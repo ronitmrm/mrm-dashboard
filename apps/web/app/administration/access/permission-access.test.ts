@@ -18,6 +18,11 @@ const permissions = [
     name: "Manage customers",
   },
   {
+    key: "pricing.customers.create",
+    module: "pricing",
+    name: "Create Customer",
+  },
+  {
     key: "pricing.assemblies.read",
     module: "pricing",
     name: "View assemblies and BOM",
@@ -84,27 +89,24 @@ describe("permission access table", () => {
     const rows = permissionAccessRows(permissions)
 
     expect(rows).toContainEqual({
-      fullPermissionKeys: ["pricing.customers.read", "pricing.customers.write"],
+      fullPermissionKeys: ["pricing.customers.read"],
       href: "/commercial/customers",
       id: "page:commercial.customers",
       kind: "page",
       label: "Customers",
       module: "Master Data",
       readPermissionKeys: ["pricing.customers.read"],
-      supportedLevels: ["none", "read", "full"],
+      supportedLevels: ["none", "read"],
     })
     expect(rows).toContainEqual({
-      fullPermissionKeys: [
-        "pricing.assemblies.read",
-        "pricing.assemblies.write",
-      ],
+      fullPermissionKeys: ["pricing.assemblies.read"],
       href: "/commercial/assemblies",
       id: "page:commercial.assemblies",
       kind: "page",
       label: "Assembly / BOM",
       module: "Commercial",
       readPermissionKeys: ["pricing.assemblies.read"],
-      supportedLevels: ["none", "read", "full"],
+      supportedLevels: ["none", "read"],
     })
   })
 
@@ -128,10 +130,25 @@ describe("permission access table", () => {
   it("lists Production and HR workspaces as independent pages", () => {
     const rows = permissionAccessRows(permissions)
 
-    expect(rows.find(({ id }) => id === "page:production.productionControlTab"))
-      .toMatchObject({ label: "Planner Actions", module: "Production" })
-    expect(rows.find(({ id }) => id === "page:hr.interviewsPanel"))
-      .toMatchObject({ label: "Interview Schedule", module: "HR & Recruitment" })
+    expect(
+      rows.find(({ id }) => id === "page:production.productionControlTab")
+    ).toMatchObject({ label: "Planner Actions", module: "Production" })
+    expect(
+      rows.find(({ id }) => id === "page:hr.interviewsPanel")
+    ).toMatchObject({ label: "Interview Schedule", module: "HR & Recruitment" })
+  })
+
+  it("lists independently assignable business commands as Task rows", () => {
+    expect(permissionAccessRows(permissions)).toContainEqual({
+      fullPermissionKeys: ["pricing.customers.create"],
+      href: null,
+      id: "pricing.customers.create",
+      kind: "task",
+      label: "Create Customer",
+      module: "pricing",
+      readPermissionKeys: [],
+      supportedLevels: ["none", "full"],
+    })
   })
 
   it("combines matching non-page capabilities into one task row", () => {
@@ -154,11 +171,11 @@ describe("permission access table", () => {
     const rows = permissionAccessRows(permissions)
 
     expect(
-      rows.find(({ id }) => id === "page:commercial.overview")
-        ?.supportedLevels
+      rows.find(({ id }) => id === "page:commercial.overview")?.supportedLevels
     ).toEqual(["none", "read"])
-    expect(rows.find(({ id }) => id === "operations.production")?.supportedLevels)
-      .toEqual(["none", "full"])
+    expect(
+      rows.find(({ id }) => id === "operations.production")?.supportedLevels
+    ).toEqual(["none", "full"])
   })
 
   it("submits read alone or read and write from the selected level", () => {
@@ -166,12 +183,13 @@ describe("permission access table", () => {
       permissionKeysForSelections(permissionAccessRows(permissions), {
         "operations.production": "full",
         "page:commercial.overview": "read",
-        "page:commercial.customers": "full",
+        "page:commercial.customers": "read",
+        "pricing.customers.create": "full",
       })
     ).toEqual([
       "operations.production.write",
+      "pricing.customers.create",
       "pricing.customers.read",
-      "pricing.customers.write",
       "pricing.dashboard.read",
     ])
   })
@@ -186,7 +204,7 @@ describe("permission access table", () => {
         "store.stock.read",
       ])
     ).toMatchObject({
-      "page:commercial.customers": "full",
+      "page:commercial.customers": "read",
       "page:store.stock": "read",
     })
   })
@@ -196,10 +214,7 @@ describe("permission access table", () => {
       permissionKeysForSelections(permissionAccessRows(permissions), {
         "page:production.productionControlTab": "read",
       })
-    ).toEqual([
-      "operations.dashboard.read",
-      "planning.planner_actions.read",
-    ])
+    ).toEqual(["operations.dashboard.read", "planning.planner_actions.read"])
   })
 
   it("keeps the legacy recruitment read gate behind any HR recruitment page", () => {
@@ -207,9 +222,6 @@ describe("permission access table", () => {
       permissionKeysForSelections(permissionAccessRows(permissions), {
         "page:hr.interviewsPanel": "read",
       })
-    ).toEqual([
-      "hr.interview_schedule.read",
-      "hr.recruitment.read",
-    ])
+    ).toEqual(["hr.interview_schedule.read", "hr.recruitment.read"])
   })
 })

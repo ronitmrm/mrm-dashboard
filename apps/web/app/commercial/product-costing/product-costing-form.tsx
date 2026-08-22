@@ -10,6 +10,14 @@ import {
   NativeSelect,
   NativeSelectOption,
 } from "@workspace/ui/components/native-select"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@workspace/ui/components/table"
 import { Textarea } from "@workspace/ui/components/textarea"
 
 import { updateProductCostingAction } from "../costing/actions"
@@ -206,21 +214,24 @@ export function ProductCostingForm({
 
       {isRoot && bomParts.length ? (
         <div className="overflow-auto rounded-2xl border">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50 text-left">
-              <tr>
-                <th className="px-3 py-2">Part</th>
-                <th className="px-3 py-2">Type</th>
-                <th className="px-3 py-2">Qty</th>
-                <th className="px-3 py-2">Cost / Piece</th>
-                <th className="px-3 py-2">Status</th>
-                <th className="px-3 py-2">Action</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table className="w-full text-sm">
+            <TableHeader className="bg-muted/50 text-left">
+              <TableRow>
+                <TableHead className="px-3 py-2">Part</TableHead>
+                <TableHead className="px-3 py-2">Type</TableHead>
+                <TableHead className="px-3 py-2">Qty</TableHead>
+                <TableHead className="px-3 py-2">Cost / Piece</TableHead>
+                <TableHead className="px-3 py-2">Status</TableHead>
+                <TableHead className="px-3 py-2">Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {bomParts.map((part) => (
-                <tr className="border-t" key={`${part.depth}-${part.itemId}`}>
-                  <td className="px-3 py-2">
+                <TableRow
+                  className="border-t"
+                  key={`${part.depth}-${part.itemId}`}
+                >
+                  <TableCell className="px-3 py-2">
                     <span
                       style={{
                         paddingInlineStart: `${(part.depth - 1) * 16}px`,
@@ -228,22 +239,22 @@ export function ProductCostingForm({
                     >
                       {part.uid} · {part.description}
                     </span>
-                  </td>
-                  <td className="px-3 py-2">{part.itemType}</td>
-                  <td className="px-3 py-2 tabular-nums">
+                  </TableCell>
+                  <TableCell className="px-3 py-2">{part.itemType}</TableCell>
+                  <TableCell className="px-3 py-2 tabular-nums">
                     {part.lineQuantity}
-                  </td>
-                  <td className="px-3 py-2 tabular-nums">
+                  </TableCell>
+                  <TableCell className="px-3 py-2 tabular-nums">
                     {money(part.productCostInr)}
-                  </td>
-                  <td className="px-3 py-2">
+                  </TableCell>
+                  <TableCell className="px-3 py-2">
                     {part.lifecycleStatus === "P"
                       ? "Portfolio · skipped"
                       : part.productCostInr > 0
                         ? "Costed"
                         : "Costing pending"}
-                  </td>
-                  <td className="px-3 py-2">
+                  </TableCell>
+                  <TableCell className="px-3 py-2">
                     {part.lifecycleStatus === "P" ? (
                       "—"
                     ) : (
@@ -251,11 +262,11 @@ export function ProductCostingForm({
                         <Link href={productHref(part.itemId)}>Open Part</Link>
                       </Button>
                     )}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       ) : null}
 

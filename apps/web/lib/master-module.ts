@@ -14,6 +14,7 @@ import { storeMasterOptions } from "./store-master-selection"
 
 export const universalMasterUnit = "universal" as const
 export type MasterUnit = ProductionFloorCode | typeof universalMasterUnit
+export type MasterModuleView = "dataEntry" | "masterTables"
 
 export type MasterModuleAccess = {
   commercialCustomers: boolean
@@ -27,10 +28,12 @@ export type MasterModuleAccess = {
 
 export type MasterOption = { id: string; label: string }
 
+type SubMasterDefinition = MasterOption & { access?: keyof MasterModuleAccess }
+
 type MasterDefinition = MasterOption & {
   access: keyof MasterModuleAccess
   scope: "unit" | "universal"
-  subMasters?: readonly MasterOption[]
+  subMasters?: readonly SubMasterDefinition[]
 }
 
 const unitMasterDefinitions = [
@@ -85,6 +88,43 @@ const commercialSubMasters = commercialMasterKinds.map((selection) => ({
   id: commercialMasterWorkspaceKind(selection),
   label: selection.label,
 }))
+
+const websiteProductSubMasters = [
+  {
+    id: "commercial_website_products",
+    label: "Website Product Data",
+  },
+  {
+    access: "commercialPricing",
+    id: "materialGrade",
+    label: "Material Grade",
+  },
+  {
+    access: "commercialPricing",
+    id: "category",
+    label: "Design Category",
+  },
+  {
+    access: "commercialPricing",
+    id: "subcategory",
+    label: "Design Subcategory",
+  },
+  {
+    access: "commercialPricing",
+    id: "application",
+    label: "Website Application",
+  },
+  {
+    access: "commercialPricing",
+    id: "certification",
+    label: "Website Certification",
+  },
+  {
+    access: "commercialPricing",
+    id: "websiteField",
+    label: "Website Field Option",
+  },
+] as const satisfies readonly SubMasterDefinition[]
 
 const universalMasterDefinitions = [
   {
@@ -146,6 +186,7 @@ const universalMasterDefinitions = [
     label: "Website Products",
     access: "commercialWebsiteProducts",
     scope: "universal",
+    subMasters: websiteProductSubMasters,
   },
 ] as const satisfies readonly MasterDefinition[]
 
@@ -221,7 +262,9 @@ export function subMastersFor(
   )
   if (!definition) return null
   const options =
-    definition.subMasters?.map(({ id, label }) => ({ id, label })) ?? []
+    definition.subMasters
+      ?.filter((option) => !option.access || access[option.access])
+      .map(({ id, label }) => ({ id, label })) ?? []
   return options.length
     ? { fallback: false, options }
     : {
@@ -256,7 +299,7 @@ function addContext(params: URLSearchParams, selection: MasterSelection) {
 
 export function masterFormHref(
   selection: MasterSelection,
-  view: "dataEntry" | "masterTables" = "dataEntry"
+  view: MasterModuleView = "dataEntry"
 ) {
   const params = new URLSearchParams()
   if (
@@ -294,6 +337,12 @@ export function masterFormHref(
   } else if (selection.main === "commercial_pricing_masters") {
     params.set("masterView", view)
     params.set("kind", selection.sub)
+  } else if (
+    selection.main === "commercial_website_products" &&
+    selection.sub !== selection.main
+  ) {
+    params.set("masterView", view)
+    params.set("kind", selection.sub)
   } else {
     params.set("masterView", view)
   }
@@ -304,18 +353,25 @@ export function masterFormHref(
       ? "/hr"
       : selection.main === "commercial_pricing_masters"
         ? "/commercial/masters"
-        : selection.main === "commercial_customers"
-          ? "/commercial/customers"
-          : "/commercial/website-products"
+        : selection.main === "commercial_website_products" &&
+            selection.sub !== selection.main
+          ? "/commercial/masters"
+          : selection.main === "commercial_customers"
+            ? "/commercial/customers"
+            : "/commercial/website-products"
   return `${path}?${params.toString()}`
 }
 
-export function masterOpenHref(selection: MasterSelection) {
+export function masterOpenHref(
+  selection: MasterSelection,
+  view: MasterModuleView = "dataEntry"
+) {
   const params = new URLSearchParams({
     unit: selection.unit,
     main: selection.main,
     sub: selection.sub,
   })
+  if (view === "masterTables") params.set("view", view)
   return `/masters/open?${params.toString()}`
 }
 export function masterSelectionSummary(selection: MasterSelection) {
@@ -328,14 +384,19 @@ export function masterSelectionSummary(selection: MasterSelection) {
     main?.subMasters?.find(({ id }) => id === selection.sub)?.label ?? mainLabel
   return `${unit} · ${mainLabel} · ${subLabel}`
 }
-export function masterSelectionHref(selection?: MasterSelection | null) {
-  if (!selection) return "/masters"
-  const params = new URLSearchParams({
-    unit: selection.unit,
-    main: selection.main,
-    sub: selection.sub,
-  })
-  return `/masters?${params.toString()}`
+export function masterSelectionHref(
+  selection?: MasterSelection | null,
+  view: MasterModuleView = "dataEntry"
+) {
+  const params = new URLSearchParams()
+  if (selection) {
+    params.set("unit", selection.unit)
+    params.set("main", selection.main)
+    params.set("sub", selection.sub)
+  }
+  if (view === "masterTables") params.set("view", view)
+  const query = params.toString()
+  return query ? `/masters?${query}` : "/masters"
 }
 
 export function masterSelectionFromContext(
@@ -391,7 +452,9 @@ export function masterSelectionMatchesDestination(
   }
   if (pathname === "/commercial/masters") {
     return (
-      selection.main === "commercial_pricing_masters" &&
+      (selection.main === "commercial_pricing_masters" ||
+        (selection.main === "commercial_website_products" &&
+          selection.sub !== selection.main)) &&
       values.kind === selection.sub
     )
   }
@@ -399,7 +462,10 @@ export function masterSelectionMatchesDestination(
     return selection.main === "commercial_customers"
   }
   if (pathname === "/commercial/website-products") {
-    return selection.main === "commercial_website_products"
+    return (
+      selection.main === "commercial_website_products" &&
+      selection.sub === selection.main
+    )
   }
   return false
 }

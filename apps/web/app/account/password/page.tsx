@@ -49,7 +49,7 @@ export default async function PasswordPage() {
               : "Change Password"}
           </CardTitle>
           <CardDescription>
-            Use at least 12 characters. Passwords are never displayed or stored
+            Use at least 6 characters. Passwords are never displayed or stored
             as plain text.
           </CardDescription>
         </CardHeader>

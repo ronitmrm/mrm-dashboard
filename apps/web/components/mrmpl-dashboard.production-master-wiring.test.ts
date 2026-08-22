@@ -14,9 +14,9 @@ describe("Production master Data Entry wiring", () => {
     )
 
     expect(source).toContain("productionFloorCode={productionFloorCode}")
-    expect(form).toContain("productionFloorCode?: ProductionFloorCode;")
+    expect(form).toMatch(/productionFloorCode\?: ProductionFloorCode;?/)
     expect(form).toMatch(
-      /payload:\s*\{\s*\.\.\.body,\s*\.\.\.\(productionFloorCode \? \{ productionFloorCode \} : \{\}\),/
+      /payload:\s*\{\s*\.\.\.body,\s*\.\.\.\(productionFloorCode \? \{ productionFloorCode \} : \{\}\),?/
     )
   })
 })

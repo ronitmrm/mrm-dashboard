@@ -34,13 +34,20 @@ describe("unified navigation", () => {
       new URL("../components/unified-sidebar-navigation.tsx", import.meta.url),
       "utf8"
     )
+    const dashboardSource = readFileSync(
+      new URL("../components/mrmpl-dashboard.tsx", import.meta.url),
+      "utf8"
+    )
 
     expect(source).toContain('label="Master Data"')
     expect(source).toContain('label="Operational Entry"')
     expect(source).toContain("filteredMasterDataNavigation.map")
     expect(source).toContain("filteredOperationalEntryNavigation.map")
-    expect(source).toContain(
-      "filteredCommercialOperationalEntryNavigation = filterNavigationItems"
+    expect(source).not.toContain(
+      "visibleCommercialOperationalEntryNavigation.map"
+    )
+    expect(dashboardSource).toMatch(
+      /externalOperationalEntryOptions\(\s*navigationAccess,\s*"dataEntry"\s*\)/
     )
     expect(source).not.toContain("CostingSubmoduleLabel")
     expect(source).not.toContain("visibleCommercialMasterDataNavigation.map")
@@ -85,7 +92,7 @@ describe("unified navigation", () => {
     ]
 
     expect(new Set(hrefs)).toHaveLength(hrefs.length)
-    expect(dashboardNavigation).toHaveLength(23)
+    expect(dashboardNavigation).toHaveLength(22)
     expect(productionFloorNavigation).toHaveLength(11)
     expect(productionFloorNavigation).not.toContainEqual(
       planningHolidayNavigation
@@ -102,7 +109,6 @@ describe("unified navigation", () => {
       "productionDashboardTab",
       "machineMasterTab",
       "maintenanceTab",
-      "correctionsTab",
     ])
     expect(
       masterDataNavigation.map(({ id, title }) => ({ id, title }))
@@ -111,10 +117,22 @@ describe("unified navigation", () => {
       { id: "masterTablesTab", title: "Master Tables" },
     ])
     expect(
-      operationalEntryNavigation.map(({ id, title }) => ({ id, title }))
+      operationalEntryNavigation.map(({ href, id, title }) => ({
+        href,
+        id,
+        title,
+      }))
     ).toEqual([
-      { id: "operationalEntryTab", title: "Data Entry" },
-      { id: "operationalTablesTab", title: "Master Tables" },
+      {
+        href: "/operational-entry",
+        id: "operationalEntryTab",
+        title: "Entry Selection",
+      },
+      {
+        href: "/operational-entry?view=masterTables",
+        id: "operationalTablesTab",
+        title: "Entry Tables",
+      },
     ])
     expect(productionCapabilityForTab("operationalTablesTab")).toBe(
       productionCapabilityForTab("operationalEntryTab")
@@ -147,7 +165,7 @@ describe("unified navigation", () => {
       "qualityControlTasksTab",
       "firstPieceInspectionTab",
       "maintenanceTab",
-      "correctionsTab",
+
       "dataEntryTab",
       "masterTablesTab",
       "operationalEntryTab",
@@ -170,7 +188,13 @@ describe("unified navigation", () => {
     ).toMatchObject({
       title: "Mechanical Maintenance",
     })
-    expect(commercialNavigation).toHaveLength(21)
+    expect(commercialNavigation).toHaveLength(20)
+    expect(dashboardNavigation.map(({ title }) => title)).not.toContain(
+      "Corrections"
+    )
+    expect(commercialNavigation.map(({ label }) => label)).not.toContain(
+      "Corrections"
+    )
     expect(
       commercialMasterDataWorkspaceNavigation.map(({ href, label }) => ({
         href,
@@ -187,10 +211,11 @@ describe("unified navigation", () => {
       }))
     ).toEqual([
       { href: "/commercial/enquiries", label: "Enquiries" },
+      { href: "/commercial/orders", label: "Purchase Orders" },
     ])
-    expect(commercialCostingNavigation.map(({ label }) => label)).toContain(
-      "Excel View"
-    )
+    const costingLabels = commercialCostingNavigation.map(({ label }) => label)
+    expect(costingLabels.slice(0, 2)).toEqual(["Excel View", "Pricing"])
+    expect(costingLabels.at(-1)).toBe("Drawing History")
     expect(commercialCostingNavigation.map(({ label }) => label)).not.toEqual(
       expect.arrayContaining([
         "Customers",
@@ -255,7 +280,6 @@ describe("unified navigation", () => {
     expect(dashboardTabHref("maintenanceTab", "cnc")).toBe(
       "/?tab=maintenanceTab&floor=cnc"
     )
-    expect(dashboardTabHref("correctionsTab")).toBe("/?tab=correctionsTab")
   })
 
   it("selects Excel View without also selecting its Enquiries parent", () => {

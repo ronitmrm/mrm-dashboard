@@ -4,23 +4,20 @@ import { createCommercialRevisionsRepository } from "@workspace/db"
 import { revalidatePath } from "next/cache"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
-import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
+import { commercialTaskCapabilities } from "@/lib/auth/task-capabilities"
 import { optionalText, requiredText } from "@/lib/form-data"
 
 const correctionsPath = "/commercial/corrections"
 
-
 async function withCorrections<T>(
+  capability: string,
   operation: (
     repository: ReturnType<typeof createCommercialRevisionsRepository>,
     actorUserId: string
   ) => Promise<T>
 ) {
-  const session = await requireCapability(
-    commercialCapabilities.corrections.write,
-    correctionsPath
-  )
+  const session = await requireCapability(capability, correctionsPath)
   const repository = createCommercialRevisionsRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
@@ -32,12 +29,14 @@ async function withCorrections<T>(
 }
 
 export async function reverseDesignCostingHandoffAction(formData: FormData) {
-  await withCorrections((repository, actorUserId) =>
-    repository.reverseDesignCostingHandoff({
-      actorUserId,
-      designTaskId: requiredText(formData, "design_task_id"),
-      remarks: optionalText(formData, "remarks"),
-    })
+  await withCorrections(
+    commercialTaskCapabilities.reverseDesignCostingHandoff,
+    (repository, actorUserId) =>
+      repository.reverseDesignCostingHandoff({
+        actorUserId,
+        designTaskId: requiredText(formData, "design_task_id"),
+        remarks: optionalText(formData, "remarks"),
+      })
   )
   revalidatePath(correctionsPath)
   revalidatePath("/commercial/enquiries")
@@ -46,27 +45,31 @@ export async function reverseDesignCostingHandoffAction(formData: FormData) {
 }
 
 export async function reverseProductEntryAction(formData: FormData) {
-  await withCorrections((repository, actorUserId) =>
-    repository.reverseProductEntry({
-      actorUserId,
-      itemId: requiredText(formData, "item_id"),
-      remarks: optionalText(formData, "remarks"),
-    })
+  await withCorrections(
+    commercialTaskCapabilities.reverseProductEntry,
+    (repository, actorUserId) =>
+      repository.reverseProductEntry({
+        actorUserId,
+        itemId: requiredText(formData, "item_id"),
+        remarks: optionalText(formData, "remarks"),
+      })
   )
   revalidatePath(correctionsPath)
   revalidatePath("/commercial/products")
 }
 
 export async function recordPricingCorrectionAction(formData: FormData) {
-  await withCorrections((repository, actorUserId) =>
-    repository.recordPricingCorrection({
-      actorUserId,
-      organizationId: requiredText(formData, "organization_id"),
-      reason: requiredText(formData, "reason"),
-      requestedAction: requiredText(formData, "requested_action"),
-      targetId: requiredText(formData, "target_id"),
-      targetTable: "quote_items",
-    })
+  await withCorrections(
+    commercialTaskCapabilities.recordPricingCorrection,
+    (repository, actorUserId) =>
+      repository.recordPricingCorrection({
+        actorUserId,
+        organizationId: requiredText(formData, "organization_id"),
+        reason: requiredText(formData, "reason"),
+        requestedAction: requiredText(formData, "requested_action"),
+        targetId: requiredText(formData, "target_id"),
+        targetTable: "quote_items",
+      })
   )
   revalidatePath(correctionsPath)
 }

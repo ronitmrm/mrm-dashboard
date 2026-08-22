@@ -9,6 +9,7 @@ import { redirect } from "next/navigation"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
+import { commercialTaskCapabilities } from "@/lib/auth/task-capabilities"
 
 const drawingHistoryPath = "/commercial/drawing-history"
 
@@ -23,7 +24,7 @@ function quantity(formData: FormData, key: string) {
 
 export async function updateDrawingHistoryAction(formData: FormData) {
   const session = await requireCapability(
-    "pricing.drawing_history.write",
+    commercialTaskCapabilities.updateDrawingHistory,
     drawingHistoryPath
   )
   const connectionString = readAuthEnvironment().connectionString

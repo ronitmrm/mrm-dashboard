@@ -1,7 +1,6 @@
 import type { ProductionFloorCode } from "@workspace/db/production-floors"
 
 import type { UnifiedNavigationAccess } from "./auth/unified-navigation-access"
-import { masterDataEntryTypes } from "./master-data-workspaces"
 import { parseStoreMasterKey } from "./store-master-selection"
 
 export type ExternalMasterDataOption = {
@@ -44,10 +43,7 @@ export function masterPayloadForScope(
 
 function canReadRecruitmentMasters(access: UnifiedNavigationAccess) {
   return access.hrHrefs.some((href) =>
-    [
-      "/hr?panel=mastersPanel",
-      "/hr?panel=postMasterPanel",
-    ].includes(href)
+    ["/hr?panel=mastersPanel", "/hr?panel=postMasterPanel"].includes(href)
   )
 }
 
@@ -66,18 +62,12 @@ export function masterDataFallbackLinks(
         ? "/commercial/customers"
         : access.commercialHrefs.includes("/commercial/website-products")
           ? "/commercial/website-products"
-      : ""
+          : ""
   if (!baseDestination) return []
 
-  const separator = baseDestination.includes("?") ? "&" : "?"
   const links: MasterDataFallbackLink[] = [
     {
-      destination: `${baseDestination}${separator}masterView=dataEntry`,
-      id: "dataEntryTab",
-      title: "Data Entry",
-    },
-    {
-      destination: `${baseDestination}${separator}masterView=masterTables`,
+      destination: "/masters?view=masterTables",
       id: "masterTablesTab",
       title: "Master Tables",
     },
@@ -106,46 +96,19 @@ export function masterDataDashboardHref(
 
 export function masterDataNavigationLinks(
   access: UnifiedNavigationAccess,
-  context: {
+  _context: {
     entryType?: string
     pathname: string
     productionFloorCode: ProductionFloorCode
     searchParams: Pick<URLSearchParams, "get">
   }
 ): MasterDataFallbackLink[] {
+  void _context
   if (!access.operations) return masterDataFallbackLinks(access)
 
-  const requestedEntryType =
-    context.pathname === "/"
-      ? context.entryType ?? context.searchParams.get("entry")
-      : undefined
-  const entryType = (masterDataEntryTypes as readonly string[]).includes(
-    requestedEntryType ?? ""
-  )
-    ? requestedEntryType
-    : undefined
-  const storeMaster =
-    entryType === "store_masters"
-      ? parseStoreMasterKey(context.searchParams.get("storeMaster"))
-      : null
   const links: MasterDataFallbackLink[] = [
     {
-      destination: masterDataDashboardHref(
-        "dataEntry",
-        context.productionFloorCode,
-        entryType,
-        storeMaster
-      ),
-      id: "dataEntryTab",
-      title: "Data Entry",
-    },
-    {
-      destination: masterDataDashboardHref(
-        "masterTables",
-        context.productionFloorCode,
-        entryType,
-        storeMaster
-      ),
+      destination: "/masters?view=masterTables",
       id: "masterTablesTab",
       title: "Master Tables",
     },

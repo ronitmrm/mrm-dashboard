@@ -15,12 +15,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
-import {
-  Field,
-  FieldGroup,
-  FieldLabel,
-} from "@workspace/ui/components/field"
-import { Input } from "@workspace/ui/components/input"
+
 import {
   Table,
   TableBody,
@@ -34,6 +29,7 @@ import { readAuthEnvironment } from "@/lib/auth/auth"
 import { istDateValue } from "@/lib/date-time"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { BoundedResultNotice } from "@/components/bounded-result-notice"
+import { MasterDataCsvImportButton } from "@/components/master-data-csv-import-button"
 import { OperationalWorkspaceTabs } from "@/components/operational-workspace-tabs"
 
 import { importEnquiryRegisterAction } from "./actions"
@@ -46,7 +42,10 @@ export default async function EnquiriesPage({
 }: {
   searchParams: Promise<{ operationalView?: string }>
 }) {
-  await requireCapability("pricing.enquiries.read", "/commercial/enquiries")
+  const session = await requireCapability(
+    "pricing.enquiries.read",
+    "/commercial/enquiries"
+  )
   const requestedView = (await searchParams).operationalView
   const operationalView =
     requestedView === "masterTables" ? "masterTables" : "dataEntry"
@@ -63,7 +62,9 @@ export default async function EnquiriesPage({
           await customerRepository.organizationIdForCode("MRMPL")
         const [customerRows, enquiries, masters] = await Promise.all([
           customerRepository.listForOrganization("MRMPL"),
-          workflow.listEnquiriesBounded("MRMPL"),
+          workflow.listEnquiriesBounded("MRMPL", 200, {
+            originatingSalespersonUserId: session.user.id,
+          }),
           masterRepository.snapshot(resolvedOrganizationId),
         ])
         return {
@@ -93,7 +94,23 @@ export default async function EnquiriesPage({
     <div className="grid gap-6">
       <OperationalWorkspaceTabs
         activeView={operationalView}
+        csvImportAction={
+          organizationId ? (
+            <MasterDataCsvImportButton
+              action={importEnquiryRegisterAction}
+              fields={{ organization_id: organizationId, received_on: today }}
+              fileField="enquiry_register_file"
+            />
+          ) : undefined
+        }
         dataEntryHref="/commercial/enquiries?operationalView=dataEntry"
+        exportAction={
+          <Button asChild size="sm" variant="outline">
+            <Link href="/commercial/enquiries/register/export.xlsx">
+              Export
+            </Link>
+          </Button>
+        }
         masterTablesHref="/commercial/enquiries?operationalView=masterTables"
       />
       <section className="grid gap-2">
@@ -102,59 +119,16 @@ export default async function EnquiriesPage({
           Sales Intake, Commercial Handover, Technical Review, Clarification,
           And Design Progression In One Postgresql Workflow.
         </p>
-        <div className="flex flex-wrap gap-2 pt-2">
-          {operationalView === "masterTables" ? (
-            <Button asChild size="sm" variant="outline">
-              <Link href="/commercial/enquiries/register/export.xlsx">
-                Export Register
-              </Link>
-            </Button>
-          ) : (
+        {operationalView === "dataEntry" ? (
+          <div className="flex flex-wrap gap-2 pt-2">
             <Button asChild size="sm" variant="outline">
               <Link href="/commercial/enquiries/register/template.xlsx">
                 Register Template
               </Link>
             </Button>
-          )}
-        </div>
+          </div>
+        ) : null}
       </section>
-
-      {operationalView === "dataEntry" && organizationId ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Import Enquiry Register</CardTitle>
-            <CardDescription>
-              Csv, Xls, Or Xlsx Rows Update An Editable Enq Or Create A New One.
-              The Whole File Rolls Back If Any Customer Or Gate Is Invalid.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form action={importEnquiryRegisterAction}>
-              <input
-                type="hidden"
-                name="organization_id"
-                value={organizationId}
-              />
-              <input type="hidden" name="received_on" value={today} />
-              <FieldGroup>
-                <Field>
-                  <FieldLabel htmlFor="enquiry-register-file">
-                    Register File
-                  </FieldLabel>
-                  <Input
-                    id="enquiry-register-file"
-                    name="enquiry_register_file"
-                    type="file"
-                    accept=".csv,.xls,.xlsx"
-                    required
-                  />
-                </Field>
-                <Button type="submit">Import Register</Button>
-              </FieldGroup>
-            </form>
-          </CardContent>
-        </Card>
-      ) : null}
 
       {operationalView === "dataEntry" ? (
         <Card>
@@ -185,85 +159,85 @@ export default async function EnquiriesPage({
 
       {operationalView === "masterTables" ? (
         <Card>
-        <CardHeader>
-          <CardTitle>Enquiry Register</CardTitle>
-          <CardDescription>
-            Current Handover State And Line Count From Normalized Postgresql
-            Rows.
-          </CardDescription>
-          <BoundedResultNotice
-            actionHref="/commercial/enquiries/register/export.xlsx"
-            actionLabel="Export the complete register"
-            coverage={enquiryResult.coverage}
-            section="Enquiries"
-          />
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-hidden rounded-3xl border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Enq</TableHead>
-                  <TableHead>Customer</TableHead>
-                  <TableHead>Received</TableHead>
-                  <TableHead>Lines</TableHead>
-                  <TableHead>Quoted / Ordered</TableHead>
-                  <TableHead>Follow-Up</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Handover</TableHead>
-                  <TableHead className="text-right">Open</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {enquiries.length ? (
-                  enquiries.map((enquiry) => (
-                    <TableRow key={enquiry.id}>
-                      <TableCell className="font-medium">
-                        {enquiry.enquiryNumber}
-                      </TableCell>
-                      <TableCell>{enquiry.companyName}</TableCell>
-                      <TableCell>{enquiry.receivedOn}</TableCell>
-                      <TableCell>{enquiry.itemCount}</TableCell>
-                      <TableCell>
-                        {enquiry.quotedLineCount} / {enquiry.orderedLineCount}
-                      </TableCell>
-                      <TableCell>
-                        {enquiry.nextFollowupDue ?? "—"}
-                        {enquiry.dueFollowupCount > 0
-                          ? ` · ${enquiry.dueFollowupCount} due`
-                          : ""}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary">{enquiry.status}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">
-                          {enquiry.technicalHandoverStatus}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button asChild size="sm" variant="outline">
-                          <Link href={`/commercial/enquiries/${enquiry.id}`}>
-                            View
-                          </Link>
-                        </Button>
+          <CardHeader>
+            <CardTitle>Enquiry Register</CardTitle>
+            <CardDescription>
+              Current Handover State And Line Count From Normalized Postgresql
+              Rows.
+            </CardDescription>
+            <BoundedResultNotice
+              actionHref="/commercial/enquiries/register/export.xlsx"
+              actionLabel="Export the complete register"
+              coverage={enquiryResult.coverage}
+              section="Enquiries"
+            />
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-hidden rounded-3xl border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Enq</TableHead>
+                    <TableHead>Customer</TableHead>
+                    <TableHead>Received</TableHead>
+                    <TableHead>Lines</TableHead>
+                    <TableHead>Quoted / Ordered</TableHead>
+                    <TableHead>Follow-Up</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Handover</TableHead>
+                    <TableHead className="text-right">Open</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {enquiries.length ? (
+                    enquiries.map((enquiry) => (
+                      <TableRow key={enquiry.id}>
+                        <TableCell className="font-medium">
+                          {enquiry.enquiryNumber}
+                        </TableCell>
+                        <TableCell>{enquiry.companyName}</TableCell>
+                        <TableCell>{enquiry.receivedOn}</TableCell>
+                        <TableCell>{enquiry.itemCount}</TableCell>
+                        <TableCell>
+                          {enquiry.quotedLineCount} / {enquiry.orderedLineCount}
+                        </TableCell>
+                        <TableCell>
+                          {enquiry.nextFollowupDue ?? "—"}
+                          {enquiry.dueFollowupCount > 0
+                            ? ` · ${enquiry.dueFollowupCount} due`
+                            : ""}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary">{enquiry.status}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">
+                            {enquiry.technicalHandoverStatus}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button asChild size="sm" variant="outline">
+                            <Link href={`/commercial/enquiries/${enquiry.id}`}>
+                              View
+                            </Link>
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell
+                        className="h-32 text-center text-muted-foreground"
+                        colSpan={9}
+                      >
+                        No Enquiries Have Been Logged.
                       </TableCell>
                     </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell
-                      className="h-32 text-center text-muted-foreground"
-                      colSpan={9}
-                    >
-                      No Enquiries Have Been Logged.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
         </Card>
       ) : null}
     </div>

@@ -432,77 +432,80 @@ export default async function CustomerBulkRevisionPage({
                     value={selectedRevision.id}
                   />
                   <div className="max-h-[36rem] overflow-auto rounded-md border">
-                    <table className="w-full caption-bottom text-sm">
-                      <thead className="sticky top-0 z-10 bg-background [&_tr]:border-b">
-                        <tr>
+                    <Table className="w-full caption-bottom text-sm">
+                      <TableHeader className="sticky top-0 z-10 bg-background [&_tr]:border-b">
+                        <TableRow>
                           {activePriceHeadings.map((heading) => (
-                            <th
+                            <TableHead
                               className="h-12 px-3 text-left align-middle font-medium whitespace-nowrap text-foreground"
                               key={heading}
                             >
                               {heading}
-                            </th>
+                            </TableHead>
                           ))}
-                        </tr>
-                      </thead>
-                      <tbody className="[&_tr:last-child]:border-0">
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody className="[&_tr:last-child]:border-0">
                         {prices.rows.map((price) => (
-                          <tr
+                          <TableRow
                             className="border-b transition-colors [contain-intrinsic-size:auto_48px] [content-visibility:auto] hover:bg-muted/50"
                             key={price.id}
                           >
-                            <td className="p-3 align-middle whitespace-nowrap">
+                            <TableCell className="p-3 align-middle whitespace-nowrap">
                               <input
                                 aria-label={`Select ${price.customerPartCode ?? price.uid}`}
                                 name="selected_quote_item_ids"
                                 type="checkbox"
                                 value={price.id}
                               />
-                            </td>
-                            <td className="p-3 align-middle whitespace-nowrap">
+                            </TableCell>
+                            <TableCell className="p-3 align-middle whitespace-nowrap">
                               {price.companyName}
-                            </td>
-                            <td className="p-3 align-middle font-mono whitespace-nowrap">
+                            </TableCell>
+                            <TableCell className="p-3 align-middle font-mono whitespace-nowrap">
                               {price.customerPartCode ?? "—"}
-                            </td>
-                            <td className="p-3 align-middle whitespace-nowrap">
+                            </TableCell>
+                            <TableCell className="p-3 align-middle whitespace-nowrap">
                               <span className="font-mono">{price.uid}</span>
                               <span className="block max-w-64 text-xs text-muted-foreground">
                                 {price.description}
                               </span>
-                            </td>
-                            <td className="p-3 align-middle whitespace-nowrap tabular-nums">
+                            </TableCell>
+                            <TableCell className="p-3 align-middle whitespace-nowrap tabular-nums">
                               $ {money(price.approvedPriceUsd)}
-                            </td>
-                            <td className="p-3 align-middle whitespace-nowrap">
+                            </TableCell>
+                            <TableCell className="p-3 align-middle whitespace-nowrap">
                               {money(price.scrapRate)}
-                            </td>
-                            <td className="p-3 align-middle whitespace-nowrap">
+                            </TableCell>
+                            <TableCell className="p-3 align-middle whitespace-nowrap">
                               {money(price.packingCost)}
-                            </td>
-                            <td className="p-3 align-middle whitespace-nowrap">
+                            </TableCell>
+                            <TableCell className="p-3 align-middle whitespace-nowrap">
                               {money(price.shippingCost)}
-                            </td>
-                            <td className="p-3 align-middle whitespace-nowrap">
+                            </TableCell>
+                            <TableCell className="p-3 align-middle whitespace-nowrap">
                               {money(price.purchaseTimes)}
-                            </td>
-                            <td className="p-3 align-middle whitespace-nowrap">
+                            </TableCell>
+                            <TableCell className="p-3 align-middle whitespace-nowrap">
                               {percent(price.profitPercent)}
-                            </td>
-                            <td className="p-3 align-middle whitespace-nowrap">
+                            </TableCell>
+                            <TableCell className="p-3 align-middle whitespace-nowrap">
                               {money(price.conversionRate)}
-                            </td>
-                          </tr>
+                            </TableCell>
+                          </TableRow>
                         ))}
                         {!prices.rows.length ? (
-                          <tr>
-                            <td className="h-24 text-center" colSpan={11}>
+                          <TableRow>
+                            <TableCell
+                              className="h-24 text-center"
+                              colSpan={11}
+                            >
                               No Active Prices Match This Search.
-                            </td>
-                          </tr>
+                            </TableCell>
+                          </TableRow>
                         ) : null}
-                      </tbody>
-                    </table>
+                      </TableBody>
+                    </Table>
                   </div>
 
                   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

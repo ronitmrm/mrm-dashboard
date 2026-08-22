@@ -11,6 +11,34 @@ import {
 } from "./master-data-navigation"
 
 describe("master data navigation", () => {
+  it("keeps standalone Data Entry out of Master Data navigation", () => {
+    const links = masterDataNavigationLinks(
+      {
+        administration: false,
+        commercialHrefs: [],
+        hrHrefs: [],
+        operations: true,
+        productionTabIds: ["dataEntryTab", "masterTablesTab"],
+        store: false,
+        storeHrefs: [],
+      },
+      {
+        entryType: "route",
+        pathname: "/",
+        productionFloorCode: "cnc",
+        searchParams: new URLSearchParams("tab=dataEntryTab&entry=route"),
+      }
+    )
+
+    expect(links).toEqual([
+      {
+        destination: "/masters?view=masterTables",
+        id: "masterTablesTab",
+        title: "Master Tables",
+      },
+    ])
+  })
+
   it("marks software-wide masters as not applicable to one Production Unit", () => {
     expect(companyWideMasterEntryTypes).toEqual([
       "rejection_type_master",
@@ -58,10 +86,7 @@ describe("master data navigation", () => {
           "/commercial/customers",
           "/commercial/website-products",
         ],
-        hrHrefs: [
-          "/hr?panel=mastersPanel",
-          "/hr?panel=postMasterPanel",
-        ],
+        hrHrefs: ["/hr?panel=mastersPanel", "/hr?panel=postMasterPanel"],
         operations: true,
         store: true,
       },
@@ -154,7 +179,7 @@ describe("master data navigation", () => {
     ).toEqual([])
   })
 
-  it("keeps the company selectors reachable for HR-only users", () => {
+  it("opens table selection for HR-only users", () => {
     expect(
       masterDataFallbackLinks({
         administration: false,
@@ -165,21 +190,14 @@ describe("master data navigation", () => {
       })
     ).toEqual([
       {
-        destination:
-          "/hr?panel=mastersPanel&masterView=dataEntry",
-        id: "dataEntryTab",
-        title: "Data Entry",
-      },
-      {
-        destination:
-          "/hr?panel=mastersPanel&masterView=masterTables",
+        destination: "/masters?view=masterTables",
         id: "masterTablesTab",
         title: "Master Tables",
       },
     ])
   })
 
-  it("opens the unfiltered unified workspace from HR masters", () => {
+  it("returns to table selection from HR masters", () => {
     const access = {
       administration: false,
       commercialHrefs: ["/commercial/masters"],
@@ -198,19 +216,14 @@ describe("master data navigation", () => {
       })
     ).toEqual([
       {
-        destination: "/?tab=dataEntryTab&floor=cnc",
-        id: "dataEntryTab",
-        title: "Data Entry",
-      },
-      {
-        destination: "/?tab=masterTablesTab&floor=cnc",
+        destination: "/masters?view=masterTables",
         id: "masterTablesTab",
         title: "Master Tables",
       },
     ])
   })
 
-  it("keeps Cycle Time selected when switching to its master table", () => {
+  it("opens table selection instead of switching directly from Cycle Time", () => {
     const access = {
       administration: false,
       commercialHrefs: [],
@@ -228,19 +241,14 @@ describe("master data navigation", () => {
       })
     ).toEqual([
       {
-        destination: "/?tab=dataEntryTab&floor=cnc&entry=cycle",
-        id: "dataEntryTab",
-        title: "Data Entry",
-      },
-      {
-        destination: "/?tab=masterTablesTab&floor=cnc&entry=cycle",
+        destination: "/masters?view=masterTables",
         id: "masterTablesTab",
         title: "Master Tables",
       },
     ])
   })
 
-  it("keeps Asset Category selected when switching Store Master views", () => {
+  it("opens table selection instead of switching directly from Store Masters", () => {
     expect(
       masterDataDashboardHref(
         "masterTables",
@@ -269,14 +277,17 @@ describe("master data navigation", () => {
             "tab=dataEntryTab&entry=store_masters&storeMaster=CATEGORY"
           ),
         }
-      ).map((link) => link.destination)
+      )
     ).toEqual([
-      "/?tab=dataEntryTab&floor=conventional&entry=store_masters&storeMaster=CATEGORY",
-      "/?tab=masterTablesTab&floor=conventional&entry=store_masters&storeMaster=CATEGORY",
+      {
+        destination: "/masters?view=masterTables",
+        id: "masterTablesTab",
+        title: "Master Tables",
+      },
     ])
   })
 
-  it("opens the unfiltered unified workspace from Pricing Masters", () => {
+  it("returns to table selection from Pricing Masters", () => {
     const access = {
       administration: false,
       commercialHrefs: ["/commercial/masters"],
@@ -294,12 +305,7 @@ describe("master data navigation", () => {
       })
     ).toEqual([
       {
-        destination: "/?tab=dataEntryTab&floor=cnc",
-        id: "dataEntryTab",
-        title: "Data Entry",
-      },
-      {
-        destination: "/?tab=masterTablesTab&floor=cnc",
+        destination: "/masters?view=masterTables",
         id: "masterTablesTab",
         title: "Master Tables",
       },

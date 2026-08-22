@@ -15,6 +15,7 @@ import { redirect } from "next/navigation"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
 import {
+  isStoreActionCapability,
   requireStoreAction,
   type StoreActionCapability,
 } from "@/lib/auth/store-action-access"
@@ -73,14 +74,7 @@ function holderType(formData: FormData) {
 }
 
 async function withStore<T>(
-  capability:
-    | StoreActionCapability
-    | "store.masters.write"
-    | "store.new_item_requests.write"
-    | "store.purchase_register.write"
-    | "store.requests.issue"
-    | "store.requests.submit"
-    | "store.stock.write",
+  capability: StoreActionCapability | "store.masters.write",
   operation: (
     repository: ReturnType<typeof createStoreRepository>,
     actorUserId: string,
@@ -88,11 +82,9 @@ async function withStore<T>(
     actorEmail: string
   ) => Promise<T>
 ) {
-  const session =
-    capability.startsWith("store.asset_") ||
-    capability.startsWith("store.requests.")
-      ? await requireStoreAction(capability as StoreActionCapability, storePath)
-      : await requireCapability(capability, storePath)
+  const session = isStoreActionCapability(capability)
+    ? await requireStoreAction(capability, storePath)
+    : await requireCapability(capability, storePath)
   const repository = createStoreRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
@@ -123,65 +115,63 @@ function revalidateStore() {
 }
 
 export async function createStoreLocationAction(formData: FormData) {
-  await withStore("store.masters.write", (
-    repository,
-    actorUserId,
-    organizationId
-  ) => {
-    const masterId = optionalText(formData, "master_id")
-    return masterId
-      ? repository.updateLocation({
-          actorUserId,
-          id: masterId,
-          locationType: requiredText(formData, "location_type") as
-            | "DEPARTMENT"
-            | "STORE"
-            | "UNIT",
-          name: requiredText(formData, "location_name"),
-          organizationId,
-        })
-      : repository.createLocation({
-          actorUserId,
-          code: requiredText(formData, "location_code"),
-          locationType: requiredText(formData, "location_type") as
-            | "DEPARTMENT"
-            | "STORE"
-            | "UNIT",
-          name: requiredText(formData, "location_name"),
-          organizationId,
-        })
-  })
+  await withStore(
+    "store.masters.write",
+    (repository, actorUserId, organizationId) => {
+      const masterId = optionalText(formData, "master_id")
+      return masterId
+        ? repository.updateLocation({
+            actorUserId,
+            id: masterId,
+            locationType: requiredText(formData, "location_type") as
+              | "DEPARTMENT"
+              | "STORE"
+              | "UNIT",
+            name: requiredText(formData, "location_name"),
+            organizationId,
+          })
+        : repository.createLocation({
+            actorUserId,
+            code: requiredText(formData, "location_code"),
+            locationType: requiredText(formData, "location_type") as
+              | "DEPARTMENT"
+              | "STORE"
+              | "UNIT",
+            name: requiredText(formData, "location_name"),
+            organizationId,
+          })
+    }
+  )
   revalidateStore()
 }
 
 export async function createStoreSupplierAction(formData: FormData) {
-  await withStore("store.masters.write", (
-    repository,
-    actorUserId,
-    organizationId
-  ) => {
-    const masterId = optionalText(formData, "master_id")
-    return masterId
-      ? repository.updateSupplier({
-          actorUserId,
-          address: optionalText(formData, "supplier_address"),
-          contactDetails: optionalText(formData, "contact_details"),
-          email: optionalText(formData, "supplier_email"),
-          gstNumber: optionalText(formData, "gst_number"),
-          id: masterId,
-          name: requiredText(formData, "supplier_name"),
-          organizationId,
-        })
-      : repository.createSupplier({
-          actorUserId,
-          address: optionalText(formData, "supplier_address"),
-          contactDetails: optionalText(formData, "contact_details"),
-          email: optionalText(formData, "supplier_email"),
-          gstNumber: optionalText(formData, "gst_number"),
-          name: requiredText(formData, "supplier_name"),
-          organizationId,
-        })
-  })
+  await withStore(
+    "store.masters.write",
+    (repository, actorUserId, organizationId) => {
+      const masterId = optionalText(formData, "master_id")
+      return masterId
+        ? repository.updateSupplier({
+            actorUserId,
+            address: optionalText(formData, "supplier_address"),
+            contactDetails: optionalText(formData, "contact_details"),
+            email: optionalText(formData, "supplier_email"),
+            gstNumber: optionalText(formData, "gst_number"),
+            id: masterId,
+            name: requiredText(formData, "supplier_name"),
+            organizationId,
+          })
+        : repository.createSupplier({
+            actorUserId,
+            address: optionalText(formData, "supplier_address"),
+            contactDetails: optionalText(formData, "contact_details"),
+            email: optionalText(formData, "supplier_email"),
+            gstNumber: optionalText(formData, "gst_number"),
+            name: requiredText(formData, "supplier_name"),
+            organizationId,
+          })
+    }
+  )
   revalidateStore()
 }
 
@@ -190,102 +180,110 @@ export async function createStoreSupplierPriceAction(formData: FormData) {
     "store.masters.write",
     (repository, actorUserId, organizationId) =>
       repository.createSupplierPrice({
-      actorUserId,
-      itemTypeId: requiredText(formData, "item_type_id"),
-      organizationId,
-      quoteReference: optionalText(formData, "quote_reference"),
-      supplierId: requiredText(formData, "supplier_id"),
-      unitPrice: requiredText(formData, "unit_price"),
-      validFrom: optionalText(formData, "valid_from"),
+        actorUserId,
+        itemTypeId: requiredText(formData, "item_type_id"),
+        organizationId,
+        quoteReference: optionalText(formData, "quote_reference"),
+        supplierId: requiredText(formData, "supplier_id"),
+        unitPrice: requiredText(formData, "unit_price"),
+        validFrom: optionalText(formData, "valid_from"),
       })
   )
   revalidateStore()
 }
 
 export async function createStoreVendorAction(formData: FormData) {
-  await withStore("store.masters.write", (
-    repository,
-    actorUserId,
-    organizationId
-  ) => {
-    const masterId = optionalText(formData, "master_id")
-    return masterId
-      ? repository.updateVendor({
-          actorUserId,
-          contactDetails: optionalText(formData, "contact_details"),
-          id: masterId,
-          name: requiredText(formData, "vendor_name"),
-          organizationId,
-        })
-      : repository.createVendor({
-          actorUserId,
-          code: requiredText(formData, "vendor_code"),
-          contactDetails: optionalText(formData, "contact_details"),
-          name: requiredText(formData, "vendor_name"),
-          organizationId,
-        })
-  })
+  await withStore(
+    "store.masters.write",
+    (repository, actorUserId, organizationId) => {
+      const masterId = optionalText(formData, "master_id")
+      return masterId
+        ? repository.updateVendor({
+            actorUserId,
+            contactDetails: optionalText(formData, "contact_details"),
+            id: masterId,
+            name: requiredText(formData, "vendor_name"),
+            organizationId,
+          })
+        : repository.createVendor({
+            actorUserId,
+            code: requiredText(formData, "vendor_code"),
+            contactDetails: optionalText(formData, "contact_details"),
+            name: requiredText(formData, "vendor_name"),
+            organizationId,
+          })
+    }
+  )
   revalidateStore()
 }
 
 export async function createStoreAssetCategoryAction(formData: FormData) {
-  await withStore("store.masters.write", (repository, actorUserId, organizationId) => {
-    const masterId = optionalText(formData, "master_id")
-    return masterId
-      ? repository.updateAssetCategory({
-          actorUserId,
-          id: masterId,
-          name: requiredText(formData, "asset_category_name"),
-          organizationId,
-        })
-      : repository.createAssetCategory({
-          actorUserId,
-          name: requiredText(formData, "asset_category_name"),
-          organizationId,
-        })
-  })
+  await withStore(
+    "store.masters.write",
+    (repository, actorUserId, organizationId) => {
+      const masterId = optionalText(formData, "master_id")
+      return masterId
+        ? repository.updateAssetCategory({
+            actorUserId,
+            id: masterId,
+            name: requiredText(formData, "asset_category_name"),
+            organizationId,
+          })
+        : repository.createAssetCategory({
+            actorUserId,
+            name: requiredText(formData, "asset_category_name"),
+            organizationId,
+          })
+    }
+  )
   revalidateStore()
 }
 
 export async function createStoreAssetSubcategoryAction(formData: FormData) {
-  await withStore("store.masters.write", (repository, actorUserId, organizationId) => {
-    const masterId = optionalText(formData, "master_id")
-    return masterId
-      ? repository.updateAssetSubcategory({
-          actorUserId,
-          categoryId: requiredText(formData, "asset_category_id"),
-          id: masterId,
-          name: requiredText(formData, "asset_subcategory_name"),
-          organizationId,
-        })
-      : repository.createAssetSubcategory({
-          actorUserId,
-          categoryId: requiredText(formData, "asset_category_id"),
-          name: requiredText(formData, "asset_subcategory_name"),
-          organizationId,
-        })
-  })
+  await withStore(
+    "store.masters.write",
+    (repository, actorUserId, organizationId) => {
+      const masterId = optionalText(formData, "master_id")
+      return masterId
+        ? repository.updateAssetSubcategory({
+            actorUserId,
+            categoryId: requiredText(formData, "asset_category_id"),
+            id: masterId,
+            name: requiredText(formData, "asset_subcategory_name"),
+            organizationId,
+          })
+        : repository.createAssetSubcategory({
+            actorUserId,
+            categoryId: requiredText(formData, "asset_category_id"),
+            name: requiredText(formData, "asset_subcategory_name"),
+            organizationId,
+          })
+    }
+  )
   revalidateStore()
 }
 
 export async function createStoreAssetNameAction(formData: FormData) {
-  await withStore("store.masters.write", (repository, actorUserId, organizationId) => {
-    const masterId = optionalText(formData, "master_id")
-    return masterId
-      ? repository.updateAssetName({
-          actorUserId,
-          id: masterId,
-          name: requiredText(formData, "asset_name"),
-          organizationId,
-          subcategoryId: requiredText(formData, "asset_subcategory_id"),
-        })
-      : repository.createAssetName({
-          actorUserId,
-          name: requiredText(formData, "asset_name"),
-          organizationId,
-          subcategoryId: requiredText(formData, "asset_subcategory_id"),
-        })
-  })
+  await withStore(
+    "store.masters.write",
+    (repository, actorUserId, organizationId) => {
+      const masterId = optionalText(formData, "master_id")
+      return masterId
+        ? repository.updateAssetName({
+            actorUserId,
+            id: masterId,
+            name: requiredText(formData, "asset_name"),
+            organizationId,
+            subcategoryId: requiredText(formData, "asset_subcategory_id"),
+          })
+        : repository.createAssetName({
+            actorUserId,
+            name: requiredText(formData, "asset_name"),
+            organizationId,
+            subcategoryId: requiredText(formData, "asset_subcategory_id"),
+          })
+    }
+  )
   revalidateStore()
 }
 
@@ -423,7 +421,7 @@ export async function deleteStoreMasterAction(formData: FormData) {
 
 export async function requestMissingStoreCodeAction(formData: FormData) {
   await withStore(
-    "store.new_item_requests.write",
+    "store.new_item_requests.submit",
     async (repository, actorUserId, organizationId) => {
       const policy = storeRequestFormPolicy(
         await repository.requisitionRequestContext({
@@ -453,7 +451,7 @@ export async function requestMissingStoreCodeAction(formData: FormData) {
 
 export async function resolveMissingStoreCodeAction(formData: FormData) {
   await withStore(
-    "store.new_item_requests.write",
+    "store.new_item_requests.resolve",
     (repository, actorUserId, organizationId) =>
       repository.resolveCodeRequest({
         actorUserId,
@@ -563,7 +561,7 @@ export async function receiveStoreStockAction(formData: FormData) {
   const savedFile = await saveGuaranteeCard(formData.get("guarantee_card"))
   try {
     await withStore(
-      "store.purchase_register.write",
+      "store.receipts.receive",
       async (repository, actorUserId, organizationId) => {
         const [requestContext, location] = await Promise.all([
           repository.requisitionRequestContext({
@@ -583,10 +581,7 @@ export async function receiveStoreStockAction(formData: FormData) {
           guaranteeCardStorageKey: savedFile?.storageKey,
           locationId: location.id,
           organizationId,
-          purchaseOrderLineId: requiredText(
-            formData,
-            "purchase_order_line_id"
-          ),
+          purchaseOrderLineId: requiredText(formData, "purchase_order_line_id"),
           quantity: positiveNumber(formData, "quantity"),
           receivedBy: requestContext.requesterEmail,
           warrantyUntil: optionalText(formData, "warranty_until"),
@@ -609,18 +604,20 @@ export async function createStorePurchaseOrdersAction(formData: FormData) {
   if (!itemTypeIds.length) {
     throw new Error("Select at least one Store item to order.")
   }
-  await withStore("store.stock.write", (repository, actorUserId, organizationId) =>
-    repository.createPurchaseOrdersFromSelection({
-      actorUserId,
-      items: itemTypeIds.map((itemTypeId) => ({
-        itemTypeId,
-        quantity: positiveNumber(formData, `quantity_${itemTypeId}`),
-        supplierId: optionalText(formData, `supplier_${itemTypeId}`),
-      })),
-      orderDate: optionalText(formData, "order_date"),
-      organizationId,
-      remark: optionalText(formData, "remark"),
-    })
+  await withStore(
+    "store.purchase_orders.create",
+    (repository, actorUserId, organizationId) =>
+      repository.createPurchaseOrdersFromSelection({
+        actorUserId,
+        items: itemTypeIds.map((itemTypeId) => ({
+          itemTypeId,
+          quantity: positiveNumber(formData, `quantity_${itemTypeId}`),
+          supplierId: optionalText(formData, `supplier_${itemTypeId}`),
+        })),
+        orderDate: optionalText(formData, "order_date"),
+        organizationId,
+        remark: optionalText(formData, "remark"),
+      })
   )
   revalidateStore()
   redirect("/store/orders")
@@ -628,17 +625,19 @@ export async function createStorePurchaseOrdersAction(formData: FormData) {
 
 export async function createStoreRepairPurchaseOrderAction(formData: FormData) {
   const assetCode = requiredText(formData, "asset_code")
-  await withStore("store.asset_repair.write", (repository, actorUserId, organizationId) =>
-    repository.createRepairPurchaseOrder({
-      actorUserId,
-      assetCode,
-      orderDate: optionalText(formData, "order_date"),
-      organizationId,
-      remark: optionalText(formData, "remark"),
-      serviceDescription: requiredText(formData, "service_description"),
-      servicePrice: requiredText(formData, "service_price"),
-      supplierId: requiredText(formData, "supplier_id"),
-    })
+  await withStore(
+    "store.asset_repair.write",
+    (repository, actorUserId, organizationId) =>
+      repository.createRepairPurchaseOrder({
+        actorUserId,
+        assetCode,
+        orderDate: optionalText(formData, "order_date"),
+        organizationId,
+        remark: optionalText(formData, "remark"),
+        serviceDescription: requiredText(formData, "service_description"),
+        servicePrice: requiredText(formData, "service_price"),
+        supplierId: requiredText(formData, "supplier_id"),
+      })
   )
   revalidatePath(`/store/assets/${encodeURIComponent(assetCode)}`)
   revalidateStore()
@@ -649,13 +648,15 @@ export async function completeStoreRepairPurchaseOrderAction(
   formData: FormData
 ) {
   const assetCode = requiredText(formData, "asset_code")
-  await withStore("store.asset_repair.write", (repository, actorUserId, organizationId) =>
-    repository.completeRepairPurchaseOrder({
-      actorUserId,
-      assetCode,
-      organizationId,
-      purchaseOrderId: requiredText(formData, "purchase_order_id"),
-    })
+  await withStore(
+    "store.asset_repair.write",
+    (repository, actorUserId, organizationId) =>
+      repository.completeRepairPurchaseOrder({
+        actorUserId,
+        assetCode,
+        organizationId,
+        purchaseOrderId: requiredText(formData, "purchase_order_id"),
+      })
   )
   revalidatePath(`/store/assets/${encodeURIComponent(assetCode)}`)
   revalidateStore()
@@ -663,18 +664,20 @@ export async function completeStoreRepairPurchaseOrderAction(
 
 export async function moveStoreAssetAction(formData: FormData) {
   const assetCode = requiredText(formData, "asset_code")
-  await withStore("store.asset_movement.write", (repository, actorUserId, organizationId) =>
-    repository.moveAsset({
-      actorUserId,
-      assetCode,
-      holderName: optionalText(formData, "holder_name"),
-      holderReference: optionalText(formData, "holder_reference"),
-      holderType: holderType(formData),
-      movedBy: optionalText(formData, "moved_by"),
-      organizationId,
-      remark: optionalText(formData, "remark"),
-      vendorId: optionalText(formData, "vendor_id"),
-    })
+  await withStore(
+    "store.asset_movement.write",
+    (repository, actorUserId, organizationId) =>
+      repository.moveAsset({
+        actorUserId,
+        assetCode,
+        holderName: optionalText(formData, "holder_name"),
+        holderReference: optionalText(formData, "holder_reference"),
+        holderType: holderType(formData),
+        movedBy: optionalText(formData, "moved_by"),
+        organizationId,
+        remark: optionalText(formData, "remark"),
+        vendorId: optionalText(formData, "vendor_id"),
+      })
   )
   revalidatePath(`/store/assets/${encodeURIComponent(assetCode)}`)
   revalidateStore()
@@ -682,14 +685,16 @@ export async function moveStoreAssetAction(formData: FormData) {
 
 export async function scheduleStoreAssetMaintenanceAction(formData: FormData) {
   const assetCode = requiredText(formData, "asset_code")
-  await withStore("store.asset_maintenance.write", (repository, actorUserId, organizationId) =>
-    repository.scheduleAssetMaintenance({
-      actorUserId,
-      assetCode,
-      definitionCode: requiredText(formData, "definition_code"),
-      firstDueOn: requiredText(formData, "first_due_on"),
-      organizationId,
-    })
+  await withStore(
+    "store.asset_maintenance.write",
+    (repository, actorUserId, organizationId) =>
+      repository.scheduleAssetMaintenance({
+        actorUserId,
+        assetCode,
+        definitionCode: requiredText(formData, "definition_code"),
+        firstDueOn: requiredText(formData, "first_due_on"),
+        organizationId,
+      })
   )
   revalidatePath(`/store/assets/${encodeURIComponent(assetCode)}`)
   revalidateStore()
@@ -701,15 +706,17 @@ export async function setStoreAssetLifecycleAction(formData: FormData) {
   if (!["BROKEN", "SCRAPPED", "UNDER_MAINTENANCE"].includes(status)) {
     throw new Error("Asset status is invalid.")
   }
-  await withStore("store.asset_lifecycle.write", (repository, actorUserId, organizationId) =>
-    repository.setAssetLifecycleStatus({
-      actorUserId,
-      assetCode,
-      changedBy: optionalText(formData, "changed_by"),
-      organizationId,
-      remark: optionalText(formData, "status_remark"),
-      status: status as "BROKEN" | "SCRAPPED" | "UNDER_MAINTENANCE",
-    })
+  await withStore(
+    "store.asset_lifecycle.write",
+    (repository, actorUserId, organizationId) =>
+      repository.setAssetLifecycleStatus({
+        actorUserId,
+        assetCode,
+        changedBy: optionalText(formData, "changed_by"),
+        organizationId,
+        remark: optionalText(formData, "status_remark"),
+        status: status as "BROKEN" | "SCRAPPED" | "UNDER_MAINTENANCE",
+      })
   )
   revalidatePath(`/store/assets/${encodeURIComponent(assetCode)}`)
   revalidateStore()
@@ -721,21 +728,23 @@ export async function completeStoreAssetMaintenanceAction(formData: FormData) {
   if (!["MAINTENANCE", "CALIBRATION", "BREAKDOWN"].includes(type)) {
     throw new Error("Maintenance type is invalid.")
   }
-  await withStore("store.asset_maintenance.write", (repository, actorUserId, organizationId) =>
-    repository.completeAssetMaintenance({
-      actorUserId,
-      assetCode,
-      certificateNumber: optionalText(formData, "certificate_number"),
-      completedBy: requiredText(formData, "completed_by"),
-      completedOn: requiredText(formData, "completed_on"),
-      cost: optionalText(formData, "cost"),
-      maintenanceType: type as "BREAKDOWN" | "CALIBRATION" | "MAINTENANCE",
-      organizationId,
-      result: optionalText(formData, "result"),
-      scheduleId: optionalText(formData, "schedule_id"),
-      supplierName: optionalText(formData, "supplier_name"),
-      workDone: optionalText(formData, "work_done"),
-    })
+  await withStore(
+    "store.asset_maintenance.write",
+    (repository, actorUserId, organizationId) =>
+      repository.completeAssetMaintenance({
+        actorUserId,
+        assetCode,
+        certificateNumber: optionalText(formData, "certificate_number"),
+        completedBy: requiredText(formData, "completed_by"),
+        completedOn: requiredText(formData, "completed_on"),
+        cost: optionalText(formData, "cost"),
+        maintenanceType: type as "BREAKDOWN" | "CALIBRATION" | "MAINTENANCE",
+        organizationId,
+        result: optionalText(formData, "result"),
+        scheduleId: optionalText(formData, "schedule_id"),
+        supplierName: optionalText(formData, "supplier_name"),
+        workDone: optionalText(formData, "work_done"),
+      })
   )
   revalidatePath(`/store/assets/${encodeURIComponent(assetCode)}`)
   revalidateStore()

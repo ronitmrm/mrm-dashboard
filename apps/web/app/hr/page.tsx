@@ -17,10 +17,9 @@ import { redirect } from "next/navigation"
 
 import { RecruitmentPanel } from "@/components/hr/recruitment-panel"
 import { readAuthEnvironment } from "@/lib/auth/auth"
-import {
-  listGrantedCapabilities,
-} from "@/lib/auth/require-capability"
+import { listGrantedCapabilities } from "@/lib/auth/require-capability"
 import { requireHrPage } from "@/lib/auth/require-hr-page"
+import { hrTaskCapabilities } from "@/lib/auth/task-capabilities"
 import { hrMasterNavigation, hrNavigation } from "@/lib/unified-navigation"
 import { normalizeRecruitmentMasterKind } from "@/lib/recruitment-master-navigation"
 
@@ -53,12 +52,18 @@ export default async function HrRecruitmentPage({
     activeItem.requiredCapability,
     activeItem.href
   )
-  const grants = await listGrantedCapabilities(session.user.id, [
-    "hr.recruitment.write",
-    "hr.employees.write",
-  ])
-  const canWrite = grants.includes("hr.recruitment.write")
-  const canManageEmployees = grants.includes("hr.employees.write")
+  const grants = await listGrantedCapabilities(
+    session.user.id,
+    Object.values(hrTaskCapabilities)
+  )
+  const canManageEmployees =
+    grants.includes(hrTaskCapabilities.assignEmployee) ||
+    grants.includes(hrTaskCapabilities.bulkAssignEmployees)
+  const canWrite = grants.some(
+    (capability) =>
+      capability !== hrTaskCapabilities.assignEmployee &&
+      capability !== hrTaskCapabilities.bulkAssignEmployees
+  )
 
   const repository = createRecruitmentRepository({
     connectionString: readAuthEnvironment().connectionString,

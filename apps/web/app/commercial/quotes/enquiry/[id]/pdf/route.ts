@@ -15,7 +15,7 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  await requireCapability(
+  const session = await requireCapability(
     commercialCapabilities.quotes.read,
     "/commercial/quotes"
   )
@@ -24,7 +24,9 @@ export async function GET(
     connectionString: readAuthEnvironment().connectionString,
   })
   try {
-    const document = (await repository.getQuoteDocument(id)) as QuoteDocument
+    const document = (await repository.getQuoteDocument(id, {
+      originatingSalespersonUserId: session.user.id,
+    })) as QuoteDocument
     const market = await loadQuoteMarketContext({
       currency: document.currency,
       fallbackRate: document.conversionRate,

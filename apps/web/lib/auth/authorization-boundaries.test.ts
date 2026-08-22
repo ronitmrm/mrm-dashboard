@@ -59,29 +59,32 @@ describe("protected server boundaries", () => {
   it("pins narrow capabilities at representative sensitive boundaries", async () => {
     const boundaries = [
       {
-        capabilities: [
-          "administration.users.manage",
-          "administration.roles.manage",
+        markers: [
+          "administrationTaskCapabilities.provisionStaff",
+          "administrationTaskCapabilities.updateRolePermissions",
         ],
         path: "administration/access/actions.ts",
       },
       {
-        capabilities: ["hr.employees.write", "hr.recruitment.write"],
+        markers: [
+          "hrTaskCapabilities.assignEmployee",
+          "hrTaskCapabilities.recordInterview",
+        ],
         path: "hr/actions.ts",
       },
       {
-        capabilities: [
-          "pricing.enquiries.write",
-          "pricing.technical_review.write",
-          "pricing.design.write",
+        markers: [
+          "commercialTaskCapabilities.createEnquiry",
+          "commercialTaskCapabilities.updateTechnicalReview",
+          "commercialTaskCapabilities.saveDesign",
         ],
         path: "commercial/enquiries/actions.ts",
       },
       {
-        capabilities: [
-          "operations.shop_floor.write",
-          "operations.production.write",
-          "planning.priority.write",
+        markers: [
+          '"operations.shop_floor.write"',
+          '"operations.production.write"',
+          '"planning.priority.write"',
         ],
         path: "api/[...path]/route.ts",
       },
@@ -89,8 +92,8 @@ describe("protected server boundaries", () => {
 
     for (const boundary of boundaries) {
       const source = await readFile(`${appRoot}/${boundary.path}`, "utf8")
-      for (const capability of boundary.capabilities) {
-        expect(source, boundary.path).toContain(`"${capability}"`)
+      for (const marker of boundary.markers) {
+        expect(source, boundary.path).toContain(marker)
       }
     }
   })

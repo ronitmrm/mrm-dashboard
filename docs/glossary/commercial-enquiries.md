@@ -14,6 +14,13 @@ one selected line for editing and does not expose Technical Review or Design
 inputs.
 _Avoid_: Combined enquiry, Technical Review, and Design workspace.
 
+**Originating Salesperson**: The authenticated Sales user who first creates an
+Enquiry. The Enquiry and every Sales task derived from it remain visible and
+actionable only to that user. Technical Review, Design, Costing, and other
+downstream team queues remain shared; when downstream work is returned to
+Sales, it returns to the same Originating Salesperson.
+_Avoid_: Reassigning ownership when another team reviews or updates the Enquiry.
+
 **Technical Review Release**: A Technical Review decision that marks one line
 Feasible or Duplicate / Existing Product and makes it available in the Design
 queue. Saving the decision stays within Technical Review; it does not start

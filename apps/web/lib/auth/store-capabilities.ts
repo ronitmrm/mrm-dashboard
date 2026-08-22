@@ -10,17 +10,19 @@ export const storeCapabilities = {
   assetRepair: { write: "store.asset_repair.write" },
   masters: {
     read: "store.masters.read",
-    write: "store.masters.write",
   },
+  masterManage: { write: "store.masters.write" },
   newItemRequests: {
     read: "store.new_item_requests.read",
-    write: "store.new_item_requests.write",
   },
+  newItemRequestResolve: { write: "store.new_item_requests.resolve" },
+  newItemRequestSubmit: { write: "store.new_item_requests.submit" },
   overview: { read: "store.overview.read" },
   purchaseRegister: {
     read: "store.purchase_register.read",
-    write: "store.purchase_register.write",
   },
+  purchaseOrderCreate: { write: "store.purchase_orders.create" },
+  receiptReceive: { write: "store.receipts.receive" },
   requests: {
     read: "store.requests.read",
   },
@@ -28,12 +30,16 @@ export const storeCapabilities = {
   requestSubmit: { write: "store.requests.submit" },
   stock: {
     read: "store.stock.read",
-    write: "store.stock.write",
   },
 } as const
 
 export const storePageAccess = [
-  page("store.overview", "Store Overview", "/store", storeCapabilities.overview),
+  page(
+    "store.overview",
+    "Store Overview",
+    "/store",
+    storeCapabilities.overview
+  ),
   page(
     "store.requests",
     "Requests & Issues",

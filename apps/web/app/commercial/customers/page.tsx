@@ -30,8 +30,10 @@ import {
 } from "@workspace/ui/components/table"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
+import { commercialTaskCapabilities } from "@/lib/auth/task-capabilities"
 import { CompanyWideMasterScope } from "@/components/company-wide-master-scope"
 import { MasterDataViewTabs } from "@/components/master-data-view-tabs"
+import { MasterDataCsvImportButton } from "@/components/master-data-csv-import-button"
 import {
   listGrantedCapabilities,
   requireCapability,
@@ -43,7 +45,11 @@ import {
 } from "@/lib/external-master-workspace"
 import { pageBounds } from "@/lib/page-bounds"
 
-import { createCustomerAction, updateCustomerAction } from "./actions"
+import {
+  createCustomerAction,
+  importCustomersCsvAction,
+  updateCustomerAction,
+} from "./actions"
 
 export const dynamic = "force-dynamic"
 
@@ -114,9 +120,15 @@ export default async function CustomersPage({
     "/commercial/customers"
   )
   const grantedCapabilities = await listGrantedCapabilities(session.user.id, [
-    "pricing.customers.write",
+    commercialTaskCapabilities.createCustomer,
+    commercialTaskCapabilities.updateCustomer,
   ])
-  const canWrite = grantedCapabilities.includes("pricing.customers.write")
+  const canCreateCustomers = grantedCapabilities.includes(
+    commercialTaskCapabilities.createCustomer
+  )
+  const canUpdateCustomers = grantedCapabilities.includes(
+    commercialTaskCapabilities.updateCustomer
+  )
 
   const repository = createCustomerRepository({
     connectionString: readAuthEnvironment().connectionString,
@@ -157,11 +169,21 @@ export default async function CustomersPage({
       <MasterDataViewTabs
         activeView={activeView}
         allMastersHref={externalMasterAllMastersHref(activeView)}
+        csvImportAction={
+          canCreateCustomers ? (
+            <MasterDataCsvImportButton action={importCustomersCsvAction} />
+          ) : null
+        }
         dataEntryHref={externalMasterViewHref(customersPath, "dataEntry")}
+        exportAction={
+          <Button asChild size="sm" variant="outline">
+            <a href={`${customersPath}/export.csv`}>Export</a>
+          </Button>
+        }
         masterTablesHref={externalMasterViewHref(customersPath, "masterTables")}
       />
 
-      {canWrite && showDataEntry ? (
+      {canCreateCustomers && showDataEntry ? (
         <Card>
           <CardHeader>
             <CardTitle>Add Customer</CardTitle>
@@ -317,7 +339,7 @@ export default async function CustomersPage({
                     <TableHead data-filterable="true">Packaging</TableHead>
                     <TableHead data-filterable="true">Currency</TableHead>
                     <TableHead data-filterable="true">Status</TableHead>
-                    {canWrite ? <TableHead>Action</TableHead> : null}
+                    {canUpdateCustomers ? <TableHead>Action</TableHead> : null}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -330,7 +352,7 @@ export default async function CustomersPage({
                             className="font-medium"
                             data-filter-value={customer.customerUid}
                           >
-                            {canWrite ? (
+                            {canUpdateCustomers ? (
                               <form action={updateCustomerAction} id={formId}>
                                 <input
                                   name="customer_id"
@@ -342,7 +364,7 @@ export default async function CustomersPage({
                             {customer.customerUid}
                           </TableCell>
                           <TableCell data-filter-value={customer.companyName}>
-                            {canWrite ? (
+                            {canUpdateCustomers ? (
                               <Field className="min-w-52">
                                 <FieldLabel
                                   className="sr-only"
@@ -363,7 +385,7 @@ export default async function CustomersPage({
                             )}
                           </TableCell>
                           <TableCell data-filter-value={customer.email ?? ""}>
-                            {canWrite ? (
+                            {canUpdateCustomers ? (
                               <Field className="min-w-52">
                                 <FieldLabel
                                   className="sr-only"
@@ -384,7 +406,7 @@ export default async function CustomersPage({
                             )}
                           </TableCell>
                           <TableCell data-filter-value={customer.phone ?? ""}>
-                            {canWrite ? (
+                            {canUpdateCustomers ? (
                               <Field className="min-w-44">
                                 <FieldLabel
                                   className="sr-only"
@@ -404,7 +426,7 @@ export default async function CustomersPage({
                             )}
                           </TableCell>
                           <TableCell data-filter-value={customer.country ?? ""}>
-                            {canWrite ? (
+                            {canUpdateCustomers ? (
                               <Field className="min-w-36">
                                 <FieldLabel
                                   className="sr-only"
@@ -426,7 +448,7 @@ export default async function CustomersPage({
                           <TableCell
                             data-filter-value={customer.defaultBuyerName ?? ""}
                           >
-                            {canWrite ? (
+                            {canUpdateCustomers ? (
                               <CustomerDefaultSelect
                                 customerUid={customer.customerUid}
                                 defaultValue={customer.defaultBuyerName}
@@ -442,7 +464,7 @@ export default async function CustomersPage({
                           <TableCell
                             data-filter-value={customer.defaultIncoterms ?? ""}
                           >
-                            {canWrite ? (
+                            {canUpdateCustomers ? (
                               <CustomerDefaultSelect
                                 customerUid={customer.customerUid}
                                 defaultValue={customer.defaultIncoterms}
@@ -460,7 +482,7 @@ export default async function CustomersPage({
                               customer.defaultPaymentTerms ?? ""
                             }
                           >
-                            {canWrite ? (
+                            {canUpdateCustomers ? (
                               <CustomerDefaultSelect
                                 customerUid={customer.customerUid}
                                 defaultValue={customer.defaultPaymentTerms}
@@ -478,7 +500,7 @@ export default async function CustomersPage({
                               customer.defaultShipmentMode ?? ""
                             }
                           >
-                            {canWrite ? (
+                            {canUpdateCustomers ? (
                               <CustomerDefaultSelect
                                 customerUid={customer.customerUid}
                                 defaultValue={customer.defaultShipmentMode}
@@ -496,7 +518,7 @@ export default async function CustomersPage({
                               customer.defaultPackagingTerms ?? ""
                             }
                           >
-                            {canWrite ? (
+                            {canUpdateCustomers ? (
                               <CustomerDefaultSelect
                                 customerUid={customer.customerUid}
                                 defaultValue={customer.defaultPackagingTerms}
@@ -512,7 +534,7 @@ export default async function CustomersPage({
                           <TableCell
                             data-filter-value={customer.defaultCurrency ?? ""}
                           >
-                            {canWrite ? (
+                            {canUpdateCustomers ? (
                               <CustomerDefaultSelect
                                 customerUid={customer.customerUid}
                                 defaultValue={customer.defaultCurrency}
@@ -526,7 +548,7 @@ export default async function CustomersPage({
                             )}
                           </TableCell>
                           <TableCell data-filter-value={customer.status}>
-                            {canWrite ? (
+                            {canUpdateCustomers ? (
                               <Field className="min-w-32">
                                 <FieldLabel
                                   className="sr-only"
@@ -555,7 +577,7 @@ export default async function CustomersPage({
                               </Badge>
                             )}
                           </TableCell>
-                          {canWrite ? (
+                          {canUpdateCustomers ? (
                             <TableCell>
                               <Button
                                 form={formId}
@@ -574,7 +596,7 @@ export default async function CustomersPage({
                     <TableRow>
                       <TableCell
                         className="h-32 text-center text-muted-foreground"
-                        colSpan={canWrite ? 13 : 12}
+                        colSpan={canUpdateCustomers ? 13 : 12}
                       >
                         No Customers Have Been Loaded Into Postgresql Yet.
                       </TableCell>

@@ -2,7 +2,6 @@ import type { PageAccessDefinition } from "./page-access-types"
 import type { DashboardTabId } from "../unified-navigation"
 
 export const productionPageCapabilities = {
-  correctionsTab: "operations.corrections_page.read",
   dataEntryTab: "operations.master_data_entry.read",
   firstPieceInspectionTab: "quality.first_piece_page.read",
   jobCardStatusTab: "operations.job_cards.read",
@@ -24,7 +23,6 @@ export const productionPageCapabilities = {
 } as const satisfies Partial<Record<DashboardTabId, string>>
 
 const labels: Record<keyof typeof productionPageCapabilities, string> = {
-  correctionsTab: "Corrections",
   dataEntryTab: "Master Data Entry",
   firstPieceInspectionTab: "First Piece Inspection",
   jobCardStatusTab: "Job Cards",
@@ -45,17 +43,19 @@ const labels: Record<keyof typeof productionPageCapabilities, string> = {
   shopFloorTasksTab: "Shop Floor Tasks",
 }
 
-export const productionPageAccess = Object.entries(productionPageCapabilities).map(
-  ([id, readPermissionKey]) => ({
-    href: `/?tab=${id}`,
-    id: `production.${id}`,
-    label: labels[id as keyof typeof labels],
-    module: "Production",
-    navigation: true,
-    readPermissionKey,
-  })
-) satisfies PageAccessDefinition[]
+export const productionPageAccess = Object.entries(
+  productionPageCapabilities
+).map(([id, readPermissionKey]) => ({
+  href: `/?tab=${id}`,
+  id: `production.${id}`,
+  label: labels[id as keyof typeof labels],
+  module: "Production",
+  navigation: true,
+  readPermissionKey,
+})) satisfies PageAccessDefinition[]
 
 export function productionCapabilityForTab(tab: DashboardTabId) {
-  return productionPageCapabilities[tab as keyof typeof productionPageCapabilities]
+  return productionPageCapabilities[
+    tab as keyof typeof productionPageCapabilities
+  ]
 }

@@ -16,10 +16,7 @@ export function operationalDataDashboardHref(
   entryType?: string | null
 ) {
   const params = new URLSearchParams({
-    tab:
-      view === "dataEntry"
-        ? "operationalEntryTab"
-        : "operationalTablesTab",
+    tab: view === "dataEntry" ? "operationalEntryTab" : "operationalTablesTab",
     floor: productionFloorCode,
   })
   const normalizedEntryType = entryType?.trim()
@@ -31,13 +28,23 @@ export function externalOperationalEntryOptions(
   access: UnifiedNavigationAccess,
   view: OperationalEntryView
 ): ExternalOperationalEntryOption[] {
-  return access.commercialHrefs.includes("/commercial/enquiries")
-    ? [
-        {
-          href: `/commercial/enquiries?operationalView=${view}`,
-          id: "commercial_enquiries",
-          title: "Enquiries",
-        },
-      ]
-    : []
+  const options: ExternalOperationalEntryOption[] = []
+
+  if (access.commercialHrefs.includes("/commercial/enquiries")) {
+    options.push({
+      href: `/commercial/enquiries?operationalView=${view}`,
+      id: "commercial_enquiries",
+      title: "Enquiries",
+    })
+  }
+
+  if (access.commercialHrefs.includes("/commercial/orders")) {
+    options.push({
+      href: `/commercial/orders?operationalView=${view}`,
+      id: "commercial_purchase_orders",
+      title: "Purchase Orders",
+    })
+  }
+
+  return options
 }

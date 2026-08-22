@@ -1,10 +1,13 @@
 "use client"
 
 import Link from "next/link"
-import { ArrowLeft } from "lucide-react"
+import { ArrowLeft, Download } from "lucide-react"
 import { useSearchParams } from "next/navigation"
-import { useEffect } from "react"
+import { type ReactNode, useEffect } from "react"
 
+import { Button } from "@workspace/ui/components/button"
+
+import { masterDataTransferAction } from "@/lib/master-data-transfer"
 import { MasterDataUnsavedGuard } from "./master-data-unsaved-guard"
 import {
   masterSelectionFromContext,
@@ -18,8 +21,12 @@ const linkClass = "border-b-2 px-4 py-3 text-sm font-medium transition-colors"
 type MasterDataViewTabsProps = {
   activeView: "dataEntry" | "masterTables"
   allMastersHref?: string
+  csvImportAction?: ReactNode
   dataEntryHref: string
+  exportAction?: ReactNode
+  exportDisabled?: boolean
   masterTablesHref: string
+  onExport?: () => void
 }
 
 function useMasterSelectionContextBridge(searchParams: URLSearchParams) {
@@ -57,22 +64,45 @@ export function MasterDataViewTabs(props: MasterDataViewTabsProps) {
     props.dataEntryHref,
     searchParams
   )
-  const masterTablesHref = withMasterSelectionContext(
-    props.masterTablesHref,
-    searchParams
-  )
+  const masterTablesHref = selection
+    ? withMasterSelectionContext(props.masterTablesHref, searchParams)
+    : "/masters?view=masterTables"
+  const transferAction = masterDataTransferAction(props.activeView, {
+    csvImport: Boolean(props.csvImportAction),
+    export: Boolean(props.exportAction || props.onExport),
+  })
 
   return (
     <>
       <MasterDataUnsavedGuard enabled={props.activeView === "dataEntry"} />
-      <div className="flex items-center border-b">
-        <Link
-          className="mr-2 inline-flex items-center gap-2 px-3 py-3 text-sm font-medium text-muted-foreground hover:text-foreground"
-          href={masterSelectionHref(selection)}
-        >
-          <ArrowLeft className="size-4" />
-          Back to Master Selection
-        </Link>
+      <div className="flex flex-wrap items-center border-b">
+        <div className="flex items-center gap-2">
+          <Link
+            className="inline-flex items-center gap-2 px-3 py-3 text-sm font-medium text-muted-foreground hover:text-foreground"
+            href={masterSelectionHref(selection, props.activeView)}
+          >
+            <ArrowLeft className="size-4" />
+            Back to Master Selection
+          </Link>
+          {transferAction === "csvImport" ? props.csvImportAction : null}
+          {transferAction === "export" && props.exportAction
+            ? props.exportAction
+            : null}
+          {transferAction === "export" &&
+          !props.exportAction &&
+          props.onExport ? (
+            <Button
+              disabled={props.exportDisabled}
+              onClick={props.onExport}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              <Download className="size-4" />
+              Export
+            </Button>
+          ) : null}
+        </div>
         {selection ? (
           <p className="mr-auto hidden truncate text-xs text-muted-foreground xl:block">
             {masterSelectionSummary(selection)}
@@ -80,7 +110,11 @@ export function MasterDataViewTabs(props: MasterDataViewTabsProps) {
         ) : (
           <span className="mr-auto" />
         )}
-        <nav aria-label="Master Data views" className="flex" role="tablist">
+        <nav
+          aria-label="Master Data views"
+          className="ml-auto flex shrink-0"
+          role="tablist"
+        >
           <Link
             aria-selected={props.activeView === "dataEntry"}
             className={`${linkClass} ${

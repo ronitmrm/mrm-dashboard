@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
+import { commercialTaskCapabilities } from "@/lib/auth/task-capabilities"
 
 const assembliesPath = "/commercial/assemblies"
 
@@ -18,7 +19,7 @@ function text(formData: FormData, name: string) {
 
 export async function addBomLineAction(formData: FormData) {
   const session = await requireCapability(
-    "pricing.assemblies.write",
+    commercialTaskCapabilities.addBomLine,
     assembliesPath
   )
   const quantity = Number(text(formData, "quantity"))

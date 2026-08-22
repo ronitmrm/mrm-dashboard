@@ -76,10 +76,7 @@ describe("personal dashboard", () => {
   it("uses the unified Master Data and Operational Entry ownership", () => {
     const widgets = availablePersonalDashboardWidgets({
       ...noAccess,
-      commercialHrefs: [
-        "/commercial/customers",
-        "/commercial/enquiries",
-      ],
+      commercialHrefs: ["/commercial/customers", "/commercial/enquiries"],
       operations: true,
     })
     const modules = Object.fromEntries(
@@ -91,6 +88,9 @@ describe("personal dashboard", () => {
       "commercial-enquiries": "Operational Entry",
       "master-data": "Master Data",
       "operational-entry": "Operational Entry",
+    })
+    expect(widgets.find(({ id }) => id === "operational-entry")).toMatchObject({
+      href: "/operational-entry",
     })
   })
 })

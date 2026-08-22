@@ -5,10 +5,10 @@ import { revalidatePath } from "next/cache"
 import { createAccessAdministrationService } from "@/lib/auth/access-administration"
 import { getAuth, readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
+import { administrationTaskCapabilities } from "@/lib/auth/task-capabilities"
 import { optionalText, requiredText } from "@/lib/form-data"
 
 const accessPath = "/administration/access"
-
 
 function employeeReference(formData: FormData) {
   const value = requiredText(formData, "employee")
@@ -57,13 +57,13 @@ async function withAccessService<T>(
 
 export async function provisionStaffAction(formData: FormData) {
   const password = requiredText(formData, "password")
-  if (password.length < 12) {
-    throw new Error("password must contain at least 12 characters")
+  if (password.length < 6) {
+    throw new Error("password must contain at least 6 characters")
   }
 
   const employee = employeeReference(formData)
   await withAccessService(
-    "administration.users.manage",
+    administrationTaskCapabilities.provisionStaff,
     (access, actorUserId) =>
       access.provisionStaff({
         actorUserId,
@@ -78,7 +78,7 @@ export async function provisionStaffAction(formData: FormData) {
 export async function linkEmployeeAction(formData: FormData) {
   const employee = employeeReference(formData)
   await withAccessService(
-    "administration.users.manage",
+    administrationTaskCapabilities.linkStaffAccount,
     (access, actorUserId) =>
       access.linkEmployee({
         actorUserId,
@@ -95,7 +95,7 @@ export async function createRoleAction(formData: FormData) {
     .filter((value): value is string => typeof value === "string")
 
   await withAccessService(
-    "administration.roles.manage",
+    administrationTaskCapabilities.createRole,
     (access, actorUserId) =>
       access.createRole({
         actorUserId,
@@ -114,7 +114,7 @@ export async function updateRolePermissionsAction(formData: FormData) {
     .filter((value): value is string => typeof value === "string")
 
   await withAccessService(
-    "administration.roles.manage",
+    administrationTaskCapabilities.updateRolePermissions,
     (access, actorUserId) =>
       access.updateRolePermissions({
         actorUserId,
@@ -127,7 +127,7 @@ export async function updateRolePermissionsAction(formData: FormData) {
 
 export async function assignRoleAction(formData: FormData) {
   await withAccessService(
-    "administration.roles.manage",
+    administrationTaskCapabilities.assignStaffRole,
     (access, actorUserId) =>
       access.assignRole({
         actorUserId,
@@ -144,7 +144,7 @@ export async function setPostRoleAction(formData: FormData) {
     throw new Error("effect must be assign or remove")
   }
   await withAccessService(
-    "administration.roles.manage",
+    administrationTaskCapabilities.assignPostAccess,
     (access, actorUserId) =>
       access.setPostRole({
         actorUserId,
@@ -163,7 +163,7 @@ export async function setPermissionOverrideAction(formData: FormData) {
   }
 
   await withAccessService(
-    "administration.roles.manage",
+    administrationTaskCapabilities.managePermissionOverrides,
     (access, actorUserId) =>
       access.setPermissionOverride({
         actorUserId,

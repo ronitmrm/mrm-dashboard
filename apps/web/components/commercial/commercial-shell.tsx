@@ -87,7 +87,9 @@ export function CommercialShell({
   const current =
     (pathname === "/account/password"
       ? { label: "Password & Security" }
-      : productionPage) ??
+      : pathname.startsWith("/operational-entry")
+        ? { label: "Operational Entry" }
+        : productionPage) ??
     [
       personalDashboardNavigation,
       ...commercialNavigation,

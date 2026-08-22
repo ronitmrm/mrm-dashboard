@@ -5,8 +5,8 @@ import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
-import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
+import { commercialTaskCapabilities } from "@/lib/auth/task-capabilities"
 import { optionalText, requiredText } from "@/lib/form-data"
 
 const revisionsPath = "/commercial/revisions"
@@ -94,7 +94,7 @@ async function withRevisions<T>(
     repository: ReturnType<typeof createCommercialRevisionsRepository>,
     actorUserId: string
   ) => Promise<T>,
-  capability: string = commercialCapabilities.revisions.write,
+  capability: string,
   returnPath: string = revisionsPath
 ) {
   const session = await requireCapability(capability, returnPath)
@@ -112,15 +112,17 @@ export async function createBulkPriceRevisionAction(formData: FormData) {
   const revisionRoute = requiredText(formData, "revision_route") as
     | "Customer Parameter Bulk Revision"
     | "Product Parameter Bulk Revision"
-  await withRevisions((repository, actorUserId) =>
-    repository.createBulkPriceRevision({
-      actorUserId,
-      customerId: optionalText(formData, "customer_id"),
-      effectiveOn: requiredText(formData, "effective_on"),
-      organizationId: requiredText(formData, "organization_id"),
-      reason: requiredText(formData, "reason"),
-      revisionRoute,
-    })
+  await withRevisions(
+    (repository, actorUserId) =>
+      repository.createBulkPriceRevision({
+        actorUserId,
+        customerId: optionalText(formData, "customer_id"),
+        effectiveOn: requiredText(formData, "effective_on"),
+        organizationId: requiredText(formData, "organization_id"),
+        reason: requiredText(formData, "reason"),
+        revisionRoute,
+      }),
+    commercialTaskCapabilities.createBulkPriceRevision
   )
   revalidatePath(revisionsPath)
   revalidatePath(customerBulkRevisionPath)
@@ -132,15 +134,20 @@ export async function stageBulkPriceRevisionAction(formData: FormData) {
   const enteredValue = numberValue(formData, "new_value")
   const newValue =
     fieldName === "profit_percent" ? enteredValue / 100 : enteredValue
-  await withRevisions((repository, actorUserId) =>
-    repository.stageBulkPriceRevisionChange({
-      actorUserId,
-      bulkPriceRevisionId: requiredText(formData, "bulk_price_revision_id"),
-      fieldName,
-      newValue,
-      notes: optionalText(formData, "notes"),
-      selectedQuoteItemIds: selectedValues(formData, "selected_quote_item_ids"),
-    })
+  await withRevisions(
+    (repository, actorUserId) =>
+      repository.stageBulkPriceRevisionChange({
+        actorUserId,
+        bulkPriceRevisionId: requiredText(formData, "bulk_price_revision_id"),
+        fieldName,
+        newValue,
+        notes: optionalText(formData, "notes"),
+        selectedQuoteItemIds: selectedValues(
+          formData,
+          "selected_quote_item_ids"
+        ),
+      }),
+    commercialTaskCapabilities.stageBulkPriceRevision
   )
   revalidatePath(revisionsPath)
   revalidatePath(customerBulkRevisionPath)
@@ -148,12 +155,14 @@ export async function stageBulkPriceRevisionAction(formData: FormData) {
 }
 
 export async function deleteBulkPriceRevisionStageAction(formData: FormData) {
-  await withRevisions((repository, actorUserId) =>
-    repository.deleteBulkPriceRevisionStage({
-      actorUserId,
-      bulkPriceRevisionId: requiredText(formData, "bulk_price_revision_id"),
-      stageGroupId: requiredText(formData, "stage_group_id"),
-    })
+  await withRevisions(
+    (repository, actorUserId) =>
+      repository.deleteBulkPriceRevisionStage({
+        actorUserId,
+        bulkPriceRevisionId: requiredText(formData, "bulk_price_revision_id"),
+        stageGroupId: requiredText(formData, "stage_group_id"),
+      }),
+    commercialTaskCapabilities.deleteBulkPriceRevisionStage
   )
   revalidatePath(revisionsPath)
   revalidatePath(customerBulkRevisionPath)
@@ -162,11 +171,13 @@ export async function deleteBulkPriceRevisionStageAction(formData: FormData) {
 
 export async function completeBulkPriceRevisionAction(formData: FormData) {
   const bulkPriceRevisionId = requiredText(formData, "bulk_price_revision_id")
-  const completed = await withRevisions((repository, actorUserId) =>
-    repository.completeBulkPriceRevision({
-      actorUserId,
-      bulkPriceRevisionId,
-    })
+  const completed = await withRevisions(
+    (repository, actorUserId) =>
+      repository.completeBulkPriceRevision({
+        actorUserId,
+        bulkPriceRevisionId,
+      }),
+    commercialTaskCapabilities.completeBulkPriceRevision
   )
   revalidatePath(revisionsPath)
   revalidatePath(customerBulkRevisionPath)
@@ -192,7 +203,7 @@ export async function createEngineeringChangeNoteAction(formData: FormData) {
         organizationId: requiredText(formData, "organization_id"),
         reason: requiredText(formData, "reason"),
       }),
-    commercialCapabilities.revisions.write,
+    commercialTaskCapabilities.createEngineeringChangeNote,
     ecnsPath
   )
   revalidatePath(revisionsPath)
@@ -225,7 +236,7 @@ export async function completeEngineeringChangeDesignAction(
           weight100Pcs: optionalNumber(formData, "weight_100_pcs"),
         },
       }),
-    commercialCapabilities.revisions.write,
+    commercialTaskCapabilities.completeEngineeringChangeDesign,
     ecnsPath
   )
   revalidatePath(revisionsPath)
@@ -282,7 +293,7 @@ export async function completeEngineeringChangeProductCostingAction(
           washing: optionalNumber(formData, "washing"),
         },
       }),
-    commercialCapabilities.revisions.write,
+    commercialTaskCapabilities.completeEngineeringChangeCosting,
     ecnsPath
   )
   revalidatePath(revisionsPath)
@@ -305,7 +316,7 @@ export async function applyEngineeringChangeDecisionAction(formData: FormData) {
         notes: optionalText(formData, "notes"),
         sourceQuoteItemId: requiredText(formData, "source_quote_item_id"),
       }),
-    commercialCapabilities.revisions.write,
+    commercialTaskCapabilities.applyEngineeringChangeDecision,
     ecnsPath
   )
   revalidatePath(revisionsPath)

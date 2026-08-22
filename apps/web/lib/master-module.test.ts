@@ -4,6 +4,7 @@ import {
   availableMainMasters,
   masterFormHref,
   masterModuleAccess,
+  masterOpenHref,
   masterSelectionMatchesDestination,
   masterSelectionHref,
   resolveMasterSelection,
@@ -68,6 +69,47 @@ describe("master module selection", () => {
     })
   })
 
+  it("opens every existing Website Product dependency as a sub-master", () => {
+    const result = subMastersFor("commercial_website_products", fullAccess)!
+
+    expect(result).toEqual({
+      fallback: false,
+      options: [
+        { id: "commercial_website_products", label: "Website Product Data" },
+        { id: "materialGrade", label: "Material Grade" },
+        { id: "category", label: "Design Category" },
+        { id: "subcategory", label: "Design Subcategory" },
+        { id: "application", label: "Website Application" },
+        { id: "certification", label: "Website Certification" },
+        { id: "websiteField", label: "Website Field Option" },
+      ],
+    })
+
+    const productSelection = resolveMasterSelection(
+      {
+        main: "commercial_website_products",
+        sub: "commercial_website_products",
+        unit: "universal",
+      },
+      fullAccess
+    )!
+    expect(masterFormHref(productSelection)).toBe(
+      "/commercial/website-products?masterView=dataEntry&masterUnit=universal&masterMain=commercial_website_products&masterSub=commercial_website_products"
+    )
+
+    const categorySelection = resolveMasterSelection(
+      {
+        main: "commercial_website_products",
+        sub: "category",
+        unit: "universal",
+      },
+      fullAccess
+    )!
+    expect(masterFormHref(categorySelection)).toBe(
+      "/commercial/masters?masterView=dataEntry&kind=category&masterUnit=universal&masterMain=commercial_website_products&masterSub=category"
+    )
+  })
+
   it("rejects invalid, mismatched, and unauthorized relationships", () => {
     expect(
       resolveMasterSelection(
@@ -104,6 +146,12 @@ describe("master module selection", () => {
     )
     expect(masterSelectionHref(selection)).toBe(
       "/masters?unit=universal&main=commercial_pricing_masters&sub=materialGrade"
+    )
+    expect(masterSelectionHref(selection, "masterTables")).toBe(
+      "/masters?unit=universal&main=commercial_pricing_masters&sub=materialGrade&view=masterTables"
+    )
+    expect(masterOpenHref(selection, "masterTables")).toBe(
+      "/masters/open?unit=universal&main=commercial_pricing_masters&sub=materialGrade&view=masterTables"
     )
     expect(
       withMasterSelectionContext(

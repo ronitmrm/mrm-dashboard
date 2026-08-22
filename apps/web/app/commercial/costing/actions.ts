@@ -8,8 +8,8 @@ import {
 import { revalidatePath } from "next/cache"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
-import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
+import { commercialTaskCapabilities } from "@/lib/auth/task-capabilities"
 import { optionalText, requiredText } from "@/lib/form-data"
 
 const customerCostingPath = "/commercial/customer-costing"
@@ -76,7 +76,7 @@ async function withCosting<T>(
 
 export async function updateProductCostingAction(formData: FormData) {
   await withCosting(
-    "pricing.costing.write",
+    commercialTaskCapabilities.updateProductCosting,
     productCostingPath,
     (repository, actorUserId) =>
       repository.updateProductCostParameters({
@@ -131,7 +131,7 @@ export async function requestProductCostingDesignClarificationAction(
   formData: FormData
 ) {
   const session = await requireCapability(
-    commercialCapabilities.costing.write,
+    commercialTaskCapabilities.requestProductCostingClarification,
     productCostingPath
   )
   const repository = createCommercialWorkflowRepository({
@@ -173,7 +173,7 @@ export async function saveQuoteAction(formData: FormData) {
   }
 
   await withCosting(
-    "pricing.costing.write",
+    commercialTaskCapabilities.saveQuote,
     customerCostingPath,
     (repository, actorUserId) =>
       repository.saveQuote({
@@ -219,7 +219,7 @@ export async function saveQuoteAction(formData: FormData) {
 
 export async function sendQuoteBackToProductCostingAction(formData: FormData) {
   await withCosting(
-    commercialCapabilities.costing.write,
+    commercialTaskCapabilities.sendQuoteBackToCosting,
     customerCostingPath,
     (repository, actorUserId) =>
       repository.sendQuoteBackToProductCosting({
@@ -238,7 +238,7 @@ export async function sendQuoteAction(formData: FormData) {
   const quoteItemId = requiredText(formData, "quote_item_id")
   const followupDueOn = requiredText(formData, "followup_due_on")
   const session = await requireCapability(
-    commercialCapabilities.quotes.write,
+    commercialTaskCapabilities.sendQuote,
     "/commercial/quotes"
   )
   const environment = readAuthEnvironment()

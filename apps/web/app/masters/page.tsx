@@ -22,6 +22,7 @@ export default async function MasterSelectionPage({
     main?: string | string[]
     sub?: string | string[]
     unit?: string | string[]
+    view?: string | string[]
   }>
 }) {
   const session = await requireAuthenticatedSession("/masters")
@@ -35,6 +36,8 @@ export default async function MasterSelectionPage({
   const query = await searchParams
   const value = (input: string | string[] | undefined) =>
     Array.isArray(input) ? (input[0] ?? "") : (input ?? "")
+  const view =
+    value(query.view) === "masterTables" ? "masterTables" : "dataEntry"
   const unit = parseMasterUnit(value(query.unit)) ?? ""
   const requestedMain = value(query.main)
   const main =
@@ -52,10 +55,13 @@ export default async function MasterSelectionPage({
   return (
     <div className="grid gap-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Master Module</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">
+          {view === "masterTables" ? "Master Table Selection" : "Master Module"}
+        </h1>
         <p className="text-sm text-muted-foreground">
-          Open the existing master-specific form and table for the required
-          scope.
+          {view === "masterTables"
+            ? "Select the Unit, Main Master, and Sub Master for the table you want to open."
+            : "Open the existing master-specific form for the required scope."}
         </p>
       </div>
       {value(query.error) === "invalid-selection" ? (
@@ -66,7 +72,11 @@ export default async function MasterSelectionPage({
           </AlertDescription>
         </Alert>
       ) : null}
-      <MasterSelection access={access} initial={{ main, sub, unit }} />
+      <MasterSelection
+        access={access}
+        initial={{ main, sub, unit }}
+        view={view}
+      />
     </div>
   )
 }

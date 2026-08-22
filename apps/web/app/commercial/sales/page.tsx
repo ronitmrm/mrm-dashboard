@@ -91,7 +91,11 @@ export default async function SalesPage({
     view?: string
   }>
 }) {
-  await requireCapability("pricing.sales.read", "/commercial/sales")
+  const session = await requireCapability(
+    "pricing.sales.read",
+    "/commercial/sales"
+  )
+  const salesScope = { originatingSalespersonUserId: session.user.id }
   const params = await searchParams
   const candidateSearch = params.candidate?.trim() ?? ""
   const requestedCandidateItemId = params.candidate_item?.trim() ?? ""
@@ -108,11 +112,11 @@ export default async function SalesPage({
       quoteReadyResults,
       sentQuoteResults,
     ] = await Promise.all([
-      workflow.listSalesClarificationQueueBounded("MRMPL"),
-      workflow.listFollowupsBounded("MRMPL"),
-      workflow.listSalesHandoverQueueBounded("MRMPL"),
-      workflow.listSalesQuoteReadyQueueBounded("MRMPL"),
-      workflow.listSalesSentQuoteQueueBounded("MRMPL"),
+      workflow.listSalesClarificationQueueBounded("MRMPL", 200, salesScope),
+      workflow.listFollowupsBounded("MRMPL", 200, salesScope),
+      workflow.listSalesHandoverQueueBounded("MRMPL", 200, salesScope),
+      workflow.listSalesQuoteReadyQueueBounded("MRMPL", 200, salesScope),
+      workflow.listSalesSentQuoteQueueBounded("MRMPL", salesScope),
     ])
     const clarificationTasks = clarificationResults.rows
     const followups = followupResults.rows

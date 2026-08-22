@@ -9,6 +9,7 @@ import { redirect } from "next/navigation"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
+import { commercialTaskCapabilities } from "@/lib/auth/task-capabilities"
 import { optionalText, requiredText } from "@/lib/form-data"
 import {
   technicalReviewChecklistFromFormData,
@@ -67,7 +68,7 @@ async function withWorkflow<T>(
 async function persistAttachment(
   file: File,
   input: {
-    capability?: string
+    capability: string
     enquiryId: string
     organizationId: string
     purpose?: "cad" | "customer_marked" | "drawing" | "internal_drawing"
@@ -79,7 +80,7 @@ async function persistAttachment(
     throw new Error("Drawing files must not exceed 25 MB.")
   }
   await withWorkflow(
-    input.capability ?? "pricing.enquiries.write",
+    input.capability,
     `${enquiriesPath}/${input.enquiryId}`,
     async (workflow) => {
       const bytes = Buffer.from(await file.arrayBuffer())
@@ -121,7 +122,7 @@ async function persistAttachment(
 
 export async function createEnquiryAction(formData: FormData) {
   const enquiry = await withWorkflow(
-    "pricing.enquiries.write",
+    commercialTaskCapabilities.createEnquiry,
     enquiriesPath,
     (workflow, actorUserId) =>
       workflow.createEnquiry({
@@ -157,7 +158,7 @@ export async function importEnquiryRegisterAction(formData: FormData) {
     file.name
   )
   await withWorkflow(
-    "pricing.enquiries.write",
+    commercialTaskCapabilities.importEnquiryRegister,
     enquiriesPath,
     (workflow, actorUserId) =>
       workflow.importEnquiryRegister({
@@ -176,7 +177,7 @@ export async function addEnquiryItemAction(formData: FormData) {
   const enquiryId = requiredText(formData, "enquiry_id")
   const organizationId = requiredText(formData, "organization_id")
   const line = await withWorkflow(
-    "pricing.enquiries.write",
+    commercialTaskCapabilities.addEnquiryItem,
     `${enquiriesPath}/${enquiryId}`,
     (workflow, actorUserId) =>
       workflow.addEnquiryItem({
@@ -195,6 +196,7 @@ export async function addEnquiryItemAction(formData: FormData) {
   const drawing = formData.get("drawing_file")
   if (drawing instanceof File && drawing.size > 0) {
     await persistAttachment(drawing, {
+      capability: commercialTaskCapabilities.addEnquiryItem,
       enquiryId,
       organizationId,
       targetId: line.id,
@@ -208,7 +210,7 @@ export async function addEnquiryItemAction(formData: FormData) {
 export async function updateEnquiryAction(formData: FormData) {
   const enquiryId = requiredText(formData, "enquiry_id")
   await withWorkflow(
-    "pricing.enquiries.write",
+    commercialTaskCapabilities.updateEnquiry,
     `${enquiriesPath}/${enquiryId}`,
     (workflow, actorUserId) =>
       workflow.updateEnquiry({
@@ -238,7 +240,7 @@ export async function updateEnquiryAction(formData: FormData) {
 export async function deleteEnquiryAction(formData: FormData) {
   const enquiryId = requiredText(formData, "enquiry_id")
   await withWorkflow(
-    "pricing.enquiries.write",
+    commercialTaskCapabilities.deleteEnquiry,
     `${enquiriesPath}/${enquiryId}`,
     (workflow, actorUserId) => workflow.deleteEnquiry(enquiryId, actorUserId)
   )
@@ -251,7 +253,7 @@ export async function updateEnquiryItemAction(formData: FormData) {
   const enquiryItemId = requiredText(formData, "enquiry_item_id")
   const organizationId = requiredText(formData, "organization_id")
   await withWorkflow(
-    "pricing.enquiries.write",
+    commercialTaskCapabilities.updateEnquiryItem,
     `${enquiriesPath}/${enquiryId}`,
     (workflow, actorUserId) =>
       workflow.updateEnquiryItem({
@@ -269,6 +271,7 @@ export async function updateEnquiryItemAction(formData: FormData) {
   const drawing = formData.get("drawing_file")
   if (drawing instanceof File && drawing.size > 0) {
     await persistAttachment(drawing, {
+      capability: commercialTaskCapabilities.updateEnquiryItem,
       enquiryId,
       organizationId,
       targetId: enquiryItemId,
@@ -281,7 +284,7 @@ export async function updateEnquiryItemAction(formData: FormData) {
 export async function handOverEnquiryAction(formData: FormData) {
   const enquiryId = requiredText(formData, "enquiry_id")
   await withWorkflow(
-    "pricing.enquiries.write",
+    commercialTaskCapabilities.handOverEnquiry,
     `${enquiriesPath}/${enquiryId}`,
     (workflow, actorUserId) =>
       workflow.handOverToTechnicalReview(enquiryId, actorUserId)
@@ -295,7 +298,7 @@ export async function updateTechnicalReviewAction(formData: FormData) {
   const enquiryItemId = requiredText(formData, "enquiry_item_id")
   const status = requiredText(formData, "technical_review_status")
   await withWorkflow(
-    "pricing.technical_review.write",
+    commercialTaskCapabilities.updateTechnicalReview,
     `${technicalReviewPath}/${enquiryItemId}`,
     (workflow, actorUserId) =>
       workflow.updateTechnicalReview({
@@ -321,7 +324,7 @@ export async function completeSalesClarificationAction(formData: FormData) {
   const enquiryItemId = requiredText(formData, "enquiry_item_id")
   const organizationId = requiredText(formData, "organization_id")
   await withWorkflow(
-    "pricing.sales.write",
+    commercialTaskCapabilities.completeSalesClarification,
     `${enquiriesPath}/${enquiryId}`,
     (workflow, actorUserId) =>
       workflow.completeSalesClarification({
@@ -342,6 +345,7 @@ export async function completeSalesClarificationAction(formData: FormData) {
   const drawing = formData.get("drawing_file")
   if (drawing instanceof File && drawing.size > 0) {
     await persistAttachment(drawing, {
+      capability: commercialTaskCapabilities.completeSalesClarification,
       enquiryId,
       organizationId,
       targetId: enquiryItemId,
@@ -355,7 +359,7 @@ export async function completeSalesClarificationAction(formData: FormData) {
 export async function startDesignWorkAction(formData: FormData) {
   const enquiryItemId = requiredText(formData, "enquiry_item_id")
   await withWorkflow(
-    "pricing.design.write",
+    commercialTaskCapabilities.startDesignWork,
     designPath,
     (workflow, actorUserId) =>
       workflow.startDesignWork({ actorUserId, enquiryItemId })
@@ -447,7 +451,7 @@ export async function saveDesignAction(formData: FormData) {
           },
         ]
   const saved = await withWorkflow(
-    "pricing.design.write",
+    commercialTaskCapabilities.saveDesign,
     `${enquiriesPath}/${enquiryId}`,
     (workflow, actorUserId) =>
       workflow.saveDesign({
@@ -503,7 +507,7 @@ export async function saveDesignAction(formData: FormData) {
     const file = formData.get(field)
     if (file instanceof File && file.size > 0) {
       await persistAttachment(file, {
-        capability: "pricing.design.write",
+        capability: commercialTaskCapabilities.saveDesign,
         enquiryId,
         organizationId,
         purpose,
@@ -521,7 +525,7 @@ export async function saveDesignAction(formData: FormData) {
 export async function requestDesignClarificationAction(formData: FormData) {
   const enquiryId = requiredText(formData, "enquiry_id")
   await withWorkflow(
-    "pricing.design.write",
+    commercialTaskCapabilities.requestDesignClarification,
     "/commercial/design",
     (workflow, actorUserId) =>
       workflow.requestDesignClarification({
@@ -541,7 +545,7 @@ export async function requestDesignClarificationAction(formData: FormData) {
 export async function prepareCostingAction(formData: FormData) {
   const enquiryId = requiredText(formData, "enquiry_id")
   await withWorkflow(
-    "pricing.costing.write",
+    commercialTaskCapabilities.prepareCosting,
     `${enquiriesPath}/${enquiryId}`,
     (workflow, actorUserId) =>
       workflow.prepareCostingFromDesign(
@@ -571,10 +575,11 @@ export async function importEnquiryLinesAction(formData: FormData) {
     .update(enquiryId)
     .digest("hex")
   const review = await withWorkflow(
-    "pricing.enquiries.write",
+    commercialTaskCapabilities.importEnquiryLines,
     `${enquiriesPath}/${enquiryId}`,
-    (workflow) =>
+    (workflow, actorUserId) =>
       workflow.createImportReview({
+        actorUserId,
         enquiryId,
         importKey,
         organizationId,
@@ -603,7 +608,7 @@ export async function applyEnquiryImportReviewAction(formData: FormData) {
     rowNumber,
   }))
   await withWorkflow(
-    "pricing.enquiries.write",
+    commercialTaskCapabilities.applyEnquiryImportReview,
     `${enquiriesPath}/${enquiryId}`,
     (workflow, actorUserId) =>
       workflow.applyImportReview({
@@ -618,7 +623,7 @@ export async function applyEnquiryImportReviewAction(formData: FormData) {
 
 export async function completeFollowupAction(formData: FormData) {
   await withWorkflow(
-    "pricing.sales.write",
+    commercialTaskCapabilities.completeFollowup,
     "/commercial/sales",
     (workflow, actorUserId) =>
       workflow.completeFollowup({

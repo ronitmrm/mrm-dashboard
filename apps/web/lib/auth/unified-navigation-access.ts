@@ -9,7 +9,7 @@ import { productionPageCapabilities } from "./production-capabilities"
 import type { DashboardTabId } from "../unified-navigation"
 
 const operationsCapability = "operations.dashboard.read"
-const administrationCapability = "administration.roles.manage"
+const administrationCapability = "administration.access.read"
 
 export type UnifiedNavigationAccess = {
   administration: boolean
@@ -59,11 +59,12 @@ async function readUnifiedNavigationAccess(
       .filter(([, capability]) => grantedCapabilities.has(capability))
       .map(([href]) => href),
     hrHrefs: [...hrMasterNavigation, ...hrNavigation]
-      .filter(({ requiredCapability }) =>
-        grantedCapabilities.has(requiredCapability) ||
-        (!hasGranularHrAccess &&
-          requiredCapability !== "hr.employees.read" &&
-          grantedCapabilities.has("hr.recruitment.read"))
+      .filter(
+        ({ requiredCapability }) =>
+          grantedCapabilities.has(requiredCapability) ||
+          (!hasGranularHrAccess &&
+            requiredCapability !== "hr.employees.read" &&
+            grantedCapabilities.has("hr.recruitment.read"))
       )
       .map(({ href }) => href),
     operations: productionModuleIsEnabled() && productionTabIds.length > 0,

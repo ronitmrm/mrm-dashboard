@@ -51,7 +51,7 @@ function configureAuth({
     emailAndPassword: {
       disableSignUp: !allowSignUp,
       enabled: true,
-      minPasswordLength: 12,
+      minPasswordLength: 6,
     },
     plugins: [admin()],
     rateLimit: {

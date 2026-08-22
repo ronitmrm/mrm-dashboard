@@ -9,6 +9,7 @@ import { redirect } from "next/navigation"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
+import { commercialTaskCapabilities } from "@/lib/auth/task-capabilities"
 import { externalMasterViewHref } from "@/lib/external-master-workspace"
 
 const websiteProductsPath = "/commercial/website-products"
@@ -31,7 +32,7 @@ function selected(formData: FormData, key: string) {
 
 export async function updateWebsiteProductAction(formData: FormData) {
   const session = await requireCapability(
-    "pricing.website_products.write",
+    commercialTaskCapabilities.updateWebsiteProduct,
     websiteProductsPath
   )
   const connectionString = readAuthEnvironment().connectionString

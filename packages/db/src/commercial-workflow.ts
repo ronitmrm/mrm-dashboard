@@ -31,6 +31,7 @@ type CommercialTerms = {
 }
 
 function enquiryRegisterSourceId(input: {
+  actorUserId?: string | null
   buyerName?: string | null
   customerId: string
   organizationId: string
@@ -41,6 +42,7 @@ function enquiryRegisterSourceId(input: {
 }) {
   const identity = JSON.stringify([
     input.organizationId,
+    input.actorUserId ?? null,
     input.customerId,
     input.receivedOn,
     input.source?.trim() || "Email",
@@ -63,6 +65,10 @@ type AddEnquiryItem = {
   remarks?: string | null
   sourceId?: string
   targetPrice?: number
+}
+
+type SalesWorkScope = {
+  originatingSalespersonUserId: string
 }
 
 type TechnicalChecklist = Record<string, boolean>
@@ -1092,7 +1098,8 @@ type SalesSentQuoteHistoryDatabaseRow = {
 async function followupsForExport(
   client: PoolClient,
   organizationCode: string,
-  requestedBatchSize: number
+  requestedBatchSize: number,
+  scope?: SalesWorkScope
 ) {
   const batchSize = boundedListLimit(requestedBatchSize)
   const rows: SalesFollowupHistoryRow[] = []
@@ -1117,6 +1124,7 @@ async function followupsForExport(
           ON organization.id = followup.organization_id
         LEFT JOIN sales.quote_items quote ON quote.id = followup.quote_item_id
         WHERE lower(organization.code) = lower($1)
+          AND ($6::uuid IS NULL OR enquiry.created_by_user_id = $6)
           AND (
             $2::date IS NULL
             OR (followup.due_on, followup.created_at, followup.id)
@@ -1131,6 +1139,7 @@ async function followupsForExport(
           cursorCreatedAt,
           cursorId,
           batchSize,
+          scope?.originatingSalespersonUserId ?? null,
         ]
       )
     rows.push(
@@ -1161,7 +1170,8 @@ async function followupsForExport(
 async function sentQuotesForExport(
   client: PoolClient,
   organizationCode: string,
-  requestedBatchSize: number
+  requestedBatchSize: number,
+  scope?: SalesWorkScope
 ) {
   const batchSize = boundedListLimit(requestedBatchSize)
   const rows: SalesSentQuoteHistoryRow[] = []
@@ -1199,6 +1209,7 @@ async function sentQuotesForExport(
           LEFT JOIN sales.followups followup
             ON followup.enquiry_id = enquiry.id
           WHERE lower(organization.code) = lower($1)
+            AND ($6::uuid IS NULL OR enquiry.created_by_user_id = $6)
           GROUP BY enquiry.id, customer.customer_uid, customer.company_name
         )
         SELECT *
@@ -1217,6 +1228,7 @@ async function sentQuotesForExport(
           cursorCreatedAt,
           cursorId,
           batchSize,
+          scope?.originatingSalespersonUserId ?? null,
         ]
       )
     rows.push(
@@ -1360,9 +1372,10 @@ async function addEnquiryItemWithClient(
       SELECT organization_id
       FROM sales.enquiries
       WHERE id = $1
+        AND ($2::uuid IS NULL OR created_by_user_id = $2)
       FOR UPDATE
     `,
-    [input.enquiryId]
+    [input.enquiryId, input.actorUserId ?? null]
   )
   if (!enquiry.rows[0]) {
     throw new Error("ENQ was not found.")
@@ -1504,18 +1517,24 @@ async function createOrUpdateClarification(
   return created.rows[0]!.id
 }
 
-async function getImportReviewWithClient(client: PoolClient, reviewId: string) {
+async function getImportReviewWithClient(
+  client: PoolClient,
+  reviewId: string,
+  scope?: SalesWorkScope
+) {
   const review = await client.query<{
     enquiry_id: string
     id: string
     status: string
   }>(
     `
-      SELECT id, enquiry_id, status
-      FROM sales.enquiry_import_reviews
-      WHERE id = $1
+      SELECT review.id, review.enquiry_id, review.status
+      FROM sales.enquiry_import_reviews review
+      JOIN sales.enquiries enquiry ON enquiry.id = review.enquiry_id
+      WHERE review.id = $1
+        AND ($2::uuid IS NULL OR enquiry.created_by_user_id = $2)
     `,
-    [reviewId]
+    [reviewId, scope?.originatingSalespersonUserId ?? null]
   )
   if (!review.rows[0]) {
     throw new Error("Import review was not found.")
@@ -1622,12 +1641,13 @@ export function createCommercialWorkflowRepository(
               payment_terms, currency, conversion_rate, incoterms,
               shipment_mode, packaging_terms, remarks,
               technical_handover_status, source_system, source_table,
-              source_id, source_payload
+              source_id, source_payload, created_by_user_id,
+              updated_by_user_id
             )
             VALUES (
               $1, $2, $3, $4, 'Logged', $5, $6, $7, $8, $9, $10,
               $11, $8, $12, $13, $14, 'Draft', 'mrm-dashboard',
-              'enquiries', $15, $16
+              'enquiries', $15, $16, $17, $17
             )
             RETURNING id, enquiry_number, technical_handover_status
           `,
@@ -1658,6 +1678,7 @@ export function createCommercialWorkflowRepository(
             input.remarks ?? null,
             sourceId,
             input,
+            input.actorUserId ?? null,
           ]
         )
         const row = created.rows[0]!
@@ -1738,9 +1759,14 @@ export function createCommercialWorkflowRepository(
                 SELECT id FROM sales.enquiries
                 WHERE organization_id = $1
                   AND lower(btrim(enquiry_number)) = lower(btrim($2))
+                  AND ($3::uuid IS NULL OR created_by_user_id = $3)
                 FOR UPDATE
               `,
-              [input.organizationId, row.enquiryNumber]
+              [
+                input.organizationId,
+                row.enquiryNumber,
+                input.actorUserId ?? null,
+              ]
             )
             const enquiryId = enquiry.rows[0]?.id
             if (!enquiryId) {
@@ -1825,6 +1851,7 @@ export function createCommercialWorkflowRepository(
           }
 
           const sourceId = enquiryRegisterSourceId({
+            actorUserId: input.actorUserId,
             buyerName: row.buyerName,
             customerId,
             organizationId: input.organizationId,
@@ -1987,9 +2014,10 @@ export function createCommercialWorkflowRepository(
               ) AS open_sales_clarification_count
             FROM sales.enquiries enquiry
             WHERE enquiry.id = $1 AND enquiry.organization_id = $2
+              AND ($3::uuid IS NULL OR enquiry.created_by_user_id = $3)
             FOR UPDATE
           `,
-          [input.enquiryId, input.organizationId]
+          [input.enquiryId, input.organizationId, input.actorUserId ?? null]
         )
         const row = current.rows[0]
         if (!row) {
@@ -2108,9 +2136,10 @@ export function createCommercialWorkflowRepository(
               ) AS design_task_count
             FROM sales.enquiries enquiry
             WHERE enquiry.id = $1
+              AND ($2::uuid IS NULL OR enquiry.created_by_user_id = $2)
             FOR UPDATE
           `,
-          [enquiryId]
+          [enquiryId, actorUserId ?? null]
         )
         const row = current.rows[0]
         if (!row) {
@@ -2207,9 +2236,10 @@ export function createCommercialWorkflowRepository(
             FROM sales.enquiry_items enquiry_item
             JOIN sales.enquiries enquiry ON enquiry.id = enquiry_item.enquiry_id
             WHERE enquiry_item.id = $1
+              AND ($2::uuid IS NULL OR enquiry.created_by_user_id = $2)
             FOR UPDATE OF enquiry_item
           `,
-          [input.enquiryItemId]
+          [input.enquiryItemId, input.actorUserId ?? null]
         )
         const row = current.rows[0]
         if (!row) {
@@ -2351,9 +2381,10 @@ export function createCommercialWorkflowRepository(
               packaging_terms, currency, conversion_rate::text
             FROM sales.enquiries
             WHERE id = $1
+              AND ($2::uuid IS NULL OR created_by_user_id = $2)
             FOR UPDATE
           `,
-          [enquiryId]
+          [enquiryId, actorUserId ?? null]
         )
         const row = enquiry.rows[0]
         if (!row) {
@@ -2541,7 +2572,8 @@ export function createCommercialWorkflowRepository(
 
     async listSalesHandoverQueue(
       organizationCode: string,
-      requestedLimit?: number
+      requestedLimit?: number,
+      scope?: SalesWorkScope
     ) {
       const result = await pool.query<{
         company_name: string
@@ -2580,6 +2612,7 @@ export function createCommercialWorkflowRepository(
             ON enquiry_item.enquiry_id = enquiry.id
           WHERE organization.code = $1
             AND enquiry.technical_handover_status <> 'Handed Over'
+            AND ($3::uuid IS NULL OR enquiry.created_by_user_id = $3)
           GROUP BY enquiry.id, customer.customer_uid, customer.company_name
           ORDER BY enquiry.created_at DESC, enquiry.id DESC
           LIMIT $2
@@ -2589,6 +2622,7 @@ export function createCommercialWorkflowRepository(
           requestedLimit === undefined
             ? null
             : boundedListLimit(requestedLimit),
+          scope?.originatingSalespersonUserId ?? null,
         ]
       )
       return result.rows.map((row) => ({
@@ -2611,7 +2645,8 @@ export function createCommercialWorkflowRepository(
 
     async listSalesQuoteReadyQueue(
       organizationCode: string,
-      requestedLimit?: number
+      requestedLimit?: number,
+      scope?: SalesWorkScope
     ) {
       const result = await pool.query<{
         company_name: string
@@ -2642,6 +2677,7 @@ export function createCommercialWorkflowRepository(
             ON quote.enquiry_item_id = item.id
             AND quote.status IN ('Ready', 'Sent', 'Accepted', 'Ordered')
           WHERE organization.code = $1
+            AND ($3::uuid IS NULL OR enquiry.created_by_user_id = $3)
             AND EXISTS (
               SELECT 1 FROM sales.quote_items ready_quote
               WHERE ready_quote.enquiry_id = enquiry.id
@@ -2670,6 +2706,7 @@ export function createCommercialWorkflowRepository(
           requestedLimit === undefined
             ? null
             : boundedListLimit(requestedLimit),
+          scope?.originatingSalespersonUserId ?? null,
         ]
       )
       return result.rows.map((row) => ({
@@ -2687,7 +2724,8 @@ export function createCommercialWorkflowRepository(
 
     async listSalesSentQuoteQueue(
       organizationCode: string,
-      requestedLimit = commercialSelectorLimit
+      requestedLimit = commercialSelectorLimit,
+      scope?: SalesWorkScope
     ) {
       const result = await pool.query<{
         company_name: string
@@ -2725,6 +2763,7 @@ export function createCommercialWorkflowRepository(
           LEFT JOIN sales.followups followup
             ON followup.enquiry_id = enquiry.id
           WHERE organization.code = $1
+            AND ($3::uuid IS NULL OR enquiry.created_by_user_id = $3)
           GROUP BY enquiry.id, customer.customer_uid, customer.company_name
           ORDER BY latest_sent_at DESC, enquiry.created_at DESC,
             enquiry.id DESC
@@ -2736,6 +2775,7 @@ export function createCommercialWorkflowRepository(
             boundedListLimit(requestedLimit),
             commercialSelectorLimit + 1
           ),
+          scope?.originatingSalespersonUserId ?? null,
         ]
       )
       return result.rows.map((row) => ({
@@ -2754,7 +2794,8 @@ export function createCommercialWorkflowRepository(
 
     async listSalesClarificationQueue(
       organizationCode: string,
-      requestedLimit?: number
+      requestedLimit?: number,
+      scope?: SalesWorkScope
     ) {
       const result = await pool.query<{
         clarification_task_id: string
@@ -2792,6 +2833,7 @@ export function createCommercialWorkflowRepository(
           JOIN core.organizations organization
             ON organization.id = enquiry.organization_id
           WHERE organization.code = $1
+            AND ($3::uuid IS NULL OR enquiry.created_by_user_id = $3)
             AND clarification.target_stage = 'Sales'
             AND clarification.status = 'Open'
           ORDER BY clarification.created_at, clarification.id
@@ -2802,6 +2844,7 @@ export function createCommercialWorkflowRepository(
           requestedLimit === undefined
             ? null
             : boundedListLimit(requestedLimit),
+          scope?.originatingSalespersonUserId ?? null,
         ]
       )
       return result.rows.map((row) => ({
@@ -3424,9 +3467,14 @@ export function createCommercialWorkflowRepository(
               AND clarification.enquiry_item_id = $2
               AND clarification.target_stage = 'Sales'
               AND clarification.status = 'Open'
+              AND ($3::uuid IS NULL OR enquiry.created_by_user_id = $3)
             FOR UPDATE OF clarification, enquiry_item
           `,
-          [input.clarificationTaskId, input.enquiryItemId]
+          [
+            input.clarificationTaskId,
+            input.enquiryItemId,
+            input.actorUserId ?? null,
+          ]
         )
         const taskRow = task.rows[0]
         if (!taskRow) {
@@ -3589,8 +3637,9 @@ export function createCommercialWorkflowRepository(
           `
             SELECT id FROM sales.enquiries
             WHERE id = $1 AND organization_id = $2
+              AND ($3::uuid IS NULL OR created_by_user_id = $3)
           `,
-          [input.enquiryId, input.organizationId]
+          [input.enquiryId, input.organizationId, input.actorUserId ?? null]
         )
         if (!enquiry.rows[0]) {
           throw new Error("ENQ was not found.")
@@ -3662,10 +3711,14 @@ export function createCommercialWorkflowRepository(
           organization_id: string
         }>(
           `
-            SELECT organization_id, enquiry_id FROM sales.followups
-            WHERE id = $1 FOR UPDATE
+            SELECT followup.organization_id, followup.enquiry_id
+            FROM sales.followups followup
+            JOIN sales.enquiries enquiry ON enquiry.id = followup.enquiry_id
+            WHERE followup.id = $1
+              AND ($2::uuid IS NULL OR enquiry.created_by_user_id = $2)
+            FOR UPDATE OF followup
           `,
-          [input.followupId]
+          [input.followupId, input.actorUserId ?? null]
         )
         if (!current.rows[0]) {
           throw new Error("Follow-up is required.")
@@ -3734,7 +3787,11 @@ export function createCommercialWorkflowRepository(
       })
     },
 
-    async listFollowups(organizationCode: string, limit = 200) {
+    async listFollowups(
+      organizationCode: string,
+      limit = 200,
+      scope?: SalesWorkScope
+    ) {
       const result = await pool.query<{
         channel: string
         company_name: string
@@ -3762,10 +3819,15 @@ export function createCommercialWorkflowRepository(
           LEFT JOIN sales.quote_items quote
             ON quote.id = followup.quote_item_id
           WHERE organization.code = $1
+            AND ($3::uuid IS NULL OR enquiry.created_by_user_id = $3)
           ORDER BY followup.due_on, followup.created_at, followup.id
           LIMIT $2
         `,
-        [organizationCode.trim(), boundedListLimit(limit)]
+        [
+          organizationCode.trim(),
+          boundedListLimit(limit),
+          scope?.originatingSalespersonUserId ?? null,
+        ]
       )
       return result.rows.map((row) => ({
         channel: row.channel,
@@ -4893,6 +4955,7 @@ export function createCommercialWorkflowRepository(
     },
 
     async createImportReview(input: {
+      actorUserId?: string | null
       enquiryId: string
       importKey: string
       organizationId: string
@@ -4906,8 +4969,9 @@ export function createCommercialWorkflowRepository(
           `
             SELECT id, customer_id FROM sales.enquiries
             WHERE id = $1 AND organization_id = $2
+              AND ($3::uuid IS NULL OR created_by_user_id = $3)
           `,
-          [input.enquiryId, input.organizationId]
+          [input.enquiryId, input.organizationId, input.actorUserId ?? null]
         )
         if (!enquiry.rows[0]) {
           throw new Error("ENQ was not found in this organization.")
@@ -4998,12 +5062,14 @@ export function createCommercialWorkflowRepository(
           status: string
         }>(
           `
-            SELECT enquiry_id, organization_id, status
-            FROM sales.enquiry_import_reviews
-            WHERE id = $1
-            FOR UPDATE
+            SELECT review.enquiry_id, review.organization_id, review.status
+            FROM sales.enquiry_import_reviews review
+            JOIN sales.enquiries enquiry ON enquiry.id = review.enquiry_id
+            WHERE review.id = $1
+              AND ($2::uuid IS NULL OR enquiry.created_by_user_id = $2)
+            FOR UPDATE OF review
           `,
-          [input.reviewId]
+          [input.reviewId, input.actorUserId ?? null]
         )
         const reviewRow = review.rows[0]
         if (!reviewRow) {
@@ -5105,6 +5171,7 @@ export function createCommercialWorkflowRepository(
           }
           const raw = importRow.raw_values
           const created = await addEnquiryItemWithClient(client, {
+            actorUserId: input.actorUserId,
             customerPartCode: asTrimmed(raw.part),
             description: asTrimmed(raw.description),
             drawingReference: asTrimmed(raw.drawing_reference) || null,
@@ -5247,7 +5314,7 @@ export function createCommercialWorkflowRepository(
       })
     },
 
-    async getEnquiry(enquiryId: string) {
+    async getEnquiry(enquiryId: string, scope?: SalesWorkScope) {
       return transaction(pool, async (client) => {
         await client.query(
           "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
@@ -5286,8 +5353,9 @@ export function createCommercialWorkflowRepository(
             FROM sales.enquiries enquiry
             JOIN sales.customers customer ON customer.id = enquiry.customer_id
             WHERE enquiry.id = $1
+              AND ($2::uuid IS NULL OR enquiry.created_by_user_id = $2)
           `,
-          [enquiryId]
+          [enquiryId, scope?.originatingSalespersonUserId ?? null]
         )
         if (!enquiry.rows[0]) {
           throw new Error("ENQ was not found.")
@@ -5431,16 +5499,20 @@ export function createCommercialWorkflowRepository(
       })
     },
 
-    async getImportReview(reviewId: string) {
+    async getImportReview(reviewId: string, scope?: SalesWorkScope) {
       return transaction(pool, async (client) => {
         await client.query(
           "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
         )
-        return getImportReviewWithClient(client, reviewId)
+        return getImportReviewWithClient(client, reviewId, scope)
       })
     },
 
-    async listEnquiries(organizationCode: string, limit = 200) {
+    async listEnquiries(
+      organizationCode: string,
+      limit = 200,
+      scope?: SalesWorkScope
+    ) {
       const result = await pool.query<{
         buyer_name: string | null
         company_name: string
@@ -5555,11 +5627,16 @@ export function createCommercialWorkflowRepository(
           JOIN sales.customers customer ON customer.id = enquiry.customer_id
           LEFT JOIN sales.enquiry_items item ON item.enquiry_id = enquiry.id
           WHERE lower(organization.code) = lower($1)
+            AND ($3::uuid IS NULL OR enquiry.created_by_user_id = $3)
           GROUP BY enquiry.id, customer.customer_uid, customer.company_name
           ORDER BY enquiry.created_at DESC
           LIMIT $2
         `,
-        [organizationCode.trim(), boundedListLimit(limit)]
+        [
+          organizationCode.trim(),
+          boundedListLimit(limit),
+          scope?.originatingSalespersonUserId ?? null,
+        ]
       )
       return result.rows.map((row) => ({
         buyerName: row.buyer_name,
@@ -5600,7 +5677,11 @@ export function createCommercialWorkflowRepository(
       }))
     },
 
-    async listEnquiriesBounded(organizationCode: string, requestedLimit = 200) {
+    async listEnquiriesBounded(
+      organizationCode: string,
+      requestedLimit = 200,
+      scope?: SalesWorkScope
+    ) {
       const limit = operationalRootLimit(requestedLimit)
       const roots = await pool.query<EnquiryRootDatabaseRow>(
         `
@@ -5616,10 +5697,15 @@ export function createCommercialWorkflowRepository(
             ON organization.id = enquiry.organization_id
           JOIN sales.customers customer ON customer.id = enquiry.customer_id
           WHERE lower(organization.code) = lower($1)
+            AND ($3::uuid IS NULL OR enquiry.created_by_user_id = $3)
           ORDER BY enquiry.created_at DESC, enquiry.id DESC
           LIMIT $2
         `,
-        [organizationCode.trim(), limit + 1]
+        [
+          organizationCode.trim(),
+          limit + 1,
+          scope?.originatingSalespersonUserId ?? null,
+        ]
       )
       const rows = await enquiryRowsWithRelations(
         pool,
@@ -5630,7 +5716,8 @@ export function createCommercialWorkflowRepository(
 
     async listEnquirySpreadsheetBounded(
       organizationCode: string,
-      requestedLimit = 200
+      requestedLimit = 200,
+      scope?: SalesWorkScope
     ) {
       const limit = operationalRootLimit(requestedLimit)
       const rows = await pool.query<EnquirySpreadsheetDatabaseRow>(
@@ -5765,12 +5852,17 @@ export function createCommercialWorkflowRepository(
             LIMIT 1
           ) drawing ON true
           WHERE lower(organization.code) = lower($1)
+            AND ($3::uuid IS NULL OR enquiry.created_by_user_id = $3)
             AND enquiry_item.linked_enquiry_item_id IS NULL
           ORDER BY enquiry.created_at DESC, enquiry.id DESC,
             enquiry_item.line_number, enquiry_item.id
           LIMIT $2
         `,
-        [organizationCode.trim(), limit + 1]
+        [
+          organizationCode.trim(),
+          limit + 1,
+          scope?.originatingSalespersonUserId ?? null,
+        ]
       )
       return boundedResult(
         rows.rows.slice(0, limit).map(enquirySpreadsheetItemFromRow),
@@ -5927,50 +6019,64 @@ export function createCommercialWorkflowRepository(
 
     async listSalesClarificationQueueBounded(
       organizationCode: string,
-      requestedLimit = 200
+      requestedLimit = 200,
+      scope?: SalesWorkScope
     ) {
       const limit = operationalRootLimit(requestedLimit)
       const rows = await this.listSalesClarificationQueue(
         organizationCode,
-        limit + 1
+        limit + 1,
+        scope
       )
       return boundedResult(rows, limit)
     },
 
     async listSalesHandoverQueueBounded(
       organizationCode: string,
-      requestedLimit = 200
+      requestedLimit = 200,
+      scope?: SalesWorkScope
     ) {
       const limit = operationalRootLimit(requestedLimit)
       const rows = await this.listSalesHandoverQueue(
         organizationCode,
-        limit + 1
+        limit + 1,
+        scope
       )
       return boundedResult(rows, limit)
     },
 
     async listSalesQuoteReadyQueueBounded(
       organizationCode: string,
-      requestedLimit = 200
+      requestedLimit = 200,
+      scope?: SalesWorkScope
     ) {
       const limit = operationalRootLimit(requestedLimit)
       const rows = await this.listSalesQuoteReadyQueue(
         organizationCode,
-        limit + 1
+        limit + 1,
+        scope
       )
       return boundedResult(rows, limit)
     },
 
-    async listFollowupsBounded(organizationCode: string, requestedLimit = 200) {
+    async listFollowupsBounded(
+      organizationCode: string,
+      requestedLimit = 200,
+      scope?: SalesWorkScope
+    ) {
       const limit = operationalRootLimit(requestedLimit)
-      const rows = await this.listFollowups(organizationCode, limit + 1)
+      const rows = await this.listFollowups(organizationCode, limit + 1, scope)
       return boundedResult(rows, limit)
     },
 
-    async listSalesSentQuoteQueueBounded(organizationCode: string) {
+    async listSalesSentQuoteQueueBounded(
+      organizationCode: string,
+      scope?: SalesWorkScope
+    ) {
       const rows = await this.listSalesSentQuoteQueue(
         organizationCode,
-        commercialSelectorLimit + 1
+        commercialSelectorLimit + 1,
+        scope
       )
       return boundedResult(rows, commercialSelectorLimit)
     },
@@ -6196,28 +6302,37 @@ export function createCommercialWorkflowRepository(
       )
     },
 
-    async listFollowupsForExport(organizationCode: string, batchSize = 500) {
-      return transaction(pool, async (client) => {
-        await client.query(
-          "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
-        )
-        return followupsForExport(client, organizationCode, batchSize)
-      })
-    },
-
-    async listSalesSentQuotesForExport(
+    async listFollowupsForExport(
       organizationCode: string,
-      batchSize = 500
+      batchSize = 500,
+      scope?: SalesWorkScope
     ) {
       return transaction(pool, async (client) => {
         await client.query(
           "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
         )
-        return sentQuotesForExport(client, organizationCode, batchSize)
+        return followupsForExport(client, organizationCode, batchSize, scope)
       })
     },
 
-    async getSalesHistoryForExport(organizationCode: string, batchSize = 500) {
+    async listSalesSentQuotesForExport(
+      organizationCode: string,
+      batchSize = 500,
+      scope?: SalesWorkScope
+    ) {
+      return transaction(pool, async (client) => {
+        await client.query(
+          "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+        )
+        return sentQuotesForExport(client, organizationCode, batchSize, scope)
+      })
+    },
+
+    async getSalesHistoryForExport(
+      organizationCode: string,
+      batchSize = 500,
+      scope?: SalesWorkScope
+    ) {
       return transaction(pool, async (client) => {
         await client.query(
           "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
@@ -6226,18 +6341,24 @@ export function createCommercialWorkflowRepository(
           followups: await followupsForExport(
             client,
             organizationCode,
-            batchSize
+            batchSize,
+            scope
           ),
           sentQuotes: await sentQuotesForExport(
             client,
             organizationCode,
-            batchSize
+            batchSize,
+            scope
           ),
         }
       })
     },
 
-    async listEnquiriesForExport(organizationCode: string, batchSize = 500) {
+    async listEnquiriesForExport(
+      organizationCode: string,
+      batchSize = 500,
+      scope?: SalesWorkScope
+    ) {
       const limit = boundedListLimit(batchSize)
       return transaction(pool, async (client) => {
         await client.query(
@@ -6266,6 +6387,7 @@ export function createCommercialWorkflowRepository(
               JOIN sales.customers customer
                 ON customer.id = enquiry.customer_id
               WHERE lower(organization.code) = lower($1)
+                AND ($5::uuid IS NULL OR enquiry.created_by_user_id = $5)
                 AND (
                   $2::timestamptz IS NULL
                   OR (enquiry.created_at, enquiry.id)
@@ -6274,7 +6396,13 @@ export function createCommercialWorkflowRepository(
               ORDER BY enquiry.created_at DESC, enquiry.id DESC
               LIMIT $4
             `,
-              [organizationCode.trim(), cursorCreatedAt, cursorId, limit]
+              [
+                organizationCode.trim(),
+                cursorCreatedAt,
+                cursorId,
+                limit,
+                scope?.originatingSalespersonUserId ?? null,
+              ]
             )
           if (!roots.rows.length) break
           rows.push(...(await enquiryRowsWithRelations(client, roots.rows)))
@@ -6288,7 +6416,11 @@ export function createCommercialWorkflowRepository(
       })
     },
 
-    async getEnquiryLinesForExport(enquiryId: string, batchSize = 500) {
+    async getEnquiryLinesForExport(
+      enquiryId: string,
+      batchSize = 500,
+      scope?: SalesWorkScope
+    ) {
       const limit = boundedListLimit(batchSize)
       return transaction(pool, async (client) => {
         await client.query(
@@ -6305,8 +6437,9 @@ export function createCommercialWorkflowRepository(
             FROM sales.enquiries enquiry
             JOIN sales.customers customer ON customer.id = enquiry.customer_id
             WHERE enquiry.id = $1
+              AND ($2::uuid IS NULL OR enquiry.created_by_user_id = $2)
           `,
-          [enquiryId]
+          [enquiryId, scope?.originatingSalespersonUserId ?? null]
         )
         if (!enquiry.rows[0]) throw new Error("ENQ was not found.")
 

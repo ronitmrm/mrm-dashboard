@@ -15,21 +15,55 @@ describe("Master Data workspace", () => {
 
     expect(source).toMatch(/<MasterDataTabs\s+activeView="dataEntry"/)
     expect(source).toMatch(/<MasterDataTabs\s+activeView="masterTables"/)
-    expect(source).toContain("entryType={preferredDataEntryType}")
+    expect(source).toContain("entryType={bulkEntryType}")
     expect(source).toContain("onEntryTypeChange={onMasterEntryTypeChange}")
     expect(tabsSource).toContain("Data Entry")
     expect(tabsSource).toContain("Master Table")
     expect(tabsSource).toContain("Back to Master Selection")
+    expect(tabsSource).toContain(
+      "masterSelectionHref(selection, props.activeView)"
+    )
+    expect(tabsSource).toMatch(
+      /const masterTablesHref = selection\s+\? withMasterSelectionContext\([\s\S]*?\)\s+: "\/masters\?view=masterTables"/
+    )
     expect(tabsSource).toContain("MasterDataUnsavedGuard")
     expect(source).toMatch(
       /masterEditDefaults\(\s*selectedSpec\.entryType,\s*row\s*\)/
     )
     expect(source).toMatch(/immutableMasterFields\(spec\.entryType\)/)
-    expect(source).toContain('submitAction("master-delete"')
+    expect(source).toMatch(/submitAction\(\s*"master-delete"/)
     expect(source).toContain("Select Replacement (Required Only If Used)")
+    const tablePanelSource = source.slice(
+      source.indexOf("function MasterTablesPanel"),
+      source.indexOf("function masterTableKeySummaryRows")
+    )
+    expect(tablePanelSource).not.toContain('<Field label="Production Unit">')
+    expect(tablePanelSource).not.toContain('<Field label="Master">')
     expect(source).not.toContain('<optgroup label="Other Modules">')
     expect(source).toContain(
       'key={`${initialDashboardTab}|${initialDataEntryType ?? ""}|${initialProductionFloor}`}'
     )
+  })
+
+  it("keeps Master Table export beside Back and the view tabs on the right", () => {
+    const source = readFileSync(
+      new URL("./mrmpl-dashboard.tsx", import.meta.url),
+      "utf8"
+    )
+    const tabsSource = readFileSync(
+      new URL("./master-data-view-tabs.tsx", import.meta.url),
+      "utf8"
+    )
+    const tablePanelSource = source.slice(
+      source.indexOf("function MasterTablesPanel"),
+      source.indexOf("function masterTableKeySummaryRows")
+    )
+
+    expect(tablePanelSource).not.toContain("Search Saved Rows")
+    expect(tablePanelSource).not.toContain("Search All Visible Columns")
+    expect(tablePanelSource).toMatch(/onExport=\{\(\) =>\s*downloadMasterTableCsv/)
+    expect(tabsSource).toContain("Back to Master Selection")
+    expect(tabsSource).toContain("Export")
+    expect(tabsSource).toContain('className="ml-auto flex shrink-0"')
   })
 })

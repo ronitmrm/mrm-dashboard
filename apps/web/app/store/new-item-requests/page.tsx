@@ -25,10 +25,8 @@ import {
 
 import { StoreRequestIdentityFields } from "@/components/store/store-request-identity-fields"
 import { readAuthEnvironment } from "@/lib/auth/auth"
-import {
-  listGrantedCapabilities,
-  requireCapability,
-} from "@/lib/auth/require-capability"
+import { requireCapability } from "@/lib/auth/require-capability"
+import { listGrantedStoreActions } from "@/lib/auth/store-action-access"
 import { formatIstDateTime } from "@/lib/date-time"
 import { storeRequestFormPolicy } from "@/lib/store-request-policy"
 
@@ -42,11 +40,9 @@ export default async function NewItemRequestsPage() {
     "store.new_item_requests.read",
     "/store/new-item-requests"
   )
-  const capabilities = new Set(
-    await listGrantedCapabilities(session.user.id, [
-      "store.new_item_requests.write",
-    ])
-  )
+  const actions = await listGrantedStoreActions(session.user.id)
+  const canResolveRequests = actions.has("store.new_item_requests.resolve")
+  const canSubmitRequests = actions.has("store.new_item_requests.submit")
   const repository = createStoreRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
@@ -77,7 +73,7 @@ export default async function NewItemRequestsPage() {
         </p>
       </div>
 
-      {capabilities.has("store.new_item_requests.write") ? (
+      {canSubmitRequests ? (
         <Card>
           <CardHeader>
             <CardTitle>Request a New Item</CardTitle>
@@ -160,9 +156,7 @@ export default async function NewItemRequestsPage() {
                 <TableHead>Department</TableHead>
                 <TableHead>Requested By</TableHead>
                 <TableHead>Status</TableHead>
-                {capabilities.has("store.new_item_requests.write") ? (
-                  <TableHead>Resolve</TableHead>
-                ) : null}
+                {canResolveRequests ? <TableHead>Resolve</TableHead> : null}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -181,7 +175,7 @@ export default async function NewItemRequestsPage() {
                   <TableCell>
                     <Badge variant="outline">{request.status}</Badge>
                   </TableCell>
-                  {capabilities.has("store.new_item_requests.write") ? (
+                  {canResolveRequests ? (
                     <TableCell>
                       {request.status === "Pending" ? (
                         <form
@@ -234,9 +228,7 @@ export default async function NewItemRequestsPage() {
                 <TableRow>
                   <TableCell
                     className="h-24 text-center text-muted-foreground"
-                    colSpan={
-                      capabilities.has("store.new_item_requests.write") ? 7 : 6
-                    }
+                    colSpan={canResolveRequests ? 7 : 6}
                   >
                     No New Item Requests.
                   </TableCell>

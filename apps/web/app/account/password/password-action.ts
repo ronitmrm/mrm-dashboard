@@ -26,9 +26,9 @@ export async function resetPasswordAction(
     if (newPassword !== confirmation) {
       return { message: "New passwords do not match.", status: "error" }
     }
-    if (newPassword.length < 12) {
+    if (newPassword.length < 6) {
       return {
-        message: "Password must contain at least 12 characters.",
+        message: "Password must contain at least 6 characters.",
         status: "error",
       }
     }

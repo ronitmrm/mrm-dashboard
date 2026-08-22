@@ -14,11 +14,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
-import { Field, FieldGroup, FieldLabel } from "@workspace/ui/components/field"
-import { Input } from "@workspace/ui/components/input"
 import Link from "next/link"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
+import { commercialTaskCapabilities } from "@/lib/auth/task-capabilities"
 import {
   listGrantedCapabilities,
   requireCapability,
@@ -28,6 +27,7 @@ import { importMastersWorkbookAction } from "./actions"
 import { MasterMaintenanceForm } from "./master-maintenance-form"
 import { CompanyWideMasterScope } from "@/components/company-wide-master-scope"
 import { MasterDataViewTabs } from "@/components/master-data-view-tabs"
+import { MasterDataCsvImportButton } from "@/components/master-data-csv-import-button"
 import {
   commercialMasterSelection,
   commercialMasterTemplateHref,
@@ -44,6 +44,9 @@ export default async function MastersPage({
   searchParams: Promise<{
     error?: string
     kind?: string
+    masterMain?: string
+    masterSub?: string
+    masterUnit?: string
     masterView?: string
     success?: string
   }>
@@ -53,14 +56,22 @@ export default async function MastersPage({
     "/commercial/masters"
   )
   const [grantedCapabilities, feedback] = await Promise.all([
-    listGrantedCapabilities(session.user.id, ["pricing.masters.write"]),
+    listGrantedCapabilities(session.user.id, [
+      commercialTaskCapabilities.deleteMaster,
+      commercialTaskCapabilities.importMasters,
+      commercialTaskCapabilities.renameMaster,
+      commercialTaskCapabilities.updateMaster,
+    ]),
     searchParams,
   ])
-  const canWrite = grantedCapabilities.includes("pricing.masters.write")
+  const canWrite = grantedCapabilities.length > 0
   const activeView =
     feedback.masterView === "masterTables" ? "masterTables" : "dataEntry"
   const selection = commercialMasterSelection(feedback.kind)
   const selectionKind = commercialMasterWorkspaceKind(selection)
+  const selectionLocked = Boolean(
+    feedback.masterUnit && feedback.masterMain && feedback.masterSub
+  )
   const showDataEntry = activeView === "dataEntry"
   const showMasterTables = activeView === "masterTables"
   let snapshot: CommercialMasterSnapshot | null = null
@@ -82,8 +93,7 @@ export default async function MastersPage({
         editableRows = await repository.listEditableRows({
           kind: selection.tableKind,
           organizationId,
-          termType:
-            "termType" in selection ? selection.termType : undefined,
+          termType: "termType" in selection ? selection.termType : undefined,
         })
       }
     } finally {
@@ -96,10 +106,24 @@ export default async function MastersPage({
     <div className="flex flex-col gap-6">
       <MasterDataViewTabs
         activeView={activeView}
-        dataEntryHref={commercialMasterViewHref(
-          "dataEntry",
-          selectionKind
-        )}
+        dataEntryHref={commercialMasterViewHref("dataEntry", selectionKind)}
+        csvImportAction={
+          canWrite ? (
+            <MasterDataCsvImportButton
+              action={importMastersWorkbookAction}
+              fields={{
+                master_view: "dataEntry",
+                workspace_kind: selectionKind,
+              }}
+              fileField="masters_file"
+            />
+          ) : null
+        }
+        exportAction={
+          <Button asChild size="sm" variant="outline">
+            <Link href="/commercial/masters/export.xlsx">Export</Link>
+          </Button>
+        }
         masterTablesHref={commercialMasterViewHref(
           "masterTables",
           selectionKind
@@ -122,7 +146,7 @@ export default async function MastersPage({
             <CardHeader>
               <CardTitle>Master Workbook</CardTitle>
               <CardDescription>
-                Source-Compatible Xls/Xlsx Sheets, Aliases, Defaults, And Atomic
+                Source-Compatible CSV/Xls/Xlsx, Aliases, Defaults, And Atomic
                 Import.
               </CardDescription>
             </CardHeader>
@@ -136,32 +160,7 @@ export default async function MastersPage({
                     Download Selected Template
                   </Link>
                 </Button>
-                <Button asChild variant="outline">
-                  <Link href="/commercial/masters/export.xlsx">
-                    Export Current Masters
-                  </Link>
-                </Button>
               </div>
-              {canWrite ? (
-                <form action={importMastersWorkbookAction}>
-                  <input name="master_view" type="hidden" value="dataEntry" />
-                  <FieldGroup className="flex flex-col gap-4 sm:flex-row sm:items-end">
-                    <Field className="max-w-xl">
-                      <FieldLabel htmlFor="masters-file">
-                        Masters Workbook
-                      </FieldLabel>
-                      <Input
-                        accept=".xlsx,.xls"
-                        id="masters-file"
-                        name="masters_file"
-                        required
-                        type="file"
-                      />
-                    </Field>
-                    <Button type="submit">Import Atomically</Button>
-                  </FieldGroup>
-                </form>
-              ) : null}
             </CardContent>
           </Card>
 
@@ -181,6 +180,7 @@ export default async function MastersPage({
                   }
                   key={selectionKind}
                   snapshot={snapshot}
+                  selectionLocked={selectionLocked}
                 />
               </CardContent>
             </Card>
@@ -207,6 +207,7 @@ export default async function MastersPage({
               initialKind={selectionKind}
               key={selectionKind}
               rows={editableRows}
+              selectionLocked={true}
             />
           </CardContent>
         </Card>

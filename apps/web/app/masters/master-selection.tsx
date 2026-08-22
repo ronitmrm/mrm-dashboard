@@ -29,16 +29,21 @@ import {
   resolveMasterSelection,
   subMastersFor,
   type MasterModuleAccess,
+  type MasterModuleView,
   type MasterUnit,
 } from "@/lib/master-module"
 
 type PartialSelection = { main: string; sub: string; unit: MasterUnit | "" }
 
-function selectionPageHref(selection: PartialSelection) {
+function selectionPageHref(
+  selection: PartialSelection,
+  view: MasterModuleView
+) {
   const params = new URLSearchParams()
   if (selection.unit) params.set("unit", selection.unit)
   if (selection.main) params.set("main", selection.main)
   if (selection.sub) params.set("sub", selection.sub)
+  if (view === "masterTables") params.set("view", view)
   const query = params.toString()
   return query ? `/masters?${query}` : "/masters"
 }
@@ -61,9 +66,11 @@ function restoredSelection(
 export function MasterSelection({
   access,
   initial,
+  view,
 }: {
   access: MasterModuleAccess
   initial: PartialSelection
+  view: MasterModuleView
 }) {
   const router = useRouter()
   const [selection, setSelection] = useState(() =>
@@ -84,16 +91,16 @@ export function MasterSelection({
       JSON.stringify(selection)
     )
     if (!initial.unit) {
-      window.history.replaceState(null, "", selectionPageHref(selection))
+      window.history.replaceState(null, "", selectionPageHref(selection, view))
     }
-  }, [initial.unit, selection])
+  }, [initial.unit, selection, view])
   function update(next: PartialSelection) {
     setSelection(next)
     window.sessionStorage.setItem(
       "master-module-selection",
       JSON.stringify(next)
     )
-    window.history.replaceState(null, "", selectionPageHref(next))
+    window.history.replaceState(null, "", selectionPageHref(next, view))
   }
 
   return (
@@ -104,9 +111,14 @@ export function MasterSelection({
             <Database className="size-5" />
           </div>
           <div>
-            <CardTitle>Master Selection</CardTitle>
+            <CardTitle>
+              {view === "masterTables"
+                ? "Master Table Selection"
+                : "Master Selection"}
+            </CardTitle>
             <CardDescription>
-              Select the Unit, Main Master, and Sub Master in order.
+              Select the Unit, Main Master, and Sub Master in order, then open
+              the selected {view === "masterTables" ? "table" : "form"}.
             </CardDescription>
           </div>
         </div>
@@ -196,11 +208,12 @@ export function MasterSelection({
           <Button
             disabled={!resolved}
             onClick={() => {
-              if (resolved) router.push(masterOpenHref(resolved))
+              if (resolved) router.push(masterOpenHref(resolved, view))
             }}
             type="button"
           >
-            Open Form <ArrowRight />
+            {view === "masterTables" ? "Open Table" : "Open Form"}{" "}
+            <ArrowRight />
           </Button>
         </div>
       </CardContent>
