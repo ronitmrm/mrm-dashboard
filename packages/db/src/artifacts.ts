@@ -119,13 +119,29 @@ function targetLockKey(input: StoreArtifactInput) {
 
 export function createArtifactService(input: {
   connectionString: string
-  provider: ArtifactStorageProvider
+  provider?: ArtifactStorageProvider
 }) {
   const pool = new Pool({ connectionString: input.connectionString })
 
   return {
     async close() {
       await pool.end()
+    },
+
+    async listByOrganization(query: { organizationId: string }) {
+      const result = await pool.query<ArtifactRow>(
+        `
+          SELECT ${artifactColumns}
+          FROM core.files file
+          JOIN core.file_objects object ON object.id = file.physical_object_id
+          JOIN core.file_links link ON link.file_id = file.id
+          WHERE file.organization_id = $1
+            AND file.source_system = 'artifact-service'
+          ORDER BY file.created_at DESC, file.id DESC
+        `,
+        [query.organizationId]
+      )
+      return result.rows.map(artifactResult)
     },
 
     async getCurrent(query: {
@@ -192,6 +208,10 @@ export function createArtifactService(input: {
     },
 
     async store(storeInput: StoreArtifactInput) {
+      const provider = input.provider
+      if (!provider) {
+        throw new Error("Artifact storage provider is required for writes.")
+      }
       const fileName = safeFileName(storeInput.fileName)
       if (storeInput.bytes.byteLength === 0)
         throw new Error("Artifact bytes are required.")
@@ -236,7 +256,7 @@ export function createArtifactService(input: {
           [storeInput.organizationId, sha256, storeInput.bytes.byteLength]
         )
         if (!physical.rows[0]) {
-          const uploaded = await input.provider.upload({
+          const uploaded = await provider.upload({
             bytes: storeInput.bytes,
             customId: `${storeInput.organizationId}:${fingerprint}`,
             mediaType: storeInput.mediaType,
@@ -373,9 +393,7 @@ export function createArtifactService(input: {
       } catch (error) {
         await client.query("ROLLBACK")
         if (uploadedKey)
-          await input.provider
-            .delete({ key: uploadedKey })
-            .catch(() => undefined)
+          await provider.delete({ key: uploadedKey }).catch(() => undefined)
         throw error
       } finally {
         client.release()

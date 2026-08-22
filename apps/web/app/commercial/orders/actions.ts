@@ -1,9 +1,12 @@
 "use server"
 
-import { createHash, randomUUID } from "node:crypto"
-import path from "node:path"
+import { createHash } from "node:crypto"
 
-import { createCommercialOrdersRepository } from "@workspace/db"
+import {
+  authorizeCommercialOrderArtifactTarget,
+  createArtifactService,
+  createCommercialOrdersRepository,
+} from "@workspace/db"
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import * as XLSX from "xlsx"
@@ -12,11 +15,8 @@ import { readAuthEnvironment } from "@/lib/auth/auth"
 import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { optionalText, requiredText } from "@/lib/form-data"
-import {
-  deleteUserAttachment,
-  saveUserAttachment,
-} from "@/lib/user-attachment-storage"
 import { validateUserAttachment } from "@/lib/user-attachment-security"
+import { createUploadThingArtifactProvider } from "@/lib/uploadthing-artifact-provider"
 
 const ordersPath = "/commercial/orders"
 
@@ -190,29 +190,40 @@ export async function uploadPurchaseOrderFileAction(formData: FormData) {
         purpose: "purchase-order",
       })
       const sha256 = createHash("sha256").update(bytes).digest("hex")
-      const sourceId = randomUUID()
-      const storageKey = path.posix.join(
-        "attachments",
-        "purchase-orders",
-        purchaseOrderId,
-        sourceId,
-        fileName
-      )
-      await saveUserAttachment({ bytes, mediaType, storageKey })
+      const order = await repository.getPurchaseOrder(purchaseOrderId)
+      const artifacts = createArtifactService({
+        connectionString: readAuthEnvironment().connectionString,
+        provider: createUploadThingArtifactProvider(),
+      })
       try {
-        await repository.recordPurchaseOrderFile({
+        await artifacts.store({
           actorUserId,
-          byteSize: bytes.byteLength,
+          authorizeTarget: (client, { isRetry }) =>
+            authorizeCommercialOrderArtifactTarget(
+              client,
+              { organizationId: order.organizationId, purchaseOrderId },
+              { requireOpenState: !isRetry }
+            ),
+          bytes,
           fileName,
+          idempotencyKey: [
+            "purchase-order-source",
+            purchaseOrderId,
+            fileName,
+            sha256,
+          ].join(":"),
           mediaType,
-          purchaseOrderId,
-          sha256,
-          sourceId,
-          storageKey,
+          organizationId: order.organizationId,
+          origin: "uploaded",
+          purpose: "source_po",
+          target: {
+            id: purchaseOrderId,
+            schema: "sales",
+            table: "purchase_orders",
+          },
         })
-      } catch (error) {
-        await deleteUserAttachment(storageKey).catch(() => undefined)
-        throw error
+      } finally {
+        await artifacts.close()
       }
     }
   )

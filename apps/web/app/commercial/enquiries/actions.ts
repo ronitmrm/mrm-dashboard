@@ -1,11 +1,13 @@
 "use server"
 
 import { createHash } from "node:crypto"
+import path from "node:path"
 
 import {
   authorizeCommercialAttachmentTarget,
   createArtifactService,
   createCommercialWorkflowRepository,
+  prepareImportReviewArtifactTarget,
   type CommercialAttachmentAuthorization,
 } from "@workspace/db"
 import { revalidatePath } from "next/cache"
@@ -47,6 +49,11 @@ function nullableNumber(value: string | undefined) {
   const parsed = Number(value)
   if (!Number.isFinite(parsed)) throw new Error("BOM values must be numeric")
   return parsed
+}
+
+function uuidFromSha256(sha256: string) {
+  const hex = sha256.slice(0, 32)
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20)}`
 }
 
 async function withWorkflow<T>(
@@ -617,19 +624,56 @@ export async function importEnquiryLinesAction(formData: FormData) {
     .update(JSON.stringify(rows.map((row) => row.rawValues)))
     .update(enquiryId)
     .digest("hex")
-  const review = await withWorkflow(
+  const session = await requireCapability(
     "pricing.enquiries.write",
-    `${enquiriesPath}/${enquiryId}`,
-    (workflow) =>
-      workflow.createImportReview({
-        enquiryId,
-        importKey,
-        organizationId,
-        rows,
-      })
+    `${enquiriesPath}/${enquiryId}`
   )
+  const reviewId = uuidFromSha256(importKey)
+  const fileName = path.basename(file.name).replace(/[<>:"/\\|?*\r\n]+/g, "_")
+  const extension = path.extname(fileName).toLowerCase()
+  const mediaType =
+    extension === ".csv"
+      ? "text/csv"
+      : extension === ".xls"
+        ? "application/vnd.ms-excel"
+        : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  const sourceSha256 = createHash("sha256").update(buffer).digest("hex")
+  const artifacts = createArtifactService({
+    connectionString: readAuthEnvironment().connectionString,
+    provider: createUploadThingArtifactProvider(),
+  })
+  try {
+    await artifacts.store({
+      actorUserId: session.user.id,
+      authorizeTarget: (client, { isRetry }) =>
+        prepareImportReviewArtifactTarget(
+          client,
+          { enquiryId, importKey, organizationId, reviewId, rows },
+          { isRetry }
+        ),
+      bytes: buffer,
+      fileName,
+      idempotencyKey: [
+        "enquiry-import-review-source",
+        reviewId,
+        fileName,
+        sourceSha256,
+      ].join(":"),
+      mediaType,
+      organizationId,
+      origin: "uploaded",
+      purpose: "import_source",
+      target: {
+        id: reviewId,
+        schema: "sales",
+        table: "enquiry_import_reviews",
+      },
+    })
+  } finally {
+    await artifacts.close()
+  }
   revalidatePath(`${enquiriesPath}/${enquiryId}`)
-  redirect(`${enquiriesPath}/${enquiryId}/import-review/${review.id}`)
+  redirect(`${enquiriesPath}/${enquiryId}/import-review/${reviewId}`)
 }
 
 export async function applyEnquiryImportReviewAction(formData: FormData) {

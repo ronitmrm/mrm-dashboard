@@ -110,6 +110,25 @@ type PurchaseOrderReportDatabaseRow = {
   unit_price: string
 }
 
+const currentPurchaseOrderSourceJoin = `
+  LEFT JOIN LATERAL (
+    SELECT file.file_name, file.media_type, file.byte_size,
+      file.sha256, file.storage_key, file.lifecycle_state,
+      object.public_url,
+      object.lifecycle_state AS object_lifecycle_state
+    FROM core.file_links link
+    JOIN core.files file ON file.id = link.file_id
+    LEFT JOIN core.file_objects object ON object.id = file.physical_object_id
+    WHERE link.organization_id = purchase_order.organization_id
+      AND link.target_schema = 'sales'
+      AND link.target_table = 'purchase_orders'
+      AND link.target_id = purchase_order.id
+      AND link.purpose = 'source_po' AND link.is_current
+    LIMIT 1
+  ) artifact ON true
+  LEFT JOIN core.files legacy ON legacy.id = purchase_order.file_id
+`
+
 const asNumber = (value: unknown, fallback = 0) => {
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : fallback
@@ -758,6 +777,26 @@ async function approveQuoteAndProduct(
     targetId: input.quoteItemId,
     targetTable: "quote_items",
   })
+}
+
+export async function authorizeCommercialOrderArtifactTarget(
+  client: PoolClient,
+  input: { organizationId: string; purchaseOrderId: string },
+  options: { requireOpenState: boolean }
+) {
+  const target = await client.query<{ id: string }>(
+    `
+      SELECT id
+      FROM sales.purchase_orders
+      WHERE id = $1 AND organization_id = $2
+        AND ($3::boolean = false OR status NOT IN ('Approved', 'Cancelled'))
+      FOR UPDATE
+    `,
+    [input.purchaseOrderId, input.organizationId, options.requireOpenState]
+  )
+  if (!target.rows[0]) {
+    throw new Error("Purchase order source target was not found or is closed.")
+  }
 }
 
 export function createCommercialOrdersRepository(options: RepositoryPoolOptions) {
@@ -2044,27 +2083,44 @@ export function createCommercialOrdersRepository(options: RepositoryPoolOptions)
       const result = await pool.query<{
         byte_size: string | null
         file_name: string
+        lifecycle_state: string
         media_type: string | null
+        object_lifecycle_state: string | null
+        public_url: string | null
         sha256: string | null
-        storage_key: string
+        storage_key: string | null
       }>(
         `
-          SELECT file.file_name, file.media_type, file.byte_size::text,
-            file.sha256, file.storage_key
+          SELECT coalesce(artifact.file_name, legacy.file_name) AS file_name,
+            coalesce(artifact.media_type, legacy.media_type) AS media_type,
+            coalesce(artifact.byte_size, legacy.byte_size)::text AS byte_size,
+            coalesce(artifact.sha256, legacy.sha256) AS sha256,
+            coalesce(artifact.storage_key, legacy.storage_key) AS storage_key,
+            artifact.public_url,
+            coalesce(artifact.lifecycle_state, 'current') AS lifecycle_state,
+            artifact.object_lifecycle_state
           FROM sales.purchase_orders purchase_order
-          JOIN core.files file ON file.id = purchase_order.file_id
+          ${currentPurchaseOrderSourceJoin}
           WHERE purchase_order.id = $1
         `,
         [purchaseOrderId]
       )
       const file = result.rows[0]
-      if (!file) {
+      if (!file?.file_name) {
         throw new Error("Purchase-order source file was not found.")
+      }
+      if (
+        file.lifecycle_state === "deleted" ||
+        (file.object_lifecycle_state !== null &&
+          file.object_lifecycle_state !== "available")
+      ) {
+        throw new Error("Purchase-order source file is deleted or unavailable.")
       }
       return {
         byteSize: file.byte_size === null ? null : Number(file.byte_size),
         fileName: file.file_name,
         mediaType: file.media_type,
+        publicUrl: file.public_url,
         sha256: file.sha256,
         storageKey: file.storage_key,
       }
@@ -2091,11 +2147,18 @@ export function createCommercialOrdersRepository(options: RepositoryPoolOptions)
             purchase_order.po_date, purchase_order.status,
             purchase_order.total_amount, purchase_order.cancellation_reason,
             purchase_order.currency_code, purchase_order.notes,
-            customer.customer_uid, customer.company_name, file.file_name
+            customer.customer_uid, customer.company_name,
+            coalesce(
+              CASE WHEN artifact.lifecycle_state = 'current'
+                AND (artifact.object_lifecycle_state IS NULL
+                  OR artifact.object_lifecycle_state = 'available')
+              THEN artifact.file_name END,
+              legacy.file_name
+            ) AS file_name
           FROM sales.purchase_orders purchase_order
           JOIN sales.customers customer
             ON customer.id = purchase_order.customer_id
-          LEFT JOIN core.files file ON file.id = purchase_order.file_id
+          ${currentPurchaseOrderSourceJoin}
           WHERE purchase_order.id = $1
         `,
         [purchaseOrderId]
@@ -2187,7 +2250,7 @@ export function createCommercialOrdersRepository(options: RepositoryPoolOptions)
       organizationCode: string,
       options: { approvedOnly?: boolean } = {}
     ) {
-const result = await pool.query<PurchaseOrderReportDatabaseRow>(
+      const result = await pool.query<PurchaseOrderReportDatabaseRow>(
         `
           SELECT purchase_order.po_number, purchase_order.po_date,
             purchase_order.cancellation_reason, customer.customer_uid,
@@ -2236,7 +2299,7 @@ const result = await pool.query<PurchaseOrderReportDatabaseRow>(
         `,
         [organizationCode.trim(), options.approvedOnly ?? false]
       )
-return result.rows.map(purchaseOrderReportRow)
+      return result.rows.map(purchaseOrderReportRow)
     },
 
     async listPurchaseOrderReportRowsForExport(

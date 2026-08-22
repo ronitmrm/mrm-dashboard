@@ -23,7 +23,6 @@ import { browserImportPolicy } from "@/lib/dashboard-api-policy"
 import {
   autoCodedMasterTemplateFields,
   csvImportRowSourceId,
-  dedupeCsvImportRows,
   importAutoCodedMasterRows,
 } from "../../../lib/auto-coded-master-import"
 import {
@@ -73,6 +72,10 @@ import {
   isCompanyWideMasterEntryType,
   masterPayloadForScope,
 } from "../../../lib/master-data-navigation"
+import {
+  parseTemplateUpload,
+  TemplateUploadError,
+} from "../../../lib/template-upload"
 
 class RouteError extends Error {
   constructor(
@@ -101,7 +104,8 @@ function dashboardRouteError(err: unknown) {
     err instanceof RouteError ||
     err instanceof OperationalEntryError ||
     err instanceof DashboardReadError ||
-    err instanceof DashboardRequestPolicyError
+    err instanceof DashboardRequestPolicyError ||
+    err instanceof TemplateUploadError
       ? err.status
       : 500
   if (status >= 500) console.error("Dashboard API request failed", err)
@@ -251,6 +255,7 @@ const dataEntryTemplateFields: Record<string, string[]> = {
     "downtimeReason",
   ],
 }
+const dataEntryTemplateTypes = new Set(Object.keys(dataEntryTemplateFields))
 
 async function dataTemplateResponse(entryType: string, request: NextRequest) {
   const fields = dataEntryTemplateFields[entryType]
@@ -1408,7 +1413,12 @@ async function post(request: NextRequest, context: RouteContext) {
       const entryType = String(body.entryType || "")
       const fileName = String(body.fileName || "")
       const fileBase64 = String(body.fileBase64 || "")
-      const importBatch = parseTemplateUpload(entryType, fileName, fileBase64)
+      const importBatch = parseTemplateUpload(
+        entryType,
+        fileName,
+        fileBase64,
+        dataEntryTemplateTypes
+      )
       const importedRows = importBatch.rows.map((payload) =>
         productionFloorPayload(payload, body.productionFloorCode)
       )
@@ -1503,7 +1513,12 @@ async function post(request: NextRequest, context: RouteContext) {
       if (isPostgresOperationalEntryType(entryType)) {
         const fileName = String(body.fileName || "")
         const fileBase64 = String(body.fileBase64 || "")
-        const importBatch = parseTemplateUpload(entryType, fileName, fileBase64)
+        const importBatch = parseTemplateUpload(
+          entryType,
+          fileName,
+          fileBase64,
+          dataEntryTemplateTypes
+        )
         const importedRows = importBatch.rows.map((payload) => {
           const rawPayload = masterPayloadForScope(entryType, payload)
           if (isCompanyWideMasterEntryType(entryType)) return rawPayload
@@ -1533,7 +1548,12 @@ async function post(request: NextRequest, context: RouteContext) {
       if (postgresMasterEntryTypes.has(entryType)) {
         const fileName = String(body.fileName || "")
         const fileBase64 = String(body.fileBase64 || "")
-        const importBatch = parseTemplateUpload(entryType, fileName, fileBase64)
+        const importBatch = parseTemplateUpload(
+          entryType,
+          fileName,
+          fileBase64,
+          dataEntryTemplateTypes
+        )
         const importedRows = importBatch.rows.map((payload) =>
           entryType === "machine_master"
             ? machineMasterImportPayload(payload, body.productionFloorCode)
@@ -1671,28 +1691,6 @@ function optionalText(value: unknown) {
   return cleaned || undefined
 }
 
-function parseTemplateUpload(
-  entryType: string,
-  fileName: string,
-  fileBase64: string
-) {
-  if (!dataEntryTemplateFields[entryType]) {
-    throw new RouteError(400, `Unknown import entry type: ${entryType}`)
-  }
-  if (!fileName.toLowerCase().endsWith(".csv")) {
-    throw new RouteError(
-      400,
-      "Upload the filled CSV template downloaded from this screen."
-    )
-  }
-  const csvText = decodeDataUrl(fileBase64)
-  const rows = parseCsv(csvText)
-    .map(normalizeImportedPayload)
-    .map((payload) => normalizeUserEnteredPayload(payload))
-    .filter((row) => Object.values(row).some((value) => text(value)))
-  return dedupeCsvImportRows(entryType, rows)
-}
-
 async function withMasterDataLifecycleRepository<T>(
   request: NextRequest,
   operation: (context: {
@@ -1727,87 +1725,6 @@ function importMessage(
   if (!duplicateCount) return imported
   const noun = duplicateCount === 1 ? "row" : "rows"
   return `${imported} Skipped ${duplicateCount} repeated ${noun}.`
-}
-
-function decodeDataUrl(value: string) {
-  const [, encoded = value] = value.split(",", 2)
-  return Buffer.from(encoded, "base64")
-    .toString("utf8")
-    .replace(/^\uFEFF/, "")
-}
-
-function parseCsv(csvText: string): Array<Record<string, unknown>> {
-  const rows: string[][] = []
-  let row: string[] = []
-  let cell = ""
-  let quoted = false
-
-  for (let index = 0; index < csvText.length; index += 1) {
-    const char = csvText[index]
-    const next = csvText[index + 1]
-
-    if (quoted) {
-      if (char === '"' && next === '"') {
-        cell += '"'
-        index += 1
-      } else if (char === '"') {
-        quoted = false
-      } else {
-        cell += char
-      }
-      continue
-    }
-
-    if (char === '"') {
-      quoted = true
-    } else if (char === ",") {
-      row.push(cell)
-      cell = ""
-    } else if (char === "\n") {
-      row.push(cell)
-      rows.push(row)
-      row = []
-      cell = ""
-    } else if (char !== "\r") {
-      cell += char
-    }
-  }
-
-  if (cell || row.length) {
-    row.push(cell)
-    rows.push(row)
-  }
-
-  const [headers = [], ...bodyRows] = rows
-  const cleanHeaders = headers.map((header) => header.trim()).filter(Boolean)
-  return bodyRows
-    .filter((bodyRow) => bodyRow.some((value) => value.trim()))
-    .map((bodyRow) =>
-      Object.fromEntries(
-        cleanHeaders.map((header, index) => [
-          header,
-          bodyRow[index]?.trim() ?? "",
-        ])
-      )
-    )
-}
-
-function normalizeImportedPayload(row: Record<string, unknown>) {
-  return Object.fromEntries(
-    Object.entries(row).map(([key, value]) => [
-      key,
-      normalizeImportedValue(value),
-    ])
-  )
-}
-
-function normalizeImportedValue(value: unknown) {
-  const cleaned = text(value)
-  if (cleaned === "") return ""
-  const numericValue = Number(cleaned)
-  return Number.isFinite(numericValue) && /^-?\d+(\.\d+)?$/.test(cleaned)
-    ? numericValue
-    : cleaned
 }
 
 function dataEntryKey(entryType: string, payload: Record<string, unknown>) {

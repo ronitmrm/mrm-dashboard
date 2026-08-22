@@ -3,7 +3,14 @@ import { randomUUID } from "node:crypto"
 import { Pool } from "pg"
 import { afterAll, beforeAll, describe, expect, test } from "vitest"
 
-import { createCommercialWorkflowRepository } from "./commercial-workflow"
+import {
+  createArtifactService,
+  type ArtifactStorageProvider,
+} from "./artifacts"
+import {
+  createCommercialWorkflowRepository,
+  prepareImportReviewArtifactTarget,
+} from "./commercial-workflow"
 import { migrateDatabase } from "./migrate"
 
 const connectionString =
@@ -12,11 +19,26 @@ const connectionString =
 
 const pool = new Pool({ connectionString })
 const repository = createCommercialWorkflowRepository({ connectionString })
+const artifactReader = createArtifactService({ connectionString })
 let customerId: string
 let enquiryId: string
 let existingProductId: string
 let organizationCode: string
 let organizationId: string
+
+class ImportReviewArtifactProvider implements ArtifactStorageProvider {
+  constructor(private readonly failUpload = false) {}
+
+  async delete() {}
+
+  async upload() {
+    if (this.failUpload) throw new Error("Import source upload failed.")
+    return {
+      key: `import-source-${randomUUID()}`,
+      url: `https://files.example.test/import-source-${randomUUID()}`,
+    }
+  }
+}
 
 beforeAll(async () => {
   await migrateDatabase({ connectionString })
@@ -58,11 +80,96 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
+  await artifactReader.close()
   await repository.close()
   await pool.end()
 })
 
 describe("PostgreSQL enquiry-to-design workflow", () => {
+  test("retains the original enquiry-line source on its Import Review", async () => {
+    const enquiry = await repository.createEnquiry({
+      customerId,
+      organizationId,
+      receivedOn: "2026-08-22",
+      source: "Email",
+    })
+    const reviewId = randomUUID()
+    const reviewInput = {
+      enquiryId: enquiry.id,
+      importKey: `retained-source-${randomUUID()}`,
+      organizationId,
+      reviewId,
+      rows: [
+        {
+          rawValues: { description: "Retained import", part: "RET-21" },
+          rowNumber: 2,
+          status: "Unclassified",
+        },
+      ],
+    }
+    const provider = new ImportReviewArtifactProvider()
+    const artifacts = createArtifactService({ connectionString, provider })
+    const target = {
+      id: reviewId,
+      schema: "sales",
+      table: "enquiry_import_reviews",
+    }
+    const storeInput = {
+      actorUserId: null,
+      authorizeTarget: (
+        client: Parameters<typeof prepareImportReviewArtifactTarget>[0],
+        { isRetry }: { isRetry: boolean }
+      ) => prepareImportReviewArtifactTarget(client, reviewInput, { isRetry }),
+      bytes: Buffer.from("Part,Description\nRET-21,Retained import\n"),
+      fileName: "enquiry-lines.csv",
+      idempotencyKey: `import-review-source:${reviewId}`,
+      mediaType: "text/csv",
+      organizationId,
+      origin: "uploaded" as const,
+      purpose: "import_source",
+      target,
+    }
+
+    try {
+      const failingArtifacts = createArtifactService({
+        connectionString,
+        provider: new ImportReviewArtifactProvider(true),
+      })
+      try {
+        await expect(failingArtifacts.store(storeInput)).rejects.toThrow(
+          "Import source upload failed"
+        )
+      } finally {
+        await failingArtifacts.close()
+      }
+      await expect(repository.getImportReview(reviewId)).rejects.toThrow(
+        "Import review was not found"
+      )
+
+      const source = await artifacts.store(storeInput)
+
+      expect(
+        await artifacts.listHistory({
+          organizationId,
+          purpose: "import_source",
+          target,
+        })
+      ).toMatchObject([
+        { fileName: "enquiry-lines.csv", isCurrent: true, version: 1 },
+      ])
+      await expect(repository.getImportReview(reviewId)).resolves.toMatchObject(
+        {
+          sourceFile: {
+            fileName: "enquiry-lines.csv",
+            publicUrl: source.publicUrl,
+          },
+        }
+      )
+    } finally {
+      await artifacts.close()
+    }
+  })
+
   test("copies customer commercial defaults into a new enquiry", async () => {
     await pool.query(
       `
@@ -1183,6 +1290,9 @@ describe("PostgreSQL enquiry-to-design workflow", () => {
   })
 
   test("imports enquiry register creates and gated updates atomically", async () => {
+    const artifactCountBefore = (
+      await artifactReader.listByOrganization({ organizationId })
+    ).length
     const existing = await repository.createEnquiry({
       customerId,
       organizationId,
@@ -1266,5 +1376,9 @@ describe("PostgreSQL enquiry-to-design workflow", () => {
     expect((await repository.listEnquiries(organizationCode)).length).toBe(
       before
     )
+    const artifactCountAfter = (
+      await artifactReader.listByOrganization({ organizationId })
+    ).length
+    expect(artifactCountAfter).toBe(artifactCountBefore)
   })
 })

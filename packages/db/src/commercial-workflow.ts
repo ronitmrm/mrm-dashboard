@@ -1510,10 +1510,11 @@ async function getImportReviewWithClient(client: PoolClient, reviewId: string) {
   const review = await client.query<{
     enquiry_id: string
     id: string
+    organization_id: string
     status: string
   }>(
     `
-      SELECT id, enquiry_id, status
+      SELECT id, enquiry_id, organization_id, status
       FROM sales.enquiry_import_reviews
       WHERE id = $1
     `,
@@ -1522,6 +1523,26 @@ async function getImportReviewWithClient(client: PoolClient, reviewId: string) {
   if (!review.rows[0]) {
     throw new Error("Import review was not found.")
   }
+  const source = await client.query<{
+    file_name: string
+    public_url: string
+  }>(
+    `
+      SELECT file.file_name, object.public_url
+      FROM core.file_links link
+      JOIN core.files file ON file.id = link.file_id
+      JOIN core.file_objects object ON object.id = file.physical_object_id
+      WHERE link.organization_id = $1
+        AND link.target_schema = 'sales'
+        AND link.target_table = 'enquiry_import_reviews'
+        AND link.target_id = $2
+        AND link.purpose = 'import_source' AND link.is_current
+        AND file.lifecycle_state = 'current'
+        AND object.lifecycle_state = 'available'
+      LIMIT 1
+    `,
+    [review.rows[0].organization_id, reviewId]
+  )
   const rows = await client.query<{
     applied_action: string | null
     created_enquiry_item_id: string | null
@@ -1559,7 +1580,153 @@ async function getImportReviewWithClient(client: PoolClient, reviewId: string) {
       status: row.status,
       suggestedAction: row.suggested_action,
     })),
+    sourceFile: source.rows[0]
+      ? {
+          fileName: source.rows[0].file_name,
+          publicUrl: source.rows[0].public_url,
+        }
+      : null,
     status: review.rows[0].status,
+  }
+}
+
+export async function authorizeImportReviewArtifactTarget(
+  client: PoolClient,
+  input: { enquiryId: string; organizationId: string; reviewId: string },
+  options: { requireOpenState: boolean }
+) {
+  const target = await client.query<{ id: string }>(
+    `
+      SELECT review.id
+      FROM sales.enquiry_import_reviews review
+      JOIN sales.enquiries enquiry ON enquiry.id = review.enquiry_id
+      WHERE review.id = $1 AND review.enquiry_id = $2
+        AND review.organization_id = $3 AND enquiry.organization_id = $3
+        AND ($4::boolean = false OR review.status = 'Pending')
+      FOR UPDATE OF review, enquiry
+    `,
+    [
+      input.reviewId,
+      input.enquiryId,
+      input.organizationId,
+      options.requireOpenState,
+    ]
+  )
+  if (!target.rows[0]) {
+    throw new Error("Import Review source target was not found or is closed.")
+  }
+}
+
+type CreateImportReviewInput = {
+  enquiryId: string
+  importKey: string
+  organizationId: string
+  reviewId?: string
+  rows: ImportRow[]
+}
+
+async function createImportReviewWithClient(
+  client: PoolClient,
+  input: CreateImportReviewInput
+) {
+  const enquiry = await client.query<{ customer_id: string; id: string }>(
+    `
+      SELECT id, customer_id FROM sales.enquiries
+      WHERE id = $1 AND organization_id = $2
+    `,
+    [input.enquiryId, input.organizationId]
+  )
+  if (!enquiry.rows[0]) {
+    throw new Error("ENQ was not found in this organization.")
+  }
+  const review = await client.query<{ id: string }>(
+    `
+      INSERT INTO sales.enquiry_import_reviews (
+        id, organization_id, enquiry_id, status, summary, source_system,
+        source_table, source_id, source_payload
+      )
+      VALUES (
+        coalesce($6::uuid, gen_random_uuid()), $1, $2, 'Pending', $3,
+        'mrm-dashboard', 'enquiry_import_reviews', $4, $5
+      )
+      ON CONFLICT (source_system, source_table, source_id)
+      DO UPDATE SET source_id = EXCLUDED.source_id
+      RETURNING id
+    `,
+    [
+      input.organizationId,
+      input.enquiryId,
+      `${input.rows.length} rows`,
+      input.importKey,
+      input,
+      input.reviewId ?? null,
+    ]
+  )
+  for (const row of input.rows) {
+    if (row.rowNumber <= 0) {
+      throw new Error("Import row number must be positive.")
+    }
+    if (
+      !asTrimmed(row.rawValues.part) &&
+      !asTrimmed(row.rawValues.description)
+    ) {
+      continue
+    }
+    const classification = await classifyImportRow(client, {
+      customerId: enquiry.rows[0]!.customer_id,
+      enquiryId: input.enquiryId,
+      organizationId: input.organizationId,
+      rawValues: row.rawValues,
+    })
+    await client.query(
+      `
+        INSERT INTO sales.enquiry_import_review_rows (
+          organization_id, review_id, row_number, status, raw_values,
+          matched_item_id, matched_enquiry_item_id,
+          matched_product_id, matched_quote_item_id, suggested_action,
+          match_note, source_system, source_table, source_id,
+          source_payload
+        )
+        VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+          'mrm-dashboard', 'enquiry_import_review_rows', $12, $13
+        )
+        ON CONFLICT (review_id, row_number) DO NOTHING
+      `,
+      [
+        input.organizationId,
+        review.rows[0]!.id,
+        row.rowNumber,
+        classification.status,
+        row.rawValues,
+        classification.matchedProductId,
+        classification.matchedEnquiryItemId,
+        classification.matchedProductId,
+        classification.matchedQuoteItemId,
+        classification.suggestedAction,
+        classification.matchNote,
+        `${input.importKey}:${row.rowNumber}`,
+        { classification, row },
+      ]
+    )
+  }
+  return getImportReviewWithClient(client, review.rows[0]!.id)
+}
+
+export async function prepareImportReviewArtifactTarget(
+  client: PoolClient,
+  input: CreateImportReviewInput & { reviewId: string },
+  options: { isRetry: boolean }
+) {
+  if (options.isRetry) {
+    await authorizeImportReviewArtifactTarget(client, input, {
+      requireOpenState: false,
+    })
+    return
+  }
+  const review = await createImportReviewWithClient(client, input)
+  if (review.id !== input.reviewId) {
+    throw new Error("Import Review source target did not match its import key.")
   }
 }
 
@@ -5151,92 +5318,9 @@ export function createCommercialWorkflowRepository(
       organizationId: string
       rows: ImportRow[]
     }) {
-      return transaction(pool, async (client) => {
-        const enquiry = await client.query<{
-          customer_id: string
-          id: string
-        }>(
-          `
-            SELECT id, customer_id FROM sales.enquiries
-            WHERE id = $1 AND organization_id = $2
-          `,
-          [input.enquiryId, input.organizationId]
-        )
-        if (!enquiry.rows[0]) {
-          throw new Error("ENQ was not found in this organization.")
-        }
-        const review = await client.query<{ id: string }>(
-          `
-            INSERT INTO sales.enquiry_import_reviews (
-              organization_id, enquiry_id, status, summary, source_system,
-              source_table, source_id, source_payload
-            )
-            VALUES (
-              $1, $2, 'Pending', $3, 'mrm-dashboard',
-              'enquiry_import_reviews', $4, $5
-            )
-            ON CONFLICT (source_system, source_table, source_id)
-            DO UPDATE SET source_id = EXCLUDED.source_id
-            RETURNING id
-          `,
-          [
-            input.organizationId,
-            input.enquiryId,
-            `${input.rows.length} rows`,
-            input.importKey,
-            input,
-          ]
-        )
-        for (const row of input.rows) {
-          if (row.rowNumber <= 0) {
-            throw new Error("Import row number must be positive.")
-          }
-          if (
-            !asTrimmed(row.rawValues.part) &&
-            !asTrimmed(row.rawValues.description)
-          ) {
-            continue
-          }
-          const classification = await classifyImportRow(client, {
-            customerId: enquiry.rows[0]!.customer_id,
-            enquiryId: input.enquiryId,
-            organizationId: input.organizationId,
-            rawValues: row.rawValues,
-          })
-          await client.query(
-            `
-              INSERT INTO sales.enquiry_import_review_rows (
-                organization_id, review_id, row_number, status, raw_values,
-                matched_item_id, matched_enquiry_item_id,
-                matched_product_id, matched_quote_item_id, suggested_action,
-                match_note, source_system, source_table, source_id,
-                source_payload
-              )
-              VALUES (
-                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
-                'mrm-dashboard', 'enquiry_import_review_rows', $12, $13
-              )
-              ON CONFLICT (review_id, row_number) DO NOTHING
-            `,
-            [
-              input.organizationId,
-              review.rows[0]!.id,
-              row.rowNumber,
-              classification.status,
-              row.rawValues,
-              classification.matchedProductId,
-              classification.matchedEnquiryItemId,
-              classification.matchedProductId,
-              classification.matchedQuoteItemId,
-              classification.suggestedAction,
-              classification.matchNote,
-              `${input.importKey}:${row.rowNumber}`,
-              { classification, row },
-            ]
-          )
-        }
-        return getImportReviewWithClient(client, review.rows[0]!.id)
-      })
+      return transaction(pool, (client) =>
+        createImportReviewWithClient(client, input)
+      )
     },
 
     async applyImportReview(input: {
