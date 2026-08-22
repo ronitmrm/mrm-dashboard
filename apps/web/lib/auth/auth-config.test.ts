@@ -36,7 +36,7 @@ describe("Better Auth security configuration", () => {
       expect(options.rateLimit?.customStorage).toBeUndefined()
       expect(options.emailAndPassword).toMatchObject({
         disableSignUp: true,
-        minPasswordLength: 12,
+        minPasswordLength: 6,
       })
       expect(options.trustedOrigins).toEqual(["https://dashboard.example.com"])
       expect(options.advanced?.useSecureCookies).toBe(true)

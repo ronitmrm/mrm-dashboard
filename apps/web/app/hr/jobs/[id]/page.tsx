@@ -32,10 +32,9 @@ import { JobInterviewScheduleForm } from "@/components/hr/interview-schedule-for
 import { CandidateApplicationActions } from "@/components/hr/candidate-application-actions"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { formatIstDateTime as formatDateTime } from "@/lib/date-time"
-import {
-  listGrantedCapabilities,
-} from "@/lib/auth/require-capability"
+import { listGrantedCapabilities } from "@/lib/auth/require-capability"
 import { requireHrPage } from "@/lib/auth/require-hr-page"
+import { hrTaskCapabilities } from "@/lib/auth/task-capabilities"
 import {
   recruitmentInterviewerOptions,
   sharedEmployeeMasterRows,
@@ -106,10 +105,11 @@ export default async function JobWorkspacePage({
   const feedback = await searchParams
   const returnPath = `/hr/jobs/${id}`
   const session = await requireHrPage("hr.jobs.read", returnPath)
-  const grants = await listGrantedCapabilities(session.user.id, [
-    "hr.recruitment.write",
-  ])
-  const canWrite = grants.includes("hr.recruitment.write")
+  const grants = await listGrantedCapabilities(
+    session.user.id,
+    Object.values(hrTaskCapabilities)
+  )
+  const canWrite = grants.length > 0
   const repository = createRecruitmentRepository({
     connectionString: readAuthEnvironment().connectionString,
   })

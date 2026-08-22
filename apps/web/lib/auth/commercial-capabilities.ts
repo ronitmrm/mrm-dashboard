@@ -3,62 +3,48 @@ import type { PageAccessDefinition } from "./page-access-types"
 export const commercialCapabilities = {
   corrections: {
     read: "pricing.corrections.read",
-    write: "pricing.corrections.write",
   },
   costing: {
     read: "pricing.costing.read",
-    write: "pricing.costing.write",
   },
   customers: {
     read: "pricing.customers.read",
-    write: "pricing.customers.write",
   },
   dashboard: { read: "pricing.dashboard.read" },
   design: {
     read: "pricing.design.read",
-    write: "pricing.design.write",
   },
   drawingHistory: {
     read: "pricing.drawing_history.read",
-    write: "pricing.drawing_history.write",
   },
   enquiries: {
     read: "pricing.enquiries.read",
-    write: "pricing.enquiries.write",
   },
   masters: {
     read: "pricing.masters.read",
-    write: "pricing.masters.write",
   },
   pricing: { read: "pricing.pricing.read" },
   products: { read: "pricing.products.read" },
   assemblies: {
     read: "pricing.assemblies.read",
-    write: "pricing.assemblies.write",
   },
   purchaseOrders: {
     read: "pricing.purchase_orders.read",
-    write: "pricing.purchase_orders.write",
   },
   quotes: {
     read: "pricing.quotes.read",
-    write: "pricing.quotes.write",
   },
   revisions: {
     read: "pricing.revisions.read",
-    write: "pricing.revisions.write",
   },
   sales: {
     read: "pricing.sales.read",
-    write: "pricing.sales.write",
   },
   technicalReview: {
     read: "pricing.technical_review.read",
-    write: "pricing.technical_review.write",
   },
   websiteProducts: {
     read: "pricing.website_products.read",
-    write: "pricing.website_products.write",
   },
 } as const
 
@@ -192,12 +178,6 @@ export const commercialPageAccess = [
     "Price Revisions",
     "/commercial/revisions",
     commercialCapabilities.revisions
-  ),
-  page(
-    "commercial.corrections",
-    "Corrections",
-    "/commercial/corrections",
-    commercialCapabilities.corrections
   ),
 ] satisfies readonly PageAccessDefinition[]
 

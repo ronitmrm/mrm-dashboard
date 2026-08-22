@@ -21,6 +21,7 @@ import {
 import { Textarea } from "@workspace/ui/components/textarea"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
+import { commercialTaskCapabilities } from "@/lib/auth/task-capabilities"
 import {
   listGrantedCapabilities,
   requireCapability,
@@ -41,8 +42,10 @@ export default async function AssembliesPage({
     "/commercial/assemblies"
   )
   const canWrite = (
-    await listGrantedCapabilities(session.user.id, ["pricing.assemblies.write"])
-  ).includes("pricing.assemblies.write")
+    await listGrantedCapabilities(session.user.id, [
+      commercialTaskCapabilities.addBomLine,
+    ])
+  ).includes(commercialTaskCapabilities.addBomLine)
   const repository = createProductRepository({
     connectionString: readAuthEnvironment().connectionString,
   })

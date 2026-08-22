@@ -16,6 +16,7 @@ import * as XLSX from "xlsx"
 import { parseEmployeeAssignmentWorkbook } from "@/app/hr/employee-assignment-workbook"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
+import { hrTaskCapabilities } from "@/lib/auth/task-capabilities"
 import { hrReturnPath } from "@/lib/hr-return-path"
 import { istDateTimeInputToIso } from "@/lib/date-time"
 import {
@@ -46,7 +47,7 @@ function interviewAtValue(formData: FormData) {
 
 async function mutate(
   formData: FormData,
-  capability: "hr.employees.write" | "hr.recruitment.write",
+  capability: (typeof hrTaskCapabilities)[keyof typeof hrTaskCapabilities],
   operation: (
     repository: ReturnType<typeof createRecruitmentRepository>,
     context: { actorUserId: string; organizationId: string }
@@ -87,15 +88,18 @@ async function mutate(
 }
 
 export async function saveMasterAction(formData: FormData) {
-  await mutate(formData, "hr.recruitment.write", (repository, context) =>
-    repository.upsertMaster({
-      ...context,
-      kind:
-        value(formData, "kind") === "designation"
-          ? "designation"
-          : "department",
-      name: value(formData, "name"),
-    })
+  await mutate(
+    formData,
+    hrTaskCapabilities.saveRecruitmentMaster,
+    (repository, context) =>
+      repository.upsertMaster({
+        ...context,
+        kind:
+          value(formData, "kind") === "designation"
+            ? "designation"
+            : "department",
+        name: value(formData, "name"),
+      })
   )
 }
 
@@ -106,7 +110,7 @@ export async function renameRecruitmentMasterAction(formData: FormData) {
       : "department"
   await mutate(
     formData,
-    "hr.recruitment.write",
+    hrTaskCapabilities.renameRecruitmentMaster,
     (repository, context) =>
       kind === "designation"
         ? repository.renameDesignationMaster({
@@ -126,7 +130,10 @@ export async function renameRecruitmentMasterAction(formData: FormData) {
 
 export async function deleteRecruitmentMasterAction(formData: FormData) {
   const path = hrReturnPath(formData)
-  const session = await requireCapability("hr.recruitment.write", path)
+  const session = await requireCapability(
+    hrTaskCapabilities.deleteRecruitmentMaster,
+    path
+  )
   const connectionString = readAuthEnvironment().connectionString
   const recruitment = createRecruitmentRepository({ connectionString })
   const lifecycle = createMasterDataLifecycleRepository({ connectionString })
@@ -163,26 +170,29 @@ export async function deleteRecruitmentMasterAction(formData: FormData) {
 }
 
 export async function saveTemplateAction(formData: FormData) {
-  await mutate(formData, "hr.recruitment.write", (repository, context) =>
-    repository.upsertTemplate({
-      ...context,
-      combinedRoleId: value(formData, "combined_role_id"),
-      departmentCode: value(formData, "department_code"),
-      designationCode: value(formData, "designation_code"),
-      education: value(formData, "education"),
-      experienceRequirement: value(formData, "experience_requirement"),
-      gender: value(formData, "gender"),
-      maximumSalary: value(formData, "maximum_salary"),
-      minimumSalary: value(formData, "minimum_salary"),
-      name: value(formData, "name"),
-      roleResponsibilities: value(formData, "role_responsibilities"),
-      templateCode: value(formData, "template_code"),
-    })
+  await mutate(
+    formData,
+    hrTaskCapabilities.saveTemplate,
+    (repository, context) =>
+      repository.upsertTemplate({
+        ...context,
+        combinedRoleId: value(formData, "combined_role_id"),
+        departmentCode: value(formData, "department_code"),
+        designationCode: value(formData, "designation_code"),
+        education: value(formData, "education"),
+        experienceRequirement: value(formData, "experience_requirement"),
+        gender: value(formData, "gender"),
+        maximumSalary: value(formData, "maximum_salary"),
+        minimumSalary: value(formData, "minimum_salary"),
+        name: value(formData, "name"),
+        roleResponsibilities: value(formData, "role_responsibilities"),
+        templateCode: value(formData, "template_code"),
+      })
   )
 }
 
 export async function savePostAction(formData: FormData) {
-  await mutate(formData, "hr.recruitment.write", (repository, context) =>
+  await mutate(formData, hrTaskCapabilities.savePost, (repository, context) =>
     repository.upsertPost({
       ...context,
       departmentCode: value(formData, "department_code"),
@@ -195,7 +205,7 @@ export async function savePostAction(formData: FormData) {
 export async function updatePostAction(formData: FormData) {
   await mutate(
     formData,
-    "hr.recruitment.write",
+    hrTaskCapabilities.updatePost,
     (repository, context) =>
       repository.updatePost({
         ...context,
@@ -209,7 +219,7 @@ export async function updatePostAction(formData: FormData) {
 export async function deletePostAction(formData: FormData) {
   await mutate(
     formData,
-    "hr.recruitment.write",
+    hrTaskCapabilities.deletePost,
     (repository, context) =>
       repository.deletePost({
         ...context,
@@ -220,20 +230,23 @@ export async function deletePostAction(formData: FormData) {
 }
 
 export async function createCombinedRoleAction(formData: FormData) {
-  await mutate(formData, "hr.recruitment.write", (repository, context) =>
-    repository.createCombinedRole({
-      ...context,
-      name: value(formData, "name"),
-      postIds: values(formData, "post_ids"),
-      primaryPostId: value(formData, "primary_post_id"),
-    })
+  await mutate(
+    formData,
+    hrTaskCapabilities.createCombinedRole,
+    (repository, context) =>
+      repository.createCombinedRole({
+        ...context,
+        name: value(formData, "name"),
+        postIds: values(formData, "post_ids"),
+        primaryPostId: value(formData, "primary_post_id"),
+      })
   )
 }
 
 export async function updateCombinedRoleAction(formData: FormData) {
   await mutate(
     formData,
-    "hr.recruitment.write",
+    hrTaskCapabilities.updateCombinedRole,
     (repository, context) =>
       repository.updateCombinedRole({
         ...context,
@@ -248,21 +261,27 @@ export async function updateCombinedRoleAction(formData: FormData) {
 }
 
 export async function assignEmployeeAction(formData: FormData) {
-  await mutate(formData, "hr.employees.write", (repository, context) =>
-    repository.assignEmployee({
-      ...context,
-      employeeCode: value(formData, "employee_code"),
-      employeeEvent: value(formData, "employee_event"),
-      employeeName: value(formData, "employee_name"),
-      lastWorkingDate: value(formData, "last_working_date"),
-      postId: value(formData, "post_id"),
-    })
+  await mutate(
+    formData,
+    hrTaskCapabilities.assignEmployee,
+    (repository, context) =>
+      repository.assignEmployee({
+        ...context,
+        employeeCode: value(formData, "employee_code"),
+        employeeEvent: value(formData, "employee_event"),
+        employeeName: value(formData, "employee_name"),
+        lastWorkingDate: value(formData, "last_working_date"),
+        postId: value(formData, "post_id"),
+      })
   )
 }
 
 export async function bulkAssignEmployeesAction(formData: FormData) {
   const path = hrReturnPath(formData)
-  const session = await requireCapability("hr.employees.write", path)
+  const session = await requireCapability(
+    hrTaskCapabilities.bulkAssignEmployees,
+    path
+  )
   const file = formData.get("employee_assignments_file")
   if (!(file instanceof File) || file.size === 0) {
     redirect(
@@ -312,7 +331,7 @@ export async function bulkAssignEmployeesAction(formData: FormData) {
 }
 
 export async function createJobAction(formData: FormData) {
-  await mutate(formData, "hr.recruitment.write", (repository, context) =>
+  await mutate(formData, hrTaskCapabilities.createJob, (repository, context) =>
     repository.createJobFromPost({
       ...context,
       postId: value(formData, "post_id"),
@@ -323,7 +342,10 @@ export async function createJobAction(formData: FormData) {
 
 export async function saveCandidateAction(formData: FormData) {
   const returnTo = hrReturnPath(formData)
-  const session = await requireCapability("hr.recruitment.write", returnTo)
+  const session = await requireCapability(
+    hrTaskCapabilities.saveCandidate,
+    returnTo
+  )
   const repository = createRecruitmentRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
@@ -413,7 +435,7 @@ export async function saveCandidateAction(formData: FormData) {
 export async function assignCandidateAction(formData: FormData) {
   await mutate(
     formData,
-    "hr.recruitment.write",
+    hrTaskCapabilities.assignCandidate,
     (repository, context) =>
       repository.assignCandidates({
         ...context,
@@ -430,7 +452,7 @@ export async function assignCandidateAction(formData: FormData) {
 export async function completeCandidateAppointmentAction(formData: FormData) {
   await mutate(
     formData,
-    "hr.recruitment.write",
+    hrTaskCapabilities.completeCandidateAppointment,
     (repository, context) =>
       repository.completeCandidateAppointment({
         ...context,
@@ -454,7 +476,7 @@ export async function completeCandidateAppointmentAction(formData: FormData) {
 export async function withdrawCandidateApplicationAction(formData: FormData) {
   await mutate(
     formData,
-    "hr.recruitment.write",
+    hrTaskCapabilities.withdrawCandidateApplication,
     (repository, context) =>
       repository.withdrawCandidateApplication({
         ...context,
@@ -466,21 +488,24 @@ export async function withdrawCandidateApplicationAction(formData: FormData) {
 }
 
 export async function logCandidateEventAction(formData: FormData) {
-  await mutate(formData, "hr.recruitment.write", (repository, context) =>
-    repository.logCandidateEvent({
-      ...context,
-      candidateId: value(formData, "candidate_id"),
-      eventType: value(formData, "event_type"),
-      notes: value(formData, "notes"),
-      title: value(formData, "title"),
-    })
+  await mutate(
+    formData,
+    hrTaskCapabilities.logCandidateEvent,
+    (repository, context) =>
+      repository.logCandidateEvent({
+        ...context,
+        candidateId: value(formData, "candidate_id"),
+        eventType: value(formData, "event_type"),
+        notes: value(formData, "notes"),
+        title: value(formData, "title"),
+      })
   )
 }
 
 export async function updateCandidateEventAction(formData: FormData) {
   await mutate(
     formData,
-    "hr.recruitment.write",
+    hrTaskCapabilities.updateCandidateEvent,
     (repository, context) =>
       repository.updateCandidateEvent({
         ...context,
@@ -496,7 +521,7 @@ export async function updateCandidateEventAction(formData: FormData) {
 export async function deleteCandidateEventAction(formData: FormData) {
   await mutate(
     formData,
-    "hr.recruitment.write",
+    hrTaskCapabilities.deleteCandidateEvent,
     (repository, context) =>
       repository.deleteCandidateEvent({
         ...context,
@@ -507,13 +532,16 @@ export async function deleteCandidateEventAction(formData: FormData) {
 }
 
 export async function scheduleInterviewAction(formData: FormData) {
-  await mutate(formData, "hr.recruitment.write", (repository, context) =>
-    repository.scheduleInterview({
-      ...context,
-      applicationId: value(formData, "application_id"),
-      interviewAt: interviewAtValue(formData),
-      roundName: value(formData, "round_name"),
-    })
+  await mutate(
+    formData,
+    hrTaskCapabilities.scheduleInterview,
+    (repository, context) =>
+      repository.scheduleInterview({
+        ...context,
+        applicationId: value(formData, "application_id"),
+        interviewAt: interviewAtValue(formData),
+        roundName: value(formData, "round_name"),
+      })
   )
 }
 
@@ -534,7 +562,7 @@ export async function recordInterviewAction(formData: FormData) {
       : "Approved"
   await mutate(
     formData,
-    "hr.recruitment.write",
+    hrTaskCapabilities.recordInterview,
     (repository, context) =>
       repository.recordInterview({
         ...context,

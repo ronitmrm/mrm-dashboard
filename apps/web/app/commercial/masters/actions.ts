@@ -14,6 +14,7 @@ import * as XLSX from "xlsx"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
+import { commercialTaskCapabilities } from "@/lib/auth/task-capabilities"
 import {
   commercialMasterSelection,
   commercialMasterViewHref,
@@ -23,6 +24,22 @@ import {
 import { parseMastersWorkbook } from "./workbook"
 
 const mastersPath = "/commercial/masters"
+const csvSheetNameByEntryKind = {
+  application: "Applications",
+  category: "Categories",
+  certification: "Certifications",
+  commercialTerm: "Commercial Terms",
+  machineType: "Machine Types",
+  materialGrade: "Grades",
+  materialRate: "Material Rates",
+  packagingOption: "Packaging",
+  process: "Processes",
+  quoteTerm: "Quote PDF Terms",
+  rodType: "Rod Types",
+  shippingTerm: "Shipping",
+  subcategory: "Sub Categories",
+  websiteField: "Website Fields",
+} as const
 
 function mastersReturnPath(formData: FormData) {
   const view = formData.get("master_view")?.toString()
@@ -60,13 +77,14 @@ function active(formData: FormData) {
 }
 
 async function withMasters<T>(
+  capability: string,
   operation: (
     repository: ReturnType<typeof createCommercialMasterRepository>,
     actorUserId: string,
     organizationId: string
   ) => Promise<T>
 ) {
-  const session = await requireCapability("pricing.masters.write", mastersPath)
+  const session = await requireCapability(capability, mastersPath)
   const connectionString = readAuthEnvironment().connectionString
   const customers = createCustomerRepository({ connectionString })
   const repository = createCommercialMasterRepository({ connectionString })
@@ -81,95 +99,99 @@ async function withMasters<T>(
 
 export async function upsertMasterAction(formData: FormData) {
   const kind = required(formData, "kind")
-  await withMasters(async (repository, actorUserId, organizationId) => {
-    const context = { actorUserId, organizationId }
-    switch (kind) {
-      case "category":
-        return repository.upsertNamed({
-          ...context,
-          code: optional(formData, "code"),
-          kind,
-          name: required(formData, "name"),
-        })
-      case "subcategory":
-        return repository.upsertSubcategory({
-          ...context,
-          category: required(formData, "category"),
-          combinationCode: optional(formData, "combination_code"),
-          name: required(formData, "name"),
-        })
-      case "machineType":
-      case "materialGrade":
-      case "process":
-      case "rodType":
-        return repository.upsertNamed({
-          ...context,
-          kind,
-          name: required(formData, "name"),
-        })
-      case "application":
-      case "certification":
-        return repository.upsertNamed({
-          ...context,
-          kind,
-          name: required(formData, "name"),
-          sortOrder: numeric(formData, "sort_order"),
-        })
-      case "websiteField":
-        return repository.upsertNamed({
-          ...context,
-          fieldType: required(formData, "field_type") as WebsiteFieldType,
-          kind,
-          name: required(formData, "name"),
-          sortOrder: numeric(formData, "sort_order"),
-        })
-      case "materialRate":
-        return repository.upsertMaterialRate({
-          ...context,
-          active: active(formData),
-          alloyPremium: numeric(formData, "alloy_premium"),
-          extrusionCost: numeric(formData, "ext_cost"),
-          grade: required(formData, "grade"),
-          rodType: required(formData, "rod_type"),
-        })
-      case "shippingTerm":
-        return repository.upsertShippingTerm({
-          ...context,
-          active: active(formData),
-          name: required(formData, "name"),
-          shippingCost: numeric(formData, "shipping_cost"),
-        })
-      case "packagingOption":
-        return repository.upsertPackagingOption({
-          ...context,
-          active: active(formData),
-          name: required(formData, "name"),
-          packingCost: numeric(formData, "packing_cost"),
-        })
-      case "commercialTerm":
-        return repository.upsertCommercialTerm({
-          ...context,
-          active: active(formData),
-          name: required(formData, "name"),
-          termType: required(formData, "term_type") as CommercialTermType,
-        })
-      case "quoteTerm":
-        return repository.upsertQuoteTerm({
-          ...context,
-          active: active(formData),
-          label: required(formData, "label"),
-          sortOrder: numeric(formData, "sort_order"),
-          termKey: required(formData, "term_key"),
-          value: required(formData, "value"),
-        })
-      default:
-        throw new Error("Unknown commercial master.")
+  await withMasters(
+    commercialTaskCapabilities.updateMaster,
+    async (repository, actorUserId, organizationId) => {
+      const context = { actorUserId, organizationId }
+      switch (kind) {
+        case "category":
+          return repository.upsertNamed({
+            ...context,
+            code: optional(formData, "code"),
+            kind,
+            name: required(formData, "name"),
+          })
+        case "subcategory":
+          return repository.upsertSubcategory({
+            ...context,
+            category: required(formData, "category"),
+            combinationCode: optional(formData, "combination_code"),
+            name: required(formData, "name"),
+          })
+        case "machineType":
+        case "materialGrade":
+        case "process":
+        case "rodType":
+          return repository.upsertNamed({
+            ...context,
+            kind,
+            name: required(formData, "name"),
+          })
+        case "application":
+        case "certification":
+          return repository.upsertNamed({
+            ...context,
+            kind,
+            name: required(formData, "name"),
+            sortOrder: numeric(formData, "sort_order"),
+          })
+        case "websiteField":
+          return repository.upsertNamed({
+            ...context,
+            fieldType: required(formData, "field_type") as WebsiteFieldType,
+            kind,
+            name: required(formData, "name"),
+            sortOrder: numeric(formData, "sort_order"),
+          })
+        case "materialRate":
+          return repository.upsertMaterialRate({
+            ...context,
+            active: active(formData),
+            alloyPremium: numeric(formData, "alloy_premium"),
+            extrusionCost: numeric(formData, "ext_cost"),
+            grade: required(formData, "grade"),
+            rodType: required(formData, "rod_type"),
+          })
+        case "shippingTerm":
+          return repository.upsertShippingTerm({
+            ...context,
+            active: active(formData),
+            name: required(formData, "name"),
+            shippingCost: numeric(formData, "shipping_cost"),
+          })
+        case "packagingOption":
+          return repository.upsertPackagingOption({
+            ...context,
+            active: active(formData),
+            name: required(formData, "name"),
+            packingCost: numeric(formData, "packing_cost"),
+          })
+        case "commercialTerm":
+          return repository.upsertCommercialTerm({
+            ...context,
+            active: active(formData),
+            name: required(formData, "name"),
+            termType: required(formData, "term_type") as CommercialTermType,
+          })
+        case "quoteTerm":
+          return repository.upsertQuoteTerm({
+            ...context,
+            active: active(formData),
+            label: required(formData, "label"),
+            sortOrder: numeric(formData, "sort_order"),
+            termKey: required(formData, "term_key"),
+            value: required(formData, "value"),
+          })
+        default:
+          throw new Error("Unknown commercial master.")
+      }
     }
-  })
+  )
   revalidatePath(mastersPath)
 }
 
 async function commercialLifecycleAction(
+  capability: string,
   formData: FormData,
   operation: (
     repository: ReturnType<typeof createMasterDataLifecycleRepository>,
@@ -179,7 +201,7 @@ async function commercialLifecycleAction(
   success: string
 ) {
   const returnPath = mastersReturnPath(formData)
-  const session = await requireCapability("pricing.masters.write", returnPath)
+  const session = await requireCapability(capability, returnPath)
   const connectionString = readAuthEnvironment().connectionString
   const customers = createCustomerRepository({ connectionString })
   const lifecycle = createMasterDataLifecycleRepository({ connectionString })
@@ -211,6 +233,7 @@ export async function renameCommercialMasterAction(formData: FormData) {
     throw new Error("Commercial master is invalid.")
   }
   await commercialLifecycleAction(
+    commercialTaskCapabilities.renameMaster,
     formData,
     (repository, actorUserId, organizationId) =>
       repository.renameMaster({
@@ -230,6 +253,7 @@ export async function deleteCommercialMasterAction(formData: FormData) {
     throw new Error("Commercial master is invalid.")
   }
   await commercialLifecycleAction(
+    commercialTaskCapabilities.deleteMaster,
     formData,
     (repository, actorUserId, organizationId) =>
       repository.deleteMaster({
@@ -252,9 +276,9 @@ export async function importMastersWorkbookAction(formData: FormData) {
       `${returnPath}${returnPath.includes("?") ? "&" : "?"}error=Masters%20workbook%20is%20required`
     )
   }
-  if (!/\.(xlsx|xls)$/i.test(file.name)) {
+  if (!/\.(csv|xlsx|xls)$/i.test(file.name)) {
     redirect(
-      `${returnPath}${returnPath.includes("?") ? "&" : "?"}error=Only%20XLSX%20or%20XLS%20files%20are%20accepted`
+      `${returnPath}${returnPath.includes("?") ? "&" : "?"}error=Only%20CSV%2C%20XLSX%20or%20XLS%20files%20are%20accepted`
     )
   }
 
@@ -263,7 +287,21 @@ export async function importMastersWorkbookAction(formData: FormData) {
     const workbook = XLSX.read(Buffer.from(await file.arrayBuffer()), {
       type: "buffer",
     })
+    if (/\.csv$/i.test(file.name)) {
+      const selection = commercialMasterSelection(
+        formData.get("workspace_kind")?.toString()
+      )
+      const source = workbook.SheetNames[0]
+      const target = csvSheetNameByEntryKind[selection.entryKind]
+      const sheet = source ? workbook.Sheets[source] : undefined
+      if (sheet) {
+        workbook.SheetNames = [target]
+        workbook.Sheets = { [target]: sheet }
+      }
+    }
     const result = await withMasters(
+      commercialTaskCapabilities.importMasters,
+
       (repository, actorUserId, organizationId) =>
         repository.importSnapshot({
           actorUserId,

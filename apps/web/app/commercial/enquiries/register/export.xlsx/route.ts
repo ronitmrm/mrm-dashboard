@@ -10,14 +10,19 @@ import {
 } from "../../enquiry-workbook"
 
 export async function GET() {
-  await requireCapability("pricing.enquiries.read", "/commercial/enquiries")
+  const session = await requireCapability(
+    "pricing.enquiries.read",
+    "/commercial/enquiries"
+  )
   const repository = createCommercialWorkflowRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
   try {
     return xlsxResponse(
       buildEnquiryRegisterExport(
-        await repository.listEnquiriesForExport("MRMPL")
+        await repository.listEnquiriesForExport("MRMPL", 500, {
+          originatingSalespersonUserId: session.user.id,
+        })
       ),
       enquiryRegisterExportFilename()
     )

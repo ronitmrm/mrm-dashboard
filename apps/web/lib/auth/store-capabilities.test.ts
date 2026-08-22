@@ -22,16 +22,28 @@ describe("store page capability contract", () => {
       },
       masters: {
         read: "store.masters.read",
+      },
+      masterManage: {
         write: "store.masters.write",
       },
       newItemRequests: {
         read: "store.new_item_requests.read",
-        write: "store.new_item_requests.write",
+      },
+      newItemRequestResolve: {
+        write: "store.new_item_requests.resolve",
+      },
+      newItemRequestSubmit: {
+        write: "store.new_item_requests.submit",
       },
       overview: { read: "store.overview.read" },
       purchaseRegister: {
         read: "store.purchase_register.read",
-        write: "store.purchase_register.write",
+      },
+      purchaseOrderCreate: {
+        write: "store.purchase_orders.create",
+      },
+      receiptReceive: {
+        write: "store.receipts.receive",
       },
       requests: {
         read: "store.requests.read",
@@ -44,7 +56,6 @@ describe("store page capability contract", () => {
       },
       stock: {
         read: "store.stock.read",
-        write: "store.stock.write",
       },
     })
   })

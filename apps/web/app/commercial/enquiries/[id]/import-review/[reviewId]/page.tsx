@@ -67,7 +67,7 @@ export default async function EnquiryImportReviewPage({
   params: Promise<{ id: string; reviewId: string }>
 }) {
   const { id, reviewId } = await params
-  await requireCapability(
+  const session = await requireCapability(
     "pricing.enquiries.read",
     `/commercial/enquiries/${id}/import-review/${reviewId}`
   )
@@ -75,7 +75,9 @@ export default async function EnquiryImportReviewPage({
     connectionString: readAuthEnvironment().connectionString,
   })
   const review = await workflow
-    .getImportReview(reviewId)
+    .getImportReview(reviewId, {
+      originatingSalespersonUserId: session.user.id,
+    })
     .finally(() => workflow.close())
   if (review.enquiryId !== id) {
     throw new Error("Import review does not belong to this enquiry.")

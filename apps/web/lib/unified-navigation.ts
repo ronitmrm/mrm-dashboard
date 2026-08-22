@@ -25,7 +25,6 @@ import {
   ShoppingCart,
   SlidersHorizontal,
   TableProperties,
-  Undo2,
   UsersRound,
   Wrench,
   type LucideIcon,
@@ -128,7 +127,7 @@ export function dashboardNavigationDestination(
   const isCompanyWide = [
     "machineMasterTab",
     "maintenanceTab",
-    "correctionsTab",
+
     "productionDashboardTab",
   ].includes(tab)
   return {
@@ -264,13 +263,7 @@ export const dashboardNavigation: readonly DashboardNavigationItem[] = [
     subtitle: "Machine Pm Schedule",
     title: "Mechanical Maintenance",
   },
-  {
-    href: dashboardTabHref("correctionsTab"),
-    icon: Undo2,
-    id: "correctionsTab",
-    subtitle: "Reverse Wrong Entries",
-    title: "Corrections",
-  },
+
   {
     href: dashboardTabHref("dataEntryTab"),
     icon: ListChecks,
@@ -286,18 +279,18 @@ export const dashboardNavigation: readonly DashboardNavigationItem[] = [
     title: "Master Tables",
   },
   {
-    href: dashboardTabHref("operationalEntryTab"),
+    href: "/operational-entry",
     icon: ClipboardList,
     id: "operationalEntryTab",
-    subtitle: "Work Orders, Inward, Output",
-    title: "Data Entry",
+    subtitle: "Select An Operational Form",
+    title: "Entry Selection",
   },
   {
-    href: dashboardTabHref("operationalTablesTab"),
+    href: "/operational-entry?view=masterTables",
     icon: Database,
     id: "operationalTablesTab",
     subtitle: "Search And Export Saved Entries",
-    title: "Master Tables",
+    title: "Entry Tables",
   },
   {
     href: dashboardTabHref("masterGapsTab"),
@@ -355,7 +348,6 @@ const universalProductionNavigationOrder: DashboardTabId[] = [
   "productionDashboardTab",
   "machineMasterTab",
   "maintenanceTab",
-  "correctionsTab",
 ]
 const universalProductionNavigationIds = new Set(
   universalProductionNavigationOrder
@@ -432,6 +424,11 @@ export const commercialNavigation = [
     label: "Excel View",
   },
   {
+    href: "/commercial/pricing",
+    icon: TableProperties,
+    label: "Pricing",
+  },
+  {
     href: "/commercial/sales",
     icon: MessageSquareText,
     label: "Sales",
@@ -457,11 +454,6 @@ export const commercialNavigation = [
     label: "Assembly / Bom",
   },
   {
-    href: "/commercial/drawing-history",
-    icon: FileClock,
-    label: "Drawing History",
-  },
-  {
     href: "/commercial/website-products",
     icon: Globe2,
     label: "Website Products",
@@ -480,11 +472,6 @@ export const commercialNavigation = [
     href: "/commercial/quotes",
     icon: ScrollText,
     label: "Quote Register",
-  },
-  {
-    href: "/commercial/pricing",
-    icon: TableProperties,
-    label: "Pricing",
   },
   {
     href: "/commercial/orders",
@@ -512,9 +499,9 @@ export const commercialNavigation = [
     label: "Price Revisions",
   },
   {
-    href: "/commercial/corrections",
-    icon: Undo2,
-    label: "Corrections",
+    href: "/commercial/drawing-history",
+    icon: FileClock,
+    label: "Drawing History",
   },
 ] as const
 
@@ -526,7 +513,7 @@ export const commercialMasterDataWorkspaceNavigation =
   )
 
 export const commercialOperationalEntryNavigation = commercialNavigation.filter(
-  ({ href }) => href === "/commercial/enquiries"
+  ({ href }) => ["/commercial/enquiries", "/commercial/orders"].includes(href)
 )
 
 export const commercialCostingNavigation = commercialNavigation.filter(

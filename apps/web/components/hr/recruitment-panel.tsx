@@ -45,6 +45,10 @@ import {
   savePostAction,
   saveTemplateAction,
 } from "@/app/hr/actions"
+import {
+  importJobTemplatesCsvAction,
+  importRecruitmentMastersCsvAction,
+} from "@/app/hr/master-transfer-actions"
 import { ApprovedPostFields } from "@/components/hr/approved-post-fields"
 import { ApprovedPostsTable } from "@/components/hr/approved-posts-table"
 import {
@@ -63,6 +67,7 @@ import {
 import { InterviewScheduleForm } from "@/components/hr/interview-schedule-form"
 import { JobTemplatesTable } from "@/components/hr/job-templates-table"
 import { MasterDataViewTabs } from "@/components/master-data-view-tabs"
+import { MasterDataCsvImportButton } from "@/components/master-data-csv-import-button"
 import { MasterTables } from "@/components/hr/master-tables"
 import { RecruitmentMasterKindSelect } from "@/components/hr/recruitment-master-kind-select"
 import { RecruitablePostFields } from "@/components/hr/recruitable-post-fields"
@@ -206,7 +211,22 @@ function MastersPanel({
       <MasterDataViewTabs
         activeView={activeView}
         allMastersHref="/?tab=dataEntryTab"
+        csvImportAction={
+          canWrite ? (
+            <MasterDataCsvImportButton
+              action={importRecruitmentMastersCsvAction}
+              fields={{ master_kind: masterKind }}
+            />
+          ) : null
+        }
         dataEntryHref={recruitmentMasterHref("dataEntry", masterKind)}
+        exportAction={
+          <Button asChild size="sm" variant="outline">
+            <Link href={`/hr/masters/export.csv?kind=${masterKind}`}>
+              Export
+            </Link>
+          </Button>
+        }
         masterTablesHref={recruitmentMasterHref("masterTables", masterKind)}
       />
       <RecruitmentMasterKindSelect kind={masterKind} view={activeView} />
@@ -269,7 +289,17 @@ function TemplatePanel({
       <MasterDataViewTabs
         activeView={activeView}
         allMastersHref="/?tab=dataEntryTab"
+        csvImportAction={
+          canWrite ? (
+            <MasterDataCsvImportButton action={importJobTemplatesCsvAction} />
+          ) : null
+        }
         dataEntryHref={`/hr?panel=postMasterPanel&masterView=dataEntry${templateParam}`}
+        exportAction={
+          <Button asChild size="sm" variant="outline">
+            <Link href="/hr/masters/export.csv?kind=job_template">Export</Link>
+          </Button>
+        }
         masterTablesHref={`/hr?panel=postMasterPanel&masterView=masterTables${templateParam}`}
       />
       {canWrite && showDataEntry ? (

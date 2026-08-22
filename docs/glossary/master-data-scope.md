@@ -7,9 +7,21 @@ maintenance, Store, HR, and Commercial masters belong here when the user has
 permission to access them.
 
 **Operational Entry Workspace**: The separate company workspace for business
-events currently entered manually: Work Orders, Raw-Material Inward, and
-Production Output. These records are corrected or reversed under their own
-lifecycle and never use Master Rename, Master Replacement, or Master Deletion.
+events currently entered manually: Work Orders, Raw-Material Inward,
+Production Output, Enquiries, and Purchase Orders. Operational Data Entry opens
+only after Unit, Main Entry, and Entry Form are chosen on **Operational Entry
+Selection**. Operational Tables uses the same selection pattern. The selected
+form and Unit stay locked until the user returns to selection. These records are
+corrected or reversed under their own lifecycle and never use Master Rename,
+Master Replacement, or Master Deletion.
+
+**Operational Entry Transfer**: Every selected Operational Data Entry workspace
+provides one uniform **Upload CSV** action. Every selected Operational Entry
+Table workspace provides one uniform **Export** action for that table. CSV
+upload is never available in Entry Table view; imports remain write-authorized
+entry operations, while exports remain read-authorized table operations.
+Purchase Orders use separate Data Entry and Entry Table views under the same
+locked Operational Entry selection.
 
 **Company-wide Master**: A master whose records apply to the whole MRMPL
 software and are not owned by one Production Unit. In Data Entry and Master
@@ -29,10 +41,28 @@ The company-wide masters are:
 - Customers; and
 - Website Products.
 
-Customers and Website Products are selected inside Data Entry or Master Tables
-like the other company-wide masters. Their legacy Commercial URLs remain the
-implementation routes for forms, tables, exports, and saved links; they are not
-separate sidebar submodules.
+Master Data Entry opens only after Unit, Main Master, and Sub Master are chosen
+on **Master Selection**. It is not a standalone Master Data navigation item.
+The selected form and Unit stay locked until the user returns to Master
+Selection.
+
+**Master Data Transfer**: Every selected Data Entry workspace provides one
+uniform **Upload CSV** action. Every selected Master Table workspace provides
+one uniform **Export** action for that table. CSV upload is never available in
+Master Table view; imports remain write-authorized Data Entry operations, while
+exports remain read-authorized table operations.
+
+Master Tables opens only after Unit, Main Master, and Sub Master are chosen on
+**Master Table Selection**. The selected table and Unit stay locked. Changing
+to another Master Table requires returning to Master Table Selection and making
+a new selection; tables never provide direct master-to-master navigation.
+
+Website Products exposes its existing dependent masters under the Website
+Products Main Master: Website Product Data, Material Grade, Design Category,
+Design Subcategory, Website Application, Website Certification, and Website
+Field Option. These selections reuse the existing Commercial forms and tables;
+they do not create duplicate master records. Legacy Commercial URLs remain the
+implementation routes for forms, tables, exports, and saved links.
 
 **Production-unit Master**: A master whose records differ by Production Unit.
 Its Data Entry and CSV import require one of the recognized Production Units.

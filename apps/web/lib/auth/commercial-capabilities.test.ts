@@ -10,62 +10,48 @@ describe("commercial Better Auth capability contract", () => {
     expect(commercialCapabilities).toEqual({
       corrections: {
         read: "pricing.corrections.read",
-        write: "pricing.corrections.write",
       },
       costing: {
         read: "pricing.costing.read",
-        write: "pricing.costing.write",
       },
       dashboard: { read: "pricing.dashboard.read" },
       design: {
         read: "pricing.design.read",
-        write: "pricing.design.write",
       },
       enquiries: {
         read: "pricing.enquiries.read",
-        write: "pricing.enquiries.write",
       },
       customers: {
         read: "pricing.customers.read",
-        write: "pricing.customers.write",
       },
       masters: {
         read: "pricing.masters.read",
-        write: "pricing.masters.write",
       },
       products: { read: "pricing.products.read" },
       assemblies: {
         read: "pricing.assemblies.read",
-        write: "pricing.assemblies.write",
       },
       drawingHistory: {
         read: "pricing.drawing_history.read",
-        write: "pricing.drawing_history.write",
       },
       websiteProducts: {
         read: "pricing.website_products.read",
-        write: "pricing.website_products.write",
       },
       purchaseOrders: {
         read: "pricing.purchase_orders.read",
-        write: "pricing.purchase_orders.write",
       },
       quotes: {
         read: "pricing.quotes.read",
-        write: "pricing.quotes.write",
       },
       pricing: { read: "pricing.pricing.read" },
       revisions: {
         read: "pricing.revisions.read",
-        write: "pricing.revisions.write",
       },
       sales: {
         read: "pricing.sales.read",
-        write: "pricing.sales.write",
       },
       technicalReview: {
         read: "pricing.technical_review.read",
-        write: "pricing.technical_review.write",
       },
     })
   })
@@ -93,7 +79,6 @@ describe("commercial Better Auth capability contract", () => {
       ["/commercial/customer-bulk-revision", "pricing.revisions.read"],
       ["/commercial/ecns", "pricing.revisions.read"],
       ["/commercial/revisions", "pricing.revisions.read"],
-      ["/commercial/corrections", "pricing.corrections.read"],
     ])
   })
 

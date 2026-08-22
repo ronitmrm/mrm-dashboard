@@ -103,7 +103,7 @@ export default async function EnquiryDetailPage({
   const { id } = await params
   const selectorParams = await searchParams
   const selectedLineId = selectorParams.line?.trim()
-  await requireCapability(
+  const session = await requireCapability(
     "pricing.enquiries.read",
     `/commercial/enquiries/${id}`
   )
@@ -111,7 +111,9 @@ export default async function EnquiryDetailPage({
   const workflow = createCommercialWorkflowRepository({ connectionString })
   const loaded = await (async () => {
     try {
-      const snapshot = await workflow.getEnquiry(id)
+      const snapshot = await workflow.getEnquiry(id, {
+        originatingSalespersonUserId: session.user.id,
+      })
       const selectedItem = selectedEnquiryLine(snapshot.items, selectedLineId)
       const drawingHistoryEntries = selectedItem
         ? [

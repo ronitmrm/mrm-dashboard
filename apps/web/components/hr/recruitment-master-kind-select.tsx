@@ -1,6 +1,6 @@
 "use client"
 
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 
 import { Field, FieldLabel } from "@workspace/ui/components/field"
 import {
@@ -13,6 +13,7 @@ import {
   recruitmentMasterHref,
   type RecruitmentMasterKind,
 } from "@/lib/recruitment-master-navigation"
+import { masterSelectionFromContext } from "@/lib/master-module"
 
 export function RecruitmentMasterKindSelect({
   kind,
@@ -22,6 +23,10 @@ export function RecruitmentMasterKindSelect({
   view: "dataEntry" | "masterTables"
 }) {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const selectionLocked = Boolean(masterSelectionFromContext(searchParams))
+
+  if (view === "masterTables" || selectionLocked) return null
 
   return (
     <Field className="max-w-md">

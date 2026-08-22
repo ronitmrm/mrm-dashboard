@@ -60,10 +60,12 @@ function NameInput({ label = "Name" }: { label?: string }) {
 export function MasterMaintenanceForm({
   initialKind,
   initialTermType,
+  selectionLocked = false,
   snapshot,
 }: {
   initialKind: CommercialMasterEntryKind
   initialTermType?: CommercialTermType
+  selectionLocked?: boolean
   snapshot: CommercialMasterSnapshot
 }) {
   const router = useRouter()
@@ -89,7 +91,7 @@ export function MasterMaintenanceForm({
       <input name="kind" type="hidden" value={kind} />
       <input name="workspace_kind" type="hidden" value={workspaceKind} />
       <FieldGroup className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Field>
+        {!selectionLocked ? <Field>
           <FieldLabel htmlFor="master-kind">Master</FieldLabel>
           <NativeSelect
             className="w-full"
@@ -123,7 +125,7 @@ export function MasterMaintenanceForm({
               )
             })}
           </NativeSelect>
-        </Field>
+        </Field> : null}
 
         {isSimple ? <NameInput /> : null}
 

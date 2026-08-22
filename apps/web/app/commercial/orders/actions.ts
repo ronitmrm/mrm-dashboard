@@ -3,23 +3,28 @@
 import { createHash, randomUUID } from "node:crypto"
 import path from "node:path"
 
-import { createCommercialOrdersRepository } from "@workspace/db"
+import {
+  createCommercialOrdersRepository,
+  createCustomerRepository,
+} from "@workspace/db"
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import * as XLSX from "xlsx"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
-import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
+import { commercialTaskCapabilities } from "@/lib/auth/task-capabilities"
 import { optionalText, requiredText } from "@/lib/form-data"
+import { readMasterCsv } from "@/lib/master-data-csv"
 import {
   deleteUserAttachment,
   saveUserAttachment,
 } from "@/lib/user-attachment-storage"
 import { validateUserAttachment } from "@/lib/user-attachment-security"
 
-const ordersPath = "/commercial/orders"
+import { parsePurchaseOrderCsvRows } from "./purchase-order-csv"
 
+const ordersPath = "/commercial/orders"
 
 function numberValue(formData: FormData, name: string) {
   const value = Number(requiredText(formData, name))
@@ -73,7 +78,7 @@ function valueFor(
 
 export async function createPurchaseOrderAction(formData: FormData) {
   const order = await withOrders(
-    commercialCapabilities.purchaseOrders.write,
+    commercialTaskCapabilities.createPurchaseOrder,
     ordersPath,
     (repository, actorUserId) =>
       repository.createPurchaseOrder({
@@ -89,10 +94,64 @@ export async function createPurchaseOrderAction(formData: FormData) {
   redirect(`${ordersPath}/${order.id}`)
 }
 
+export async function importPurchaseOrderCsvAction(formData: FormData) {
+  const session = await requireCapability(
+    commercialTaskCapabilities.createPurchaseOrder,
+    ordersPath
+  )
+  await requireCapability(
+    commercialTaskCapabilities.importPurchaseOrder,
+    ordersPath
+  )
+  const connectionString = readAuthEnvironment().connectionString
+  const customers = createCustomerRepository({ connectionString })
+  const orders = createCommercialOrdersRepository({ connectionString })
+  let purchaseOrderId = ""
+  try {
+    const input = parsePurchaseOrderCsvRows(
+      await readMasterCsv(
+        formData.get("purchase_order_csv_file"),
+        "Purchase Order CSV"
+      )
+    )
+    const [organizationId, customerResult] = await Promise.all([
+      customers.organizationIdForCode("MRMPL"),
+      customers.searchForOrganization("MRMPL", input.customerUid),
+    ])
+    const customer = customerResult.rows.find(
+      ({ customerUid }) =>
+        customerUid.toLowerCase() === input.customerUid.toLowerCase()
+    )
+    if (!customer) {
+      throw new Error(`Customer UID ${input.customerUid} was not found.`)
+    }
+    const order = await orders.createPurchaseOrder({
+      actorUserId: session.user.id,
+      currencyCode: input.currencyCode,
+      customerId: customer.id,
+      notes: input.notes,
+      organizationId,
+      poDate: input.poDate,
+      poNumber: input.poNumber,
+    })
+    purchaseOrderId = order.id
+    await orders.importPurchaseOrderLines({
+      actorUserId: session.user.id,
+      purchaseOrderId: order.id,
+      rows: input.lines,
+    })
+  } finally {
+    await customers.close()
+    await orders.close()
+  }
+  revalidatePath(ordersPath)
+  redirect(`${ordersPath}/${purchaseOrderId}`)
+}
+
 export async function addPurchaseOrderLineAction(formData: FormData) {
   const purchaseOrderId = requiredText(formData, "purchase_order_id")
   await withOrders(
-    commercialCapabilities.purchaseOrders.write,
+    commercialTaskCapabilities.addPurchaseOrderLine,
     `${ordersPath}/${purchaseOrderId}`,
     (repository, actorUserId) =>
       repository.addPurchaseOrderLine({
@@ -157,7 +216,7 @@ export async function importPurchaseOrderWorkbookAction(formData: FormData) {
     }
   })
   await withOrders(
-    commercialCapabilities.purchaseOrders.write,
+    commercialTaskCapabilities.importPurchaseOrder,
     `${ordersPath}/${purchaseOrderId}`,
     (repository, actorUserId) =>
       repository.importPurchaseOrderLines({
@@ -180,7 +239,7 @@ export async function uploadPurchaseOrderFileAction(formData: FormData) {
     throw new Error("PO source file must be 25 MB or smaller.")
   }
   await withOrders(
-    commercialCapabilities.purchaseOrders.write,
+    commercialTaskCapabilities.uploadPurchaseOrderFile,
     `${ordersPath}/${purchaseOrderId}`,
     async (repository, actorUserId) => {
       const bytes = Buffer.from(await upload.arrayBuffer())
@@ -227,7 +286,7 @@ export async function decidePurchaseOrderLinePriceAction(formData: FormData) {
     throw new Error("Unsupported price decision")
   }
   await withOrders(
-    commercialCapabilities.purchaseOrders.write,
+    commercialTaskCapabilities.decidePurchaseOrderLinePrice,
     `${ordersPath}/${purchaseOrderId}`,
     (repository, actorUserId) =>
       repository.decidePurchaseOrderLinePrice({
@@ -243,7 +302,7 @@ export async function decidePurchaseOrderLinePriceAction(formData: FormData) {
 export async function createPoQuoteRequestAction(formData: FormData) {
   const purchaseOrderId = requiredText(formData, "purchase_order_id")
   await withOrders(
-    commercialCapabilities.purchaseOrders.write,
+    commercialTaskCapabilities.createPoQuoteRequest,
     `${ordersPath}/${purchaseOrderId}`,
     (repository, actorUserId) =>
       repository.createQuoteRequestFromPurchaseOrderLine({
@@ -258,7 +317,7 @@ export async function createPoQuoteRequestAction(formData: FormData) {
 export async function generateProformaInvoiceAction(formData: FormData) {
   const purchaseOrderId = requiredText(formData, "purchase_order_id")
   await withOrders(
-    commercialCapabilities.purchaseOrders.write,
+    commercialTaskCapabilities.generateProformaInvoice,
     `${ordersPath}/${purchaseOrderId}`,
     (repository, actorUserId) =>
       repository.generateProformaInvoice({
@@ -273,7 +332,7 @@ export async function generateProformaInvoiceAction(formData: FormData) {
 export async function markProformaInvoiceSentAction(formData: FormData) {
   const purchaseOrderId = requiredText(formData, "purchase_order_id")
   await withOrders(
-    commercialCapabilities.purchaseOrders.write,
+    commercialTaskCapabilities.markProformaInvoiceSent,
     `${ordersPath}/${purchaseOrderId}`,
     (repository, actorUserId) =>
       repository.markProformaInvoiceSent({
@@ -287,7 +346,7 @@ export async function markProformaInvoiceSentAction(formData: FormData) {
 export async function approveProformaInvoiceAction(formData: FormData) {
   const purchaseOrderId = requiredText(formData, "purchase_order_id")
   await withOrders(
-    commercialCapabilities.purchaseOrders.write,
+    commercialTaskCapabilities.approveProformaInvoice,
     `${ordersPath}/${purchaseOrderId}`,
     (repository, actorUserId) =>
       repository.approveProformaInvoice({
@@ -304,7 +363,7 @@ export async function approveProformaInvoiceAction(formData: FormData) {
 export async function cancelPurchaseOrderAction(formData: FormData) {
   const purchaseOrderId = requiredText(formData, "purchase_order_id")
   await withOrders(
-    commercialCapabilities.purchaseOrders.write,
+    commercialTaskCapabilities.cancelPurchaseOrder,
     `${ordersPath}/${purchaseOrderId}`,
     (repository, actorUserId) =>
       repository.cancelPurchaseOrder({

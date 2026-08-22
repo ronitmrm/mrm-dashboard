@@ -4,6 +4,7 @@ import {
 } from "@workspace/db"
 
 import type { AuthSystem } from "./auth"
+import { administrationTaskCapabilities } from "./task-capabilities"
 
 type CreateAccessAdministrationServiceOptions = {
   auth: AuthSystem["auth"]
@@ -17,9 +18,6 @@ type ProvisionStaffInput = {
   organizationId: string
   password: string
 }
-
-const MANAGE_USERS_CAPABILITY = "administration.users.manage"
-const MANAGE_ROLES_CAPABILITY = "administration.roles.manage"
 
 type CreateRoleInput = {
   actorUserId: string
@@ -92,7 +90,10 @@ export function createAccessAdministrationService({
       organizationId,
       password,
     }: ProvisionStaffInput) {
-      await requireActorCapability(actorUserId, MANAGE_USERS_CAPABILITY)
+      await requireActorCapability(
+        actorUserId,
+        administrationTaskCapabilities.provisionStaff
+      )
 
       const employee = await access.employeeForAccount({
         employeeCode,
@@ -125,7 +126,10 @@ export function createAccessAdministrationService({
     },
 
     async linkEmployee(input: LinkEmployeeInput) {
-      await requireActorCapability(input.actorUserId, MANAGE_USERS_CAPABILITY)
+      await requireActorCapability(
+        input.actorUserId,
+        administrationTaskCapabilities.linkStaffAccount
+      )
       await access.employeeForAccount(input)
       return access.linkEmployeeUser({ ...input, accountOrigin: "existing" })
     },
@@ -137,7 +141,10 @@ export function createAccessAdministrationService({
       name,
       permissionKeys,
     }: CreateRoleInput) {
-      await requireActorCapability(actorUserId, MANAGE_ROLES_CAPABILITY)
+      await requireActorCapability(
+        actorUserId,
+        administrationTaskCapabilities.createRole
+      )
       const normalizedKey = key.trim().toLowerCase()
       if (!/^[a-z][a-z0-9-]*$/.test(normalizedKey)) {
         throw new Error(
@@ -155,7 +162,10 @@ export function createAccessAdministrationService({
     },
 
     async assignRole({ actorUserId, roleKey, userId }: AssignRoleInput) {
-      await requireActorCapability(actorUserId, MANAGE_ROLES_CAPABILITY)
+      await requireActorCapability(
+        actorUserId,
+        administrationTaskCapabilities.assignStaffRole
+      )
       return access.assignRole({ actorUserId, roleKey, userId })
     },
 
@@ -164,7 +174,10 @@ export function createAccessAdministrationService({
       permissionKeys,
       roleKey,
     }: UpdateRolePermissionsInput) {
-      await requireActorCapability(actorUserId, MANAGE_ROLES_CAPABILITY)
+      await requireActorCapability(
+        actorUserId,
+        administrationTaskCapabilities.updateRolePermissions
+      )
       return access.updateRolePermissions({
         actorUserId,
         permissionKeys: [...new Set(permissionKeys)].sort(),
@@ -173,17 +186,26 @@ export function createAccessAdministrationService({
     },
 
     async setPostRole(input: SetPostRoleInput) {
-      await requireActorCapability(input.actorUserId, MANAGE_ROLES_CAPABILITY)
+      await requireActorCapability(
+        input.actorUserId,
+        administrationTaskCapabilities.assignPostAccess
+      )
       return access.setPostRole(input)
     },
 
     async setPermissionOverride(input: SetPermissionOverrideInput) {
-      await requireActorCapability(input.actorUserId, MANAGE_ROLES_CAPABILITY)
+      await requireActorCapability(
+        input.actorUserId,
+        administrationTaskCapabilities.managePermissionOverrides
+      )
       return access.setPermissionOverride(input)
     },
 
     async getSnapshot({ actorUserId }: { actorUserId: string }) {
-      await requireActorCapability(actorUserId, MANAGE_ROLES_CAPABILITY)
+      await requireActorCapability(
+        actorUserId,
+        administrationTaskCapabilities.accessPage
+      )
       return access.getSnapshot()
     },
   }

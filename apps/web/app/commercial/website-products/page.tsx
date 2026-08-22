@@ -5,7 +5,7 @@ import {
   createCustomerRepository,
   type WebsiteProductRow,
 } from "@workspace/db"
-import { Download, Pencil, RotateCcw } from "lucide-react"
+import { Pencil, RotateCcw } from "lucide-react"
 import Link from "next/link"
 
 import { Badge } from "@workspace/ui/components/badge"
@@ -34,6 +34,7 @@ import { readAuthEnvironment } from "@/lib/auth/auth"
 import { BoundedResultNotice } from "@/components/bounded-result-notice"
 import { CompanyWideMasterScope } from "@/components/company-wide-master-scope"
 import { MasterDataViewTabs } from "@/components/master-data-view-tabs"
+import { MasterDataCsvImportButton } from "@/components/master-data-csv-import-button"
 import { requireCapability } from "@/lib/auth/require-capability"
 import {
   externalMasterAllMastersHref,
@@ -42,6 +43,7 @@ import {
 } from "@/lib/external-master-workspace"
 
 import { updateWebsiteProductAction } from "./actions"
+import { importWebsiteProductsCsvAction } from "./import-action"
 
 const websiteProductsPath = "/commercial/website-products"
 const selectClassName =
@@ -275,97 +277,102 @@ export default async function WebsiteProductsPage({
       <MasterDataViewTabs
         activeView={activeView}
         allMastersHref={externalMasterAllMastersHref(activeView)}
+        csvImportAction={
+          <MasterDataCsvImportButton action={importWebsiteProductsCsvAction} />
+        }
         dataEntryHref={externalMasterViewHref(
           websiteProductsPath,
           "dataEntry",
           { edit: editing?.profileId }
         )}
+        exportAction={
+          <Button asChild size="sm" variant="outline">
+            <Link href={`${websiteProductsPath}/export.xlsx`}>Export</Link>
+          </Button>
+        }
         masterTablesHref={externalMasterViewHref(
           websiteProductsPath,
           "masterTables"
         )}
       />
 
-      {showMasterTables ? <Card>
-        <CardHeader>
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <CardTitle>Website Product Data</CardTitle>
-              <CardDescription>
-                Ordered Products And Bom-Adjacent Parts With Source-Equivalent
-                Derived Codes, Status, Thread Standards, And Assembly Slots.
-              </CardDescription>
+      {showMasterTables ? (
+        <Card>
+          <CardHeader>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <CardTitle>Website Product Data</CardTitle>
+                <CardDescription>
+                  Ordered Products And Bom-Adjacent Parts With Source-Equivalent
+                  Derived Codes, Status, Thread Standards, And Assembly Slots.
+                </CardDescription>
+              </div>
             </div>
-            <Button asChild variant="outline">
-              <Link href={`${websiteProductsPath}/export.xlsx`}>
-                <Download /> Export Excel
-              </Link>
-            </Button>
-          </div>
-          <BoundedResultNotice
-            actionHref={`${websiteProductsPath}/export.xlsx`}
-            actionLabel="Export every Website Product"
-            coverage={result.coverage}
-            searchQuery={filters.q?.trim()}
-            section="Website Products"
-          />
-        </CardHeader>
-        <CardContent>
-          <form className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_12rem_12rem_12rem_auto_auto]">
-            <input name="masterView" type="hidden" value="masterTables" />
-            <Input
-              aria-label="Search Website Products"
-              defaultValue={filters.q}
-              name="q"
-              placeholder="Search Uid, Code, Description Or Grade"
+            <BoundedResultNotice
+              actionHref={`${websiteProductsPath}/export.xlsx`}
+              actionLabel="Export every Website Product"
+              coverage={result.coverage}
+              searchQuery={filters.q?.trim()}
+              section="Website Products"
             />
-            <SearchableSelect
-              aria-label="Filter Category"
-              className={selectClassName}
-              defaultValue={filters.category ?? ""}
-              name="category"
-            >
-              <option value="">All Categories</option>
-              {masters.categories.map((category) => (
-                <option key={category.name} value={category.name}>
-                  {category.name}
-                </option>
-              ))}
-            </SearchableSelect>
-            <SearchableSelect
-              aria-label="Filter Website Status"
-              className={selectClassName}
-              defaultValue={filters.status ?? ""}
-              name="status"
-            >
-              <option value="">All Statuses</option>
-              <option value="In Progress">In Progress</option>
-              <option value="Completed">Completed</option>
-            </SearchableSelect>
-            <SearchableSelect
-              aria-label="Filter Website Active"
-              className={selectClassName}
-              defaultValue={filters.active ?? ""}
-              name="active"
-            >
-              <option value="">All Activation States</option>
-              <option value="true">True</option>
-              <option value="false">False</option>
-            </SearchableSelect>
-            <Button type="submit">Apply Filters</Button>
-            <Button asChild variant="ghost">
-              <Link
-                href={externalMasterViewHref(
-                  websiteProductsPath,
-                  "masterTables"
-                )}
+          </CardHeader>
+          <CardContent>
+            <form className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_12rem_12rem_12rem_auto_auto]">
+              <input name="masterView" type="hidden" value="masterTables" />
+              <Input
+                aria-label="Search Website Products"
+                defaultValue={filters.q}
+                name="q"
+                placeholder="Search Uid, Code, Description Or Grade"
+              />
+              <SearchableSelect
+                aria-label="Filter Category"
+                className={selectClassName}
+                defaultValue={filters.category ?? ""}
+                name="category"
               >
-                <RotateCcw /> Reset
-              </Link>
-            </Button>
-          </form>
-        </CardContent>
-      </Card> : null}
+                <option value="">All Categories</option>
+                {masters.categories.map((category) => (
+                  <option key={category.name} value={category.name}>
+                    {category.name}
+                  </option>
+                ))}
+              </SearchableSelect>
+              <SearchableSelect
+                aria-label="Filter Website Status"
+                className={selectClassName}
+                defaultValue={filters.status ?? ""}
+                name="status"
+              >
+                <option value="">All Statuses</option>
+                <option value="In Progress">In Progress</option>
+                <option value="Completed">Completed</option>
+              </SearchableSelect>
+              <SearchableSelect
+                aria-label="Filter Website Active"
+                className={selectClassName}
+                defaultValue={filters.active ?? ""}
+                name="active"
+              >
+                <option value="">All Activation States</option>
+                <option value="true">True</option>
+                <option value="false">False</option>
+              </SearchableSelect>
+              <Button type="submit">Apply Filters</Button>
+              <Button asChild variant="ghost">
+                <Link
+                  href={externalMasterViewHref(
+                    websiteProductsPath,
+                    "masterTables"
+                  )}
+                >
+                  <RotateCcw /> Reset
+                </Link>
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {showDataEntry && !editing ? (
         <Card>
@@ -627,68 +634,70 @@ export default async function WebsiteProductsPage({
         </Card>
       ) : null}
 
-      {showMasterTables ? <Card>
-        <CardHeader>
-          <CardTitle>Website Product Excel View</CardTitle>
-          <CardDescription>
-            Showing {result.coverage.returned} Ordered Product Rows.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="max-h-[70vh] overflow-auto rounded-2xl border">
-            <Table className="min-w-max text-xs">
-              <TableHeader className="sticky top-0 z-10 bg-background">
-                <TableRow>
-                  <TableHead className="sticky left-0 z-20 bg-background">
-                    Action
-                  </TableHead>
-                  {columns.map((column) => (
-                    <TableHead key={column.label}>{column.label}</TableHead>
-                  ))}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.length ? (
-                  rows.map((row) => (
-                    <TableRow key={row.profileId}>
-                      <TableCell className="sticky left-0 bg-background">
-                        <Button asChild size="sm" variant="ghost">
-                          <Link
-                            href={externalMasterViewHref(
-                              websiteProductsPath,
-                              "dataEntry",
-                              { edit: row.profileId }
-                            )}
-                          >
-                            <Pencil /> Edit
-                          </Link>
-                        </Button>
-                      </TableCell>
-                      {columns.map((column) => (
-                        <TableCell
-                          className="max-w-72 whitespace-normal"
-                          key={column.label}
-                        >
-                          {column.value(row) || "—"}
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  ))
-                ) : (
+      {showMasterTables ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Website Product Excel View</CardTitle>
+            <CardDescription>
+              Showing {result.coverage.returned} Ordered Product Rows.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="max-h-[70vh] overflow-auto rounded-2xl border">
+              <Table className="min-w-max text-xs">
+                <TableHeader className="sticky top-0 z-10 bg-background">
                   <TableRow>
-                    <TableCell
-                      className="h-32 text-center text-muted-foreground"
-                      colSpan={columns.length + 1}
-                    >
-                      No Website Products Match These Filters.
-                    </TableCell>
+                    <TableHead className="sticky left-0 z-20 bg-background">
+                      Action
+                    </TableHead>
+                    {columns.map((column) => (
+                      <TableHead key={column.label}>{column.label}</TableHead>
+                    ))}
                   </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card> : null}
+                </TableHeader>
+                <TableBody>
+                  {rows.length ? (
+                    rows.map((row) => (
+                      <TableRow key={row.profileId}>
+                        <TableCell className="sticky left-0 bg-background">
+                          <Button asChild size="sm" variant="ghost">
+                            <Link
+                              href={externalMasterViewHref(
+                                websiteProductsPath,
+                                "dataEntry",
+                                { edit: row.profileId }
+                              )}
+                            >
+                              <Pencil /> Edit
+                            </Link>
+                          </Button>
+                        </TableCell>
+                        {columns.map((column) => (
+                          <TableCell
+                            className="max-w-72 whitespace-normal"
+                            key={column.label}
+                          >
+                            {column.value(row) || "—"}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell
+                        className="h-32 text-center text-muted-foreground"
+                        colSpan={columns.length + 1}
+                      >
+                        No Website Products Match These Filters.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   )
 }

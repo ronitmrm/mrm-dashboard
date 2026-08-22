@@ -31,10 +31,8 @@ import {
 } from "@workspace/ui/components/table"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
-import {
-  listGrantedCapabilities,
-  requireCapability,
-} from "@/lib/auth/require-capability"
+import { requireCapability } from "@/lib/auth/require-capability"
+import { listGrantedStoreActions } from "@/lib/auth/store-action-access"
 
 import { receiveStoreStockAction } from "../actions"
 
@@ -43,11 +41,9 @@ export default async function StoreOrdersPage() {
     "store.purchase_register.read",
     "/store/orders"
   )
-  const canManage = (
-    await listGrantedCapabilities(session.user.id, [
-      "store.purchase_register.write",
-    ])
-  ).includes("store.purchase_register.write")
+  const canManage = (await listGrantedStoreActions(session.user.id)).has(
+    "store.receipts.receive"
+  )
   const repository = createStoreRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
@@ -160,11 +156,14 @@ export default async function StoreOrdersPage() {
                             </DialogTrigger>
                             <DialogContent>
                               <DialogHeader>
-                                <DialogTitle>Receive {order.typeCode}</DialogTitle>
+                                <DialogTitle>
+                                  Receive {order.typeCode}
+                                </DialogTitle>
                                 <DialogDescription>
-                                  {order.orderNumber} · {order.remainingQuantity}{" "}
-                                  {order.unit} remaining. Stock will be received
-                                  into Main Store under your signed-in ID.
+                                  {order.orderNumber} ·{" "}
+                                  {order.remainingQuantity} {order.unit}{" "}
+                                  remaining. Stock will be received into Main
+                                  Store under your signed-in ID.
                                 </DialogDescription>
                               </DialogHeader>
                               <form

@@ -36,6 +36,7 @@ import {
 } from "@workspace/ui/components/table"
 
 import { storeAssetWorkspaceHref } from "@/lib/store-asset-workspace"
+import { masterSelectionFromContext } from "@/lib/master-module"
 
 import {
   createStoreAssetCategoryAction,
@@ -151,6 +152,8 @@ export function StoreMasterWorkspace({
   mode?: "combined" | "entry" | "table"
 }) {
   const searchParams = useSearchParams()
+  const selectionLocked =
+    mode === "table" || Boolean(masterSelectionFromContext(searchParams))
   const selectedMaster = normalizeStoreMasterKey(
     searchParams.get("storeMaster")
   )
@@ -169,37 +172,35 @@ export function StoreMasterWorkspace({
 
   return (
     <div className="grid gap-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            {mode === "table"
-              ? "Select Store Master Table"
-              : "Select Store Data Entry"}
-          </CardTitle>
-          <CardDescription>
-            Select one Store master. Only the corresponding{" "}
-            {mode === "table" ? "saved records" : "entry form"} are shown.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Field className="max-w-xl">
-            <FieldLabel htmlFor="store-master-selector">Master</FieldLabel>
-            <NativeSelect
-              id="store-master-selector"
-              onChange={(event) =>
-                selectMaster(event.target.value as StoreMasterKey)
-              }
-              value={selectedMaster}
-            >
-              {storeMasterOptions.map(([value, label]) => (
-                <NativeSelectOption key={value} value={value}>
-                  {label}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
-          </Field>
-        </CardContent>
-      </Card>
+      {!selectionLocked ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Select Store Master</CardTitle>
+            <CardDescription>
+              Select one Store master. Only its corresponding workspace is
+              shown.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Field className="max-w-xl">
+              <FieldLabel htmlFor="store-master-selector">Master</FieldLabel>
+              <NativeSelect
+                id="store-master-selector"
+                onChange={(event) =>
+                  selectMaster(event.target.value as StoreMasterKey)
+                }
+                value={selectedMaster}
+              >
+                {storeMasterOptions.map(([value, label]) => (
+                  <NativeSelectOption key={value} value={value}>
+                    {label}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </Field>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {canManage && mode !== "table" ? (
         <Card>

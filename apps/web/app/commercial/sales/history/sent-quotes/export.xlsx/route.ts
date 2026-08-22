@@ -7,14 +7,19 @@ import { xlsxResponse } from "@/lib/xlsx-response"
 import { buildSentQuoteHistoryWorkbook } from "../../../sales-history-workbook"
 
 export async function GET() {
-  await requireCapability("pricing.sales.read", "/commercial/sales")
+  const session = await requireCapability(
+    "pricing.sales.read",
+    "/commercial/sales"
+  )
   const repository = createCommercialWorkflowRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
   try {
     return xlsxResponse(
       buildSentQuoteHistoryWorkbook(
-        await repository.listSalesSentQuotesForExport("MRMPL")
+        await repository.listSalesSentQuotesForExport("MRMPL", 500, {
+          originatingSalespersonUserId: session.user.id,
+        })
       ),
       "sent-quote-history.xlsx"
     )

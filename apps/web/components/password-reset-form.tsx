@@ -88,7 +88,7 @@ export function PasswordResetForm({
             autoComplete="new-password"
             id="newPassword"
             maxLength={128}
-            minLength={12}
+            minLength={6}
             name="newPassword"
             required
             type="password"
@@ -100,7 +100,7 @@ export function PasswordResetForm({
             autoComplete="new-password"
             id="confirmPassword"
             maxLength={128}
-            minLength={12}
+            minLength={6}
             name="confirmPassword"
             required
             type="password"

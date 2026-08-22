@@ -12,7 +12,7 @@ export default async function AdministrationLayout({
   children: ReactNode
 }) {
   const session = await requireCapability(
-    "administration.roles.manage",
+    "administration.access.read",
     "/administration/access"
   )
   const navigationAccess = await getUnifiedNavigationAccess(session.user.id)

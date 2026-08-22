@@ -56,10 +56,12 @@ export function CommercialMasterTable({
   canWrite,
   initialKind,
   rows,
+  selectionLocked = false,
 }: {
   canWrite: boolean
   initialKind: string
   rows: CommercialMasterRow[]
+  selectionLocked?: boolean
 }) {
   const router = useRouter()
   const [workspaceKind, setWorkspaceKind] = useState(() =>
@@ -75,7 +77,7 @@ export function CommercialMasterTable({
 
   return (
     <div className="grid gap-4">
-      <Field className="max-w-md">
+      {!selectionLocked ? <Field className="max-w-md">
         <FieldLabel htmlFor="commercial-master-table-kind">Master</FieldLabel>
         <NativeSelect
           id="commercial-master-table-kind"
@@ -99,7 +101,7 @@ export function CommercialMasterTable({
             )
           })}
         </NativeSelect>
-      </Field>
+      </Field> : null}
       <div className="overflow-x-auto rounded-md border">
         <Table>
           <TableHeader>

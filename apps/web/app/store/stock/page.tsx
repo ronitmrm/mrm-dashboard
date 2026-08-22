@@ -51,17 +51,14 @@ export default async function StoreStockPage({
 }) {
   const session = await requireCapability("store.stock.read", "/store/stock")
   const capabilities = new Set(
-    await listGrantedCapabilities(session.user.id, [
-      "store.stock.write",
-      "store.requests.submit",
-      "store.asset_history.read",
-    ])
+    await listGrantedCapabilities(session.user.id, ["store.asset_history.read"])
   )
   const storeActions = await listGrantedStoreActions(session.user.id)
   const params = await searchParams
   const requestedMode = firstValue(params.mode)
   const mode =
-    requestedMode === "order" && capabilities.has("store.stock.write")
+    requestedMode === "order" &&
+    storeActions.has("store.purchase_orders.create")
       ? "order"
       : requestedMode === "request" && storeActions.has("store.requests.submit")
         ? "request"
@@ -112,7 +109,7 @@ export default async function StoreStockPage({
                   <Link href="/store/stock?mode=request">Request Items</Link>
                 </Button>
               ) : null}
-              {capabilities.has("store.stock.write") ? (
+              {storeActions.has("store.purchase_orders.create") ? (
                 <Button
                   asChild
                   variant={mode === "order" ? "default" : "outline"}
@@ -153,7 +150,9 @@ export default async function StoreStockPage({
                 <TableHead>Asset Category</TableHead>
                 <TableHead>Asset Subcategory</TableHead>
                 <TableHead>Stock Quantity</TableHead>
-                <TableHead data-filterable="true">Unit ID / Serial ID</TableHead>
+                <TableHead data-filterable="true">
+                  Unit ID / Serial ID
+                </TableHead>
                 <TableHead>Storage Location</TableHead>
                 <TableHead>Supplier</TableHead>
                 <TableHead>Master Price</TableHead>
@@ -250,7 +249,9 @@ export default async function StoreStockPage({
                     </TableCell>
                     <TableCell>{item.storageLocations}</TableCell>
                     <TableCell>
-                      {mode === "order" && item.actionItem && supplierOptions.length ? (
+                      {mode === "order" &&
+                      item.actionItem &&
+                      supplierOptions.length ? (
                         <NativeSelect
                           aria-label={`Supplier for ${item.typeCode}`}
                           defaultValue={item.currentSupplierId ?? undefined}

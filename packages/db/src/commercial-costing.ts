@@ -51,6 +51,10 @@ type ProductRow = {
   source_payload: Record<string, unknown>
 }
 
+type SalesWorkScope = {
+  originatingSalespersonUserId: string
+}
+
 type QuoteInputs = {
   conversionRate: number
   overheadCost: number
@@ -838,7 +842,8 @@ export function createCommercialCostingRepository(
   ) => {
     const cursor = input.cursor
     const search = selectorSearchTerm(input.query ?? "")
-    const customerPartCode = input.customerPartCode?.trim().toLowerCase() || null
+    const customerPartCode =
+      input.customerPartCode?.trim().toLowerCase() || null
     const result = await queryable.query<PricingRegisterDatabaseRow>(
       `
         WITH RECURSIVE roots AS (
@@ -2005,10 +2010,13 @@ export function createCommercialCostingRepository(
             JOIN sales.customers customer ON customer.id = quote.customer_id
             LEFT JOIN sales.enquiry_items enquiry_item
               ON enquiry_item.id = quote.enquiry_item_id
+            LEFT JOIN sales.enquiries enquiry
+              ON enquiry.id = coalesce(quote.enquiry_id, enquiry_item.enquiry_id)
             WHERE quote.id = $1
+              AND ($2::uuid IS NULL OR enquiry.created_by_user_id = $2)
             FOR UPDATE OF quote
           `,
-          [input.quoteItemId]
+          [input.quoteItemId, input.actorUserId ?? null]
         )
         if (!root.rows[0]) {
           throw new Error("Quote was not found.")
@@ -2172,11 +2180,25 @@ export function createCommercialCostingRepository(
       })
     },
 
-    async getQuote(quoteItemId: string) {
+    async getQuote(quoteItemId: string, scope?: SalesWorkScope) {
       return transaction(pool, async (client) => {
         await client.query(
           "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
         )
+        const visible = await client.query(
+          `
+            SELECT quote.id
+            FROM sales.quote_items quote
+            LEFT JOIN sales.enquiry_items enquiry_item
+              ON enquiry_item.id = quote.enquiry_item_id
+            LEFT JOIN sales.enquiries enquiry
+              ON enquiry.id = coalesce(quote.enquiry_id, enquiry_item.enquiry_id)
+            WHERE quote.id = $1
+              AND ($2::uuid IS NULL OR enquiry.created_by_user_id = $2)
+          `,
+          [quoteItemId, scope?.originatingSalespersonUserId ?? null]
+        )
+        if (!visible.rows[0]) throw new Error("Quote was not found.")
         return getQuoteWithClient(client, quoteItemId)
       })
     },
@@ -2659,7 +2681,7 @@ export function createCommercialCostingRepository(
       })
     },
 
-    async getQuoteDocument(enquiryId: string) {
+    async getQuoteDocument(enquiryId: string, scope?: SalesWorkScope) {
       const header = await pool.query<{
         company_name: string
         conversion_rate: string
@@ -2680,8 +2702,9 @@ export function createCommercialCostingRepository(
           FROM sales.enquiries enquiry
           JOIN sales.customers customer ON customer.id = enquiry.customer_id
           WHERE enquiry.id = $1
+            AND ($2::uuid IS NULL OR enquiry.created_by_user_id = $2)
         `,
-        [enquiryId]
+        [enquiryId, scope?.originatingSalespersonUserId ?? null]
       )
       if (!header.rows[0]) {
         throw new Error("Enquiry was not found.")
@@ -3007,7 +3030,11 @@ export function createCommercialCostingRepository(
       })
     },
 
-    async listQuotes(organizationCode: string, requestedLimit = 200) {
+    async listQuotes(
+      organizationCode: string,
+      requestedLimit = 200,
+      scope?: SalesWorkScope
+    ) {
       const limit = Math.min(Math.max(Math.floor(requestedLimit), 1), 500)
       const result = await pool.query<{
         company_name: string
@@ -3031,7 +3058,12 @@ export function createCommercialCostingRepository(
             ON organization.id = quote.organization_id
           JOIN sales.customers customer ON customer.id = quote.customer_id
           JOIN catalog.items item ON item.id = quote.item_id
+          LEFT JOIN sales.enquiry_items enquiry_item
+            ON enquiry_item.id = quote.enquiry_item_id
+          LEFT JOIN sales.enquiries enquiry
+            ON enquiry.id = coalesce(quote.enquiry_id, enquiry_item.enquiry_id)
           WHERE lower(organization.code) = lower($1)
+            AND ($3::uuid IS NULL OR enquiry.created_by_user_id = $3)
             AND NOT EXISTS (
               SELECT 1
               FROM sales.quote_package_components component
@@ -3040,7 +3072,11 @@ export function createCommercialCostingRepository(
           ORDER BY quote.created_at DESC
           LIMIT $2
         `,
-        [organizationCode.trim(), limit]
+        [
+          organizationCode.trim(),
+          limit,
+          scope?.originatingSalespersonUserId ?? null,
+        ]
       )
       return result.rows.map((row) => ({
         companyName: row.company_name,

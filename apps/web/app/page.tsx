@@ -13,6 +13,13 @@ import {
 import { getUnifiedNavigationAccess } from "@/lib/auth/unified-navigation-access"
 import { productionModuleIsEnabled } from "@/lib/production-module"
 import {
+  operationalEntryModuleAccess,
+  operationalEntrySelectionHref,
+  operationalEntrySelectionMatchesDestination,
+  resolveOperationalEntrySelection,
+  type OperationalEntryView,
+} from "@/lib/operational-entry-module"
+import {
   dashboardNavigation,
   legacyMasterEntryForDashboardTab,
   type DashboardTabId,
@@ -26,6 +33,9 @@ export default async function Page({
   searchParams: Promise<{
     floor?: string | string[]
     entry?: string | string[]
+    operationalMain?: string | string[]
+    operationalSub?: string | string[]
+    operationalUnit?: string | string[]
     tab?: string | string[]
   }>
 }) {
@@ -35,6 +45,49 @@ export default async function Page({
   const query = await searchParams
   const session = await requireAuthenticatedSession("/")
   const navigationAccess = await getUnifiedNavigationAccess(session.user.id)
+  const value = (input: string | string[] | undefined) =>
+    Array.isArray(input) ? input[0] : input
+  const requestedTab = value(query.tab)
+  if (
+    requestedTab === "operationalEntryTab" ||
+    requestedTab === "operationalTablesTab"
+  ) {
+    const view: OperationalEntryView =
+      requestedTab === "operationalTablesTab" ? "masterTables" : "dataEntry"
+    const access = operationalEntryModuleAccess(navigationAccess)
+    const selection = resolveOperationalEntrySelection(
+      {
+        main: value(query.operationalMain),
+        sub: value(query.operationalSub),
+        unit: value(query.operationalUnit),
+      },
+      access,
+      view
+    )
+    if (
+      !selection ||
+      !operationalEntrySelectionMatchesDestination(selection, "/", {
+        entry: value(query.entry),
+        floor: value(query.floor),
+        tab: requestedTab,
+      })
+    ) {
+      const legacySelection = resolveOperationalEntrySelection(
+        {
+          main: "production_entries",
+          sub: value(query.entry),
+          unit: value(query.floor),
+        },
+        access,
+        view
+      )
+      const selectionHref = operationalEntrySelectionHref(
+        selection ?? legacySelection,
+        view
+      )
+      redirect(selectionHref)
+    }
+  }
   const capabilities = new Set(
     await listGrantedCapabilities(session.user.id, [
       "operations.corrections.write",
@@ -80,7 +133,6 @@ export default async function Page({
         }
       })()
     : null
-  const requestedTab = Array.isArray(query.tab) ? query.tab[0] : query.tab
   const legacyMasterEntry = legacyMasterEntryForDashboardTab(requestedTab)
   const requestedDashboardTab = legacyMasterEntry
     ? "dataEntryTab"
@@ -91,7 +143,7 @@ export default async function Page({
     requestedDashboardTab
   )
     ? requestedDashboardTab
-    : navigationAccess.productionTabIds?.[0] ?? requestedDashboardTab
+    : (navigationAccess.productionTabIds?.[0] ?? requestedDashboardTab)
   const pageCapability = productionCapabilityForTab(initialDashboardTab)
   if (pageCapability) {
     await requireProductionPage(pageCapability, "/")

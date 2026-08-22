@@ -32,10 +32,9 @@ import { ArrowLeft, FileText } from "lucide-react"
 import { saveCandidateAction } from "@/app/hr/actions"
 import { ConversationLogsTable } from "@/components/hr/conversation-logs-table"
 import { readAuthEnvironment } from "@/lib/auth/auth"
-import {
-  listGrantedCapabilities,
-} from "@/lib/auth/require-capability"
+import { listGrantedCapabilities } from "@/lib/auth/require-capability"
 import { requireHrPage } from "@/lib/auth/require-hr-page"
+import { hrTaskCapabilities } from "@/lib/auth/task-capabilities"
 import { candidateSourceOptions } from "@/lib/recruitment-candidate-sources"
 
 export const dynamic = "force-dynamic"
@@ -53,9 +52,13 @@ export default async function CandidateWorkspacePage({
     "hr.candidate_search.read",
     "/hr?panel=candidatesPanel"
   )
-  const canWrite = (
-    await listGrantedCapabilities(session.user.id, ["hr.recruitment.write"])
-  ).includes("hr.recruitment.write")
+  const canWrite =
+    (
+      await listGrantedCapabilities(
+        session.user.id,
+        Object.values(hrTaskCapabilities)
+      )
+    ).length > 0
   const repository = createRecruitmentRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
@@ -139,8 +142,8 @@ export default async function CandidateWorkspacePage({
           <CardHeader>
             <CardTitle>Edit Candidate</CardTitle>
             <CardDescription>
-              Update Candidate Details, Department, Designation, Or Replace
-              The Resume Pdf.
+              Update Candidate Details, Department, Designation, Or Replace The
+              Resume Pdf.
             </CardDescription>
           </CardHeader>
           <CardContent>

@@ -34,7 +34,7 @@ function money(value: number) {
 }
 
 export default async function QuotesPage() {
-  await requireCapability(
+  const session = await requireCapability(
     commercialCapabilities.quotes.read,
     "/commercial/quotes"
   )
@@ -43,7 +43,9 @@ export default async function QuotesPage() {
     connectionString: readAuthEnvironment().connectionString,
   })
   const quotes = await repository
-    .listQuotes("MRMPL")
+    .listQuotes("MRMPL", 200, {
+      originatingSalespersonUserId: session.user.id,
+    })
     .finally(() => repository.close())
   const today = istDateValue()
 

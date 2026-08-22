@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs"
+
 import { describe, expect, it } from "vitest"
 
 import {
@@ -50,5 +52,15 @@ describe("commercial master workspace", () => {
 
   it("falls back safely when the address contains an unknown master", () => {
     expect(commercialMasterSelection("unknown").entryKind).toBe("materialGrade")
+  })
+
+  it("locks the selected Commercial table", () => {
+    const source = readFileSync(
+      new URL("../app/commercial/masters/page.tsx", import.meta.url),
+      "utf8"
+    )
+
+    expect(source).toContain("<CommercialMasterTable")
+    expect(source).toContain("selectionLocked={true}")
   })
 })

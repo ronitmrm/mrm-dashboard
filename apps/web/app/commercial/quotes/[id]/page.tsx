@@ -41,7 +41,7 @@ export default async function QuoteDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  await requireCapability(
+  const session = await requireCapability(
     commercialCapabilities.quotes.read,
     `/commercial/quotes/${id}`
   )
@@ -50,7 +50,9 @@ export default async function QuoteDetailPage({
     connectionString: readAuthEnvironment().connectionString,
   })
   const quote = await repository
-    .getQuote(id)
+    .getQuote(id, {
+      originatingSalespersonUserId: session.user.id,
+    })
     .catch(() => null)
     .finally(() => repository.close())
   if (!quote) {

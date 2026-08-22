@@ -29,7 +29,9 @@ async function resetIdentity() {
 
   try {
     await client.query("BEGIN")
-    await client.query("DELETE FROM audit.events WHERE event_type LIKE 'access.%'")
+    await client.query(
+      "DELETE FROM audit.events WHERE event_type LIKE 'access.%'"
+    )
     await client.query("DELETE FROM identity.post_role_assignments")
     await client.query("DELETE FROM identity.employee_links")
     await client.query("DELETE FROM identity.user_permission_overrides")
@@ -207,7 +209,7 @@ describe("access administration", () => {
           organizationId,
           password: "unauthorized-test-password",
         })
-      ).rejects.toThrow("administration.users.manage")
+      ).rejects.toThrow("administration.staff.provision")
     } finally {
       await access.close()
       await provisioner.close()

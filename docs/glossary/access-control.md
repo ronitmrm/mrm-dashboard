@@ -8,9 +8,13 @@ role is created.
 Access hides and blocks it; Read Only opens it without its changing actions;
 Full Access includes its applicable changing actions.
 
-**Task Access**: Permission for one operational action that is not the identity
-of a page, such as issuing a Store request, moving an asset, or recording a
-calibration.
+**Task Access**: Permission for one independently assignable business command,
+such as requesting stock, making a purchase order, issuing a Store request, or
+moving an asset. Task Access is independent of Page Access: the page controls
+whether the workspace can be opened, while each Task Access grant controls its
+button or function. The interface hides an unavailable command and the server
+rejects it. Search, filter, navigation, download, and cancel controls do not need
+Task Access unless they change business data.
 
 **Design Team Profile**: The Application Role for staff who review commercial
 context and maintain design work and drawing history without costing,

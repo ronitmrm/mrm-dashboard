@@ -41,6 +41,12 @@ import { Input } from "@workspace/ui/components/input"
 import type { UnifiedNavigationAccess } from "@/lib/auth/unified-navigation-access"
 import { masterDataNavigationLinks } from "@/lib/master-data-navigation"
 import {
+  expandedSidebarSections,
+  storedSidebarSections,
+  type ExpandedSidebarSections,
+  type SidebarSectionId,
+} from "@/lib/sidebar-accordion"
+import {
   administrationNavigation,
   commercialCostingNavigation,
   commercialMasterDataWorkspaceNavigation,
@@ -60,17 +66,8 @@ import {
 const storageKey = "mrmpl:sidebar:expanded-modules"
 const stateChangedEvent = "mrmpl:sidebar:expanded-modules-changed"
 
-type SectionId =
-  | "costing"
-  | "hr"
-  | "masterData"
-  | "operationalEntry"
-  | "store"
-  | "productionConventional"
-  | "productionConventional02"
-  | "productionCnc"
-  | "productionForging"
-type ExpandedSections = Record<SectionId, boolean>
+type SectionId = SidebarSectionId
+type ExpandedSections = ExpandedSidebarSections
 
 const productionSectionIds: Record<ProductionFloorCode, SectionId> = {
   conventional: "productionConventional",
@@ -104,7 +101,9 @@ function defaultExpandedSections(
       activeDashboardTab === "masterTablesTab" ||
       onCommercialMasterData,
     operationalEntry:
+      pathname.startsWith("/operational-entry") ||
       activeDashboardTab === "operationalEntryTab" ||
+      activeDashboardTab === "operationalTablesTab" ||
       onCommercialOperationalEntry,
     store: pathname.startsWith("/store"),
     productionConventional:
@@ -113,53 +112,6 @@ function defaultExpandedSections(
       onProduction && activeProductionFloor === "conventional-02",
     productionCnc: onProduction && activeProductionFloor === "cnc",
     productionForging: onProduction && activeProductionFloor === "forging",
-  }
-}
-
-function storedExpandedSections(
-  value: string | null,
-  fallback: ExpandedSections
-): ExpandedSections {
-  if (!value) return fallback
-
-  try {
-    const parsed = JSON.parse(value) as Partial<ExpandedSections> & {
-      production?: boolean
-    }
-    return {
-      costing:
-        typeof parsed.costing === "boolean" ? parsed.costing : fallback.costing,
-      hr: typeof parsed.hr === "boolean" ? parsed.hr : fallback.hr,
-      masterData:
-        typeof parsed.masterData === "boolean"
-          ? parsed.masterData
-          : fallback.masterData,
-      operationalEntry:
-        typeof parsed.operationalEntry === "boolean"
-          ? parsed.operationalEntry
-          : fallback.operationalEntry,
-      store: typeof parsed.store === "boolean" ? parsed.store : fallback.store,
-      productionConventional:
-        typeof parsed.productionConventional === "boolean"
-          ? parsed.productionConventional
-          : typeof parsed.production === "boolean"
-            ? parsed.production
-            : fallback.productionConventional,
-      productionConventional02:
-        typeof parsed.productionConventional02 === "boolean"
-          ? parsed.productionConventional02
-          : fallback.productionConventional02,
-      productionCnc:
-        typeof parsed.productionCnc === "boolean"
-          ? parsed.productionCnc
-          : fallback.productionCnc,
-      productionForging:
-        typeof parsed.productionForging === "boolean"
-          ? parsed.productionForging
-          : fallback.productionForging,
-    }
-  } catch {
-    return fallback
   }
 }
 
@@ -206,7 +158,7 @@ export function UnifiedSidebarNavigation({
     expandedSectionsSnapshot,
     serverExpandedSectionsSnapshot
   )
-  const expandedSections = storedExpandedSections(
+  const expandedSections = storedSidebarSections(
     storedSections,
     defaultExpandedSections(
       pathname,
@@ -222,6 +174,10 @@ export function UnifiedSidebarNavigation({
   const visibleCommercialOperationalEntryNavigation =
     commercialOperationalEntryNavigation.filter((item) =>
       navigationAccess.commercialHrefs.includes(item.href)
+    )
+  const onCommercialOperationalEntry =
+    visibleCommercialOperationalEntryNavigation.some((item) =>
+      navigationHrefMatches(pathname, searchParams, item.href)
     )
   const visibleHrNavigation = hrNavigation.filter((item) =>
     navigationAccess.hrHrefs.includes(item.href)
@@ -243,11 +199,7 @@ export function UnifiedSidebarNavigation({
     normalizedMenuSearch,
     "costing commercial"
   )
-  const filteredCommercialOperationalEntryNavigation = filterNavigationItems(
-    visibleCommercialOperationalEntryNavigation,
-    normalizedMenuSearch,
-    "commercial operational entry enquiries"
-  )
+
   const filteredHrNavigation = filterNavigationItems(
     visibleHrNavigation,
     normalizedMenuSearch,
@@ -263,9 +215,10 @@ export function UnifiedSidebarNavigation({
         .map((floor) => ({
           floor,
           items: filterProductionItems(
-            productionFloorNavigation.filter((item) =>
-              !navigationAccess.productionTabIds ||
-              navigationAccess.productionTabIds.includes(item.id)
+            productionFloorNavigation.filter(
+              (item) =>
+                !navigationAccess.productionTabIds ||
+                navigationAccess.productionTabIds.includes(item.id)
             ),
             normalizedMenuSearch,
             `${floor.label} ${floor.shortLabel} production`.toLowerCase()
@@ -275,7 +228,10 @@ export function UnifiedSidebarNavigation({
     : []
   const filteredUniversalProductionNavigation = navigationAccess.operations
     ? filterProductionItems(
-        [...universalProductionNavigation, ...consolidatedProductionNavigation].filter(
+        [
+          ...universalProductionNavigation,
+          ...consolidatedProductionNavigation,
+        ].filter(
           (item) =>
             !navigationAccess.productionTabIds ||
             navigationAccess.productionTabIds.includes(item.id)
@@ -305,33 +261,38 @@ export function UnifiedSidebarNavigation({
         normalizedMenuSearch
       )
   )
-  const visibleOperationalEntryNavigation = [
-    ...visibleCommercialOperationalEntryNavigation.map((item) => ({
-      dashboardTabId: undefined,
-      destination: item.href,
-      id: `commercial:${item.href}`,
-      title: item.label,
-    })),
-    ...(navigationAccess.operations &&
+  const canSelectProductionEntry =
+    navigationAccess.operations &&
     (!navigationAccess.productionTabIds ||
       navigationAccess.productionTabIds.includes("operationalEntryTab"))
-      ? operationalEntryNavigation.map((item) => ({
-          dashboardTabId: item.id,
-          destination: universalProductionNavigationHref(
-            item.id,
-            activeProductionFloor
-          ),
-          id: item.id,
-          title: item.title,
-        }))
-      : []),
-  ]
+  const canSelectProductionTable =
+    navigationAccess.operations &&
+    (!navigationAccess.productionTabIds ||
+      navigationAccess.productionTabIds.includes("operationalTablesTab"))
+  const canSelectCommercialEntry =
+    visibleCommercialOperationalEntryNavigation.length > 0
+  const canSelectCommercialTable =
+    visibleCommercialOperationalEntryNavigation.some(
+      ({ href }) => href === "/commercial/enquiries"
+    )
+  const visibleOperationalEntryNavigation = operationalEntryNavigation
+    .filter((item) =>
+      item.id === "operationalEntryTab"
+        ? canSelectProductionEntry || canSelectCommercialEntry
+        : canSelectProductionTable || canSelectCommercialTable
+    )
+    .map((item) => ({
+      dashboardTabId: item.id,
+      destination: item.href,
+      id: item.id,
+      title: item.title,
+    }))
   const filteredOperationalEntryNavigation =
     visibleOperationalEntryNavigation.filter(
       (item) =>
         !normalizedMenuSearch ||
         item.title.toLowerCase().includes(normalizedMenuSearch) ||
-        "operational entry work orders rm inward production output enquiries".includes(
+        "operational entry work orders rm inward production output enquiries purchase orders tables".includes(
           normalizedMenuSearch
         )
     )
@@ -341,7 +302,8 @@ export function UnifiedSidebarNavigation({
     "administration access account password security"
   )
   const dashboardMatchesSearch =
-    !normalizedMenuSearch || "dashboard home my dashboard".includes(normalizedMenuSearch)
+    !normalizedMenuSearch ||
+    "dashboard home my dashboard".includes(normalizedMenuSearch)
   useEffect(() => {
     function focusMenuSearch(event: KeyboardEvent) {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
@@ -355,7 +317,7 @@ export function UnifiedSidebarNavigation({
   }, [])
 
   function setSectionOpen(section: SectionId, open: boolean) {
-    const next = { ...expandedSections, [section]: open }
+    const next = expandedSidebarSections(open ? section : undefined)
     window.localStorage.setItem(storageKey, JSON.stringify(next))
     window.dispatchEvent(new Event(stateChangedEvent))
   }
@@ -421,12 +383,16 @@ export function UnifiedSidebarNavigation({
       {filteredMasterDataNavigation.length ? (
         <NavigationSection
           icon={Database}
-          isActive={visibleMasterDataNavigation.some((item) =>
-            activeDashboardTab === item.id ||
-            navigationHrefMatches(pathname, searchParams, item.destination)
-          ) || commercialMasterDataWorkspaceNavigation.some((item) =>
-            navigationHrefMatches(pathname, searchParams, item.href)
-          )}
+          isActive={
+            visibleMasterDataNavigation.some(
+              (item) =>
+                activeDashboardTab === item.id ||
+                navigationHrefMatches(pathname, searchParams, item.destination)
+            ) ||
+            commercialMasterDataWorkspaceNavigation.some((item) =>
+              navigationHrefMatches(pathname, searchParams, item.href)
+            )
+          }
           label="Master Data"
           onOpenChange={(open) => {
             if (!normalizedMenuSearch) setSectionOpen("masterData", open)
@@ -463,19 +429,20 @@ export function UnifiedSidebarNavigation({
       {filteredOperationalEntryNavigation.length ? (
         <NavigationSection
           icon={ListChecks}
-          isActive={visibleOperationalEntryNavigation.some(
-            (item) =>
-              (item.dashboardTabId !== undefined &&
-                activeDashboardTab === item.dashboardTabId) ||
-              navigationHrefMatches(pathname, searchParams, item.destination)
-          )}
+          isActive={
+            onCommercialOperationalEntry ||
+            visibleOperationalEntryNavigation.some(
+              (item) =>
+                (item.dashboardTabId !== undefined &&
+                  activeDashboardTab === item.dashboardTabId) ||
+                navigationHrefMatches(pathname, searchParams, item.destination)
+            )
+          }
           label="Operational Entry"
           onOpenChange={(open) => {
             if (!normalizedMenuSearch) setSectionOpen("operationalEntry", open)
           }}
-          open={
-            normalizedMenuSearch ? true : expandedSections.operationalEntry
-          }
+          open={normalizedMenuSearch ? true : expandedSections.operationalEntry}
         >
           {filteredOperationalEntryNavigation.map((item) => (
             <SidebarMenuSubItem key={item.id}>
@@ -483,6 +450,8 @@ export function UnifiedSidebarNavigation({
                 asChild
                 className="h-8 rounded-md px-2.5 text-sidebar-foreground/70 hover:bg-transparent hover:text-sidebar-primary data-[active=true]:bg-transparent data-[active=true]:font-semibold data-[active=true]:text-sidebar-primary data-[active=true]:shadow-none"
                 isActive={
+                  (item.dashboardTabId === "operationalEntryTab" &&
+                    onCommercialOperationalEntry) ||
                   (item.dashboardTabId !== undefined &&
                     activeDashboardTab === item.dashboardTabId) ||
                   navigationHrefMatches(
@@ -738,7 +707,6 @@ export function UnifiedSidebarNavigation({
       !filteredHrNavigation.length &&
       !filteredStoreNavigation.length &&
       !filteredCommercialNavigation.length &&
-      !filteredCommercialOperationalEntryNavigation.length &&
       !filteredMasterDataNavigation.length &&
       !filteredOperationalEntryNavigation.length &&
       !filteredUniversalProductionNavigation.length &&

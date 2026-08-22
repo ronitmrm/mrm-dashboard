@@ -13,13 +13,18 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  await requireCapability("pricing.enquiries.read", "/commercial/enquiries")
+  const session = await requireCapability(
+    "pricing.enquiries.read",
+    "/commercial/enquiries"
+  )
   const { id } = await params
   const repository = createCommercialWorkflowRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
   try {
-    const result = await repository.getEnquiryLinesForExport(id)
+    const result = await repository.getEnquiryLinesForExport(id, 500, {
+      originatingSalespersonUserId: session.user.id,
+    })
     return xlsxResponse(
       buildEnquiryLinesExport(result.enquiry, result.items),
       enquiryLinesExportFilename(result.enquiry.enquiryNumber)

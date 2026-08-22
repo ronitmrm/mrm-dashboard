@@ -16,11 +16,15 @@ export const tableSecondaryTextSelector = [
   "small.text-muted-foreground",
 ].join(", ")
 
-export function isTableSecondaryPlaceholder(
-  value: string | null | undefined
-) {
+export function isTableSecondaryPlaceholder(value: string | null | undefined) {
   const normalized = value?.trim() ?? ""
   return normalized === "" || normalized === "-" || normalized === "—"
+}
+
+export function hasMeaningfulTableFilterValue(
+  values: Array<string | null | undefined>
+) {
+  return values.some((value) => !isTableSecondaryPlaceholder(value))
 }
 
 export function joinTableFilterTextParts(

@@ -32,7 +32,7 @@ const numberFormat = new Intl.NumberFormat("en-IN", {
 })
 
 export default async function EnquiryExcelViewPage() {
-  await requireCapability(
+  const session = await requireCapability(
     "pricing.enquiries.read",
     "/commercial/enquiries/excel-view"
   )
@@ -40,7 +40,9 @@ export default async function EnquiryExcelViewPage() {
     connectionString: readAuthEnvironment().connectionString,
   })
   const result = await workflow
-    .listEnquirySpreadsheetBounded("MRMPL")
+    .listEnquirySpreadsheetBounded("MRMPL", 200, {
+      originatingSalespersonUserId: session.user.id,
+    })
     .finally(() => workflow.close())
 
   return (

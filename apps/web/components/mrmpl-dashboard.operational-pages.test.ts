@@ -30,7 +30,9 @@ describe("Production operational page loading", () => {
     expect(firstPiecePage).toContain("shopFloorQueueRows(productionControl)")
     expect(firstPiecePage).toContain('roleTaskMatches(row, "quality")')
     expect(firstPiecePage).toContain("readStoredFirstPieceInspectionTasks()")
-    expect(firstPiecePage).toContain('className="grid w-full min-w-0 gap-4 text-foreground"')
+    expect(firstPiecePage).toContain(
+      'className="grid w-full min-w-0 gap-4 text-foreground"'
+    )
     expect(firstPiecePage).toContain("@5xl/main:grid-cols-3")
     expect(firstPiecePage).not.toContain("max-w-6xl")
     expect(firstPiecePage).not.toContain("Example Only")
@@ -58,8 +60,11 @@ describe("Production operational page loading", () => {
       "utf8"
     )
     const importHandler = source.slice(
-      source.indexOf("async function importEntryTemplate"),
-      source.indexOf("return (", source.indexOf("async function importEntryTemplate"))
+      source.indexOf("async function importEntryFile"),
+      source.indexOf(
+        "return (",
+        source.indexOf("async function importEntryFile")
+      )
     )
 
     expect(importHandler).toContain("{ throwOnError: true }")
@@ -108,8 +113,8 @@ describe("Production operational page loading", () => {
     expect(panel).not.toContain(">Add Machine</Button>")
     expect(panel).not.toContain(">Edit</Button>")
     expect(panel).toContain("Open Machine Master")
-    expect(panel).toContain('TileField label="Machine Status"')
-    expect(panel).toContain('TileField label="Remarks"')
+    expect(panel).toMatch(/<TileField\s+label="Machine Status"/)
+    expect(panel).toMatch(/<TileField\s+label="Remarks"/)
     expect(panel).toContain("useSyncExternalStore(")
     expect(panel).toContain("machineMasterQueryFromLocation()")
     expect(panel).not.toContain("const [selectedMachineNo] = useState")
@@ -130,5 +135,49 @@ describe("Production operational page loading", () => {
     }
     expect(workspace).toContain("combinedMachineMasterProductionControl")
     expect(workspace).toContain("<MaintenancePanel")
+  })
+
+  it("keeps production-unit and connection badges out of the dashboard header", () => {
+    const source = readFileSync(
+      new URL("./mrmpl-dashboard.tsx", import.meta.url),
+      "utf8"
+    )
+    const headerStart = source.indexOf('<header className="sticky top-0')
+    const header = source.slice(
+      headerStart,
+      source.indexOf("</header>", headerStart)
+    )
+
+    expect(header).toContain("<HeaderActions")
+    expect(header).not.toContain("selectedProductionFloor.shortLabel")
+    expect(header).not.toContain("dashboardStatusLabel")
+  })
+  it("locks the selected operational form and provides a selection return path", () => {
+    const source = readFileSync(
+      new URL("./mrmpl-dashboard.tsx", import.meta.url),
+      "utf8"
+    )
+    const tabsSource = readFileSync(
+      new URL("./operational-workspace-tabs.tsx", import.meta.url),
+      "utf8"
+    )
+    const dataEntryPanel = source.slice(
+      source.indexOf("function DataEntryPanel"),
+      source.indexOf("function OperationalTablesPanel")
+    )
+    const tablePanel = source.slice(
+      source.indexOf("function OperationalTablesPanel"),
+      source.indexOf("function MasterTablesPanel")
+    )
+
+    expect(dataEntryPanel).toContain(
+      "operationalEntrySelectionFromContext(searchParams)"
+    )
+    expect(tablePanel).toContain(
+      "operationalEntrySelectionFromContext(searchParams)"
+    )
+    expect(tabsSource).toContain("Back to Operational Entry Selection")
+    expect(tabsSource).toContain("withOperationalEntrySelectionContext")
+    expect(tabsSource).toContain("operationalEntrySelectionSummary")
   })
 })
