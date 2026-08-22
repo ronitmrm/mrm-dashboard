@@ -77,6 +77,7 @@ export {
 } from "./store"
 export { storeUnitId } from "./store-item-codes"
 export {
+  authorizeRecruitmentCandidateArtifactTarget,
   createRecruitmentRepository,
   type RecruitmentCandidateRow,
   type RecruitmentCandidateApplicationHistoryRow,
