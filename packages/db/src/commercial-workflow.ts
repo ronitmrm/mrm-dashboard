@@ -4627,6 +4627,15 @@ export function createCommercialWorkflowRepository(
       return transaction(pool, async (client) => {
         const targetTable = input.targetTable ?? "enquiry_items"
         const purpose = input.purpose ?? "drawing"
+        await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
+          [
+            input.organizationId,
+            "sales",
+            targetTable,
+            input.targetId,
+            purpose,
+          ].join(":"),
+        ])
         const target = await client.query<{ id: string }>(
           targetTable === "design_tasks"
             ? `
@@ -4681,14 +4690,60 @@ export function createCommercialWorkflowRepository(
             input,
           ]
         )
+        const existingLink = await client.query(
+          `
+            SELECT id FROM core.file_links
+            WHERE file_id = $1 AND target_schema = 'sales'
+              AND target_table = $2 AND target_id = $3 AND purpose = $4
+          `,
+          [file.rows[0]!.id, targetTable, input.targetId, purpose]
+        )
+        if (existingLink.rows[0]) {
+          return {
+            fileName: file.rows[0]!.file_name,
+            id: file.rows[0]!.id,
+            storageKey: file.rows[0]!.storage_key,
+          }
+        }
+        const version = await client.query<{ value: number }>(
+          `
+            SELECT coalesce(max(version), 0)::integer + 1 AS value
+            FROM core.file_links
+            WHERE organization_id = $1 AND target_schema = 'sales'
+              AND target_table = $2 AND target_id = $3 AND purpose = $4
+          `,
+          [input.organizationId, targetTable, input.targetId, purpose]
+        )
+        await client.query(
+          `
+            UPDATE core.file_links
+            SET is_current = false, deactivated_at = now(), updated_at = now(),
+              row_version = row_version + 1
+            WHERE organization_id = $1 AND target_schema = 'sales'
+              AND target_table = $2 AND target_id = $3 AND purpose = $4
+              AND is_current
+          `,
+          [input.organizationId, targetTable, input.targetId, purpose]
+        )
+        await client.query(
+          `
+            UPDATE core.files prior
+            SET lifecycle_state = 'superseded', updated_at = now()
+            FROM core.file_links link
+            WHERE link.file_id = prior.id AND link.organization_id = $1
+              AND link.target_schema = 'sales' AND link.target_table = $2
+              AND link.target_id = $3 AND link.purpose = $4
+              AND NOT link.is_current AND prior.lifecycle_state = 'current'
+          `,
+          [input.organizationId, targetTable, input.targetId, purpose]
+        )
         await client.query(
           `
             INSERT INTO core.file_links (
               organization_id, file_id, target_schema, target_table,
-              target_id, purpose
+              target_id, purpose, version, is_current
             )
-            VALUES ($1, $2, 'sales', $3, $4, $5)
-            ON CONFLICT DO NOTHING
+            VALUES ($1, $2, 'sales', $3, $4, $5, $6, true)
           `,
           [
             input.organizationId,
@@ -4696,6 +4751,7 @@ export function createCommercialWorkflowRepository(
             targetTable,
             input.targetId,
             purpose,
+            version.rows[0]!.value,
           ]
         )
         return {
@@ -4825,19 +4881,26 @@ export function createCommercialWorkflowRepository(
         file_name: string
         id: string
         media_type: string | null
+        is_current: boolean
+        lifecycle_state: "current" | "deleted" | "superseded"
+        public_url: string | null
         storage_key: string
+        version: number
       }>(
         `
           SELECT file.id, file.file_name, file.media_type,
-            file.byte_size::text, file.storage_key, file.created_at
+            file.byte_size::text, file.storage_key, file.created_at,
+            file.lifecycle_state, file_link.is_current, file_link.version,
+            object.public_url
           FROM core.file_links file_link
           JOIN core.files file ON file.id = file_link.file_id
+          LEFT JOIN core.file_objects object ON object.id = file.physical_object_id
           WHERE file_link.organization_id = $1
             AND file_link.target_schema = 'sales'
             AND file_link.target_table = 'enquiry_items'
             AND file_link.target_id = $2
             AND file_link.purpose = 'drawing'
-          ORDER BY file.created_at DESC, file.id DESC
+          ORDER BY file_link.version DESC, file.id DESC
         `,
         [input.organizationId, input.enquiryItemId]
       )
@@ -4846,8 +4909,12 @@ export function createCommercialWorkflowRepository(
         createdAt: row.created_at,
         fileName: row.file_name,
         id: row.id,
+        isCurrent: row.is_current,
+        lifecycleState: row.lifecycle_state,
         mediaType: row.media_type,
+        publicUrl: row.public_url,
         storageKey: row.storage_key,
+        version: row.version,
       }))
     },
 
@@ -4861,19 +4928,30 @@ export function createCommercialWorkflowRepository(
         file_name: string
         id: string
         media_type: string | null
+        lifecycle_state: "current" | "deleted" | "superseded"
+        object_lifecycle_state:
+          | "available"
+          | "deleted"
+          | "deletion_failed"
+          | null
+        public_url: string | null
         storage_key: string
       }>(
         `
           SELECT file.id, file.file_name, file.media_type,
-            file.byte_size::text, file.storage_key, file.created_at
+            file.byte_size::text, file.storage_key, file.created_at,
+            file.lifecycle_state, object.public_url,
+            object.lifecycle_state AS object_lifecycle_state
           FROM core.file_links file_link
           JOIN core.files file ON file.id = file_link.file_id
+          LEFT JOIN core.file_objects object ON object.id = file.physical_object_id
           WHERE file_link.organization_id = $1
             AND file_link.target_schema = 'sales'
             AND file_link.target_table = 'enquiry_items'
             AND file_link.target_id = $2
             AND file_link.purpose = 'drawing'
-          ORDER BY file.created_at DESC, file.id DESC
+            AND file_link.is_current
+          ORDER BY file_link.version DESC, file.id DESC
           LIMIT 1
         `,
         [input.organizationId, input.enquiryItemId]
@@ -4882,12 +4960,20 @@ export function createCommercialWorkflowRepository(
       if (!row) {
         throw new Error("Drawing was not found.")
       }
+      if (
+        row.lifecycle_state === "deleted" ||
+        (row.object_lifecycle_state !== null &&
+          row.object_lifecycle_state !== "available")
+      ) {
+        throw new Error("Drawing is deleted or unavailable.")
+      }
       return {
         byteSize: Number(row.byte_size),
         createdAt: row.created_at,
         fileName: row.file_name,
         id: row.id,
         mediaType: row.media_type,
+        publicUrl: row.public_url,
         storageKey: row.storage_key,
       }
     },

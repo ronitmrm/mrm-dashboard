@@ -113,8 +113,10 @@ The complete mapping, reconciliation, cutover, and rollback contract is in
 ## Local file storage
 
 PostgreSQL stores canonical file metadata, checksums, ownership, and entity
-links. Local attachment bytes live below `LOCAL_FILE_STORAGE_PATH`, which must
-remain outside version control.
+links. New retained enquiry drawings use UploadThing and require the server-only
+`UPLOADTHING_TOKEN`. Historical local attachment bytes remain readable below
+`LOCAL_FILE_STORAGE_PATH`, which must remain outside version control; new
+enquiry drawing writes do not create local bytes.
 
 The checksum-verified backup and empty-root restore commands are documented in
 [`docs/local-file-storage-backup-restore.md`](docs/local-file-storage-backup-restore.md).

@@ -24,6 +24,10 @@ Status: Approved classification; retention durations require business approval
 - Raw payloads and conflict evidence must never be written to application logs.
 - Production artifacts, exports, workbooks, database files, and attachment
   trees are never committed.
+- Retained UploadThing objects use the approved `public-read` exception. App
+  authorization protects upload and URL discovery, but anyone holding a
+  disclosed object URL can read it until the final physical object is deleted.
+  Public URLs must therefore never be logged or treated as confidential links.
 - Access to migration credentials expires after cutover.
 - Old Convex and SQLite sources remain read-only through the signed acceptance
   window.

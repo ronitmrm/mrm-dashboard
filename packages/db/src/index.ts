@@ -4,6 +4,10 @@ export {
   type AccessAuditChange,
 } from "./access-audit"
 export { createAuthorizationRepository } from "./authorization"
+export {
+  createArtifactService,
+  type ArtifactStorageProvider,
+} from "./artifacts"
 export { createCatalogMasterRepository } from "./catalog-masters"
 export {
   type BoundedCommercialResult,

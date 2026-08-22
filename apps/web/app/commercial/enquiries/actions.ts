@@ -3,7 +3,10 @@
 import { createHash, randomUUID } from "node:crypto"
 import path from "node:path"
 
-import { createCommercialWorkflowRepository } from "@workspace/db"
+import {
+  createArtifactService,
+  createCommercialWorkflowRepository,
+} from "@workspace/db"
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 
@@ -19,6 +22,7 @@ import {
   saveUserAttachment,
 } from "@/lib/user-attachment-storage"
 import { validateUserAttachment } from "@/lib/user-attachment-security"
+import { createUploadThingArtifactProvider } from "@/lib/uploadthing-artifact-provider"
 
 import {
   parseEnquiryImportFile,
@@ -81,7 +85,7 @@ async function persistAttachment(
   await withWorkflow(
     input.capability ?? "pricing.enquiries.write",
     `${enquiriesPath}/${input.enquiryId}`,
-    async (workflow) => {
+    async (workflow, actorUserId) => {
       const bytes = Buffer.from(await file.arrayBuffer())
       const { fileName, mediaType } = validateUserAttachment({
         bytes,
@@ -89,6 +93,37 @@ async function persistAttachment(
         purpose: "drawing",
       })
       const sha256 = createHash("sha256").update(bytes).digest("hex")
+      if ((input.targetTable ?? "enquiry_items") === "enquiry_items") {
+        const service = createArtifactService({
+          connectionString: readAuthEnvironment().connectionString,
+          provider: createUploadThingArtifactProvider(),
+        })
+        try {
+          await service.store({
+            actorUserId,
+            bytes,
+            fileName,
+            idempotencyKey: [
+              "enquiry-drawing",
+              input.targetId,
+              input.purpose ?? "drawing",
+              sha256,
+            ].join(":"),
+            mediaType,
+            organizationId: input.organizationId,
+            origin: "uploaded",
+            purpose: input.purpose ?? "drawing",
+            target: {
+              id: input.targetId,
+              schema: "sales",
+              table: "enquiry_items",
+            },
+          })
+        } finally {
+          await service.close()
+        }
+        return
+      }
       const sourceId = randomUUID()
       const storageKey = path.posix.join(
         "attachments",
