@@ -45,7 +45,6 @@ import {
 } from "@workspace/ui/components/table"
 import {
   BriefcaseBusiness,
-  Download,
   FilterX,
   ListFilter,
   Pencil,
@@ -65,6 +64,7 @@ import {
   type ApprovedPostFilterKey,
 } from "@/components/hr/approved-post-filter-columns"
 import { SingleEmployeeAssignmentFields } from "@/components/hr/single-employee-assignment-fields"
+import { DataDownloadButton } from "@/components/data-download-button"
 
 type TemplateOption = Pick<
   RecruitmentTemplateRow,
@@ -377,12 +377,7 @@ export function ApprovedPostsTable({
                   : `${posts.length} sanctioned staffing positions`}
               </CardDescription>
             </div>
-            <Button asChild size="sm" variant="outline">
-              <a href="/hr/approved-posts/export">
-                <Download data-icon="inline-start" />
-                Download Excel
-              </a>
-            </Button>
+            <DataDownloadButton href="/hr/approved-posts/export" />
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex min-h-8 items-center justify-between gap-3">

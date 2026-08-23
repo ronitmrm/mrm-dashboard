@@ -28,6 +28,7 @@ import { readAuthEnvironment } from "@/lib/auth/auth"
 import { istDateValue } from "@/lib/date-time"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { BoundedResultNotice } from "@/components/bounded-result-notice"
+import { DataDownloadButton } from "@/components/data-download-button"
 import {
   MasterDataCsvDownloadButton,
   MasterDataCsvImportButton,
@@ -105,11 +106,7 @@ export default async function EnquiriesPage({
         }
         dataEntryHref="/commercial/enquiries?operationalView=dataEntry"
         exportAction={
-          <Button asChild size="sm" variant="outline">
-            <Link href="/commercial/enquiries/register/export.xlsx">
-              Export
-            </Link>
-          </Button>
+          <DataDownloadButton href="/commercial/enquiries/register/export.xlsx" />
         }
         masterTablesHref="/commercial/enquiries?operationalView=masterTables"
       />

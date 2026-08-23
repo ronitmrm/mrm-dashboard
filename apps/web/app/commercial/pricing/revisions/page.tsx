@@ -10,6 +10,7 @@ import {
 import Link from "next/link"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
+import { DataDownloadButton } from "@/components/data-download-button"
 import { requireCapability } from "@/lib/auth/require-capability"
 
 import { PricingTable } from "../pricing-table"
@@ -60,11 +61,9 @@ export default async function PricingRevisionsPage({
           </CardDescription>
         </div>
         <div className="flex gap-2">
-          <Button asChild variant="outline">
-            <Link href={"/commercial/pricing/revisions/export.xlsx" + query}>
-              Export Excel
-            </Link>
-          </Button>
+          <DataDownloadButton
+            href={"/commercial/pricing/revisions/export.xlsx" + query}
+          />
           <Button asChild variant="secondary">
             <Link href="/commercial/pricing">Back To Pricing</Link>
           </Button>

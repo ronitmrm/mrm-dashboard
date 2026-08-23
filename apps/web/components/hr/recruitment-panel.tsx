@@ -62,6 +62,7 @@ import {
 import { CombinedRoleForm } from "@/components/hr/combined-role-form"
 import { CombinedRolesTable as EditableCombinedRolesTable } from "@/components/hr/combined-roles-table"
 import { CompanyWideMasterScope } from "@/components/company-wide-master-scope"
+import { DataDownloadButton } from "@/components/data-download-button"
 import { ConversationLogsTable } from "@/components/hr/conversation-logs-table"
 import { EmployeeAssignmentUpload } from "@/components/hr/employee-assignment-upload"
 import {
@@ -235,11 +236,10 @@ function MastersPanel({
         }
         dataEntryHref={recruitmentMasterHref("dataEntry", masterKind)}
         exportAction={
-          <Button asChild size="sm" variant="outline">
-            <Link href={`/hr/masters/export.csv?kind=${masterKind}`}>
-              Export
-            </Link>
-          </Button>
+          <DataDownloadButton
+            href={`/hr/masters/export.csv?kind=${masterKind}`}
+            label="Download CSV"
+          />
         }
         masterTablesHref={recruitmentMasterHref("masterTables", masterKind)}
       />
@@ -327,9 +327,10 @@ function TemplatePanel({
         }
         dataEntryHref={`/hr?panel=postMasterPanel&masterView=dataEntry${templateParam}`}
         exportAction={
-          <Button asChild size="sm" variant="outline">
-            <Link href="/hr/masters/export.csv?kind=job_template">Export</Link>
-          </Button>
+          <DataDownloadButton
+            href="/hr/masters/export.csv?kind=job_template"
+            label="Download CSV"
+          />
         }
         masterTablesHref={`/hr?panel=postMasterPanel&masterView=masterTables${templateParam}`}
       />
@@ -443,9 +444,7 @@ function ApprovedPostPanel({
         }
         dataEntryHref="/hr?panel=approvedPostPanel&masterView=dataEntry"
         exportAction={
-          <Button asChild size="sm" variant="outline">
-            <Link href="/hr/approved-posts/export">Export</Link>
-          </Button>
+          <DataDownloadButton href="/hr/approved-posts/export" />
         }
         masterTablesHref="/hr?panel=approvedPostPanel&masterView=masterTables"
       />

@@ -6,7 +6,6 @@ import {
 } from "@workspace/db"
 import { Alert, AlertDescription } from "@workspace/ui/components/alert"
 import { Badge } from "@workspace/ui/components/badge"
-import { Button } from "@workspace/ui/components/button"
 import {
   Card,
   CardContent,
@@ -14,7 +13,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
-import Link from "next/link"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { commercialTaskCapabilities } from "@/lib/auth/task-capabilities"
@@ -26,6 +24,7 @@ import {
 import { importMastersWorkbookAction } from "./actions"
 import { MasterMaintenanceForm } from "./master-maintenance-form"
 import { CompanyWideMasterScope } from "@/components/company-wide-master-scope"
+import { DataDownloadButton } from "@/components/data-download-button"
 import { MasterDataViewTabs } from "@/components/master-data-view-tabs"
 import {
   MasterDataCsvDownloadButton,
@@ -128,9 +127,7 @@ export default async function MastersPage({
           ) : null
         }
         exportAction={
-          <Button asChild size="sm" variant="outline">
-            <Link href="/commercial/masters/export.xlsx">Export</Link>
-          </Button>
+          <DataDownloadButton href="/commercial/masters/export.xlsx" />
         }
         masterTablesHref={commercialMasterViewHref(
           "masterTables",

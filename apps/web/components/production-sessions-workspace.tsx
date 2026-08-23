@@ -16,10 +16,11 @@ import { Input } from "@workspace/ui/components/input"
 import { NativeSelect, NativeSelectOption } from "@workspace/ui/components/native-select"
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@workspace/ui/components/sheet"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@workspace/ui/components/table"
-import { Clock3, Download, History, Play, Search, Square, TriangleAlert } from "lucide-react"
+import { Clock3, History, Play, Search, Square, TriangleAlert } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 
 import { useDashboardDelivery } from "@/hooks/use-dashboard-delivery"
+import { DataDownloadButton } from "@/components/data-download-button"
 import { dashboardPayloadFromState, dashboardPayloadForProductionFloor } from "@/lib/dashboard-view-model"
 import {
   formatIstDateTime,
@@ -260,7 +261,7 @@ export function ProductionSessionsWorkspace({ initialFloor }: { initialFloor: Pr
             {view !== "start" ? <div className="flex flex-wrap gap-2">
               <div className="relative min-w-56 flex-1"><Search className="absolute left-3 top-3.5 size-4 text-muted-foreground" /><Input className="h-11 pl-9" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search machine, job, part or operator" /></div>
               {view === "register" ? <NativeSelect className="h-11 w-52" aria-label="Session status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as SessionStatusFilter)}><NativeSelectOption value="all">All statuses</NativeSelectOption><NativeSelectOption value="closing_required">Closing Required ({closingRequiredSessions.length})</NativeSelectOption><NativeSelectOption value="open">Open</NativeSelectOption><NativeSelectOption value="closed">Closed</NativeSelectOption></NativeSelect> : null}
-              <Button className="h-11" variant="outline" onClick={exportCsv}><Download />Export CSV</Button>
+              <DataDownloadButton label="Download CSV" onClick={exportCsv} />
             </div> : null}
           </CardHeader>
           <CardContent>

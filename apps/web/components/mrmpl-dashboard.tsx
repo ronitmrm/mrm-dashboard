@@ -25,7 +25,6 @@ import {
   ChevronDown,
   ChevronRight,
   CheckCircle2,
-  Download,
   Eye,
   FileText,
   Gauge,
@@ -97,6 +96,7 @@ import {
 } from "@/components/dashboard/dashboard-components"
 
 import { MasterDataViewTabs } from "@/components/master-data-view-tabs"
+import { DataDownloadButton } from "@/components/data-download-button"
 import {
   MasterDataCsvClientImportButton,
   MasterDataCsvDownloadButton,
@@ -427,13 +427,10 @@ function MasterDataTabs({
       )}
       exportAction={
         entryType === "store_masters" ? (
-          <Button asChild size="sm" variant="outline">
-            <a
-              href={`/store/masters/export.csv?storeMaster=${selectedStoreMaster ?? "ITEM_TYPE"}`}
-            >
-              Export
-            </a>
-          </Button>
+          <DataDownloadButton
+            href={`/store/masters/export.csv?storeMaster=${selectedStoreMaster ?? "ITEM_TYPE"}`}
+            label="Download CSV"
+          />
         ) : null
       }
       exportDisabled={exportDisabled}
@@ -11127,18 +11124,13 @@ function OperationalTablesPanel({
         activeView="masterTables"
         dataEntryHref={operationalTabs.dataEntryHref}
         exportAction={
-          <Button
+          <DataDownloadButton
             disabled={!rows.length || !columns.length}
-            size="sm"
-            type="button"
-            variant="outline"
+            label="Download CSV"
             onClick={() =>
               downloadMasterTableCsv(selectedSpec, rows, columns, "all-rows")
             }
-          >
-            <Download className="size-4" />
-            Export
-          </Button>
+          />
         }
         masterTablesHref={operationalTabs.masterTablesHref}
       />

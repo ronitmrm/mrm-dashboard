@@ -30,6 +30,7 @@ import {
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { commercialTaskCapabilities } from "@/lib/auth/task-capabilities"
 import { CompanyWideMasterScope } from "@/components/company-wide-master-scope"
+import { DataDownloadButton } from "@/components/data-download-button"
 import { MasterDataViewTabs } from "@/components/master-data-view-tabs"
 import {
   MasterDataCsvDownloadButton,
@@ -187,9 +188,10 @@ export default async function CustomersPage({
         }
         dataEntryHref={externalMasterViewHref(customersPath, "dataEntry")}
         exportAction={
-          <Button asChild size="sm" variant="outline">
-            <a href={`${customersPath}/export.csv`}>Export</a>
-          </Button>
+          <DataDownloadButton
+            href={`${customersPath}/export.csv`}
+            label="Download CSV"
+          />
         }
         masterTablesHref={externalMasterViewHref(customersPath, "masterTables")}
       />
