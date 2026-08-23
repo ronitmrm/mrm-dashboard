@@ -150,14 +150,14 @@
   --chart-4: var(--mrm-tennis);
   --chart-5: var(--mrm-jungle);
   --radius: var(--radius-app-md);
-  --sidebar: var(--mrm-tennis);
-  --sidebar-foreground: var(--mrm-jungle);
-  --sidebar-primary: var(--mrm-jungle);
-  --sidebar-primary-foreground: var(--mrm-white);
-  --sidebar-accent: rgb(247 247 242 / 18%);
-  --sidebar-accent-foreground: var(--mrm-jungle);
-  --sidebar-border: rgb(16 60 30 / 24%);
-  --sidebar-ring: var(--mrm-jungle);
+  --sidebar: var(--color-chrome);
+  --sidebar-foreground: var(--color-on-chrome);
+  --sidebar-primary: var(--color-accent);
+  --sidebar-primary-foreground: var(--color-on-accent);
+  --sidebar-accent: rgb(247 247 242 / 10%);
+  --sidebar-accent-foreground: var(--color-on-chrome);
+  --sidebar-border: rgb(247 247 242 / 18%);
+  --sidebar-ring: var(--color-focus);
 }
 
 .dark {
@@ -204,14 +204,14 @@
   --chart-3: #7fbd99;
   --chart-4: var(--mrm-tennis);
   --chart-5: #9aa69c;
-  --sidebar: var(--mrm-tennis);
-  --sidebar-foreground: var(--mrm-jungle);
-  --sidebar-primary: var(--mrm-jungle);
-  --sidebar-primary-foreground: var(--mrm-white);
-  --sidebar-accent: rgb(247 247 242 / 18%);
-  --sidebar-accent-foreground: var(--mrm-jungle);
-  --sidebar-border: rgb(16 60 30 / 24%);
-  --sidebar-ring: var(--mrm-jungle);
+  --sidebar: var(--color-chrome);
+  --sidebar-foreground: var(--color-on-chrome);
+  --sidebar-primary: var(--color-accent);
+  --sidebar-primary-foreground: var(--color-on-accent);
+  --sidebar-accent: rgb(247 247 242 / 10%);
+  --sidebar-accent-foreground: var(--color-on-chrome);
+  --sidebar-border: rgb(247 247 242 / 16%);
+  --sidebar-ring: var(--color-focus);
 }
 
 @layer base {
@@ -286,7 +286,7 @@
   outline-offset: 2px !important;
 }
 [data-slot="sidebar"] :focus-visible {
-  outline-color: var(--mrm-jungle) !important;
+  outline-color: var(--mrm-tennis) !important;
 }
 
 @keyframes sidebar-submenu-in {
