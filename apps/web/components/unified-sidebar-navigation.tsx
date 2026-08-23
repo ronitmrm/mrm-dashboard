@@ -1,6 +1,12 @@
 "use client"
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react"
+import {
+  Children,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react"
 import { usePathname, useSearchParams } from "next/navigation"
 import {
   BriefcaseBusiness,
@@ -65,6 +71,8 @@ import {
 
 const storageKey = "mrmpl:sidebar:expanded-modules"
 const stateChangedEvent = "mrmpl:sidebar:expanded-modules-changed"
+const submoduleButtonClassName =
+  "group/submodule h-8 rounded-md px-2.5 text-sidebar-foreground/70 transition-[background-color,color] duration-[var(--dur-fast)] hover:bg-sidebar-accent hover:text-sidebar-foreground data-[active=true]:bg-sidebar-accent data-[active=true]:font-semibold data-[active=true]:text-sidebar-foreground"
 
 type SectionId = SidebarSectionId
 type ExpandedSections = ExpandedSidebarSections
@@ -403,7 +411,7 @@ export function UnifiedSidebarNavigation({
             <SidebarMenuSubItem key={item.id}>
               <SidebarMenuSubButton
                 asChild
-                className="h-8 rounded-md px-2.5 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground data-[active=true]:bg-sidebar-accent data-[active=true]:font-semibold data-[active=true]:text-sidebar-foreground data-[active=true]:shadow-[inset_2px_0_0_var(--sidebar-primary)]"
+                className={submoduleButtonClassName}
                 isActive={
                   activeDashboardTab === item.id ||
                   navigationHrefMatches(
@@ -414,10 +422,7 @@ export function UnifiedSidebarNavigation({
                 }
               >
                 <a href={item.destination}>
-                  <span
-                    aria-hidden="true"
-                    className="size-1.5 shrink-0 rounded-full bg-current opacity-55"
-                  />
+                  <SubmoduleBranch />
                   <span>{item.title}</span>
                 </a>
               </SidebarMenuSubButton>
@@ -448,7 +453,7 @@ export function UnifiedSidebarNavigation({
             <SidebarMenuSubItem key={item.id}>
               <SidebarMenuSubButton
                 asChild
-                className="h-8 rounded-md px-2.5 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground data-[active=true]:bg-sidebar-accent data-[active=true]:font-semibold data-[active=true]:text-sidebar-foreground data-[active=true]:shadow-[inset_2px_0_0_var(--sidebar-primary)]"
+                className={submoduleButtonClassName}
                 isActive={
                   (item.dashboardTabId === "operationalEntryTab" &&
                     onCommercialOperationalEntry) ||
@@ -462,10 +467,7 @@ export function UnifiedSidebarNavigation({
                 }
               >
                 <a href={item.destination}>
-                  <span
-                    aria-hidden="true"
-                    className="size-1.5 shrink-0 rounded-full bg-current opacity-55"
-                  />
+                  <SubmoduleBranch />
                   <span>{item.title}</span>
                 </a>
               </SidebarMenuSubButton>
@@ -490,7 +492,7 @@ export function UnifiedSidebarNavigation({
             <SidebarMenuSubItem key={item.href}>
               <SidebarMenuSubButton
                 asChild
-                className="h-8 rounded-md px-2.5 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground data-[active=true]:bg-sidebar-accent data-[active=true]:font-semibold data-[active=true]:text-sidebar-foreground data-[active=true]:shadow-[inset_2px_0_0_var(--sidebar-primary)]"
+                className={submoduleButtonClassName}
                 isActive={navigationHrefMatches(
                   pathname,
                   searchParams,
@@ -498,10 +500,7 @@ export function UnifiedSidebarNavigation({
                 )}
               >
                 <a href={item.href}>
-                  <span
-                    aria-hidden="true"
-                    className="size-1.5 shrink-0 rounded-full bg-current opacity-55"
-                  />
+                  <SubmoduleBranch />
                   <span>{item.label}</span>
                 </a>
               </SidebarMenuSubButton>
@@ -526,7 +525,7 @@ export function UnifiedSidebarNavigation({
             <SidebarMenuSubItem key={item.href}>
               <SidebarMenuSubButton
                 asChild
-                className="h-8 rounded-md px-2.5 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground data-[active=true]:bg-sidebar-accent data-[active=true]:font-semibold data-[active=true]:text-sidebar-foreground data-[active=true]:shadow-[inset_2px_0_0_var(--sidebar-primary)]"
+                className={submoduleButtonClassName}
                 isActive={navigationHrefMatches(
                   pathname,
                   searchParams,
@@ -534,10 +533,7 @@ export function UnifiedSidebarNavigation({
                 )}
               >
                 <a href={item.href}>
-                  <span
-                    aria-hidden="true"
-                    className="size-1.5 shrink-0 rounded-full bg-current opacity-55"
-                  />
+                  <SubmoduleBranch />
                   <span>{item.label}</span>
                 </a>
               </SidebarMenuSubButton>
@@ -562,7 +558,7 @@ export function UnifiedSidebarNavigation({
             <SidebarMenuSubItem key={item.href}>
               <SidebarMenuSubButton
                 asChild
-                className="h-8 rounded-md px-2.5 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground data-[active=true]:bg-sidebar-accent data-[active=true]:font-semibold data-[active=true]:text-sidebar-foreground data-[active=true]:shadow-[inset_2px_0_0_var(--sidebar-primary)]"
+                className={submoduleButtonClassName}
                 isActive={navigationHrefMatches(
                   pathname,
                   searchParams,
@@ -570,10 +566,7 @@ export function UnifiedSidebarNavigation({
                 )}
               >
                 <a href={item.href}>
-                  <span
-                    aria-hidden="true"
-                    className="size-1.5 shrink-0 rounded-full bg-current opacity-55"
-                  />
+                  <SubmoduleBranch />
                   <span>{item.label}</span>
                 </a>
               </SidebarMenuSubButton>
@@ -603,7 +596,7 @@ export function UnifiedSidebarNavigation({
               <SidebarMenuSubItem key={`${floor.code}:${item.id}`}>
                 <SidebarMenuSubButton
                   asChild
-                  className="h-8 rounded-md px-2.5 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground data-[active=true]:bg-sidebar-accent data-[active=true]:font-semibold data-[active=true]:text-sidebar-foreground data-[active=true]:shadow-[inset_2px_0_0_var(--sidebar-primary)]"
+                  className={submoduleButtonClassName}
                   isActive={
                     floor.code === activeProductionFloor &&
                     item.id === activeDashboardTab
@@ -614,18 +607,12 @@ export function UnifiedSidebarNavigation({
                       onClick={() => onDashboardTabSelect(item.id, floor.code)}
                       type="button"
                     >
-                      <span
-                        aria-hidden="true"
-                        className="size-1.5 shrink-0 rounded-full bg-current opacity-55"
-                      />
+                      <SubmoduleBranch />
                       <span>{item.title}</span>
                     </button>
                   ) : (
                     <a href={productionNavigationHref(item.id, floor.code)}>
-                      <span
-                        aria-hidden="true"
-                        className="size-1.5 shrink-0 rounded-full bg-current opacity-55"
-                      />
+                      <SubmoduleBranch />
                       <span>{item.title}</span>
                     </a>
                   )}
@@ -772,6 +759,8 @@ function NavigationSection({
   onOpenChange: (open: boolean) => void
   open: boolean
 }) {
+  const submoduleCount = Children.count(children)
+
   return (
     <Collapsible
       className="group/collapsible px-3 py-0.5"
@@ -790,15 +779,21 @@ function NavigationSection({
               >
                 <Icon className="size-[18px]" />
                 <span className="truncate">{label}</span>
-                <span className="ml-auto flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-transform duration-[var(--dur-base)] group-data-[state=open]/collapsible:rotate-90 group-data-[state=open]/collapsible:text-sidebar-foreground">
+                <span
+                  aria-hidden="true"
+                  className="ml-auto min-w-5 shrink-0 rounded-full border border-sidebar-border bg-sidebar-accent px-1.5 text-center text-[10px] leading-5 font-semibold text-sidebar-foreground/70 tabular-nums group-data-[state=open]/collapsible:text-sidebar-foreground"
+                >
+                  {submoduleCount}
+                </span>
+                <span className="flex size-6 shrink-0 origin-center items-center justify-center rounded-md text-muted-foreground transition-[transform,color] duration-[var(--dur-base)] group-data-[state=open]/collapsible:rotate-90 group-data-[state=open]/collapsible:text-sidebar-foreground">
                   <ChevronRight className="size-3.5" />
                 </span>
               </SidebarMenuButton>
             </CollapsibleTrigger>
-            <CollapsibleContent>
+            <CollapsibleContent className="sidebar-submenu-content">
               <SidebarMenuSub
                 aria-label={`${label} submodules`}
-                className="mx-5 mt-0 mb-1 gap-0 border-sidebar-primary/30 px-2 py-1"
+                className="mx-5 mt-0 mb-1 gap-0 border-sidebar-primary/30 px-1 py-1"
               >
                 {children}
               </SidebarMenuSub>
@@ -807,5 +802,14 @@ function NavigationSection({
         </SidebarMenu>
       </SidebarGroup>
     </Collapsible>
+  )
+}
+
+function SubmoduleBranch() {
+  return (
+    <span
+      aria-hidden="true"
+      className="h-px w-3 shrink-0 bg-sidebar-border transition-[background-color] duration-[var(--dur-fast)] group-hover/submodule:bg-sidebar-foreground/55 group-data-[active=true]/submodule:bg-sidebar-primary"
+    />
   )
 }
