@@ -20,6 +20,7 @@ describe("HR master workspace", () => {
     expect(pageSource).toContain('activeItem.panelId !== "mastersPanel"')
     expect(pageSource).toContain('activeItem.panelId !== "postMasterPanel"')
     expect(pageSource).toContain('activeItem.panelId !== "approvedPostPanel"')
+    expect(pageSource).toContain('activeItem.panelId !== "candidatesPanel"')
     expect(panelSource).not.toContain("<RecruitmentMasterKindSelect")
 
     expect(panelSource).toContain("function ApprovedPostPanel")
@@ -34,6 +35,12 @@ describe("HR master workspace", () => {
       'masterTablesHref="/hr?panel=approvedPostPanel&masterView=masterTables"'
     )
 
+    expect(panelSource).toContain(
+      'dataEntryHref="/hr?panel=candidatesPanel&masterView=dataEntry"'
+    )
+    expect(panelSource).toContain(
+      'masterTablesHref="/hr?panel=candidatesPanel&masterView=masterTables"'
+    )
     expect(panelSource).toContain('allMastersHref="/?tab=dataEntryTab"')
     expect(tablesSource).toMatch(
       /const rows =\s+kind === "department" \? masters\.departments : masters\.designations/

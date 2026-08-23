@@ -81,9 +81,11 @@ function CandidateStatusBadge({ status }: { status: string }) {
 export function CandidatesTable({
   canWrite = false,
   candidates,
+  masterView,
 }: {
   canWrite?: boolean
   candidates: RecruitmentCandidateRow[]
+  masterView?: "dataEntry" | "masterTables"
 }) {
   const [filters, setFilters] = useState({ ...emptyFilters })
   const [loggingCandidate, setLoggingCandidate] =
@@ -249,6 +251,9 @@ export function CandidatesTable({
       <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
         <form action={logCandidateEventAction} className="flex min-h-full flex-col">
           <input name="panel" type="hidden" value="candidatesPanel" />
+          {masterView ? (
+            <input name="master_view" type="hidden" value={masterView} />
+          ) : null}
           <input name="candidate_id" type="hidden" value={loggingCandidate.id} />
           <SheetHeader>
             <SheetTitle>Log Conversation</SheetTitle>

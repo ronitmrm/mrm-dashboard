@@ -11,6 +11,7 @@ describe("Costing module Excel filters", () => {
   it("keeps linked and editable business columns filterable", () => {
     const customers = source("app/commercial/customers/page.tsx")
     const pricing = source("app/commercial/pricing/pricing-table.tsx")
+    const pricingPage = source("app/commercial/pricing/page.tsx")
     const quote = source("app/commercial/quotes/[id]/page.tsx")
     const quotes = source("app/commercial/quotes/page.tsx")
 
@@ -30,9 +31,11 @@ describe("Costing module Excel filters", () => {
     expect(quotes).toContain(
       '<TableHead data-filterable="true">Quote</TableHead>'
     )
-    expect(pricing).toMatch(
-      /data-filterable=\{\s*header === "Customer Part Code" \? "true" : undefined\s*\}/
-    )
+    expect(pricing).toContain('data-filterable="true"')
+    expect(pricingPage).not.toContain('aria-label="Search pricing"')
+    expect(pricingPage).not.toContain('name="q"')
+    expect(pricingPage).toContain("<CardAction>")
+    expect(pricingPage).toContain('<Button asChild size="sm" variant="outline">')
     expect(quote).toContain(
       '<TableHead data-filterable="true">Component</TableHead>'
     )

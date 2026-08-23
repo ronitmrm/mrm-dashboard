@@ -197,6 +197,23 @@ describe("master data navigation", () => {
     ])
   })
 
+  it("opens Master Tables for a Candidate Entry-only HR user", () => {
+    expect(
+      masterDataFallbackLinks({
+        administration: false,
+        commercialHrefs: [],
+        hrHrefs: ["/hr?panel=candidatesPanel"],
+        operations: false,
+        store: false,
+      })
+    ).toEqual([
+      {
+        destination: "/masters?view=masterTables",
+        id: "masterTablesTab",
+        title: "Master Tables",
+      },
+    ])
+  })
   it("returns to table selection from HR masters", () => {
     const access = {
       administration: false,

@@ -600,6 +600,13 @@ export const hrMasterNavigation = [
     panelId: "approvedPostPanel",
     requiredCapability: "hr.approved_posts.read",
   },
+  {
+    href: "/hr?panel=candidatesPanel",
+    icon: UsersRound,
+    label: "Candidates",
+    panelId: "candidatesPanel",
+    requiredCapability: "hr.candidate_entry.read",
+  },
 ] as const
 
 export const hrNavigation = [
@@ -617,13 +624,7 @@ export const hrNavigation = [
     panelId: "jobsPanel",
     requiredCapability: "hr.jobs.read",
   },
-  {
-    href: "/hr?panel=candidatesPanel",
-    icon: UsersRound,
-    label: "Log Candidate",
-    panelId: "candidatesPanel",
-    requiredCapability: "hr.candidate_entry.read",
-  },
+
   {
     href: "/hr?panel=candidateSearchPanel",
     icon: PackageSearch,
