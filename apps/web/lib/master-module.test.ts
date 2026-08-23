@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  autoSelectedSubMaster,
   availableMainMasters,
   masterFormHref,
   masterModuleAccess,
@@ -27,6 +28,13 @@ const fullAccess: MasterModuleAccess = {
 }
 
 describe("master module selection", () => {
+  it("auto-selects the main master fallback when no sub-master exists", () => {
+    expect(autoSelectedSubMaster("commercial_customers", fullAccess)).toBe(
+      "commercial_customers"
+    )
+    expect(autoSelectedSubMaster("hr_masters", fullAccess)).toBe("")
+  })
+
   it("requires the direct Store Masters capability", () => {
     const navigationAccess = {
       administration: false,

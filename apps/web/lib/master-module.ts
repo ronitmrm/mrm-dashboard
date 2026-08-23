@@ -316,6 +316,14 @@ export function subMastersFor(
       }
 }
 
+export function autoSelectedSubMaster(
+  main: string,
+  access: MasterModuleAccess
+) {
+  const result = subMastersFor(main, access)
+  return result?.fallback ? (result.options[0]?.id ?? "") : ""
+}
+
 export function resolveMasterSelection(
   input: { main?: unknown; sub?: unknown; unit?: unknown },
   access: MasterModuleAccess
