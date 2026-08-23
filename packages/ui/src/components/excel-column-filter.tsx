@@ -28,11 +28,13 @@ export function matchesColumnFilter(
 }
 
 export function ExcelColumnFilter({
+  allLabel = "All",
   label,
   onApply,
   options,
   selected,
 }: {
+  allLabel?: string
   label: string
   onApply: (selected: string[] | null) => void
   options: string[]
@@ -82,7 +84,7 @@ export function ExcelColumnFilter({
           type="button"
           variant={selected === null ? "outline" : "default"}
         >
-          {selected === null ? "All" : `${selected.length} selected`}
+          {selected === null ? allLabel : `${selected.length} selected`}
           <ListFilter className="size-3.5" />
         </Button>
       </PopoverTrigger>

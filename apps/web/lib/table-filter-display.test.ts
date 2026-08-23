@@ -4,6 +4,7 @@ import {
   isTableSecondaryPlaceholder,
   hasMeaningfulTableFilterValue,
   joinTableFilterTextParts,
+  parseTableFilterValues,
   resolveTableFilterText,
   shouldShowTableFilter,
 } from "@workspace/ui/lib/table-filter-display"
@@ -21,6 +22,21 @@ describe("table filter display", () => {
       "Planning item Route master"
     )
     expect(joinTableFilterTextParts(["M3", "", undefined])).toBe("M3")
+  })
+
+  it("reads multiple independent values from one table cell", () => {
+    expect(
+      parseTableFilterValues(
+        '["Planning Item Missing","Route Master Missing"]',
+        "Planning Item Missing Route Master Missing"
+      )
+    ).toEqual(["Planning Item Missing", "Route Master Missing"])
+    expect(parseTableFilterValues(undefined, "Rm Received")).toEqual([
+      "Rm Received",
+    ])
+    expect(parseTableFilterValues("not-json", "Waiting Rm")).toEqual([
+      "Waiting Rm",
+    ])
   })
 
   it("uses muted text when it is the only meaningful cell value", () => {

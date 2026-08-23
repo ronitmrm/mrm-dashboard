@@ -69,3 +69,28 @@ export function resolveTableFilterText(
     joinTableFilterTextParts(fallbackParts)
   )
 }
+
+export function parseTableFilterValues(
+  serialized: string | undefined,
+  fallback: string | null | undefined
+) {
+  if (serialized) {
+    try {
+      const parsed = JSON.parse(serialized) as unknown
+      if (Array.isArray(parsed)) {
+        const values = [
+          ...new Set(
+            parsed
+              .filter((value): value is string => typeof value === "string")
+              .map((value) => value.trim())
+              .filter(Boolean)
+          ),
+        ]
+        if (values.length) return values
+      }
+    } catch {
+      // Fall back to the cell's normal display value.
+    }
+  }
+  return [fallback?.trim() || "—"]
+}
