@@ -43,6 +43,7 @@ import { Textarea } from "@workspace/ui/components/textarea"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { selectedEnquiryLine } from "@/lib/pricing/enquiry-detail"
+import { isActiveEnquiryCustomer } from "@/lib/pricing/enquiry-customers"
 
 import {
   addEnquiryItemAction,
@@ -151,7 +152,7 @@ export default async function EnquiryDetailPage({
   })()
   const customers = customerRows.filter(
     (customer) =>
-      customer.status === "Active" ||
+      isActiveEnquiryCustomer(customer) ||
       customer.id === snapshot.enquiry.customerId
   )
 

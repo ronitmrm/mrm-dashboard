@@ -29,8 +29,12 @@ import { readAuthEnvironment } from "@/lib/auth/auth"
 import { istDateValue } from "@/lib/date-time"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { BoundedResultNotice } from "@/components/bounded-result-notice"
-import { MasterDataCsvImportButton } from "@/components/master-data-csv-import-button"
+import {
+  MasterDataCsvDownloadButton,
+  MasterDataCsvImportButton,
+} from "@/components/master-data-csv-import-button"
 import { OperationalWorkspaceTabs } from "@/components/operational-workspace-tabs"
+import { activeEnquiryCustomers } from "@/lib/pricing/enquiry-customers"
 
 import { importEnquiryRegisterAction } from "./actions"
 import { EnquiryLogForm, type CommercialTermOptions } from "./enquiry-log-form"
@@ -68,7 +72,7 @@ export default async function EnquiriesPage({
           masterRepository.snapshot(resolvedOrganizationId),
         ])
         return {
-          customers: customerRows.filter(({ status }) => status === "Active"),
+          customers: activeEnquiryCustomers(customerRows),
           enquiryResult: enquiries,
           masterSnapshot: masters,
           organizationId: resolvedOrganizationId,
@@ -94,6 +98,9 @@ export default async function EnquiriesPage({
     <div className="grid gap-6">
       <OperationalWorkspaceTabs
         activeView={operationalView}
+        csvDownloadAction={
+          <MasterDataCsvDownloadButton href="/commercial/enquiries/register/template.csv" />
+        }
         csvImportAction={
           organizationId ? (
             <MasterDataCsvImportButton
@@ -119,15 +126,6 @@ export default async function EnquiriesPage({
           Sales Intake, Commercial Handover, Technical Review, Clarification,
           And Design Progression In One Postgresql Workflow.
         </p>
-        {operationalView === "dataEntry" ? (
-          <div className="flex flex-wrap gap-2 pt-2">
-            <Button asChild size="sm" variant="outline">
-              <Link href="/commercial/enquiries/register/template.xlsx">
-                Register Template
-              </Link>
-            </Button>
-          </div>
-        ) : null}
       </section>
 
       {operationalView === "dataEntry" ? (

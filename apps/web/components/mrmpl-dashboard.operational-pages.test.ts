@@ -178,6 +178,11 @@ describe("Production operational page loading", () => {
     )
     expect(tabsSource).toContain("Back to Operational Entry Selection")
     expect(tabsSource).toContain("withOperationalEntrySelectionContext")
-    expect(tabsSource).toContain("operationalEntrySelectionSummary")
+    expect(tabsSource).not.toContain("operationalEntrySelectionSummary")
+    expect(tabsSource.indexOf("<nav")).toBeLessThan(
+      tabsSource.indexOf('className="ml-auto flex items-center gap-2"')
+    )
+    expect(dataEntryPanel).toContain("csvDownloadAction={")
+    expect(dataEntryPanel).toContain("csvImportAction={csvImportAction}")
   })
 })

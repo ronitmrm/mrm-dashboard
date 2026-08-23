@@ -8,7 +8,6 @@ import { useSearchParams } from "next/navigation"
 import {
   operationalEntrySelectionFromContext,
   operationalEntrySelectionHref,
-  operationalEntrySelectionSummary,
   withOperationalEntrySelectionContext,
   type OperationalEntryView,
 } from "@/lib/operational-entry-module"
@@ -19,12 +18,14 @@ const linkClass =
 
 export function OperationalWorkspaceTabs({
   activeView,
+  csvDownloadAction,
   csvImportAction,
   dataEntryHref,
   exportAction,
   masterTablesHref,
 }: {
   activeView: OperationalEntryView
+  csvDownloadAction?: ReactNode
   csvImportAction?: ReactNode
   dataEntryHref: string
   exportAction?: ReactNode
@@ -40,7 +41,7 @@ export function OperationalWorkspaceTabs({
     ? withOperationalEntrySelectionContext(masterTablesHref, searchParams)
     : "/operational-entry?view=masterTables"
   const transferAction = operationalEntryTransferAction(activeView, {
-    csvImport: Boolean(csvImportAction),
+    csvImport: Boolean(csvDownloadAction || csvImportAction),
     export: Boolean(exportAction),
   })
 
@@ -53,18 +54,9 @@ export function OperationalWorkspaceTabs({
         <ArrowLeft className="size-4" />
         Back to Operational Entry Selection
       </Link>
-      {selection ? (
-        <p className="mr-auto hidden truncate text-xs text-muted-foreground xl:block">
-          {operationalEntrySelectionSummary(selection)}
-        </p>
-      ) : (
-        <span className="mr-auto" />
-      )}
-      {transferAction === "csvImport" ? csvImportAction : null}
-      {transferAction === "export" ? exportAction : null}
       <nav
         aria-label="Operational Entry views"
-        className="ml-auto flex shrink-0"
+        className="flex shrink-0"
         role="tablist"
       >
         <Link
@@ -94,6 +86,11 @@ export function OperationalWorkspaceTabs({
           Entry Tables
         </Link>
       </nav>
+      <div className="ml-auto flex items-center gap-2">
+        {transferAction === "csvImport" ? csvDownloadAction : null}
+        {transferAction === "csvImport" ? csvImportAction : null}
+        {transferAction === "export" ? exportAction : null}
+      </div>
     </div>
   )
 }
