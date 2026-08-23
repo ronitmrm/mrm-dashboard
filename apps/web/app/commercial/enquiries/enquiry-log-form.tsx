@@ -16,6 +16,8 @@ import {
 import { Textarea } from "@workspace/ui/components/textarea"
 import { useState } from "react"
 
+import type { CommercialTermOptions } from "@/lib/commercial-term-options"
+
 import { createEnquiryAction } from "./actions"
 
 export type EnquiryCustomerOption = {
@@ -29,8 +31,6 @@ export type EnquiryCustomerOption = {
   defaultShipmentMode: string | null
   id: string
 }
-
-export type CommercialTermOptions = Record<CommercialTermType, string[]>
 
 type CustomerDefaults = {
   buyer: string

@@ -1,11 +1,9 @@
 import Link from "next/link"
 
 import {
-  commercialTermTypes,
   createCommercialMasterRepository,
   createCommercialWorkflowRepository,
   createCustomerRepository,
-  type CommercialTermType,
 } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
@@ -44,6 +42,7 @@ import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { selectedEnquiryLine } from "@/lib/pricing/enquiry-detail"
 import { isActiveEnquiryCustomer } from "@/lib/pricing/enquiry-customers"
+import { commercialTermOptions } from "@/lib/commercial-term-options"
 
 import {
   addEnquiryItemAction,
@@ -156,14 +155,7 @@ export default async function EnquiryDetailPage({
       customer.id === snapshot.enquiry.customerId
   )
 
-  const termOptions = Object.fromEntries(
-    commercialTermTypes.map((termType) => [
-      termType,
-      masterSnapshot.commercialTerms
-        .filter((term) => term.active && term.termType === termType)
-        .map((term) => term.name),
-    ])
-  ) as Record<CommercialTermType, string[]>
+  const termOptions = commercialTermOptions(masterSnapshot.commercialTerms)
 
   return (
     <div className="grid gap-6">

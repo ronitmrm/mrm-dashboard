@@ -45,6 +45,7 @@ import {
   MasterDataCsvImportButton,
 } from "@/components/master-data-csv-import-button"
 import { OperationalWorkspaceTabs } from "@/components/operational-workspace-tabs"
+import { currencyCodes } from "@/lib/currencies"
 
 import {
   createPurchaseOrderAction,
@@ -210,15 +211,14 @@ export default async function PurchaseOrdersPage({
                           id="po-currency"
                           name="currency_code"
                         >
-                          <NativeSelectOption value="USD">
-                            Usd
-                          </NativeSelectOption>
-                          <NativeSelectOption value="INR">
-                            Inr
-                          </NativeSelectOption>
-                          <NativeSelectOption value="EUR">
-                            Eur
-                          </NativeSelectOption>
+                          {currencyCodes.map((currency) => (
+                            <NativeSelectOption
+                              key={currency}
+                              value={currency}
+                            >
+                              {currency}
+                            </NativeSelectOption>
+                          ))}
                         </NativeSelect>
                       </Field>
                     </div>

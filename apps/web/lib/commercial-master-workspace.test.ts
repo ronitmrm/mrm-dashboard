@@ -3,12 +3,23 @@ import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 
 import {
+  commercialMasterKinds,
   commercialMasterSelection,
   commercialMasterTemplateHref,
   commercialMasterViewHref,
 } from "./commercial-master-workspace"
 
 describe("commercial master workspace", () => {
+  it("does not expose Currency as a separate commercial master", () => {
+    expect(
+      commercialMasterKinds.map((selection) =>
+        "workspaceKind" in selection
+          ? selection.workspaceKind
+          : selection.entryKind
+      )
+    ).not.toContain("currency")
+  })
+
   it("keeps Material Grade selected between entry and table views", () => {
     expect(commercialMasterSelection("materialGrade")).toEqual({
       entryKind: "materialGrade",

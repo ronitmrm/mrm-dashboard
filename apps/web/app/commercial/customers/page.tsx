@@ -1,8 +1,6 @@
 import {
-  commercialTermTypes,
   createCommercialMasterRepository,
   createCustomerRepository,
-  type CommercialTermType,
 } from "@workspace/db"
 import { redirect } from "next/navigation"
 import { Badge } from "@workspace/ui/components/badge"
@@ -47,6 +45,7 @@ import {
   externalMasterViewHref,
 } from "@/lib/external-master-workspace"
 import { pageBounds } from "@/lib/page-bounds"
+import { commercialTermOptions } from "@/lib/commercial-term-options"
 
 import {
   createCustomerAction,
@@ -57,8 +56,6 @@ import {
 export const dynamic = "force-dynamic"
 
 const customersPath = "/commercial/customers"
-
-type CommercialTermOptions = Record<CommercialTermType, string[]>
 
 function CustomerDefaultSelect({
   customerUid,
@@ -152,14 +149,7 @@ export default async function CustomersPage({
       await masterRepository.close()
     }
   })()
-  const termOptions = Object.fromEntries(
-    commercialTermTypes.map((termType) => [
-      termType,
-      masterSnapshot.commercialTerms
-        .filter((term) => term.active && term.termType === termType)
-        .map((term) => term.name),
-    ])
-  ) as CommercialTermOptions
+  const termOptions = commercialTermOptions(masterSnapshot.commercialTerms)
   const visibleCustomers = customerPage.rows
   if (!visibleCustomers.length && bounds.page > 1) {
     redirect(externalMasterViewHref(customersPath, "masterTables"))

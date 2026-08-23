@@ -1,7 +1,6 @@
 import Link from "next/link"
 
 import {
-  commercialTermTypes,
   createCommercialMasterRepository,
   createCommercialWorkflowRepository,
   createCustomerRepository,
@@ -35,9 +34,10 @@ import {
 } from "@/components/master-data-csv-import-button"
 import { OperationalWorkspaceTabs } from "@/components/operational-workspace-tabs"
 import { activeEnquiryCustomers } from "@/lib/pricing/enquiry-customers"
+import { commercialTermOptions } from "@/lib/commercial-term-options"
 
 import { importEnquiryRegisterAction } from "./actions"
-import { EnquiryLogForm, type CommercialTermOptions } from "./enquiry-log-form"
+import { EnquiryLogForm } from "./enquiry-log-form"
 
 export const dynamic = "force-dynamic"
 
@@ -85,14 +85,7 @@ export default async function EnquiriesPage({
     })()
   const enquiries = enquiryResult.rows
   const today = istDateValue()
-  const termOptions = Object.fromEntries(
-    commercialTermTypes.map((termType) => [
-      termType,
-      masterSnapshot.commercialTerms
-        .filter((term) => term.active && term.termType === termType)
-        .map((term) => term.name),
-    ])
-  ) as CommercialTermOptions
+  const termOptions = commercialTermOptions(masterSnapshot.commercialTerms)
 
   return (
     <div className="grid gap-6">
