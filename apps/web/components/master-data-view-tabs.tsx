@@ -12,7 +12,6 @@ import { MasterDataUnsavedGuard } from "./master-data-unsaved-guard"
 import {
   masterSelectionFromContext,
   masterSelectionHref,
-  masterSelectionSummary,
   withMasterSelectionContext,
 } from "@/lib/master-module"
 
@@ -77,43 +76,16 @@ export function MasterDataViewTabs(props: MasterDataViewTabsProps) {
     <>
       <MasterDataUnsavedGuard enabled={props.activeView === "dataEntry"} />
       <div className="flex flex-wrap items-center border-b">
-        <div className="flex items-center gap-2">
-          <Link
-            className="inline-flex items-center gap-2 px-3 py-3 text-sm font-medium text-muted-foreground hover:text-foreground"
-            href={masterSelectionHref(selection, props.activeView)}
-          >
-            <ArrowLeft className="size-4" />
-            Back to Master Selection
-          </Link>
-          {transferAction === "csvImport" ? props.csvImportAction : null}
-          {transferAction === "export" && props.exportAction
-            ? props.exportAction
-            : null}
-          {transferAction === "export" &&
-          !props.exportAction &&
-          props.onExport ? (
-            <Button
-              disabled={props.exportDisabled}
-              onClick={props.onExport}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              <Download className="size-4" />
-              Export
-            </Button>
-          ) : null}
-        </div>
-        {selection ? (
-          <p className="mr-auto hidden truncate text-xs text-muted-foreground xl:block">
-            {masterSelectionSummary(selection)}
-          </p>
-        ) : (
-          <span className="mr-auto" />
-        )}
+        <Link
+          className="inline-flex items-center gap-2 px-3 py-3 text-sm font-medium text-muted-foreground hover:text-foreground"
+          href={masterSelectionHref(selection, props.activeView)}
+        >
+          <ArrowLeft className="size-4" />
+          Back to Master Selection
+        </Link>
         <nav
           aria-label="Master Data views"
-          className="ml-auto flex shrink-0"
+          className="flex shrink-0"
           role="tablist"
         >
           <Link
@@ -141,6 +113,26 @@ export function MasterDataViewTabs(props: MasterDataViewTabsProps) {
             Master Table
           </Link>
         </nav>
+        <div className="ml-auto flex items-center gap-2">
+          {transferAction === "csvImport" ? props.csvImportAction : null}
+          {transferAction === "export" && props.exportAction
+            ? props.exportAction
+            : null}
+          {transferAction === "export" &&
+          !props.exportAction &&
+          props.onExport ? (
+            <Button
+              disabled={props.exportDisabled}
+              onClick={props.onExport}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              <Download className="size-4" />
+              Export
+            </Button>
+          ) : null}
+        </div>
       </div>
     </>
   )
