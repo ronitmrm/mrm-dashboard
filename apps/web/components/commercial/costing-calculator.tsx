@@ -6,7 +6,6 @@ import { Badge } from "@workspace/ui/components/badge"
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
   MetricCard,
@@ -94,10 +93,6 @@ export function CostingCalculator() {
       <Card>
         <CardHeader>
           <CardTitle>Audited Workbook Inputs</CardTitle>
-          <CardDescription>
-            This Vertical Slice Runs The Pricing Formula Engine Now Owned By The
-            Canonical Web App.
-          </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
           {fields.map((field) => (
@@ -129,9 +124,6 @@ export function CostingCalculator() {
       <Card>
         <CardHeader>
           <CardTitle>Calculation Trace</CardTitle>
-          <CardDescription>
-            Intermediate Values Remain Visible For Workbook Reconciliation.
-          </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
           <div className="grid grid-cols-2 gap-3">

@@ -156,10 +156,6 @@ export default async function CustomerParameterCostingPage({
             <h1 className="text-2xl font-semibold tracking-tight">
               Customer Parameter Costing
             </h1>
-            <p className="mt-1 max-w-4xl text-sm text-muted-foreground">
-              Calculate Customer-Specific Profit, Packaging, Shipping, FX, And
-              Approved Prices After Product Costing Is Complete.
-            </p>
           </div>
           <Button asChild variant="outline">
             <Link href="/commercial/quotes">View Quote Register</Link>
@@ -181,10 +177,6 @@ export default async function CustomerParameterCostingPage({
       <Card>
         <CardHeader>
           <CardTitle>Customer Costing Queue</CardTitle>
-          <CardDescription>
-            New Quotes, Customer-Side Revisions, ECNs, And Accepted PO Prices
-            Remain Distinct Workflows.
-          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="max-h-[60vh] overflow-auto rounded-md border">

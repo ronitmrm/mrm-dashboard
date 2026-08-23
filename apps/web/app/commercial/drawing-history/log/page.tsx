@@ -11,7 +11,6 @@ import { Button } from "@workspace/ui/components/button"
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
@@ -70,10 +69,6 @@ export default async function DrawingChangeLogPage() {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <CardTitle>Drawing Change Log</CardTitle>
-            <CardDescription>
-              Every Drawing Revision And Saved Change, Including Before And
-              After Values.
-            </CardDescription>
           </div>
           <Button asChild variant="outline">
             <Link href={drawingHistoryPath}>

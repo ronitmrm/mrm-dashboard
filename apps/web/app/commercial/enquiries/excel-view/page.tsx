@@ -6,7 +6,6 @@ import { Button } from "@workspace/ui/components/button"
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
@@ -52,10 +51,6 @@ export default async function EnquiryExcelViewPage() {
         <h2 className="text-2xl font-semibold tracking-tight">
           Enquiry Excel View
         </h2>
-        <p className="max-w-3xl text-sm text-muted-foreground">
-          Follow Every Enquiry Line From Sales Intake Through Technical Review,
-          Design, Costing, Quote Delivery, And Order Receipt.
-        </p>
         <div className="flex flex-wrap gap-2 pt-2">
           <DataDownloadButton href="/commercial/enquiries/register/export.xlsx" />
         </div>
@@ -70,10 +65,6 @@ export default async function EnquiryExcelViewPage() {
       <Card>
         <CardHeader>
           <CardTitle>Workflow Line Register</CardTitle>
-          <CardDescription>
-            Filter Any Column Like A Workbook. Your Selections Are Restored In
-            This Browser.
-          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="max-h-[72vh] overflow-auto rounded-md border">

@@ -10,7 +10,6 @@ import { Button } from "@workspace/ui/components/button"
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
   MetricCard,
@@ -170,10 +169,6 @@ export function InterviewScheduleBoard({
         <CardHeader className="gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <CardTitle>Interview Schedule</CardTitle>
-            <CardDescription>
-              Select A Date To See Exactly How Many Interviews Are Planned That
-              Day.
-            </CardDescription>
           </div>
           <Field className="w-full sm:w-64">
             <FieldLabel htmlFor="interview-schedule-date">View Date</FieldLabel>
@@ -334,9 +329,6 @@ export function InterviewResultsWorkspace({
       <Card>
         <CardHeader>
           <CardTitle>Interview Workspace</CardTitle>
-          <CardDescription>
-            Open Any Completed Round To Review That Candidate’s Full Result.
-          </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
           <Table>

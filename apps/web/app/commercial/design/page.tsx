@@ -7,7 +7,6 @@ import { Button } from "@workspace/ui/components/button"
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
   MetricCard,
@@ -52,10 +51,6 @@ export default async function DesignPage() {
     <div className="grid gap-6">
       <section className="grid gap-2">
         <h2 className="text-2xl font-semibold tracking-tight">Design Tasks</h2>
-        <p className="max-w-4xl text-sm text-muted-foreground">
-          Technically approved enquiry lines arrive here as an Excel-style work
-          queue. Start a task to review its complete Technical Review details.
-        </p>
       </section>
 
       <section className="grid gap-3 sm:grid-cols-3">
@@ -74,10 +69,6 @@ export default async function DesignPage() {
       <Card>
         <CardHeader>
           <CardTitle>Approved Line Items</CardTitle>
-          <CardDescription>
-            Start Task opens the released line details. The Design form remains
-            separate from this queue.
-          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto rounded-md border">

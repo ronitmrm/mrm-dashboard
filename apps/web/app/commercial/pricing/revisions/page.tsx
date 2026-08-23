@@ -3,7 +3,6 @@ import { Button } from "@workspace/ui/components/button"
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
@@ -56,9 +55,6 @@ export default async function PricingRevisionsPage({
           <CardTitle>
             {code ? "Price revisions — " + code : "Price Revisions"}
           </CardTitle>
-          <CardDescription>
-            Every Retained Quote Revision And Its Historical Snapshot Tree.
-          </CardDescription>
         </div>
         <div className="flex gap-2">
           <DataDownloadButton

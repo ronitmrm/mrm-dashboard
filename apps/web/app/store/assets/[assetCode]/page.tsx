@@ -499,9 +499,6 @@ export default async function StoreAssetWorkspacePage({
       <Card>
         <CardHeader>
           <CardTitle>Repair Purchase Orders</CardTitle>
-          <CardDescription>
-            Every outsourced repair PO remains linked to this Unit ID.
-          </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
           <Table>
@@ -637,10 +634,6 @@ export default async function StoreAssetWorkspacePage({
       <Card>
         <CardHeader>
           <CardTitle>Movement Record</CardTitle>
-          <CardDescription>
-            Complete immutable assignment and transfer history for this physical
-            asset.
-          </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
           <Table>
@@ -737,9 +730,6 @@ export default async function StoreAssetWorkspacePage({
       <Card>
         <CardHeader>
           <CardTitle>Supplier Price History</CardTitle>
-          <CardDescription>
-            Purchase prices for this Asset Type are kept with the Asset.
-          </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
           <Table>
@@ -887,10 +877,6 @@ function StoreItemWorkspace({
       <Card>
         <CardHeader>
           <CardTitle>Physical Units</CardTitle>
-          <CardDescription>
-            Open a Unit ID to see its movement, maintenance, calibration,
-            purchase, warranty and document history.
-          </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
           <Table>
@@ -952,10 +938,6 @@ function StoreItemWorkspace({
       <Card>
         <CardHeader>
           <CardTitle>Suppliers & Price History</CardTitle>
-          <CardDescription>
-            Every recorded supplier quote remains visible; active prices can be
-            selected for a Purchase Order.
-          </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
           <Table>

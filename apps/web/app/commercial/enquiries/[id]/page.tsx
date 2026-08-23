@@ -174,10 +174,6 @@ export default async function EnquiryDetailPage({
               {snapshot.enquiry.technicalHandoverStatus}
             </Badge>
           </div>
-          <p className="max-w-3xl text-sm text-muted-foreground">
-            Each Mutation Below Repeats Its Better Auth Capability Check And
-            Commits The Workflow Transition Atomically In Postgresql.
-          </p>
           <div className="flex flex-wrap gap-2 pt-2">
             <DataDownloadButton
               href={`/commercial/enquiries/${id}/lines/export.xlsx`}

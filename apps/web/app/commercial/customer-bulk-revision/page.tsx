@@ -156,10 +156,6 @@ export default async function CustomerBulkRevisionPage({
             <h1 className="text-2xl font-semibold tracking-tight">
               Customer Parameter Bulk Revision
             </h1>
-            <p className="mt-1 max-w-4xl text-sm text-muted-foreground">
-              Select Active Customer Prices, Stage Commercial Parameter Changes,
-              Preview Their Effect, Then Create Immutable Quote Revisions Once.
-            </p>
           </div>
           <Button asChild variant="outline">
             <Link href="/commercial/revisions">All Price Revisions</Link>
@@ -194,10 +190,6 @@ export default async function CustomerBulkRevisionPage({
         <Card>
           <CardHeader>
             <CardTitle>Customer Revision Queue</CardTitle>
-            <CardDescription>
-              Open Customer-Side Requests Only. Product Revisions Appear Here
-              Only After They Reach Customer Costing.
-            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="max-h-[34rem] overflow-auto rounded-md border">

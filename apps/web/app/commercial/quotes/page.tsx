@@ -6,7 +6,6 @@ import { Button } from "@workspace/ui/components/button"
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
@@ -55,10 +54,6 @@ export default async function QuotesPage() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <CardTitle>Quote Register</CardTitle>
-            <CardDescription>
-              In-Progress, Ready, Active, And Superseded Quote Revisions. Sent
-              Values Are Immutable And Remain Available As Historical Evidence.
-            </CardDescription>
           </div>
           <Button asChild variant="outline">
             <Link href="/commercial/customer-costing">Return To Costing</Link>

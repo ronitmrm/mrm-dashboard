@@ -58,11 +58,6 @@ export default async function OperationalEntrySelectionPage({
             ? "Operational Table Selection"
             : "Operational Entry Module"}
         </h1>
-        <p className="text-sm text-muted-foreground">
-          {view === "masterTables"
-            ? "Select the Unit, Main Entry, and Entry Table you want to open."
-            : "Select the operational form first, then enter its data on a locked page."}
-        </p>
       </div>
       {value(query.error) === "invalid-selection" ? (
         <Alert className="w-full" variant="destructive">

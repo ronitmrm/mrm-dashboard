@@ -5,7 +5,6 @@ import { Button } from "@workspace/ui/components/button"
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
@@ -67,9 +66,6 @@ export default async function StoreOrdersPage() {
       <Card>
         <CardHeader>
           <CardTitle>Purchase Orders and Receipts</CardTitle>
-          <CardDescription>
-            Ordered and received quantities remain together in one register.
-          </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
           <Table>

@@ -284,10 +284,6 @@ export default async function CustomersPage({
         <Card>
           <CardHeader>
             <CardTitle>Customers</CardTitle>
-            <CardDescription>
-              Canonical Customer Masters With Immutable Pricing Source
-              Provenance.
-            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">

@@ -162,10 +162,6 @@ export default async function SalesPage({
       <div className="grid gap-6">
         <section className="grid gap-2">
           <h2 className="text-2xl font-semibold tracking-tight">Sales</h2>
-          <p className="max-w-3xl text-sm text-muted-foreground">
-            One Sales Task Queue With Quote-Created Follow-Ups, Follow-Up
-            History, And Sent Quotes.
-          </p>
         </section>
 
         <SalesWorkspaceTabs activeView={activeView} />
@@ -174,10 +170,6 @@ export default async function SalesPage({
           <Card>
             <CardHeader>
               <CardTitle>Sales Task List</CardTitle>
-              <CardDescription>
-                Clarifications, Technical Handovers, Quote-Ready Work, And
-                Pending Follow-Ups In One Filterable Table.
-              </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="max-h-[70vh] overflow-auto rounded-md border">
@@ -631,9 +623,6 @@ export default async function SalesPage({
           <Card>
             <CardHeader>
               <CardTitle>Follow-Up History</CardTitle>
-              <CardDescription>
-                Every Saved Follow-Up, Including Pending And Completed Work.
-              </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="max-h-[70vh] overflow-auto rounded-md border">
@@ -688,9 +677,6 @@ export default async function SalesPage({
           <Card>
             <CardHeader>
               <CardTitle>Sent Quotes</CardTitle>
-              <CardDescription>
-                Saved Sent-Quote History With Follow-Up Coverage.
-              </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="max-h-[70vh] overflow-auto rounded-md border">

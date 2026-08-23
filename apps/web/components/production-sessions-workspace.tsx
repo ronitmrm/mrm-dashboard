@@ -11,7 +11,7 @@ import {
 } from "@workspace/db/production-floors"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@workspace/ui/components/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@workspace/ui/components/card"
 import { Input } from "@workspace/ui/components/input"
 import { NativeSelect, NativeSelectOption } from "@workspace/ui/components/native-select"
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@workspace/ui/components/sheet"
@@ -242,7 +242,7 @@ export function ProductionSessionsWorkspace({ initialFloor }: { initialFloor: Pr
   return (
     <div className="grid gap-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div><h1 className="text-xl font-semibold">Production Sessions</h1><p className="text-sm text-muted-foreground">Start and review sessions for {unit.shortLabel}.</p></div>
+          <h1 className="text-xl font-semibold">Production Sessions</h1>
           <div className="flex flex-wrap items-center gap-2">
             {closingRequiredSessions.length ? <Button className="h-8 px-3" variant="destructive" onClick={() => { setStatusFilter("closing_required"); setView("register") }}><TriangleAlert />Closing Required · {closingRequiredSessions.length}</Button> : null}
             <Badge variant="secondary" className="h-8 px-3">{unit.shortLabel}</Badge>
@@ -253,7 +253,7 @@ export function ProductionSessionsWorkspace({ initialFloor }: { initialFloor: Pr
         <Card>
           <CardHeader className="gap-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div><CardTitle>{view === "start" ? "Start a session" : view === "register" ? "Session Register" : "Event Log"}</CardTitle><CardDescription>{view === "start" ? "Select a running machine and verify its current planning details." : "Search the session history for this Production Unit."}</CardDescription></div>
+              <CardTitle>{view === "start" ? "Start a session" : view === "register" ? "Session Register" : "Event Log"}</CardTitle>
               <div className="flex flex-wrap gap-2">
                 {([['start','Start Session'],['register','Session Register'],['events','Event Log']] as const).map(([id, label]) => <Button key={id} className="h-11" variant={view === id ? "default" : "outline"} onClick={() => setView(id)}>{id === "start" ? <Play /> : id === "register" ? <History /> : <Clock3 />}{label}</Button>)}
               </div>

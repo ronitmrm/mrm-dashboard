@@ -75,9 +75,6 @@ export default async function AssembliesPage({
       <Card className="min-w-0">
         <CardHeader>
           <CardTitle>Assembly / Bom Register</CardTitle>
-          <CardDescription>
-            Ordered Parent/Component Rows Used By Package And Assembly Costing.
-          </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
           <Table>
