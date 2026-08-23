@@ -271,7 +271,6 @@ describe("unified navigation", () => {
       label: "Candidates",
     })
     expect(hrNavigation.map(({ href, label }) => ({ href, label }))).toEqual([
-      { href: "/hr?panel=employeeMasterPanel", label: "Employee Master" },
       { href: "/hr?panel=jobsPanel", label: "Job Posts" },
       {
         href: "/hr?panel=candidateSearchPanel",
@@ -290,6 +289,12 @@ describe("unified navigation", () => {
         label: "Interview Workspace",
       },
     ])
+    expect(
+      hrMasterNavigation.map(({ href, label }) => ({ href, label }))
+    ).toContainEqual({
+      href: "/hr?panel=employeeMasterPanel",
+      label: "Employee Assignment",
+    })
   })
 
   it("creates shareable links for operations tabs", () => {

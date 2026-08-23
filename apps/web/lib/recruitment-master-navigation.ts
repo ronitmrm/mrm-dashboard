@@ -1,9 +1,13 @@
-export type RecruitmentMasterKind = "department" | "designation"
+export type RecruitmentMasterKind =
+  | "department"
+  | "designation"
+  | "employee-assignment"
 
 export function normalizeRecruitmentMasterKind(
   value: unknown
 ): RecruitmentMasterKind {
-  return value === "designation" ? "designation" : "department"
+  if (value === "designation" || value === "employee-assignment") return value
+  return "department"
 }
 
 export function recruitmentMasterHref(
@@ -11,7 +15,8 @@ export function recruitmentMasterHref(
   kind: RecruitmentMasterKind
 ) {
   const params = new URLSearchParams({
-    panel: "mastersPanel",
+    panel:
+      kind === "employee-assignment" ? "employeeMasterPanel" : "mastersPanel",
     masterView: view,
     kind,
   })

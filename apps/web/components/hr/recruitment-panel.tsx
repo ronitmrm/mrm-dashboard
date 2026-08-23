@@ -206,6 +206,8 @@ function MastersPanel({
   RecruitmentPanelProps,
   "canWrite" | "masterKind" | "masterView" | "masters"
 >) {
+  const activeMasterKind =
+    masterKind === "designation" ? "designation" : "department"
   const activeView = masterView ?? "dataEntry"
   const showDataEntry = activeView === "dataEntry"
   const showMasterTables = activeView === "masterTables"
@@ -244,10 +246,10 @@ function MastersPanel({
           description="The Code Is Generated Automatically From The Department Or Designation Name."
           panelId="mastersPanel"
           masterView={activeView}
-          title={`Add A ${masterKind === "department" ? "Department" : "Designation"}`}
+          title={`Add A ${activeMasterKind === "department" ? "Department" : "Designation"}`}
         >
           <CompanyWideMasterScope />
-          <input name="kind" type="hidden" value={masterKind} />
+          <input name="kind" type="hidden" value={activeMasterKind} />
           <TextField label="Name" name="name" required />
           <Button className="md:col-span-2 xl:col-span-3" type="submit">
             Save Master
@@ -257,7 +259,7 @@ function MastersPanel({
       {showMasterTables ? (
         <MasterTables
           canWrite={canWrite}
-          kind={masterKind}
+          kind={activeMasterKind}
           masterView={activeView}
           masters={masters}
         />
@@ -545,6 +547,7 @@ function EmployeePanel({
   canWrite,
   combinedRoles,
   jobs,
+  masterView,
   posts,
   templates,
 }: Pick<
@@ -553,12 +556,29 @@ function EmployeePanel({
   | "canWrite"
   | "combinedRoles"
   | "jobs"
+  | "masterView"
   | "posts"
   | "templates"
 >) {
+  const activeView = masterView ?? "dataEntry"
+  const showDataEntry = activeView === "dataEntry"
+  const showMasterTables = activeView === "masterTables"
+
   return (
     <>
-      {canManageEmployees ? (
+      <MasterDataViewTabs
+        activeView={activeView}
+        allMastersHref="/?tab=dataEntryTab"
+        dataEntryHref={recruitmentMasterHref(
+          "dataEntry",
+          "employee-assignment"
+        )}
+        masterTablesHref={recruitmentMasterHref(
+          "masterTables",
+          "employee-assignment"
+        )}
+      />
+      {showDataEntry && canManageEmployees ? (
         <div className="grid gap-6">
           <Card>
             <CardHeader>
@@ -582,14 +602,17 @@ function EmployeePanel({
           </Card>
         </div>
       ) : null}
-      <ApprovedPostsTable
-        canWrite={canWrite}
-        combinedRoles={combinedRoles}
-        employeeManagement={canManageEmployees}
-        jobs={jobs}
-        posts={posts}
-        templates={templates.filter((template) => !template.combinedRoleId)}
-      />
+      {showMasterTables ? (
+        <ApprovedPostsTable
+          canWrite={canWrite}
+          combinedRoles={combinedRoles}
+          employeeManagement={canManageEmployees}
+          jobs={jobs}
+          masterView={activeView}
+          posts={posts}
+          templates={templates.filter((template) => !template.combinedRoleId)}
+        />
+      ) : null}
     </>
   )
 }
@@ -894,6 +917,7 @@ export function RecruitmentPanel(props: RecruitmentPanelProps) {
           canWrite={props.canWrite}
           combinedRoles={props.combinedRoles}
           jobs={props.jobs}
+          masterView={props.masterView}
           posts={props.posts}
           templates={props.templates}
         />

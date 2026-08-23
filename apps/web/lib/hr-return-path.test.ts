@@ -25,6 +25,17 @@ describe("HR action return path", () => {
     expect(hrReturnPath(formData)).toBe(`/hr/jobs/${jobId}`)
   })
 
+  it("keeps employee updates inside the Employee Assignment master table", () => {
+    const formData = new FormData()
+    formData.set("panel", "employeeMasterPanel")
+    formData.set("master_view", "masterTables")
+    formData.set("master_kind", "employee-assignment")
+
+    expect(hrReturnPath(formData)).toBe(
+      "/hr?panel=employeeMasterPanel&masterView=masterTables&kind=employee-assignment"
+    )
+  })
+
   it("keeps candidate detail returns and safe panel fallbacks", () => {
     const candidateForm = new FormData()
     candidateForm.set("return_candidate_id", candidateId)

@@ -47,6 +47,7 @@ describe("master data navigation", () => {
       "store_masters",
       "hr_masters",
       "hr_job_templates",
+      "hr_employee_assignments",
       "commercial_pricing_masters",
       "commercial_customers",
       "commercial_website_products",
@@ -86,7 +87,11 @@ describe("master data navigation", () => {
           "/commercial/customers",
           "/commercial/website-products",
         ],
-        hrHrefs: ["/hr?panel=mastersPanel", "/hr?panel=postMasterPanel"],
+        hrHrefs: [
+          "/hr?panel=mastersPanel",
+          "/hr?panel=postMasterPanel",
+          "/hr?panel=employeeMasterPanel",
+        ],
         operations: true,
         store: true,
       },
@@ -103,6 +108,11 @@ describe("master data navigation", () => {
         href: "/hr?panel=postMasterPanel&masterView=dataEntry",
         id: "hr_job_templates",
         title: "HR Job Templates",
+      },
+      {
+        href: "/hr?panel=employeeMasterPanel&masterView=dataEntry&kind=employee-assignment",
+        id: "hr_employee_assignments",
+        title: "Employee Assignment",
       },
       {
         href: "/commercial/masters?masterView=dataEntry",
@@ -160,6 +170,27 @@ describe("master data navigation", () => {
         href: "/hr?panel=postMasterPanel&masterView=masterTables",
         id: "hr_job_templates",
         title: "HR Job Templates",
+      },
+    ])
+  })
+
+  it("offers Employee Assignment only with Employee Master read access", () => {
+    expect(
+      externalMasterDataOptions(
+        {
+          administration: false,
+          commercialHrefs: [],
+          hrHrefs: ["/hr?panel=employeeMasterPanel"],
+          operations: false,
+          store: false,
+        },
+        "masterTables"
+      )
+    ).toEqual([
+      {
+        href: "/hr?panel=employeeMasterPanel&masterView=masterTables&kind=employee-assignment",
+        id: "hr_employee_assignments",
+        title: "Employee Assignment",
       },
     ])
   })

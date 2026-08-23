@@ -21,7 +21,11 @@ export function hrReturnPath(formData: FormData) {
   }
   const masterKind =
     formValue(formData, "master_kind") || formValue(formData, "kind")
-  if (masterKind === "department" || masterKind === "designation") {
+  if (
+    masterKind === "department" ||
+    masterKind === "designation" ||
+    masterKind === "employee-assignment"
+  ) {
     params.set("kind", masterKind)
   }
   const selectedJobId = formValue(formData, "job_id")

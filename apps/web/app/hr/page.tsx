@@ -205,6 +205,7 @@ export default async function HrRecruitmentPage({
       activeItem.panelId !== "approvedPostPanel" &&
       activeItem.panelId !== "combinedRolesPanel" &&
       activeItem.panelId !== "candidatesPanel" &&
+      activeItem.panelId !== "employeeMasterPanel" &&
       activeItem.panelId !== "interviewsPanel" &&
       activeItem.panelId !== "interviewWorkspacePanel" ? (
         <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">

@@ -22,6 +22,7 @@ export const companyWideMasterEntryTypes = [
   "store_masters",
   "hr_masters",
   "hr_job_templates",
+  "hr_employee_assignments",
   "commercial_pricing_masters",
   "commercial_customers",
   "commercial_website_products",
@@ -49,6 +50,7 @@ function canReadRecruitmentMasters(access: UnifiedNavigationAccess) {
       "/hr?panel=approvedPostPanel",
       "/hr?panel=combinedRolesPanel",
       "/hr?panel=candidatesPanel",
+      "/hr?panel=employeeMasterPanel",
     ].includes(href)
   )
 }
@@ -61,7 +63,9 @@ export function masterDataFallbackLinks(
   const baseDestination = canReadRecruitmentMasters(access)
     ? access.hrHrefs.includes("/hr?panel=mastersPanel")
       ? "/hr?panel=mastersPanel"
-      : "/hr?panel=postMasterPanel"
+      : access.hrHrefs.includes("/hr?panel=postMasterPanel")
+        ? "/hr?panel=postMasterPanel"
+        : "/hr?panel=employeeMasterPanel&kind=employee-assignment"
     : access.commercialHrefs.includes("/commercial/masters")
       ? "/commercial/masters"
       : access.commercialHrefs.includes("/commercial/customers")
@@ -142,6 +146,13 @@ export function externalMasterDataOptions(
       href: `/hr?panel=postMasterPanel&masterView=${view}`,
       id: "hr_job_templates",
       title: "HR Job Templates",
+    })
+  }
+  if (access.hrHrefs.includes("/hr?panel=employeeMasterPanel")) {
+    options.push({
+      href: `/hr?panel=employeeMasterPanel&masterView=${view}&kind=employee-assignment`,
+      id: "hr_employee_assignments",
+      title: "Employee Assignment",
     })
   }
 
