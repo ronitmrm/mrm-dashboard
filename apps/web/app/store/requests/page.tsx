@@ -5,7 +5,6 @@ import { Button } from "@workspace/ui/components/button"
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
@@ -65,10 +64,6 @@ export default async function StoreRequestsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Request Allocation Queue</CardTitle>
-          <CardDescription>
-            Use the filter in each column heading, then allocate each line
-            independently.
-          </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 overflow-x-auto">
           <Table>

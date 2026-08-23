@@ -6,7 +6,6 @@ import { Button } from "@workspace/ui/components/button"
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
   MetricCard,
@@ -73,9 +72,6 @@ export default async function TechnicalReviewPage() {
       <Card>
         <CardHeader>
           <CardTitle>Technical Review Queue</CardTitle>
-          <CardDescription>
-            Use The Filter On Each Column, Then Open One Review At A Time.
-          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="max-h-[70vh] overflow-auto rounded-md border">

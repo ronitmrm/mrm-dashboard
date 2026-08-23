@@ -176,10 +176,6 @@ export function StoreMasterWorkspace({
         <Card>
           <CardHeader>
             <CardTitle>Select Store Master</CardTitle>
-            <CardDescription>
-              Select one Store master. Only its corresponding workspace is
-              shown.
-            </CardDescription>
           </CardHeader>
           <CardContent>
             <Field className="max-w-xl">

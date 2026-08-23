@@ -141,10 +141,6 @@ export default async function CandidateWorkspacePage({
         <Card>
           <CardHeader>
             <CardTitle>Edit Candidate</CardTitle>
-            <CardDescription>
-              Update Candidate Details, Department, Designation, Or Replace The
-              Resume Pdf.
-            </CardDescription>
           </CardHeader>
           <CardContent>
             <form
@@ -298,9 +294,6 @@ export default async function CandidateWorkspacePage({
       <Card>
         <CardHeader>
           <CardTitle>Job Application History</CardTitle>
-          <CardDescription>
-            Every Job This Candidate Has Been Assigned To.
-          </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
           <Table>

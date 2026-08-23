@@ -8,7 +8,6 @@ import { Button } from "@workspace/ui/components/button"
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
@@ -117,10 +116,6 @@ export function MasterSelection({
                 ? "Master Table Selection"
                 : "Master Selection"}
             </CardTitle>
-            <CardDescription>
-              Select the Unit, Main Master, and Sub Master in order, then open
-              the selected {view === "masterTables" ? "table" : "form"}.
-            </CardDescription>
           </div>
         </div>
       </CardHeader>
