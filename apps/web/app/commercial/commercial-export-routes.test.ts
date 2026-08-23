@@ -12,6 +12,7 @@ const advertisedRoutes = [
   "enquiries/register/template.xlsx/route.ts",
   "masters/export.xlsx/route.ts",
   "masters/template.xlsx/route.ts",
+  "masters/template.csv/route.ts",
   "orders/[id]/export.xlsx/route.ts",
   "orders/[id]/pi.xlsx/route.ts",
   "orders/master/export.xlsx/route.ts",

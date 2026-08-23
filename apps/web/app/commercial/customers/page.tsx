@@ -33,7 +33,10 @@ import { readAuthEnvironment } from "@/lib/auth/auth"
 import { commercialTaskCapabilities } from "@/lib/auth/task-capabilities"
 import { CompanyWideMasterScope } from "@/components/company-wide-master-scope"
 import { MasterDataViewTabs } from "@/components/master-data-view-tabs"
-import { MasterDataCsvImportButton } from "@/components/master-data-csv-import-button"
+import {
+  MasterDataCsvDownloadButton,
+  MasterDataCsvImportButton,
+} from "@/components/master-data-csv-import-button"
 import {
   listGrantedCapabilities,
   requireCapability,
@@ -169,6 +172,24 @@ export default async function CustomersPage({
       <MasterDataViewTabs
         activeView={activeView}
         allMastersHref={externalMasterAllMastersHref(activeView)}
+        csvDownloadAction={
+          <MasterDataCsvDownloadButton
+            columns={[
+              "company_name",
+              "country",
+              "default_buyer_name",
+              "default_currency",
+              "default_incoterms",
+              "default_packaging_terms",
+              "default_payment_terms",
+              "default_shipment_mode",
+              "email",
+              "phone",
+              "status",
+            ]}
+            fileName="customer-master-template.csv"
+          />
+        }
         csvImportAction={
           canCreateCustomers ? (
             <MasterDataCsvImportButton action={importCustomersCsvAction} />

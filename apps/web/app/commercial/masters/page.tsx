@@ -27,7 +27,10 @@ import { importMastersWorkbookAction } from "./actions"
 import { MasterMaintenanceForm } from "./master-maintenance-form"
 import { CompanyWideMasterScope } from "@/components/company-wide-master-scope"
 import { MasterDataViewTabs } from "@/components/master-data-view-tabs"
-import { MasterDataCsvImportButton } from "@/components/master-data-csv-import-button"
+import {
+  MasterDataCsvDownloadButton,
+  MasterDataCsvImportButton,
+} from "@/components/master-data-csv-import-button"
 import {
   commercialMasterSelection,
   commercialMasterTemplateHref,
@@ -107,6 +110,11 @@ export default async function MastersPage({
       <MasterDataViewTabs
         activeView={activeView}
         dataEntryHref={commercialMasterViewHref("dataEntry", selectionKind)}
+        csvDownloadAction={
+          <MasterDataCsvDownloadButton
+            href={commercialMasterTemplateHref(selectionKind)}
+          />
+        }
         csvImportAction={
           canWrite ? (
             <MasterDataCsvImportButton
@@ -152,15 +160,6 @@ export default async function MastersPage({
             </CardHeader>
             <CardContent className="flex flex-col gap-5">
               <CompanyWideMasterScope />
-              <div className="flex flex-wrap gap-3">
-                <Button asChild variant="outline">
-                  <Link
-                    href={commercialMasterTemplateHref(selection.entryKind)}
-                  >
-                    Download Selected Template
-                  </Link>
-                </Button>
-              </div>
             </CardContent>
           </Card>
 

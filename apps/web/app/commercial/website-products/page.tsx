@@ -34,7 +34,10 @@ import { readAuthEnvironment } from "@/lib/auth/auth"
 import { BoundedResultNotice } from "@/components/bounded-result-notice"
 import { CompanyWideMasterScope } from "@/components/company-wide-master-scope"
 import { MasterDataViewTabs } from "@/components/master-data-view-tabs"
-import { MasterDataCsvImportButton } from "@/components/master-data-csv-import-button"
+import {
+  MasterDataCsvDownloadButton,
+  MasterDataCsvImportButton,
+} from "@/components/master-data-csv-import-button"
 import { requireCapability } from "@/lib/auth/require-capability"
 import {
   externalMasterAllMastersHref,
@@ -277,6 +280,39 @@ export default async function WebsiteProductsPage({
       <MasterDataViewTabs
         activeView={activeView}
         allMastersHref={externalMasterAllMastersHref(activeView)}
+        csvDownloadAction={
+          <MasterDataCsvDownloadButton
+            columns={[
+              "uid",
+              "description",
+              "grade",
+              "material",
+              "size",
+              "category",
+              "sub_category",
+              "applications",
+              "certifications",
+              "connections",
+              "dimensions",
+              "drawing_category",
+              "finish_plating",
+              "pressure",
+              "sealant",
+              "temperature",
+              "thread_size_1",
+              "thread_size_2",
+              "thread_size_3",
+              "thread_size_4",
+              "website_category",
+              "website_sub_category",
+              "website_active",
+              "created_at",
+              "remark",
+              "additional_notes",
+            ]}
+            fileName="website-product-master-template.csv"
+          />
+        }
         csvImportAction={
           <MasterDataCsvImportButton action={importWebsiteProductsCsvAction} />
         }

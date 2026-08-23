@@ -113,8 +113,7 @@ export type CommercialMasterEntryKind =
 export type CommercialMasterTableKind =
   (typeof commercialMasterKinds)[number]["tableKind"]
 
-export type CommercialMasterSelection =
-  (typeof commercialMasterKinds)[number]
+export type CommercialMasterSelection = (typeof commercialMasterKinds)[number]
 
 export function commercialMasterWorkspaceKind(
   selection: CommercialMasterSelection
@@ -171,5 +170,6 @@ export function commercialMasterTemplateHref(kind?: string | null) {
   const params = new URLSearchParams({
     master: templateKeys[selection.entryKind],
   })
-  return `/commercial/masters/template.xlsx?${params.toString()}`
+  if ("termType" in selection) params.set("termType", selection.termType)
+  return `/commercial/masters/template.csv?${params.toString()}`
 }

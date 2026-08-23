@@ -21,6 +21,7 @@ const linkClass =
 type MasterDataViewTabsProps = {
   activeView: "dataEntry" | "masterTables"
   allMastersHref?: string
+  csvDownloadAction?: ReactNode
   csvImportAction?: ReactNode
   dataEntryHref: string
   exportAction?: ReactNode
@@ -68,7 +69,7 @@ export function MasterDataViewTabs(props: MasterDataViewTabsProps) {
     ? withMasterSelectionContext(props.masterTablesHref, searchParams)
     : "/masters?view=masterTables"
   const transferAction = masterDataTransferAction(props.activeView, {
-    csvImport: Boolean(props.csvImportAction),
+    csvImport: Boolean(props.csvDownloadAction || props.csvImportAction),
     export: Boolean(props.exportAction || props.onExport),
   })
 
@@ -114,6 +115,7 @@ export function MasterDataViewTabs(props: MasterDataViewTabsProps) {
           </Link>
         </nav>
         <div className="ml-auto flex items-center gap-2">
+          {transferAction === "csvImport" ? props.csvDownloadAction : null}
           {transferAction === "csvImport" ? props.csvImportAction : null}
           {transferAction === "export" && props.exportAction
             ? props.exportAction

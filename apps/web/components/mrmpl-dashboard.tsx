@@ -99,6 +99,7 @@ import {
 import { MasterDataViewTabs } from "@/components/master-data-view-tabs"
 import {
   MasterDataCsvClientImportButton,
+  MasterDataCsvDownloadButton,
   MasterDataCsvImportButton,
 } from "@/components/master-data-csv-import-button"
 import { importStoreMasterCsvAction } from "@/app/store/master-transfer-action"
@@ -342,6 +343,50 @@ function dataEntryDestination(entryType: string): DashboardTabId {
   return "dataEntryTab"
 }
 
+const storeMasterCsvColumns = {
+  ASSET_NAME: ["asset_name", "asset_subcategory_id"],
+  CATEGORY: ["asset_category_name"],
+  ITEM_TYPE: [
+    "applicable_item_code",
+    "asset_category_id",
+    "asset_name_id",
+    "asset_subcategory_id",
+    "asset_type",
+    "drawing_number",
+    "identification_name",
+    "minimum_stock",
+    "unit",
+  ],
+  LOCATION: ["location_code", "location_name", "location_type"],
+  SUBCATEGORY: ["asset_category_id", "asset_subcategory_name"],
+  SUPPLIER: [
+    "supplier_name",
+    "supplier_address",
+    "supplier_email",
+    "gst_number",
+    "contact_details",
+  ],
+  SUPPLIER_PRICE: [
+    "supplier_id",
+    "item_type_id",
+    "unit_price",
+    "valid_from",
+    "quote_reference",
+  ],
+  VENDOR: ["vendor_code", "vendor_name", "contact_details"],
+} as const
+
+function storeMasterCsvTemplate(selectedMaster: string | null) {
+  const key =
+    selectedMaster && Object.hasOwn(storeMasterCsvColumns, selectedMaster)
+      ? (selectedMaster as keyof typeof storeMasterCsvColumns)
+      : "ITEM_TYPE"
+  return {
+    columns: storeMasterCsvColumns[key],
+    fileName: `${key.toLowerCase()}-master-template.csv`,
+  }
+}
+
 function MasterDataTabs({
   activeView,
   csvImportAction,
@@ -362,6 +407,17 @@ function MasterDataTabs({
   return (
     <MasterDataViewTabs
       activeView={activeView}
+      csvDownloadAction={
+        entryType === "store_masters" ? (
+          <MasterDataCsvDownloadButton
+            {...storeMasterCsvTemplate(selectedStoreMaster)}
+          />
+        ) : (
+          <MasterDataCsvDownloadButton
+            href={`/api/data-template?entryType=${encodeURIComponent(entryType)}`}
+          />
+        )
+      }
       csvImportAction={csvImportAction}
       dataEntryHref={masterDataDashboardHref(
         "dataEntry",
@@ -11014,17 +11070,6 @@ function DataEntryPanel({
                 </Field>
               ) : null}
             </div>
-            {bulkEntryType !== "store_masters" ? (
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => downloadApi("data-template", bulkEntryType)}
-                >
-                  Download Template
-                </Button>
-              </div>
-            ) : null}
           </CardContent>
         </fieldset>
       </Card>
@@ -17026,10 +17071,6 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
       {children}
     </Label>
   )
-}
-
-function downloadApi(kind: "data-template", entryType: string) {
-  window.location.href = `/api/${kind}?entryType=${encodeURIComponent(entryType)}&t=${Date.now()}`
 }
 
 async function postDashboardApi(
