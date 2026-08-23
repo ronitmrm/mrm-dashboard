@@ -53,6 +53,16 @@ describe("HR master workspace", () => {
     expect(panelSource).toContain(
       'masterTablesHref="/hr?panel=candidatesPanel&masterView=masterTables"'
     )
+    const candidatePanelSource = panelSource.slice(
+      panelSource.indexOf("function LogCandidatePanel"),
+      panelSource.indexOf("function CandidateSearchPanel")
+    )
+    expect(candidatePanelSource).toContain("csvDownloadAction={")
+    expect(candidatePanelSource).toContain(
+      'fileName="candidate-master-template.csv"'
+    )
+    expect(candidatePanelSource).toContain("csvImportAction={")
+    expect(candidatePanelSource).toContain("action={importCandidatesCsvAction}")
     expect(panelSource).toContain('allMastersHref="/?tab=dataEntryTab"')
     expect(panelSource).toContain('"employee-assignment"')
     expect(panelSource).toContain("showDataEntry && canManageEmployees")
