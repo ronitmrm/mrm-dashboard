@@ -8,6 +8,7 @@ import {
   requireAuthenticatedSession,
 } from "@/lib/auth/require-capability"
 import {
+  autoSelectedSubMaster,
   availableMainMasters,
   masterModuleAccess,
   parseMasterUnit,
@@ -48,11 +49,11 @@ export default async function MasterSelectionPage({
       ? requestedMain
       : ""
   const requestedSub = value(query.sub)
-  const sub =
-    main &&
-    subMastersFor(main, access)?.options.some(({ id }) => id === requestedSub)
+  const sub = main
+    ? subMastersFor(main, access)?.options.some(({ id }) => id === requestedSub)
       ? requestedSub
-      : ""
+      : autoSelectedSubMaster(main, access)
+    : ""
 
   return (
     <FullPageWorkspace>

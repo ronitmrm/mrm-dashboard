@@ -23,6 +23,7 @@ import {
 } from "@workspace/ui/components/native-select"
 
 import {
+  autoSelectedSubMaster,
   availableMainMasters,
   masterOpenHref,
   masterUnitOptions,
@@ -152,13 +153,14 @@ export function MasterSelection({
             <NativeSelect
               disabled={!selection.unit}
               id="main-master"
-              onChange={(event) =>
+              onChange={(event) => {
+                const main = event.target.value
                 update({
                   ...selection,
-                  main: event.target.value,
-                  sub: "",
+                  main,
+                  sub: autoSelectedSubMaster(main, access),
                 })
-              }
+              }}
               value={selection.main}
             >
               <NativeSelectOption value="">
