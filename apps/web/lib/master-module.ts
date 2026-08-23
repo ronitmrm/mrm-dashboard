@@ -20,6 +20,7 @@ export type MasterModuleAccess = {
   commercialCustomers: boolean
   commercialPricing: boolean
   commercialWebsiteProducts: boolean
+  hrApprovedPosts: boolean
   hrJobTemplates: boolean
   hrMasters: boolean
   operations: boolean
@@ -28,10 +29,14 @@ export type MasterModuleAccess = {
 
 export type MasterOption = { id: string; label: string }
 
-type SubMasterDefinition = MasterOption & { access?: keyof MasterModuleAccess }
+type MasterAccessRule =
+  | keyof MasterModuleAccess
+  | readonly (keyof MasterModuleAccess)[]
+
+type SubMasterDefinition = MasterOption & { access?: MasterAccessRule }
 
 type MasterDefinition = MasterOption & {
-  access: keyof MasterModuleAccess
+  access: MasterAccessRule
   scope: "unit" | "universal"
   subMasters?: readonly SubMasterDefinition[]
 }
@@ -154,12 +159,17 @@ const universalMasterDefinitions = [
   },
   {
     id: "hr_masters",
-    label: "HR Departments & Designations",
-    access: "hrMasters",
+    label: "HR Masters",
+    access: ["hrMasters", "hrApprovedPosts"],
     scope: "universal",
     subMasters: [
-      { id: "department", label: "Department" },
-      { id: "designation", label: "Designation" },
+      { access: "hrMasters", id: "department", label: "Department" },
+      { access: "hrMasters", id: "designation", label: "Designation" },
+      {
+        access: "hrApprovedPosts",
+        id: "approved_posts",
+        label: "Approved Posts",
+      },
     ],
   },
   {
@@ -215,6 +225,9 @@ export function masterModuleAccess(
     commercialWebsiteProducts: navigationAccess.commercialHrefs.includes(
       "/commercial/website-products"
     ),
+    hrApprovedPosts: navigationAccess.hrHrefs.includes(
+      "/hr?panel=approvedPostPanel"
+    ),
     hrJobTemplates: navigationAccess.hrHrefs.includes(
       "/hr?panel=postMasterPanel"
     ),
@@ -227,6 +240,11 @@ export function masterModuleAccess(
   }
 }
 
+function hasMasterAccess(rule: MasterAccessRule, access: MasterModuleAccess) {
+  return typeof rule === "string"
+    ? access[rule]
+    : rule.some((key) => access[key])
+}
 export const masterUnitOptions: readonly MasterOption[] = [
   { id: universalMasterUnit, label: "Universal" },
   ...productionFloors.map(({ code, shortLabel }) => ({
@@ -248,7 +266,8 @@ export function availableMainMasters(
   const scope = unit === universalMasterUnit ? "universal" : "unit"
   return masterDefinitions
     .filter(
-      (definition) => definition.scope === scope && access[definition.access]
+      (definition) =>
+        definition.scope === scope && hasMasterAccess(definition.access, access)
     )
     .map(({ id, label }) => ({ id, label }))
 }
@@ -258,12 +277,15 @@ export function subMastersFor(
   access: MasterModuleAccess
 ): { fallback: boolean; options: MasterOption[] } | null {
   const definition = masterDefinitions.find(
-    (candidate) => candidate.id === main && access[candidate.access]
+    (candidate) =>
+      candidate.id === main && hasMasterAccess(candidate.access, access)
   )
   if (!definition) return null
   const options =
     definition.subMasters
-      ?.filter((option) => !option.access || access[option.access])
+      ?.filter(
+        (option) => !option.access || hasMasterAccess(option.access, access)
+      )
       .map(({ id, label }) => ({ id, label })) ?? []
   return options.length
     ? { fallback: false, options }
@@ -328,9 +350,12 @@ export function masterFormHref(
   }
 
   if (selection.main === "hr_masters") {
-    params.set("panel", "mastersPanel")
+    params.set(
+      "panel",
+      selection.sub === "approved_posts" ? "approvedPostPanel" : "mastersPanel"
+    )
     params.set("masterView", view)
-    params.set("kind", selection.sub)
+    if (selection.sub !== "approved_posts") params.set("kind", selection.sub)
   } else if (selection.main === "hr_job_templates") {
     params.set("panel", "postMasterPanel")
     params.set("masterView", view)
@@ -446,7 +471,9 @@ export function masterSelectionMatchesDestination(
   }
   if (pathname === "/hr") {
     return selection.main === "hr_masters"
-      ? values.panel === "mastersPanel" && values.kind === selection.sub
+      ? selection.sub === "approved_posts"
+        ? values.panel === "approvedPostPanel"
+        : values.panel === "mastersPanel" && values.kind === selection.sub
       : selection.main === "hr_job_templates" &&
           values.panel === "postMasterPanel"
   }

@@ -19,7 +19,20 @@ describe("HR master workspace", () => {
 
     expect(pageSource).toContain('activeItem.panelId !== "mastersPanel"')
     expect(pageSource).toContain('activeItem.panelId !== "postMasterPanel"')
+    expect(pageSource).toContain('activeItem.panelId !== "approvedPostPanel"')
     expect(panelSource).not.toContain("<RecruitmentMasterKindSelect")
+
+    expect(panelSource).toContain("function ApprovedPostPanel")
+    expect(panelSource).toContain('showDataEntry = activeView === "dataEntry"')
+    expect(panelSource).toContain(
+      'showMasterTables = activeView === "masterTables"'
+    )
+    expect(panelSource).toContain(
+      'dataEntryHref="/hr?panel=approvedPostPanel&masterView=dataEntry"'
+    )
+    expect(panelSource).toContain(
+      'masterTablesHref="/hr?panel=approvedPostPanel&masterView=masterTables"'
+    )
 
     expect(panelSource).toContain('allMastersHref="/?tab=dataEntryTab"')
     expect(tablesSource).toMatch(

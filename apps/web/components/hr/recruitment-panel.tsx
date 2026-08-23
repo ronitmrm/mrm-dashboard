@@ -398,11 +398,18 @@ function ApprovedPostPanel({
   combinedRoles,
   jobs,
   masters,
+  masterView,
   posts,
   templates,
 }: Pick<
   RecruitmentPanelProps,
-  "canWrite" | "combinedRoles" | "jobs" | "masters" | "posts" | "templates"
+  | "canWrite"
+  | "combinedRoles"
+  | "jobs"
+  | "masters"
+  | "masterView"
+  | "posts"
+  | "templates"
 >) {
   const activeCombinedPostCodes = new Set(
     combinedRoles
@@ -413,13 +420,22 @@ function ApprovedPostPanel({
     (post) =>
       post.status !== "Inactive" && !activeCombinedPostCodes.has(post.postCode)
   )
+  const activeView = masterView ?? "dataEntry"
+  const showDataEntry = activeView === "dataEntry"
+  const showMasterTables = activeView === "masterTables"
 
   return (
     <>
-      {canWrite ? (
+      <MasterDataViewTabs
+        activeView={activeView}
+        dataEntryHref="/hr?panel=approvedPostPanel&masterView=dataEntry"
+        masterTablesHref="/hr?panel=approvedPostPanel&masterView=masterTables"
+      />
+      {canWrite && showDataEntry ? (
         <PanelForm
           action={savePostAction}
           description="Register A Sanctioned Post And Connect It To Its Requirement Template."
+          masterView={activeView}
           panelId="approvedPostPanel"
           title="Approved Post Form"
         >
@@ -438,11 +454,12 @@ function ApprovedPostPanel({
           </Button>
         </PanelForm>
       ) : null}
-      {canWrite ? (
+      {canWrite && showDataEntry ? (
         <CombinedRoleForm
           existingVacancyCodes={combinedRoles.flatMap((role) =>
             role.vacancyCode ? [role.vacancyCode] : []
           )}
+          masterView={activeView}
           posts={availableCombinedPosts.map(
             ({ department, designation, id, postCode, status }) => ({
               department,
@@ -454,18 +471,24 @@ function ApprovedPostPanel({
           )}
         />
       ) : null}
-      <EditableCombinedRolesTable
-        canWrite={canWrite}
-        combinedRoles={combinedRoles}
-        posts={posts}
-        templates={templates}
-      />
-      <ApprovedPostsTable
-        canWrite={canWrite}
-        jobs={jobs}
-        posts={posts}
-        templates={templates.filter((template) => !template.combinedRoleId)}
-      />
+      {showMasterTables ? (
+        <>
+          <EditableCombinedRolesTable
+            canWrite={canWrite}
+            combinedRoles={combinedRoles}
+            masterView={activeView}
+            posts={posts}
+            templates={templates}
+          />
+          <ApprovedPostsTable
+            canWrite={canWrite}
+            jobs={jobs}
+            masterView={activeView}
+            posts={posts}
+            templates={templates.filter((template) => !template.combinedRoleId)}
+          />
+        </>
+      ) : null}
     </>
   )
 }
@@ -783,6 +806,7 @@ export function RecruitmentPanel(props: RecruitmentPanelProps) {
           combinedRoles={props.combinedRoles}
           jobs={props.jobs}
           masters={props.masters}
+          masterView={props.masterView}
           posts={props.posts}
           templates={props.templates}
         />

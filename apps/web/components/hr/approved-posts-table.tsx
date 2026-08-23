@@ -268,6 +268,7 @@ export function ApprovedPostsTable({
   combinedRoles = [],
   employeeManagement = false,
   jobs = [],
+  masterView,
   posts,
   templates = [],
 }: {
@@ -275,6 +276,7 @@ export function ApprovedPostsTable({
   combinedRoles?: RecruitmentCombinedRoleRow[]
   employeeManagement?: boolean
   jobs?: RecruitmentJobRow[]
+  masterView?: "dataEntry" | "masterTables"
   posts: RecruitmentPostRow[]
   templates?: TemplateOption[]
 }) {
@@ -359,342 +361,368 @@ export function ApprovedPostsTable({
 
   return (
     <>
-    <Sheet
-      onOpenChange={(open) => {
-        if (!open) setEditingPost(null)
-      }}
-      open={editingPost !== null}
-    >
-      <Card>
-        <CardHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="space-y-1.5">
-            <CardTitle>Approved Posts</CardTitle>
-            <CardDescription>
-              {hasFilters
-                ? `Showing ${filteredPosts.length} of ${posts.length} sanctioned staffing positions`
-                : `${posts.length} sanctioned staffing positions`}
-            </CardDescription>
-          </div>
-          <Button asChild size="sm" variant="outline">
-            <a href="/hr/approved-posts/export">
-              <Download data-icon="inline-start" />
-              Download Excel
-            </a>
-          </Button>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex min-h-8 items-center justify-between gap-3">
-            <p className="text-xs text-muted-foreground">
-              Open A Column Filter, Tick One Or More Values, Then Apply. Filters
-              From Different Columns Work Together.
-            </p>
-            <div className="flex items-center gap-2">
-            {employeeManagement ? (
-              <Button
-                disabled={!selectedEmployeePost}
-                onClick={() => setEmployeeEditorOpen(true)}
-                size="sm"
-                type="button"
-              >
-                <UserRoundCog data-icon="inline-start" />
-                Update Selected Employee
-              </Button>
-            ) : null}
-            {hasFilters ? (
-              <Button
-                onClick={() => setFilters({ ...EMPTY_FILTERS })}
-                size="sm"
-                type="button"
-                variant="outline"
-              >
-                <FilterX data-icon="inline-start" />
-                Clear Filters
-              </Button>
-            ) : null}
+      <Sheet
+        onOpenChange={(open) => {
+          if (!open) setEditingPost(null)
+        }}
+        open={editingPost !== null}
+      >
+        <Card>
+          <CardHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="space-y-1.5">
+              <CardTitle>Approved Posts</CardTitle>
+              <CardDescription>
+                {hasFilters
+                  ? `Showing ${filteredPosts.length} of ${posts.length} sanctioned staffing positions`
+                  : `${posts.length} sanctioned staffing positions`}
+              </CardDescription>
             </div>
-          </div>
-          <div className="overflow-x-auto rounded-lg border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  {employeeManagement ? <TableHead>Select</TableHead> : null}
-                  <TableHead>Post Code</TableHead>
-                  <TableHead>Vacancy Code</TableHead>
-                  <TableHead>Department</TableHead>
-                  <TableHead>Designation</TableHead>
-                  <TableHead>Template</TableHead>
-                  <TableHead>Employee Name</TableHead>
-                  <TableHead>Employee ID</TableHead>
-                  <TableHead>Joining Date</TableHead>
-                  <TableHead>Last Working Date</TableHead>
-                  <TableHead>Status</TableHead>
-                  {showActions ? (
-                    <TableHead className="text-right">Actions</TableHead>
-                  ) : null}
-                </TableRow>
-                <TableRow className="bg-muted/40 hover:bg-muted/40">
-                  {employeeManagement ? <TableHead /> : null}
-                  {APPROVED_POST_FILTER_COLUMNS.map((column) => (
-                    <TableHead key={column.key}>
-                      <ApprovedPostColumnFilter
-                        filterKey={column.key}
-                        label={column.label}
-                        onApply={(value) => updateFilter(column.key, value)}
-                        options={filterOptions[column.key]}
-                        selected={filters[column.key]}
-                      />
-                    </TableHead>
-                  ))}
-                  {showActions ? <TableHead /> : null}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredPosts.length ? (
-                  filteredPosts.map((row) => (
-                    <TableRow key={row.id}>
-                      {employeeManagement ? (
-                        <TableCell>
-                          <Checkbox
-                            aria-label={`Select ${row.postCode}`}
-                            checked={selectedEmployeePost?.id === row.id}
-                            onCheckedChange={(checked) =>
-                              setSelectedEmployeePost(
-                                checked === true ? row : null
-                              )
-                            }
-                          />
-                        </TableCell>
-                      ) : null}
-                      <TableCell className="font-mono">
-                        {row.postCode}
-                      </TableCell>
-                      <TableCell className="font-mono">
-                        {row.vacancyCode}
-                      </TableCell>
-                      <TableCell>{row.department}</TableCell>
-                      <TableCell>{row.designation}</TableCell>
-                      <TableCell className="font-mono">
-                        {row.requirementTemplateCode ?? "—"}
-                      </TableCell>
-                      <TableCell>{row.employeeName ?? "—"}</TableCell>
-                      <TableCell className="font-mono">
-                        {row.employeeCode ?? "—"}
-                      </TableCell>
-                      <TableCell>{row.joiningDate ?? "—"}</TableCell>
-                      <TableCell>{row.lastWorkingDate ?? "—"}</TableCell>
-                      <TableCell>
-                        <PostStatusBadge status={row.status} />
-                      </TableCell>
-                      {showActions ? (
-                        <TableCell>
-                          <div className="flex justify-end gap-2">
-                            {employeeManagement ? (
-                              <Button
-                                onClick={() => {
-                                  setSelectedEmployeePost(row)
-                                  setEmployeeEditorOpen(true)
-                                }}
-                                size="sm"
-                                type="button"
-                                variant="outline"
-                              >
-                                <UserRoundCog data-icon="inline-start" />
-                                {row.joiningConfirmationDue
-                                  ? "Confirm Joining"
-                                  : "Employee"}
-                              </Button>
-                            ) : null}
-                            {canWrite ? (
-                              <>
-                            {(row.status === "Vacant" ||
-                              row.status === "Resigned") &&
-                            (!row.combinedRoleId ||
-                              row.isPrimaryCombinedPost) &&
-                            !openJobPostCodes.has(row.postCode) ? (
-                              <form action={createJobAction}>
-                                <input
-                                  name="panel"
-                                  type="hidden"
-                                  value="approvedPostPanel"
-                                />
-                                <input
-                                  name="post_id"
-                                  type="hidden"
-                                  value={row.id}
-                                />
-                                <Button size="sm" type="submit">
-                                  <BriefcaseBusiness data-icon="inline-start" />
-                                  Create Job
-                                </Button>
-                              </form>
-                            ) : null}
-                            <Button
-                              aria-label={`Edit ${row.postCode}`}
-                              onClick={() => setEditingPost(row)}
-                              size="sm"
-                              type="button"
-                              variant="outline"
-                            >
-                              <Pencil data-icon="inline-start" />
-                              Edit
-                            </Button>
-                            <form
-                              action={deletePostAction}
-                              onSubmit={(event) => {
-                                if (
-                                  !window.confirm(
-                                    `Delete approved post ${row.postCode}? This cannot be undone.`
-                                  )
-                                ) {
-                                  event.preventDefault()
-                                }
-                              }}
-                            >
-                              <input
-                                name="panel"
-                                type="hidden"
-                                value="approvedPostPanel"
-                              />
-                              <input
-                                name="post_id"
-                                type="hidden"
-                                value={row.id}
-                              />
-                              <Button
-                                size="sm"
-                                type="submit"
-                                variant="destructive"
-                              >
-                                <Trash2 data-icon="inline-start" />
-                                Delete
-                              </Button>
-                            </form>
-                              </>
-                            ) : null}
-                          </div>
-                        </TableCell>
-                      ) : null}
-                    </TableRow>
-                  ))
-                ) : (
+            <Button asChild size="sm" variant="outline">
+              <a href="/hr/approved-posts/export">
+                <Download data-icon="inline-start" />
+                Download Excel
+              </a>
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex min-h-8 items-center justify-between gap-3">
+              <p className="text-xs text-muted-foreground">
+                Open A Column Filter, Tick One Or More Values, Then Apply.
+                Filters From Different Columns Work Together.
+              </p>
+              <div className="flex items-center gap-2">
+                {employeeManagement ? (
+                  <Button
+                    disabled={!selectedEmployeePost}
+                    onClick={() => setEmployeeEditorOpen(true)}
+                    size="sm"
+                    type="button"
+                  >
+                    <UserRoundCog data-icon="inline-start" />
+                    Update Selected Employee
+                  </Button>
+                ) : null}
+                {hasFilters ? (
+                  <Button
+                    onClick={() => setFilters({ ...EMPTY_FILTERS })}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    <FilterX data-icon="inline-start" />
+                    Clear Filters
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+            <div className="overflow-x-auto rounded-lg border">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell
-                      className="py-10 text-center text-muted-foreground"
-                      colSpan={columnCount}
-                    >
-                      {posts.length
-                        ? "No Approved Posts Match The Selected Filters."
-                        : "No Approved Posts Found."}
-                    </TableCell>
+                    {employeeManagement ? <TableHead>Select</TableHead> : null}
+                    <TableHead>Post Code</TableHead>
+                    <TableHead>Vacancy Code</TableHead>
+                    <TableHead>Department</TableHead>
+                    <TableHead>Designation</TableHead>
+                    <TableHead>Template</TableHead>
+                    <TableHead>Employee Name</TableHead>
+                    <TableHead>Employee ID</TableHead>
+                    <TableHead>Joining Date</TableHead>
+                    <TableHead>Last Working Date</TableHead>
+                    <TableHead>Status</TableHead>
+                    {showActions ? (
+                      <TableHead className="text-right">Actions</TableHead>
+                    ) : null}
                   </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
+                  <TableRow className="bg-muted/40 hover:bg-muted/40">
+                    {employeeManagement ? <TableHead /> : null}
+                    {APPROVED_POST_FILTER_COLUMNS.map((column) => (
+                      <TableHead key={column.key}>
+                        <ApprovedPostColumnFilter
+                          filterKey={column.key}
+                          label={column.label}
+                          onApply={(value) => updateFilter(column.key, value)}
+                          options={filterOptions[column.key]}
+                          selected={filters[column.key]}
+                        />
+                      </TableHead>
+                    ))}
+                    {showActions ? <TableHead /> : null}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredPosts.length ? (
+                    filteredPosts.map((row) => (
+                      <TableRow key={row.id}>
+                        {employeeManagement ? (
+                          <TableCell>
+                            <Checkbox
+                              aria-label={`Select ${row.postCode}`}
+                              checked={selectedEmployeePost?.id === row.id}
+                              onCheckedChange={(checked) =>
+                                setSelectedEmployeePost(
+                                  checked === true ? row : null
+                                )
+                              }
+                            />
+                          </TableCell>
+                        ) : null}
+                        <TableCell className="font-mono">
+                          {row.postCode}
+                        </TableCell>
+                        <TableCell className="font-mono">
+                          {row.vacancyCode}
+                        </TableCell>
+                        <TableCell>{row.department}</TableCell>
+                        <TableCell>{row.designation}</TableCell>
+                        <TableCell className="font-mono">
+                          {row.requirementTemplateCode ?? "—"}
+                        </TableCell>
+                        <TableCell>{row.employeeName ?? "—"}</TableCell>
+                        <TableCell className="font-mono">
+                          {row.employeeCode ?? "—"}
+                        </TableCell>
+                        <TableCell>{row.joiningDate ?? "—"}</TableCell>
+                        <TableCell>{row.lastWorkingDate ?? "—"}</TableCell>
+                        <TableCell>
+                          <PostStatusBadge status={row.status} />
+                        </TableCell>
+                        {showActions ? (
+                          <TableCell>
+                            <div className="flex justify-end gap-2">
+                              {employeeManagement ? (
+                                <Button
+                                  onClick={() => {
+                                    setSelectedEmployeePost(row)
+                                    setEmployeeEditorOpen(true)
+                                  }}
+                                  size="sm"
+                                  type="button"
+                                  variant="outline"
+                                >
+                                  <UserRoundCog data-icon="inline-start" />
+                                  {row.joiningConfirmationDue
+                                    ? "Confirm Joining"
+                                    : "Employee"}
+                                </Button>
+                              ) : null}
+                              {canWrite ? (
+                                <>
+                                  {(row.status === "Vacant" ||
+                                    row.status === "Resigned") &&
+                                  (!row.combinedRoleId ||
+                                    row.isPrimaryCombinedPost) &&
+                                  !openJobPostCodes.has(row.postCode) ? (
+                                    <form action={createJobAction}>
+                                      <input
+                                        name="panel"
+                                        type="hidden"
+                                        value="approvedPostPanel"
+                                      />
+                                      {masterView ? (
+                                        <input
+                                          name="master_view"
+                                          type="hidden"
+                                          value={masterView}
+                                        />
+                                      ) : null}
+                                      <input
+                                        name="post_id"
+                                        type="hidden"
+                                        value={row.id}
+                                      />
+                                      <Button size="sm" type="submit">
+                                        <BriefcaseBusiness data-icon="inline-start" />
+                                        Create Job
+                                      </Button>
+                                    </form>
+                                  ) : null}
+                                  <Button
+                                    aria-label={`Edit ${row.postCode}`}
+                                    onClick={() => setEditingPost(row)}
+                                    size="sm"
+                                    type="button"
+                                    variant="outline"
+                                  >
+                                    <Pencil data-icon="inline-start" />
+                                    Edit
+                                  </Button>
+                                  <form
+                                    action={deletePostAction}
+                                    onSubmit={(event) => {
+                                      if (
+                                        !window.confirm(
+                                          `Delete approved post ${row.postCode}? This cannot be undone.`
+                                        )
+                                      ) {
+                                        event.preventDefault()
+                                      }
+                                    }}
+                                  >
+                                    <input
+                                      name="panel"
+                                      type="hidden"
+                                      value="approvedPostPanel"
+                                    />
+                                    {masterView ? (
+                                      <input
+                                        name="master_view"
+                                        type="hidden"
+                                        value={masterView}
+                                      />
+                                    ) : null}
+                                    <input
+                                      name="post_id"
+                                      type="hidden"
+                                      value={row.id}
+                                    />
+                                    <Button
+                                      size="sm"
+                                      type="submit"
+                                      variant="destructive"
+                                    >
+                                      <Trash2 data-icon="inline-start" />
+                                      Delete
+                                    </Button>
+                                  </form>
+                                </>
+                              ) : null}
+                            </div>
+                          </TableCell>
+                        ) : null}
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell
+                        className="py-10 text-center text-muted-foreground"
+                        colSpan={columnCount}
+                      >
+                        {posts.length
+                          ? "No Approved Posts Match The Selected Filters."
+                          : "No Approved Posts Found."}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
 
-      {editingPost ? (
-        <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
-          <form action={updatePostAction} className="flex min-h-full flex-col">
-            <input name="panel" type="hidden" value="approvedPostPanel" />
-            <input name="post_id" type="hidden" value={editingPost.id} />
-            <SheetHeader>
-              <SheetTitle>Edit Approved Post</SheetTitle>
-              <SheetDescription>
-                Update The Job Template Linked To {editingPost.postCode}.
-                Department And Designation Remain Locked Because They Form The
-                Software-Generated Post Code.
-              </SheetDescription>
-            </SheetHeader>
-            <div className="grid flex-1 content-start gap-4 px-6">
-              <Field>
-                <FieldLabel htmlFor="edit-post-code">Post Code</FieldLabel>
-                <Input
-                  id="edit-post-code"
-                  readOnly
-                  value={editingPost.postCode}
-                />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="edit-post-department">
-                  Department
-                </FieldLabel>
-                <Input
-                  id="edit-post-department"
-                  readOnly
-                  value={editingPost.department}
-                />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="edit-post-designation">
-                  Designation
-                </FieldLabel>
-                <Input
-                  id="edit-post-designation"
-                  readOnly
-                  value={editingPost.designation}
-                />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="edit-post-template">
-                  Job Template
-                </FieldLabel>
-                <NativeSelect
-                  className="w-full"
-                  defaultValue={editingPost.requirementTemplateCode ?? ""}
-                  id="edit-post-template"
-                  name="requirement_template_code"
-                >
-                  <NativeSelectOption value="">No Template</NativeSelectOption>
-                  {templates.map((template) => (
-                    <NativeSelectOption
-                      key={template.id}
-                      value={template.templateCode}
-                    >
-                      {template.templateCode} / {template.name}
+        {editingPost ? (
+          <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
+            <form
+              action={updatePostAction}
+              className="flex min-h-full flex-col"
+            >
+              <input name="panel" type="hidden" value="approvedPostPanel" />
+              {masterView ? (
+                <input name="master_view" type="hidden" value={masterView} />
+              ) : null}
+              <input name="post_id" type="hidden" value={editingPost.id} />
+              <SheetHeader>
+                <SheetTitle>Edit Approved Post</SheetTitle>
+                <SheetDescription>
+                  Update The Job Template Linked To {editingPost.postCode}.
+                  Department And Designation Remain Locked Because They Form The
+                  Software-Generated Post Code.
+                </SheetDescription>
+              </SheetHeader>
+              <div className="grid flex-1 content-start gap-4 px-6">
+                <Field>
+                  <FieldLabel htmlFor="edit-post-code">Post Code</FieldLabel>
+                  <Input
+                    id="edit-post-code"
+                    readOnly
+                    value={editingPost.postCode}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="edit-post-department">
+                    Department
+                  </FieldLabel>
+                  <Input
+                    id="edit-post-department"
+                    readOnly
+                    value={editingPost.department}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="edit-post-designation">
+                    Designation
+                  </FieldLabel>
+                  <Input
+                    id="edit-post-designation"
+                    readOnly
+                    value={editingPost.designation}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="edit-post-template">
+                    Job Template
+                  </FieldLabel>
+                  <NativeSelect
+                    className="w-full"
+                    defaultValue={editingPost.requirementTemplateCode ?? ""}
+                    id="edit-post-template"
+                    name="requirement_template_code"
+                  >
+                    <NativeSelectOption value="">
+                      No Template
                     </NativeSelectOption>
-                  ))}
-                </NativeSelect>
-              </Field>
-            </div>
-            <SheetFooter>
-              <Button type="submit">Save Changes</Button>
-            </SheetFooter>
-          </form>
-        </SheetContent>
-      ) : null}
-    </Sheet>
-    <Sheet
-      onOpenChange={setEmployeeEditorOpen}
-      open={employeeEditorOpen && selectedEmployeePost !== null}
-    >
-      {selectedEmployeePost ? (
-        <SheetContent className="!w-full overflow-y-auto sm:!w-[30rem] sm:!max-w-[30rem]">
-          <form action={assignEmployeeAction} className="flex min-h-full flex-col">
-            <input name="panel" type="hidden" value="employeeMasterPanel" />
-            <SheetHeader>
-              <SheetTitle>Update Employee Status</SheetTitle>
-              <SheetDescription>
-                {selectedEmployeePost.postCode} · {selectedEmployeePost.designation}
-              </SheetDescription>
-            </SheetHeader>
-            <div className="flex flex-1 flex-col gap-5 px-6 pb-2">
-              <SingleEmployeeAssignmentFields
-                combinedRoles={combinedRoles}
-                initialPostId={selectedEmployeePost.id}
-                key={selectedEmployeePost.id}
-                posts={posts}
-                showTargetSelector={false}
-              />
-            </div>
-            <SheetFooter>
-              <Button type="submit">Update Employee Status</Button>
-            </SheetFooter>
-          </form>
-        </SheetContent>
-      ) : null}
-    </Sheet>
+                    {templates.map((template) => (
+                      <NativeSelectOption
+                        key={template.id}
+                        value={template.templateCode}
+                      >
+                        {template.templateCode} / {template.name}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                </Field>
+              </div>
+              <SheetFooter>
+                <Button type="submit">Save Changes</Button>
+              </SheetFooter>
+            </form>
+          </SheetContent>
+        ) : null}
+      </Sheet>
+      <Sheet
+        onOpenChange={setEmployeeEditorOpen}
+        open={employeeEditorOpen && selectedEmployeePost !== null}
+      >
+        {selectedEmployeePost ? (
+          <SheetContent className="!w-full overflow-y-auto sm:!w-[30rem] sm:!max-w-[30rem]">
+            <form
+              action={assignEmployeeAction}
+              className="flex min-h-full flex-col"
+            >
+              <input name="panel" type="hidden" value="employeeMasterPanel" />
+              <SheetHeader>
+                <SheetTitle>Update Employee Status</SheetTitle>
+                <SheetDescription>
+                  {selectedEmployeePost.postCode} ·{" "}
+                  {selectedEmployeePost.designation}
+                </SheetDescription>
+              </SheetHeader>
+              <div className="flex flex-1 flex-col gap-5 px-6 pb-2">
+                <SingleEmployeeAssignmentFields
+                  combinedRoles={combinedRoles}
+                  initialPostId={selectedEmployeePost.id}
+                  key={selectedEmployeePost.id}
+                  posts={posts}
+                  showTargetSelector={false}
+                />
+              </div>
+              <SheetFooter>
+                <Button type="submit">Update Employee Status</Button>
+              </SheetFooter>
+            </form>
+          </SheetContent>
+        ) : null}
+      </Sheet>
     </>
   )
 }
