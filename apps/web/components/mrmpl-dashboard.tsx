@@ -10953,42 +10953,30 @@ function DataEntryPanel({
           <CardContent className="grid gap-4">
             {productionFloorCode &&
             onProductionFloorChange &&
-            !selectionLocked ? (
+            !selectionLocked &&
+            !selectedMasterIsCompanyWide ? (
               <div className="grid gap-2 @3xl/main:grid-cols-[minmax(240px,360px)_1fr] @3xl/main:items-end">
                 <Field label="Production Unit">
-                  {selectedMasterIsCompanyWide ? (
-                    <SearchableSelect
-                      className="h-9 rounded-md border bg-muted px-3 text-sm"
-                      disabled
-                      value="company-wide"
-                    >
-                      <option value="company-wide">
-                        Full Software / Not Applicable
+                  <SearchableSelect
+                    className="h-9 rounded-md border bg-background px-3 text-sm"
+                    required
+                    value={productionFloorCode}
+                    onChange={(event) =>
+                      onProductionFloorChange(
+                        normalizeProductionFloorCode(event.target.value)
+                      )
+                    }
+                  >
+                    {productionFloors.map((floor) => (
+                      <option key={floor.code} value={floor.code}>
+                        {floor.label}
                       </option>
-                    </SearchableSelect>
-                  ) : (
-                    <SearchableSelect
-                      className="h-9 rounded-md border bg-background px-3 text-sm"
-                      required
-                      value={productionFloorCode}
-                      onChange={(event) =>
-                        onProductionFloorChange(
-                          normalizeProductionFloorCode(event.target.value)
-                        )
-                      }
-                    >
-                      {productionFloors.map((floor) => (
-                        <option key={floor.code} value={floor.code}>
-                          {floor.label}
-                        </option>
-                      ))}
-                    </SearchableSelect>
-                  )}
+                    ))}
+                  </SearchableSelect>
                 </Field>
                 <p className="pb-2 text-sm text-muted-foreground">
-                  {selectedMasterIsCompanyWide
-                    ? "This master applies to the full software and is not tied to one Production Unit."
-                    : "Uploads and manual entries are saved for the selected Production Unit."}
+                  Uploads and manual entries are saved for the selected
+                  Production Unit.
                 </p>
               </div>
             ) : null}

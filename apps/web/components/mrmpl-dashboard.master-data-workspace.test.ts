@@ -45,13 +45,17 @@ describe("Master Data workspace", () => {
     )
   })
 
-  it("keeps Master Table export beside Back and the view tabs on the right", () => {
+  it("keeps view tabs beside Back and transfer actions on the right", () => {
     const source = readFileSync(
       new URL("./mrmpl-dashboard.tsx", import.meta.url),
       "utf8"
     )
     const tabsSource = readFileSync(
       new URL("./master-data-view-tabs.tsx", import.meta.url),
+      "utf8"
+    )
+    const companyWideScopeSource = readFileSync(
+      new URL("./company-wide-master-scope.tsx", import.meta.url),
       "utf8"
     )
     const tablePanelSource = source.slice(
@@ -61,9 +65,28 @@ describe("Master Data workspace", () => {
 
     expect(tablePanelSource).not.toContain("Search Saved Rows")
     expect(tablePanelSource).not.toContain("Search All Visible Columns")
-    expect(tablePanelSource).toMatch(/onExport=\{\(\) =>\s*downloadMasterTableCsv/)
+    expect(tablePanelSource).toMatch(
+      /onExport=\{\(\) =>\s*downloadMasterTableCsv/
+    )
     expect(tabsSource).toContain("Back to Master Selection")
     expect(tabsSource).toContain("Export")
-    expect(tabsSource).toContain('className="ml-auto flex shrink-0"')
+    const toolbarSource = tabsSource.slice(
+      tabsSource.indexOf(
+        '<div className="flex flex-wrap items-center border-b">'
+      )
+    )
+    expect(toolbarSource.indexOf("Back to Master Selection")).toBeLessThan(
+      toolbarSource.indexOf('aria-label="Master Data views"')
+    )
+    expect(
+      toolbarSource.indexOf('aria-label="Master Data views"')
+    ).toBeLessThan(toolbarSource.indexOf('transferAction === "csvImport"'))
+    expect(tabsSource).toContain('className="ml-auto flex items-center gap-2"')
+    expect(tabsSource).not.toContain("masterSelectionSummary")
+    expect(companyWideScopeSource).not.toContain("Production Unit")
+    expect(companyWideScopeSource).not.toContain(
+      "Full Software / Not Applicable"
+    )
+    expect(source).toContain("!selectedMasterIsCompanyWide")
   })
 })
