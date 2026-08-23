@@ -137,10 +137,6 @@ export default async function ProductParameterCostingPage({
         <h2 className="text-2xl font-semibold tracking-tight">
           Product Parameter Costing
         </h2>
-        <p className="max-w-4xl text-sm text-muted-foreground">
-          Complete Product-Level Material, Process, Loss, And Package Costs
-          Before Customer-Specific Pricing Begins.
-        </p>
         <BoundedResultNotice
           coverage={queue.coverage}
           section="Product Parameter Costing queue"
@@ -163,10 +159,6 @@ export default async function ProductParameterCostingPage({
       <Card>
         <CardHeader>
           <CardTitle>Product Parameter Costing Queue</CardTitle>
-          <CardDescription>
-            Product-Side Work Is Separated By New Design, Bulk Revision, And
-            Engineering Change.
-          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="max-h-[60vh] overflow-auto rounded-md border">

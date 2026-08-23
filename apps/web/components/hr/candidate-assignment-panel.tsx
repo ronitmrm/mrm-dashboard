@@ -314,10 +314,6 @@ export function CandidateAssignmentPanel({
     <Card>
           <CardHeader>
             <CardTitle>Search Candidates For A Job</CardTitle>
-            <CardDescription>
-              Select One Job First, Use The Column Filters To Find Suitable
-              Candidates, Then Tick One Or Many Candidates For That Job.
-            </CardDescription>
           </CardHeader>
           <CardContent>
             <CandidateAssignmentForm

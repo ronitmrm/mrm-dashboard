@@ -337,10 +337,6 @@ export default async function WebsiteProductsPage({
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <CardTitle>Website Product Data</CardTitle>
-                <CardDescription>
-                  Ordered Products And Bom-Adjacent Parts With Source-Equivalent
-                  Derived Codes, Status, Thread Standards, And Assembly Slots.
-                </CardDescription>
               </div>
             </div>
             <BoundedResultNotice

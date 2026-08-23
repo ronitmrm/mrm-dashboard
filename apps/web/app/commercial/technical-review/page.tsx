@@ -48,10 +48,6 @@ export default async function TechnicalReviewPage() {
         <h2 className="text-2xl font-semibold tracking-tight">
           Technical Review
         </h2>
-        <p className="max-w-3xl text-sm text-muted-foreground">
-          Open Review Work In A Dedicated Page. Completed Technical Reviews
-          Leave This Queue And Released Lines Move To Design.
-        </p>
         <BoundedResultNotice
           actionHref="/commercial/enquiries/register/export.xlsx"
           actionLabel="Export the complete enquiry register"

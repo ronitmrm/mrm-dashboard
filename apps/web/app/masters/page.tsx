@@ -61,11 +61,6 @@ export default async function MasterSelectionPage({
         <h1 className="text-2xl font-semibold tracking-tight">
           {view === "masterTables" ? "Master Table Selection" : "Master Module"}
         </h1>
-        <p className="text-sm text-muted-foreground">
-          {view === "masterTables"
-            ? "Select the Unit, Main Master, and Sub Master for the table you want to open."
-            : "Open the existing master-specific form for the required scope."}
-        </p>
       </div>
       {value(query.error) === "invalid-selection" ? (
         <Alert className="w-full" variant="destructive">

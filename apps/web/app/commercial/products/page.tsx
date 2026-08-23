@@ -7,7 +7,6 @@ import { Button } from "@workspace/ui/components/button"
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
@@ -62,10 +61,6 @@ export default async function ProductsPage({
     <Card>
       <CardHeader>
         <CardTitle>Products</CardTitle>
-        <CardDescription>
-          Canonical Product Identities And Pricing Calculation Inputs. Exact
-          Source Aliases Remain Separate From Item Identity.
-        </CardDescription>
       </CardHeader>
       <CardContent>
         <form className="mb-4 flex flex-col gap-2 sm:flex-row" role="search">

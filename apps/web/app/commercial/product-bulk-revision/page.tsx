@@ -131,10 +131,6 @@ export default async function ProductBulkRevisionPage({
             <h1 className="text-2xl font-semibold tracking-tight">
               Product Parameter Bulk Revision
             </h1>
-            <p className="mt-1 max-w-4xl text-sm text-muted-foreground">
-              Select Active Prices Across Customers, Stage Product Cost Changes,
-              Then Hand The Affected Price Set To Customer Costing.
-            </p>
           </div>
           <Button asChild variant="outline">
             <Link href="/commercial/revisions">All Price Revisions</Link>
@@ -166,10 +162,6 @@ export default async function ProductBulkRevisionPage({
         <Card>
           <CardHeader>
             <CardTitle>Product Revision Queue</CardTitle>
-            <CardDescription>
-              Product-Side Requests Only. Applied Product Changes Move To The
-              Customer Bulk Revision Queue.
-            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="max-h-[34rem] overflow-auto rounded-md border">

@@ -112,10 +112,6 @@ export default async function EnquiriesPage({
       />
       <section className="grid gap-2">
         <h2 className="text-2xl font-semibold tracking-tight">Enquiries</h2>
-        <p className="max-w-3xl text-sm text-muted-foreground">
-          Sales Intake, Commercial Handover, Technical Review, Clarification,
-          And Design Progression In One Postgresql Workflow.
-        </p>
       </section>
 
       {operationalView === "dataEntry" ? (
@@ -149,10 +145,6 @@ export default async function EnquiriesPage({
         <Card>
           <CardHeader>
             <CardTitle>Enquiry Register</CardTitle>
-            <CardDescription>
-              Current Handover State And Line Count From Normalized Postgresql
-              Rows.
-            </CardDescription>
             <BoundedResultNotice
               actionHref="/commercial/enquiries/register/export.xlsx"
               actionLabel="Export the complete register"

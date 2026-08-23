@@ -3,7 +3,6 @@ import {
   Card,
   CardAction,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
@@ -31,10 +30,6 @@ export default async function PricingPage() {
       <Card>
         <CardHeader>
           <CardTitle>Pricing</CardTitle>
-          <CardDescription>
-            Current Customer Prices With Immutable Product/Calculation
-            Snapshots And Recursive Bom Rows.
-          </CardDescription>
           <CardAction>
             <DataDownloadButton href="/commercial/pricing/export.xlsx" />
           </CardAction>

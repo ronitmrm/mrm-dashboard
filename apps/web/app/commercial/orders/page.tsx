@@ -246,10 +246,6 @@ export default async function PurchaseOrdersPage({
         <Card>
           <CardHeader>
             <CardTitle>Purchase-Order Register</CardTitle>
-            <CardDescription>
-              Imported, Matched, Pi, Approved, And Cancelled Orders With Their
-              Retained Source Prices.
-            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="overflow-hidden rounded-3xl border">

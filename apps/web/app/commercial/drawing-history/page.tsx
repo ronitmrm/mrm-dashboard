@@ -62,11 +62,6 @@ export default async function DrawingHistoryPage({
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <CardTitle>Drawing History</CardTitle>
-              <CardDescription>
-                Revision-Keyed Production Drawing Control. Revision 0 Rows Are
-                Created Atomically When Approved Q Products Become Internal
-                Products.
-              </CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
               <Button asChild variant="outline">
@@ -84,10 +79,6 @@ export default async function DrawingHistoryPage({
         <Card>
           <CardHeader>
             <CardTitle>Edit {editing.uid}</CardTitle>
-            <CardDescription>
-              Drawing Number, Revision, Effective Date, Archived Laminated
-              Quantities, And Remarks Remain Auditable.
-            </CardDescription>
           </CardHeader>
           <CardContent>
             <form action={updateDrawingHistoryAction} className="grid gap-4">

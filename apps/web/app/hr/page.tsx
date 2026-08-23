@@ -183,10 +183,6 @@ export default async function HrRecruitmentPage({
             Hr Recruitment
           </h2>
         </div>
-        <p className="max-w-3xl text-sm text-muted-foreground">
-          {activeItem.label} Is Part Of The Authenticated Mrmpl Dashboard And
-          Uses The Same Account, Permissions, And Postgresql Records.
-        </p>
       </section>
 
       {feedback.error ? (

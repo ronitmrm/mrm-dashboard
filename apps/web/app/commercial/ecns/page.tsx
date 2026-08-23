@@ -131,11 +131,6 @@ export default async function EngineeringChangeNotesPage({
         <h2 className="text-2xl font-semibold tracking-tight">
           Engineering Change Notes
         </h2>
-        <p className="max-w-4xl text-sm text-muted-foreground">
-          Move One Ordered Portfolio Product Through Design, Product Costing,
-          And A Keep-Or-Revise Decision For Every Recursively Affected Customer
-          Price.
-        </p>
         {ecns.length === registerLimit ? (
           <p className="text-xs text-muted-foreground">
             Showing The Latest {registerLimit} ECNs. Open Work Counts Remain
@@ -219,10 +214,6 @@ export default async function EngineeringChangeNotesPage({
       <Card>
         <CardHeader>
           <CardTitle>ECN Register</CardTitle>
-          <CardDescription>
-            Customer Costing Progress Is Decisions Recorded Against The Frozen
-            Affected-Price Set.
-          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="max-h-[65vh] overflow-auto rounded-md border">

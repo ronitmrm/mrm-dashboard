@@ -141,10 +141,6 @@ export default async function AccessAdministrationPage({
             Access Administration
           </h2>
         </div>
-        <p className="max-w-3xl text-sm text-muted-foreground">
-          Provision Fresh Better Auth Identities And Grant Application Access
-          Through Postgresql Roles And Explicit User Overrides.
-        </p>
       </section>
 
       <Alert>
