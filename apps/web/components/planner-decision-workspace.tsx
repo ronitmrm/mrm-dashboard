@@ -18,7 +18,6 @@ import { Button } from "@workspace/ui/components/button"
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
@@ -114,9 +113,6 @@ export function PlannerDecisionWorkspace({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <CardTitle>Planner Actions</CardTitle>
-            <CardDescription>
-              Make one planning decision at a time and review its effect before saving.
-            </CardDescription>
           </div>
           <Button type="button" variant="outline" onClick={onRecalculate}>
             <RefreshCw className="size-4" />

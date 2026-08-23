@@ -8,7 +8,6 @@ import { Button } from "@workspace/ui/components/button"
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
@@ -125,10 +124,6 @@ export function OperationalEntrySelection({
                 ? "Operational Table Selection"
                 : "Operational Entry Selection"}
             </CardTitle>
-            <CardDescription>
-              Select the Unit, Main Entry, and Entry Form in order, then open
-              the selected {view === "masterTables" ? "table" : "form"}.
-            </CardDescription>
           </div>
         </div>
       </CardHeader>

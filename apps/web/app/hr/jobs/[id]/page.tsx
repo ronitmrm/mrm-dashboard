@@ -344,10 +344,6 @@ export default async function JobWorkspacePage({
       <Card>
         <CardHeader>
           <CardTitle>Complete Interview History</CardTitle>
-          <CardDescription>
-            Every Scheduled Round And Saved Outcome For This Recruitment Opening
-            Is Listed Here.
-          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto rounded-2xl border">

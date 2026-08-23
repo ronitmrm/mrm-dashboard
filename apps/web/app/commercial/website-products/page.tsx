@@ -414,9 +414,6 @@ export default async function WebsiteProductsPage({
         <Card>
           <CardHeader>
             <CardTitle>Select Website Product</CardTitle>
-            <CardDescription>
-              Choose The Existing Product Profile You Want To Maintain.
-            </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-5">
             <CompanyWideMasterScope />
