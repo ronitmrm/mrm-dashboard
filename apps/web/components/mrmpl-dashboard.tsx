@@ -2618,7 +2618,6 @@ function DashboardContent({
             "dataEntry"
           )}
           title="Master Data Entry"
-          description="Create Or Maintain Reusable Records Used Across The Software."
         />
       </div>
     )
@@ -2654,7 +2653,6 @@ function DashboardContent({
             "dataEntry"
           )}
           title="Operational Entry"
-          description="Enter Work Orders, Raw-Material Inward, Production Output, Enquiries, And Purchase Orders In One Workspace."
         />
       </div>
     )
@@ -2729,7 +2727,6 @@ function DashboardContent({
         preferredDefaults={preferredDataEntryDefaults}
         allowedEntryTypes={checklistWorkspaceEntryTypes}
         title="Checklist Workspace"
-        description="Create And Maintain All Coded Setup And Maintenance Checklists In One Place."
       />
     )
   }
@@ -2744,7 +2741,6 @@ function DashboardContent({
         preferredDefaults={preferredDataEntryDefaults}
         allowedEntryTypes={maintenanceMasterEntryTypes}
         title="Maintenance Master Workspace"
-        description="Create Reusable Maintenance Schedules And Assign Checklists Created In The Checklists Tab."
       />
     )
   }
@@ -2759,7 +2755,6 @@ function DashboardContent({
         preferredDefaults={preferredDataEntryDefaults}
         allowedEntryTypes={qualityWorkspaceEntryTypes}
         title="Quality Master Workspace"
-        description="Maintain Inspection Parameters Only For Existing Route Lines And Manage Generated Quality Codes."
       />
     )
   }
@@ -6472,9 +6467,6 @@ function JobCardsPanel({
       <Card>
         <CardHeader>
           <CardTitle>Job Card Actions</CardTitle>
-          <CardDescription>
-            Setup Completion And Dispatch Approval Actions.
-          </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 @5xl/main:grid-cols-2">
           <SetupCompleteActionForm
@@ -6565,24 +6557,18 @@ type RoleTaskKind = "shopFloor" | "machinist" | "quality"
 
 const roleTaskCopy: Record<
   RoleTaskKind,
-  { title: string; description: string; empty: string }
+  { title: string; empty: string }
 > = {
   shopFloor: {
     title: "Shop Floor Tasks",
-    description:
-      "Record Operator Sessions, Production Output, And Downtime; Place Raw Material For New Setups.",
     empty: "No raw-material placement tasks are pending.",
   },
   machinist: {
     title: "Machinist Tasks",
-    description:
-      "Complete Setup And Machine Start Tasks; Record Downtime Against The Running Session.",
     empty: "No machinist tasks are pending.",
   },
   quality: {
     title: "Quality Control Tasks",
-    description:
-      "Record Session Rejections Or Downtime, And Close CNC Sessions When Required.",
     empty: "First-piece tasks are available only in First Piece Inspection.",
   },
 }
@@ -6799,9 +6785,6 @@ function ShopFloorStatusPanel({
     <Card>
       <CardHeader>
         <CardTitle>Shop Floor Status</CardTitle>
-        <CardDescription>
-          Machine-Wise Current Item And Next Planned Setup For Floor Teams.
-        </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
         <TrackingSummary
@@ -6972,8 +6955,6 @@ function RoleTaskPanel({
   const copy = enableFirstPieceInspection
     ? {
         title: "First Piece Inspection",
-        description:
-          "Quality Approval Tasks That Require A First-Piece Inspection Report With Five Piece Readings.",
         empty: "No first-piece inspection tasks are pending.",
       }
     : roleTaskCopy[role]
@@ -7061,7 +7042,6 @@ function RoleTaskPanel({
       <Card>
         <CardHeader>
           <CardTitle>{copy.title}</CardTitle>
-          <CardDescription>{copy.description}</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
           {role === "quality" ? (
@@ -10526,7 +10506,6 @@ function MasterReadinessPanel({
     <section className="grid gap-4">
       <WorkOrderGapTable
         title="Production Validation"
-        description="Immediate Attention: Rm Received And At Least One Planning Gap Exists."
         rows={masterGaps}
         submitAction={submitAction}
         openDataEntry={openDataEntry}
@@ -10534,7 +10513,6 @@ function MasterReadinessPanel({
       />
       <WorkOrderGapTable
         title="Whole Work-Order Missing Details"
-        description="Planner View For Every Accepted Work Order With A Missing Planning Item, Route Option, Route Master, Cycle Time, Tooling, Or Machine Master."
         rows={allWorkOrderGaps}
         submitAction={submitAction}
         openDataEntry={openDataEntry}
@@ -10546,14 +10524,12 @@ function MasterReadinessPanel({
 
 function WorkOrderGapTable({
   title,
-  description,
   rows,
   submitAction,
   openDataEntry,
   showFilters,
 }: {
   title: string
-  description: string
   rows: DashboardPayload[]
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
   openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void
@@ -10578,12 +10554,11 @@ function WorkOrderGapTable({
   })
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="flex-row items-center justify-between gap-3">
         <CardTitle>{title}</CardTitle>
-        <CardDescription>
-          {description} {formatNumber(filteredRows.length)} Of{" "}
-          {formatNumber(rows.length)} Rows Shown.
-        </CardDescription>
+        <Badge variant="outline">
+          {formatNumber(filteredRows.length)} / {formatNumber(rows.length)} Rows
+        </Badge>
       </CardHeader>
       <CardContent className="grid gap-4">
         {showFilters ? (
@@ -10876,7 +10851,6 @@ function DataEntryPanel({
   operationalTabs,
   storeMasterData,
   title = "Production data entry",
-  description = "Use focused forms for manual entry or download the matching CSV template for a small import.",
   externalOptions = [],
 }: {
   canManageStoreMasters?: boolean
@@ -10895,7 +10869,6 @@ function DataEntryPanel({
   operationalTabs?: { dataEntryHref: string; masterTablesHref: string }
   storeMasterData?: StoreMasterData | null
   title?: string
-  description?: string
   externalOptions?: ExternalMasterDataOption[]
 }) {
   const dataEntry = asRecord(payload.dataEntry)
@@ -11000,7 +10973,6 @@ function DataEntryPanel({
       <Card>
         <CardHeader>
           <CardTitle>{title}</CardTitle>
-          <CardDescription>{description}</CardDescription>
         </CardHeader>
         {isImporting ? (
           <div className="px-6">
@@ -11210,10 +11182,6 @@ function OperationalTablesPanel({
       <Card>
         <CardHeader>
           <CardTitle>Entry Tables</CardTitle>
-          <CardDescription>
-            Search And Export Saved Operational Entries. Enquiries Use The Same
-            Register And Export Workflow.
-          </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 @4xl/main:grid-cols-[minmax(220px,320px)_minmax(220px,320px)_minmax(260px,1fr)]">
           {!selectionLocked ? (
@@ -11307,13 +11275,6 @@ function OperationalTablesPanel({
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <CardTitle>{selectedSpec.title}</CardTitle>
-              <CardDescription>
-                {selectedSpec.description} Showing{" "}
-                {productionFloors.find(
-                  (floor) => floor.code === productionFloorCode
-                )?.label ?? productionFloorCode}
-                .
-              </CardDescription>
             </div>
             <Badge variant="outline">
               {formatNumber(filteredRows.length)} / {formatNumber(rows.length)}{" "}
@@ -11410,9 +11371,6 @@ function MasterTablesPanel({
   const [replacementRecordId, setReplacementRecordId] = useState("")
   const [deleteReason, setDeleteReason] = useState("")
   const [isDeleting, setIsDeleting] = useState(false)
-  const selectedMasterIsCompanyWide = isCompanyWideMasterEntryType(
-    selectedSpec?.entryType ?? ""
-  )
   const dataEntry = asRecord(payload.dataEntry)
   const rows = useMemo(
     () =>
@@ -11490,10 +11448,6 @@ function MasterTablesPanel({
       <Card>
         <CardHeader>
           <CardTitle>Master Tables</CardTitle>
-          <CardDescription>
-            Review Saved Master Data In Tabular Format. Use Data Entry Only When
-            You Need To Add Or Edit Rows.
-          </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3">
           <div className="flex flex-wrap items-end gap-2">
@@ -11531,12 +11485,6 @@ function MasterTablesPanel({
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <CardTitle>{selectedSpec.title}</CardTitle>
-                <CardDescription>
-                  {selectedSpec.description}{" "}
-                  {selectedMasterIsCompanyWide
-                    ? "Shared Across All Production Units."
-                    : `Showing ${productionFloors.find((floor) => floor.code === productionFloorCode)?.label ?? productionFloorCode}.`}
-                </CardDescription>
               </div>
               <Badge variant="outline">
                 {formatNumber(filteredRows.length)} /{" "}
@@ -11635,9 +11583,6 @@ function MasterTablesPanel({
         <Card>
           <CardHeader>
             <CardTitle>{selectedSpec.title} Summary</CardTitle>
-            <CardDescription>
-              Key Summary For The Selected Master Only.
-            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto rounded-md border">
@@ -12294,10 +12239,6 @@ function MachineMasterPanel({
         <Card>
           <CardHeader>
             <CardTitle>All Machines</CardTitle>
-            <CardDescription>
-              Open A Machine To Review Its Details, Store Assets, Maintenance
-              Schedules, History, And Reports.
-            </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -12426,9 +12367,6 @@ function MachineMasterPanel({
       <Card>
         <CardHeader>
           <CardTitle>{displayValue(selectedMachine.machineNo)}</CardTitle>
-          <CardDescription>
-            Canonical Machine Identity And Current Assignment.
-          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-4">
@@ -12745,9 +12683,6 @@ function MachineMasterPanel({
       <Card>
         <CardHeader>
           <CardTitle>Maintenance History</CardTitle>
-          <CardDescription>
-            Planned And Breakdown Maintenance Saved Against This Machine.
-          </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
           <div className="grid gap-3 @4xl/main:grid-cols-[minmax(0,1fr)_repeat(3,180px)]">
@@ -13046,10 +12981,6 @@ function MaintenancePanel({
       <Card className={dueNowRows.length ? "border-amber-300/80" : ""}>
         <CardHeader>
           <CardTitle>Maintenance Pending Tasks</CardTitle>
-          <CardDescription>
-            Due And Overdue Planned Maintenance Appears Here From Machine Master
-            Schedules.
-          </CardDescription>
         </CardHeader>
         <CardContent>
           {dueRows.length ? (
@@ -13136,9 +13067,6 @@ function MaintenancePanel({
       <Card>
         <CardHeader>
           <CardTitle>Breakdown Maintenance Entry</CardTitle>
-          <CardDescription>
-            Use This For Maintenance Not Against A Planned Schedule.
-          </CardDescription>
         </CardHeader>
         <CardContent>
           <form className="grid gap-3" onSubmit={saveBreakdownMaintenance}>
@@ -13433,9 +13361,6 @@ function PlanningHolidayPanel({
       <Card>
         <CardHeader>
           <CardTitle>Saved Planning Holidays</CardTitle>
-          <CardDescription>
-            Dates Affecting The Selected Department / Production Floor.
-          </CardDescription>
         </CardHeader>
         <CardContent>
           {holidayRows.length ? (
@@ -13597,13 +13522,11 @@ function DataEntryForm({
     <Card>
       <CardHeader>
         <CardTitle>{spec.title}</CardTitle>
-        <CardDescription>{spec.description}</CardDescription>
       </CardHeader>
       <CardContent>
         <LegacyActionForm
           key={`${spec.entryType}-${defaultsKey}`}
           title={`Save ${spec.title}`}
-          description="Writes The Same Entry Type And Payload Shape Used By The Legacy Form."
           fields={resolvedFields}
           defaults={resolvedDefaults}
           buttonLabel={`Save ${spec.title}`}
@@ -14036,10 +13959,6 @@ function QualityParameterMasterForm({
     <Card>
       <CardHeader>
         <CardTitle>{spec.title}</CardTitle>
-        <CardDescription>
-          Maintain One Parameter Set For An Item, Option, And Setup. The Same
-          Rows Are Used By First-Piece Inspection And Hourly Quality Checks.
-        </CardDescription>
       </CardHeader>
       {isSaving ? (
         <div className="px-6">
@@ -14418,10 +14337,6 @@ function MaintenanceMasterForm({
     <Card>
       <CardHeader>
         <CardTitle>{spec.title}</CardTitle>
-        <CardDescription>
-          Create Reusable Maintenance Schedules Here, Then Assign Them To
-          Machines From Machine Master.
-        </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
         <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px]">
@@ -14768,10 +14683,6 @@ function MaintenanceChecklistMasterForm({
     <Card>
       <CardHeader>
         <CardTitle>{spec.title}</CardTitle>
-        <CardDescription>
-          Create The Checklist Once, Then Add All Steps In The Table. Step Codes
-          Are Not Required.
-        </CardDescription>
       </CardHeader>
       {isSaving ? (
         <div className="px-6">
@@ -15146,10 +15057,6 @@ function SetupChecklistMasterForm({
     <Card>
       <CardHeader>
         <CardTitle>{spec.title}</CardTitle>
-        <CardDescription>
-          Create One Generated Checklist Code, Then Maintain All Machinist Steps
-          Under It.
-        </CardDescription>
       </CardHeader>
       {isSaving ? (
         <div className="px-6">
@@ -15731,9 +15638,6 @@ function ToolFixturePanel({ rows }: { rows: DashboardPayload[] }) {
     <Card>
       <CardHeader>
         <CardTitle>Next Tool / Fixture Number</CardTitle>
-        <CardDescription>
-          First Missing Number, Otherwise Next New.
-        </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
         <section className="grid gap-3 sm:grid-cols-2 @5xl/main:grid-cols-5">
@@ -15766,14 +15670,12 @@ type LegacyField = {
 
 function LegacyActionForm({
   title,
-  description,
   fields,
   defaults = {},
   buttonLabel,
   onSubmit,
 }: {
   title: string
-  description: string
   fields: LegacyField[]
   defaults?: Record<string, unknown>
   buttonLabel: string
@@ -15803,7 +15705,6 @@ function LegacyActionForm({
       <fieldset className="contents" disabled={isSubmitting}>
         <div>
           <div className="text-sm font-medium">{title}</div>
-          <div className="text-xs text-muted-foreground">{description}</div>
         </div>
         <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
           {fields.map((field) => (

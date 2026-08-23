@@ -6,7 +6,6 @@ import { Badge } from "@workspace/ui/components/badge"
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
@@ -80,10 +79,6 @@ export function MachineStoreAssets({
     <Card>
       <CardHeader>
         <CardTitle>Assigned Store Assets</CardTitle>
-        <CardDescription>
-          Current physical assets and complete Store assignment history for this
-          machine.
-        </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-5">
         <div className="overflow-auto rounded-lg border">
