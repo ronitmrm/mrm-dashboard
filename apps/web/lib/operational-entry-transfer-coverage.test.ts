@@ -15,8 +15,9 @@ describe("Operational Entry transfer coverage", () => {
     "app/commercial/enquiries/page.tsx",
     "app/commercial/orders/page.tsx",
   ]) {
-    it(`${file} supplies CSV import and Entry Table export actions`, () => {
+    it(`${file} supplies CSV download, import and Entry Table export actions`, () => {
       const page = source(file)
+      expect(page).toContain("csvDownloadAction=")
       expect(page).toContain("csvImportAction=")
       expect(page).toContain("exportAction=")
     })

@@ -37,6 +37,18 @@ describe("HR master workspace", () => {
       'masterTablesHref="/hr?panel=approvedPostPanel&masterView=masterTables"'
     )
     expect(panelSource).toContain("function CombinedRolePanel")
+    const combinedRolePanelSource = panelSource.slice(
+      panelSource.indexOf("function CombinedRolePanel"),
+      panelSource.indexOf("function EmployeePanel")
+    )
+    expect(combinedRolePanelSource).toContain("csvDownloadAction={")
+    expect(combinedRolePanelSource).toContain(
+      'fileName="combined-approved-posts-template.csv"'
+    )
+    expect(combinedRolePanelSource).toContain("csvImportAction={")
+    expect(combinedRolePanelSource).toContain(
+      "action={importCombinedRolesCsvAction}"
+    )
     expect(panelSource).toContain(
       'dataEntryHref="/hr?panel=combinedRolesPanel&masterView=dataEntry"'
     )
@@ -65,6 +77,18 @@ describe("HR master workspace", () => {
     expect(candidatePanelSource).toContain("action={importCandidatesCsvAction}")
     expect(panelSource).toContain('allMastersHref="/?tab=dataEntryTab"')
     expect(panelSource).toContain('"employee-assignment"')
+    const employeePanelSource = panelSource.slice(
+      panelSource.indexOf("function EmployeePanel"),
+      panelSource.indexOf("function JobsPanel")
+    )
+    expect(employeePanelSource).toContain("csvDownloadAction={")
+    expect(employeePanelSource).toContain(
+      'fileName="employee-assignment-template.csv"'
+    )
+    expect(employeePanelSource).toContain("csvImportAction={")
+    expect(employeePanelSource).toContain(
+      "action={importEmployeeAssignmentsCsvAction}"
+    )
     expect(panelSource).toContain("showDataEntry && canManageEmployees")
     expect(panelSource).toContain("showMasterTables ? (")
     expect(tablesSource).toMatch(
