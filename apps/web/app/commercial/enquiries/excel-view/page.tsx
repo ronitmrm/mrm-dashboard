@@ -57,9 +57,6 @@ export default async function EnquiryExcelViewPage() {
           Design, Costing, Quote Delivery, And Order Receipt.
         </p>
         <div className="flex flex-wrap gap-2 pt-2">
-          <Button asChild size="sm" variant="outline">
-            <Link href="/commercial/enquiries">Back To Enquiries</Link>
-          </Button>
           <DataDownloadButton href="/commercial/enquiries/register/export.xlsx" />
         </div>
         <BoundedResultNotice

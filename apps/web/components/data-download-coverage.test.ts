@@ -29,4 +29,14 @@ describe("data download button coverage", () => {
 
     expect(source).toContain("DataDownloadButton")
   })
+
+  it("keeps Excel View focused on the register and its download", () => {
+    const source = readFileSync(
+      new URL("../app/commercial/enquiries/excel-view/page.tsx", import.meta.url),
+      "utf8"
+    )
+
+    expect(source).not.toContain("Back To Enquiries")
+    expect(source).toContain("DataDownloadButton")
+  })
 })
