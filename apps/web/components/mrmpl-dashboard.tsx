@@ -10979,6 +10979,11 @@ function DataEntryPanel({
         operationalTabs ? (
           <OperationalWorkspaceTabs
             activeView="dataEntry"
+            csvDownloadAction={
+              <MasterDataCsvDownloadButton
+                href={`/api/data-template?entryType=${encodeURIComponent(bulkEntryType)}`}
+              />
+            }
             csvImportAction={csvImportAction}
             dataEntryHref={operationalTabs.dataEntryHref}
             masterTablesHref={operationalTabs.masterTablesHref}

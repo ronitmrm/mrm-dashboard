@@ -122,29 +122,34 @@ export function EnquiryLogForm({
     )
   }
 
-  if (!customers.length) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        Add An Active Customer Before Logging An Enquiry.
-      </p>
-    )
-  }
+  const hasCustomers = customers.length > 0
 
   return (
     <form action={createEnquiryAction}>
       <input name="organization_id" type="hidden" value={organizationId} />
       <FieldGroup>
+        {!hasCustomers ? (
+          <p className="text-sm text-muted-foreground">
+            Add An Active Customer Before Logging An Enquiry.
+          </p>
+        ) : null}
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <Field>
             <FieldLabel htmlFor="enquiry-customer">Customer</FieldLabel>
             <NativeSelect
               className="w-full"
+              disabled={!hasCustomers}
               id="enquiry-customer"
               name="customer_id"
               onChange={(event) => selectCustomer(event.target.value)}
               required
               value={customerId}
             >
+              {!hasCustomers ? (
+                <NativeSelectOption value="">
+                  No Active Customers Available
+                </NativeSelectOption>
+              ) : null}
               {customers.map((customer) => (
                 <NativeSelectOption key={customer.id} value={customer.id}>
                   {customer.customerUid} · {customer.companyName}
@@ -214,7 +219,9 @@ export function EnquiryLogForm({
             Technical Line Details Are Added After The Enquiry Is Logged.
           </FieldDescription>
         </Field>
-        <Button type="submit">Log Enquiry</Button>
+        <Button disabled={!hasCustomers} type="submit">
+          Log Enquiry
+        </Button>
       </FieldGroup>
     </form>
   )

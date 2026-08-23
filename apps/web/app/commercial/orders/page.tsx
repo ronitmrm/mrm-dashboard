@@ -40,7 +40,10 @@ import { istDateValue } from "@/lib/date-time"
 import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { BoundedResultNotice } from "@/components/bounded-result-notice"
-import { MasterDataCsvImportButton } from "@/components/master-data-csv-import-button"
+import {
+  MasterDataCsvDownloadButton,
+  MasterDataCsvImportButton,
+} from "@/components/master-data-csv-import-button"
 import { OperationalWorkspaceTabs } from "@/components/operational-workspace-tabs"
 
 import {
@@ -96,6 +99,9 @@ export default async function PurchaseOrdersPage({
     <div className="grid gap-6">
       <OperationalWorkspaceTabs
         activeView={operationalView}
+        csvDownloadAction={
+          <MasterDataCsvDownloadButton href="/commercial/orders/template.csv" />
+        }
         csvImportAction={
           <MasterDataCsvImportButton
             action={importPurchaseOrderCsvAction}
@@ -127,16 +133,6 @@ export default async function PurchaseOrdersPage({
               Create The Po Header Manually Or Upload One CSV Containing Its
               Header And Line Items. Matching Uses Active Sent Quote Lineages.
             </CardDescription>
-            <div className="flex flex-wrap gap-2 pt-2">
-              <Button asChild size="sm" variant="outline">
-                <Link href="/commercial/orders/template.csv">CSV Template</Link>
-              </Button>
-              <Button asChild size="sm" variant="outline">
-                <Link href="/commercial/orders/template.xlsx">
-                  Excel Template
-                </Link>
-              </Button>
-            </div>
           </CardHeader>
           <CardContent className="grid gap-5">
             <form
