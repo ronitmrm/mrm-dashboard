@@ -75,7 +75,7 @@ function DashboardPageHeader({
   return (
     <section
       className={cn(
-        "flex min-w-0 flex-wrap items-start justify-between gap-4 rounded-xl border border-[var(--color-border-strong)] bg-[color-mix(in_srgb,var(--mrm-green)_5%,var(--color-surface))] p-4 shadow-[var(--shadow-sm)] sm:p-5",
+        "flex min-w-0 flex-wrap items-start justify-between gap-4 rounded-xl border border-[var(--color-panel-border)] bg-[color-mix(in_srgb,var(--mrm-green)_5%,var(--color-surface))] p-4 shadow-[var(--shadow-sm)] sm:p-5",
         className
       )}
       data-slot="dashboard-page-header"
@@ -417,7 +417,7 @@ function ActivityList({
 }) {
   return (
     <div
-      className="divide-y overflow-hidden rounded-lg border border-[var(--color-border-strong)]"
+      className="divide-y overflow-hidden rounded-lg border border-[var(--color-panel-border)]"
       data-slot="activity-list"
     >
       {items.map((item, index) => {
@@ -523,7 +523,7 @@ function FilterBar({
     <section
       aria-label={label}
       className={cn(
-        "flex min-w-0 flex-wrap items-end gap-3 rounded-lg border border-[var(--color-border-strong)] bg-card p-3 shadow-[var(--shadow-sm)]",
+        "flex min-w-0 flex-wrap items-end gap-3 rounded-lg border border-[var(--color-panel-border)] bg-card p-3 shadow-[var(--shadow-sm)]",
         className
       )}
       data-slot="dashboard-filter-bar"
