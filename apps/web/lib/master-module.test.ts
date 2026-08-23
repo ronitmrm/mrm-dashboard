@@ -82,6 +82,7 @@ describe("master module selection", () => {
         { id: "combined_approved_posts", label: "Combined Approved Posts" },
         { id: "candidates", label: "Candidates" },
         { id: "employee_assignments", label: "Employee Assignment" },
+        { id: "job_templates", label: "HR Job Templates" },
       ],
     })
 
@@ -105,6 +106,35 @@ describe("master module selection", () => {
         panel: "approvedPostPanel",
       })
     ).toBe(true)
+  })
+  it("groups Job Templates under HR and rejection definitions under Rejection", () => {
+    const jobTemplates = resolveMasterSelection(
+      { main: "hr_masters", sub: "job_templates", unit: "universal" },
+      fullAccess
+    )!
+    expect(masterFormHref(jobTemplates)).toBe(
+      "/hr?panel=postMasterPanel&masterView=dataEntry&masterUnit=universal&masterMain=hr_masters&masterSub=job_templates"
+    )
+
+    expect(subMastersFor("rejection", fullAccess)).toEqual({
+      fallback: false,
+      options: [
+        { id: "rejection_type_master", label: "Rejection Type" },
+        { id: "rejection_remark_master", label: "Rejection Remark" },
+        { id: "rejection_reason_master", label: "Rejection Reason" },
+      ],
+    })
+    const rejection = resolveMasterSelection(
+      {
+        main: "rejection",
+        sub: "rejection_reason_master",
+        unit: "universal",
+      },
+      fullAccess
+    )!
+    expect(masterFormHref(rejection)).toBe(
+      "/?tab=dataEntryTab&floor=conventional&entry=rejection_reason_master&masterUnit=universal&masterMain=rejection&masterSub=rejection_reason_master"
+    )
   })
   it("opens Employee Assignment as an HR sub-master", () => {
     const selection = resolveMasterSelection(

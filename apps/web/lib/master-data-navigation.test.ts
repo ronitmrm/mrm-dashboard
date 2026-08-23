@@ -78,7 +78,7 @@ describe("master data navigation", () => {
     })
   })
 
-  it("offers permitted HR and Commercial masters from both company selectors", () => {
+  it("offers HR once as a main master alongside Commercial masters", () => {
     const options = externalMasterDataOptions(
       {
         administration: false,
@@ -100,19 +100,9 @@ describe("master data navigation", () => {
 
     expect(options).toEqual([
       {
-        href: "/hr?panel=mastersPanel&masterView=dataEntry",
-        id: "hr_masters",
-        title: "HR Departments & Designations",
-      },
-      {
-        href: "/hr?panel=postMasterPanel&masterView=dataEntry",
-        id: "hr_job_templates",
-        title: "HR Job Templates",
-      },
-      {
-        href: "/hr?panel=employeeMasterPanel&masterView=dataEntry&kind=employee-assignment",
-        id: "hr_employee_assignments",
-        title: "Employee Assignment",
+        href: "/hr?panel=mastersPanel&masterView=dataEntry&kind=department",
+        id: "hr",
+        title: "HR",
       },
       {
         href: "/commercial/masters?masterView=dataEntry",
@@ -167,9 +157,9 @@ describe("master data navigation", () => {
       )
     ).toEqual([
       {
-        href: "/hr?panel=postMasterPanel&masterView=masterTables",
-        id: "hr_job_templates",
-        title: "HR Job Templates",
+        href: "/hr?panel=postMasterPanel&masterView=masterTables&kind=job-template",
+        id: "hr",
+        title: "HR",
       },
     ])
   })
@@ -189,8 +179,8 @@ describe("master data navigation", () => {
     ).toEqual([
       {
         href: "/hr?panel=employeeMasterPanel&masterView=masterTables&kind=employee-assignment",
-        id: "hr_employee_assignments",
-        title: "Employee Assignment",
+        id: "hr",
+        title: "HR",
       },
     ])
   })

@@ -134,27 +134,14 @@ export function externalMasterDataOptions(
   view: "dataEntry" | "masterTables"
 ): ExternalMasterDataOption[] {
   const options: ExternalMasterDataOption[] = []
-  if (access.hrHrefs.includes("/hr?panel=mastersPanel")) {
-    options.push({
-      href: `/hr?panel=mastersPanel&masterView=${view}`,
-      id: "hr_masters",
-      title: "HR Departments & Designations",
-    })
-  }
-  if (access.hrHrefs.includes("/hr?panel=postMasterPanel")) {
-    options.push({
-      href: `/hr?panel=postMasterPanel&masterView=${view}`,
-      id: "hr_job_templates",
-      title: "HR Job Templates",
-    })
-  }
-  if (access.hrHrefs.includes("/hr?panel=employeeMasterPanel")) {
-    options.push({
-      href: `/hr?panel=employeeMasterPanel&masterView=${view}&kind=employee-assignment`,
-      id: "hr_employee_assignments",
-      title: "Employee Assignment",
-    })
-  }
+  const hrHref = access.hrHrefs.includes("/hr?panel=mastersPanel")
+    ? `/hr?panel=mastersPanel&masterView=${view}&kind=department`
+    : access.hrHrefs.includes("/hr?panel=postMasterPanel")
+      ? `/hr?panel=postMasterPanel&masterView=${view}&kind=job-template`
+      : access.hrHrefs.includes("/hr?panel=employeeMasterPanel")
+        ? `/hr?panel=employeeMasterPanel&masterView=${view}&kind=employee-assignment`
+        : null
+  if (hrHref) options.push({ href: hrHref, id: "hr", title: "HR" })
 
   if (access.commercialHrefs.includes("/commercial/masters")) {
     options.push({
