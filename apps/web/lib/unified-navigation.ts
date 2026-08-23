@@ -594,6 +594,13 @@ export const hrMasterNavigation = [
     requiredCapability: "hr.job_templates.read",
   },
   {
+    href: "/hr?panel=employeeMasterPanel",
+    icon: UsersRound,
+    label: "Employee Assignment",
+    panelId: "employeeMasterPanel",
+    requiredCapability: "hr.employees.read",
+  },
+  {
     href: "/hr?panel=approvedPostPanel",
     icon: ListChecks,
     label: "Approved Posts",
@@ -617,13 +624,6 @@ export const hrMasterNavigation = [
 ] as const
 
 export const hrNavigation = [
-  {
-    href: "/hr?panel=employeeMasterPanel",
-    icon: UsersRound,
-    label: "Employee Master",
-    panelId: "employeeMasterPanel",
-    requiredCapability: "hr.employees.read",
-  },
   {
     href: "/hr?panel=jobsPanel",
     icon: BriefcaseBusiness,

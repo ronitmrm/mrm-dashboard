@@ -66,6 +66,8 @@ export function EmployeeAssignmentUpload() {
       encType="multipart/form-data"
     >
       <input name="panel" type="hidden" value="employeeMasterPanel" />
+      <input name="master_view" type="hidden" value="dataEntry" />
+      <input name="master_kind" type="hidden" value="employee-assignment" />
       <EmployeeAssignmentUploadFields />
     </form>
   )

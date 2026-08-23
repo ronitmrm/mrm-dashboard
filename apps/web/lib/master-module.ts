@@ -22,6 +22,7 @@ export type MasterModuleAccess = {
   commercialWebsiteProducts: boolean
   hrApprovedPosts: boolean
   hrCandidates: boolean
+  hrEmployees: boolean
   hrJobTemplates: boolean
   hrMasters: boolean
   operations: boolean
@@ -161,7 +162,7 @@ const universalMasterDefinitions = [
   {
     id: "hr_masters",
     label: "HR Masters",
-    access: ["hrMasters", "hrApprovedPosts", "hrCandidates"],
+    access: ["hrMasters", "hrApprovedPosts", "hrCandidates", "hrEmployees"],
     scope: "universal",
     subMasters: [
       { access: "hrMasters", id: "department", label: "Department" },
@@ -180,6 +181,11 @@ const universalMasterDefinitions = [
         access: "hrCandidates",
         id: "candidates",
         label: "Candidates",
+      },
+      {
+        access: "hrEmployees",
+        id: "employee_assignments",
+        label: "Employee Assignment",
       },
     ],
   },
@@ -241,6 +247,9 @@ export function masterModuleAccess(
     ),
     hrCandidates: navigationAccess.hrHrefs.includes(
       "/hr?panel=candidatesPanel"
+    ),
+    hrEmployees: navigationAccess.hrHrefs.includes(
+      "/hr?panel=employeeMasterPanel"
     ),
     hrJobTemplates: navigationAccess.hrHrefs.includes(
       "/hr?panel=postMasterPanel"
@@ -371,10 +380,15 @@ export function masterFormHref(
           ? "combinedRolesPanel"
           : selection.sub === "candidates"
             ? "candidatesPanel"
+            : selection.sub === "employee_assignments"
+              ? "employeeMasterPanel"
             : "mastersPanel"
     params.set("panel", panel)
     params.set("masterView", view)
     if (panel === "mastersPanel") params.set("kind", selection.sub)
+    if (panel === "employeeMasterPanel") {
+      params.set("kind", "employee-assignment")
+    }
   } else if (selection.main === "hr_job_templates") {
     params.set("panel", "postMasterPanel")
     params.set("masterView", view)
@@ -496,6 +510,8 @@ export function masterSelectionMatchesDestination(
           ? values.panel === "combinedRolesPanel"
           : selection.sub === "candidates"
             ? values.panel === "candidatesPanel"
+            : selection.sub === "employee_assignments"
+              ? values.panel === "employeeMasterPanel"
             : values.panel === "mastersPanel" && values.kind === selection.sub
       : selection.main === "hr_job_templates" &&
           values.panel === "postMasterPanel"

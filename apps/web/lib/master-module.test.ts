@@ -19,6 +19,7 @@ const fullAccess: MasterModuleAccess = {
   commercialWebsiteProducts: true,
   hrApprovedPosts: true,
   hrCandidates: true,
+  hrEmployees: true,
   hrJobTemplates: true,
   hrMasters: true,
   operations: true,
@@ -80,6 +81,7 @@ describe("master module selection", () => {
         { id: "approved_posts", label: "Approved Posts" },
         { id: "combined_approved_posts", label: "Combined Approved Posts" },
         { id: "candidates", label: "Candidates" },
+        { id: "employee_assignments", label: "Employee Assignment" },
       ],
     })
 
@@ -101,6 +103,28 @@ describe("master module selection", () => {
     expect(
       masterSelectionMatchesDestination(selection, "/hr", {
         panel: "approvedPostPanel",
+      })
+    ).toBe(true)
+  })
+  it("opens Employee Assignment as an HR sub-master", () => {
+    const selection = resolveMasterSelection(
+      {
+        main: "hr_masters",
+        sub: "employee_assignments",
+        unit: "universal",
+      },
+      fullAccess
+    )!
+
+    expect(masterFormHref(selection)).toBe(
+      "/hr?panel=employeeMasterPanel&masterView=dataEntry&kind=employee-assignment&masterUnit=universal&masterMain=hr_masters&masterSub=employee_assignments"
+    )
+    expect(masterFormHref(selection, "masterTables")).toBe(
+      "/hr?panel=employeeMasterPanel&masterView=masterTables&kind=employee-assignment&masterUnit=universal&masterMain=hr_masters&masterSub=employee_assignments"
+    )
+    expect(
+      masterSelectionMatchesDestination(selection, "/hr", {
+        panel: "employeeMasterPanel",
       })
     ).toBe(true)
   })

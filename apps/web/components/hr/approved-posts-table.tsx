@@ -700,6 +700,16 @@ export function ApprovedPostsTable({
               className="flex min-h-full flex-col"
             >
               <input name="panel" type="hidden" value="employeeMasterPanel" />
+              {employeeManagement && masterView ? (
+                <>
+                  <input name="master_view" type="hidden" value={masterView} />
+                  <input
+                    name="master_kind"
+                    type="hidden"
+                    value="employee-assignment"
+                  />
+                </>
+              ) : null}
               <SheetHeader>
                 <SheetTitle>Update Employee Status</SheetTitle>
                 <SheetDescription>
