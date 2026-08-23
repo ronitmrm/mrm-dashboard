@@ -1,4 +1,5 @@
 export type TableFilterColumn = {
+  allLabel?: string
   index: number
   label: string
   options: string[]
@@ -9,7 +10,11 @@ export type TableColumnFilters = Record<number, string[] | null>
 const persistedTableFilterVersion = 1
 
 function columnSchema(columns: TableFilterColumn[]) {
-  return columns.map(({ index, label }) => ({ index, label }))
+  return columns.map(({ allLabel, index, label }) => ({
+    allLabel,
+    index,
+    label,
+  }))
 }
 
 export function filtersForTableColumns(
@@ -18,10 +23,16 @@ export function filtersForTableColumns(
   currentFilters: TableColumnFilters
 ) {
   const currentSchema = currentColumns
-    .map((column) => `${column.index}:${column.label}`)
+    .map(
+      (column) =>
+        `${column.index}:${column.label}:${column.allLabel ?? ""}`
+    )
     .join("|")
   const nextSchema = nextColumns
-    .map((column) => `${column.index}:${column.label}`)
+    .map(
+      (column) =>
+        `${column.index}:${column.label}:${column.allLabel ?? ""}`
+    )
     .join("|")
 
   return currentSchema === nextSchema ? currentFilters : {}

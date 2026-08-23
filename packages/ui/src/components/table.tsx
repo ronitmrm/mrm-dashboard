@@ -18,6 +18,7 @@ import {
 } from "@workspace/ui/lib/table-filter-state"
 import {
   isTableSecondaryPlaceholder,
+  parseTableFilterValues,
   resolveTableFilterText,
   shouldShowTableFilter,
   tableFilterIgnoredSelector,
@@ -28,6 +29,7 @@ import {
 type TableProps = React.ComponentProps<"table"> & {
   excelFilters?: boolean
   filterStorageKey?: string
+  onFilteredRowCountChange?: (visible: number, total: number) => void
 }
 
 function headerLabel(cell: HTMLTableCellElement) {
@@ -52,6 +54,13 @@ function cellFilterValue(cell: HTMLTableCellElement | null) {
   return resolveTableFilterText(
     tableFilterTextParts(primaryClone),
     tableFilterTextParts(fallbackClone)
+  )
+}
+
+function cellFilterValues(cell: HTMLTableCellElement | null) {
+  return parseTableFilterValues(
+    cell?.dataset.filterValues,
+    cellFilterValue(cell)
   )
 }
 
@@ -101,7 +110,7 @@ function tableSnapshot(table: HTMLTableElement) {
   const columns = headerCells.flatMap((cell, index) => {
     const label = headerLabel(cell)
     const cells = rows.map((row) => row.cells.item(index))
-    const filterValues = cells.map(cellFilterValue)
+    const filterValues = cells.flatMap(cellFilterValues)
     const forceFilter = cell.dataset.filterable === "true"
     const isActionColumn =
       rows.length > 0 &&
@@ -121,6 +130,7 @@ function tableSnapshot(table: HTMLTableElement) {
 
     return [
       {
+        allLabel: cell.dataset.filterAllLabel,
         index,
         label,
         options: uniqueFilterOptions(filterValues),
@@ -139,6 +149,7 @@ function Table({
   className,
   excelFilters = true,
   filterStorageKey,
+  onFilteredRowCountChange,
   ...props
 }: TableProps) {
   const tableRef = React.useRef<HTMLTableElement>(null)
@@ -218,14 +229,17 @@ function Table({
       sameColumns(current, snapshot.columns) ? current : snapshot.columns
     )
 
+    let visibleRows = 0
     for (const row of snapshot.rows) {
       row.hidden = snapshot.columns.some((column) => {
         const selected = applicableFilters[column.index] ?? null
-        const value = cellFilterValue(row.cells.item(column.index))
-        return !matchesColumnFilter(value, selected)
+        const values = cellFilterValues(row.cells.item(column.index))
+        return !values.some((value) => matchesColumnFilter(value, selected))
       })
+      if (!row.hidden) visibleRows += 1
     }
-  }, [excelFilters, filterStorageKey, filters])
+    onFilteredRowCountChange?.(visibleRows, snapshot.rows.length)
+  }, [excelFilters, filterStorageKey, filters, onFilteredRowCountChange])
 
   React.useLayoutEffect(() => {
     refreshTable()
@@ -280,6 +294,7 @@ function Table({
         return host
           ? createPortal(
               <ExcelColumnFilter
+                allLabel={column.allLabel}
                 label={column.label}
                 onApply={(selected) =>
                   setFilters((current) => ({

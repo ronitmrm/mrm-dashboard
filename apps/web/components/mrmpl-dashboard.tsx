@@ -10509,14 +10509,12 @@ function MasterReadinessPanel({
         rows={masterGaps}
         submitAction={submitAction}
         openDataEntry={openDataEntry}
-        showFilters={false}
       />
       <WorkOrderGapTable
         title="Whole Work-Order Missing Details"
         rows={allWorkOrderGaps}
         submitAction={submitAction}
         openDataEntry={openDataEntry}
-        showFilters
       />
     </section>
   )
@@ -10527,84 +10525,40 @@ function WorkOrderGapTable({
   rows,
   submitAction,
   openDataEntry,
-  showFilters,
 }: {
   title: string
   rows: DashboardPayload[]
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
   openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void
-  showFilters: boolean
 }) {
-  const [gapFilter, setGapFilter] = useState("all")
-  const [rmFilter, setRmFilter] = useState("all")
-  const filteredRows = rows.filter((row) => {
-    const matchesGap =
-      gapFilter === "all" ||
-      (gapFilter === "route_option" && Boolean(row.routeSelectionMissing)) ||
-      (gapFilter === "planning_item" && Boolean(row.planningItemMissing)) ||
-      (gapFilter === "route_master" && Boolean(row.routeMasterMissing)) ||
-      (gapFilter === "cycle_time" && Boolean(row.cycleTimeMissing)) ||
-      (gapFilter === "tooling" && Boolean(row.toolingPlanMissing)) ||
-      (gapFilter === "machine_master" && Boolean(row.machineMasterMissing))
-    const matchesRm =
-      rmFilter === "all" ||
-      (rmFilter === "received" && str(row.rmStatus) === "Received") ||
-      (rmFilter === "waiting" && str(row.rmStatus) !== "Received")
-    return matchesGap && matchesRm
-  })
+  const [visibleRowCount, setVisibleRowCount] = useState(rows.length)
   return (
     <Card>
       <CardHeader className="flex-row items-center justify-between gap-3">
         <CardTitle>{title}</CardTitle>
         <Badge variant="outline">
-          {formatNumber(filteredRows.length)} / {formatNumber(rows.length)} Rows
+          {formatNumber(visibleRowCount)} / {formatNumber(rows.length)} Rows
         </Badge>
       </CardHeader>
       <CardContent className="grid gap-4">
-        {showFilters ? (
-          <div className="grid gap-3 md:grid-cols-2">
-            <Field label="Gap Type">
-              <SearchableSelect
-                className="h-9 rounded-md border bg-background px-3 text-sm"
-                value={gapFilter}
-                onChange={(event) => setGapFilter(event.target.value)}
-              >
-                <option value="all">All Gaps</option>
-                <option value="planning_item">Planning Item Missing</option>
-                <option value="route_option">Route Option Missing</option>
-                <option value="route_master">Route Master Missing</option>
-                <option value="cycle_time">Cycle Time Missing</option>
-                <option value="tooling">Tooling Missing</option>
-                <option value="machine_master">Machine Master Missing</option>
-              </SearchableSelect>
-            </Field>
-            <Field label="Rm Status">
-              <SearchableSelect
-                className="h-9 rounded-md border bg-background px-3 text-sm"
-                value={rmFilter}
-                onChange={(event) => setRmFilter(event.target.value)}
-              >
-                <option value="all">All Work Orders</option>
-                <option value="received">Rm Received</option>
-                <option value="waiting">Waiting Rm</option>
-              </SearchableSelect>
-            </Field>
-          </div>
-        ) : null}
         <div className="overflow-hidden rounded-md border">
-          <Table>
+          <Table onFilteredRowCountChange={setVisibleRowCount}>
             <TableHeader>
               <TableRow>
                 <TableHead>Job Card</TableHead>
                 <TableHead>Item</TableHead>
-                <TableHead>Rm</TableHead>
-                <TableHead>Missing Details</TableHead>
+                <TableHead data-filter-all-label="All Work Orders">
+                  Rm
+                </TableHead>
+                <TableHead data-filter-all-label="All Gaps">
+                  Missing Details
+                </TableHead>
                 <TableHead>Action</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredRows.length ? (
-                filteredRows.map((row, index) => (
+              {rows.length ? (
+                rows.map((row, index) => (
                   <WorkOrderGapRow
                     key={`${title}-${jobCardNumber(row)}-${index}`}
                     row={row}
@@ -10661,8 +10615,17 @@ function WorkOrderGapRow({
           {displayValue(row.description)}
         </div>
       </TableCell>
-      <TableCell>{displayValue(row.rmStatus)}</TableCell>
-      <TableCell className="min-w-44">
+      <TableCell
+        data-filter-value={
+          str(row.rmStatus) === "Received" ? "Rm Received" : "Waiting Rm"
+        }
+      >
+        {displayValue(row.rmStatus)}
+      </TableCell>
+      <TableCell
+        className="min-w-44"
+        data-filter-values={JSON.stringify(gaps)}
+      >
         <div className="flex flex-wrap gap-1.5">
           {gaps.map((gap) => (
             <Badge key={gap} variant="outline">
