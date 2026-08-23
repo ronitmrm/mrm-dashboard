@@ -12,8 +12,9 @@ const workspaces = [
 
 describe("Master Data transfer coverage", () => {
   for (const file of workspaces) {
-    it(`${file} supplies CSV import and table export actions`, () => {
+    it(`${file} supplies CSV download, import and table export actions`, () => {
       const source = readFileSync(resolve(process.cwd(), file), "utf8")
+      expect(source).toContain("csvDownloadAction=")
       expect(source).toContain("csvImportAction=")
       expect(source).toMatch(/exportAction=|onExport=/)
     })

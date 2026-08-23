@@ -48,6 +48,8 @@ import {
 import {
   importApprovedPostsCsvAction,
   importCandidatesCsvAction,
+  importCombinedRolesCsvAction,
+  importEmployeeAssignmentsCsvAction,
   importJobTemplatesCsvAction,
   importRecruitmentMastersCsvAction,
 } from "@/app/hr/master-transfer-actions"
@@ -510,6 +512,28 @@ function CombinedRolePanel({
     <>
       <MasterDataViewTabs
         activeView={activeView}
+        csvDownloadAction={
+          <MasterDataCsvDownloadButton
+            columns={[
+              "combined_role_name",
+              "post_codes",
+              "primary_post_code",
+            ]}
+            fileName="combined-approved-posts-template.csv"
+          />
+        }
+        csvImportAction={
+          canWrite ? (
+            <MasterDataCsvImportButton
+              action={importCombinedRolesCsvAction}
+              fields={{
+                masterMain: "hr_masters",
+                masterSub: "combined_approved_posts",
+                masterUnit: "universal",
+              }}
+            />
+          ) : null
+        }
         dataEntryHref="/hr?panel=combinedRolesPanel&masterView=dataEntry"
         masterTablesHref="/hr?panel=combinedRolesPanel&masterView=masterTables"
       />
@@ -570,6 +594,31 @@ function EmployeePanel({
       <MasterDataViewTabs
         activeView={activeView}
         allMastersHref="/?tab=dataEntryTab"
+        csvDownloadAction={
+          <MasterDataCsvDownloadButton
+            columns={[
+              "target_type",
+              "target_code",
+              "employee_name",
+              "employee_code",
+              "employment_event",
+              "last_working_date",
+            ]}
+            fileName="employee-assignment-template.csv"
+          />
+        }
+        csvImportAction={
+          canManageEmployees ? (
+            <MasterDataCsvImportButton
+              action={importEmployeeAssignmentsCsvAction}
+              fields={{
+                masterMain: "hr_masters",
+                masterSub: "employee_assignments",
+                masterUnit: "universal",
+              }}
+            />
+          ) : null
+        }
         dataEntryHref={recruitmentMasterHref(
           "dataEntry",
           "employee-assignment"
