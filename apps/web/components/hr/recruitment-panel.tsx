@@ -652,13 +652,27 @@ function LogCandidatePanel({
   canWrite,
   candidates,
   masters,
-}: Pick<RecruitmentPanelProps, "canWrite" | "candidates" | "masters">) {
+  masterView,
+}: Pick<
+  RecruitmentPanelProps,
+  "canWrite" | "candidates" | "masters" | "masterView"
+>) {
+  const activeView = masterView ?? "dataEntry"
+  const showDataEntry = activeView === "dataEntry"
+  const showMasterTables = activeView === "masterTables"
+
   return (
     <>
-      {canWrite ? (
+      <MasterDataViewTabs
+        activeView={activeView}
+        dataEntryHref="/hr?panel=candidatesPanel&masterView=dataEntry"
+        masterTablesHref="/hr?panel=candidatesPanel&masterView=masterTables"
+      />
+      {canWrite && showDataEntry ? (
         <PanelForm
           action={saveCandidateAction}
           description="Phone Number Is The Duplicate-Safe Candidate Identity."
+          masterView={activeView}
           panelId="candidatesPanel"
           title="Log Candidate"
         >
@@ -735,7 +749,13 @@ function LogCandidatePanel({
           </Button>
         </PanelForm>
       ) : null}
-      <CandidatesTable canWrite={canWrite} candidates={candidates} />
+      {showMasterTables ? (
+        <CandidatesTable
+          canWrite={canWrite}
+          candidates={candidates}
+          masterView={activeView}
+        />
+      ) : null}
     </>
   )
 }
@@ -837,6 +857,7 @@ export function RecruitmentPanel(props: RecruitmentPanelProps) {
           canWrite={props.canWrite}
           candidates={props.candidates}
           masters={props.masters}
+          masterView={props.masterView}
         />
       )
     case "candidateSearchPanel":

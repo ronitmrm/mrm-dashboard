@@ -18,6 +18,7 @@ const fullAccess: MasterModuleAccess = {
   commercialPricing: true,
   commercialWebsiteProducts: true,
   hrApprovedPosts: true,
+  hrCandidates: true,
   hrJobTemplates: true,
   hrMasters: true,
   operations: true,
@@ -77,6 +78,7 @@ describe("master module selection", () => {
         { id: "department", label: "Department" },
         { id: "designation", label: "Designation" },
         { id: "approved_posts", label: "Approved Posts" },
+        { id: "candidates", label: "Candidates" },
       ],
     })
 
@@ -100,6 +102,19 @@ describe("master module selection", () => {
         panel: "approvedPostPanel",
       })
     ).toBe(true)
+  })
+  it("opens Candidate Entry and its records as HR master views", () => {
+    const selection = resolveMasterSelection(
+      { main: "hr_masters", sub: "candidates", unit: "universal" },
+      fullAccess
+    )!
+
+    expect(masterFormHref(selection)).toBe(
+      "/hr?panel=candidatesPanel&masterView=dataEntry&masterUnit=universal&masterMain=hr_masters&masterSub=candidates"
+    )
+    expect(masterFormHref(selection, "masterTables")).toBe(
+      "/hr?panel=candidatesPanel&masterView=masterTables&masterUnit=universal&masterMain=hr_masters&masterSub=candidates"
+    )
   })
   it("opens every existing Website Product dependency as a sub-master", () => {
     const result = subMastersFor("commercial_website_products", fullAccess)!

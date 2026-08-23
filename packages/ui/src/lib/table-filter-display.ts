@@ -27,6 +27,30 @@ export function hasMeaningfulTableFilterValue(
   return values.some((value) => !isTableSecondaryPlaceholder(value))
 }
 
+export function shouldShowTableFilter({
+  forceFilter,
+  hasRows,
+  isActionColumn,
+  label,
+  values,
+}: {
+  forceFilter: boolean
+  hasRows: boolean
+  isActionColumn: boolean
+  label: string
+  values: Array<string | null | undefined>
+}) {
+  if (!label) return false
+  if (!hasRows) {
+    const actionLabel = /^(actions?|select|workspace)$/i.test(label.trim())
+    return forceFilter || (!isActionColumn && !actionLabel)
+  }
+  return !(
+    isActionColumn &&
+    !forceFilter &&
+    !hasMeaningfulTableFilterValue(values)
+  )
+}
 export function joinTableFilterTextParts(
   parts: Array<string | null | undefined>
 ) {

@@ -17,9 +17,9 @@ import {
   type TableFilterColumn,
 } from "@workspace/ui/lib/table-filter-state"
 import {
-  hasMeaningfulTableFilterValue,
   isTableSecondaryPlaceholder,
   resolveTableFilterText,
+  shouldShowTableFilter,
   tableFilterIgnoredSelector,
   tableFilterSecondarySelector,
   tableSecondaryTextSelector,
@@ -86,7 +86,6 @@ function tableSnapshot(table: HTMLTableElement) {
 
   if (
     !firstHeaderRow ||
-    !bodyRows.length ||
     hasExcelFilterRow ||
     ((headerRows?.length ?? 0) > 1 && !hasLegacyFilterRow)
   ) {
@@ -104,15 +103,19 @@ function tableSnapshot(table: HTMLTableElement) {
     const cells = rows.map((row) => row.cells.item(index))
     const filterValues = cells.map(cellFilterValue)
     const forceFilter = cell.dataset.filterable === "true"
-    const isActionColumn = cells.every((rowCell) =>
-      rowCell?.querySelector("a, button, form, input, select, textarea")
-    )
+    const isActionColumn =
+      rows.length > 0 &&
+      cells.every((rowCell) =>
+        rowCell?.querySelector("a, button, form, input, select, textarea")
+      )
     if (
-      !label ||
-      !rows.length ||
-      (isActionColumn &&
-        !forceFilter &&
-        !hasMeaningfulTableFilterValue(filterValues))
+      !shouldShowTableFilter({
+        forceFilter,
+        hasRows: rows.length > 0,
+        isActionColumn,
+        label,
+        values: filterValues,
+      })
     )
       return []
 

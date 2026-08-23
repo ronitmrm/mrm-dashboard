@@ -43,7 +43,12 @@ export function masterPayloadForScope(
 
 function canReadRecruitmentMasters(access: UnifiedNavigationAccess) {
   return access.hrHrefs.some((href) =>
-    ["/hr?panel=mastersPanel", "/hr?panel=postMasterPanel"].includes(href)
+    [
+      "/hr?panel=mastersPanel",
+      "/hr?panel=postMasterPanel",
+      "/hr?panel=approvedPostPanel",
+      "/hr?panel=candidatesPanel",
+    ].includes(href)
   )
 }
 

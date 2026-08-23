@@ -21,6 +21,7 @@ export type MasterModuleAccess = {
   commercialPricing: boolean
   commercialWebsiteProducts: boolean
   hrApprovedPosts: boolean
+  hrCandidates: boolean
   hrJobTemplates: boolean
   hrMasters: boolean
   operations: boolean
@@ -160,7 +161,7 @@ const universalMasterDefinitions = [
   {
     id: "hr_masters",
     label: "HR Masters",
-    access: ["hrMasters", "hrApprovedPosts"],
+    access: ["hrMasters", "hrApprovedPosts", "hrCandidates"],
     scope: "universal",
     subMasters: [
       { access: "hrMasters", id: "department", label: "Department" },
@@ -169,6 +170,11 @@ const universalMasterDefinitions = [
         access: "hrApprovedPosts",
         id: "approved_posts",
         label: "Approved Posts",
+      },
+      {
+        access: "hrCandidates",
+        id: "candidates",
+        label: "Candidates",
       },
     ],
   },
@@ -227,6 +233,9 @@ export function masterModuleAccess(
     ),
     hrApprovedPosts: navigationAccess.hrHrefs.includes(
       "/hr?panel=approvedPostPanel"
+    ),
+    hrCandidates: navigationAccess.hrHrefs.includes(
+      "/hr?panel=candidatesPanel"
     ),
     hrJobTemplates: navigationAccess.hrHrefs.includes(
       "/hr?panel=postMasterPanel"
@@ -350,12 +359,15 @@ export function masterFormHref(
   }
 
   if (selection.main === "hr_masters") {
-    params.set(
-      "panel",
-      selection.sub === "approved_posts" ? "approvedPostPanel" : "mastersPanel"
-    )
+    const panel =
+      selection.sub === "approved_posts"
+        ? "approvedPostPanel"
+        : selection.sub === "candidates"
+          ? "candidatesPanel"
+          : "mastersPanel"
+    params.set("panel", panel)
     params.set("masterView", view)
-    if (selection.sub !== "approved_posts") params.set("kind", selection.sub)
+    if (panel === "mastersPanel") params.set("kind", selection.sub)
   } else if (selection.main === "hr_job_templates") {
     params.set("panel", "postMasterPanel")
     params.set("masterView", view)
@@ -473,7 +485,9 @@ export function masterSelectionMatchesDestination(
     return selection.main === "hr_masters"
       ? selection.sub === "approved_posts"
         ? values.panel === "approvedPostPanel"
-        : values.panel === "mastersPanel" && values.kind === selection.sub
+        : selection.sub === "candidates"
+          ? values.panel === "candidatesPanel"
+          : values.panel === "mastersPanel" && values.kind === selection.sub
       : selection.main === "hr_job_templates" &&
           values.panel === "postMasterPanel"
   }

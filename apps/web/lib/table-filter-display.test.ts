@@ -5,6 +5,7 @@ import {
   hasMeaningfulTableFilterValue,
   joinTableFilterTextParts,
   resolveTableFilterText,
+  shouldShowTableFilter,
 } from "@workspace/ui/lib/table-filter-display"
 
 describe("table filter display", () => {
@@ -27,6 +28,35 @@ describe("table filter display", () => {
     expect(resolveTableFilterText([], ["Not linked"])).toBe("Not linked")
   })
 
+  it("keeps explicitly filterable columns visible before rows exist", () => {
+    expect(
+      shouldShowTableFilter({
+        forceFilter: true,
+        hasRows: false,
+        isActionColumn: false,
+        label: "Customer Line Status",
+        values: [],
+      })
+    ).toBe(true)
+    expect(
+      shouldShowTableFilter({
+        forceFilter: false,
+        hasRows: false,
+        isActionColumn: false,
+        label: "Customer Line Status",
+        values: [],
+      })
+    ).toBe(true)
+    expect(
+      shouldShowTableFilter({
+        forceFilter: false,
+        hasRows: false,
+        isActionColumn: true,
+        label: "Actions",
+        values: [],
+      })
+    ).toBe(false)
+  })
   it("keeps linked data columns filterable while ignoring control-only values", () => {
     expect(hasMeaningfulTableFilterValue(["ACME Industries", "Mayank"])).toBe(
       true
