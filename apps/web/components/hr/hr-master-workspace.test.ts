@@ -20,6 +20,7 @@ describe("HR master workspace", () => {
     expect(pageSource).toContain('activeItem.panelId !== "mastersPanel"')
     expect(pageSource).toContain('activeItem.panelId !== "postMasterPanel"')
     expect(pageSource).toContain('activeItem.panelId !== "approvedPostPanel"')
+    expect(pageSource).toContain('activeItem.panelId !== "combinedRolesPanel"')
     expect(pageSource).toContain('activeItem.panelId !== "candidatesPanel"')
     expect(panelSource).not.toContain("<RecruitmentMasterKindSelect")
 
@@ -34,6 +35,16 @@ describe("HR master workspace", () => {
     expect(panelSource).toContain(
       'masterTablesHref="/hr?panel=approvedPostPanel&masterView=masterTables"'
     )
+    expect(panelSource).toContain("function CombinedRolePanel")
+    expect(panelSource).toContain(
+      'dataEntryHref="/hr?panel=combinedRolesPanel&masterView=dataEntry"'
+    )
+    expect(panelSource).toContain(
+      'masterTablesHref="/hr?panel=combinedRolesPanel&masterView=masterTables"'
+    )
+    expect(panelSource).toContain("action={importApprovedPostsCsvAction}")
+    expect(panelSource).toContain('fileName="approved-posts-template.csv"')
+    expect(panelSource).toContain('href="/hr/approved-posts/export"')
 
     expect(panelSource).toContain(
       'dataEntryHref="/hr?panel=candidatesPanel&masterView=dataEntry"'

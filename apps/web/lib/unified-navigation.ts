@@ -601,6 +601,13 @@ export const hrMasterNavigation = [
     requiredCapability: "hr.approved_posts.read",
   },
   {
+    href: "/hr?panel=combinedRolesPanel",
+    icon: ListChecks,
+    label: "Combined Approved Posts",
+    panelId: "combinedRolesPanel",
+    requiredCapability: "hr.approved_posts.read",
+  },
+  {
     href: "/hr?panel=candidatesPanel",
     icon: UsersRound,
     label: "Candidates",

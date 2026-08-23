@@ -172,6 +172,11 @@ const universalMasterDefinitions = [
         label: "Approved Posts",
       },
       {
+        access: "hrApprovedPosts",
+        id: "combined_approved_posts",
+        label: "Combined Approved Posts",
+      },
+      {
         access: "hrCandidates",
         id: "candidates",
         label: "Candidates",
@@ -362,9 +367,11 @@ export function masterFormHref(
     const panel =
       selection.sub === "approved_posts"
         ? "approvedPostPanel"
-        : selection.sub === "candidates"
-          ? "candidatesPanel"
-          : "mastersPanel"
+        : selection.sub === "combined_approved_posts"
+          ? "combinedRolesPanel"
+          : selection.sub === "candidates"
+            ? "candidatesPanel"
+            : "mastersPanel"
     params.set("panel", panel)
     params.set("masterView", view)
     if (panel === "mastersPanel") params.set("kind", selection.sub)
@@ -485,9 +492,11 @@ export function masterSelectionMatchesDestination(
     return selection.main === "hr_masters"
       ? selection.sub === "approved_posts"
         ? values.panel === "approvedPostPanel"
-        : selection.sub === "candidates"
-          ? values.panel === "candidatesPanel"
-          : values.panel === "mastersPanel" && values.kind === selection.sub
+        : selection.sub === "combined_approved_posts"
+          ? values.panel === "combinedRolesPanel"
+          : selection.sub === "candidates"
+            ? values.panel === "candidatesPanel"
+            : values.panel === "mastersPanel" && values.kind === selection.sub
       : selection.main === "hr_job_templates" &&
           values.panel === "postMasterPanel"
   }

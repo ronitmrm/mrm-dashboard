@@ -333,7 +333,7 @@ export function CombinedRolesTable({
             action={updateCombinedRoleAction}
             className="flex min-h-full flex-col"
           >
-            <input name="panel" type="hidden" value="approvedPostPanel" />
+            <input name="panel" type="hidden" value="combinedRolesPanel" />
             {masterView ? (
               <input name="master_view" type="hidden" value={masterView} />
             ) : null}

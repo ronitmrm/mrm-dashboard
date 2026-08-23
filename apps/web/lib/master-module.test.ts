@@ -78,6 +78,7 @@ describe("master module selection", () => {
         { id: "department", label: "Department" },
         { id: "designation", label: "Designation" },
         { id: "approved_posts", label: "Approved Posts" },
+        { id: "combined_approved_posts", label: "Combined Approved Posts" },
         { id: "candidates", label: "Candidates" },
       ],
     })
@@ -100,6 +101,28 @@ describe("master module selection", () => {
     expect(
       masterSelectionMatchesDestination(selection, "/hr", {
         panel: "approvedPostPanel",
+      })
+    ).toBe(true)
+  })
+  it("opens Combined Approved Posts as a separate HR sub-master", () => {
+    const selection = resolveMasterSelection(
+      {
+        main: "hr_masters",
+        sub: "combined_approved_posts",
+        unit: "universal",
+      },
+      fullAccess
+    )!
+
+    expect(masterFormHref(selection)).toBe(
+      "/hr?panel=combinedRolesPanel&masterView=dataEntry&masterUnit=universal&masterMain=hr_masters&masterSub=combined_approved_posts"
+    )
+    expect(masterFormHref(selection, "masterTables")).toBe(
+      "/hr?panel=combinedRolesPanel&masterView=masterTables&masterUnit=universal&masterMain=hr_masters&masterSub=combined_approved_posts"
+    )
+    expect(
+      masterSelectionMatchesDestination(selection, "/hr", {
+        panel: "combinedRolesPanel",
       })
     ).toBe(true)
   })
