@@ -47,6 +47,7 @@ import {
 } from "@/app/hr/actions"
 import {
   importApprovedPostsCsvAction,
+  importCandidatesCsvAction,
   importJobTemplatesCsvAction,
   importRecruitmentMastersCsvAction,
 } from "@/app/hr/master-transfer-actions"
@@ -735,6 +736,34 @@ function LogCandidatePanel({
     <>
       <MasterDataViewTabs
         activeView={activeView}
+        csvDownloadAction={
+          <MasterDataCsvDownloadButton
+            columns={[
+              "candidate_name",
+              "phone",
+              "email",
+              "current_company",
+              "experience",
+              "source",
+              "department_code",
+              "designation_code",
+              "initial_notes",
+            ]}
+            fileName="candidate-master-template.csv"
+          />
+        }
+        csvImportAction={
+          canWrite ? (
+            <MasterDataCsvImportButton
+              action={importCandidatesCsvAction}
+              fields={{
+                masterMain: "hr_masters",
+                masterSub: "candidates",
+                masterUnit: "universal",
+              }}
+            />
+          ) : null
+        }
         dataEntryHref="/hr?panel=candidatesPanel&masterView=dataEntry"
         masterTablesHref="/hr?panel=candidatesPanel&masterView=masterTables"
       />

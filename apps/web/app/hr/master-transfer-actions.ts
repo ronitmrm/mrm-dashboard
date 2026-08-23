@@ -8,6 +8,7 @@ import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { hrTaskCapabilities } from "@/lib/auth/task-capabilities"
 import { approvedPostInputFromCsvRow } from "@/lib/approved-post-import"
+import { candidateInputFromCsvRow } from "@/lib/candidate-import"
 import { csvValue, readMasterCsv } from "@/lib/master-data-csv"
 
 const hrPath = "/hr"
@@ -124,4 +125,49 @@ export async function importJobTemplatesCsvAction(formData: FormData) {
   }
   revalidatePath(hrPath)
   redirect(`${hrPath}?panel=postMasterPanel&masterView=dataEntry`)
+}
+
+export async function importCandidatesCsvAction(formData: FormData) {
+  const returnParams = new URLSearchParams({
+    masterView: "dataEntry",
+    panel: "candidatesPanel",
+  })
+  for (const key of ["masterUnit", "masterMain", "masterSub"]) {
+    const value = formData.get(key)?.toString().trim()
+    if (value) returnParams.set(key, value)
+  }
+  const returnPath = `${hrPath}?${returnParams}`
+  let context: Awaited<ReturnType<typeof repositoryContext>> | undefined
+  let outcome: { error?: string; success?: string }
+  try {
+    const rows = await readMasterCsv(
+      formData.get("master_csv_file"),
+      "Candidate CSV"
+    )
+    const inputs = rows.map((row, index) =>
+      candidateInputFromCsvRow(row, index + 2)
+    )
+    context = await repositoryContext(hrTaskCapabilities.saveCandidate)
+    for (const input of inputs) {
+      await context.repository.upsertCandidate({
+        ...input,
+        actorUserId: context.actorUserId,
+        organizationId: context.organizationId,
+      })
+    }
+    outcome = {
+      success: `${inputs.length} candidate${inputs.length === 1 ? "" : "s"} imported successfully.`,
+    }
+  } catch (error) {
+    outcome = {
+      error:
+        error instanceof Error
+          ? error.message
+          : "The Candidate CSV was not imported.",
+    }
+  } finally {
+    await context?.repository.close()
+  }
+  revalidatePath(hrPath)
+  redirect(`${returnPath}&${new URLSearchParams(outcome)}`)
 }
