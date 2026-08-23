@@ -72,7 +72,7 @@ import {
 const storageKey = "mrmpl:sidebar:expanded-modules"
 const stateChangedEvent = "mrmpl:sidebar:expanded-modules-changed"
 const submoduleButtonClassName =
-  "group/submodule h-8 rounded-md px-2.5 text-sidebar-foreground transition-[background-color,color] duration-[var(--dur-fast)] hover:bg-sidebar-accent hover:text-sidebar-foreground data-[active=true]:bg-sidebar-accent data-[active=true]:font-semibold data-[active=true]:text-sidebar-foreground"
+  "group/submodule h-8 rounded-md px-2.5 text-sidebar-foreground/70 transition-[background-color,color] duration-[var(--dur-fast)] hover:bg-sidebar-accent hover:text-sidebar-foreground data-[active=true]:bg-sidebar-accent data-[active=true]:font-semibold data-[active=true]:text-sidebar-foreground"
 
 type SectionId = SidebarSectionId
 type ExpandedSections = ExpandedSidebarSections
@@ -336,11 +336,11 @@ export function UnifiedSidebarNavigation({
         <div className="relative">
           <Search
             aria-hidden="true"
-            className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-sidebar-foreground/70"
+            className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
           />
           <Input
             aria-label="Search navigation menu"
-            className="h-10 rounded-lg border-sidebar-border bg-[var(--mrm-white)] pr-16 pl-9 text-sidebar-foreground shadow-none placeholder:text-sidebar-foreground/70 dark:bg-[var(--mrm-white)] dark:text-sidebar-foreground"
+            className="h-10 rounded-lg border-sidebar-border bg-background pr-16 pl-9 shadow-none"
             onChange={(event) => setMenuSearch(event.target.value)}
             placeholder="Search menu..."
             ref={searchInputRef}
@@ -350,7 +350,7 @@ export function UnifiedSidebarNavigation({
           {menuSearch ? (
             <button
               aria-label="Clear menu search"
-              className="absolute top-1/2 right-2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+              className="absolute top-1/2 right-2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
               onClick={() => {
                 setMenuSearch("")
                 searchInputRef.current?.focus()
@@ -360,7 +360,7 @@ export function UnifiedSidebarNavigation({
               <X className="size-3.5" />
             </button>
           ) : (
-            <kbd className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 rounded border border-sidebar-border bg-sidebar-accent/70 px-1.5 py-0.5 text-[10px] font-medium text-sidebar-foreground">
+            <kbd className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 rounded border border-sidebar-border bg-sidebar-accent/70 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
               Ctrl K
             </kbd>
           )}
@@ -700,7 +700,7 @@ export function UnifiedSidebarNavigation({
       !filteredProductionNavigation.length &&
       !dashboardMatchesSearch &&
       !filteredAdministrationNavigation.length ? (
-        <p className="px-6 py-8 text-center text-sm text-sidebar-foreground">
+        <p className="px-6 py-8 text-center text-sm text-muted-foreground">
           No menu items found.
         </p>
       ) : null}
@@ -781,11 +781,11 @@ function NavigationSection({
                 <span className="truncate">{label}</span>
                 <span
                   aria-hidden="true"
-                  className="ml-auto min-w-5 shrink-0 rounded-full border border-sidebar-border bg-sidebar-accent px-1.5 text-center text-[10px] leading-5 font-semibold text-sidebar-foreground tabular-nums group-data-[state=open]/collapsible:text-sidebar-foreground"
+                  className="ml-auto min-w-5 shrink-0 rounded-full border border-sidebar-border bg-sidebar-accent px-1.5 text-center text-[10px] leading-5 font-semibold text-sidebar-foreground/70 tabular-nums group-data-[state=open]/collapsible:text-sidebar-foreground"
                 >
                   {submoduleCount}
                 </span>
-                <span className="flex size-6 shrink-0 origin-center items-center justify-center rounded-md text-sidebar-foreground transition-[transform,color] duration-[var(--dur-base)] group-data-[state=open]/collapsible:rotate-90 group-data-[state=open]/collapsible:text-sidebar-foreground">
+                <span className="flex size-6 shrink-0 origin-center items-center justify-center rounded-md text-muted-foreground transition-[transform,color] duration-[var(--dur-base)] group-data-[state=open]/collapsible:rotate-90 group-data-[state=open]/collapsible:text-sidebar-foreground">
                   <ChevronRight className="size-3.5" />
                 </span>
               </SidebarMenuButton>
