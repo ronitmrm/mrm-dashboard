@@ -1,5 +1,7 @@
 import { Alert, AlertDescription } from "@workspace/ui/components/alert"
 
+import { FullPageWorkspace } from "@/components/full-page-workspace"
+
 import { requireAuthenticatedSession } from "@/lib/auth/require-capability"
 import { getUnifiedNavigationAccess } from "@/lib/auth/unified-navigation-access"
 import {
@@ -49,7 +51,7 @@ export default async function OperationalEntrySelectionPage({
       : ""
 
   return (
-    <div className="grid gap-6">
+    <FullPageWorkspace>
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">
           {view === "masterTables"
@@ -63,7 +65,7 @@ export default async function OperationalEntrySelectionPage({
         </p>
       </div>
       {value(query.error) === "invalid-selection" ? (
-        <Alert className="mx-auto w-full max-w-3xl" variant="destructive">
+        <Alert className="w-full" variant="destructive">
           <AlertDescription>
             That operational selection is mismatched or not permitted. Select an
             available entry and retry.
@@ -75,6 +77,6 @@ export default async function OperationalEntrySelectionPage({
         initial={{ main, sub, unit }}
         view={view}
       />
-    </div>
+    </FullPageWorkspace>
   )
 }
