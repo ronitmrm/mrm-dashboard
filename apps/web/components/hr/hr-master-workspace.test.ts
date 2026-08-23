@@ -19,14 +19,8 @@ describe("HR master workspace", () => {
 
     expect(pageSource).toContain('activeItem.panelId !== "mastersPanel"')
     expect(pageSource).toContain('activeItem.panelId !== "postMasterPanel"')
-    expect(panelSource).toContain("<RecruitmentMasterKindSelect")
-    const selectorSource = readFileSync(
-      new URL("./recruitment-master-kind-select.tsx", import.meta.url),
-      "utf8"
-    )
-    expect(selectorSource).toContain(
-      'if (view === "masterTables" || selectionLocked) return null'
-    )
+    expect(panelSource).not.toContain("<RecruitmentMasterKindSelect")
+
     expect(panelSource).toContain('allMastersHref="/?tab=dataEntryTab"')
     expect(tablesSource).toMatch(
       /const rows =\s+kind === "department" \? masters\.departments : masters\.designations/
