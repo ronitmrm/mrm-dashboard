@@ -16,7 +16,6 @@ import { Button } from "@workspace/ui/components/button"
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
   MetricCard,
@@ -193,9 +192,6 @@ export default async function StoreOverviewPage() {
                 </span>
                 <div>
                   <CardTitle>Attention Required</CardTitle>
-                  <CardDescription>
-                    Stock alerts, missing codes and due maintenance.
-                  </CardDescription>
                 </div>
               </div>
             </CardHeader>

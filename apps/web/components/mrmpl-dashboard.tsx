@@ -1055,9 +1055,6 @@ function FirstPieceInspectionShell({
       <div className="grid gap-3 @3xl/main:grid-cols-[minmax(0,1fr)_auto] @3xl/main:items-start">
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold">First Piece Inspection</h1>
-          <p className="text-sm text-muted-foreground">
-            Select A Pending Setup, Enter Five Readings, Then Approve It.
-          </p>
         </div>
         <Button
           className="w-full @3xl/main:w-auto"
@@ -1256,10 +1253,6 @@ function HourlyQualityCheckShell({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold">Hourly Quality Check</h1>
-            <p className="text-sm text-muted-foreground">
-              Select The Running Machine, Then Record The Hourly Inspection
-              Against The Active Item, Option, And Setup.
-            </p>
           </div>
           <Button
             type="button"
@@ -1687,10 +1680,6 @@ function SetupChecklistShell({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold">Setup Checklist</h1>
-            <p className="text-sm text-muted-foreground">
-              Save Pre Setting And Setting Checklist Progress Outside The
-              Machinist Task List.
-            </p>
           </div>
           <Button
             type="button"
@@ -1716,7 +1705,6 @@ function SetupChecklistShell({
                       ? "Setting Completion"
                       : "Pre Setting Start"}
                   </CardTitle>
-                  <CardDescription>Running Setup Details</CardDescription>
                 </CardHeader>
                 <CardContent className="grid gap-3">
                   <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
@@ -12301,10 +12289,6 @@ function MachineMasterPanel({
           <h2 className="text-xl font-semibold tracking-tight">
             Machine {displayValue(selectedMachine.machineNo)}
           </h2>
-          <p className="text-sm text-muted-foreground">
-            Identity, Store Assets, Maintenance Schedules, History, And Reports
-            For This Machine.
-          </p>
         </div>
         <Button type="button" variant="outline" onClick={closeMachine}>
           Back To Machines

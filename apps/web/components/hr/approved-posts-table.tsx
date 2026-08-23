@@ -380,11 +380,7 @@ export function ApprovedPostsTable({
             <DataDownloadButton href="/hr/approved-posts/export" />
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="flex min-h-8 items-center justify-between gap-3">
-              <p className="text-xs text-muted-foreground">
-                Open A Column Filter, Tick One Or More Values, Then Apply.
-                Filters From Different Columns Work Together.
-              </p>
+            <div className="flex min-h-8 items-center justify-end gap-3">
               <div className="flex items-center gap-2">
                 {employeeManagement ? (
                   <Button

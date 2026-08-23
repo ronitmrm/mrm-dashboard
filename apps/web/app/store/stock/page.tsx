@@ -85,9 +85,6 @@ export default async function StoreStockPage({
     <div className="flex flex-col gap-6">
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">Stock</h2>
-        <p className="text-sm text-muted-foreground">
-          One filterable table for every Consumable and Non Consumable item.
-        </p>
       </div>
 
       <Card>

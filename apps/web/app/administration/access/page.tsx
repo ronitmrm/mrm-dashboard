@@ -412,9 +412,6 @@ export default async function AccessAdministrationPage({
         <Card>
           <CardHeader>
             <CardTitle>Staff Access</CardTitle>
-            <CardDescription>
-              Effective Access Is Evaluated On Every Protected Server Request.
-            </CardDescription>
           </CardHeader>
           <CardContent>
             {snapshot.users.length === 0 ? (
