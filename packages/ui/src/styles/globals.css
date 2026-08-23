@@ -289,6 +289,40 @@
   outline-color: var(--mrm-tennis) !important;
 }
 
+@keyframes sidebar-submenu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-0.25rem) scaleY(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scaleY(1);
+  }
+}
+
+@keyframes sidebar-submenu-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scaleY(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-0.25rem) scaleY(0.985);
+  }
+}
+
+.sidebar-submenu-content {
+  transform-origin: top;
+}
+
+.sidebar-submenu-content[data-state="open"] {
+  animation: sidebar-submenu-in var(--dur-base) var(--ease-standard) both;
+}
+
+.sidebar-submenu-content[data-state="closed"] {
+  animation: sidebar-submenu-out var(--dur-fast) var(--ease-standard) both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
