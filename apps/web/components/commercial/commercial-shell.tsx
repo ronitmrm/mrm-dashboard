@@ -145,9 +145,6 @@ export function CommercialShell({
             <h1 className="truncate text-base font-semibold">
               {current.label}
             </h1>
-            <p className="truncate text-xs text-muted-foreground">
-              Unified Mrmpl Workflow
-            </p>
           </div>
           <Badge variant="outline">
             <Settings2 />

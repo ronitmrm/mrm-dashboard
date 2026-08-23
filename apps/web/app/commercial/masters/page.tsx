@@ -190,9 +190,6 @@ export default async function MastersPage({
             <div className="flex items-center justify-between gap-3">
               <div>
                 <CardTitle>Commercial Master Tables</CardTitle>
-                <CardDescription>
-                  Edit names or safely replace and delete duplicate masters.
-                </CardDescription>
               </div>
               <Badge variant="outline">{editableRows.length}</Badge>
             </div>
