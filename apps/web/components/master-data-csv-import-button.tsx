@@ -1,11 +1,62 @@
 "use client"
 
-import { Upload } from "lucide-react"
+import { Download, Upload } from "lucide-react"
 import { useRef, useState } from "react"
 
 import { Button } from "@workspace/ui/components/button"
 
 type CsvImportAction = (formData: FormData) => void | Promise<void>
+
+function csvCell(value: string) {
+  return /[",\r\n]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value
+}
+
+export function MasterDataCsvDownloadButton({
+  columns,
+  fileName,
+  href,
+}: {
+  columns?: readonly string[]
+  fileName?: string
+  href?: string
+}) {
+  const content = columns?.length
+    ? `\uFEFF${columns.map(csvCell).join(",")}\r\n`
+    : ""
+  const label = (
+    <>
+      <Download className="size-4" />
+      Download CSV
+    </>
+  )
+
+  return href ? (
+    <Button asChild size="sm" variant="outline">
+      <a href={href}>{label}</a>
+    </Button>
+  ) : (
+    <Button
+      disabled={!content}
+      size="sm"
+      type="button"
+      variant="outline"
+      onClick={() => {
+        const url = URL.createObjectURL(
+          new Blob([content], { type: "text/csv;charset=utf-8" })
+        )
+        const link = document.createElement("a")
+        link.href = url
+        link.download = fileName || "master-template.csv"
+        document.body.append(link)
+        link.click()
+        link.remove()
+        window.setTimeout(() => URL.revokeObjectURL(url), 0)
+      }}
+    >
+      {label}
+    </Button>
+  )
+}
 
 export function MasterDataCsvImportButton({
   action,

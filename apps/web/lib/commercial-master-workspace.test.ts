@@ -43,10 +43,13 @@ describe("commercial master workspace", () => {
 
   it("downloads the source workbook sheet for the selected master", () => {
     expect(commercialMasterTemplateHref("materialGrade")).toBe(
-      "/commercial/masters/template.xlsx?master=grades"
+      "/commercial/masters/template.csv?master=grades"
     )
     expect(commercialMasterTemplateHref("commercial_shipping")).toBe(
-      "/commercial/masters/template.xlsx?master=shipping"
+      "/commercial/masters/template.csv?master=shipping"
+    )
+    expect(commercialMasterTemplateHref("buyer")).toBe(
+      "/commercial/masters/template.csv?master=commercials&termType=buyer"
     )
   })
 

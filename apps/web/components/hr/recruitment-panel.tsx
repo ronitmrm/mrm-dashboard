@@ -67,7 +67,10 @@ import {
 import { InterviewScheduleForm } from "@/components/hr/interview-schedule-form"
 import { JobTemplatesTable } from "@/components/hr/job-templates-table"
 import { MasterDataViewTabs } from "@/components/master-data-view-tabs"
-import { MasterDataCsvImportButton } from "@/components/master-data-csv-import-button"
+import {
+  MasterDataCsvDownloadButton,
+  MasterDataCsvImportButton,
+} from "@/components/master-data-csv-import-button"
 import { MasterTables } from "@/components/hr/master-tables"
 import { RecruitmentMasterKindSelect } from "@/components/hr/recruitment-master-kind-select"
 import { RecruitablePostFields } from "@/components/hr/recruitable-post-fields"
@@ -211,6 +214,12 @@ function MastersPanel({
       <MasterDataViewTabs
         activeView={activeView}
         allMastersHref="/?tab=dataEntryTab"
+        csvDownloadAction={
+          <MasterDataCsvDownloadButton
+            columns={["name"]}
+            fileName={`${masterKind}-master-template.csv`}
+          />
+        }
         csvImportAction={
           canWrite ? (
             <MasterDataCsvImportButton
@@ -289,6 +298,24 @@ function TemplatePanel({
       <MasterDataViewTabs
         activeView={activeView}
         allMastersHref="/?tab=dataEntryTab"
+        csvDownloadAction={
+          <MasterDataCsvDownloadButton
+            columns={[
+              "template_code",
+              "name",
+              "department_code",
+              "designation_code",
+              "combined_role_id",
+              "education",
+              "experience_requirement",
+              "gender",
+              "minimum_salary",
+              "maximum_salary",
+              "role_responsibilities",
+            ]}
+            fileName="job-template-master-template.csv"
+          />
+        }
         csvImportAction={
           canWrite ? (
             <MasterDataCsvImportButton action={importJobTemplatesCsvAction} />
