@@ -14,6 +14,7 @@ import {
   dashboardNavigation,
   dashboardNavigationDestination,
   dashboardTabHref,
+  hrMasterNavigation,
   hrNavigation,
   jobCardWorkspaceHref,
   legacyMasterEntryForDashboardTab,
@@ -251,8 +252,13 @@ describe("unified navigation", () => {
       { href: "/administration/access", label: "Access Administration" },
       { href: "/account/password", label: "Password & Security" },
     ])
+    expect(
+      hrMasterNavigation.map(({ href, label }) => ({ href, label }))
+    ).toContainEqual({
+      href: "/hr?panel=approvedPostPanel",
+      label: "Approved Posts",
+    })
     expect(hrNavigation.map(({ href, label }) => ({ href, label }))).toEqual([
-      { href: "/hr?panel=approvedPostPanel", label: "Approved Post Form" },
       { href: "/hr?panel=employeeMasterPanel", label: "Employee Master" },
       { href: "/hr?panel=jobsPanel", label: "Job Posts" },
       { href: "/hr?panel=candidatesPanel", label: "Log Candidate" },

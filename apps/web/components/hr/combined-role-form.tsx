@@ -25,9 +25,11 @@ type CombinedPostOption = {
 
 export function CombinedRoleForm({
   existingVacancyCodes,
+  masterView,
   posts,
 }: {
   existingVacancyCodes: string[]
+  masterView?: "dataEntry" | "masterTables"
   posts: CombinedPostOption[]
 }) {
   const [primaryPostId, setPrimaryPostId] = useState("")
@@ -70,6 +72,9 @@ export function CombinedRoleForm({
       <CardContent>
         <form action={createCombinedRoleAction} className="grid gap-4">
           <input name="panel" type="hidden" value="approvedPostPanel" />
+          {masterView ? (
+            <input name="master_view" type="hidden" value={masterView} />
+          ) : null}
           {[...selectedPostIds].map((postId) => (
             <input key={postId} name="post_ids" type="hidden" value={postId} />
           ))}

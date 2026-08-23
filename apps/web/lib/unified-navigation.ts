@@ -593,16 +593,16 @@ export const hrMasterNavigation = [
     panelId: "postMasterPanel",
     requiredCapability: "hr.job_templates.read",
   },
-] as const
-
-export const hrNavigation = [
   {
     href: "/hr?panel=approvedPostPanel",
     icon: ListChecks,
-    label: "Approved Post Form",
+    label: "Approved Posts",
     panelId: "approvedPostPanel",
     requiredCapability: "hr.approved_posts.read",
   },
+] as const
+
+export const hrNavigation = [
   {
     href: "/hr?panel=employeeMasterPanel",
     icon: UsersRound,

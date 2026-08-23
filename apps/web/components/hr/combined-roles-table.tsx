@@ -58,11 +58,13 @@ function CombinedStatusBadge({ status }: { status: string }) {
 export function CombinedRolesTable({
   canWrite,
   combinedRoles,
+  masterView,
   posts,
   templates,
 }: {
   canWrite: boolean
   combinedRoles: RecruitmentCombinedRoleRow[]
+  masterView?: "dataEntry" | "masterTables"
   posts: RecruitmentPostRow[]
   templates: RecruitmentTemplateRow[]
 }) {
@@ -332,6 +334,9 @@ export function CombinedRolesTable({
             className="flex min-h-full flex-col"
           >
             <input name="panel" type="hidden" value="approvedPostPanel" />
+            {masterView ? (
+              <input name="master_view" type="hidden" value={masterView} />
+            ) : null}
             <input
               name="combined_role_id"
               type="hidden"
