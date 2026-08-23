@@ -93,10 +93,12 @@ export default async function HrRecruitmentPage({
     const needsTemplates = [
       "postMasterPanel",
       "approvedPostPanel",
+      "combinedRolesPanel",
       "employeeMasterPanel",
     ].includes(panelId)
     const needsPosts = [
       "approvedPostPanel",
+      "combinedRolesPanel",
       "employeeMasterPanel",
       "interviewsPanel",
       "jobsPanel",
@@ -104,6 +106,7 @@ export default async function HrRecruitmentPage({
     const needsCombinedRoles = [
       "postMasterPanel",
       "approvedPostPanel",
+      "combinedRolesPanel",
       "employeeMasterPanel",
       "jobsPanel",
     ].includes(panelId)
@@ -200,6 +203,7 @@ export default async function HrRecruitmentPage({
       {activeItem.panelId !== "mastersPanel" &&
       activeItem.panelId !== "postMasterPanel" &&
       activeItem.panelId !== "approvedPostPanel" &&
+      activeItem.panelId !== "combinedRolesPanel" &&
       activeItem.panelId !== "candidatesPanel" &&
       activeItem.panelId !== "interviewsPanel" &&
       activeItem.panelId !== "interviewWorkspacePanel" ? (

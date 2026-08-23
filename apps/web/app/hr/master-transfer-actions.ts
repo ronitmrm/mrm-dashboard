@@ -7,6 +7,7 @@ import { redirect } from "next/navigation"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { hrTaskCapabilities } from "@/lib/auth/task-capabilities"
+import { approvedPostInputFromCsvRow } from "@/lib/approved-post-import"
 import { csvValue, readMasterCsv } from "@/lib/master-data-csv"
 
 const hrPath = "/hr"
@@ -18,6 +19,48 @@ async function repositoryContext(capability: string) {
   })
   const organizationId = await repository.organizationIdForCode("MRMPL")
   return { actorUserId: session.user.id, organizationId, repository }
+}
+
+export async function importApprovedPostsCsvAction(formData: FormData) {
+  const returnParams = new URLSearchParams({
+    masterView: "dataEntry",
+    panel: "approvedPostPanel",
+  })
+  for (const key of ["masterUnit", "masterMain", "masterSub"]) {
+    const value = formData.get(key)?.toString().trim()
+    if (value) returnParams.set(key, value)
+  }
+  const returnPath = `${hrPath}?${returnParams}`
+  let context: Awaited<ReturnType<typeof repositoryContext>> | undefined
+  let outcome: { error?: string; success?: string }
+  try {
+    const rows = await readMasterCsv(formData.get("master_csv_file"))
+    const inputs = rows.map((row, index) =>
+      approvedPostInputFromCsvRow(row, index + 2)
+    )
+    context = await repositoryContext(hrTaskCapabilities.savePost)
+    for (const input of inputs) {
+      await context.repository.upsertPost({
+        ...input,
+        actorUserId: context.actorUserId,
+        organizationId: context.organizationId,
+      })
+    }
+    outcome = {
+      success: `${inputs.length} approved post${inputs.length === 1 ? "" : "s"} imported successfully.`,
+    }
+  } catch (error) {
+    outcome = {
+      error:
+        error instanceof Error
+          ? error.message
+          : "The Approved Posts CSV was not imported.",
+    }
+  } finally {
+    await context?.repository.close()
+  }
+  revalidatePath(hrPath)
+  redirect(`${returnPath}&${new URLSearchParams(outcome)}`)
 }
 
 export async function importRecruitmentMastersCsvAction(formData: FormData) {

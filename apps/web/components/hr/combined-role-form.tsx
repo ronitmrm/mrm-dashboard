@@ -71,7 +71,7 @@ export function CombinedRoleForm({
       </CardHeader>
       <CardContent>
         <form action={createCombinedRoleAction} className="grid gap-4">
-          <input name="panel" type="hidden" value="approvedPostPanel" />
+          <input name="panel" type="hidden" value="combinedRolesPanel" />
           {masterView ? (
             <input name="master_view" type="hidden" value={masterView} />
           ) : null}

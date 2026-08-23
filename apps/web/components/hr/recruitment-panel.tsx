@@ -46,6 +46,7 @@ import {
   saveTemplateAction,
 } from "@/app/hr/actions"
 import {
+  importApprovedPostsCsvAction,
   importJobTemplatesCsvAction,
   importRecruitmentMastersCsvAction,
 } from "@/app/hr/master-transfer-actions"
@@ -395,7 +396,6 @@ function TemplatePanel({
 
 function ApprovedPostPanel({
   canWrite,
-  combinedRoles,
   jobs,
   masters,
   masterView,
@@ -403,23 +403,8 @@ function ApprovedPostPanel({
   templates,
 }: Pick<
   RecruitmentPanelProps,
-  | "canWrite"
-  | "combinedRoles"
-  | "jobs"
-  | "masters"
-  | "masterView"
-  | "posts"
-  | "templates"
+  "canWrite" | "jobs" | "masters" | "masterView" | "posts" | "templates"
 >) {
-  const activeCombinedPostCodes = new Set(
-    combinedRoles
-      .filter((role) => role.status === "Active")
-      .flatMap((role) => role.postCodes)
-  )
-  const availableCombinedPosts = posts.filter(
-    (post) =>
-      post.status !== "Inactive" && !activeCombinedPostCodes.has(post.postCode)
-  )
   const activeView = masterView ?? "dataEntry"
   const showDataEntry = activeView === "dataEntry"
   const showMasterTables = activeView === "masterTables"
@@ -428,7 +413,35 @@ function ApprovedPostPanel({
     <>
       <MasterDataViewTabs
         activeView={activeView}
+        allMastersHref="/?tab=dataEntryTab"
+        csvDownloadAction={
+          <MasterDataCsvDownloadButton
+            columns={[
+              "department_code",
+              "designation_code",
+              "requirement_template_code",
+            ]}
+            fileName="approved-posts-template.csv"
+          />
+        }
+        csvImportAction={
+          canWrite ? (
+            <MasterDataCsvImportButton
+              action={importApprovedPostsCsvAction}
+              fields={{
+                masterMain: "hr_masters",
+                masterSub: "approved_posts",
+                masterUnit: "universal",
+              }}
+            />
+          ) : null
+        }
         dataEntryHref="/hr?panel=approvedPostPanel&masterView=dataEntry"
+        exportAction={
+          <Button asChild size="sm" variant="outline">
+            <Link href="/hr/approved-posts/export">Export</Link>
+          </Button>
+        }
         masterTablesHref="/hr?panel=approvedPostPanel&masterView=masterTables"
       />
       {canWrite && showDataEntry ? (
@@ -454,6 +467,49 @@ function ApprovedPostPanel({
           </Button>
         </PanelForm>
       ) : null}
+      {showMasterTables ? (
+        <ApprovedPostsTable
+          canWrite={canWrite}
+          jobs={jobs}
+          masterView={activeView}
+          posts={posts}
+          templates={templates.filter((template) => !template.combinedRoleId)}
+        />
+      ) : null}
+    </>
+  )
+}
+
+function CombinedRolePanel({
+  canWrite,
+  combinedRoles,
+  masterView,
+  posts,
+  templates,
+}: Pick<
+  RecruitmentPanelProps,
+  "canWrite" | "combinedRoles" | "masterView" | "posts" | "templates"
+>) {
+  const activeCombinedPostCodes = new Set(
+    combinedRoles
+      .filter((role) => role.status === "Active")
+      .flatMap((role) => role.postCodes)
+  )
+  const availableCombinedPosts = posts.filter(
+    (post) =>
+      post.status !== "Inactive" && !activeCombinedPostCodes.has(post.postCode)
+  )
+  const activeView = masterView ?? "dataEntry"
+  const showDataEntry = activeView === "dataEntry"
+  const showMasterTables = activeView === "masterTables"
+
+  return (
+    <>
+      <MasterDataViewTabs
+        activeView={activeView}
+        dataEntryHref="/hr?panel=combinedRolesPanel&masterView=dataEntry"
+        masterTablesHref="/hr?panel=combinedRolesPanel&masterView=masterTables"
+      />
       {canWrite && showDataEntry ? (
         <CombinedRoleForm
           existingVacancyCodes={combinedRoles.flatMap((role) =>
@@ -472,22 +528,13 @@ function ApprovedPostPanel({
         />
       ) : null}
       {showMasterTables ? (
-        <>
-          <EditableCombinedRolesTable
-            canWrite={canWrite}
-            combinedRoles={combinedRoles}
-            masterView={activeView}
-            posts={posts}
-            templates={templates}
-          />
-          <ApprovedPostsTable
-            canWrite={canWrite}
-            jobs={jobs}
-            masterView={activeView}
-            posts={posts}
-            templates={templates.filter((template) => !template.combinedRoleId)}
-          />
-        </>
+        <EditableCombinedRolesTable
+          canWrite={canWrite}
+          combinedRoles={combinedRoles}
+          masterView={activeView}
+          posts={posts}
+          templates={templates}
+        />
       ) : null}
     </>
   )
@@ -823,9 +870,18 @@ export function RecruitmentPanel(props: RecruitmentPanelProps) {
       return (
         <ApprovedPostPanel
           canWrite={props.canWrite}
-          combinedRoles={props.combinedRoles}
           jobs={props.jobs}
           masters={props.masters}
+          masterView={props.masterView}
+          posts={props.posts}
+          templates={props.templates}
+        />
+      )
+    case "combinedRolesPanel":
+      return (
+        <CombinedRolePanel
+          canWrite={props.canWrite}
+          combinedRoles={props.combinedRoles}
           masterView={props.masterView}
           posts={props.posts}
           templates={props.templates}

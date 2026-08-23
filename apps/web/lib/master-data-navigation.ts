@@ -47,6 +47,7 @@ function canReadRecruitmentMasters(access: UnifiedNavigationAccess) {
       "/hr?panel=mastersPanel",
       "/hr?panel=postMasterPanel",
       "/hr?panel=approvedPostPanel",
+      "/hr?panel=combinedRolesPanel",
       "/hr?panel=candidatesPanel",
     ].includes(href)
   )

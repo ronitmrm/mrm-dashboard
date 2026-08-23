@@ -261,6 +261,12 @@ describe("unified navigation", () => {
     expect(
       hrMasterNavigation.map(({ href, label }) => ({ href, label }))
     ).toContainEqual({
+      href: "/hr?panel=combinedRolesPanel",
+      label: "Combined Approved Posts",
+    })
+    expect(
+      hrMasterNavigation.map(({ href, label }) => ({ href, label }))
+    ).toContainEqual({
       href: "/hr?panel=candidatesPanel",
       label: "Candidates",
     })
