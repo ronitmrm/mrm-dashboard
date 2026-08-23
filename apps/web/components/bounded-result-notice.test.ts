@@ -28,7 +28,8 @@ describe("BoundedResultNotice", () => {
     })
 
     expect(html).toContain("Enquiries: showing 200 results; more match.")
-    expect(html).toContain("Export the complete register")
+    expect(html).toContain("Download Excel")
+    expect(html).toContain('data-icon="inline-start"')
     expect(html).toContain('role="status"')
   })
 

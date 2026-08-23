@@ -1,5 +1,4 @@
 import { createCommercialCostingRepository } from "@workspace/db"
-import { Button } from "@workspace/ui/components/button"
 import {
   Card,
   CardAction,
@@ -8,9 +7,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
-import Link from "next/link"
 
 import { BoundedResultNotice } from "@/components/bounded-result-notice"
+import { DataDownloadButton } from "@/components/data-download-button"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
 
@@ -37,9 +36,7 @@ export default async function PricingPage() {
             Snapshots And Recursive Bom Rows.
           </CardDescription>
           <CardAction>
-            <Button asChild size="sm" variant="outline">
-              <Link href="/commercial/pricing/export.xlsx">Export Excel</Link>
-            </Button>
+            <DataDownloadButton href="/commercial/pricing/export.xlsx" />
           </CardAction>
         </CardHeader>
         <CardContent className="grid gap-4">

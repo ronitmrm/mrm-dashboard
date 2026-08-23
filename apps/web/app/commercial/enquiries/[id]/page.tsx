@@ -39,6 +39,7 @@ import {
 import { Textarea } from "@workspace/ui/components/textarea"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
+import { DataDownloadButton } from "@/components/data-download-button"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { selectedEnquiryLine } from "@/lib/pricing/enquiry-detail"
 import { isActiveEnquiryCustomer } from "@/lib/pricing/enquiry-customers"
@@ -178,11 +179,9 @@ export default async function EnquiryDetailPage({
             Commits The Workflow Transition Atomically In Postgresql.
           </p>
           <div className="flex flex-wrap gap-2 pt-2">
-            <Button asChild size="sm" variant="outline">
-              <Link href={`/commercial/enquiries/${id}/lines/export.xlsx`}>
-                Export Logged Lines
-              </Link>
-            </Button>
+            <DataDownloadButton
+              href={`/commercial/enquiries/${id}/lines/export.xlsx`}
+            />
             <Button asChild size="sm" variant="outline">
               <Link href="/commercial/enquiries/template.csv">
                 Line Import Template

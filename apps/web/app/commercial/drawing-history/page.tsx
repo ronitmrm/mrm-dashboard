@@ -2,7 +2,7 @@ import {
   createCommercialReportingRepository,
   createCustomerRepository,
 } from "@workspace/db"
-import { Download, History, Pencil } from "lucide-react"
+import { History, Pencil } from "lucide-react"
 import Link from "next/link"
 
 import { Badge } from "@workspace/ui/components/badge"
@@ -27,6 +27,7 @@ import {
 import { Textarea } from "@workspace/ui/components/textarea"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
+import { DataDownloadButton } from "@/components/data-download-button"
 import { requireCapability } from "@/lib/auth/require-capability"
 
 import { updateDrawingHistoryAction } from "./actions"
@@ -73,11 +74,7 @@ export default async function DrawingHistoryPage({
                   <History /> Change Log
                 </Link>
               </Button>
-              <Button asChild variant="outline">
-                <Link href={`${drawingHistoryPath}/export.xlsx`}>
-                  <Download /> Export Excel
-                </Link>
-              </Button>
+              <DataDownloadButton href={`${drawingHistoryPath}/export.xlsx`} />
             </div>
           </div>
         </CardHeader>

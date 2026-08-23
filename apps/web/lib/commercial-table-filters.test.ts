@@ -35,7 +35,9 @@ describe("Costing module Excel filters", () => {
     expect(pricingPage).not.toContain('aria-label="Search pricing"')
     expect(pricingPage).not.toContain('name="q"')
     expect(pricingPage).toContain("<CardAction>")
-    expect(pricingPage).toContain('<Button asChild size="sm" variant="outline">')
+    expect(pricingPage).toContain(
+      '<DataDownloadButton href="/commercial/pricing/export.xlsx" />'
+    )
     expect(quote).toContain(
       '<TableHead data-filterable="true">Component</TableHead>'
     )

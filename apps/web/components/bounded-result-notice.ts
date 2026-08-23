@@ -2,6 +2,8 @@ import { createElement } from "react"
 
 import Link from "next/link"
 
+import { DataDownloadButton } from "./data-download-button"
+
 type Coverage = {
   limit: number
   returned: number
@@ -41,10 +43,30 @@ export function BoundedResultNotice({
     )
   }
   const total = coverage.total === undefined ? "" : ` of ${coverage.total}`
+  const message = `${section}: showing ${coverage.returned}${total} results${scope}; more match.`
+  const downloadLabel = actionHref?.includes(".xlsx")
+    ? "Download Excel"
+    : actionHref?.includes(".csv")
+      ? "Download CSV"
+      : null
+  if (actionHref && actionLabel && downloadLabel) {
+    return createElement(
+      "div",
+      {
+        className: "flex flex-wrap items-center justify-between gap-2",
+        role: "status",
+      },
+      createElement("p", { className: "text-xs text-muted-foreground" }, message),
+      createElement(DataDownloadButton, {
+        href: actionHref,
+        label: downloadLabel,
+      })
+    )
+  }
   return createElement(
     "p",
     { className: "text-xs text-muted-foreground", role: "status" },
-    `${section}: showing ${coverage.returned}${total} results${scope}; more match.`,
+    message,
     actionHref && actionLabel ? " " : null,
     actionHref && actionLabel
       ? createElement(

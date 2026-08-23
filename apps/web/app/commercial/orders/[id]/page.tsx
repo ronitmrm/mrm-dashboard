@@ -33,6 +33,7 @@ import {
 import { Textarea } from "@workspace/ui/components/textarea"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
+import { DataDownloadButton } from "@/components/data-download-button"
 import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { currencyCodes } from "@/lib/currencies"
@@ -122,11 +123,10 @@ export default async function PurchaseOrderPage({
                   </Link>
                 </Button>
               ) : null}
-              <Button asChild variant="outline">
-                <Link href={`/commercial/orders/${order.id}/export.xlsx`}>
-                  Export Po Excel
-                </Link>
-              </Button>
+              <DataDownloadButton
+                href={`/commercial/orders/${order.id}/export.xlsx`}
+                label="Download PO Excel"
+              />
               <Button asChild variant="outline">
                 <Link href="/commercial/orders">Purchase-Order Register</Link>
               </Button>
@@ -506,13 +506,10 @@ export default async function PurchaseOrderPage({
                       Open Pi Pdf
                     </Link>
                   </Button>
-                  <Button asChild size="sm" variant="outline">
-                    <Link
-                      href={`/commercial/orders/${order.id}/pi.xlsx`}
-                    >
-                      Export Pi Excel
-                    </Link>
-                  </Button>
+                  <DataDownloadButton
+                    href={`/commercial/orders/${order.id}/pi.xlsx`}
+                    label="Download PI Excel"
+                  />
                 </div>
                 {currentInvoice.status === "Draft" ? (
                   <form action={markProformaInvoiceSentAction}>

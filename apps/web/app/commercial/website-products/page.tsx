@@ -33,6 +33,7 @@ import { Textarea } from "@workspace/ui/components/textarea"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { BoundedResultNotice } from "@/components/bounded-result-notice"
 import { CompanyWideMasterScope } from "@/components/company-wide-master-scope"
+import { DataDownloadButton } from "@/components/data-download-button"
 import { MasterDataViewTabs } from "@/components/master-data-view-tabs"
 import {
   MasterDataCsvDownloadButton,
@@ -322,9 +323,7 @@ export default async function WebsiteProductsPage({
           { edit: editing?.profileId }
         )}
         exportAction={
-          <Button asChild size="sm" variant="outline">
-            <Link href={`${websiteProductsPath}/export.xlsx`}>Export</Link>
-          </Button>
+          <DataDownloadButton href={`${websiteProductsPath}/export.xlsx`} />
         }
         masterTablesHref={externalMasterViewHref(
           websiteProductsPath,

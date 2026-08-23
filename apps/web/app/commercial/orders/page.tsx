@@ -40,6 +40,7 @@ import { istDateValue } from "@/lib/date-time"
 import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { BoundedResultNotice } from "@/components/bounded-result-notice"
+import { DataDownloadButton } from "@/components/data-download-button"
 import {
   MasterDataCsvDownloadButton,
   MasterDataCsvImportButton,
@@ -112,16 +113,14 @@ export default async function PurchaseOrdersPage({
         dataEntryHref="/commercial/orders?operationalView=dataEntry"
         exportAction={
           <>
-            <Button asChild size="sm" variant="outline">
-              <Link href="/commercial/orders/master/export.xlsx">
-                Export PO
-              </Link>
-            </Button>
-            <Button asChild size="sm" variant="outline">
-              <Link href="/commercial/orders/pi-master/export.xlsx">
-                Export Approved PI
-              </Link>
-            </Button>
+            <DataDownloadButton
+              href="/commercial/orders/master/export.xlsx"
+              label="Download PO Excel"
+            />
+            <DataDownloadButton
+              href="/commercial/orders/pi-master/export.xlsx"
+              label="Download Approved PI Excel"
+            />
           </>
         }
         masterTablesHref="/commercial/orders?operationalView=masterTables"

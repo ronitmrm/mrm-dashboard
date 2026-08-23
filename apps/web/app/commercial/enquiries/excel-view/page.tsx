@@ -20,6 +20,7 @@ import {
 } from "@workspace/ui/components/table"
 
 import { BoundedResultNotice } from "@/components/bounded-result-notice"
+import { DataDownloadButton } from "@/components/data-download-button"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { formatIstDateTime } from "@/lib/date-time"
@@ -59,11 +60,7 @@ export default async function EnquiryExcelViewPage() {
           <Button asChild size="sm" variant="outline">
             <Link href="/commercial/enquiries">Back To Enquiries</Link>
           </Button>
-          <Button asChild size="sm" variant="outline">
-            <Link href="/commercial/enquiries/register/export.xlsx">
-              Export Complete Register
-            </Link>
-          </Button>
+          <DataDownloadButton href="/commercial/enquiries/register/export.xlsx" />
         </div>
         <BoundedResultNotice
           actionHref="/commercial/enquiries/register/export.xlsx"

@@ -1,11 +1,11 @@
 "use client"
 
 import Link from "next/link"
-import { ArrowLeft, Download } from "lucide-react"
+import { ArrowLeft } from "lucide-react"
 import { useSearchParams } from "next/navigation"
 import { type ReactNode, useEffect } from "react"
 
-import { Button } from "@workspace/ui/components/button"
+import { DataDownloadButton } from "@/components/data-download-button"
 
 import { masterDataTransferAction } from "@/lib/master-data-transfer"
 import { MasterDataUnsavedGuard } from "./master-data-unsaved-guard"
@@ -123,16 +123,11 @@ export function MasterDataViewTabs(props: MasterDataViewTabsProps) {
           {transferAction === "export" &&
           !props.exportAction &&
           props.onExport ? (
-            <Button
+            <DataDownloadButton
               disabled={props.exportDisabled}
+              label="Download CSV"
               onClick={props.onExport}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              <Download className="size-4" />
-              Export
-            </Button>
+            />
           ) : null}
         </div>
       </div>
