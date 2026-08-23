@@ -6,7 +6,12 @@ these defaults, while that Enquiry may select different active Commercial Master
 values without changing the Customer.
 
 **Commercial Term Master**: The company-wide active values available for Buyer,
-Incoterms, Payment Terms, Shipment Mode, Packaging, and Currency dropdowns.
+Incoterms, Payment Terms, Shipment Mode, and Packaging dropdowns.
+
+**Currency Catalog**: The application-owned, company-wide list of currency codes
+available in Customer, Enquiry, and Purchase Order dropdowns. Currency is not a
+maintainable Commercial Term Master. Existing saved currency values remain
+readable and selectable when editing historical records.
 
 **Enquiry Intake**: The Sales-owned recording and correction of one Enquiry's
 commercial terms and line items before downstream work. Its line register opens

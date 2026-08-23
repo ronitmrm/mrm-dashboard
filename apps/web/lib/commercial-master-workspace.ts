@@ -95,13 +95,6 @@ export const commercialMasterKinds = [
     workspaceKind: "packaging_terms",
   },
   {
-    entryKind: "commercialTerm",
-    label: "Currency",
-    tableKind: "commercial_commercial_term",
-    termType: "currency",
-    workspaceKind: "currency",
-  },
-  {
     entryKind: "quoteTerm",
     label: "Quote PDF term",
     tableKind: "commercial_quote_term",

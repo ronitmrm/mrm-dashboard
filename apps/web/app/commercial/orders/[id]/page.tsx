@@ -35,6 +35,7 @@ import { Textarea } from "@workspace/ui/components/textarea"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
+import { currencyCodes } from "@/lib/currencies"
 
 import {
   addPurchaseOrderLineAction,
@@ -218,15 +219,14 @@ export default async function PurchaseOrderPage({
                           id="line-currency"
                           name="currency_code"
                         >
-                          <NativeSelectOption value="USD">
-                            Usd
-                          </NativeSelectOption>
-                          <NativeSelectOption value="INR">
-                            Inr
-                          </NativeSelectOption>
-                          <NativeSelectOption value="EUR">
-                            Eur
-                          </NativeSelectOption>
+                          {currencyCodes.map((currency) => (
+                            <NativeSelectOption
+                              key={currency}
+                              value={currency}
+                            >
+                              {currency}
+                            </NativeSelectOption>
+                          ))}
                         </NativeSelect>
                       </Field>
                       <Field>
