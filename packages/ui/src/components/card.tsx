@@ -20,7 +20,7 @@ function Card({
       data-slot="card"
       data-size={size}
       className={cn(
-        "group/card flex flex-col gap-(--card-spacing) overflow-hidden rounded-lg border border-[var(--color-border-strong)] bg-card py-(--card-spacing) text-sm text-card-foreground shadow-[var(--shadow-sm)] [--card-spacing:--spacing(6)] has-[>img:first-child]:pt-0 data-[size=sm]:[--card-spacing:--spacing(4)] *:[img:first-child]:rounded-t-lg *:[img:last-child]:rounded-b-lg",
+        "group/card flex flex-col gap-(--card-spacing) overflow-hidden rounded-lg border border-[var(--color-panel-border)] bg-card py-(--card-spacing) text-sm text-card-foreground shadow-[var(--shadow-sm)] [--card-spacing:--spacing(6)] has-[>img:first-child]:pt-0 data-[size=sm]:[--card-spacing:--spacing(4)] *:[img:first-child]:rounded-t-lg *:[img:last-child]:rounded-b-lg",
         className
       )}
       {...props}
@@ -174,6 +174,17 @@ const metricToneClassNames: Record<
   },
 }
 
+const metricToneSurfaceClassNames: Record<MetricCardTone, string> = {
+  accent: "bg-[color-mix(in_srgb,var(--mrm-tennis)_10%,var(--color-surface))]",
+  brand: "bg-[color-mix(in_srgb,var(--mrm-green)_7%,var(--color-surface))]",
+  error: "bg-[color-mix(in_srgb,var(--color-error)_7%,var(--color-surface))]",
+  info: "bg-[color-mix(in_srgb,var(--color-info)_8%,var(--color-surface))]",
+  neutral: "bg-card",
+  success:
+    "bg-[color-mix(in_srgb,var(--color-success)_8%,var(--color-surface))]",
+  warning:
+    "bg-[color-mix(in_srgb,var(--color-warning)_12%,var(--color-surface))]",
+}
 function MetricCard({
   chart,
   className,
@@ -306,7 +317,8 @@ function MetricCard({
     </>
   )
   const metricClassName = cn(
-    "group/metric relative flex min-h-28 items-stretch overflow-hidden rounded-lg border border-[var(--color-border-strong)] bg-card p-4 text-left shadow-[var(--shadow-sm)]",
+    "group/metric relative flex min-h-28 items-stretch overflow-hidden rounded-lg border border-[var(--color-panel-border)] p-4 text-left shadow-[var(--shadow-sm)]",
+    metricToneSurfaceClassNames[tone],
     onClick &&
       "pr-8 transition-[border-color,box-shadow,background-color] duration-[var(--dur-fast)] ease-[var(--ease-standard)] hover:border-primary/35 hover:bg-[var(--color-brand-tint)] hover:shadow-[var(--shadow-md)] focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 focus-visible:outline-none",
     className

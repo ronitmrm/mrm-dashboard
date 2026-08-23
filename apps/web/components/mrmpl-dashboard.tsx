@@ -53,7 +53,9 @@ import {
   CardHeader,
   CardTitle,
   MetricCard,
+  type MetricCardTone,
 } from "@workspace/ui/components/card"
+import { Empty } from "@workspace/ui/components/empty"
 import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
 import {
@@ -6746,6 +6748,7 @@ function ShopFloorStatusPanel({
       </CardHeader>
       <CardContent className="grid gap-4">
         <TrackingSummary
+          tones={["brand", "success", "info", "warning"]}
           items={[
             ["Machines", formatNumber(floorRows.length)],
             ["Current running", formatNumber(currentCount)],
@@ -7057,6 +7060,7 @@ function RoleTaskPanel({
             Open Production Sessions
           </Button>
           <TrackingSummary
+            tones={["warning", "brand", "info"]}
             items={[
               ["Pending", formatNumber(roleRows.length)],
               [
@@ -12240,6 +12244,7 @@ function MachineMasterPanel({
     return (
       <section className="grid gap-4">
         <TrackingSummary
+          tones={["brand", "info", "accent", "success"]}
           items={[
             ["Machines", formatNumber(machineRows.length)],
             ["Schedule master", formatNumber(maintenanceMasterRows.length)],
@@ -12371,6 +12376,7 @@ function MachineMasterPanel({
         </Button>
       </div>
       <TrackingSummary
+        tones={["accent", "success", "info", "brand"]}
         items={[
           ["Schedules", formatNumber(machineSchedules.length)],
           ["Records", formatNumber(machineHistory.length)],
@@ -12990,6 +12996,7 @@ function MaintenancePanel({
   return (
     <section className="grid gap-4">
       <TrackingSummary
+        tones={["brand", "success", "warning", "error"]}
         items={[
           ["Machines", formatNumber(machineRows.length)],
           ["Saved schedules", formatNumber(scheduleRows.length)],
@@ -13317,6 +13324,7 @@ function PlanningHolidayPanel({
   return (
     <section className="grid gap-4">
       <TrackingSummary
+        tones={["accent", "brand", "info"]}
         items={[
           ["Weekly shutdown", displayValue(calendar.weeklyHoliday || "Friday")],
           ["Manual holidays", formatNumber(holidayRows.length)],
@@ -15528,6 +15536,7 @@ function CorrectionsPanel({
       </CardHeader>
       <CardContent className="grid gap-4">
         <TrackingSummary
+          tones={["brand", "info", "accent", "neutral"]}
           items={[
             ["Active entries", formatNumber(filteredRows.length)],
             ["Production units", formatNumber(productionUnitOptions.length)],
@@ -15965,6 +15974,7 @@ function JobCardTileBoard({
         {rows.length ? (
           <>
             <TrackingSummary
+              tones={["warning", "success", "error", "brand", "info"]}
               items={[
                 ["Pending RM", formatNumber(pendingRm)],
                 ["Ready", formatNumber(ready)],
@@ -16327,6 +16337,7 @@ function MachinePlanningBoard({
         {boardRows.length ? (
           <>
             <TrackingSummary
+              tones={["info", "success", "brand", "accent"]}
               items={[
                 ["Machine types", formatNumber(machineTypes.length)],
                 ["Running", formatNumber(runningRows)],
@@ -16666,13 +16677,21 @@ function MachinePlannedPartsPanel({
 
 function TrackingSummary({
   items,
+  tones,
 }: {
   items: Array<[string, string, (() => void)?]>
+  tones?: MetricCardTone[]
 }) {
   return (
     <div className="grid gap-2 sm:grid-cols-2 @4xl/main:grid-cols-5">
-      {items.map(([label, value, onClick]) => (
-        <MetricCard key={label} label={label} onClick={onClick} value={value} />
+      {items.map(([label, value, onClick], index) => (
+        <MetricCard
+          key={label}
+          label={label}
+          onClick={onClick}
+          tone={tones?.[index]}
+          value={value}
+        />
       ))}
     </div>
   )
@@ -16950,9 +16969,9 @@ function MachineStateBadge({
 
 function EmptyRowsMessage({ children }: { children: ReactNode }) {
   return (
-    <div className="grid h-28 place-items-center rounded-xl border border-dashed text-sm text-muted-foreground">
+    <Empty className="h-28 flex-none p-4 text-sm text-muted-foreground">
       {children}
-    </div>
+    </Empty>
   )
 }
 

@@ -314,20 +314,17 @@ function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
   return (
     <thead
       data-slot="table-header"
-      className={cn("bg-muted/70 [&_tr]:border-b", className)}
+      className={cn(
+        "bg-muted/70 [&_tr]:border-b-2 [&_tr]:border-[var(--color-table-border-strong)]",
+        className
+      )}
       {...props}
     />
   )
 }
 
 function TableBody({ className, ...props }: React.ComponentProps<"tbody">) {
-  return (
-    <tbody
-      data-slot="table-body"
-      className={cn("[&_tr:last-child]:border-0", className)}
-      {...props}
-    />
-  )
+  return <tbody data-slot="table-body" className={cn(className)} {...props} />
 }
 
 function TableFooter({ className, ...props }: React.ComponentProps<"tfoot">) {
@@ -335,7 +332,7 @@ function TableFooter({ className, ...props }: React.ComponentProps<"tfoot">) {
     <tfoot
       data-slot="table-footer"
       className={cn(
-        "border-t bg-muted/50 font-medium [&>tr]:last:border-b-0",
+        "border-t border-[var(--color-table-border-strong)] bg-muted/50 font-medium [&>tr]:last:border-b-0",
         className
       )}
       {...props}
@@ -348,7 +345,7 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
     <tr
       data-slot="table-row"
       className={cn(
-        "h-11 border-b transition-colors duration-[var(--dur-fast)] hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-accent/10 data-[state=selected]:shadow-[inset_2px_0_0_var(--color-accent)]",
+        "h-11 border-b border-[var(--color-table-border)] transition-colors duration-[var(--dur-fast)] focus-within:bg-[var(--color-accent-tint)] focus-within:shadow-[inset_3px_0_0_var(--mrm-tennis)] hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-accent/10 data-[state=selected]:shadow-[inset_2px_0_0_var(--color-accent)]",
         className
       )}
       {...props}
