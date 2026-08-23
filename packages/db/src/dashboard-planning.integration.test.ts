@@ -164,7 +164,7 @@ describe("dashboard planning writes", () => {
     expect(floor.rows).toEqual([
       {
         code: "conventional-02",
-        name: "Production Planning & Control Conventional-02",
+        name: "PPAC Conventional-02",
       },
     ])
   })

@@ -1,22 +1,22 @@
 export const productionFloors = [
   {
     code: "conventional",
-    label: "Production Planning & Control Conventional-01",
+    label: "PPAC Conventional-01",
     shortLabel: "Conventional-01",
   },
   {
     code: "conventional-02",
-    label: "Production Planning & Control Conventional-02",
+    label: "PPAC Conventional-02",
     shortLabel: "Conventional-02",
   },
   {
     code: "cnc",
-    label: "Production Planning & Control CNC-01",
+    label: "PPAC CNC-01",
     shortLabel: "CNC-01",
   },
   {
     code: "forging",
-    label: "Production Planning & Control Forging",
+    label: "PPAC Forging",
     shortLabel: "Forging",
   },
 ] as const
@@ -61,6 +61,7 @@ export function parseProductionFloorCode(
   if (name.endsWith("conventional 01")) return "conventional"
   if (name.endsWith("conventional 02")) return "conventional-02"
   if (name.endsWith("cnc 01")) return "cnc"
+  if (name.endsWith("forging")) return "forging"
   return null
 }
 
