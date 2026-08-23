@@ -19,6 +19,25 @@ type ProvisionStaffInput = {
   password: string
 }
 
+const roleKeyPattern = /^[a-z][a-z0-9-]*$/
+
+export function normalizeApplicationRoleKey(value: string) {
+  const normalizedKey = value
+    .trim()
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+
+  if (!roleKeyPattern.test(normalizedKey)) {
+    throw new Error(
+      "Role keys must start with a letter and contain only lowercase letters, numbers, and hyphens"
+    )
+  }
+  return normalizedKey
+}
+
 type CreateRoleInput = {
   actorUserId: string
   description?: string
@@ -145,12 +164,7 @@ export function createAccessAdministrationService({
         actorUserId,
         administrationTaskCapabilities.createRole
       )
-      const normalizedKey = key.trim().toLowerCase()
-      if (!/^[a-z][a-z0-9-]*$/.test(normalizedKey)) {
-        throw new Error(
-          "Role keys must start with a letter and contain only lowercase letters, numbers, and hyphens"
-        )
-      }
+      const normalizedKey = normalizeApplicationRoleKey(key)
 
       return access.createRole({
         actorUserId,
