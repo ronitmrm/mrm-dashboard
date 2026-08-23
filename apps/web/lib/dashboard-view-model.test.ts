@@ -302,17 +302,17 @@ describe("toDashboardViewModel", () => {
       expect.objectContaining({
         jcNo: "JC-CONV",
         productionFloorCode: "conventional",
-        productionUnit: "Production Planning & Control Conventional-01",
+        productionUnit: "PPAC Conventional-01",
       }),
       expect.objectContaining({
         jcNo: "JC-CNC",
         productionFloorCode: "cnc",
-        productionUnit: "Production Planning & Control CNC-01",
+        productionUnit: "PPAC CNC-01",
       }),
       expect.objectContaining({
         jcNo: "JC-FORGING",
         productionFloorCode: "forging",
-        productionUnit: "Production Planning & Control Forging",
+        productionUnit: "PPAC Forging",
       }),
     ]);
   });

@@ -33,17 +33,19 @@ describe("production floors", () => {
   })
 
   it("parses Machine Master production-unit names without silently changing units", () => {
+    expect(parseProductionFloorCode("PPAC Conventional-01")).toBe(
+      "conventional"
+    )
     expect(
-      parseProductionFloorCode(
-        "Production Planning & Control Conventional-01"
-      )
+      parseProductionFloorCode("Production Planning & Control Conventional-01")
     ).toBe("conventional")
     expect(
-      parseProductionFloorCode(
-        "Prduction Planning & Control Conventional-02"
-      )
+      parseProductionFloorCode("Prduction Planning & Control Conventional-02")
     ).toBe("conventional-02")
     expect(parseProductionFloorCode("CNC-01")).toBe("cnc")
+    expect(
+      parseProductionFloorCode("Production Planning & Control Forging")
+    ).toBe("forging")
     expect(parseProductionFloorCode("unknown unit")).toBeNull()
   })
 
@@ -55,12 +57,12 @@ describe("production floors", () => {
     ).toEqual([
       {
         code: "conventional",
-        label: "Production Planning & Control Conventional-01",
+        label: "PPAC Conventional-01",
         shortLabel: "Conventional-01",
       },
       {
         code: "conventional-02",
-        label: "Production Planning & Control Conventional-02",
+        label: "PPAC Conventional-02",
         shortLabel: "Conventional-02",
       },
     ])
@@ -68,16 +70,16 @@ describe("production floors", () => {
 
   it("displays the existing CNC department as CNC-01", () => {
     expect(productionFloors.find(({ code }) => code === "cnc")).toMatchObject({
-      label: "Production Planning & Control CNC-01",
+      label: "PPAC CNC-01",
       shortLabel: "CNC-01",
     })
   })
 
-  it("uses the full Production Planning & Control title for Forging", () => {
+  it("uses the PPAC title for Forging", () => {
     expect(
       productionFloors.find(({ code }) => code === "forging")
     ).toMatchObject({
-      label: "Production Planning & Control Forging",
+      label: "PPAC Forging",
       shortLabel: "Forging",
     })
   })
