@@ -2,7 +2,7 @@
 
 import type { ProductionFloorCode } from "@workspace/db/production-floors"
 import { Button } from "@workspace/ui/components/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@workspace/ui/components/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@workspace/ui/components/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@workspace/ui/components/table"
 import { ExternalLink } from "lucide-react"
 import Link from "next/link"
@@ -48,7 +48,6 @@ export function JobCardRegister({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <CardTitle>Job Card Register</CardTitle>
-            <CardDescription>One row per Job Card. Open a Job Card for masters, history and analytics.</CardDescription>
           </div>
           {actionNeededCount ? <Button variant="outline" onClick={onOpenMasterReadiness}>{actionNeededCount} need master action</Button> : null}
         </div>
