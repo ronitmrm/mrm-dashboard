@@ -24,8 +24,8 @@ import {
 import {
   autoSelectedSubMaster,
   availableMainMasters,
+  availableMasterUnits,
   masterOpenHref,
-  masterUnitOptions,
   resolveMasterSelection,
   subMastersFor,
   type MasterModuleAccess,
@@ -80,6 +80,7 @@ export function MasterSelection({
     () => (selection.unit ? availableMainMasters(selection.unit, access) : []),
     [access, selection.unit]
   )
+  const unitOptions = useMemo(() => availableMasterUnits(access), [access])
   const subMasterResult = selection.main
     ? subMastersFor(selection.main, access)
     : null
@@ -135,7 +136,7 @@ export function MasterSelection({
               value={selection.unit}
             >
               <NativeSelectOption value="">Select Unit</NativeSelectOption>
-              {masterUnitOptions.map(({ id, label }) => (
+              {unitOptions.map(({ id, label }) => (
                 <NativeSelectOption key={id} value={id}>
                   {label}
                 </NativeSelectOption>

@@ -274,6 +274,12 @@ export const masterUnitOptions: readonly MasterOption[] = [
   })),
 ]
 
+export function availableMasterUnits(access: MasterModuleAccess) {
+  return masterUnitOptions.filter(({ id }) =>
+    availableMainMasters(id as MasterUnit, access).length > 0
+  )
+}
+
 export function parseMasterUnit(value: unknown): MasterUnit | null {
   return value === universalMasterUnit
     ? universalMasterUnit

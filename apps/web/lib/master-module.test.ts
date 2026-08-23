@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 import {
   autoSelectedSubMaster,
   availableMainMasters,
+  availableMasterUnits,
   masterFormHref,
   masterModuleAccess,
   masterOpenHref,
@@ -28,6 +29,20 @@ const fullAccess: MasterModuleAccess = {
 }
 
 describe("master module selection", () => {
+  it("hides units that contain no permitted masters", () => {
+    const noAccess = Object.fromEntries(
+      Object.keys(fullAccess).map((key) => [key, false])
+    ) as MasterModuleAccess
+
+    expect(availableMasterUnits(noAccess)).toEqual([])
+    expect(
+      availableMasterUnits({
+        ...noAccess,
+        commercialCustomers: true,
+      }).map(({ id }) => id)
+    ).toEqual(["universal"])
+  })
+
   it("auto-selects the main master fallback when no sub-master exists", () => {
     expect(autoSelectedSubMaster("commercial_customers", fullAccess)).toBe(
       "commercial_customers"

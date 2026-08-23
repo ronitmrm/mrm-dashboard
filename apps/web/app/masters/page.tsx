@@ -10,6 +10,7 @@ import {
 import {
   autoSelectedSubMaster,
   availableMainMasters,
+  availableMasterUnits,
   masterModuleAccess,
   parseMasterUnit,
   subMastersFor,
@@ -41,7 +42,12 @@ export default async function MasterSelectionPage({
     Array.isArray(input) ? (input[0] ?? "") : (input ?? "")
   const view =
     value(query.view) === "masterTables" ? "masterTables" : "dataEntry"
-  const unit = parseMasterUnit(value(query.unit)) ?? ""
+  const requestedUnit = parseMasterUnit(value(query.unit))
+  const unit =
+    requestedUnit &&
+    availableMasterUnits(access).some(({ id }) => id === requestedUnit)
+      ? requestedUnit
+      : ""
   const requestedMain = value(query.main)
   const main =
     unit &&
