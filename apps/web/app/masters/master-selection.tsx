@@ -104,7 +104,7 @@ export function MasterSelection({
   }
 
   return (
-    <Card className="mx-auto w-full max-w-3xl">
+    <Card className="w-full">
       <CardHeader>
         <div className="flex items-center gap-3">
           <div className="rounded-lg border bg-muted p-2">

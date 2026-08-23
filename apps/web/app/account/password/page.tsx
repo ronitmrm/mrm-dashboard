@@ -10,6 +10,7 @@ import {
   CardTitle,
 } from "@workspace/ui/components/card"
 
+import { FullPageWorkspace } from "@/components/full-page-workspace"
 import { PasswordResetForm } from "@/components/password-reset-form"
 import { getAuth } from "@/lib/auth/auth"
 import { createPasswordResetService } from "@/lib/auth/password-reset"
@@ -19,7 +20,7 @@ export default async function PasswordPage() {
   const context = await reset.getScreenContext(await headers())
 
   return (
-    <div className="mx-auto grid w-full max-w-3xl gap-6">
+    <FullPageWorkspace>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="grid gap-1">
           <div className="flex items-center gap-2">
@@ -61,6 +62,6 @@ export default async function PasswordPage() {
           />
         </CardContent>
       </Card>
-    </div>
+    </FullPageWorkspace>
   )
 }

@@ -1,5 +1,7 @@
 import { Alert, AlertDescription } from "@workspace/ui/components/alert"
 
+import { FullPageWorkspace } from "@/components/full-page-workspace"
+
 import { getUnifiedNavigationAccess } from "@/lib/auth/unified-navigation-access"
 import {
   listGrantedCapabilities,
@@ -53,7 +55,7 @@ export default async function MasterSelectionPage({
       : ""
 
   return (
-    <div className="grid gap-6">
+    <FullPageWorkspace>
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">
           {view === "masterTables" ? "Master Table Selection" : "Master Module"}
@@ -65,7 +67,7 @@ export default async function MasterSelectionPage({
         </p>
       </div>
       {value(query.error) === "invalid-selection" ? (
-        <Alert className="mx-auto w-full max-w-3xl" variant="destructive">
+        <Alert className="w-full" variant="destructive">
           <AlertDescription>
             That master selection is inactive, mismatched, or not permitted.
             Select an available master and retry.
@@ -77,6 +79,6 @@ export default async function MasterSelectionPage({
         initial={{ main, sub, unit }}
         view={view}
       />
-    </div>
+    </FullPageWorkspace>
   )
 }
