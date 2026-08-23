@@ -294,10 +294,12 @@ export default async function AccessAdministrationPage({
                       <Input
                         id="role-key"
                         name="key"
-                        pattern="[a-z][a-z0-9-]*"
                         placeholder="production-planner"
                         required
                       />
+                      <FieldDescription>
+                        Spaces And Symbols Are Converted To Hyphens Automatically.
+                      </FieldDescription>
                     </Field>
                   </div>
                   <Field>
