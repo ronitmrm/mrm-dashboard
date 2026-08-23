@@ -4,8 +4,10 @@ import {
   immutableMasterFields,
   masterEditDefaults,
   masterDataEntryTypes,
+  masterDataMainMasterKey,
   operationalDataEntryTypes,
   operationalEntryRows,
+  rejectionMasterSubMasters,
 } from "./master-data-workspaces"
 
 describe("master data workspaces", () => {
@@ -31,6 +33,19 @@ describe("master data workspaces", () => {
       "rm_inward",
       "software_raw",
     ])
+  })
+
+  it("groups rejection code lists under one Rejection main master", () => {
+    expect(rejectionMasterSubMasters).toEqual([
+      { entryType: "rejection_type_master", title: "Rejection Type" },
+      { entryType: "rejection_remark_master", title: "Rejection Remark" },
+      { entryType: "rejection_reason_master", title: "Rejection Reason" },
+    ])
+    expect(masterDataMainMasterKey("rejection_type_master")).toBe("rejection")
+    expect(masterDataMainMasterKey("rejection_reason_master")).toBe(
+      "rejection"
+    )
+    expect(masterDataMainMasterKey("route")).toBe("route")
   })
 
   it("reads saved rows for every operational entry table", () => {

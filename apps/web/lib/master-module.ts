@@ -135,22 +135,15 @@ const websiteProductSubMasters = [
 
 const universalMasterDefinitions = [
   {
-    id: "rejection_type_master",
-    label: "Rejection Type",
+    id: "rejection",
+    label: "Rejection",
     access: "operations",
     scope: "universal",
-  },
-  {
-    id: "rejection_remark_master",
-    label: "Rejection Remark",
-    access: "operations",
-    scope: "universal",
-  },
-  {
-    id: "rejection_reason_master",
-    label: "Rejection Reason",
-    access: "operations",
-    scope: "universal",
+    subMasters: [
+      { id: "rejection_type_master", label: "Rejection Type" },
+      { id: "rejection_remark_master", label: "Rejection Remark" },
+      { id: "rejection_reason_master", label: "Rejection Reason" },
+    ],
   },
   {
     id: "store_masters",
@@ -161,8 +154,14 @@ const universalMasterDefinitions = [
   },
   {
     id: "hr_masters",
-    label: "HR Masters",
-    access: ["hrMasters", "hrApprovedPosts", "hrCandidates", "hrEmployees"],
+    label: "HR",
+    access: [
+      "hrMasters",
+      "hrApprovedPosts",
+      "hrCandidates",
+      "hrEmployees",
+      "hrJobTemplates",
+    ],
     scope: "universal",
     subMasters: [
       { access: "hrMasters", id: "department", label: "Department" },
@@ -187,13 +186,12 @@ const universalMasterDefinitions = [
         id: "employee_assignments",
         label: "Employee Assignment",
       },
+      {
+        access: "hrJobTemplates",
+        id: "job_templates",
+        label: "HR Job Templates",
+      },
     ],
-  },
-  {
-    id: "hr_job_templates",
-    label: "HR Job Templates",
-    access: "hrJobTemplates",
-    scope: "universal",
   },
   {
     id: "commercial_pricing_masters",
@@ -349,7 +347,7 @@ export function masterFormHref(
   const params = new URLSearchParams()
   if (
     unitMasterDefinitions.some(({ id }) => id === selection.main) ||
-    selection.main.startsWith("rejection_")
+    selection.main === "rejection"
   ) {
     params.set("tab", view === "dataEntry" ? "dataEntryTab" : "masterTablesTab")
     params.set(
@@ -358,7 +356,10 @@ export function masterFormHref(
         ? defaultProductionFloorCode
         : selection.unit
     )
-    params.set("entry", selection.main)
+    params.set(
+      "entry",
+      selection.main === "rejection" ? selection.sub : selection.main
+    )
     addContext(params, selection)
     return `/?${params.toString()}`
   }
@@ -382,16 +383,15 @@ export function masterFormHref(
             ? "candidatesPanel"
             : selection.sub === "employee_assignments"
               ? "employeeMasterPanel"
-            : "mastersPanel"
+              : selection.sub === "job_templates"
+                ? "postMasterPanel"
+                : "mastersPanel"
     params.set("panel", panel)
     params.set("masterView", view)
     if (panel === "mastersPanel") params.set("kind", selection.sub)
     if (panel === "employeeMasterPanel") {
       params.set("kind", "employee-assignment")
     }
-  } else if (selection.main === "hr_job_templates") {
-    params.set("panel", "postMasterPanel")
-    params.set("masterView", view)
   } else if (selection.main === "commercial_pricing_masters") {
     params.set("masterView", view)
     params.set("kind", selection.sub)
@@ -407,7 +407,7 @@ export function masterFormHref(
   addContext(params, selection)
 
   const path =
-    selection.main === "hr_masters" || selection.main === "hr_job_templates"
+    selection.main === "hr_masters"
       ? "/hr"
       : selection.main === "commercial_pricing_masters"
         ? "/commercial/masters"
@@ -494,8 +494,10 @@ export function masterSelectionMatchesDestination(
   values: Record<string, string | null | undefined>
 ) {
   if (pathname === "/") {
+    const expectedEntry =
+      selection.main === "rejection" ? selection.sub : selection.main
     return (
-      values.entry === selection.main &&
+      values.entry === expectedEntry &&
       (selection.main !== "store_masters" ||
         values.storeMaster === selection.sub) &&
       (selection.unit === universalMasterUnit ||
@@ -512,9 +514,10 @@ export function masterSelectionMatchesDestination(
             ? values.panel === "candidatesPanel"
             : selection.sub === "employee_assignments"
               ? values.panel === "employeeMasterPanel"
-            : values.panel === "mastersPanel" && values.kind === selection.sub
-      : selection.main === "hr_job_templates" &&
-          values.panel === "postMasterPanel"
+              : selection.sub === "job_templates"
+                ? values.panel === "postMasterPanel"
+                : values.panel === "mastersPanel" && values.kind === selection.sub
+      : false
   }
   if (pathname === "/commercial/masters") {
     return (

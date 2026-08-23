@@ -21,6 +21,24 @@ export const operationalDataEntryTypes = [
   "software_raw",
 ] as const
 
+export const rejectionMasterSubMasters = [
+  { entryType: "rejection_type_master", title: "Rejection Type" },
+  { entryType: "rejection_remark_master", title: "Rejection Remark" },
+  { entryType: "rejection_reason_master", title: "Rejection Reason" },
+] as const
+
+const rejectionMasterEntryTypes = new Set<string>(
+  rejectionMasterSubMasters.map(({ entryType }) => entryType)
+)
+
+export function isRejectionMasterEntryType(entryType: string) {
+  return rejectionMasterEntryTypes.has(entryType)
+}
+
+export function masterDataMainMasterKey(entryType: string) {
+  return isRejectionMasterEntryType(entryType) ? "rejection" : entryType
+}
+
 const operationalRowSourceByEntryType: Record<string, string> = {
   rm_inward: "rmInwardRows",
   software_raw: "productionOutputRows",

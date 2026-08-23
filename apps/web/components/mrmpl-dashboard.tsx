@@ -447,6 +447,7 @@ function MasterDataTabs({
     />
   )
 }
+
 const dataEntrySpecs: DataEntrySpec[] = [
   {
     entryType: "setup_name_master",

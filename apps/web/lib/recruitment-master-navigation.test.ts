@@ -10,6 +10,7 @@ describe("HR master navigation", () => {
     expect(normalizeRecruitmentMasterKind("employee-assignment")).toBe(
       "employee-assignment"
     )
+    expect(normalizeRecruitmentMasterKind("job-template")).toBe("job-template")
     expect(normalizeRecruitmentMasterKind("designation")).toBe("designation")
     expect(normalizeRecruitmentMasterKind("department")).toBe("department")
     expect(normalizeRecruitmentMasterKind("unknown")).toBe("department")
@@ -25,6 +26,9 @@ describe("HR master navigation", () => {
     )
     expect(recruitmentMasterHref("masterTables", "employee-assignment")).toBe(
       "/hr?panel=employeeMasterPanel&masterView=masterTables&kind=employee-assignment"
+    )
+    expect(recruitmentMasterHref("dataEntry", "job-template")).toBe(
+      "/hr?panel=postMasterPanel&masterView=dataEntry&kind=job-template"
     )
   })
 })
