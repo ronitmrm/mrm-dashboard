@@ -5,9 +5,9 @@ Account or inherited from an Approved Post. Its access can be changed after the
 role is created.
 
 **Administrative Role**: The assignable, non-system Application Role for staff
-who require full current software access. It remains separate from the protected
-System Administrator identity so it can be assigned to Staff Accounts and
-Approved Posts.
+who manage application access and administration. It remains separate from the
+protected System Administrator identity so it can be assigned to Staff Accounts
+and Approved Posts without granting unrelated operational capabilities.
 
 **Page Access**: Permission to open one named software page or workspace. No
 Access hides and blocks it; Read Only opens it without its changing actions;
