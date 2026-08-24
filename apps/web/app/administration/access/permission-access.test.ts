@@ -112,6 +112,21 @@ const permissions = [
     module: "operations",
     name: "View PPAC CNC-01 Planner Actions",
   },
+  {
+    key: "operations.floors.conventional.planner_actions.planner_priority.write",
+    module: "operations",
+    name: "Change planner priorities in PPAC Conventional-01",
+  },
+  {
+    key: "operations.floors.cnc.planner_actions.planner_priority.write",
+    module: "operations",
+    name: "Change planner priorities in PPAC CNC-01",
+  },
+  {
+    key: "planning.priority.write",
+    module: "planning",
+    name: "Change planner priorities",
+  },
 ] as const
 
 describe("permission access table", () => {
@@ -251,6 +266,45 @@ describe("permission access table", () => {
     ).toMatchObject({ label: "Quality Control", submodule: "Quality Control" })
   })
 
+  it("lists PPAC tasks independently under each floor and submodule", () => {
+    const rows = permissionAccessRows(permissions)
+
+    expect(
+      rows.find(
+        ({ id }) => id === "task:production.conventional.planner_priority"
+      )
+    ).toMatchObject({
+      fullPermissionKeys: [
+        "operations.floors.conventional.planner_actions.planner_priority.write",
+        "planning.priority.write",
+      ],
+      kind: "task",
+      label: "Change planner priorities",
+      module: "PPAC Conventional-01",
+      submodule: "Planner Actions",
+    })
+    expect(
+      rows.find(({ id }) => id === "task:production.cnc.planner_priority")
+    ).toMatchObject({
+      module: "PPAC CNC-01",
+      submodule: "Planner Actions",
+    })
+    expect(
+      rows.find(({ id }) => id === "planning.priority")
+    ).toBeUndefined()
+  })
+
+  it("submits only the selected floor task plus its legacy server gate", () => {
+    expect(
+      permissionKeysForSelections(permissionAccessRows(permissions), {
+        "task:production.conventional.planner_priority": "full",
+      })
+    ).toEqual([
+      "operations.floors.conventional.planner_actions.planner_priority.write",
+      "planning.priority.write",
+    ])
+  })
+
   it("lists independently assignable business commands as Task rows", () => {
     expect(permissionAccessRows(permissions)).toContainEqual({
       fullPermissionKeys: ["pricing.customers.create"],
@@ -289,20 +343,23 @@ describe("permission access table", () => {
       rows.find(({ id }) => id === "page:commercial.overview")?.supportedLevels
     ).toEqual(["none", "read"])
     expect(
-      rows.find(({ id }) => id === "operations.production")?.supportedLevels
+      rows.find(
+        ({ id }) => id === "task:production.conventional.planner_priority"
+      )?.supportedLevels
     ).toEqual(["none", "full"])
   })
 
   it("submits read alone or read and write from the selected level", () => {
     expect(
       permissionKeysForSelections(permissionAccessRows(permissions), {
-        "operations.production": "full",
+        "task:production.conventional.planner_priority": "full",
         "page:commercial.overview": "read",
         "page:commercial.customers": "read",
         "pricing.customers.create": "full",
       })
     ).toEqual([
-      "operations.production.write",
+      "operations.floors.conventional.planner_actions.planner_priority.write",
+      "planning.priority.write",
       "pricing.customers.create",
       "pricing.customers.read",
       "pricing.dashboard.read",

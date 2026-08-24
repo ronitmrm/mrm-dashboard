@@ -4,15 +4,12 @@ import {
   createProductionShopFloorRepository,
   isMasterDataKind,
 } from "@workspace/db"
-import {
-  normalizeProductionFloorCode,
-  parseProductionFloorCode,
-} from "@workspace/db/production-floors"
+import { parseProductionFloorCode } from "@workspace/db/production-floors"
 import { validConfirmedPrioritySetupNumbers } from "@workspace/db/planning-rules"
 import { NextResponse, type NextRequest } from "next/server"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
-import { hasProductionFloorAccess } from "../../../lib/auth/production-floor-capabilities"
+import { hasProductionFloorTaskCapability } from "../../../lib/auth/production-floor-task-capabilities"
 import { istDateValue } from "../../../lib/date-time"
 import { planningProductionFloorPayload } from "../../../lib/planning-production-floor"
 import {
@@ -385,20 +382,15 @@ async function preauthorizeDashboardMutation(
       session.user.id,
       telemetry
     )
-    const requestedFloor =
-      typeof body.productionFloorCode === "string"
-        ? normalizeProductionFloorCode(body.productionFloorCode)
-        : typeof body.floor === "string"
-          ? normalizeProductionFloorCode(body.floor)
-          : null
     const hasTaskCapability = capabilities.some((capability) =>
       granted.has(capability)
     )
-    const hasFloorCapability =
-      !requestedFloor ||
-      hasProductionFloorAccess(granted, requestedFloor) ||
-      granted.has("operations.production_dashboard.read")
-    if (!hasTaskCapability || !hasFloorCapability) {
+    const hasFloorTaskCapability = hasProductionFloorTaskCapability(
+      granted,
+      path,
+      body
+    )
+    if (!hasTaskCapability || !hasFloorTaskCapability) {
       telemetry.setOutcome("unauthorized")
       throw new RouteError(
         403,
@@ -817,14 +809,14 @@ async function post(request: NextRequest, context: RouteContext) {
   const path = (await context.params).path.join("/")
 
   try {
-    if (path === "dashboard-refresh") {
-      return json(await requestPostgresDashboardRefresh(request))
-    }
-
     const body = normalizeUserEnteredPayload(
       plainRecord(await readDashboardJsonBody(request))
     )
     await preauthorizeDashboardMutation(request, path, plainRecord(body))
+
+    if (path === "dashboard-refresh") {
+      return json(await requestPostgresDashboardRefresh(request))
+    }
 
     if (path === "attendance" || path === "training") {
       const result = await executePostgresOperationalEntry(
