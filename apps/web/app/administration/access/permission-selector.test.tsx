@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest"
 import { PermissionSelector } from "./permission-selector"
 
 describe("PermissionSelector", () => {
-  it("offers main-module and sub-module navigation before page or task access", () => {
+  it("uses only the table column filters for module navigation", () => {
     const markup = renderToStaticMarkup(
       <PermissionSelector
         permissions={[
@@ -17,8 +17,8 @@ describe("PermissionSelector", () => {
       />
     )
 
-    expect(markup).toContain('aria-label="Filter by main module"')
-    expect(markup).toContain('aria-label="Filter by sub module"')
+    expect(markup).not.toContain('aria-label="Filter by main module"')
+    expect(markup).not.toContain('aria-label="Filter by sub module"')
     expect(markup).toContain("Main Module")
     expect(markup).toContain("Sub Module")
     expect(markup).toContain("PPAC Conventional-01")
