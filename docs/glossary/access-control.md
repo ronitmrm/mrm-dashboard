@@ -9,6 +9,11 @@ who manage application access and administration. It remains separate from the
 protected System Administrator identity so it can be assigned to Staff Accounts
 and Approved Posts without granting unrelated operational capabilities.
 
+**Sales & Marketing Role**: The assignable Application Role for the sales team.
+It can read Commercial Pricing Masters and add or update the Buyer, Incoterms,
+Payment Terms, Shipment Mode, and Packaging Terms used by Customer Commercial
+Defaults. It does not receive master deletion, renaming, or workbook import.
+
 **Page Access**: Permission to open one named software page or workspace. No
 Access hides and blocks it; Read Only opens it without its changing actions;
 Full Access includes its applicable changing actions.

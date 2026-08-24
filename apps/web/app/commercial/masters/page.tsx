@@ -35,6 +35,7 @@ import {
   commercialMasterTemplateHref,
   commercialMasterViewHref,
   commercialMasterWorkspaceKind,
+  isCustomerDefaultCommercialMaster,
 } from "@/lib/commercial-master-workspace"
 import { CommercialMasterTable } from "./commercial-master-table"
 
@@ -57,20 +58,33 @@ export default async function MastersPage({
     "pricing.masters.read",
     "/commercial/masters"
   )
-  const [grantedCapabilities, feedback] = await Promise.all([
+  const [grantedCapabilityList, feedback] = await Promise.all([
     listGrantedCapabilities(session.user.id, [
       commercialTaskCapabilities.deleteMaster,
       commercialTaskCapabilities.importMasters,
       commercialTaskCapabilities.renameMaster,
+      commercialTaskCapabilities.updateCustomerDefaultTerm,
       commercialTaskCapabilities.updateMaster,
     ]),
     searchParams,
   ])
-  const canWrite = grantedCapabilities.length > 0
+  const grantedCapabilities = new Set(grantedCapabilityList)
   const activeView =
     feedback.masterView === "masterTables" ? "masterTables" : "dataEntry"
   const selection = commercialMasterSelection(feedback.kind)
   const selectionKind = commercialMasterWorkspaceKind(selection)
+  const canUpdate =
+    grantedCapabilities.has(commercialTaskCapabilities.updateMaster) ||
+    (isCustomerDefaultCommercialMaster(selection) &&
+      grantedCapabilities.has(
+        commercialTaskCapabilities.updateCustomerDefaultTerm
+      ))
+  const canImport = grantedCapabilities.has(
+    commercialTaskCapabilities.importMasters
+  )
+  const canModifyLifecycle =
+    grantedCapabilities.has(commercialTaskCapabilities.deleteMaster) ||
+    grantedCapabilities.has(commercialTaskCapabilities.renameMaster)
   const selectionLocked = Boolean(
     feedback.masterUnit && feedback.masterMain && feedback.masterSub
   )
@@ -83,13 +97,13 @@ export default async function MastersPage({
     label: string
   }> = []
 
-  if ((showDataEntry && canWrite) || showMasterTables) {
+  if ((showDataEntry && canUpdate) || showMasterTables) {
     const connectionString = readAuthEnvironment().connectionString
     const customers = createCustomerRepository({ connectionString })
     const repository = createCommercialMasterRepository({ connectionString })
     try {
       const organizationId = await customers.organizationIdForCode("MRMPL")
-      if (showDataEntry && canWrite) {
+      if (showDataEntry && canUpdate) {
         snapshot = await repository.snapshot(organizationId)
       } else {
         editableRows = await repository.listEditableRows({
@@ -115,7 +129,7 @@ export default async function MastersPage({
           />
         }
         csvImportAction={
-          canWrite ? (
+          canImport ? (
             <MasterDataCsvImportButton
               action={importMastersWorkbookAction}
               fields={{
@@ -160,7 +174,7 @@ export default async function MastersPage({
             </CardContent>
           </Card>
 
-          {canWrite && snapshot ? (
+          {canUpdate && snapshot ? (
             <Card>
               <CardHeader>
                 <CardTitle>Add Or Update A Master</CardTitle>
@@ -196,7 +210,7 @@ export default async function MastersPage({
           </CardHeader>
           <CardContent>
             <CommercialMasterTable
-              canWrite={canWrite}
+              canWrite={canModifyLifecycle}
               initialKind={selectionKind}
               key={selectionKind}
               rows={editableRows}

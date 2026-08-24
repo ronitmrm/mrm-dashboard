@@ -54,6 +54,7 @@ export const commercialTaskCapabilities = {
   stageBulkPriceRevision: "pricing.price_revisions.stages.update",
   startDesignWork: "pricing.design.start",
   updateCustomer: "pricing.customers.update",
+  updateCustomerDefaultTerm: "pricing.customer_default_terms.update",
   updateDrawingHistory: "pricing.drawing_history.update",
   updateEnquiry: "pricing.enquiries.update",
   updateEnquiryItem: "pricing.enquiries.items.update",

@@ -7,6 +7,8 @@ import {
   commercialMasterSelection,
   commercialMasterTemplateHref,
   commercialMasterViewHref,
+  commercialMasterWorkspaceKind,
+  isCustomerDefaultCommercialMaster,
 } from "./commercial-master-workspace"
 
 describe("commercial master workspace", () => {
@@ -50,6 +52,20 @@ describe("commercial master workspace", () => {
     expect(commercialMasterViewHref("dataEntry", "buyer")).toBe(
       "/commercial/masters?masterView=dataEntry&kind=buyer"
     )
+  })
+
+  it("identifies only the configurable Customer default term masters", () => {
+    expect(
+      commercialMasterKinds
+        .filter(isCustomerDefaultCommercialMaster)
+        .map(commercialMasterWorkspaceKind)
+    ).toEqual([
+      "buyer",
+      "incoterms",
+      "payment_terms",
+      "shipment_mode",
+      "packaging_terms",
+    ])
   })
 
   it("downloads the source workbook sheet for the selected master", () => {

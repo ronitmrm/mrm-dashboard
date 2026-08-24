@@ -19,6 +19,7 @@ import {
   commercialMasterSelection,
   commercialMasterViewHref,
   commercialMasterWorkspaceKind,
+  isCustomerDefaultCommercialTerm,
 } from "@/lib/commercial-master-workspace"
 
 import { parseMastersWorkbook } from "./workbook"
@@ -99,8 +100,12 @@ async function withMasters<T>(
 
 export async function upsertMasterAction(formData: FormData) {
   const kind = required(formData, "kind")
+  const termType =
+    kind === "commercialTerm" ? required(formData, "term_type") : null
   await withMasters(
-    commercialTaskCapabilities.updateMaster,
+    termType && isCustomerDefaultCommercialTerm(termType)
+      ? commercialTaskCapabilities.updateCustomerDefaultTerm
+      : commercialTaskCapabilities.updateMaster,
     async (repository, actorUserId, organizationId) => {
       const context = { actorUserId, organizationId }
       switch (kind) {
@@ -171,7 +176,7 @@ export async function upsertMasterAction(formData: FormData) {
             ...context,
             active: active(formData),
             name: required(formData, "name"),
-            termType: required(formData, "term_type") as CommercialTermType,
+            termType: termType as CommercialTermType,
           })
         case "quoteTerm":
           return repository.upsertQuoteTerm({
