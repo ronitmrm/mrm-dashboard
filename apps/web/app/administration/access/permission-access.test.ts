@@ -82,6 +82,26 @@ const permissions = [
     module: "quality",
     name: "Manage inspections",
   },
+  {
+    key: "pricing.sales.followups.complete",
+    module: "pricing",
+    name: "Complete Sales Followups",
+  },
+  {
+    key: "pricing.sales.read",
+    module: "pricing",
+    name: "View Sales Workflow",
+  },
+  {
+    key: "administration.staff.provision",
+    module: "administration",
+    name: "Provision Staff",
+  },
+  {
+    key: "maintenance.tasks.write",
+    module: "maintenance",
+    name: "Complete Maintenance Tasks",
+  },
 ] as const
 
 describe("permission access table", () => {
@@ -104,7 +124,7 @@ describe("permission access table", () => {
       id: "page:commercial.assemblies",
       kind: "page",
       label: "Assembly / BOM",
-      module: "Commercial",
+      module: "Costing",
       readPermissionKeys: ["pricing.assemblies.read"],
       supportedLevels: ["none", "read"],
     })
@@ -132,10 +152,42 @@ describe("permission access table", () => {
 
     expect(
       rows.find(({ id }) => id === "page:production.productionControlTab")
-    ).toMatchObject({ label: "Planner Actions", module: "Production" })
+    ).toMatchObject({ label: "Planner Actions", module: "Production Dashboard" })
     expect(
       rows.find(({ id }) => id === "page:hr.interviewsPanel")
     ).toMatchObject({ label: "Interview Schedule", module: "HR & Recruitment" })
+  })
+
+  it("uses the left-sidebar module names instead of internal permission namespaces", () => {
+    const rows = permissionAccessRows(permissions)
+
+    expect(rows.find(({ id }) => id === "page:commercial.sales")).toMatchObject({
+      label: "Sales",
+      module: "Costing",
+    })
+    expect(
+      rows.find(({ id }) => id === "pricing.sales.followups.complete")
+    ).toMatchObject({ module: "Costing" })
+    expect(
+      rows.find(({ id }) => id === "administration.staff.provision")
+    ).toMatchObject({ module: "Access Administration" })
+    expect(rows.find(({ id }) => id === "maintenance.tasks")).toMatchObject({
+      module: "Mechanical Maintenance",
+    })
+    expect(rows.map(({ module }) => module)).not.toEqual(
+      expect.arrayContaining([
+        "administration",
+        "Commercial",
+        "hr",
+        "maintenance",
+        "operations",
+        "planning",
+        "pricing",
+        "Production",
+        "quality",
+        "store",
+      ])
+    )
   })
 
   it("lists independently assignable business commands as Task rows", () => {
@@ -145,7 +197,7 @@ describe("permission access table", () => {
       id: "pricing.customers.create",
       kind: "task",
       label: "Create Customer",
-      module: "pricing",
+      module: "Master Data",
       readPermissionKeys: [],
       supportedLevels: ["none", "full"],
     })
@@ -161,7 +213,7 @@ describe("permission access table", () => {
       id: "quality.inspections",
       kind: "task",
       label: "Inspections",
-      module: "quality",
+      module: "Production Dashboard",
       readPermissionKeys: ["quality.inspections.read"],
       supportedLevels: ["none", "read", "full"],
     })

@@ -1,5 +1,6 @@
 import type { PageAccessDefinition } from "./page-access-types"
 import type { DashboardTabId } from "../unified-navigation"
+import { sidebarModuleLabels } from "../sidebar-module-labels"
 
 export const productionPageCapabilities = {
   dataEntryTab: "operations.master_data_entry.read",
@@ -43,13 +44,34 @@ const labels: Record<keyof typeof productionPageCapabilities, string> = {
   shopFloorTasksTab: "Shop Floor Tasks",
 }
 
+const modules: Record<keyof typeof productionPageCapabilities, string> = {
+  dataEntryTab: sidebarModuleLabels.masterData,
+  firstPieceInspectionTab: sidebarModuleLabels.productionDashboard,
+  jobCardStatusTab: sidebarModuleLabels.productionDashboard,
+  machineDetailTab: sidebarModuleLabels.productionDashboard,
+  machineMasterTab: sidebarModuleLabels.machines,
+  machinistTasksTab: sidebarModuleLabels.productionDashboard,
+  maintenanceTab: sidebarModuleLabels.mechanicalMaintenance,
+  masterGapsTab: sidebarModuleLabels.productionDashboard,
+  masterTablesTab: sidebarModuleLabels.masterData,
+  operationalEntryTab: sidebarModuleLabels.operationalEntry,
+  operationalTablesTab: sidebarModuleLabels.operationalEntry,
+  planningControlTab: sidebarModuleLabels.productionDashboard,
+  productionControlTab: sidebarModuleLabels.productionDashboard,
+  productionDashboardTab: sidebarModuleLabels.productionDashboard,
+  productionSessionsTab: sidebarModuleLabels.productionDashboard,
+  qualityControlTasksTab: sidebarModuleLabels.productionDashboard,
+  shopFloorStatusTab: sidebarModuleLabels.productionDashboard,
+  shopFloorTasksTab: sidebarModuleLabels.productionDashboard,
+}
+
 export const productionPageAccess = Object.entries(
   productionPageCapabilities
 ).map(([id, readPermissionKey]) => ({
   href: `/?tab=${id}`,
   id: `production.${id}`,
   label: labels[id as keyof typeof labels],
-  module: "Production",
+  module: modules[id as keyof typeof modules],
   navigation: true,
   readPermissionKey,
 })) satisfies PageAccessDefinition[]

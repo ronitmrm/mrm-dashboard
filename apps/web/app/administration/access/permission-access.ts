@@ -3,6 +3,7 @@ import {
   pageAccessCatalog,
 } from "../../../lib/auth/page-access-catalog"
 import { productionPageCapabilities } from "../../../lib/auth/production-capabilities"
+import { sidebarModuleForPermission } from "../../../lib/sidebar-module-labels"
 import { hrMasterNavigation, hrNavigation } from "../../../lib/unified-navigation"
 
 export type PermissionOption = {
@@ -92,7 +93,7 @@ export function permissionAccessRows(
     const { id, kind } = permissionKind(permission.key)
     const group = groups.get(id) ?? {
       full: [],
-      module: permission.module,
+      module: sidebarModuleForPermission(permission.key, permission.module),
       read: [],
     }
     if (kind === "read") group.read.push(permission)

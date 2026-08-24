@@ -19,6 +19,10 @@ It does not receive master deletion, renaming, or workbook import.
 Access hides and blocks it; Read Only opens it without its changing actions;
 Full Access includes its applicable changing actions.
 
+**Access Module Name**: The module shown in Access Administration uses the same
+business-facing name as the left sidebar. Internal permission namespaces such
+as `pricing`, `operations`, and `hr` are never displayed as module names.
+
 **Task Access**: Permission for one independently assignable business command,
 such as requesting stock, making a purchase order, issuing a Store request, or
 moving an asset. Task Access is independent of Page Access: the page controls

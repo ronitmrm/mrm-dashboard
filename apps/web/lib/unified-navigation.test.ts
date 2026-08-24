@@ -40,8 +40,8 @@ describe("unified navigation", () => {
       "utf8"
     )
 
-    expect(source).toContain('label="Master Data"')
-    expect(source).toContain('label="Operational Entry"')
+    expect(source).toContain("label={sidebarModuleLabels.masterData}")
+    expect(source).toContain("label={sidebarModuleLabels.operationalEntry}")
     expect(source).toContain("filteredMasterDataNavigation.map")
     expect(source).toContain("filteredOperationalEntryNavigation.map")
     expect(source).not.toContain(

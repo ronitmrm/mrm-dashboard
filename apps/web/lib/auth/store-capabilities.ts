@@ -1,4 +1,5 @@
 import type { PageAccessDefinition } from "./page-access-types"
+import { sidebarModuleLabels } from "../sidebar-module-labels"
 
 export const storeCapabilities = {
   assetHistory: {
@@ -78,7 +79,7 @@ function page(
   href: string,
   capabilities: { read: string; write?: string },
   navigation = true,
-  module = "Store"
+  module = sidebarModuleLabels.store
 ): PageAccessDefinition {
   return {
     href,

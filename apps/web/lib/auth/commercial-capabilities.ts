@@ -1,4 +1,5 @@
 import type { PageAccessDefinition } from "./page-access-types"
+import { sidebarModuleLabels } from "../sidebar-module-labels"
 
 export const commercialCapabilities = {
   corrections: {
@@ -60,21 +61,21 @@ export const commercialPageAccess = [
     "Customers",
     "/commercial/customers",
     commercialCapabilities.customers,
-    "Master Data"
+    sidebarModuleLabels.masterData
   ),
   page(
     "commercial.enquiries",
     "Enquiries",
     "/commercial/enquiries",
     commercialCapabilities.enquiries,
-    "Operational Entry"
+    sidebarModuleLabels.operationalEntry
   ),
   page(
     "commercial.enquiry_excel_view",
     "Excel View",
     "/commercial/enquiries/excel-view",
     commercialCapabilities.enquiries,
-    "Operational Entry"
+    sidebarModuleLabels.operationalEntry
   ),
   page(
     "commercial.sales",
@@ -98,7 +99,8 @@ export const commercialPageAccess = [
     "commercial.masters",
     "Pricing Masters",
     "/commercial/masters",
-    commercialCapabilities.masters
+    commercialCapabilities.masters,
+    sidebarModuleLabels.masterData
   ),
   page(
     "commercial.products",
@@ -123,7 +125,7 @@ export const commercialPageAccess = [
     "Website Products",
     "/commercial/website-products",
     commercialCapabilities.websiteProducts,
-    "Master Data"
+    sidebarModuleLabels.masterData
   ),
   page(
     "commercial.product-costing",
@@ -153,7 +155,8 @@ export const commercialPageAccess = [
     "commercial.orders",
     "Purchase Orders",
     "/commercial/orders",
-    commercialCapabilities.purchaseOrders
+    commercialCapabilities.purchaseOrders,
+    sidebarModuleLabels.operationalEntry
   ),
   page(
     "commercial.product-bulk-revision",
@@ -190,7 +193,7 @@ function page(
   label: string,
   href: string,
   capabilities: { read: string; write?: string },
-  module = "Commercial"
+  module: string = sidebarModuleLabels.costing
 ): PageAccessDefinition {
   return {
     href,
