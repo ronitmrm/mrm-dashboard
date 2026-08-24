@@ -55,7 +55,7 @@ function permissionKind(key: string) {
 }
 
 function taskLabel(permission: PermissionOption) {
-  const label = permission.name.replace(/^View\s+/i, "")
+  const label = permission.name.trim()
   return label ? `${label[0]!.toUpperCase()}${label.slice(1)}` : permission.name
 }
 
@@ -171,7 +171,7 @@ export function permissionAccessRows(
     const writePermissionKeys = group.full.map(({ key }) => key).sort()
     const hasRead = readPermissionKeys.length > 0
     const hasWrite = writePermissionKeys.length > 0
-    const labelSource = group.read[0] ?? group.full[0]
+    const labelSource = group.full[0] ?? group.read[0]
     if (!labelSource) throw new Error(`Permission group ${id} is empty`)
     const supportedLevels: PermissionAccessLevel[] = ["none"]
     if (hasRead) supportedLevels.push("read")

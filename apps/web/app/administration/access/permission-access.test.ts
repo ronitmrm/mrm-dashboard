@@ -58,6 +58,11 @@ const permissions = [
     name: "View pricing dashboard",
   },
   {
+    key: "pricing.enquiries.read",
+    module: "pricing",
+    name: "View enquiries",
+  },
+  {
     key: "operations.production.write",
     module: "operations",
     name: "Record production",
@@ -101,6 +106,16 @@ const permissions = [
     key: "maintenance.tasks.write",
     module: "maintenance",
     name: "Complete Maintenance Tasks",
+  },
+  {
+    key: "hr.masters.read",
+    module: "hr",
+    name: "View HR Masters",
+  },
+  {
+    key: "hr.approved_posts.create",
+    module: "hr",
+    name: "Create approved posts",
   },
   {
     key: "operations.floors.conventional.planner_actions.read",
@@ -152,7 +167,7 @@ describe("permission access table", () => {
       label: "Assembly / BOM",
       module: "Costing",
       readPermissionKeys: ["pricing.assemblies.read"],
-      submodule: "Assembly / BOM",
+      submodule: "Product Parameter Costing",
       supportedLevels: ["none", "read"],
     })
   })
@@ -171,6 +186,7 @@ describe("permission access table", () => {
       fullPermissionKeys: ["store.asset_history.read"],
       href: "/store/assets/:assetCode",
       label: "Asset Movement & Maintenance History",
+      submodule: "Stock",
     })
   })
 
@@ -199,9 +215,14 @@ describe("permission access table", () => {
     ).toMatchObject({ module: "Costing" })
     expect(
       rows.find(({ id }) => id === "administration.staff.provision")
-    ).toMatchObject({ module: "Access Administration" })
+    ).toMatchObject({
+      label: "Provision Staff",
+      module: "Access Administration",
+      submodule: "Access Administration",
+    })
     expect(rows.find(({ id }) => id === "maintenance.tasks")).toMatchObject({
       module: "Mechanical Maintenance",
+      submodule: "Mechanical Maintenance",
     })
     expect(rows.map(({ module }) => module)).not.toEqual(
       expect.arrayContaining([
@@ -217,6 +238,40 @@ describe("permission access table", () => {
         "store",
       ])
     )
+  })
+
+  it("places HR master pages and tasks under the Master Data sidebar hierarchy", () => {
+    const rows = permissionAccessRows(permissions)
+
+    expect(rows.find(({ id }) => id === "page:hr.mastersPanel")).toMatchObject({
+      label: "Masters",
+      module: "Master Data",
+      submodule: "Master Selection",
+    })
+    expect(
+      rows.find(({ id }) => id === "hr.approved_posts.create")
+    ).toMatchObject({
+      label: "Create approved posts",
+      module: "Master Data",
+      submodule: "Master Selection",
+    })
+  })
+
+  it("places enquiry entry and Excel View under their exact sidebar locations", () => {
+    const rows = permissionAccessRows(permissions)
+
+    expect(
+      rows.find(({ id }) => id === "page:commercial.enquiries")
+    ).toMatchObject({
+      module: "Operational Entry",
+      submodule: "Entry Selection",
+    })
+    expect(
+      rows.find(({ id }) => id === "page:commercial.enquiry_excel_view")
+    ).toMatchObject({
+      module: "Costing",
+      submodule: "Excel View",
+    })
   })
 
   it("lists PPAC floor pages under their exact sidebar module and submodule", () => {
@@ -328,10 +383,10 @@ describe("permission access table", () => {
       href: null,
       id: "quality.inspections",
       kind: "task",
-      label: "Inspections",
+      label: "Manage inspections",
       module: "Production Dashboard",
       readPermissionKeys: ["quality.inspections.read"],
-      submodule: "Inspections",
+      submodule: "Production Dashboard",
       supportedLevels: ["none", "read", "full"],
     })
   })

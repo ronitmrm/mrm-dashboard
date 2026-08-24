@@ -25,7 +25,9 @@ as `pricing`, `operations`, and `hr` are never displayed as module names.
 
 **Access Hierarchy**: Access Administration presents every grant as Main
 Module, Sub Module, then Page or Task. Main Module and Sub Module names match
-the left sidebar exactly. A PPAC page grant is scoped to one Production Floor;
+the left sidebar exactly. The Page or Task name carries the detailed page or
+business-command wording; a command name is never used as a Sub Module. A PPAC
+page grant is scoped to one Production Floor;
 granting a page under PPAC Conventional-01 does not grant the same page under
 PPAC Conventional-02, PPAC CNC-01, or PPAC Forging. PPAC Task Access is scoped
 the same way: granting a production command for one floor never authorizes that
