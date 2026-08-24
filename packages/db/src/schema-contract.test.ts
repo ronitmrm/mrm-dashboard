@@ -1666,6 +1666,33 @@ test("authorization lets Sales & Marketing maintain Customer default terms witho
   ])
 })
 
+test("authorization lets Sales & Marketing open the Sales workspace and complete follow-ups", async () => {
+  await migrateDatabase({ connectionString })
+
+  const result = await pool.query<{ permission_keys: string[] }>(`
+    SELECT COALESCE(
+      array_agg(permissions.key ORDER BY permissions.key)
+        FILTER (WHERE permissions.key IS NOT NULL),
+      ARRAY[]::text[]
+    ) AS permission_keys
+    FROM identity.roles AS roles
+    LEFT JOIN identity.role_permissions AS role_permissions
+      ON role_permissions.role_id = roles.id
+    LEFT JOIN identity.permissions AS permissions
+      ON permissions.id = role_permissions.permission_id
+    WHERE roles.key = 'sales-marketing'
+    GROUP BY roles.id
+  `)
+
+  expect(result.rows).toHaveLength(1)
+  expect(result.rows[0]?.permission_keys).toEqual(
+    expect.arrayContaining([
+      "pricing.sales.followups.complete",
+      "pricing.sales.read",
+    ])
+  )
+})
+
 test("foundation includes provenance, conflict review, and durable work tables", async () => {
   await migrateDatabase({ connectionString })
 
