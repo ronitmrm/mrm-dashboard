@@ -41,24 +41,12 @@ export function PermissionSelector({
 }) {
   const [query, setQuery] = useState("")
   const rows = useMemo(() => permissionAccessRows(permissions), [permissions])
-  const [mainModule, setMainModule] = useState("")
-  const [submodule, setSubmodule] = useState("")
   const [selections, setSelections] = useState<
     Record<string, PermissionAccessLevel>
   >(() => permissionSelectionsForKeys(rows, initialPermissionKeys))
   const normalizedQuery = query.trim().toLowerCase()
-  const mainModules = [...new Set(rows.map((row) => row.module))]
-  const submodules = [
-    ...new Set(
-      rows
-        .filter((row) => !mainModule || row.module === mainModule)
-        .map((row) => row.submodule)
-    ),
-  ]
   const visibleRows = rows.filter(
     (row) =>
-      (!mainModule || row.module === mainModule) &&
-      (!submodule || row.submodule === submodule) &&
       (!normalizedQuery ||
         row.module.toLowerCase().includes(normalizedQuery) ||
         row.submodule.toLowerCase().includes(normalizedQuery) ||
@@ -93,34 +81,7 @@ export function PermissionSelector({
         <input key={key} name="permissionKeys" type="hidden" value={key} />
       ))}
 
-      <div className="grid gap-2 md:grid-cols-[minmax(12rem,1fr)_minmax(12rem,1fr)_minmax(16rem,2fr)_auto]">
-        <NativeSelect
-          aria-label="Filter by main module"
-          onChange={(event) => {
-            setMainModule(event.target.value)
-            setSubmodule("")
-          }}
-          value={mainModule}
-        >
-          <NativeSelectOption value="">All Main Modules</NativeSelectOption>
-          {mainModules.map((module) => (
-            <NativeSelectOption key={module} value={module}>
-              {module}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
-        <NativeSelect
-          aria-label="Filter by sub module"
-          onChange={(event) => setSubmodule(event.target.value)}
-          value={submodule}
-        >
-          <NativeSelectOption value="">All Sub Modules</NativeSelectOption>
-          {submodules.map((item) => (
-            <NativeSelectOption key={item} value={item}>
-              {item}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
+      <div className="flex items-center gap-2">
         <div className="relative min-w-0 flex-1">
           <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -131,13 +92,9 @@ export function PermissionSelector({
             value={query}
           />
         </div>
-        {query || mainModule || submodule ? (
+        {query ? (
           <Button
-            onClick={() => {
-              setQuery("")
-              setMainModule("")
-              setSubmodule("")
-            }}
+            onClick={() => setQuery("")}
             type="button"
             variant="outline"
           >
