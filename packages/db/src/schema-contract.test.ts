@@ -1651,6 +1651,19 @@ test("authorization lets Sales & Marketing maintain Customer default terms witho
       ].includes(key)
     )
   ).toEqual([])
+
+  const assignedRoles = await pool.query<{ key: string }>(`
+    SELECT roles.key
+    FROM identity.role_permissions AS role_permissions
+    JOIN identity.roles AS roles ON roles.id = role_permissions.role_id
+    JOIN identity.permissions AS permissions
+      ON permissions.id = role_permissions.permission_id
+    WHERE permissions.key = 'pricing.customer_default_terms.update'
+    ORDER BY roles.key
+  `)
+  expect(assignedRoles.rows.map(({ key }) => key)).toEqual([
+    "sales-marketing",
+  ])
 })
 
 test("foundation includes provenance, conflict review, and durable work tables", async () => {
