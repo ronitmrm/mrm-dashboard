@@ -46,6 +46,7 @@ import { Input } from "@workspace/ui/components/input"
 
 import type { UnifiedNavigationAccess } from "@/lib/auth/unified-navigation-access"
 import { masterDataNavigationLinks } from "@/lib/master-data-navigation"
+import { sidebarModuleLabels } from "@/lib/sidebar-module-labels"
 import {
   expandedSidebarSections,
   storedSidebarSections,
@@ -401,7 +402,7 @@ export function UnifiedSidebarNavigation({
               navigationHrefMatches(pathname, searchParams, item.href)
             )
           }
-          label="Master Data"
+          label={sidebarModuleLabels.masterData}
           onOpenChange={(open) => {
             if (!normalizedMenuSearch) setSectionOpen("masterData", open)
           }}
@@ -443,7 +444,7 @@ export function UnifiedSidebarNavigation({
                 navigationHrefMatches(pathname, searchParams, item.destination)
             )
           }
-          label="Operational Entry"
+          label={sidebarModuleLabels.operationalEntry}
           onOpenChange={(open) => {
             if (!normalizedMenuSearch) setSectionOpen("operationalEntry", open)
           }}
@@ -482,7 +483,7 @@ export function UnifiedSidebarNavigation({
           isActive={visibleHrNavigation.some((item) =>
             navigationHrefMatches(pathname, searchParams, item.href)
           )}
-          label="HR & Recruitment"
+          label={sidebarModuleLabels.hr}
           onOpenChange={(open) => {
             if (!normalizedMenuSearch) setSectionOpen("hr", open)
           }}
@@ -515,7 +516,7 @@ export function UnifiedSidebarNavigation({
           isActive={visibleStoreNavigation.some((item) =>
             navigationHrefMatches(pathname, searchParams, item.href)
           )}
-          label="Store"
+          label={sidebarModuleLabels.store}
           onOpenChange={(open) => {
             if (!normalizedMenuSearch) setSectionOpen("store", open)
           }}
@@ -548,7 +549,7 @@ export function UnifiedSidebarNavigation({
           isActive={visibleCommercialNavigation.some((item) =>
             navigationHrefMatches(pathname, searchParams, item.href)
           )}
-          label="Costing"
+          label={sidebarModuleLabels.costing}
           onOpenChange={(open) => {
             if (!normalizedMenuSearch) setSectionOpen("costing", open)
           }}
