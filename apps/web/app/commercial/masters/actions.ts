@@ -13,7 +13,11 @@ import { redirect } from "next/navigation"
 import * as XLSX from "xlsx"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
-import { requireCapability } from "@/lib/auth/require-capability"
+import {
+  listGrantedCapabilities,
+  requireAuthenticatedSession,
+  requireCapability,
+} from "@/lib/auth/require-capability"
 import { commercialTaskCapabilities } from "@/lib/auth/task-capabilities"
 import {
   commercialMasterSelection,
@@ -78,14 +82,27 @@ function active(formData: FormData) {
 }
 
 async function withMasters<T>(
-  capability: string,
+  capability: string | readonly string[],
   operation: (
     repository: ReturnType<typeof createCommercialMasterRepository>,
     actorUserId: string,
     organizationId: string
   ) => Promise<T>
 ) {
-  const session = await requireCapability(capability, mastersPath)
+  const session =
+    typeof capability === "string"
+      ? await requireCapability(capability, mastersPath)
+      : await (async () => {
+          const authenticatedSession = await requireAuthenticatedSession(
+            mastersPath
+          )
+          const granted = await listGrantedCapabilities(
+            authenticatedSession.user.id,
+            capability
+          )
+          if (granted.length === 0) redirect("/unauthorized")
+          return authenticatedSession
+        })()
   const connectionString = readAuthEnvironment().connectionString
   const customers = createCustomerRepository({ connectionString })
   const repository = createCommercialMasterRepository({ connectionString })
@@ -104,7 +121,10 @@ export async function upsertMasterAction(formData: FormData) {
     kind === "commercialTerm" ? required(formData, "term_type") : null
   await withMasters(
     termType && isCustomerDefaultCommercialTerm(termType)
-      ? commercialTaskCapabilities.updateCustomerDefaultTerm
+      ? [
+          commercialTaskCapabilities.updateCustomerDefaultTerm,
+          commercialTaskCapabilities.updateMaster,
+        ]
       : commercialTaskCapabilities.updateMaster,
     async (repository, actorUserId, organizationId) => {
       const context = { actorUserId, organizationId }
