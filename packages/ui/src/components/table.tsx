@@ -312,7 +312,7 @@ function Table({
       })}
       <div
         data-slot="table-container"
-        className="relative w-full overflow-x-auto"
+        className="relative w-full max-h-[32rem] overflow-auto"
       >
         <table
           ref={tableRef}
