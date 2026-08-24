@@ -133,13 +133,17 @@ export const commercialPageAccess = [
     "commercial.product-costing",
     "Product Parameter Costing",
     "/commercial/product-costing",
-    commercialCapabilities.costing
+    commercialCapabilities.costing,
+    sidebarModuleLabels.costing,
+    "Product Parameter Costing"
   ),
   page(
     "commercial.customer-costing",
     "Customer Parameter Costing",
     "/commercial/customer-costing",
-    commercialCapabilities.costing
+    commercialCapabilities.costing,
+    sidebarModuleLabels.costing,
+    "Customer Parameter Costing"
   ),
   page(
     "commercial.quotes",
@@ -165,25 +169,33 @@ export const commercialPageAccess = [
     "commercial.product-bulk-revision",
     "Product Bulk Revision",
     "/commercial/product-bulk-revision",
-    commercialCapabilities.revisions
+    commercialCapabilities.revisions,
+    sidebarModuleLabels.costing,
+    "Product Bulk Revision"
   ),
   page(
     "commercial.customer-bulk-revision",
     "Customer Bulk Revision",
     "/commercial/customer-bulk-revision",
-    commercialCapabilities.revisions
+    commercialCapabilities.revisions,
+    sidebarModuleLabels.costing,
+    "Customer Bulk Revision"
   ),
   page(
     "commercial.ecns",
     "Engineering Change Notes",
     "/commercial/ecns",
-    commercialCapabilities.revisions
+    commercialCapabilities.revisions,
+    sidebarModuleLabels.costing,
+    "Engineering Changes"
   ),
   page(
     "commercial.revisions",
     "Price Revisions",
     "/commercial/revisions",
-    commercialCapabilities.revisions
+    commercialCapabilities.revisions,
+    sidebarModuleLabels.costing,
+    "Product Bulk Revision"
   ),
 ] satisfies readonly PageAccessDefinition[]
 
