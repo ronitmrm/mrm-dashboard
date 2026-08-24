@@ -225,6 +225,30 @@ describe("permission access table", () => {
       module: "PPAC CNC-01",
       submodule: "Planner Actions",
     })
+
+    const completeRows = permissionAccessRows([
+      ...permissions,
+      {
+        key: "operations.floors.conventional.machinist_tasks.read",
+        module: "operations",
+        name: "View PPAC Conventional-01 Machinist",
+      },
+      {
+        key: "operations.floors.conventional.quality_control_tasks.read",
+        module: "operations",
+        name: "View PPAC Conventional-01 Quality Control",
+      },
+    ])
+    expect(
+      completeRows.find(
+        ({ id }) => id === "page:production.conventional.machinistTasksTab"
+      )
+    ).toMatchObject({ label: "Machinist", submodule: "Machinist" })
+    expect(
+      completeRows.find(
+        ({ id }) => id === "page:production.conventional.qualityControlTasksTab"
+      )
+    ).toMatchObject({ label: "Quality Control", submodule: "Quality Control" })
   })
 
   it("lists independently assignable business commands as Task rows", () => {

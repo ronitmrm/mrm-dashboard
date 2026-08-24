@@ -42,7 +42,7 @@ export const productionPageLabels: Record<
   jobCardStatusTab: "Job Cards",
   machineDetailTab: "Machine Detail",
   machineMasterTab: "Machines",
-  machinistTasksTab: "Machinist Tasks",
+  machinistTasksTab: "Machinist",
   maintenanceTab: "Mechanical Maintenance",
   masterGapsTab: "Part Readiness",
   masterTablesTab: "Master Tables",
@@ -52,7 +52,7 @@ export const productionPageLabels: Record<
   productionControlTab: "Planner Actions",
   productionDashboardTab: "Production Dashboard",
   productionSessionsTab: "Production Sessions",
-  qualityControlTasksTab: "Quality Control Tasks",
+  qualityControlTasksTab: "Quality Control",
   shopFloorStatusTab: "Shop Floor Status",
   shopFloorTasksTab: "Shop Floor Tasks",
 }
