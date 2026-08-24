@@ -2,7 +2,11 @@ import { administrationPageAccess } from "./administration-capabilities"
 import { commercialPageAccess } from "./commercial-capabilities"
 import { storePageAccess } from "./store-capabilities"
 import { hrPageAccess } from "./hr-capabilities"
-import { productionPageAccess } from "./production-capabilities"
+import {
+  productionPageAccess,
+  productionPageCapabilities,
+} from "./production-capabilities"
+import { productionFloorPageSlugs } from "./production-floor-capabilities"
 import type { PageAccessDefinition } from "./page-access-types"
 
 export const pageAccessCatalog: readonly PageAccessDefinition[] = [
@@ -21,6 +25,10 @@ export const legacyPermissionKeys = new Set([
   "hr.recruitment.write",
   "operations.corrections_page.read",
   "operations.dashboard.read",
+  ...Object.keys(productionFloorPageSlugs).map(
+    (tab) =>
+      productionPageCapabilities[tab as keyof typeof productionPageCapabilities]
+  ),
   "pricing.assemblies.write",
   "pricing.corrections.read",
   "pricing.corrections.write",

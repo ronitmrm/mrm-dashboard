@@ -25,6 +25,7 @@ import {
   type DashboardTabId,
 } from "@/lib/unified-navigation"
 import { productionCapabilityForTab } from "@/lib/auth/production-capabilities"
+import { isProductionFloorTab } from "@/lib/auth/production-floor-capabilities"
 import { requireProductionPage } from "@/lib/auth/require-production-page"
 
 export default async function Page({
@@ -134,23 +135,31 @@ export default async function Page({
       })()
     : null
   const legacyMasterEntry = legacyMasterEntryForDashboardTab(requestedTab)
+  const requestedFloor = normalizeProductionFloorCode(
+    value(query.floor) ?? defaultProductionFloorCode
+  )
   const requestedDashboardTab = legacyMasterEntry
     ? "dataEntryTab"
     : dashboardNavigation.some((item) => item.id === requestedTab)
       ? (requestedTab as DashboardTabId)
       : "productionControlTab"
-  const initialDashboardTab = navigationAccess.productionTabIds?.includes(
+  const requestedFloorTabs =
+    navigationAccess.productionFloorTabIds?.[requestedFloor]
+  const allowedDashboardTabs = isProductionFloorTab(requestedDashboardTab)
+    ? requestedFloorTabs
+    : navigationAccess.productionTabIds
+  const initialDashboardTab = allowedDashboardTabs?.includes(
     requestedDashboardTab
   )
     ? requestedDashboardTab
-    : (navigationAccess.productionTabIds?.[0] ?? requestedDashboardTab)
-  const pageCapability = productionCapabilityForTab(initialDashboardTab)
+    : (allowedDashboardTabs?.[0] ?? requestedDashboardTab)
+  const pageCapability = productionCapabilityForTab(
+    initialDashboardTab,
+    requestedFloor
+  )
   if (pageCapability) {
     await requireProductionPage(pageCapability, "/")
   }
-  const requestedFloor = Array.isArray(query.floor)
-    ? query.floor[0]
-    : query.floor
   const requestedEntryFromQuery = Array.isArray(query.entry)
     ? query.entry[0]
     : query.entry
@@ -160,9 +169,7 @@ export default async function Page({
     <MrmplDashboard
       initialDashboardTab={initialDashboardTab}
       initialDataEntryType={requestedEntry}
-      initialProductionFloor={normalizeProductionFloorCode(
-        requestedFloor ?? defaultProductionFloorCode
-      )}
+      initialProductionFloor={requestedFloor}
       navigationAccess={navigationAccess}
       canDeleteMasters={capabilities.has("operations.corrections.write")}
       canManageStoreMasters={capabilities.has("store.masters.write")}

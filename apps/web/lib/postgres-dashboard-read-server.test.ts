@@ -75,6 +75,7 @@ describe("authenticated dashboard state reader", () => {
     })
     mocks.listAllGrantedCapabilities.mockResolvedValue([
       "operations.dashboard.read",
+      "operations.floors.conventional.planner_actions.read",
     ])
     mocks.organizationIdForCode.mockResolvedValue("organization-1")
     mocks.state.mockResolvedValue({
@@ -123,6 +124,19 @@ describe("authenticated dashboard state reader", () => {
     expect(mocks.state).not.toHaveBeenCalled()
     expect(mocks.dashboardClose).not.toHaveBeenCalled()
     expect(mocks.setOutcome).toHaveBeenCalledWith("unauthorized")
+  })
+
+  it("does not allow one PPAC floor grant to read a different floor", async () => {
+    mocks.listAllGrantedCapabilities.mockResolvedValue([
+      "operations.dashboard.read",
+      "operations.floors.conventional.planner_actions.read",
+    ])
+    const request = new NextRequest("http://localhost/api/dashboard-state")
+
+    await expect(
+      readPostgresDashboardState(request, {}, "cnc")
+    ).rejects.toMatchObject({ status: 403 })
+    expect(mocks.state).not.toHaveBeenCalled()
   })
 
   it("requires dedicated correction authority before reversing operations evidence", async () => {

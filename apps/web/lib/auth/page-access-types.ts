@@ -5,5 +5,6 @@ export type PageAccessDefinition = {
   module: string
   navigation: boolean
   readPermissionKey: string
+  submodule?: string
   writePermissionKey?: string
 }

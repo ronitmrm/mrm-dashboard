@@ -8,6 +8,7 @@ import {
   createWorkforceRepository,
 } from "@workspace/db"
 import type { NextRequest } from "next/server"
+import { normalizeProductionFloorCode } from "@workspace/db/production-floors"
 
 import { getAuth, readAuthEnvironment } from "@/lib/auth/auth"
 import { operationalEntryPlan } from "@/lib/postgres-operational-entry"
@@ -15,6 +16,7 @@ import { sharedEmployeeMasterRows } from "@/lib/shared-employee-master"
 import { withPostgresRepository } from "@/lib/postgres-repository-lifecycle"
 import { authorizationRequestTelemetryForCurrentScope } from "./auth/authorization-request-telemetry"
 import { telemetryRequestId } from "./request-telemetry"
+import { productionCapabilityForTab } from "./auth/production-capabilities"
 
 const operationalEntryTypes = new Set([
   "attendance",
@@ -97,7 +99,11 @@ export async function readPostgresHourlyQualityPage(
   checkKey?: string | null,
   productionFloorCode?: string | null
 ) {
-  const actor = await authorizedActor(request, "operations.dashboard.read")
+  const floor = normalizeProductionFloorCode(productionFloorCode)
+  const actor = await authorizedActor(
+    request,
+    productionCapabilityForTab("qualityControlTasksTab", floor)!
+  )
   return withPostgresRepository(
     createQualityRepository(actor),
     async (repository) => {
@@ -105,7 +111,7 @@ export async function readPostgresHourlyQualityPage(
       const page = await repository.readHourlyQualityPage({
         checkKey,
         organizationId,
-        productionFloorCode: productionFloorCode ?? undefined,
+        productionFloorCode: floor,
       })
       return {
         ...page,
@@ -130,14 +136,18 @@ export async function readPostgresSetupChecklistPage(
   sessionKey?: string | null,
   productionFloorCode?: string | null
 ) {
-  const actor = await authorizedActor(request, "operations.dashboard.read")
+  const floor = normalizeProductionFloorCode(productionFloorCode)
+  const actor = await authorizedActor(
+    request,
+    productionCapabilityForTab("machinistTasksTab", floor)!
+  )
   return withPostgresRepository(
     createQualityRepository(actor),
     async (repository) => {
       const organizationId = await repository.organizationIdForCode("MRMPL")
       return await repository.readSetupChecklistPage({
         organizationId,
-        productionFloorCode: productionFloorCode ?? undefined,
+        productionFloorCode: floor,
         sessionKey,
       })
     },

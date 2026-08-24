@@ -102,6 +102,16 @@ const permissions = [
     module: "maintenance",
     name: "Complete Maintenance Tasks",
   },
+  {
+    key: "operations.floors.conventional.planner_actions.read",
+    module: "operations",
+    name: "View PPAC Conventional-01 Planner Actions",
+  },
+  {
+    key: "operations.floors.cnc.planner_actions.read",
+    module: "operations",
+    name: "View PPAC CNC-01 Planner Actions",
+  },
 ] as const
 
 describe("permission access table", () => {
@@ -116,6 +126,7 @@ describe("permission access table", () => {
       label: "Customers",
       module: "Master Data",
       readPermissionKeys: ["pricing.customers.read"],
+      submodule: "Master Selection",
       supportedLevels: ["none", "read"],
     })
     expect(rows).toContainEqual({
@@ -126,6 +137,7 @@ describe("permission access table", () => {
       label: "Assembly / BOM",
       module: "Costing",
       readPermissionKeys: ["pricing.assemblies.read"],
+      submodule: "Assembly / BOM",
       supportedLevels: ["none", "read"],
     })
   })
@@ -147,12 +159,12 @@ describe("permission access table", () => {
     })
   })
 
-  it("lists Production and HR workspaces as independent pages", () => {
+  it("replaces legacy global PPAC pages while keeping HR workspaces", () => {
     const rows = permissionAccessRows(permissions)
 
     expect(
       rows.find(({ id }) => id === "page:production.productionControlTab")
-    ).toMatchObject({ label: "Planner Actions", module: "Production Dashboard" })
+    ).toBeUndefined()
     expect(
       rows.find(({ id }) => id === "page:hr.interviewsPanel")
     ).toMatchObject({ label: "Interview Schedule", module: "HR & Recruitment" })
@@ -161,10 +173,12 @@ describe("permission access table", () => {
   it("uses the left-sidebar module names instead of internal permission namespaces", () => {
     const rows = permissionAccessRows(permissions)
 
-    expect(rows.find(({ id }) => id === "page:commercial.sales")).toMatchObject({
-      label: "Sales",
-      module: "Costing",
-    })
+    expect(rows.find(({ id }) => id === "page:commercial.sales")).toMatchObject(
+      {
+        label: "Sales",
+        module: "Costing",
+      }
+    )
     expect(
       rows.find(({ id }) => id === "pricing.sales.followups.complete")
     ).toMatchObject({ module: "Costing" })
@@ -190,6 +204,29 @@ describe("permission access table", () => {
     )
   })
 
+  it("lists PPAC floor pages under their exact sidebar module and submodule", () => {
+    const rows = permissionAccessRows(permissions)
+
+    expect(
+      rows.find(
+        ({ id }) => id === "page:production.conventional.productionControlTab"
+      )
+    ).toMatchObject({
+      kind: "page",
+      label: "Planner Actions",
+      module: "PPAC Conventional-01",
+      submodule: "Planner Actions",
+    })
+    expect(
+      rows.find(({ id }) => id === "page:production.cnc.productionControlTab")
+    ).toMatchObject({
+      kind: "page",
+      label: "Planner Actions",
+      module: "PPAC CNC-01",
+      submodule: "Planner Actions",
+    })
+  })
+
   it("lists independently assignable business commands as Task rows", () => {
     expect(permissionAccessRows(permissions)).toContainEqual({
       fullPermissionKeys: ["pricing.customers.create"],
@@ -199,6 +236,7 @@ describe("permission access table", () => {
       label: "Create Customer",
       module: "Master Data",
       readPermissionKeys: [],
+      submodule: "Master Selection",
       supportedLevels: ["none", "full"],
     })
   })
@@ -215,6 +253,7 @@ describe("permission access table", () => {
       label: "Inspections",
       module: "Production Dashboard",
       readPermissionKeys: ["quality.inspections.read"],
+      submodule: "Inspections",
       supportedLevels: ["none", "read", "full"],
     })
   })
@@ -264,9 +303,12 @@ describe("permission access table", () => {
   it("keeps the legacy dashboard read gate behind any Production page", () => {
     expect(
       permissionKeysForSelections(permissionAccessRows(permissions), {
-        "page:production.productionControlTab": "read",
+        "page:production.conventional.productionControlTab": "read",
       })
-    ).toEqual(["operations.dashboard.read", "planning.planner_actions.read"])
+    ).toEqual([
+      "operations.dashboard.read",
+      "operations.floors.conventional.planner_actions.read",
+    ])
   })
 
   it("keeps the legacy recruitment read gate behind any HR recruitment page", () => {

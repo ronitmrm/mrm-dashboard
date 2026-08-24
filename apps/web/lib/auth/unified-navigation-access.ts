@@ -6,7 +6,12 @@ import { listGrantedCapabilities } from "./require-capability"
 import { hrMasterNavigation, hrNavigation } from "../unified-navigation"
 import { productionModuleIsEnabled } from "../production-module"
 import { productionPageCapabilities } from "./production-capabilities"
+import {
+  isProductionFloorTab,
+  productionFloorPageCapabilities,
+} from "./production-floor-capabilities"
 import type { DashboardTabId } from "../unified-navigation"
+import type { ProductionFloorCode } from "@workspace/db/production-floors"
 
 const operationsCapability = "operations.dashboard.read"
 const administrationCapability = "administration.access.read"
@@ -16,6 +21,7 @@ export type UnifiedNavigationAccess = {
   commercialHrefs: string[]
   hrHrefs: string[]
   operations: boolean
+  productionFloorTabIds?: Partial<Record<ProductionFloorCode, DashboardTabId[]>>
   productionTabIds?: DashboardTabId[]
   store: boolean
   storeHrefs?: string[]
@@ -29,6 +35,7 @@ async function readUnifiedNavigationAccess(
     "hr.recruitment.read",
     administrationCapability,
     ...Object.values(productionPageCapabilities),
+    ...Object.values(productionFloorPageCapabilities).flatMap(Object.values),
     ...storeNavigationAccess.map(([, capability]) => capability),
     ...[...hrMasterNavigation, ...hrNavigation].map(
       ({ requiredCapability }) => requiredCapability
@@ -38,17 +45,44 @@ async function readUnifiedNavigationAccess(
   const grantedCapabilities = new Set(
     await listGrantedCapabilities(userId, [...new Set(capabilities)])
   )
-  const productionTabIds = Object.entries(productionPageCapabilities)
+  const universalProductionTabIds = Object.entries(productionPageCapabilities)
+    .filter(([tab]) => !isProductionFloorTab(tab as DashboardTabId))
     .filter(([, capability]) => grantedCapabilities.has(capability))
     .map(([tab]) => tab as DashboardTabId)
-  if (
-    productionTabIds.length === 0 &&
-    grantedCapabilities.has(operationsCapability)
-  ) {
-    productionTabIds.push(
-      ...(Object.keys(productionPageCapabilities) as DashboardTabId[])
+  const legacyFloorTabIds = Object.entries(productionPageCapabilities)
+    .filter(
+      ([tab, capability]) =>
+        isProductionFloorTab(tab as DashboardTabId) &&
+        grantedCapabilities.has(capability)
     )
-  }
+    .map(([tab]) => tab as DashboardTabId)
+  const hasFloorSpecificGrant = Object.values(
+    productionFloorPageCapabilities
+  ).some((capabilities) =>
+    Object.values(capabilities).some((key) => grantedCapabilities.has(key))
+  )
+  const productionFloorTabIds = Object.fromEntries(
+    Object.entries(productionFloorPageCapabilities).map(
+      ([floor, floorCapabilities]) => {
+        let tabs = Object.entries(floorCapabilities)
+          .filter(([, capability]) => grantedCapabilities.has(capability))
+          .map(([tab]) => tab as DashboardTabId)
+        if (!hasFloorSpecificGrant) {
+          tabs = legacyFloorTabIds
+          if (!tabs.length && grantedCapabilities.has(operationsCapability)) {
+            tabs = Object.keys(floorCapabilities) as DashboardTabId[]
+          }
+        }
+        return [floor, tabs]
+      }
+    )
+  ) as Partial<Record<ProductionFloorCode, DashboardTabId[]>>
+  const productionTabIds = [
+    ...new Set([
+      ...universalProductionTabIds,
+      ...Object.values(productionFloorTabIds).flatMap((tabs) => tabs ?? []),
+    ]),
+  ]
   const hasGranularHrAccess = [...hrMasterNavigation, ...hrNavigation].some(
     ({ requiredCapability }) => grantedCapabilities.has(requiredCapability)
   )
@@ -68,6 +102,7 @@ async function readUnifiedNavigationAccess(
       )
       .map(({ href }) => href),
     operations: productionModuleIsEnabled() && productionTabIds.length > 0,
+    productionFloorTabIds,
     productionTabIds,
     store: storeNavigationAccess.some(([, capability]) =>
       grantedCapabilities.has(capability)

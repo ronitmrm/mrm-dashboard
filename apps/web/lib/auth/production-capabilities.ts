@@ -1,4 +1,14 @@
 import type { PageAccessDefinition } from "./page-access-types"
+import {
+  productionFloors,
+  type ProductionFloorCode,
+} from "@workspace/db/production-floors"
+
+import {
+  isProductionFloorTab,
+  productionFloorPageCapabilities,
+  productionFloorPageSlugs,
+} from "./production-floor-capabilities"
 import type { DashboardTabId } from "../unified-navigation"
 import { sidebarModuleLabels } from "../sidebar-module-labels"
 
@@ -23,7 +33,10 @@ export const productionPageCapabilities = {
   shopFloorTasksTab: "operations.shop_floor_tasks.read",
 } as const satisfies Partial<Record<DashboardTabId, string>>
 
-const labels: Record<keyof typeof productionPageCapabilities, string> = {
+export const productionPageLabels: Record<
+  keyof typeof productionPageCapabilities,
+  string
+> = {
   dataEntryTab: "Master Data Entry",
   firstPieceInspectionTab: "First Piece Inspection",
   jobCardStatusTab: "Job Cards",
@@ -65,18 +78,46 @@ const modules: Record<keyof typeof productionPageCapabilities, string> = {
   shopFloorTasksTab: sidebarModuleLabels.productionDashboard,
 }
 
-export const productionPageAccess = Object.entries(
-  productionPageCapabilities
-).map(([id, readPermissionKey]) => ({
-  href: `/?tab=${id}`,
-  id: `production.${id}`,
-  label: labels[id as keyof typeof labels],
-  module: modules[id as keyof typeof modules],
-  navigation: true,
-  readPermissionKey,
-})) satisfies PageAccessDefinition[]
+const universalProductionPageAccess = Object.entries(productionPageCapabilities)
+  .filter(([id]) => !(id in productionFloorPageSlugs))
+  .map(([id, readPermissionKey]) => ({
+    href: `/?tab=${id}`,
+    id: `production.${id}`,
+    label: productionPageLabels[id as keyof typeof productionPageLabels],
+    module: modules[id as keyof typeof modules],
+    navigation: true,
+    readPermissionKey,
+    submodule: productionPageLabels[id as keyof typeof productionPageLabels],
+  }))
 
-export function productionCapabilityForTab(tab: DashboardTabId) {
+const floorProductionPageAccess = productionFloors.flatMap((floor) =>
+  (
+    Object.keys(productionFloorPageSlugs) as Array<
+      keyof typeof productionFloorPageSlugs
+    >
+  ).map((id) => ({
+    href: `/?tab=${id}&floor=${floor.code}`,
+    id: `production.${floor.code}.${id}`,
+    label: productionPageLabels[id],
+    module: floor.label,
+    navigation: true,
+    readPermissionKey: productionFloorPageCapabilities[floor.code][id],
+    submodule: productionPageLabels[id],
+  }))
+)
+
+export const productionPageAccess = [
+  ...universalProductionPageAccess,
+  ...floorProductionPageAccess,
+] satisfies PageAccessDefinition[]
+
+export function productionCapabilityForTab(
+  tab: DashboardTabId,
+  floor?: ProductionFloorCode
+) {
+  if (floor && isProductionFloorTab(tab)) {
+    return productionFloorPageCapabilities[floor][tab]
+  }
   return productionPageCapabilities[
     tab as keyof typeof productionPageCapabilities
   ]

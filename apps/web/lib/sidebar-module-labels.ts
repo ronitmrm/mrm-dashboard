@@ -29,9 +29,7 @@ export function sidebarModuleForPermission(
   storedModule: string
 ) {
   if (
-    masterDataPricingPrefixes.some((prefix) =>
-      permissionKey.startsWith(prefix)
-    )
+    masterDataPricingPrefixes.some((prefix) => permissionKey.startsWith(prefix))
   ) {
     return sidebarModuleLabels.masterData
   }
@@ -62,4 +60,51 @@ export function sidebarModuleForPermission(
     default:
       return storedModule
   }
+}
+
+export function sidebarSubmoduleForPermission(
+  permissionKey: string,
+  fallbackLabel: string
+) {
+  if (
+    masterDataPricingPrefixes.some((prefix) => permissionKey.startsWith(prefix))
+  ) {
+    return "Master Selection"
+  }
+  if (
+    operationalEntryPricingPrefixes.some((prefix) =>
+      permissionKey.startsWith(prefix)
+    )
+  ) {
+    return "Entry Selection"
+  }
+
+  const mappings = [
+    ["pricing.sales.", "Sales"],
+    ["pricing.technical_review.", "Technical Review"],
+    ["pricing.design.", "Design Tasks"],
+    ["pricing.product_costing.", "Product Parameter Costing"],
+    ["pricing.customer_costing.", "Customer Parameter Costing"],
+    ["pricing.product_bulk_revision.", "Product Bulk Revision"],
+    ["pricing.customer_bulk_revision.", "Customer Bulk Revision"],
+    ["pricing.engineering_changes.", "Engineering Changes"],
+    ["pricing.drawing_history.", "Drawing History"],
+    ["store.requests.", "Requests & Issues"],
+    ["store.new_item_requests.", "New Item Requests"],
+    ["store.purchase_register.", "Purchase Register"],
+    ["store.stock.", "Stock"],
+    ["maintenance.", "Mechanical Maintenance"],
+    ["hr.employees.", "Master Selection"],
+    ["hr.masters.", "Master Selection"],
+    ["hr.candidate_entry.", "Master Selection"],
+    ["hr.jobs.", "Job Posts"],
+    ["hr.candidate_search.", "Search Candidate"],
+    ["hr.conversations.", "Conversation History"],
+    ["hr.interview_schedule.", "Interview Schedule"],
+    ["hr.interview_workspace.", "Interview Workspace"],
+  ] as const
+  return (
+    mappings.find(([prefix]) => permissionKey.startsWith(prefix))?.[1] ??
+    fallbackLabel
+  )
 }

@@ -226,8 +226,10 @@ export function UnifiedSidebarNavigation({
           items: filterProductionItems(
             productionFloorNavigation.filter(
               (item) =>
-                !navigationAccess.productionTabIds ||
-                navigationAccess.productionTabIds.includes(item.id)
+                !navigationAccess.productionFloorTabIds ||
+                navigationAccess.productionFloorTabIds[floor.code]?.includes(
+                  item.id
+                )
             ),
             normalizedMenuSearch,
             `${floor.label} ${floor.shortLabel} production`.toLowerCase()
