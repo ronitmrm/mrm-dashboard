@@ -68,14 +68,16 @@ export const commercialPageAccess = [
     "Enquiries",
     "/commercial/enquiries",
     commercialCapabilities.enquiries,
-    sidebarModuleLabels.operationalEntry
+    sidebarModuleLabels.operationalEntry,
+    "Entry Selection"
   ),
   page(
     "commercial.enquiry_excel_view",
     "Excel View",
     "/commercial/enquiries/excel-view",
     commercialCapabilities.enquiries,
-    sidebarModuleLabels.operationalEntry
+    sidebarModuleLabels.costing,
+    "Excel View"
   ),
   page(
     "commercial.sales",
@@ -156,7 +158,8 @@ export const commercialPageAccess = [
     "Purchase Orders",
     "/commercial/orders",
     commercialCapabilities.purchaseOrders,
-    sidebarModuleLabels.operationalEntry
+    sidebarModuleLabels.operationalEntry,
+    "Entry Selection"
   ),
   page(
     "commercial.product-bulk-revision",
@@ -193,7 +196,8 @@ function page(
   label: string,
   href: string,
   capabilities: { read: string; write?: string },
-  module: string = sidebarModuleLabels.costing
+  module: string = sidebarModuleLabels.costing,
+  submodule?: string
 ): PageAccessDefinition {
   return {
     href,
@@ -202,6 +206,7 @@ function page(
     module,
     navigation: true,
     readPermissionKey: capabilities.read,
+    ...(submodule ? { submodule } : {}),
     ...(capabilities.write ? { writePermissionKey: capabilities.write } : {}),
   }
 }
