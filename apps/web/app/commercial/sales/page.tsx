@@ -27,6 +27,11 @@ import {
 import { Textarea } from "@workspace/ui/components/textarea"
 
 import { BoundedResultNotice } from "@/components/bounded-result-notice"
+import {
+  SalesWorkspaceTabs,
+  salesWorkspaceViews,
+  type SalesWorkspaceView,
+} from "@/components/sales-workspace-tabs"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { salesTaskRows } from "@/lib/sales-task-rows"
@@ -39,46 +44,10 @@ import {
 
 export const dynamic = "force-dynamic"
 
-const salesWorkspaceViews = [
-  { id: "tasks", label: "Tasks" },
-  { id: "followup-history", label: "Follow-Up History" },
-  { id: "sent-quotes", label: "Sent Quotes" },
-] as const
-
-type SalesWorkspaceView = (typeof salesWorkspaceViews)[number]["id"]
-
 function salesView(value: string | undefined): SalesWorkspaceView {
   return salesWorkspaceViews.some((view) => view.id === value)
     ? (value as SalesWorkspaceView)
     : "tasks"
-}
-
-function SalesWorkspaceTabs({
-  activeView,
-}: {
-  activeView: SalesWorkspaceView
-}) {
-  const linkClass = "border-b-2 px-4 py-3 text-sm font-medium transition-colors"
-
-  return (
-    <nav
-      aria-label="Sales views"
-      className="flex overflow-x-auto border-b"
-      role="tablist"
-    >
-      {salesWorkspaceViews.map((view) => (
-        <Link
-          aria-selected={activeView === view.id}
-          className={`${linkClass} ${activeView === view.id ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
-          href={{ pathname: "/commercial/sales", query: { view: view.id } }}
-          key={view.id}
-          role="tab"
-        >
-          {view.label}
-        </Link>
-      ))}
-    </nav>
-  )
 }
 
 export default async function SalesPage({
