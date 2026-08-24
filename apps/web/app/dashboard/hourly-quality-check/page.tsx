@@ -2,6 +2,7 @@ import { normalizeProductionFloorCode } from "@workspace/db/production-floors"
 import { redirect } from "next/navigation"
 
 import { requireProductionPage } from "@/lib/auth/require-production-page"
+import { productionCapabilityForTab } from "@/lib/auth/production-capabilities"
 import { productionModuleIsEnabled } from "@/lib/production-module"
 
 export default async function Page({
@@ -11,19 +12,15 @@ export default async function Page({
 }) {
   if (!productionModuleIsEnabled()) redirect("/commercial")
 
-  const { HourlyQualityCheckPage } = await import(
-    "@/components/mrmpl-dashboard"
-  )
+  const { HourlyQualityCheckPage } =
+    await import("@/components/mrmpl-dashboard")
   const query = await searchParams
+  const floor = normalizeProductionFloorCode(
+    Array.isArray(query.floor) ? query.floor[0] : query.floor
+  )
   await requireProductionPage(
-    "quality.control_tasks.read",
+    productionCapabilityForTab("qualityControlTasksTab", floor)!,
     "/dashboard/hourly-quality-check"
   )
-  return (
-    <HourlyQualityCheckPage
-      productionFloorCode={normalizeProductionFloorCode(
-        Array.isArray(query.floor) ? query.floor[0] : query.floor
-      )}
-    />
-  )
+  return <HourlyQualityCheckPage productionFloorCode={floor} />
 }

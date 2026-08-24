@@ -2,8 +2,14 @@ import { readFile } from "node:fs/promises"
 
 import { describe, expect, test } from "vitest"
 
-const componentUrl = new URL("../components/mrmpl-dashboard.tsx", import.meta.url)
-const dashboardLayoutUrl = new URL("../app/dashboard/layout.tsx", import.meta.url)
+const componentUrl = new URL(
+  "../components/mrmpl-dashboard.tsx",
+  import.meta.url
+)
+const dashboardLayoutUrl = new URL(
+  "../app/dashboard/layout.tsx",
+  import.meta.url
+)
 const rootLayoutUrl = new URL("../app/layout.tsx", import.meta.url)
 const pageUrl = new URL("../app/page.tsx", import.meta.url)
 const proxyUrl = new URL("../proxy.ts", import.meta.url)
@@ -16,14 +22,16 @@ describe("PostgreSQL dashboard client cutover", () => {
     expect(source).not.toContain("@convex-dev/auth")
     expect(source).not.toContain('from "convex/react"')
     expect(source).not.toContain("@/convex/_generated")
-    expect(source).not.toMatch(/\buse(?:ConvexAuth|Mutation|PaginatedQuery|Query)\b/)
+    expect(source).not.toMatch(
+      /\buse(?:ConvexAuth|Mutation|PaginatedQuery|Query)\b/
+    )
   })
 
   test("the root dashboard is protected by Better Auth capability checks", async () => {
     const source = await readFile(pageUrl, "utf8")
 
     expect(source).toContain('requireAuthenticatedSession("/")')
-    expect(source).toContain("productionCapabilityForTab(initialDashboardTab)")
+    expect(source).toContain("initialDashboardTab,\n    requestedFloor")
     expect(source).toContain("await requireProductionPage(pageCapability")
   })
 

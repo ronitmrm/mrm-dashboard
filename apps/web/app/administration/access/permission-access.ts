@@ -3,8 +3,15 @@ import {
   pageAccessCatalog,
 } from "../../../lib/auth/page-access-catalog"
 import { productionPageCapabilities } from "../../../lib/auth/production-capabilities"
-import { sidebarModuleForPermission } from "../../../lib/sidebar-module-labels"
-import { hrMasterNavigation, hrNavigation } from "../../../lib/unified-navigation"
+import { productionFloorPageCapabilities } from "../../../lib/auth/production-floor-capabilities"
+import {
+  sidebarModuleForPermission,
+  sidebarSubmoduleForPermission,
+} from "../../../lib/sidebar-module-labels"
+import {
+  hrMasterNavigation,
+  hrNavigation,
+} from "../../../lib/unified-navigation"
 
 export type PermissionOption = {
   key: string
@@ -22,6 +29,7 @@ export type PermissionAccessRow = {
   label: string
   module: string
   readPermissionKeys: string[]
+  submodule: string
   supportedLevels: PermissionAccessLevel[]
 }
 
@@ -70,6 +78,9 @@ export function permissionAccessRows(
         label: page.label,
         module: page.module,
         readPermissionKeys,
+        submodule:
+          page.submodule ??
+          sidebarSubmoduleForPermission(page.readPermissionKey, page.label),
         supportedLevels,
       },
     ]
@@ -80,6 +91,7 @@ export function permissionAccessRows(
       full: PermissionOption[]
       module: string
       read: PermissionOption[]
+      submodule: string
     }
   >()
 
@@ -95,37 +107,42 @@ export function permissionAccessRows(
       full: [],
       module: sidebarModuleForPermission(permission.key, permission.module),
       read: [],
+      submodule: sidebarSubmoduleForPermission(
+        permission.key,
+        taskLabel(permission)
+      ),
     }
     if (kind === "read") group.read.push(permission)
     else group.full.push(permission)
     groups.set(id, group)
   }
 
-  const taskRows = [...groups.entries()]
-    .map(([id, group]) => {
-      const readPermissionKeys = group.read.map(({ key }) => key).sort()
-      const writePermissionKeys = group.full.map(({ key }) => key).sort()
-      const hasRead = readPermissionKeys.length > 0
-      const hasWrite = writePermissionKeys.length > 0
-      const labelSource = group.read[0] ?? group.full[0]
-      if (!labelSource) throw new Error(`Permission group ${id} is empty`)
-      const supportedLevels: PermissionAccessLevel[] = ["none"]
-      if (hasRead) supportedLevels.push("read")
-      if (hasWrite) supportedLevels.push("full")
-      return {
-        fullPermissionKeys: [...readPermissionKeys, ...writePermissionKeys],
-        href: null,
-        id,
-        kind: "task" as const,
-        label: taskLabel(labelSource),
-        module: group.module,
-        readPermissionKeys,
-        supportedLevels,
-      }
-    })
+  const taskRows = [...groups.entries()].map(([id, group]) => {
+    const readPermissionKeys = group.read.map(({ key }) => key).sort()
+    const writePermissionKeys = group.full.map(({ key }) => key).sort()
+    const hasRead = readPermissionKeys.length > 0
+    const hasWrite = writePermissionKeys.length > 0
+    const labelSource = group.read[0] ?? group.full[0]
+    if (!labelSource) throw new Error(`Permission group ${id} is empty`)
+    const supportedLevels: PermissionAccessLevel[] = ["none"]
+    if (hasRead) supportedLevels.push("read")
+    if (hasWrite) supportedLevels.push("full")
+    return {
+      fullPermissionKeys: [...readPermissionKeys, ...writePermissionKeys],
+      href: null,
+      id,
+      kind: "task" as const,
+      label: taskLabel(labelSource),
+      module: group.module,
+      readPermissionKeys,
+      submodule: group.submodule,
+      supportedLevels,
+    }
+  })
   return [...pageRows, ...taskRows].sort(
     (left, right) =>
       left.module.localeCompare(right.module) ||
+      left.submodule.localeCompare(right.submodule) ||
       left.kind.localeCompare(right.kind) ||
       left.label.localeCompare(right.label)
   )
@@ -146,17 +163,18 @@ export function permissionKeysForSelections(
           : []
     for (const key of keys) permissionKeys.add(key)
   }
-  if (
-    Object.values(productionPageCapabilities).some((key) =>
-      permissionKeys.has(key)
-    )
-  ) {
+  const productionKeys = [
+    ...Object.values(productionPageCapabilities),
+    ...Object.values(productionFloorPageCapabilities).flatMap(Object.values),
+  ]
+  if (productionKeys.some((key) => permissionKeys.has(key))) {
     permissionKeys.add("operations.dashboard.read")
   }
   if (
-    [...hrMasterNavigation, ...hrNavigation].some(({ requiredCapability }) =>
-      requiredCapability !== "hr.employees.read" &&
-      permissionKeys.has(requiredCapability)
+    [...hrMasterNavigation, ...hrNavigation].some(
+      ({ requiredCapability }) =>
+        requiredCapability !== "hr.employees.read" &&
+        permissionKeys.has(requiredCapability)
     )
   ) {
     permissionKeys.add("hr.recruitment.read")

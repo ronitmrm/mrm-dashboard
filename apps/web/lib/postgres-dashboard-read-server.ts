@@ -9,6 +9,7 @@ import {
   readRequestGrantedCapabilitySet,
 } from "./auth/request-authorization"
 import { telemetryRequestId } from "./request-telemetry"
+import { hasProductionFloorAccess } from "./auth/production-floor-capabilities"
 
 export class DashboardReadError extends Error {
   constructor(
@@ -26,7 +27,8 @@ async function withDashboardReadRepository<T>(
     organizationId: string
     repository: ReturnType<typeof createDashboardReadModelRepository>
   }) => Promise<T>,
-  capability = "operations.dashboard.read"
+  capability = "operations.dashboard.read",
+  requestedProductionFloor?: string | null
 ) {
   const authorizationTelemetry = authorizationRequestTelemetryForCurrentScope({
     requestId: telemetryRequestId(request),
@@ -49,7 +51,17 @@ async function withDashboardReadRepository<T>(
       session.user.id,
       telemetry
     )
-    if (!granted.has(capability)) {
+    const floor = requestedProductionFloor
+      ? normalizeProductionFloorCode(requestedProductionFloor)
+      : null
+    const hasFloorGrant = floor && hasProductionFloorAccess(granted, floor)
+    const authorized =
+      granted.has(capability) &&
+      (!floor ||
+        capability !== "operations.dashboard.read" ||
+        hasFloorGrant ||
+        granted.has("operations.production_dashboard.read"))
+    if (!authorized) {
       telemetry.setOutcome("unauthorized")
       throw new DashboardReadError(
         403,
@@ -90,7 +102,9 @@ export async function readPostgresDashboard(
       if (payload) return payload
       await repository.requestRefresh(organizationId)
       return { cacheStatus: "missing", filters }
-    }
+    },
+    "operations.dashboard.read",
+    requestedProductionFloor
   )
 }
 
@@ -145,7 +159,9 @@ export async function readPostgresDashboardState(
         notModified: false,
         status: { ...state.status, isRefreshing: true },
       }
-    }
+    },
+    "operations.dashboard.read",
+    requestedProductionFloor
   )
 }
 

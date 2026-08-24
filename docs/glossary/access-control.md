@@ -23,6 +23,12 @@ Full Access includes its applicable changing actions.
 business-facing name as the left sidebar. Internal permission namespaces such
 as `pricing`, `operations`, and `hr` are never displayed as module names.
 
+**Access Hierarchy**: Access Administration presents every grant as Main
+Module, Sub Module, then Page or Task. Main Module and Sub Module names match
+the left sidebar exactly. A PPAC page grant is scoped to one Production Floor;
+granting a page under PPAC Conventional-01 does not grant the same page under
+PPAC Conventional-02, PPAC CNC-01, or PPAC Forging.
+
 **Task Access**: Permission for one independently assignable business command,
 such as requesting stock, making a purchase order, issuing a Store request, or
 moving an asset. Task Access is independent of Page Access: the page controls

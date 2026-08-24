@@ -4,11 +4,15 @@ import {
   createProductionShopFloorRepository,
   isMasterDataKind,
 } from "@workspace/db"
-import { parseProductionFloorCode } from "@workspace/db/production-floors"
+import {
+  normalizeProductionFloorCode,
+  parseProductionFloorCode,
+} from "@workspace/db/production-floors"
 import { validConfirmedPrioritySetupNumbers } from "@workspace/db/planning-rules"
 import { NextResponse, type NextRequest } from "next/server"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
+import { hasProductionFloorAccess } from "../../../lib/auth/production-floor-capabilities"
 import { istDateValue } from "../../../lib/date-time"
 import { planningProductionFloorPayload } from "../../../lib/planning-production-floor"
 import {
@@ -121,12 +125,7 @@ const dataEntryTemplateFields: Record<string, string[]> = {
     "machineType",
     "stageWeight",
   ],
-  cycle: [
-    "partNo",
-    "optionNumber",
-    "setupNo",
-    "cycleTime",
-  ],
+  cycle: ["partNo", "optionNumber", "setupNo", "cycleTime"],
   tooling: [
     "partNo",
     "optionNumber",
@@ -361,7 +360,8 @@ async function authorizedDashboardSession(
 
 async function preauthorizeDashboardMutation(
   request: NextRequest,
-  path: string
+  path: string,
+  body: Record<string, unknown>
 ) {
   const capabilities = dashboardMutationCapabilities(path)
   if (!capabilities) throw new RouteError(404, "Not found")
@@ -385,7 +385,20 @@ async function preauthorizeDashboardMutation(
       session.user.id,
       telemetry
     )
-    if (!capabilities.some((capability) => granted.has(capability))) {
+    const requestedFloor =
+      typeof body.productionFloorCode === "string"
+        ? normalizeProductionFloorCode(body.productionFloorCode)
+        : typeof body.floor === "string"
+          ? normalizeProductionFloorCode(body.floor)
+          : null
+    const hasTaskCapability = capabilities.some((capability) =>
+      granted.has(capability)
+    )
+    const hasFloorCapability =
+      !requestedFloor ||
+      hasProductionFloorAccess(granted, requestedFloor) ||
+      granted.has("operations.production_dashboard.read")
+    if (!hasTaskCapability || !hasFloorCapability) {
       telemetry.setOutcome("unauthorized")
       throw new RouteError(
         403,
@@ -591,9 +604,7 @@ async function savePlanningMasterEntry(
         code: optionalText(payload.foamTool),
         type: "Foam tool",
       },
-    ].filter((row): row is { code: string; type: string } =>
-      Boolean(row.code)
-    )
+    ].filter((row): row is { code: string; type: string } => Boolean(row.code))
     if (!toolingRows.length) {
       throw new RouteError(400, "At least one fixture or tool is required.")
     }
@@ -810,10 +821,10 @@ async function post(request: NextRequest, context: RouteContext) {
       return json(await requestPostgresDashboardRefresh(request))
     }
 
-    await preauthorizeDashboardMutation(request, path)
     const body = normalizeUserEnteredPayload(
       plainRecord(await readDashboardJsonBody(request))
     )
+    await preauthorizeDashboardMutation(request, path, plainRecord(body))
 
     if (path === "attendance" || path === "training") {
       const result = await executePostgresOperationalEntry(

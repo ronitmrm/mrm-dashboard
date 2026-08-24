@@ -41,18 +41,31 @@ export function PermissionSelector({
 }) {
   const [query, setQuery] = useState("")
   const rows = useMemo(() => permissionAccessRows(permissions), [permissions])
+  const [mainModule, setMainModule] = useState("")
+  const [submodule, setSubmodule] = useState("")
   const [selections, setSelections] = useState<
     Record<string, PermissionAccessLevel>
   >(() => permissionSelectionsForKeys(rows, initialPermissionKeys))
   const normalizedQuery = query.trim().toLowerCase()
+  const mainModules = [...new Set(rows.map((row) => row.module))]
+  const submodules = [
+    ...new Set(
+      rows
+        .filter((row) => !mainModule || row.module === mainModule)
+        .map((row) => row.submodule)
+    ),
+  ]
   const visibleRows = rows.filter(
     (row) =>
-      !normalizedQuery ||
-      row.module.toLowerCase().includes(normalizedQuery) ||
-      row.label.toLowerCase().includes(normalizedQuery) ||
-      row.fullPermissionKeys.some((key) =>
-        key.toLowerCase().includes(normalizedQuery)
-      )
+      (!mainModule || row.module === mainModule) &&
+      (!submodule || row.submodule === submodule) &&
+      (!normalizedQuery ||
+        row.module.toLowerCase().includes(normalizedQuery) ||
+        row.submodule.toLowerCase().includes(normalizedQuery) ||
+        row.label.toLowerCase().includes(normalizedQuery) ||
+        row.fullPermissionKeys.some((key) =>
+          key.toLowerCase().includes(normalizedQuery)
+        ))
   )
   const selectedPermissionKeys = permissionKeysForSelections(rows, selections)
   const configuredCount = Object.values(selections).filter(
@@ -80,7 +93,34 @@ export function PermissionSelector({
         <input key={key} name="permissionKeys" type="hidden" value={key} />
       ))}
 
-      <div className="flex flex-col gap-2 sm:flex-row">
+      <div className="grid gap-2 md:grid-cols-[minmax(12rem,1fr)_minmax(12rem,1fr)_minmax(16rem,2fr)_auto]">
+        <NativeSelect
+          aria-label="Filter by main module"
+          onChange={(event) => {
+            setMainModule(event.target.value)
+            setSubmodule("")
+          }}
+          value={mainModule}
+        >
+          <NativeSelectOption value="">All Main Modules</NativeSelectOption>
+          {mainModules.map((module) => (
+            <NativeSelectOption key={module} value={module}>
+              {module}
+            </NativeSelectOption>
+          ))}
+        </NativeSelect>
+        <NativeSelect
+          aria-label="Filter by sub module"
+          onChange={(event) => setSubmodule(event.target.value)}
+          value={submodule}
+        >
+          <NativeSelectOption value="">All Sub Modules</NativeSelectOption>
+          {submodules.map((item) => (
+            <NativeSelectOption key={item} value={item}>
+              {item}
+            </NativeSelectOption>
+          ))}
+        </NativeSelect>
         <div className="relative min-w-0 flex-1">
           <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -91,11 +131,12 @@ export function PermissionSelector({
             value={query}
           />
         </div>
-        {query || configuredCount ? (
+        {query || mainModule || submodule ? (
           <Button
             onClick={() => {
               setQuery("")
-              setSelections({})
+              setMainModule("")
+              setSubmodule("")
             }}
             type="button"
             variant="outline"
@@ -109,7 +150,8 @@ export function PermissionSelector({
         <Table>
           <TableHeader className="sticky top-0 z-10 bg-background">
             <TableRow>
-              <TableHead className="w-40">Module</TableHead>
+              <TableHead className="w-48">Main Module</TableHead>
+              <TableHead className="w-48">Sub Module</TableHead>
               <TableHead className="w-24">Type</TableHead>
               <TableHead>Page / Task</TableHead>
               <TableHead className="w-52">Access</TableHead>
@@ -119,11 +161,14 @@ export function PermissionSelector({
             {visibleRows.length ? (
               visibleRows.map((row) => (
                 <TableRow key={row.id}>
-                  <TableCell className="capitalize text-muted-foreground">
+                  <TableCell className="text-muted-foreground capitalize">
                     {row.module}
                   </TableCell>
+                  <TableCell>{row.submodule}</TableCell>
                   <TableCell>
-                    <Badge variant={row.kind === "page" ? "default" : "outline"}>
+                    <Badge
+                      variant={row.kind === "page" ? "default" : "outline"}
+                    >
                       {row.kind === "page" ? "Page" : "Task"}
                     </Badge>
                   </TableCell>
@@ -168,7 +213,7 @@ export function PermissionSelector({
               <TableRow>
                 <TableCell
                   className="h-24 text-center text-muted-foreground"
-                  colSpan={4}
+                  colSpan={5}
                 >
                   No Pages Or Tasks Match This Search.
                 </TableCell>
