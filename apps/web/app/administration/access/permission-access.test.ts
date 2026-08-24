@@ -63,6 +63,31 @@ const permissions = [
     name: "View enquiries",
   },
   {
+    key: "pricing.costing.read",
+    module: "pricing",
+    name: "View product and quote costing",
+  },
+  {
+    key: "pricing.revisions.read",
+    module: "pricing",
+    name: "View price revisions and ECNs",
+  },
+  {
+    key: "operations.master_data_entry.read",
+    module: "operations",
+    name: "View Master Data Entry",
+  },
+  {
+    key: "operations.master_tables.read",
+    module: "operations",
+    name: "View Master Tables",
+  },
+  {
+    key: "operations.operational_entry.read",
+    module: "operations",
+    name: "View Operational Entry",
+  },
+  {
     key: "operations.production.write",
     module: "operations",
     name: "Record production",
@@ -272,6 +297,40 @@ describe("permission access table", () => {
       module: "Costing",
       submodule: "Excel View",
     })
+  })
+
+  it("uses exact Master Data and Operational Entry sidebar submodules", () => {
+    const rows = permissionAccessRows(permissions)
+
+    expect(
+      rows.find(({ id }) => id === "page:production.dataEntryTab")
+    ).toMatchObject({ module: "Master Data", submodule: "Master Selection" })
+    expect(
+      rows.find(({ id }) => id === "page:production.masterTablesTab")
+    ).toMatchObject({ module: "Master Data", submodule: "Master Tables" })
+    expect(
+      rows.find(({ id }) => id === "page:production.operationalEntryTab")
+    ).toMatchObject({
+      module: "Operational Entry",
+      submodule: "Entry Selection",
+    })
+    expect(
+      rows.find(({ id }) => id === "page:production.operationalTablesTab")
+    ).toMatchObject({ module: "Operational Entry", submodule: "Entry Tables" })
+  })
+
+  it("maps internal commercial pages to exact Costing sidebar workflows", () => {
+    const rows = permissionAccessRows(permissions)
+
+    expect(
+      rows.find(({ id }) => id === "page:commercial.customer-costing")
+    ).toMatchObject({ submodule: "Customer Parameter Costing" })
+    expect(rows.find(({ id }) => id === "page:commercial.ecns")).toMatchObject(
+      { submodule: "Engineering Changes" }
+    )
+    expect(
+      rows.find(({ id }) => id === "page:commercial.revisions")
+    ).toMatchObject({ submodule: "Product Bulk Revision" })
   })
 
   it("lists PPAC floor pages under their exact sidebar module and submodule", () => {

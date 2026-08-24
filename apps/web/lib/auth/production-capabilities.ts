@@ -78,6 +78,18 @@ const modules: Record<keyof typeof productionPageCapabilities, string> = {
   shopFloorTasksTab: sidebarModuleLabels.productionDashboard,
 }
 
+const universalSubmodules: Partial<
+  Record<keyof typeof productionPageCapabilities, string>
+> = {
+  dataEntryTab: "Master Selection",
+  machineMasterTab: sidebarModuleLabels.machines,
+  maintenanceTab: sidebarModuleLabels.mechanicalMaintenance,
+  masterTablesTab: "Master Tables",
+  operationalEntryTab: "Entry Selection",
+  operationalTablesTab: "Entry Tables",
+  productionDashboardTab: sidebarModuleLabels.productionDashboard,
+}
+
 const universalProductionPageAccess = Object.entries(productionPageCapabilities)
   .filter(([id]) => !(id in productionFloorPageSlugs))
   .map(([id, readPermissionKey]) => ({
@@ -87,7 +99,9 @@ const universalProductionPageAccess = Object.entries(productionPageCapabilities)
     module: modules[id as keyof typeof modules],
     navigation: true,
     readPermissionKey,
-    submodule: productionPageLabels[id as keyof typeof productionPageLabels],
+    submodule:
+      universalSubmodules[id as keyof typeof universalSubmodules] ??
+      productionPageLabels[id as keyof typeof productionPageLabels],
   }))
 
 const floorProductionPageAccess = productionFloors.flatMap((floor) =>
