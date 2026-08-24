@@ -108,6 +108,27 @@ export type CommercialMasterTableKind =
 
 export type CommercialMasterSelection = (typeof commercialMasterKinds)[number]
 
+const customerDefaultCommercialTermTypes = new Set([
+  "buyer",
+  "incoterms",
+  "payment_terms",
+  "shipment_mode",
+  "packaging_terms",
+])
+
+export function isCustomerDefaultCommercialMaster(
+  selection: CommercialMasterSelection
+) {
+  return (
+    "termType" in selection &&
+    customerDefaultCommercialTermTypes.has(selection.termType)
+  )
+}
+
+export function isCustomerDefaultCommercialTerm(termType: string) {
+  return customerDefaultCommercialTermTypes.has(termType)
+}
+
 export function commercialMasterWorkspaceKind(
   selection: CommercialMasterSelection
 ) {

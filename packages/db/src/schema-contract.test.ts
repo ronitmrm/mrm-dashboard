@@ -1609,6 +1609,50 @@ test("authorization seeds an assignable Administrative role with administration 
   )
 })
 
+test("authorization lets Sales & Marketing maintain Customer default terms without destructive master access", async () => {
+  await migrateDatabase({ connectionString })
+
+  const result = await pool.query<{
+    assignable: boolean
+    permission_keys: string[]
+  }>(`
+    SELECT
+      NOT roles.is_system AS assignable,
+      COALESCE(
+        array_agg(permissions.key ORDER BY permissions.key)
+          FILTER (WHERE permissions.key IS NOT NULL),
+        ARRAY[]::text[]
+      ) AS permission_keys
+    FROM identity.roles AS roles
+    LEFT JOIN identity.role_permissions AS role_permissions
+      ON role_permissions.role_id = roles.id
+    LEFT JOIN identity.permissions AS permissions
+      ON permissions.id = role_permissions.permission_id
+    WHERE roles.key = 'sales-marketing'
+    GROUP BY roles.id
+  `)
+
+  expect(result.rows).toHaveLength(1)
+  expect(result.rows[0]?.assignable).toBe(true)
+  expect(result.rows[0]?.permission_keys).toEqual(
+    expect.arrayContaining([
+      "pricing.customer_default_terms.update",
+      "pricing.masters.read",
+    ])
+  )
+  expect(
+    result.rows[0]?.permission_keys.filter((key) =>
+      [
+        "pricing.masters.delete",
+        "pricing.masters.import",
+        "pricing.masters.rename",
+        "pricing.masters.update",
+        "pricing.masters.write",
+      ].includes(key)
+    )
+  ).toEqual([])
+})
+
 test("foundation includes provenance, conflict review, and durable work tables", async () => {
   await migrateDatabase({ connectionString })
 
