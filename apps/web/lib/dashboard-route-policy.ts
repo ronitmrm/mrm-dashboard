@@ -18,6 +18,7 @@ const dataMutationCapabilities = [
 
 const mutationCapabilitiesByPath: Record<string, readonly string[]> = {
   attendance: ["operations.attendance.write"],
+  "dashboard-refresh": ["planning.refresh.execute"],
   "data-entry": dataMutationCapabilities,
   "data-import": dataMutationCapabilities,
   "dispatch-approval": ["operations.dispatch.write"],

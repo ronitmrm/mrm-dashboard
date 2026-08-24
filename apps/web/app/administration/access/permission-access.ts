@@ -1,9 +1,20 @@
+import { productionFloors } from "@workspace/db/production-floors"
+
 import {
   legacyPermissionKeys,
   pageAccessCatalog,
 } from "../../../lib/auth/page-access-catalog"
-import { productionPageCapabilities } from "../../../lib/auth/production-capabilities"
+import {
+  productionPageCapabilities,
+  productionPageLabels,
+} from "../../../lib/auth/production-capabilities"
 import { productionFloorPageCapabilities } from "../../../lib/auth/production-floor-capabilities"
+import {
+  productionFloorLegacyTaskCapabilities,
+  productionFloorTaskCapabilities,
+  productionFloorTaskDefinitions,
+  productionFloorTaskIds,
+} from "../../../lib/auth/production-floor-task-capabilities"
 import {
   sidebarModuleForPermission,
   sidebarSubmoduleForPermission,
@@ -95,10 +106,48 @@ export function permissionAccessRows(
     }
   >()
 
+  const floorTaskPermissionKeys = new Set(
+    Object.values(productionFloorTaskCapabilities).flatMap(Object.values)
+  )
+  const floorTaskRows = productionFloors.flatMap((floor) =>
+    productionFloorTaskIds.flatMap((taskId) => {
+      const definition = productionFloorTaskDefinitions[taskId]
+      const scopedPermissionKey =
+        productionFloorTaskCapabilities[floor.code][taskId]
+      if (
+        !permissionKeys.has(scopedPermissionKey) ||
+        !permissionKeys.has(definition.legacyCapability)
+      ) {
+        return []
+      }
+      return [
+        {
+          fullPermissionKeys: [
+            scopedPermissionKey,
+            definition.legacyCapability,
+          ].sort(),
+          href: null,
+          id: `task:production.${floor.code}.${taskId}`,
+          kind: "task" as const,
+          label: definition.label,
+          module: floor.label,
+          readPermissionKeys: [],
+          submodule: productionPageLabels[definition.tab],
+          supportedLevels: [
+            "none",
+            "full",
+          ] as PermissionAccessLevel[],
+        },
+      ]
+    })
+  )
+
   for (const permission of permissions) {
     if (
       pagePermissionKeys.has(permission.key) ||
-      legacyPermissionKeys.has(permission.key)
+      legacyPermissionKeys.has(permission.key) ||
+      floorTaskPermissionKeys.has(permission.key) ||
+      productionFloorLegacyTaskCapabilities.has(permission.key)
     ) {
       continue
     }
@@ -139,7 +188,7 @@ export function permissionAccessRows(
       supportedLevels,
     }
   })
-  return [...pageRows, ...taskRows].sort(
+  return [...pageRows, ...floorTaskRows, ...taskRows].sort(
     (left, right) =>
       left.module.localeCompare(right.module) ||
       left.submodule.localeCompare(right.submodule) ||
