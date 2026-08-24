@@ -9,6 +9,7 @@ import {
   productionPageLabels,
 } from "../../../lib/auth/production-capabilities"
 import { productionFloorPageCapabilities } from "../../../lib/auth/production-floor-capabilities"
+import { taskCapabilityLabel } from "../../../lib/auth/task-capabilities"
 import {
   productionFloorLegacyTaskCapabilities,
   productionFloorTaskCapabilities,
@@ -55,6 +56,8 @@ function permissionKind(key: string) {
 }
 
 function taskLabel(permission: PermissionOption) {
+  const configuredLabel = taskCapabilityLabel(permission.key)
+  if (configuredLabel) return configuredLabel
   const label = permission.name.trim()
   return label ? `${label[0]!.toUpperCase()}${label.slice(1)}` : permission.name
 }

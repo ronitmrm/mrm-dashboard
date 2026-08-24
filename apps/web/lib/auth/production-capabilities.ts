@@ -37,7 +37,7 @@ export const productionPageLabels: Record<
   keyof typeof productionPageCapabilities,
   string
 > = {
-  dataEntryTab: "Master Data Entry",
+  dataEntryTab: "Data Entry",
   firstPieceInspectionTab: "First Piece Inspection",
   jobCardStatusTab: "Job Cards",
   machineDetailTab: "Machine Detail",
@@ -45,9 +45,9 @@ export const productionPageLabels: Record<
   machinistTasksTab: "Machinist",
   maintenanceTab: "Mechanical Maintenance",
   masterGapsTab: "Part Readiness",
-  masterTablesTab: "Master Tables",
-  operationalEntryTab: "Operational Entry",
-  operationalTablesTab: "Operational Entry Master Tables",
+  masterTablesTab: "Master Table",
+  operationalEntryTab: "Data Entry",
+  operationalTablesTab: "Entry Tables",
   planningControlTab: "Planning Control",
   productionControlTab: "Planner Actions",
   productionDashboardTab: "Production Dashboard",

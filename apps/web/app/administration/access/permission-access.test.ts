@@ -20,7 +20,7 @@ const permissions = [
   {
     key: "pricing.customers.create",
     module: "pricing",
-    name: "Create Customer",
+    name: "Pricing Customers Create",
   },
   {
     key: "pricing.assemblies.read",
@@ -125,7 +125,7 @@ const permissions = [
   {
     key: "administration.staff.provision",
     module: "administration",
-    name: "Provision Staff",
+    name: "Administration Staff Provision",
   },
   {
     key: "maintenance.tasks.write",
@@ -140,7 +140,27 @@ const permissions = [
   {
     key: "hr.approved_posts.create",
     module: "hr",
-    name: "Create approved posts",
+    name: "Hr Approved Posts Create",
+  },
+  {
+    key: "pricing.assemblies.lines.add",
+    module: "pricing",
+    name: "Pricing Assemblies Lines Add",
+  },
+  {
+    key: "pricing.enquiries.handover",
+    module: "pricing",
+    name: "Pricing Enquiries Handover",
+  },
+  {
+    key: "hr.combined_roles.create",
+    module: "hr",
+    name: "Hr Combined Roles Create",
+  },
+  {
+    key: "store.new_item_requests.submit",
+    module: "store",
+    name: "Store New Item Requests Submit",
   },
   {
     key: "operations.floors.conventional.planner_actions.read",
@@ -276,10 +296,30 @@ describe("permission access table", () => {
     expect(
       rows.find(({ id }) => id === "hr.approved_posts.create")
     ).toMatchObject({
-      label: "Create approved posts",
+      label: "Save Approved Post",
       module: "Master Data",
       submodule: "Master Selection",
     })
+  })
+
+  it("uses the exact visible button label for task access", () => {
+    const rows = permissionAccessRows(permissions)
+
+    expect(
+      rows.find(({ id }) => id === "pricing.customers.create")
+    ).toMatchObject({ label: "Add Customer" })
+    expect(
+      rows.find(({ id }) => id === "pricing.assemblies.lines.add")
+    ).toMatchObject({ label: "Add Bom Line" })
+    expect(
+      rows.find(({ id }) => id === "pricing.enquiries.handover")
+    ).toMatchObject({ label: "Hand Over To Technical Review" })
+    expect(
+      rows.find(({ id }) => id === "hr.combined_roles.create")
+    ).toMatchObject({ label: "Create Combined Role" })
+    expect(
+      rows.find(({ id }) => id === "store.new_item_requests.submit")
+    ).toMatchObject({ label: "Send New Item Request" })
   })
 
   it("places enquiry entry and Excel View under their exact sidebar locations", () => {
@@ -304,19 +344,32 @@ describe("permission access table", () => {
 
     expect(
       rows.find(({ id }) => id === "page:production.dataEntryTab")
-    ).toMatchObject({ module: "Master Data", submodule: "Master Selection" })
+    ).toMatchObject({
+      label: "Data Entry",
+      module: "Master Data",
+      submodule: "Master Selection",
+    })
     expect(
       rows.find(({ id }) => id === "page:production.masterTablesTab")
-    ).toMatchObject({ module: "Master Data", submodule: "Master Tables" })
+    ).toMatchObject({
+      label: "Master Table",
+      module: "Master Data",
+      submodule: "Master Tables",
+    })
     expect(
       rows.find(({ id }) => id === "page:production.operationalEntryTab")
     ).toMatchObject({
+      label: "Data Entry",
       module: "Operational Entry",
       submodule: "Entry Selection",
     })
     expect(
       rows.find(({ id }) => id === "page:production.operationalTablesTab")
-    ).toMatchObject({ module: "Operational Entry", submodule: "Entry Tables" })
+    ).toMatchObject({
+      label: "Entry Tables",
+      module: "Operational Entry",
+      submodule: "Entry Tables",
+    })
   })
 
   it("maps internal commercial pages to exact Costing sidebar workflows", () => {
@@ -425,7 +478,7 @@ describe("permission access table", () => {
       href: null,
       id: "pricing.customers.create",
       kind: "task",
-      label: "Create Customer",
+      label: "Add Customer",
       module: "Master Data",
       readPermissionKeys: [],
       submodule: "Master Selection",
