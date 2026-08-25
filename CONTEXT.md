@@ -16,6 +16,9 @@ _Avoid_: Editing active Quote rows in place, product parameter revision, custome
 A two-stage, cross-customer request that applies staged Product Parameter changes to Product Master for selected active Sent or Accepted prices, expands the affected Product identity across every active customer price, then waits in Customer Bulk Revision for optional customer parameter changes before creating immutable replacement Quote revisions through every affected Package or Assembly ancestor.
 _Avoid_: Creating Quote revisions during the product stage, editing active Quote rows in place, customer-only revision.
 
+**Package/Assembly Price Composition**:
+A Package or Assembly Customer Price is the BOM-quantity sum of its component Customer Prices plus its own adjusted process amount. Each component retains its own rejection and profit. The parent applies its rejection and profit only to its own assembly/package process amount, never to the combined component value. Product Parameter Costing separately rolls up component base costs plus the unadjusted parent process cost per piece.
+_Avoid_: Applying parent rejection or profit to component prices, flattening all rejection/profit into one package-wide percentage.
 **Pricing Register**:
 The current customer-price spreadsheet built from active or editable root Quotes and their immutable recursive Product and calculation snapshots. It keeps Package / Assembly parent, depth, quantity, commercial inputs, formula evidence, currency, and purchased-product website descriptions together; selecting a Customer Part Code opens its complete retained Quote revision history.
 _Avoid_: Product Master price, mutable calculation sheet, unscoped full-history load.

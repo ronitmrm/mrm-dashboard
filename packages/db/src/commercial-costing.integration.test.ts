@@ -913,9 +913,7 @@ describe("PostgreSQL product-costing and quote workflow", () => {
       }
     )
     expect(
-      history
-        .filter((row) => row.componentDepth === 0)
-        .map((row) => row.status)
+      history.filter((row) => row.componentDepth === 0).map((row) => row.status)
     ).toEqual(expect.arrayContaining(["Sent", "Superseded"]))
     expect(
       history
@@ -932,5 +930,113 @@ describe("PostgreSQL product-costing and quote workflow", () => {
         customerPartCode: "CUSTOMER-PART-08",
       })
     ).resolves.toEqual([])
+  })
+  test("applies Package rejection and profit only to its own process cost", async () => {
+    const suffix = randomUUID()
+    const items = await pool.query<{ id: string; item_type: string }>(
+      `
+        INSERT INTO catalog.items (
+          organization_id, uid, lifecycle_status, description, item_type,
+          pricing_method, weight_100_pcs, direct_purchase_price_per_piece,
+          assembly_operation_cost, rejection_percent, source_system,
+          source_table, source_id
+        )
+        VALUES
+          ($1, $2, 'P', 'Adjusted component', 'List', 'Direct Purchase',
+            100, 100, 0, 0.10, 'test', 'products', $2),
+          ($1, $3, 'P', 'Assembly-only package', 'Package', 'Derived',
+            0, 0, 10, 0.10, 'test', 'products', $3)
+        RETURNING id, item_type
+      `,
+      [organizationId, `M-COMPONENT-${suffix}`, `M-PACKAGE-${suffix}`]
+    )
+    const componentId = items.rows.find((row) => row.item_type === "List")!.id
+    const packageId = items.rows.find((row) => row.item_type === "Package")!.id
+    await pool.query(
+      `
+        INSERT INTO catalog.bom_lines (
+          organization_id, parent_item_id, component_item_id, quantity,
+          source_system, source_table, source_id
+        )
+        VALUES ($1, $2, $3, 1, 'test', 'bom_lines', $4)
+      `,
+      [organizationId, packageId, componentId, suffix]
+    )
+    const packageEnquiryItemId = await createEnquiryItem({
+      customerPartCode: `PACKAGE-PROCESS-${suffix}`,
+      itemId: packageId,
+    })
+
+    const quote = await repository.saveQuote({
+      childInputs: [
+        {
+          itemId: componentId,
+          profitPercent: 0.3,
+          purchaseTimes: 1,
+          scrapRate: 0,
+        },
+      ],
+      customerPartCode: `PACKAGE-PROCESS-${suffix}`,
+      enquiryItemId: packageEnquiryItemId,
+      inputs: {
+        conversionRate: 80,
+        overheadCost: 0,
+        packingCost: 0,
+        profitPercent: 0.2,
+        purchaseTimes: 1,
+        scrapRate: 0,
+        shippingCost: 0,
+      },
+      itemId: packageId,
+      quantity: 1,
+    })
+
+    await expect(repository.getQuote(quote.id)).resolves.toMatchObject({
+      components: [{ extendedCost: 143, quantity: 1, unitCost: 143 }],
+      rateInr: 1.32,
+      totalRateInr: 144.32,
+    })
+  })
+  test("rolls Derived component base costs into Package product costing", async () => {
+    const suffix = randomUUID()
+    const items = await pool.query<{ id: string; item_type: string }>(
+      `
+        INSERT INTO catalog.items (
+          organization_id, uid, lifecycle_status, description, item_type,
+          pricing_method, weight_100_pcs, product_cost_inr,
+          assembly_operation_cost, source_system, source_table, source_id
+        )
+        VALUES
+          ($1, $2, 'P', 'Derived component', 'List', 'Derived',
+            100, 10, 0, 'test', 'products', $2),
+          ($1, $3, 'P', 'Derived package', 'Package', 'Derived',
+            0, 0, 10, 'test', 'products', $3)
+        RETURNING id, item_type
+      `,
+      [organizationId, `M-BASE-COMPONENT-${suffix}`, `M-BASE-PACKAGE-${suffix}`]
+    )
+    const componentId = items.rows.find((row) => row.item_type === "List")!.id
+    const packageId = items.rows.find((row) => row.item_type === "Package")!.id
+    await pool.query(
+      `
+        INSERT INTO catalog.bom_lines (
+          organization_id, parent_item_id, component_item_id, quantity,
+          source_system, source_table, source_id
+        )
+        VALUES ($1, $2, $3, 1, 'test', 'bom_lines', $4)
+      `,
+      [organizationId, packageId, componentId, suffix]
+    )
+
+    await expect(
+      repository.updateProductCostParameters({
+        assemblyOperationCost: 10,
+        itemId: packageId,
+        pricingMethod: "Derived",
+      })
+    ).resolves.toMatchObject({
+      piecesPerKg: 10,
+      productCostInr: 11,
+    })
   })
 })

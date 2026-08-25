@@ -628,17 +628,17 @@ function revisedCalculation(
         ? asNumber(product.assembly_operation_cost) / piecesPerKg
         : storedProcessBase
     const rejectionPercent = asNumber(product.rejection_percent)
+    const rejectionCost = processBase * rejectionPercent
+    const totalA = processBase + rejectionCost
     let revisedProfit = profit
-    if (targetPriceUsd !== undefined && processBase > 0) {
-      const targetBeforeRejection =
-        (targetPriceUsd * conversionRate) / (1 + rejectionPercent)
+    if (targetPriceUsd !== undefined && totalA > 0) {
       revisedProfit =
-        (targetBeforeRejection - childQuoteTotal - processBase) / processBase
+        (targetPriceUsd * conversionRate - childQuoteTotal - totalA) / totalA
     }
-    const profitB = processBase * revisedProfit
-    const packageBeforeRejection = childQuoteTotal + processBase + profitB
-    const rejectionCost = packageBeforeRejection * rejectionPercent
-    const totalRateInr = packageBeforeRejection + rejectionCost
+    const profitB = totalA * revisedProfit
+    const totalAPlusB = totalA + profitB
+    const packageBeforeRejection = childQuoteTotal + processBase
+    const totalRateInr = childQuoteTotal + totalAPlusB
     return {
       calculation: {
         ...calculation,
@@ -646,8 +646,8 @@ function revisedCalculation(
         packageBeforeRejection,
         profitB,
         rejectionCost,
-        totalA: processBase,
-        totalAPlusB: processBase + profitB,
+        totalA,
+        totalAPlusB,
         totalRateInr,
         totalRodsCost: childQuoteTotal,
       },
@@ -3095,9 +3095,7 @@ export function createCommercialRevisionsRepository(
             [lockedRevision.organization_id, uniqueIds]
           )
           if (active.rows.length !== uniqueIds.length) {
-            throw new Error(
-              "One or more staged prices are no longer active."
-            )
+            throw new Error("One or more staged prices are no longer active.")
           }
           return uniqueIds
         }
@@ -3105,8 +3103,7 @@ export function createCommercialRevisionsRepository(
         const isProductRoute =
           lockedRevision.revision_route === "Product Parameter Bulk Revision"
         const isProductStage =
-          isProductRoute &&
-          lockedRevision.status !== "Pending Customer Costing"
+          isProductRoute && lockedRevision.status !== "Pending Customer Costing"
 
         if (isProductStage) {
           for (const [stageGroupId, group] of stageGroups) {
