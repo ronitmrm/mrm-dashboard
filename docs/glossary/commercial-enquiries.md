@@ -50,6 +50,16 @@ packaging, shipping, overhead, and FX without changing the Product master cost.
 Only one selected Enquiry and its recursive BOM are opened for editing at a
 time.
 
+**Package/Assembly Price Composition**: A Package or Assembly Customer Price
+is the BOM-quantity sum of its component Customer Prices plus its own adjusted
+process amount. Each component retains its own rejection and profit. The parent
+applies its rejection and profit only to its own assembly/package process amount;
+it never applies either percentage to the combined component value. Nested
+Package and Assembly prices follow the same rule recursively. Product Parameter
+Costing separately rolls up component base costs plus the unadjusted parent
+process cost per piece.
+_Avoid_: Applying parent rejection or profit to component prices, flattening all
+rejection/profit into one package-wide percentage.
 **Ready Quote**: A Customer Parameter Costing result explicitly completed for
 Sales. An In-Progress Quote remains `Draft` and editable; a `Ready` Quote is
 locked for Costing and may be sent by Sales. Sending makes its saved calculation

@@ -407,16 +407,12 @@ describe("commercial revisions and corrections", () => {
       })
     )
     expect(
-      (
-        await repository.listProductBulkPriceRevisionsBounded(organizationCode)
-      ).rows
+      (await repository.listProductBulkPriceRevisionsBounded(organizationCode))
+        .rows
     ).not.toContainEqual(expect.objectContaining({ id: revision.id }))
     expect(
-      (
-        await repository.listCustomerBulkPriceRevisionsBounded(
-          organizationCode
-        )
-      ).rows
+      (await repository.listCustomerBulkPriceRevisionsBounded(organizationCode))
+        .rows
     ).toContainEqual(expect.objectContaining({ id: revision.id }))
     expect(await repository.listBulkPriceRevisionStages(revision.id)).toEqual([
       expect.objectContaining({
@@ -441,7 +437,9 @@ describe("commercial revisions and corrections", () => {
     const activeAfter =
       await repository.listBulkPriceRevisionActivePricesBounded(revision.id)
     expect(activeAfter.rows).toHaveLength(2)
-    expect(activeAfter.rows.map((price) => price.id)).not.toContain(firstQuoteId)
+    expect(activeAfter.rows.map((price) => price.id)).not.toContain(
+      firstQuoteId
+    )
     expect(activeAfter.rows.map((price) => price.id)).not.toContain(
       secondQuoteId
     )
@@ -1305,6 +1303,74 @@ describe("commercial revisions and corrections", () => {
         canReverse: false,
         id: blockedItemId,
       })
+    )
+  })
+  test("revises a Package without compounding its adjustment over child prices", async () => {
+    const suffix = randomUUID()
+    const leafId = await createItem(`M-REV-COMPONENT-${suffix}`, "List")
+    const packageId = await createItem(`P-REV-PACKAGE-${suffix}`, "Package")
+    await pool.query(
+      "UPDATE catalog.items SET rejection_percent = 0.10 WHERE id = $1",
+      [packageId]
+    )
+    const leafQuoteId = await createQuote({
+      itemId: leafId,
+      itemType: "List",
+      processBase: 10,
+      profitPercent: 0.2,
+      total: 12,
+    })
+    const packageQuoteId = await createQuote({
+      child: { itemId: leafId, quoteItemId: leafQuoteId, total: 12 },
+      customerPartCode: `REV-PACKAGE-${suffix}`,
+      itemId: packageId,
+      itemType: "Package",
+      processBase: 1,
+      profitPercent: 0.2,
+      total: 13.32,
+    })
+    const revision = await repository.createBulkPriceRevision({
+      customerId,
+      effectiveOn: "2026-08-25",
+      organizationId,
+      reason: "Raise only the component profit",
+      revisionRoute: "Customer Parameter Bulk Revision",
+    })
+    await repository.stageBulkPriceRevisionChange({
+      bulkPriceRevisionId: revision.id,
+      fieldName: "profit_percent",
+      newValue: 0.3,
+      selectedQuoteItemIds: [leafQuoteId],
+    })
+
+    await repository.completeBulkPriceRevision({
+      bulkPriceRevisionId: revision.id,
+    })
+
+    const replacements = await pool.query<{
+      approved_price_usd: string
+      prior_quote_item_id: string
+    }>(
+      `
+        SELECT change.prior_quote_item_id, quote.approved_price_usd
+        FROM sales.bulk_price_revision_changes change
+        JOIN sales.quote_items quote
+          ON quote.id = change.replacement_quote_item_id
+        WHERE change.bulk_price_revision_id = $1
+      `,
+      [revision.id]
+    )
+    const prices = new Map(
+      replacements.rows.map((row) => [
+        row.prior_quote_item_id,
+        Number(row.approved_price_usd),
+      ])
+    )
+    expect(prices).toEqual(
+      new Map([
+        [leafQuoteId, 13],
+        [packageQuoteId, 14.32],
+      ])
     )
   })
 })

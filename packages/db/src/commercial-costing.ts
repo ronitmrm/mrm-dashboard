@@ -238,6 +238,12 @@ function storedProductCost(product: ProductRow) {
   return 0
 }
 
+function storedRollupCost(product: ProductRow) {
+  return product.pricing_method === "Direct Purchase"
+    ? asNumber(product.direct_purchase_price_per_piece)
+    : asNumber(product.product_cost_inr)
+}
+
 async function rolledProductCost(
   client: PoolClient,
   product: ProductRow,
@@ -246,7 +252,7 @@ async function rolledProductCost(
   if (seen.has(product.id)) {
     return 0
   }
-  const storedCost = storedProductCost(product)
+  const storedCost = storedRollupCost(product)
   if (storedCost > 0) {
     return storedCost
   }
@@ -1860,12 +1866,14 @@ export function createCommercialCostingRepository(
             const profitPercent = options.isRoot
               ? input.inputs.profitPercent
               : (assemblyProfits.get(product.id) ?? 0)
-            const profitB = packageProcessCostPerPiece * profitPercent
-            const totalAPlusB = packageProcessCostPerPiece + profitB
-            const packageBeforeRejection = childQuoteTotal + totalAPlusB
             const rejectionCost =
-              packageBeforeRejection * asNumber(product.rejection_percent)
-            const totalRateInr = packageBeforeRejection + rejectionCost
+              packageProcessCostPerPiece * asNumber(product.rejection_percent)
+            const totalA = packageProcessCostPerPiece + rejectionCost
+            const profitB = totalA * profitPercent
+            const totalAPlusB = totalA + profitB
+            const packageBeforeRejection =
+              childQuoteTotal + packageProcessCostPerPiece
+            const totalRateInr = childQuoteTotal + totalAPlusB
             const rateUsd =
               input.inputs.conversionRate > 0
                 ? totalRateInr / input.inputs.conversionRate
@@ -1890,7 +1898,7 @@ export function createCommercialCostingRepository(
               scrapReturn: 0,
               scrapReturnPrice: 0,
               scrapReturnPriceIncludingBurningLoss: 0,
-              totalA: packageProcessCostPerPiece,
+              totalA,
               totalAPlusB,
               totalRateInr,
               totalRodsCost: childQuoteTotal,
