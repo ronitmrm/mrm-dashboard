@@ -72,4 +72,28 @@ describe("Pricing spreadsheet workbook", () => {
       1.25
     )
   })
+
+  test("labels product-base pricing and exposes its stored INR cost", () => {
+    const productBaseRow: PricingRegisterRow = {
+      ...row,
+      companyName: "",
+      currency: "INR",
+      customerId: "",
+      customerPartCode: null,
+      customerUid: "",
+      product: { ...row.product, productCostInr: 16.2957 },
+      quoteNumber: "",
+      revision: 0,
+      status: "",
+    }
+
+    expect(toPricingViewRow(productBaseRow)).toMatchObject({
+      "Customer Line Status": "-",
+      "Price Rev": "-",
+      "Pricing Scope": "Product Base",
+      "Product Base Cost (INR/pc)": 16.2957,
+      "Quote Status": "-",
+    })
+    expect(toPricingViewRow(row)["Pricing Scope"]).toBe("Customer Price")
+  })
 })

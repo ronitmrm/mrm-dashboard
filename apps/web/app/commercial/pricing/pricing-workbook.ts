@@ -21,13 +21,19 @@ export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
   const context = row.productContext
   const inputs = row.quoteInputs
   const calculation = row.calculation
+  const isCustomerPrice = Boolean(row.quoteNumber)
   return {
     "Row Type": row.componentDepth > 0 ? row.itemType : row.itemType,
-    "Customer Line Status": row.componentDepth > 0 ? "" : row.lifecycleStatus,
+    "Pricing Scope": isCustomerPrice ? "Customer Price" : "Product Base",
+    "Customer Line Status": isCustomerPrice
+      ? row.componentDepth > 0
+        ? ""
+        : row.lifecycleStatus
+      : "-",
     "Customer UID": row.customerUid,
     "Change Date": row.changeDate.toISOString(),
     "Customer Part Code": row.customerPartCode ?? "",
-    "Price Rev": row.revision,
+    "Price Rev": isCustomerPrice ? row.revision : "-",
     Under: row.parentUid ?? "",
     "BOM Level": row.componentDepth || "",
     "BOM Qty": row.componentQuantity,
@@ -51,6 +57,7 @@ export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
     "Die Code": value(context, "dieCode"),
     "1 Piece Weight ( gm )": value(product, "weight100Pcs"),
     "No of Piece / KG": value(calculation, "piecesPerKg"),
+    "Product Base Cost (INR/pc)": value(product, "productCostInr"),
     Casting: value(product, "casting"),
     "Scrap Rate (INR/kg)": value(inputs, "scrapRate"),
     "Alloy Premium (INR/kg)": value(product, "alloyPremium"),
@@ -101,7 +108,11 @@ export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
     "Total Rate / PCS In INR": value(calculation, "totalRateInr"),
     Currency: row.currency,
     "Rate / PCS In Currency": value(calculation, "rateUsd"),
-    "Quote Status": row.componentDepth > 0 ? "" : row.status,
+    "Quote Status": isCustomerPrice
+      ? row.componentDepth > 0
+        ? ""
+        : row.status
+      : "-",
   }
 }
 

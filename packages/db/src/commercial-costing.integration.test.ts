@@ -879,6 +879,60 @@ describe("PostgreSQL product-costing and quote workflow", () => {
     ).toBeGreaterThan(1)
   })
 
+  test("includes ordered product-base prices before a customer quote exists", async () => {
+    const uid = `M-BASE-${randomUUID()}`
+    await pool.query(
+      `
+        INSERT INTO catalog.items (
+          organization_id, uid, lifecycle_status, description, item_type,
+          product_cost_inr, pieces_per_kg, pricing_method, source_system,
+          source_table, source_id
+        )
+        VALUES (
+          $1, $2, 'P', 'Unquoted product base price', 'Package',
+          16.2957, 34.8675, 'Derived', 'test', 'products', $2
+        )
+      `,
+      [organizationId, uid]
+    )
+
+    const pricing = await repository.listPricingRegisterBounded(
+      organizationCode,
+      { limit: 1, query: uid }
+    )
+
+    expect(pricing.coverage).toEqual({
+      limit: 1,
+      returned: 1,
+      truncated: false,
+    })
+    expect(pricing.rows).toHaveLength(1)
+    expect(pricing.rows[0]).toMatchObject({
+      companyName: "",
+      currency: "INR",
+      customerId: "",
+      customerPartCode: null,
+      customerUid: "",
+      itemType: "Package",
+      lifecycleStatus: "P",
+      product: {
+        description: "Unquoted product base price",
+        productCostInr: 16.2957,
+      },
+      quoteNumber: "",
+      revision: 0,
+      status: "",
+      uid,
+    })
+
+    const exported = await repository.listPricingRegisterForExport(
+      organizationCode,
+      { query: uid }
+    )
+    expect(exported).toHaveLength(1)
+    expect(exported[0]?.uid).toBe(uid)
+  })
+
   test("bounds the current pricing register after search and scopes complete revision history", async () => {
     const firstPage = await repository.listPricingRegisterBounded(
       organizationCode,
