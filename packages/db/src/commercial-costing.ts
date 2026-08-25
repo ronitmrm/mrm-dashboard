@@ -1026,6 +1026,126 @@ export function createCommercialCostingRepository(
     return result.rows
   }
 
+  const productPricingRegisterBatch = async (
+    queryable: Pool | PoolClient,
+    organizationCode: string,
+    input: {
+      cursor?: { id: string; uid: string }
+      limit: number
+      query?: string
+    }
+  ) => {
+    const search = selectorSearchTerm(input.query ?? "")
+    const result = await queryable.query<PricingRegisterDatabaseRow>(
+      `
+        SELECT item.id, 'product:' || item.id::text AS row_key,
+          item.id AS root_quote_item_id, ''::text AS root_company_name,
+          item.uid AS root_customer_part_code, ''::text AS quote_number,
+          0 AS revision, ''::text AS status, false AS is_active,
+          NULL::timestamptz AS sent_at, NULL::text AS customer_part_code,
+          item.product_cost_inr::text AS unit_price,
+          ''::text AS customer_id, ''::text AS customer_uid,
+          ''::text AS company_name, item.uid,
+          website.product_description AS website_product_description,
+          website.size AS website_size, item.item_type,
+          item.lifecycle_status, NULL::text AS enquiry_number,
+          'INR'::text AS currency, NULL::integer AS line_number,
+          ''::text AS enquiry_description, NULL::text AS parent_uid,
+          0 AS component_depth, '1'::text AS component_quantity,
+          item.updated_at AS change_date,
+          jsonb_build_object(
+            'description', item.description,
+            'uid', item.uid,
+            'pricingMethod', item.pricing_method,
+            'productionType', item.production_type,
+            'weight100Pcs', item.weight_100_pcs,
+            'casting', item.casting,
+            'alloyPremium', item.alloy_premium,
+            'extrusionCost', item.extrusion_cost,
+            'forgingCost', item.forging_cost,
+            'directPurchasePricePerKg', item.direct_purchase_price_per_kg,
+            'directPurchasePricePerPiece', item.direct_purchase_price_per_piece,
+            'productCostInr', item.product_cost_inr,
+            'machiningCost', item.machining_cost,
+            'machiningPricePerPiece', item.machining_price_per_piece,
+            'washing', item.washing,
+            'checking', item.checking,
+            'marking', item.marking,
+            'plating', item.plating,
+            'annealing', item.annealing,
+            'deburring', item.deburring,
+            'buffing', item.buffing,
+            'sealant', item.sealant,
+            'assemblyOperationCost', item.assembly_operation_cost,
+            'overheadCost', item.overhead_cost,
+            'rejectionPercent', item.rejection_percent,
+            'burningLossPercent', item.burning_loss_percent
+          ) AS product_snapshot,
+          jsonb_build_object(
+            'piecesPerKg', item.pieces_per_kg
+          ) AS calculation_json,
+          '{}'::jsonb AS quote_inputs,
+          jsonb_build_object(
+            'grade', grade.name,
+            'rodType', rod_type.name,
+            'machineType', machine_type.name,
+            'rodSize', item.rod_size,
+            'dieCode', item.die_code,
+            'remarks', item.remarks
+          ) AS product_context,
+          NULL::text AS packaging, NULL::text AS shipping_terms
+        FROM catalog.items item
+        JOIN core.organizations organization
+          ON organization.id = item.organization_id
+        LEFT JOIN catalog.website_product_profiles website
+          ON website.item_id = item.id
+        LEFT JOIN catalog.material_grades grade
+          ON grade.id = item.material_grade_id
+        LEFT JOIN catalog.rod_types rod_type
+          ON rod_type.id = item.rod_type_id
+        LEFT JOIN catalog.machine_types machine_type
+          ON machine_type.id = item.machine_type_id
+        WHERE lower(organization.code) = lower($1)
+          AND item.lifecycle_status = 'P'
+          AND NOT EXISTS (
+            SELECT 1
+            FROM sales.quote_items quote
+            WHERE quote.organization_id = item.organization_id
+              AND quote.item_id = item.id
+              AND (
+                quote.status IN ('Draft', 'Ready')
+                OR quote.is_active
+              )
+          )
+          AND (
+            $2::text IS NULL
+            OR (item.uid, item.id) > ($2::text, $3::uuid)
+          )
+          AND (
+            $5 = ''
+            OR lower(btrim(item.uid)) = $5
+            OR (
+              $6::text IS NOT NULL
+              AND lower(
+                coalesce(item.uid, '') || ' ' || coalesce(item.description, '')
+              ) LIKE $6 ESCAPE '\\'
+            )
+          )
+        ORDER BY item.uid, item.id
+        LIMIT $4
+      `,
+      [
+        organizationCode.trim(),
+        input.cursor?.uid ?? null,
+        input.cursor?.id ?? null,
+        input.limit,
+        search.query,
+        search.containsPattern,
+      ]
+    )
+    return result.rows
+  }
+
   return {
     close,
 
@@ -2941,32 +3061,42 @@ export function createCommercialCostingRepository(
       options: { limit?: number; query?: string } = {}
     ) {
       const limit = Math.min(Math.max(Math.floor(options.limit ?? 200), 1), 200)
-      const batch = await pricingRegisterBatch(pool, organizationCode, {
+      const quoteBatch = await pricingRegisterBatch(pool, organizationCode, {
         limit: limit + 1,
         query: options.query,
       })
-      const rootIds: string[] = []
-      const seenRootIds = new Set<string>()
-      for (const row of batch) {
-        if (!seenRootIds.has(row.root_quote_item_id)) {
-          seenRootIds.add(row.root_quote_item_id)
-          rootIds.push(row.root_quote_item_id)
+      const quoteRootIds: string[] = []
+      const seenQuoteRootIds = new Set<string>()
+      for (const row of quoteBatch) {
+        if (!seenQuoteRootIds.has(row.root_quote_item_id)) {
+          seenQuoteRootIds.add(row.root_quote_item_id)
+          quoteRootIds.push(row.root_quote_item_id)
         }
       }
-      const visibleRootIds = new Set(rootIds.slice(0, limit))
-      const rows = batch
-        .filter((row) => visibleRootIds.has(row.root_quote_item_id))
+      const visibleQuoteRootIds = new Set(quoteRootIds.slice(0, limit))
+      const rows = quoteBatch
+        .filter((row) => visibleQuoteRootIds.has(row.root_quote_item_id))
         .map(pricingRegisterRow)
+      const remaining = limit - visibleQuoteRootIds.size
+      const productBatch = remaining
+        ? await productPricingRegisterBatch(pool, organizationCode, {
+            limit: remaining + 1,
+            query: options.query,
+          })
+        : []
+      const visibleProducts = productBatch.slice(0, remaining)
+      rows.push(...visibleProducts.map(pricingRegisterRow))
+
       return {
         coverage: {
           limit,
-          returned: visibleRootIds.size,
-          truncated: rootIds.length > limit,
+          returned: visibleQuoteRootIds.size + visibleProducts.length,
+          truncated:
+            quoteRootIds.length > limit || productBatch.length > remaining,
         },
         rows,
       }
     },
-
     async listPricingRevisionHistory(
       organizationCode: string,
       input: { customerId: string; customerPartCode: string }
@@ -3031,6 +3161,29 @@ export function createCommercialCostingRepository(
             customerPartCode: last.root_customer_part_code,
             id: last.root_quote_item_id,
             revision: last.revision,
+          }
+        }
+
+        if (
+          !options.revisions &&
+          options.customerId === undefined &&
+          options.customerPartCode === undefined
+        ) {
+          let productCursor: { id: string; uid: string } | undefined
+          while (true) {
+            const batch = await productPricingRegisterBatch(
+              client,
+              organizationCode,
+              {
+                cursor: productCursor,
+                limit,
+                query: options.query,
+              }
+            )
+            rows.push(...batch.map(pricingRegisterRow))
+            if (batch.length < limit) break
+            const last = batch.at(-1)!
+            productCursor = { id: last.id, uid: last.uid }
           }
         }
 
