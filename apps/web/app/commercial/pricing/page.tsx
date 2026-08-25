@@ -36,8 +36,6 @@ export default async function PricingPage() {
         </CardHeader>
         <CardContent className="grid gap-4">
           <BoundedResultNotice
-            actionHref="/commercial/pricing/export.xlsx"
-            actionLabel="Export every matching price"
             coverage={pricing.coverage}
             section="Current pricing register"
           />

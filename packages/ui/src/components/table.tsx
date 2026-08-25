@@ -27,6 +27,7 @@ import {
 } from "@workspace/ui/lib/table-filter-display"
 
 type TableProps = React.ComponentProps<"table"> & {
+  containerClassName?: string
   excelFilters?: boolean
   filterStorageKey?: string
   onFilteredRowCountChange?: (visible: number, total: number) => void
@@ -147,6 +148,7 @@ function sameColumns(left: TableFilterColumn[], right: TableFilterColumn[]) {
 
 function Table({
   className,
+  containerClassName,
   excelFilters = true,
   filterStorageKey,
   onFilteredRowCountChange,
@@ -312,7 +314,10 @@ function Table({
       })}
       <div
         data-slot="table-container"
-        className="relative w-full max-h-[32rem] overflow-auto"
+        className={cn(
+          "relative w-full max-h-[calc(100svh-var(--header-height)-8rem)] overflow-auto",
+          containerClassName
+        )}
       >
         <table
           ref={tableRef}

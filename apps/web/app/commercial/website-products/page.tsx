@@ -340,8 +340,6 @@ export default async function WebsiteProductsPage({
               </div>
             </div>
             <BoundedResultNotice
-              actionHref={`${websiteProductsPath}/export.xlsx`}
-              actionLabel="Export every Website Product"
               coverage={result.coverage}
               searchQuery={filters.q?.trim()}
               section="Website Products"
@@ -413,8 +411,6 @@ export default async function WebsiteProductsPage({
           <CardContent className="grid gap-5">
             <CompanyWideMasterScope />
             <BoundedResultNotice
-              actionHref={`${websiteProductsPath}/export.xlsx`}
-              actionLabel="Export every Website Product"
               coverage={result.coverage}
               section="Website Product choices"
             />
@@ -672,7 +668,7 @@ export default async function WebsiteProductsPage({
           </CardHeader>
           <CardContent>
             <div className="max-h-[70vh] overflow-auto rounded-2xl border">
-              <Table className="min-w-max text-xs">
+              <Table containerClassName="max-h-none overflow-visible" className="min-w-max text-xs">
                 <TableHeader className="sticky top-0 z-10 bg-background">
                   <TableRow>
                     <TableHead className="sticky left-0 z-20 bg-background">

@@ -54,7 +54,7 @@ export function JobCardRegister({
       </CardHeader>
       <CardContent>
         <div className="max-h-[70vh] overflow-auto rounded-md border">
-          <Table excelFilters>
+          <Table containerClassName="max-h-none overflow-visible" excelFilters>
             <TableHeader className="sticky top-0 z-10 bg-background"><TableRow>
               <TableHead data-filterable="true">Job Card</TableHead><TableHead>Part</TableHead><TableHead>Description</TableHead><TableHead>FG PO</TableHead><TableHead className="text-right">Order Qty</TableHead><TableHead>Stage</TableHead><TableHead>Production Progress</TableHead><TableHead>Route</TableHead><TableHead />
             </TableRow></TableHeader>

@@ -146,8 +146,6 @@ export default async function EnquiriesPage({
           <CardHeader>
             <CardTitle>Enquiry Register</CardTitle>
             <BoundedResultNotice
-              actionHref="/commercial/enquiries/register/export.xlsx"
-              actionLabel="Export the complete register"
               coverage={enquiryResult.coverage}
               section="Enquiries"
             />

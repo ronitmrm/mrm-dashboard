@@ -217,7 +217,7 @@ export default async function EngineeringChangeNotesPage({
         </CardHeader>
         <CardContent>
           <div className="max-h-[65vh] overflow-auto rounded-md border">
-            <Table excelFilters>
+            <Table containerClassName="max-h-none overflow-visible" excelFilters>
               <TableHeader className="sticky top-0 z-10 bg-background">
                 <TableRow>
                   <TableHead data-filterable="true">ECN</TableHead>

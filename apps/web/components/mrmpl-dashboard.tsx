@@ -6827,7 +6827,7 @@ function ShopFloorStatusPanel({
         />
         {floorRows.length ? (
           <div className="max-h-[72vh] overflow-auto rounded-lg border">
-            <Table>
+            <Table containerClassName="max-h-none overflow-visible">
               <TableHeader className="sticky top-0 z-10 bg-background">
                 <TableRow>
                   <TableHead className="min-w-32">Machine No.</TableHead>
@@ -7105,7 +7105,7 @@ function RoleTaskPanel({
           />
           {roleRows.length ? (
             <div className="max-h-[72vh] overflow-auto rounded-lg border">
-              <Table>
+              <Table containerClassName="max-h-none overflow-visible">
                 <TableHeader className="sticky top-0 z-10 bg-background">
                   <TableRow>
                     <TableHead className="min-w-32">Machine No.</TableHead>
@@ -12201,7 +12201,7 @@ function MachineMasterPanel({
               </Button>
             </div>
             <div className="max-h-[72vh] overflow-auto rounded-lg border">
-              <Table>
+              <Table containerClassName="max-h-none overflow-visible">
                 <TableHeader className="sticky top-0 z-10 bg-background">
                   <TableRow>
                     <TableHead>Machine No.</TableHead>
@@ -15485,7 +15485,7 @@ function CorrectionsPanel({
         </div>
         {filteredRows.length ? (
           <div className="max-h-[72vh] overflow-auto rounded-lg border">
-            <Table>
+            <Table containerClassName="max-h-none overflow-visible">
               <TableHeader className="sticky top-0 z-10 bg-background">
                 <TableRow>
                   <TableHead className="min-w-40">Production Unit</TableHead>
