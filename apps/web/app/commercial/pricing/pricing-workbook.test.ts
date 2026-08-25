@@ -89,11 +89,47 @@ describe("Pricing spreadsheet workbook", () => {
 
     expect(toPricingViewRow(productBaseRow)).toMatchObject({
       "Customer Line Status": "-",
+      "Net Rate / KG Without Alloy Premium": "-",
       "Price Rev": "-",
       "Pricing Scope": "Product Base",
       "Product Base Cost (INR/pc)": 16.2957,
+      Profit: "-",
       "Quote Status": "-",
+      "Rate / PCS In Currency": "-",
+      "Scrap Rate (INR/kg)": "-",
     })
     expect(toPricingViewRow(row)["Pricing Scope"]).toBe("Customer Price")
+  })
+
+  test("keeps product-derived answers on a package base row", () => {
+    const packageRow: PricingRegisterRow = {
+      ...row,
+      calculation: { piecesPerKg: 66.2251655629139 },
+      companyName: "",
+      currency: "INR",
+      customerId: "",
+      customerPartCode: null,
+      customerUid: "",
+      itemType: "Package",
+      product: {
+        assemblyOperationCost: 5,
+        description: "3/16 X 1/8 Male Compression X Male Nptf Adapter",
+        productCostInr: 2.36,
+        rejectionPercent: 0.02,
+        uid: "M2",
+      },
+      quoteNumber: "",
+      revision: 0,
+      status: "",
+      uid: "M2",
+    }
+
+    expect(toPricingViewRow(packageRow)).toMatchObject({
+      "Assembly Cost (INR/kg)": 5,
+      "No of Piece / KG": 66.2251655629139,
+      "Product Base Cost (INR/pc)": 2.36,
+      "Rejection %": 2,
+      "Total Rate / PCS In INR": "-",
+    })
   })
 })

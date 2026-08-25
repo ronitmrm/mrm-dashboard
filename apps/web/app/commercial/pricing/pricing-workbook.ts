@@ -16,12 +16,19 @@ function value(record: Record<string, unknown>, key: string) {
     : (result as string | number)
 }
 
+function percentValue(record: Record<string, unknown>, key: string) {
+  const result = value(record, key)
+  return result === "" ? "" : Number(result) * 100
+}
+
 export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
   const product = row.product
   const context = row.productContext
   const inputs = row.quoteInputs
   const calculation = row.calculation
   const isCustomerPrice = Boolean(row.quoteNumber)
+  const customerValue = (record: Record<string, unknown>, key: string) =>
+    isCustomerPrice ? value(record, key) : "-"
   return {
     "Row Type": row.componentDepth > 0 ? row.itemType : row.itemType,
     "Pricing Scope": isCustomerPrice ? "Customer Price" : "Product Base",
@@ -59,7 +66,7 @@ export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
     "No of Piece / KG": value(calculation, "piecesPerKg"),
     "Product Base Cost (INR/pc)": value(product, "productCostInr"),
     Casting: value(product, "casting"),
-    "Scrap Rate (INR/kg)": value(inputs, "scrapRate"),
+    "Scrap Rate (INR/kg)": customerValue(inputs, "scrapRate"),
     "Alloy Premium (INR/kg)": value(product, "alloyPremium"),
     "Ext. Cost (INR/kg)": value(product, "extrusionCost"),
     "Forg Cost+ Nitric Blasting (INR/kg)": value(product, "forgingCost"),
@@ -75,39 +82,42 @@ export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
     "Debbring (INR/kg)": value(product, "deburring"),
     "Buffing (INR/kg)": value(product, "buffing"),
     "Sealant (INR/kg)": value(product, "sealant"),
-    "Packing (INR/kg)": value(inputs, "packingCost"),
-    "Shipping (INR/kg)": value(inputs, "shippingCost"),
+    "Packing (INR/kg)": customerValue(inputs, "packingCost"),
+    "Shipping (INR/kg)": customerValue(inputs, "shippingCost"),
     "Overhead (INR/kg)": value(product, "overheadCost"),
     "Assembly Cost (INR/kg)": value(product, "assemblyOperationCost"),
     Remarks: value(context, "remarks"),
-    "Rejection %": Number(value(product, "rejectionPercent") || 0) * 100,
-    "BL %": Number(value(product, "burningLossPercent") || 0) * 100,
-    "Conversion Cost": value(inputs, "conversionRate"),
-    Profit: Number(value(inputs, "profitPercent") || 0) * 100,
-    "OR Purchase Times": value(inputs, "purchaseTimes"),
-    "Assembled Part": value(inputs, "assembledPartInr"),
-    "Net Rate / KG Without Alloy Premium": value(
+    "Rejection %": percentValue(product, "rejectionPercent"),
+    "BL %": percentValue(product, "burningLossPercent"),
+    "Conversion Cost": customerValue(inputs, "conversionRate"),
+    Profit: isCustomerPrice ? percentValue(inputs, "profitPercent") : "-",
+    "OR Purchase Times": customerValue(inputs, "purchaseTimes"),
+    "Assembled Part": customerValue(inputs, "assembledPartInr"),
+    "Net Rate / KG Without Alloy Premium": customerValue(
       calculation,
       "netRateWithoutAlloy"
     ),
-    "Net Rate / KG With Alloy Premium": value(calculation, "netRateWithAlloy"),
-    "Scrap Rate / gm": value(calculation, "scrapRatePerGm"),
-    "RM Cost": value(calculation, "rawMaterialCost"),
-    "Scrap Return": value(calculation, "scrapReturn"),
-    "Scrap Return Price ( Inc. Burning Loss )": value(
+    "Net Rate / KG With Alloy Premium": customerValue(
+      calculation,
+      "netRateWithAlloy"
+    ),
+    "Scrap Rate / gm": customerValue(calculation, "scrapRatePerGm"),
+    "RM Cost": customerValue(calculation, "rawMaterialCost"),
+    "Scrap Return": customerValue(calculation, "scrapReturn"),
+    "Scrap Return Price ( Inc. Burning Loss )": customerValue(
       calculation,
       "scrapReturnPriceIncludingBurningLoss"
     ),
-    "Scrap Return Price": value(calculation, "scrapReturnPrice"),
-    "Total Rods Cost": value(calculation, "totalRodsCost"),
-    Rejection: value(calculation, "rejectionCost"),
-    "Total - A": value(calculation, "totalA"),
-    "Profit - B": value(calculation, "profitB"),
-    "Total - A + B": value(calculation, "totalAPlusB"),
-    "Rate / PCS In INR": value(calculation, "rateInr"),
-    "Total Rate / PCS In INR": value(calculation, "totalRateInr"),
+    "Scrap Return Price": customerValue(calculation, "scrapReturnPrice"),
+    "Total Rods Cost": customerValue(calculation, "totalRodsCost"),
+    Rejection: customerValue(calculation, "rejectionCost"),
+    "Total - A": customerValue(calculation, "totalA"),
+    "Profit - B": customerValue(calculation, "profitB"),
+    "Total - A + B": customerValue(calculation, "totalAPlusB"),
+    "Rate / PCS In INR": customerValue(calculation, "rateInr"),
+    "Total Rate / PCS In INR": customerValue(calculation, "totalRateInr"),
     Currency: row.currency,
-    "Rate / PCS In Currency": value(calculation, "rateUsd"),
+    "Rate / PCS In Currency": customerValue(calculation, "rateUsd"),
     "Quote Status": isCustomerPrice
       ? row.componentDepth > 0
         ? ""
