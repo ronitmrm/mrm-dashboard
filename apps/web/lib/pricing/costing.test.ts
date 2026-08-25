@@ -27,7 +27,6 @@ const quote = {
   forgingCost: 5,
   packingCost: 12,
   shippingCost: 13,
-  overheadCost: 14,
   purchaseTimes: 0.5,
   profitPercent: 0.2,
   conversionRate: 80,
@@ -47,13 +46,13 @@ describe("calculateCosting", () => {
       scrapReturnPrice: 90,
       totalRodsCost: 150,
       rejectionCost: 7.5,
-      processCost: 114,
-      totalA: 271.5,
-      profitB: 54.300000000000004,
-      totalAPlusB: 325.8,
-      rateInr: 162.9,
-      totalRateInr: 182.9,
-      rateUsd: 2.28625,
+      processCost: 100,
+      totalA: 257.5,
+      profitB: 51.5,
+      totalAPlusB: 309,
+      rateInr: 154.5,
+      totalRateInr: 174.5,
+      rateUsd: 2.18125,
     })
   })
 

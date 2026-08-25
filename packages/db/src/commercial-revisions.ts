@@ -624,8 +624,12 @@ function revisedCalculation(
       asNumber(quote.calculation_json.totalA)
     )
     const processBase =
-      override?.has("assembly_operation_cost") && piecesPerKg > 0
-        ? asNumber(product.assembly_operation_cost) / piecesPerKg
+      (override?.has("assembly_operation_cost") ||
+        override?.has("overhead_cost")) &&
+      piecesPerKg > 0
+        ? (asNumber(product.assembly_operation_cost) +
+            asNumber(product.overhead_cost)) /
+          piecesPerKg
         : storedProcessBase
     const rejectionPercent = asNumber(product.rejection_percent)
     const rejectionCost = processBase * rejectionPercent
@@ -683,15 +687,14 @@ function revisedCalculation(
       for (const [fieldName, value] of override) {
         if (fieldName.startsWith("__")) continue
         const quoteField =
-          fieldName === "ext_cost"
-            ? "extrusion_cost"
-            : fieldName === "overhead_cost"
-              ? "overhead_cost_input"
-              : fieldName
-        const current = asNumber(
-          quote[quoteField as keyof QuoteRow] ??
-            quote.snapshot_product_json[fieldName]
-        )
+          fieldName === "ext_cost" ? "extrusion_cost" : fieldName
+        const current =
+          fieldName === "overhead_cost"
+            ? asNumber(quote.snapshot_product_json.overheadCost)
+            : asNumber(
+                quote[quoteField as keyof QuoteRow] ??
+                  quote.snapshot_product_json[fieldName]
+              )
         totalRateInr += value - current
       }
     }
@@ -748,11 +751,6 @@ function revisedCalculation(
               product.production_type?.toLowerCase() === "barstock"
                 ? 0
                 : asNumber(product.forging_cost),
-            overheadCost: overrideNumber(
-              override,
-              "overhead_cost_input",
-              quote.overhead_cost_input
-            ),
             packingCost: overrideNumber(
               override,
               "packing_cost",
@@ -910,7 +908,7 @@ async function createRevisedQuote(
       asNumber(revisedProduct.forging_cost),
       overrideNumber(override, "packing_cost", quote.packing_cost),
       overrideNumber(override, "shipping_cost", quote.shipping_cost),
-      asNumber(quote.overhead_cost_input),
+      0,
       overrideNumber(override, "purchase_times", quote.purchase_times),
       revised.profit,
       overrideNumber(override, "conversion_rate", quote.conversion_rate),
@@ -946,7 +944,8 @@ async function createRevisedQuote(
         organization_id, $1, item_uid, description, item_type,
         production_type, weight_100_pcs, pieces_per_kg, material_rate,
         material_cost, conversion_cost, packaging_cost, shipping_cost,
-        overhead_cost, $2, $3, $4, calculation_version, $5,
+        COALESCE(($5::jsonb->>'overheadCost')::numeric, 0), $2, $3, $4,
+        calculation_version, $5,
         $6, $7, 'mrm-dashboard', 'quote_revision_snapshots', $8, $9
       FROM sales.quote_product_snapshots
       WHERE quote_item_id = $10

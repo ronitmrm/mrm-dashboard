@@ -322,7 +322,6 @@ export default async function CustomerParameterCostingPage({
                         <NumberField defaultValue={selectedTask.quoteDefaults.purchaseTimes} label="OR / Purchase Times" name="purchase_times" />
                       </>
                     )}
-                    <NumberField defaultValue={selectedTask.quoteDefaults.overheadCost} label="Overhead INR / Pc" name="quote_overhead_cost" />
                     <NumberField defaultValue={selectedTask.quoteDefaults.packingCost} label="Packing INR / Kg" name="packing_cost" />
                     <NumberField defaultValue={selectedTask.quoteDefaults.shippingCost} label="Shipping INR / Kg" name="shipping_cost" />
                     <Field>

@@ -32,7 +32,6 @@ type ProductInputs = {
 
 type FormValues = {
   conversionRate: number
-  overheadCost: number
   packingCost: number
   purchaseTimes: number
   scrapRate: number
@@ -97,8 +96,7 @@ function baseCost(product: ProductInputs, values: FormValues) {
     product.assemblyOperationCost +
     product.overheadCost +
     values.packingCost +
-    values.shippingCost +
-    values.overheadCost
+    values.shippingCost
   const totalA = processCost + totalRodsCost + rejectionCost
   return {
     piecesPerKg,
@@ -119,7 +117,6 @@ export function PoProfitTargetCalculator({
   const rootRef = useRef<HTMLDivElement>(null)
   const [values, setValues] = useState<FormValues>({
     conversionRate: 1,
-    overheadCost: 0,
     packingCost: 0,
     purchaseTimes: 1,
     scrapRate: 0,
@@ -133,7 +130,6 @@ export function PoProfitTargetCalculator({
       const data = new FormData(form)
       setValues({
         conversionRate: numeric(data.get("conversion_rate"), 1),
-        overheadCost: numeric(data.get("quote_overhead_cost")),
         packingCost: numeric(data.get("packing_cost")),
         purchaseTimes: numeric(data.get("purchase_times"), 1),
         scrapRate: numeric(data.get("scrap_rate")),

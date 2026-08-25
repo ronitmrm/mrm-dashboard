@@ -22,7 +22,6 @@ export type QuoteCostingInput = {
   conversionRate: number
   extCost: number
   forgingCost: number
-  overheadCost: number
   packingCost: number
   profitPercent: number
   purchaseTimes: number
@@ -86,8 +85,7 @@ export function calculateCosting(
     product.assemblyOperationCost +
     product.overheadCost +
     quote.packingCost +
-    quote.shippingCost +
-    quote.overheadCost
+    quote.shippingCost
   const totalA = processCost + totalRodsCost + rejectionCost
   const profitB = totalA * quote.profitPercent
   const totalAPlusB = totalA + profitB
