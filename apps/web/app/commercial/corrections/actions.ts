@@ -55,7 +55,7 @@ export async function reverseProductEntryAction(formData: FormData) {
       })
   )
   revalidatePath(correctionsPath)
-  revalidatePath("/commercial/products")
+  revalidatePath("/commercial/pricing")
 }
 
 export async function recordPricingCorrectionAction(formData: FormData) {

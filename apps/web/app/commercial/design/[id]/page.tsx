@@ -232,7 +232,7 @@ export default async function DesignTaskDetailPage({
           <Button asChild variant="outline">
             <Link
               href={{
-                pathname: "/commercial/products",
+                pathname: "/commercial/pricing",
                 query: { q: portfolioSearch },
               }}
             >

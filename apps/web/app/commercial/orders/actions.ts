@@ -356,7 +356,7 @@ export async function approveProformaInvoiceAction(formData: FormData) {
   )
   revalidatePath(ordersPath)
   revalidatePath(`${ordersPath}/${purchaseOrderId}`)
-  revalidatePath("/commercial/products")
+  revalidatePath("/commercial/pricing")
   revalidatePath("/commercial/quotes")
 }
 

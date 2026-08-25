@@ -124,7 +124,7 @@ export async function updateProductCostingAction(formData: FormData) {
   )
   revalidatePath(productCostingPath)
   revalidatePath(customerCostingPath)
-  revalidatePath("/commercial/products")
+  revalidatePath("/commercial/pricing")
 }
 
 export async function requestProductCostingDesignClarificationAction(

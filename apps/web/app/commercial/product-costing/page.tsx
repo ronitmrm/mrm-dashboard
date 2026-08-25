@@ -139,7 +139,7 @@ export default async function ProductParameterCostingPage({
             Product Parameter Costing
           </h2>
           <Button asChild variant="outline">
-            <Link href="/commercial/products">All Products</Link>
+            <Link href="/commercial/pricing">Product Pricing</Link>
           </Button>
         </div>
         <BoundedResultNotice

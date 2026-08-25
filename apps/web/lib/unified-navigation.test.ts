@@ -189,7 +189,7 @@ describe("unified navigation", () => {
     ).toMatchObject({
       title: "Mechanical Maintenance",
     })
-    expect(commercialNavigation).toHaveLength(20)
+    expect(commercialNavigation).toHaveLength(19)
     expect(dashboardNavigation.map(({ title }) => title)).not.toContain(
       "Corrections"
     )
@@ -216,7 +216,7 @@ describe("unified navigation", () => {
     ])
     const costingLabels = commercialCostingNavigation.map(({ label }) => label)
     expect(costingLabels.slice(0, 2)).toEqual(["Excel View", "Pricing"])
-    expect(costingLabels).toContain("Products")
+    expect(costingLabels).not.toContain("Products")
     expect(costingLabels.at(-1)).toBe("Drawing History")
     expect(commercialCostingNavigation.map(({ label }) => label)).not.toEqual(
       expect.arrayContaining([
@@ -224,6 +224,7 @@ describe("unified navigation", () => {
         "Enquiries",
         "Website Products",
         "Commercial Overview",
+        "Products",
         "Assembly / Bom",
         "Quote Register",
         "Price Revisions",
