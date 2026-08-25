@@ -6,6 +6,7 @@ const { permanentRedirect } = vi.hoisted(() => ({
 
 vi.mock("next/navigation", () => ({ permanentRedirect }))
 
+import ProductsPage from "../products/page"
 import CostingPage from "./page"
 
 describe("retired costing route", () => {
@@ -15,5 +16,10 @@ describe("retired costing route", () => {
     expect(permanentRedirect).toHaveBeenCalledWith(
       "/commercial/product-costing"
     )
+  })
+  test("permanently redirects the retired Products route to Pricing", () => {
+    ProductsPage()
+
+    expect(permanentRedirect).toHaveBeenCalledWith("/commercial/pricing")
   })
 })

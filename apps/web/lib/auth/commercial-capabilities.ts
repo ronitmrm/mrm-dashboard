@@ -199,9 +199,12 @@ export const commercialPageAccess = [
   ),
 ] satisfies readonly PageAccessDefinition[]
 
-export const commercialNavigationAccess = commercialPageAccess.map(
-  ({ href, readPermissionKey }) => [href, readPermissionKey] as const
-)
+export const commercialNavigationAccess = [
+  ...commercialPageAccess.map(
+    ({ href, readPermissionKey }) => [href, readPermissionKey] as const
+  ),
+  ["/commercial/pricing", commercialCapabilities.products.read] as const,
+]
 
 function page(
   id: string,
