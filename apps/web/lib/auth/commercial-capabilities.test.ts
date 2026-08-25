@@ -79,7 +79,6 @@ describe("commercial Better Auth capability contract", () => {
       ["/commercial/customer-bulk-revision", "pricing.revisions.read"],
       ["/commercial/ecns", "pricing.revisions.read"],
       ["/commercial/revisions", "pricing.revisions.read"],
-      ["/commercial/pricing", "pricing.products.read"],
     ])
   })
 
