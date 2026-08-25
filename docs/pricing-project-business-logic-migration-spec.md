@@ -178,7 +178,7 @@ totalRodsCost = rawMaterialCost - scrapReturnPrice
 rejectionCost = totalRodsCost * rejectionPercent
 processCost = machining + washing + checking + marking + plating + annealing
             + deburring + buffing + sealant + assemblyOperation
-            + productOverhead + packing + shipping + quoteOverhead
+            + productOverhead + packing + shipping
 totalA = processCost + totalRodsCost + rejectionCost
 profitB = totalA * profitPercent
 totalAPlusB = totalA + profitB

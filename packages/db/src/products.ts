@@ -119,7 +119,7 @@ export function createProductRepository(options: RepositoryPoolOptions) {
           marking: decimal(input.marking),
           materialGradeId: input.materialGradeId ?? null,
           organizationId: input.organizationId,
-          overheadCost: decimal(isPackage ? 0 : input.overheadCost),
+          overheadCost: decimal(input.overheadCost),
           piecesPerKg: decimal(piecesPerKg),
           plating: decimal(input.plating),
           pricingMethod: input.pricingMethod ?? "Derived",

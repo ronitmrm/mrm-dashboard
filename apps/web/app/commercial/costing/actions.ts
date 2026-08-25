@@ -196,7 +196,6 @@ export async function saveQuoteAction(formData: FormData) {
         enquiryItemId: requiredText(formData, "enquiry_item_id"),
         inputs: {
           conversionRate: numberValue(formData, "conversion_rate", 1),
-          overheadCost: numberValue(formData, "quote_overhead_cost", 0),
           packingCost: numberValue(formData, "packing_cost", 0),
           profitPercent: numberValue(formData, "profit_percent", 0) / 100,
           purchaseTimes: numberValue(formData, "purchase_times", 1),

@@ -46,7 +46,10 @@ automatic start on Technical Review completion.
 
 **Customer Parameter Costing**: The customer- and Enquiry-specific price step
 after Product Parameter Costing. It applies scrap/purchase factors, profit,
-packaging, shipping, overhead, and FX without changing the Product master cost.
+packaging, shipping, and FX without changing the Product master cost. Product
+Overhead is an INR/kg Product Parameter input and cannot be entered or overridden
+at the customer level. For a Package or Assembly, Product Overhead joins only the
+parent's own assembly process amount, not the combined component value.
 Only one selected Enquiry and its recursive BOM are opened for editing at a
 time.
 

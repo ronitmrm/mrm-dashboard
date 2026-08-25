@@ -1819,7 +1819,7 @@ test("Pricing products preserve creation-time costing rules in PostgreSQL", asyn
       description: "Fixture barstock package",
       forgingCost: "0.00000000",
       machiningPricePerPiece: "5.00000000",
-      overheadCost: "0.00000000",
+      overheadCost: "9.00000000",
       piecesPerKg: "2.00000000",
       uid: "MRM-100",
     })

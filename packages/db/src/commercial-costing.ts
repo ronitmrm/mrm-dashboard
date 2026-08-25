@@ -57,7 +57,6 @@ type SalesWorkScope = {
 
 type QuoteInputs = {
   conversionRate: number
-  overheadCost: number
   packingCost: number
   profitPercent: number
   purchaseTimes: number
@@ -467,7 +466,6 @@ function calculateProductQuote(product: ProductRow, inputs: QuoteInputs) {
         conversionRate: inputs.conversionRate,
         extCost: extrusionCost,
         forgingCost,
-        overheadCost: inputs.overheadCost,
         packingCost: inputs.packingCost,
         profitPercent: inputs.profitPercent,
         purchaseTimes: inputs.purchaseTimes,
@@ -642,7 +640,7 @@ async function persistQuote(
         snapshot.forgingCost,
         input.inputs.packingCost,
         input.inputs.shippingCost,
-        input.inputs.overheadCost,
+        0,
         input.inputs.purchaseTimes,
         input.inputs.profitPercent,
         input.inputs.conversionRate,
@@ -704,7 +702,7 @@ async function persistQuote(
         snapshot.forgingCost,
         input.inputs.packingCost,
         input.inputs.shippingCost,
-        input.inputs.overheadCost,
+        0,
         input.inputs.purchaseTimes,
         input.inputs.profitPercent,
         input.inputs.conversionRate,
@@ -775,7 +773,7 @@ async function persistQuote(
       input.calculation.processCost,
       input.inputs.packingCost,
       input.inputs.shippingCost,
-      input.inputs.overheadCost,
+      snapshot.overheadCost,
       input.calculation.rejectionCost,
       input.calculation.totalRateInr,
       input.calculation.rateUsd,
@@ -1668,8 +1666,13 @@ export function createCommercialCostingRepository(
           ? (input.assemblyOperationCost ??
             asNumber(product.assembly_operation_cost))
           : 0
-        const packageAssemblyCostPerPiece =
-          isPackage && piecesPerKg > 0 ? assemblyOperationCost / piecesPerKg : 0
+        const overheadCost = isDirectPurchase
+          ? 0
+          : (input.overheadCost ?? asNumber(product.overhead_cost))
+        const packageProcessCostPerPiece =
+          isPackage && piecesPerKg > 0
+            ? (assemblyOperationCost + overheadCost) / piecesPerKg
+            : 0
         let componentCost = 0
         let hasOpenPackageChildren = false
         if (isPackage) {
@@ -1687,7 +1690,7 @@ export function createCommercialCostingRepository(
           }
         }
         const productCostInr = isPackage
-          ? componentCost + packageAssemblyCostPerPiece
+          ? componentCost + packageProcessCostPerPiece
           : pricingMethod === "Direct Purchase"
             ? directPurchasePricePerPiece
             : machiningPricePerPiece
@@ -1710,10 +1713,6 @@ export function createCommercialCostingRepository(
           product.production_type?.toLowerCase() === "barstock"
             ? 0
             : (input.forgingCost ?? asNumber(product.forging_cost))
-        const overheadCost =
-          isPackage || isDirectPurchase
-            ? 0
-            : (input.overheadCost ?? asNumber(product.overhead_cost))
         const updated = await client.query<ProductRow>(
           `
             UPDATE catalog.items
@@ -1975,12 +1974,17 @@ export function createCommercialCostingRepository(
               piecesPerKg > 0
                 ? asNumber(product.assembly_operation_cost) / piecesPerKg
                 : 0
+            const overheadCostPerPiece =
+              piecesPerKg > 0
+                ? asNumber(product.overhead_cost) / piecesPerKg
+                : 0
             const parentPackingCostPerPiece =
               piecesPerKg > 0 ? packingCost / piecesPerKg : 0
             const parentShippingCostPerPiece =
               piecesPerKg > 0 ? shippingCost / piecesPerKg : 0
             const packageProcessCostPerPiece =
               assemblyCostPerPiece +
+              overheadCostPerPiece +
               parentPackingCostPerPiece +
               parentShippingCostPerPiece
             const profitPercent = options.isRoot
@@ -2003,6 +2007,7 @@ export function createCommercialCostingRepository(
               childQuoteTotal,
               netRateWithAlloy: 0,
               netRateWithoutAlloy: 0,
+              overheadCostPerPiece,
               packageBeforeRejection,
               packageProcessCostPerPiece,
               parentPackingCostPerPiece,
@@ -2025,7 +2030,6 @@ export function createCommercialCostingRepository(
             }
             quoteInputs = {
               conversionRate: input.inputs.conversionRate,
-              overheadCost: 0,
               packingCost,
               profitPercent,
               purchaseTimes: 1,
@@ -2038,7 +2042,6 @@ export function createCommercialCostingRepository(
               ? input.inputs
               : {
                   conversionRate: input.inputs.conversionRate,
-                  overheadCost: 0,
                   packingCost: 0,
                   profitPercent: childInput?.profitPercent ?? 0,
                   purchaseTimes: childInput?.purchaseTimes ?? 1,
@@ -2372,7 +2375,6 @@ export function createCommercialCostingRepository(
         quote_approved_price_usd: string | null
         quote_conversion_rate: string | null
         quote_id: string | null
-        quote_overhead_cost: string | null
         quote_packing_cost: string | null
         quote_packaging: string | null
         quote_profit_percent: string | null
@@ -2411,7 +2413,6 @@ export function createCommercialCostingRepository(
             latest_quote.scrap_rate::text AS quote_scrap_rate,
             latest_quote.purchase_times::text AS quote_purchase_times,
             latest_quote.profit_percent::text AS quote_profit_percent,
-            latest_quote.overhead_cost_input::text AS quote_overhead_cost,
             latest_quote.packing_cost::text AS quote_packing_cost,
             latest_quote.shipping_cost::text AS quote_shipping_cost,
             latest_quote.conversion_rate::text AS quote_conversion_rate,
@@ -2710,10 +2711,6 @@ export function createCommercialCostingRepository(
             asNumber(row.conversion_rate, 1)
           ),
           id: row.quote_id,
-          overheadCost: asNumber(
-            row.quote_overhead_cost,
-            asNumber(row.overhead_cost)
-          ),
           packingCost: asNumber(row.quote_packing_cost),
           packaging: row.quote_packaging ?? row.packaging_terms,
           profitPercent: asNumber(row.quote_profit_percent),
