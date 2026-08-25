@@ -249,9 +249,9 @@ The target must provide source-equivalent destinations within `/commercial`; exa
 | `/enquiries`, `/enquiries/[id]`, `/enquiries/spreadsheet`                       | Register/detail/edit/delete, line CRUD/drawing, import review, spreadsheet filters and export.      |
 | Enquiry CSV/XLS/XLSX templates and exports                                      | Preserve source headers, ordering, calculated-column omissions and filenames.                       |
 | `/technical-review`, `/design-tasks`, Design file routes                        | Dedicated queues, complete Design editor/BOM, internal/customer/CAD downloads.                      |
-| `/pricing?view=products`, `/assemblies`, `/quotes`                                           | Product queue/register, Assembly register, full customer-costing workbench.                         |
+| `/product-costing`, `/assemblies`, `/quotes`                               | Product costing queue, Assembly register, full customer-costing workbench.                          |
 | `/quotes/enquiry/[id]/pdf`                                                      | Historical quote PDF with terms and external-rate fallbacks.                                        |
-| `/pricing?view=customer`, `/pricing/revisions`                                                | Current price and historical revisions spreadsheet views and XLSX export.                           |
+| `/pricing`, `/pricing/revisions`                                             | Complete customer-and-product pricing, revision history, and XLSX export.                            |
 | `/po-pi`, `/po-pi/[id]`                                                         | PO register/detail/file, match/decision/revision/PI lifecycle.                                      |
 | PO template, detail XLSX, PI PDF/XLSX, PO master and approved-PI master exports | Exact sheets, fields, percent display, filenames and source row selection.                          |
 | `/bulk-revisions/product`, `/bulk-revisions/customer`, detail screens           | Separate route semantics, selection/preview/staging/completion.                                     |
