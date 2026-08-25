@@ -216,6 +216,7 @@ describe("unified navigation", () => {
     ])
     const costingLabels = commercialCostingNavigation.map(({ label }) => label)
     expect(costingLabels.slice(0, 2)).toEqual(["Excel View", "Pricing"])
+    expect(costingLabels).toContain("Products")
     expect(costingLabels.at(-1)).toBe("Drawing History")
     expect(commercialCostingNavigation.map(({ label }) => label)).not.toEqual(
       expect.arrayContaining([
@@ -223,7 +224,6 @@ describe("unified navigation", () => {
         "Enquiries",
         "Website Products",
         "Commercial Overview",
-        "Products",
         "Assembly / Bom",
         "Quote Register",
         "Price Revisions",
@@ -233,7 +233,7 @@ describe("unified navigation", () => {
       commercialCostingNavigation.length +
         commercialMasterDataWorkspaceNavigation.length +
         commercialOperationalEntryNavigation.length
-    ).toBe(commercialNavigation.length - 5)
+    ).toBe(commercialNavigation.length - 4)
     expect(commercialNavigation.map(({ label }) => label)).not.toContain(
       "Pricing Masters"
     )
