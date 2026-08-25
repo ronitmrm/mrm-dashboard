@@ -29,6 +29,7 @@ import {
 type TableProps = React.ComponentProps<"table"> & {
   containerClassName?: string
   excelFilters?: boolean
+  filterMode?: "dom" | "external"
   filterStorageKey?: string
   onFilteredRowCountChange?: (visible: number, total: number) => void
 }
@@ -150,6 +151,7 @@ function Table({
   className,
   containerClassName,
   excelFilters = true,
+  filterMode = "dom",
   filterStorageKey,
   onFilteredRowCountChange,
   ...props
@@ -175,7 +177,7 @@ function Table({
         }
       }
     }
-    if (!excelFilters) return
+    if (!excelFilters || filterMode === "external") return
 
     const snapshot = tableSnapshot(table)
     const headerCells = Array.from(table.tHead?.rows.item(0)?.cells ?? [])
@@ -241,7 +243,13 @@ function Table({
       if (!row.hidden) visibleRows += 1
     }
     onFilteredRowCountChange?.(visibleRows, snapshot.rows.length)
-  }, [excelFilters, filterStorageKey, filters, onFilteredRowCountChange])
+  }, [
+    excelFilters,
+    filterMode,
+    filterStorageKey,
+    filters,
+    onFilteredRowCountChange,
+  ])
 
   React.useLayoutEffect(() => {
     refreshTable()
@@ -249,7 +257,7 @@ function Table({
 
   React.useEffect(() => {
     const table = tableRef.current
-    if (!table || !excelFilters) return
+    if (!table || !excelFilters || filterMode === "external") return
 
     const observer = new MutationObserver(refreshTable)
     observer.observe(table, {
@@ -258,19 +266,25 @@ function Table({
       subtree: true,
     })
     return () => observer.disconnect()
-  }, [excelFilters, refreshTable])
+  }, [excelFilters, filterMode, refreshTable])
 
   React.useEffect(() => {
-    if (excelFilters) return
+    if (excelFilters && filterMode !== "external") return
     const table = tableRef.current
     if (!table) return
     for (const body of Array.from(table.tBodies)) {
       for (const row of Array.from(body.rows)) row.hidden = false
     }
-  }, [excelFilters])
+  }, [excelFilters, filterMode])
 
   React.useEffect(() => {
-    if (!excelFilters || !filterStorageKey || !columns.length) return
+    if (
+      !excelFilters ||
+      filterMode === "external" ||
+      !filterStorageKey ||
+      !columns.length
+    )
+      return
     const schemaKey = `${filterStorageKey}:${JSON.stringify(
       columns.map(({ index, label }) => ({ index, label }))
     )}`
@@ -287,7 +301,7 @@ function Table({
     } catch {
       // Storage can be unavailable in private or policy-restricted browsers.
     }
-  }, [columns, excelFilters, filterStorageKey, filters])
+  }, [columns, excelFilters, filterMode, filterStorageKey, filters])
 
   return (
     <div className="w-full" data-slot="table-shell">
