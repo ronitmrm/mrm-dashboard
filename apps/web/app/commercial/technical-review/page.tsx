@@ -71,7 +71,7 @@ export default async function TechnicalReviewPage() {
         </CardHeader>
         <CardContent>
           <div className="max-h-[70vh] overflow-auto rounded-md border">
-            <Table excelFilters>
+            <Table containerClassName="max-h-none overflow-visible" excelFilters>
               <TableHeader className="sticky top-0 z-10 bg-background">
                 <TableRow>
                   <TableHead data-filterable="true">Enquiry</TableHead>

@@ -11,7 +11,7 @@ import {
 } from "@workspace/ui/components/table"
 
 describe("TableHeader", () => {
-  it("stays visible at the top while a table scrolls", () => {
+  it("uses the available viewport while its header stays visible", () => {
     const markup = renderToStaticMarkup(
       <Table>
         <TableHeader>
@@ -28,6 +28,8 @@ describe("TableHeader", () => {
     )
 
     expect(markup).toContain("sticky top-0 z-10")
-    expect(markup).toContain("max-h-[32rem] overflow-auto")
+    expect(markup).toContain(
+      "max-h-[calc(100svh-var(--header-height)-8rem)] overflow-auto"
+    )
   })
 })

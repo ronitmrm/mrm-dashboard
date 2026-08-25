@@ -27,6 +27,7 @@ export function PricingTable({
   return (
     <div className="max-h-[70vh] overflow-auto rounded-xl border">
       <Table
+        containerClassName="max-h-none overflow-visible"
         className="min-w-max text-xs"
         filterStorageKey={filterStorageKey}
       >
