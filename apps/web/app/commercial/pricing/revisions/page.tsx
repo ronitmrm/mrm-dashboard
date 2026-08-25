@@ -8,11 +8,12 @@ import {
 } from "@workspace/ui/components/card"
 import Link from "next/link"
 
-import { readAuthEnvironment } from "@/lib/auth/auth"
 import { DataDownloadButton } from "@/components/data-download-button"
+import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
 
 import { PricingTable } from "../pricing-table"
+import { toPricingViewRow } from "../pricing-workbook"
 
 export const dynamic = "force-dynamic"
 
@@ -47,6 +48,11 @@ export default async function PricingRevisionsPage({
     encodeURIComponent(customer) +
     "&code=" +
     encodeURIComponent(code)
+  const tableRows = rows.map((row) => ({
+    customerId: row.customerId,
+    rowKey: row.rowKey,
+    values: toPricingViewRow(row),
+  }))
 
   return (
     <Card>
@@ -69,7 +75,7 @@ export default async function PricingRevisionsPage({
         <PricingTable
           filterStorageKey="mrmpl:commercial:pricing-revisions:filters:v1"
           revisionLinks={false}
-          rows={rows}
+          rows={tableRows}
         />
       </CardContent>
     </Card>

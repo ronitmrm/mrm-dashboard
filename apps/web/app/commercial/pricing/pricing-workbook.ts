@@ -7,7 +7,7 @@ export type PricingRegisterRow = Awaited<
   >
 >[number]
 
-type PricingViewRow = Record<string, string | number>
+export type PricingViewRow = Record<string, string | number>
 
 function value(record: Record<string, unknown>, key: string) {
   const result = record[key]
