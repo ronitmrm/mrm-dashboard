@@ -524,7 +524,6 @@ export const commercialCostingNavigation = commercialNavigation.filter(
     !commercialOperationalEntryNavigation.some((item) => item.href === href) &&
     ![
       "/commercial",
-      "/commercial/products",
       "/commercial/assemblies",
       "/commercial/quotes",
       "/commercial/revisions",

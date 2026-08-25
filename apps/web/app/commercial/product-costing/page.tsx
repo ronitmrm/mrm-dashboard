@@ -134,9 +134,14 @@ export default async function ProductParameterCostingPage({
   return (
     <div className="grid gap-6">
       <section className="grid gap-2">
-        <h2 className="text-2xl font-semibold tracking-tight">
-          Product Parameter Costing
-        </h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-2xl font-semibold tracking-tight">
+            Product Parameter Costing
+          </h2>
+          <Button asChild variant="outline">
+            <Link href="/commercial/products">All Products</Link>
+          </Button>
+        </div>
         <BoundedResultNotice
           coverage={queue.coverage}
           section="Product Parameter Costing queue"
