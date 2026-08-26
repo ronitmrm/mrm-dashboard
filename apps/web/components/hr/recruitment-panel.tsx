@@ -39,6 +39,7 @@ import {
 import { Textarea } from "@workspace/ui/components/textarea"
 
 import {
+  assignEmployeeAction,
   createJobAction,
   saveCandidateAction,
   saveMasterAction,
@@ -65,6 +66,7 @@ import { CompanyWideMasterScope } from "@/components/company-wide-master-scope"
 import { DataDownloadButton } from "@/components/data-download-button"
 import { ConversationLogsTable } from "@/components/hr/conversation-logs-table"
 import { EmployeeAssignmentUpload } from "@/components/hr/employee-assignment-upload"
+import { SingleEmployeeAssignmentFields } from "@/components/hr/single-employee-assignment-fields"
 import {
   InterviewResultsWorkspace,
   InterviewScheduleBoard,
@@ -613,6 +615,33 @@ function EmployeePanel({
       />
       {showDataEntry && canManageEmployees ? (
         <div className="grid gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Single Employee Update</CardTitle>
+              <CardDescription>
+                Select one approved post or combined job and update its
+                employee.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form action={assignEmployeeAction} className="grid gap-5">
+                <input name="panel" type="hidden" value="employeeMasterPanel" />
+                <input name="master_view" type="hidden" value="dataEntry" />
+                <input
+                  name="master_kind"
+                  type="hidden"
+                  value="employee-assignment"
+                />
+                <SingleEmployeeAssignmentFields
+                  combinedRoles={combinedRoles}
+                  posts={posts}
+                />
+                <div>
+                  <Button type="submit">Update Employee</Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
           <Card>
             <CardHeader>
               <CardTitle>Bulk Employee Assignment</CardTitle>

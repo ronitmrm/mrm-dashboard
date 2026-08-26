@@ -104,7 +104,7 @@ describe("master module selection", () => {
         { id: "approved_posts", label: "Approved Posts" },
         { id: "combined_approved_posts", label: "Combined Approved Posts" },
         { id: "candidates", label: "Candidates" },
-        { id: "employee_assignments", label: "Employee Assignment" },
+        { id: "employee_assignments", label: "Employee Master" },
         { id: "job_templates", label: "HR Job Templates" },
       ],
     })
@@ -159,7 +159,7 @@ describe("master module selection", () => {
       "/?tab=dataEntryTab&floor=conventional&entry=rejection_reason_master&masterUnit=universal&masterMain=rejection&masterSub=rejection_reason_master"
     )
   })
-  it("opens Employee Assignment as an HR sub-master", () => {
+  it("opens Employee Master as an HR sub-master", () => {
     const selection = resolveMasterSelection(
       {
         main: "hr_masters",

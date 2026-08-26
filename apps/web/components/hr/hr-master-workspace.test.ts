@@ -89,6 +89,13 @@ describe("HR master workspace", () => {
     expect(employeePanelSource).toContain(
       "action={importEmployeeAssignmentsCsvAction}"
     )
+    expect(employeePanelSource).toContain("<SingleEmployeeAssignmentFields")
+    expect(employeePanelSource).toContain(
+      "<CardTitle>Single Employee Update</CardTitle>"
+    )
+    expect(employeePanelSource).toContain(
+      "<CardTitle>Bulk Employee Assignment</CardTitle>"
+    )
     expect(panelSource).toContain("showDataEntry && canManageEmployees")
     expect(panelSource).toContain("showMasterTables ? (")
     expect(tablesSource).toMatch(

@@ -239,6 +239,23 @@ One sanctioned staffing position identified by a post code. It is vacant,
 appointed, occupied, resigned, or inactive and may participate in one combined role.
 _Avoid_: Job post.
 
+**Combined Approved Posts**:
+Two or more Approved Posts grouped as one staffing assignment. If any member is
+occupied, every active member is occupied by the same Employee Master person;
+creating or editing the group copies that assignment to all members and rejects
+conflicting employees.
+_Avoid_: Independently occupied members, one employee per member.
+
+**Employee ID**:
+The numeric-only Employee Master identifier confirmed when a person joins. New
+or corrected Employee IDs never accept letters; HR may correct the ID for the
+same named occupied employee without treating that correction as a replacement.
+_Avoid_: Alphanumeric employee code, changing the employee through an ID edit.
+
+**Employee Master**:
+The HR & Recruitment workspace for one-at-a-time employee updates and the existing bulk employee-assignment import.
+_Avoid_: Bulk-only employee maintenance, editing Approved Post structure here.
+
 **Department Master Rename**:
 An HR master change that keeps the Department's stable identity. Choosing to apply
 the rename everywhere preserves existing links and shows the new name on linked
