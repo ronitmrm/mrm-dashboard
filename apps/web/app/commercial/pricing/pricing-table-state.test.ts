@@ -16,6 +16,25 @@ function row(rowKey: string, uid: string, customer: string): PricingTableRow {
 }
 
 describe("pricing table complete-register filters", () => {
+  it("uses one ASCII dash option for blank and dash-only values", () => {
+    const rows: PricingTableRow[] = ["", "-", "—", "–"].map(
+      (value, index) => ({
+        customerId: "customer-id",
+        rowKey: String(index),
+        values: { "Quote Status": value },
+      })
+    )
+
+    const columns = pricingFilterColumns(rows, ["Quote Status"])
+
+    expect(columns[0]?.options).toEqual(["-"])
+    expect(
+      filterPricingTableRows(rows, columns, { 0: ["-"] }).map(
+        (entry) => entry.rowKey
+      )
+    ).toEqual(["0", "1", "2", "3"])
+  })
+
   it("filters the complete register before applying the visible-row limit", () => {
     const rows = Array.from({ length: pricingPageSize + 1 }, (_, index) =>
       row(

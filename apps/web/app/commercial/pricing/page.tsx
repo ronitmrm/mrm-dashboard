@@ -43,7 +43,7 @@ export default async function PricingPage() {
         </CardHeader>
         <CardContent className="flex min-h-0 flex-1 flex-col">
           <PricingTable
-            filterStorageKey="mrmpl:commercial:pricing:filters:v1"
+            filterStorageKey="mrmpl:commercial:pricing:filters:v2"
             rows={tableRows}
           />
         </CardContent>

@@ -40,12 +40,30 @@ function percentValue(record: Record<string, unknown>, key: string) {
   return Number.isFinite(number) ? (number * 100).toFixed(2) : ""
 }
 
-function directValue(record: Record<string, unknown>, key: string) {
-  const pricingMethod = record.pricingMethod
-  if (pricingMethod === null || pricingMethod === undefined) return ""
-  return String(pricingMethod).trim().toLowerCase() === "direct purchase"
-    ? value(record, key)
-    : "-"
+function isDirectPricing(record: Record<string, unknown>) {
+  const pricingMethod = String(record.pricingMethod ?? "")
+    .trim()
+    .toLowerCase()
+  return pricingMethod === "direct" || pricingMethod === "direct purchase"
+}
+
+function directValue(
+  record: Record<string, unknown>,
+  directKey: string,
+  importedWorkingKey: string
+) {
+  if (!isDirectPricing(record)) return "-"
+  const direct = record[directKey]
+  const importedWorking = record[importedWorkingKey]
+  const result =
+    Number(direct) === 0 && Number(importedWorking) !== 0
+      ? importedWorking
+      : (direct ?? importedWorking)
+  return value({ result }, "result")
+}
+
+function machiningValue(record: Record<string, unknown>, key: string) {
+  return isDirectPricing(record) ? "-" : value(record, key)
 }
 
 export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
@@ -55,6 +73,13 @@ export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
   const calculation = row.calculation
   const isCustomerPrice = Boolean(row.quoteNumber)
   const quoteStatus = row.lifecycleStatus === "P" ? "P" : "Q"
+  const missingPricingValues = new Set<string>()
+  if (isCustomerPrice && !row.customerPartCode?.trim()) {
+    missingPricingValues.add("Customer Part Code")
+  }
+  for (const field of row.pricingMissingFields) {
+    missingPricingValues.add(field)
+  }
   const customerValue = (
     record: Record<string, unknown>,
     key: string,
@@ -101,10 +126,21 @@ export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
     "Alloy Premium (INR/kg)": value(product, "alloyPremium"),
     "Ext. Cost (INR/kg)": value(product, "extrusionCost"),
     "Forg Cost+ Nitric Blasting (INR/kg)": value(product, "forgingCost"),
-    "Direct (INR/kg)": directValue(product, "directPurchasePricePerKg"),
-    "Direct (INR/pc)": directValue(product, "directPurchasePricePerPiece"),
-    "M/c Cost (INR/kg)": value(product, "machiningCost"),
-    "M/c Cost (INR/pc)": value(product, "machiningPricePerPiece"),
+    "Direct (INR/kg)": directValue(
+      product,
+      "directPurchasePricePerKg",
+      "machiningCost"
+    ),
+    "Direct (INR/pc)": directValue(
+      product,
+      "directPurchasePricePerPiece",
+      "machiningPricePerPiece"
+    ),
+    "M/c Cost (INR/kg)": machiningValue(product, "machiningCost"),
+    "M/c Cost (INR/pc)": machiningValue(
+      product,
+      "machiningPricePerPiece"
+    ),
     "Washing (INR/kg)": value(product, "washing"),
     "Checking (INR/kg)": value(product, "checking"),
     "Marking (INR/kg)": value(product, "marking"),
@@ -117,10 +153,9 @@ export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
     "Shipping (INR/kg)": customerValue(inputs, "shippingCost"),
     "Overhead (INR/kg)": value(product, "overheadCost"),
     "Assembly Cost (INR/kg)": value(product, "assemblyOperationCost"),
-    Remarks: value(context, "remarks"),
     "Rejection %": percentValue(product, "rejectionPercent"),
     "BL %": percentValue(product, "burningLossPercent"),
-    "Conversion Cost": customerValue(inputs, "conversionRate"),
+    "Conversion Cost": "95.00",
     Profit: isCustomerPrice ? percentValue(inputs, "profitPercent") : "-",
     "OR Purchase Times": customerValue(inputs, "purchaseTimes"),
     "Assembled Part": customerValue(inputs, "assembledPartInr"),
@@ -147,13 +182,23 @@ export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
     "Total - A + B": customerValue(calculation, "totalAPlusB"),
     "Rate / PCS In INR": customerValue(calculation, "rateInr"),
     "Total Rate / PCS In INR": customerValue(calculation, "totalRateInr"),
-    Currency: row.currency,
+    Currency: "USD",
     "Rate / PCS In Currency": customerValue(calculation, "rateUsd", 4),
+    "Pricing Completeness":
+      row.lifecycleStatus === "D"
+        ? "Dead"
+        : missingPricingValues.size
+          ? "Missing Values"
+          : "Complete",
+    "Missing Pricing Values": missingPricingValues.size
+      ? [...missingPricingValues].join("; ")
+      : "-",
     "Quote Status": isCustomerPrice
       ? row.componentDepth > 0
-        ? ""
-        : row.status
+        ? "-"
+        : dashIfEmpty(row.status)
       : "-",
+    Remarks: value(context, "remarks"),
   }
 }
 
@@ -177,6 +222,7 @@ export const pricingHeaders = Object.keys(
     lineNumber: null,
     packaging: null,
     parentUid: null,
+    pricingMissingFields: [],
     product: {},
     productContext: {},
     quoteInputs: {},
