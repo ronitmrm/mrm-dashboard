@@ -34,6 +34,7 @@ const row: PricingRegisterRow = {
   lineNumber: 1,
   packaging: "Export",
   parentUid: null,
+  pricingMissingFields: [],
   product: {
     burningLossPercent: 0.03,
     description: "Valve",
@@ -70,6 +71,7 @@ describe("Pricing spreadsheet workbook", () => {
     expect(view.Size).toBe("1/2 inch")
     expect(view["MRMPL Product Description"]).toBe("Purchased valve")
     expect(pricingWorkbookFilename).toBe("pricing-view.xlsx")
+    expect(pricingHeaders.at(-1)).toBe("Remarks")
 
     const workbook = buildPricingWorkbook([row])
     expect(workbook.SheetNames).toEqual(["Pricing View"])
@@ -79,6 +81,45 @@ describe("Pricing spreadsheet workbook", () => {
     expect(values[1]?.[pricingHeaders.indexOf("Rate / PCS In Currency")]).toBe(
       "1.2500"
     )
+  })
+
+  test("shows WORKING direct prices in Direct columns and hides machining", () => {
+    const directRow: PricingRegisterRow = {
+      ...row,
+      product: {
+        ...row.product,
+        directPurchasePricePerKg: 0,
+        directPurchasePricePerPiece: 0,
+        machiningCost: 514,
+        machiningPricePerPiece: 0.771,
+        pricingMethod: "Direct Purchase",
+      },
+    }
+
+    expect(toPricingViewRow(directRow)).toMatchObject({
+      "Direct (INR/kg)": "514.00",
+      "Direct (INR/pc)": "0.77",
+      "M/c Cost (INR/kg)": "-",
+      "M/c Cost (INR/pc)": "-",
+    })
+  })
+
+  test("identifies incomplete prices and defaults their USD terms", () => {
+    const incompleteRow: PricingRegisterRow = {
+      ...row,
+      currency: "",
+      customerPartCode: null,
+      pricingMissingFields: ["Production Type", "Rod Size"],
+      quoteInputs: {},
+    }
+
+    expect(toPricingViewRow(incompleteRow)).toMatchObject({
+      Currency: "USD",
+      "Conversion Cost": "95.00",
+      "Missing Pricing Values":
+        "Customer Part Code; Production Type; Rod Size",
+      "Pricing Completeness": "Missing Values",
+    })
   })
 
   test("labels product-base pricing and exposes its stored INR cost", () => {
@@ -141,6 +182,7 @@ describe("Pricing spreadsheet workbook", () => {
       Line: 7,
       Packaging: "-",
       "Q/P": "Q",
+      "Quote Status": "-",
       Shipping: "-",
       Under: "M2",
     })

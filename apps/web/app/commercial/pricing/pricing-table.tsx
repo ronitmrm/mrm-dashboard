@@ -31,6 +31,7 @@ const widePricingColumns = new Set([
   "Description",
   "MRMPL Product Description",
   "Enquiry Description",
+  "Missing Pricing Values",
   "Remarks",
 ])
 
@@ -124,16 +125,10 @@ export function PricingTable({
     firstRowIndex,
     firstRowIndex + pricingPageSize
   )
-  const firstVisible = visibleRows.length ? firstRowIndex + 1 : 0
-  const lastVisible = firstRowIndex + visibleRows.length
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-        <p role="status">
-          Showing {firstVisible}–{lastVisible} of {filteredRows.length} matching
-          rows. Filters use all {rows.length} pricing rows.
-        </p>
+      <div className="flex shrink-0 justify-end text-xs text-muted-foreground">
         <div className="flex items-center gap-2">
           <Button
             disabled={currentPage === 0}

@@ -12,10 +12,17 @@ import {
   PopoverTrigger,
 } from "@workspace/ui/components/popover"
 
+const dashOnly = /^[\s\u2010-\u2015\u2212-]+$/u
+
+function normalizedFilterValue(value: string | null | undefined) {
+  const normalized = value?.trim() ?? ""
+  return !normalized || dashOnly.test(normalized) ? "-" : normalized
+}
+
 export function uniqueFilterOptions(
   values: Array<string | null | undefined>
 ) {
-  return [...new Set(values.map((value) => value?.trim() || "—"))].sort(
+  return [...new Set(values.map(normalizedFilterValue))].sort(
     (left, right) => left.localeCompare(right, "en-IN", { numeric: true })
   )
 }
@@ -24,7 +31,7 @@ export function matchesColumnFilter(
   value: string | null | undefined,
   selected: string[] | null
 ) {
-  return selected === null || selected.includes(value?.trim() || "—")
+  return selected === null || selected.includes(normalizedFilterValue(value))
 }
 
 export function ExcelColumnFilter({

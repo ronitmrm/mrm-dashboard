@@ -95,6 +95,7 @@ type PricingRegisterDatabaseRow = {
   line_number: number | null
   packaging: string | null
   parent_uid: string | null
+  pricing_missing_fields: unknown[]
   product_context: Record<string, unknown>
   product_snapshot: Record<string, unknown>
   quote_inputs: Record<string, unknown>
@@ -284,6 +285,9 @@ const pricingRegisterRow = (row: PricingRegisterDatabaseRow) => {
         ? row.imported_packaging
         : null),
     parentUid: row.parent_uid,
+    pricingMissingFields: Array.isArray(row.pricing_missing_fields)
+      ? row.pricing_missing_fields.map(String)
+      : [],
     productContext,
     product: row.product_snapshot,
     quoteInputs: row.quote_inputs,
@@ -1108,8 +1112,20 @@ export function createCommercialCostingRepository(
             NULLIF(btrim(item.rod_size), '')
           ) AS website_size,
           COALESCE(snapshot.item_type, item.item_type) AS item_type,
-          item.lifecycle_status, enquiry.enquiry_number,
-          enquiry.currency, enquiry_item.line_number,
+          item.lifecycle_status,
+          CASE
+            WHEN item.source_system = 'working_xlsx'
+              THEN jsonb_build_array('Product Base Pricing')
+            ELSE COALESCE(
+              item.source_payload #> '{pricingImport,blankFields}',
+              '[]'::jsonb
+            ) - 'Costing Remarks'
+              - 'Direct Purchase Price (INR/pc)'
+              - 'Expected Product Base Price (INR/pc)'
+          END AS pricing_missing_fields,
+          enquiry.enquiry_number,
+          COALESCE(enquiry.currency, root.currency_code, 'USD') AS currency,
+          enquiry_item.line_number,
           enquiry_item.description AS enquiry_description,
           parent.uid AS parent_uid, tree.component_depth,
           tree.component_quantity::text,
@@ -1217,8 +1233,19 @@ export function createCommercialCostingRepository(
             NULLIF(btrim(item.source_payload ->> 'productSize'), ''),
             NULLIF(btrim(item.rod_size), '')
           ) AS website_size, item.item_type,
-          item.lifecycle_status, NULL::text AS enquiry_number,
-          'INR'::text AS currency, NULL::integer AS line_number,
+          item.lifecycle_status,
+          CASE
+            WHEN item.source_system = 'working_xlsx'
+              THEN jsonb_build_array('Product Base Pricing')
+            ELSE COALESCE(
+              item.source_payload #> '{pricingImport,blankFields}',
+              '[]'::jsonb
+            ) - 'Costing Remarks'
+              - 'Direct Purchase Price (INR/pc)'
+              - 'Expected Product Base Price (INR/pc)'
+          END AS pricing_missing_fields,
+          NULL::text AS enquiry_number,
+          'USD'::text AS currency, NULL::integer AS line_number,
           ''::text AS enquiry_description, NULL::text AS parent_uid,
           0 AS component_depth, '1'::text AS component_quantity,
           item.updated_at AS change_date,
@@ -1253,7 +1280,7 @@ export function createCommercialCostingRepository(
           jsonb_build_object(
             'piecesPerKg', item.pieces_per_kg
           ) AS calculation_json,
-          '{}'::jsonb AS quote_inputs,
+          jsonb_build_object('conversionRate', 95::numeric) AS quote_inputs,
           jsonb_build_object(
             'grade', grade.name,
             'rodType', rod_type.name,
@@ -3173,8 +3200,20 @@ export function createCommercialCostingRepository(
               NULLIF(btrim(item.rod_size), '')
             ) AS website_size,
             COALESCE(snapshot.item_type, item.item_type) AS item_type,
-            item.lifecycle_status, enquiry.enquiry_number,
-            enquiry.currency, enquiry_item.line_number,
+            item.lifecycle_status,
+            CASE
+              WHEN item.source_system = 'working_xlsx'
+                THEN jsonb_build_array('Product Base Pricing')
+              ELSE COALESCE(
+                item.source_payload #> '{pricingImport,blankFields}',
+                '[]'::jsonb
+              ) - 'Costing Remarks'
+                - 'Direct Purchase Price (INR/pc)'
+                - 'Expected Product Base Price (INR/pc)'
+            END AS pricing_missing_fields,
+            enquiry.enquiry_number,
+            COALESCE(enquiry.currency, root.currency_code, 'USD') AS currency,
+            enquiry_item.line_number,
             enquiry_item.description AS enquiry_description,
             parent.uid AS parent_uid, tree.component_depth,
             tree.component_quantity::text,
