@@ -52,6 +52,17 @@ version and supersedes the former version without overwriting its bytes; exact
 bytes may share one Organization-scoped physical object.
 _Avoid_: Mutable file paths, overwriting stored bytes, merging logical purposes.
 
+**Product Base Price**: The Product-owned INR-per-piece cost before any
+Customer-specific scrap/purchase choice, rejection adjustment, profit,
+packaging, shipping, or FX. For a Derived Product, it is every applicable
+Product process input per kg (machining, washing, checking, marking, plating,
+annealing, deburring, buffing, sealant, assembly operation, and overhead)
+divided by Pieces per kg. For a Direct Purchase Product, it is Direct Purchase
+INR/kg divided by Pieces per kg. For a Package or Assembly, it is the
+BOM-quantity sum of component Product Base Prices plus the parent Product's own
+unadjusted full process cost per piece. Product Base Price is derived and must
+not be copied from a customer workbook formula result.
+
 **Customer Parameter Costing**: The customer- and Enquiry-specific price step
 after Product Parameter Costing. It applies scrap/purchase factors, profit,
 packaging, shipping, and FX without changing the Product master cost. Product
@@ -64,13 +75,16 @@ time.
 **Package/Assembly Price Composition**: A Package or Assembly Customer Price
 is the BOM-quantity sum of its component Customer Prices plus its own adjusted
 process amount. Each component retains its own rejection and profit. The parent
-applies its rejection and profit only to its own assembly/package process amount;
-it never applies either percentage to the combined component value. Nested
-Package and Assembly prices follow the same rule recursively. Product Parameter
-Costing separately rolls up component base costs plus the unadjusted parent
-process cost per piece.
+applies rejection only to its own Product process amount. Packaging and shipping
+are then added to that adjusted process line, and parent profit applies to that
+parent line. The component total and parent line are added once, and FX is
+applied once to the final INR total. The parent never applies rejection or profit
+to the combined component value. Nested Package and Assembly prices follow the
+same rule recursively. Product Parameter Costing separately rolls up component
+base costs plus the unadjusted parent process cost per piece.
 _Avoid_: Applying parent rejection or profit to component prices, flattening all
 rejection/profit into one package-wide percentage.
+
 **Ready Quote**: A Customer Parameter Costing result explicitly completed for
 Sales. An In-Progress Quote remains `Draft` and editable; a `Ready` Quote is
 locked for Costing and may be sent by Sales. Sending makes its saved calculation
