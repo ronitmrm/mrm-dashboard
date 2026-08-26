@@ -41,6 +41,7 @@ import Link from "next/link"
 import { useMemo, useState } from "react"
 
 import { updateCombinedRoleAction } from "@/app/hr/actions"
+import { CombinedPostPicker } from "@/components/hr/combined-post-picker"
 import {
   ExcelColumnFilter,
   matchesColumnFilter,
@@ -72,7 +73,6 @@ export function CombinedRolesTable({
     useState<RecruitmentCombinedRoleRow | null>(null)
   const [name, setName] = useState("")
   const [primaryPostId, setPrimaryPostId] = useState("")
-  const [search, setSearch] = useState("")
   const [templateCode, setTemplateCode] = useState("")
   const [selectedPostIds, setSelectedPostIds] = useState<Set<string>>(
     () => new Set()
@@ -103,7 +103,6 @@ export function CombinedRolesTable({
           ?.templateCode ??
         ""
     )
-    setSearch("")
     setSelectedPostIds(new Set(memberPosts.map((post) => post.id)))
   }
 
@@ -111,7 +110,6 @@ export function CombinedRolesTable({
     setEditingRole(null)
     setName("")
     setPrimaryPostId("")
-    setSearch("")
     setTemplateCode("")
     setSelectedPostIds(new Set())
   }
@@ -138,14 +136,6 @@ export function CombinedRolesTable({
       (editingMemberCodes.has(post.postCode) ||
         !otherActiveMemberCodes.has(post.postCode))
   )
-  const normalizedSearch = search.trim().toLowerCase()
-  const filteredPosts = normalizedSearch
-    ? editablePosts.filter((post) =>
-        [post.postCode, post.department, post.designation].some((value) =>
-          value.toLowerCase().includes(normalizedSearch)
-        )
-      )
-    : editablePosts
   const canSubmit =
     selectedPostIds.size >= 2 && selectedPostIds.has(primaryPostId)
   const roleValues = useMemo(
@@ -404,17 +394,6 @@ export function CombinedRolesTable({
                   ))}
                 </NativeSelect>
               </Field>
-              <Field>
-                <FieldLabel htmlFor="edit-combined-search">
-                  Search Post Codes
-                </FieldLabel>
-                <Input
-                  id="edit-combined-search"
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search By Post Code, Department, Or Designation"
-                  value={search}
-                />
-              </Field>
               <div className="flex items-center justify-between gap-3 text-sm">
                 <span>{selectedPostIds.size} Posts Selected</span>
                 <span className="text-muted-foreground">
@@ -423,55 +402,14 @@ export function CombinedRolesTable({
                     : "Choose One Primary Post"}
                 </span>
               </div>
-              <div className="max-h-[50vh] overflow-y-auto rounded-md border">
-                {filteredPosts.length ? (
-                  filteredPosts.map((post) => {
-                    const selected = selectedPostIds.has(post.id)
-                    return (
-                      <div
-                        className="grid grid-cols-[auto_1fr_auto] items-center gap-3 border-b px-3 py-2 last:border-b-0"
-                        key={post.id}
-                      >
-                        <input
-                          checked={selected}
-                          className="size-4 accent-primary"
-                          id={`edit-combine-post-${post.id}`}
-                          onChange={(event) =>
-                            setPostSelected(post.id, event.target.checked)
-                          }
-                          type="checkbox"
-                        />
-                        <label
-                          className="min-w-0 cursor-pointer"
-                          htmlFor={`edit-combine-post-${post.id}`}
-                        >
-                          <span className="block font-mono text-sm font-medium">
-                            {post.postCode}
-                          </span>
-                          <span className="block truncate text-xs text-muted-foreground">
-                            {post.department} / {post.designation} / {post.status}
-                          </span>
-                        </label>
-                        <label className="flex items-center gap-2 text-xs">
-                          <input
-                            checked={primaryPostId === post.id}
-                            className="size-4 accent-primary"
-                            disabled={!selected}
-                            name="primary-post-choice"
-                            onChange={() => setPrimaryPostId(post.id)}
-                            type="radio"
-                          />
-                          Primary
-                        </label>
-                      </div>
-                    )
-                  })
-                ) : (
-                  <p className="p-6 text-center text-sm text-muted-foreground">
-                    No Available Post Codes Match This Search.
-                  </p>
-                )}
-              </div>
+              <CombinedPostPicker
+                idPrefix="edit-combine-post"
+                onPostSelected={setPostSelected}
+                onPrimaryPostChange={setPrimaryPostId}
+                posts={editablePosts}
+                primaryPostId={primaryPostId}
+                selectedPostIds={selectedPostIds}
+              />
             </div>
             <SheetFooter>
               <Button disabled={!canSubmit} type="submit">

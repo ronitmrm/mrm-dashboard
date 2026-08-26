@@ -14,14 +14,8 @@ import { Input } from "@workspace/ui/components/input"
 import { useState } from "react"
 
 import { createCombinedRoleAction } from "@/app/hr/actions"
-
-type CombinedPostOption = {
-  department: string
-  designation: string
-  id: string
-  postCode: string
-  status: string
-}
+import { CombinedPostPicker } from "@/components/hr/combined-post-picker"
+import type { CombinedPostOption } from "@/components/hr/combined-post-picker-state"
 
 export function CombinedRoleForm({
   existingVacancyCodes,
@@ -33,19 +27,10 @@ export function CombinedRoleForm({
   posts: CombinedPostOption[]
 }) {
   const [primaryPostId, setPrimaryPostId] = useState("")
-  const [search, setSearch] = useState("")
   const [selectedPostIds, setSelectedPostIds] = useState<Set<string>>(
     () => new Set()
   )
   const identity = nextRecruitmentCombinedRoleIdentity(existingVacancyCodes)
-  const normalizedSearch = search.trim().toLowerCase()
-  const filteredPosts = normalizedSearch
-    ? posts.filter((post) =>
-        [post.postCode, post.department, post.designation].some((value) =>
-          value.toLowerCase().includes(normalizedSearch)
-        )
-      )
-    : posts
 
   function setPostSelected(postId: string, selected: boolean) {
     setSelectedPostIds((current) => {
@@ -78,11 +63,7 @@ export function CombinedRoleForm({
           {[...selectedPostIds].map((postId) => (
             <input key={postId} name="post_ids" type="hidden" value={postId} />
           ))}
-          <input
-            name="primary_post_id"
-            type="hidden"
-            value={primaryPostId}
-          />
+          <input name="primary_post_id" type="hidden" value={primaryPostId} />
           <div className="grid gap-4 md:grid-cols-2">
             <Field>
               <FieldLabel htmlFor="combined-role-name">
@@ -106,72 +87,20 @@ export function CombinedRoleForm({
               />
             </Field>
           </div>
-          <Field>
-            <FieldLabel htmlFor="combined-role-search">
-              Search Post Codes
-            </FieldLabel>
-            <Input
-              id="combined-role-search"
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search By Post Code, Department, Or Designation"
-              value={search}
-            />
-          </Field>
           <div className="flex items-center justify-between gap-3 text-sm">
             <span>{selectedPostIds.size} Posts Selected</span>
             <span className="text-muted-foreground">
               {primaryPostId ? "Primary Selected" : "Choose One Primary Post"}
             </span>
           </div>
-          <div className="max-h-80 overflow-y-auto rounded-md border">
-            {filteredPosts.length ? (
-              filteredPosts.map((post) => {
-                const selected = selectedPostIds.has(post.id)
-                return (
-                  <div
-                    className="grid grid-cols-[auto_1fr_auto] items-center gap-3 border-b px-3 py-2 last:border-b-0"
-                    key={post.id}
-                  >
-                    <input
-                      checked={selected}
-                      className="size-4 accent-primary"
-                      id={`combine-post-${post.id}`}
-                      onChange={(event) =>
-                        setPostSelected(post.id, event.target.checked)
-                      }
-                      type="checkbox"
-                    />
-                    <label
-                      className="min-w-0 cursor-pointer"
-                      htmlFor={`combine-post-${post.id}`}
-                    >
-                      <span className="block font-mono text-sm font-medium">
-                        {post.postCode}
-                      </span>
-                      <span className="block truncate text-xs text-muted-foreground">
-                        {post.department} · {post.designation} · {post.status}
-                      </span>
-                    </label>
-                    <label className="flex items-center gap-2 text-xs">
-                      <input
-                        checked={primaryPostId === post.id}
-                        className="size-4 accent-primary"
-                        disabled={!selected}
-                        name="primary-post-choice"
-                        onChange={() => setPrimaryPostId(post.id)}
-                        type="radio"
-                      />
-                      Primary
-                    </label>
-                  </div>
-                )
-              })
-            ) : (
-              <p className="p-6 text-center text-sm text-muted-foreground">
-                No Available Post Codes Match This Search.
-              </p>
-            )}
-          </div>
+          <CombinedPostPicker
+            idPrefix="combine-post"
+            onPostSelected={setPostSelected}
+            onPrimaryPostChange={setPrimaryPostId}
+            posts={posts}
+            primaryPostId={primaryPostId}
+            selectedPostIds={selectedPostIds}
+          />
           <Button disabled={!canSubmit} type="submit">
             Create Combined Role
           </Button>
