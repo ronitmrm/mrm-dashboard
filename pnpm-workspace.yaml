@@ -9,6 +9,7 @@ allowBuilds:
   unrs-resolver: true
   msw: false
   esbuild: true
+  msgpackr-extract: false
 
 overrides:
   "esbuild@<=0.24.2": "0.25.0"

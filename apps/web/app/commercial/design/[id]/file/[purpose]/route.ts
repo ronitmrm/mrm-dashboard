@@ -24,16 +24,28 @@ export async function GET(
   const workflow = createCommercialWorkflowRepository({ connectionString })
   try {
     const organizationId = await customers.organizationIdForCode("MRMPL")
-    const attachment = (
-      await workflow.listAttachments({
-        organizationId,
-        purpose: purpose as "cad" | "customer_marked" | "internal_drawing",
-        targetId: id,
-        targetTable: "design_tasks",
-      })
-    )[0]
+    const attachments = await workflow.listAttachments({
+      organizationId,
+      purpose: purpose as "cad" | "customer_marked" | "internal_drawing",
+      targetId: id,
+      targetTable: "design_tasks",
+    })
+    const attachment =
+      attachments.find((candidate) => candidate.isCurrent) ?? attachments[0]
     if (!attachment) {
       return new Response("Design attachment was not found.", { status: 404 })
+    }
+    if (
+      attachment.lifecycleState === "deleted" ||
+      (attachment.objectLifecycleState !== null &&
+        attachment.objectLifecycleState !== "available")
+    ) {
+      return new Response("Design attachment is deleted or unavailable.", {
+        status: 410,
+      })
+    }
+    if (attachment.publicUrl) {
+      return Response.redirect(attachment.publicUrl, 307)
     }
     const file = await readUserAttachment(attachment.storageKey)
     return new Response(file.body, {

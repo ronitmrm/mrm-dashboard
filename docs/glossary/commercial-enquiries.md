@@ -44,6 +44,14 @@ Progress; completing its required BOM changes it to Design Complete.
 _Avoid_: Inline portfolio search, opening every Design editor inside the queue,
 automatic start on Technical Review completion.
 
+**Commercial Attachment**: Immutable drawing or CAD evidence retained through
+the shared Artifact lifecycle. Enquiry drawings, Sales Clarification responses,
+Design internal drawings, customer-marked drawings, and CAD files keep separate
+business purposes and filenames. Replacing one purpose creates a new current
+version and supersedes the former version without overwriting its bytes; exact
+bytes may share one Organization-scoped physical object.
+_Avoid_: Mutable file paths, overwriting stored bytes, merging logical purposes.
+
 **Customer Parameter Costing**: The customer- and Enquiry-specific price step
 after Product Parameter Costing. It applies scrap/purchase factors, profit,
 packaging, shipping, and FX without changing the Product master cost. Product
@@ -67,6 +75,36 @@ rejection/profit into one package-wide percentage.
 Sales. An In-Progress Quote remains `Draft` and editable; a `Ready` Quote is
 locked for Costing and may be sent by Sales. Sending makes its saved calculation
 and recursive Product snapshots immutable.
+
+**Sent Quote PDF**: The exact generated PDF Artifact stored and linked during
+Quote issuance before the Quote becomes `Sent`. Draft preview generation remains
+live and creates no Artifact. Failed upload or Artifact metadata storage leaves
+the Quote retryable; retries reuse the same logical issuance and
+Organization-scoped physical bytes. Sent and superseded download URLs resolve
+the stored Artifact instead of rebuilding from later Quote, Customer,
+Organization, pricing, market, or term values.
+_Avoid_: Regenerated historical Quote PDF, persisted draft preview, Sent without
+an issued PDF Artifact.
+
+**Sent PI document set**: The exact Proforma Invoice PDF and XLSX Artifacts
+stored and linked as one required set before the PI becomes `Sent`. Draft PI
+previews remain live and create no Artifact. If either file fails, neither
+logical Artifact is issued and the PI remains retryable. Retries reuse the same
+logical and Organization-scoped physical results. Approval and later Customer,
+Purchase Order, or source-data changes do not replace either issued file; the
+existing PI PDF and XLSX URLs resolve the stored Artifacts.
+_Avoid_: Partial PI issuance, persisted draft preview, or regenerating either
+sent file from current data.
+
+**Issued Store Purchase Order PDF**: The exact PDF Artifact stored and linked
+before a Goods or Repair Store Purchase Order becomes visible or operational.
+Failed storage leaves the pending issuance hidden and retryable. The same
+issuance retry reuses its Purchase Order, logical Artifact link, and
+Organization-scoped physical bytes. Receipt progress, status changes, Supplier
+details, and Store Item values never replace the issued PDF; the Purchase
+Register download resolves the stored Artifact.
+_Avoid_: Visible Store PO without a PDF, duplicate PO on retry, or regenerating
+the PDF from current Store data.
 
 **PO Price Match Costing**: A controlled replacement Quote requested when Sales
 accepts a customer's PO price. The prior sent Quote remains immutable. The new

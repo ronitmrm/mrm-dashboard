@@ -205,6 +205,11 @@ export default async function NewDesignWorkspacePage({
 
           <form action={saveDesignAction}>
             <input
+              name="design_id"
+              type="hidden"
+              value={selectedItem.designId ?? ""}
+            />
+            <input
               name="enquiry_id"
               type="hidden"
               value={selectedItem.enquiryId}

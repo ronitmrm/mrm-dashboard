@@ -1,15 +1,19 @@
-# Local file-storage backup and restore
+# Legacy local-file backup and restore
 
-PostgreSQL is canonical for file metadata, ownership, entity links, sizes,
-MIME types, and SHA-256 values. The bytes addressed by those rows live below
-`LOCAL_FILE_STORAGE_PATH` and require a matching filesystem backup before
-cutover, rollback, or source retirement.
+This runbook applies only to historical rows whose bytes still live below
+`LOCAL_FILE_STORAGE_PATH`. The application can read those paths but has no
+local create, replace, or delete interface. Every new retained file uses the
+shared Artifact service and UploadThing.
+
+PostgreSQL remains canonical for historical metadata, ownership, entity links,
+sizes, MIME types, and SHA-256 values. Keep a matching filesystem backup until
+the legacy rows receive separately approved migration or retirement.
 
 ## Backup
 
-Stop the web process before taking the backup so no upload can race the copy.
-Resolve both paths explicitly; the backup must be outside the storage root and
-must not already exist.
+The compatibility root is read-only, so a running web process cannot race the
+copy with a local write. Resolve both paths explicitly; the backup must be
+outside the storage root and must not already exist.
 
 ```bash
 pnpm files:backup -- /absolute/path/to/local-file-storage /absolute/path/to/new-backup
@@ -35,8 +39,8 @@ each file and verifies the restored checksum. Only point
 `LOCAL_FILE_STORAGE_PATH` at the restored root after the command succeeds.
 
 After a production restore, reconcile PostgreSQL file rows against the restored
-paths and stored checksums, then test an authenticated download from every file
-family before reopening writes.
+paths and stored checksums, then test an authorized legacy download from every
+file family. Do not reopen local writes; no such runtime interface remains.
 
 ## LM-09 acceptance proof — 2026-07-22
 
