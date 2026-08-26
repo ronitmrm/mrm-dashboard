@@ -169,6 +169,55 @@ describe("assignEmployee", () => {
     expect(update?.[1]?.[1]).toBe("104")
   })
 
+  test("corrects both name and numeric ID in explicit correction mode", async () => {
+    const postId = "00000000-0000-4000-8000-000000000001"
+    const query = vi.fn(
+      async (statement: string, parameters?: readonly unknown[]) => {
+        if (statement.includes("SELECT id, employee_name, employee_code")) {
+          return {
+            rows: [
+              {
+                can_replace: false,
+                combined_role_id: null,
+                employee_code: "104",
+                employee_name: "Currnt Employee",
+                id: postId,
+                last_working_date: null,
+                status: "Occupied",
+              },
+            ],
+          }
+        }
+        if (statement.includes("UPDATE recruitment.posts")) {
+          return { rows: [{ id: postId }] }
+        }
+        return { rows: [], parameters }
+      }
+    )
+    const client = { query, release: vi.fn() } as unknown as PoolClient
+    const repository = createRecruitmentRepository({
+      pool: { connect: vi.fn(async () => client) } as unknown as Pool,
+    })
+
+    await repository.assignEmployee({
+      employeeCode: "105",
+      employeeEvent: "Joined",
+      employeeName: "Current Employee",
+      identityCorrection: true,
+      organizationId: "00000000-0000-4000-8000-000000000010",
+      postId,
+    })
+
+    const update = (
+      query.mock.calls as unknown as Array<[string, unknown[]]>
+    ).find(([statement]) => statement.includes("UPDATE recruitment.posts"))
+    expect(update?.[1]?.slice(0, 3)).toEqual([
+      "Current Employee",
+      "105",
+      "Occupied",
+    ])
+  })
+
   test("rejects a bulk workbook before updating when any target is invalid", async () => {
     const combinedPostId = "00000000-0000-4000-8000-000000000001"
     const query = vi.fn(async (statement: string, _parameters?: unknown[]) => {

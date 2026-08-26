@@ -24,19 +24,28 @@ type AssignmentTarget = {
   post: RecruitmentPostRow
 }
 
-function initialEmploymentEvent(status?: string) {
-  if (status === "Appointed") return ""
+function initialEmploymentEvent(
+  status?: string,
+  allowIdentityCorrection = false
+) {
+  if (status === "Appointed") {
+    return allowIdentityCorrection ? "Appointed" : ""
+  }
   if (status === "Resigned") return "Resigned"
-  if (status === "Occupied") return ""
+  if (status === "Occupied") {
+    return allowIdentityCorrection ? "Joined" : ""
+  }
   return "Appointed"
 }
 
 export function SingleEmployeeAssignmentFields({
+  allowIdentityCorrection = false,
   combinedRoles,
   initialPostId = "",
   posts,
   showTargetSelector = true,
 }: {
+  allowIdentityCorrection?: boolean
   combinedRoles: RecruitmentCombinedRoleRow[]
   initialPostId?: string
   posts: RecruitmentPostRow[]
@@ -85,7 +94,7 @@ export function SingleEmployeeAssignmentFields({
     initialTarget?.post.employeeCode ?? ""
   )
   const [event, setEvent] = useState(
-    initialEmploymentEvent(initialTarget?.post.status)
+    initialEmploymentEvent(initialTarget?.post.status, allowIdentityCorrection)
   )
   const selected = targets.find(({ post }) => post.id === postId)
   const assigned = Boolean(
@@ -96,13 +105,19 @@ export function SingleEmployeeAssignmentFields({
     appointed && selected?.post.joiningConfirmationDue
   )
   const employeeIdentityLocked = selected?.post.status === "Resigned"
+  const canCorrectIdentity = Boolean(
+    allowIdentityCorrection &&
+    assigned &&
+    (selected?.post.status === "Appointed" ||
+      selected?.post.status === "Occupied")
+  )
 
   function selectTarget(nextPostId: string) {
     const next = targets.find(({ post }) => post.id === nextPostId)
     setPostId(nextPostId)
     setEmployeeName(next?.post.employeeName ?? "")
     setEmployeeCode(next?.post.employeeCode ?? "")
-    setEvent(initialEmploymentEvent(next?.post.status))
+    setEvent(initialEmploymentEvent(next?.post.status, allowIdentityCorrection))
   }
 
   return (
@@ -153,6 +168,9 @@ export function SingleEmployeeAssignmentFields({
       ) : (
         <input name="post_id" type="hidden" value={postId} />
       )}
+      {canCorrectIdentity ? (
+        <input name="identity_correction" type="hidden" value="true" />
+      ) : null}
       {selected ? (
         <Alert className="w-full min-w-0">
           <AlertDescription>
@@ -173,9 +191,14 @@ export function SingleEmployeeAssignmentFields({
           id="employee-name"
           name="employee_name"
           onChange={(change) => setEmployeeName(change.target.value)}
-          readOnly={assigned}
+          readOnly={assigned && !canCorrectIdentity}
           value={employeeName}
         />
+        {canCorrectIdentity ? (
+          <FieldDescription>
+            Correcting Details Keeps This Employee On The Same Approved Post.
+          </FieldDescription>
+        ) : null}
       </Field>
       <Field className="w-full min-w-0">
         <FieldLabel htmlFor="employee-code">Employee ID</FieldLabel>

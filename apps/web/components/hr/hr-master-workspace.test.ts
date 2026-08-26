@@ -81,6 +81,16 @@ describe("HR master workspace", () => {
       panelSource.indexOf("function EmployeePanel"),
       panelSource.indexOf("function JobsPanel")
     )
+    const approvedPostsTableSource = readFileSync(
+      new URL("./approved-posts-table.tsx", import.meta.url),
+      "utf8"
+    )
+    expect(employeePanelSource).toContain(
+      "const standalone = masterView === undefined"
+    )
+    expect(employeePanelSource).toContain(
+      'const activeView = masterView ?? "masterTables"'
+    )
     expect(employeePanelSource).toContain("csvDownloadAction={")
     expect(employeePanelSource).toContain(
       'href="/hr/employee-assignments/template.csv"'
@@ -89,12 +99,14 @@ describe("HR master workspace", () => {
     expect(employeePanelSource).toContain(
       "action={importEmployeeAssignmentsCsvAction}"
     )
-    expect(employeePanelSource).toContain("<SingleEmployeeAssignmentFields")
-    expect(employeePanelSource).toContain(
-      "<CardTitle>Single Employee Update</CardTitle>"
-    )
+    expect(employeePanelSource).not.toContain("<SingleEmployeeAssignmentFields")
+    expect(employeePanelSource).not.toContain("Single Employee Update")
     expect(employeePanelSource).toContain(
       "<CardTitle>Bulk Employee Assignment</CardTitle>"
+    )
+    expect(approvedPostsTableSource).toContain("allowIdentityCorrection")
+    expect(approvedPostsTableSource).toContain(
+      'employeeManagement ? "Employee Master" : "Approved Posts"'
     )
     expect(panelSource).toContain("showDataEntry && canManageEmployees")
     expect(panelSource).toContain("showMasterTables ? (")

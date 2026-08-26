@@ -518,6 +518,7 @@ type EmployeeAssignmentInput = MutationContext & {
   employeeCode?: string | null
   employeeEvent?: string | null
   employeeName?: string | null
+  identityCorrection?: boolean
   joiningDate?: string | null
   lastWorkingDate?: string | null
   postId: string
@@ -601,11 +602,17 @@ async function assignEmployeeInTransaction(
   const changesAssignedPerson =
     changesEmployeeName || (!currentEmployeeName && changesEmployeeCode)
   const canAssignNewPerson = existingAssignment.can_replace
+  const correctsExistingIdentity =
+    input.identityCorrection === true &&
+    ((existingAssignment.status === "Appointed" &&
+      employeeEvent === "Appointed") ||
+      (existingAssignment.status === "Occupied" && employeeEvent === "Joined"))
   if (
     (employeeEvent === "Appointed" || employeeEvent === "Joined") &&
     Boolean(currentEmployeeName || currentEmployeeCode) &&
     changesAssignedPerson &&
-    !canAssignNewPerson
+    !canAssignNewPerson &&
+    !correctsExistingIdentity
   ) {
     throw new Error(
       "This post is assigned to another employee. Mark the current employee as Removed or Resigned and vacate the post before assigning a different person."
@@ -678,6 +685,7 @@ async function assignEmployeeInTransaction(
             : "approved-post",
           combinedRoleId: currentPost.combined_role_id,
           appointedApplicationId: optional(input.appointedApplicationId),
+          identityCorrection: correctsExistingIdentity,
           joiningDate: optional(input.joiningDate),
           postId: post.id,
           status: assignment.status,
