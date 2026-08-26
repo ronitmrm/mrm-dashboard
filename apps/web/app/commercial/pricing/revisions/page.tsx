@@ -13,7 +13,7 @@ import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
 
 import { PricingTable } from "../pricing-table"
-import { toPricingViewRow } from "../pricing-workbook"
+import { orderPricingRows, toPricingViewRow } from "../pricing-workbook"
 
 export const dynamic = "force-dynamic"
 
@@ -48,7 +48,7 @@ export default async function PricingRevisionsPage({
     encodeURIComponent(customer) +
     "&code=" +
     encodeURIComponent(code)
-  const tableRows = rows.map((row) => ({
+  const tableRows = orderPricingRows(rows).map((row) => ({
     customerId: row.customerId,
     rowKey: row.rowKey,
     values: toPricingViewRow(row),
