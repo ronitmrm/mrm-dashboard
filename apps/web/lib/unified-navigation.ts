@@ -573,6 +573,14 @@ export function storePurchaseOrderHref(input: {
   }).toString()}`
 }
 
+const hrEmployeeMasterNavigation = {
+  href: "/hr?panel=employeeMasterPanel",
+  icon: UsersRound,
+  label: "Employee Master",
+  panelId: "employeeMasterPanel",
+  requiredCapability: "hr.employees.read",
+} as const
+
 export const hrMasterNavigation = [
   {
     href: "/hr?panel=mastersPanel",
@@ -588,13 +596,7 @@ export const hrMasterNavigation = [
     panelId: "postMasterPanel",
     requiredCapability: "hr.job_templates.read",
   },
-  {
-    href: "/hr?panel=employeeMasterPanel",
-    icon: UsersRound,
-    label: "Employee Master",
-    panelId: "employeeMasterPanel",
-    requiredCapability: "hr.employees.read",
-  },
+  hrEmployeeMasterNavigation,
   {
     href: "/hr?panel=approvedPostPanel",
     icon: ListChecks,
@@ -655,6 +657,12 @@ export const hrNavigation = [
     panelId: "interviewWorkspacePanel",
     requiredCapability: "hr.interview_workspace.read",
   },
+] as const
+
+export const hrSidebarNavigation = [
+  hrNavigation[0],
+  hrEmployeeMasterNavigation,
+  ...hrNavigation.slice(1),
 ] as const
 
 export const administrationNavigation = [

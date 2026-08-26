@@ -16,6 +16,7 @@ import {
   dashboardTabHref,
   hrMasterNavigation,
   hrNavigation,
+  hrSidebarNavigation,
   jobCardWorkspaceHref,
   legacyMasterEntryForDashboardTab,
   machineMasterNavigation,
@@ -272,8 +273,14 @@ describe("unified navigation", () => {
       href: "/hr?panel=candidatesPanel",
       label: "Candidates",
     })
-    expect(hrNavigation.map(({ href, label }) => ({ href, label }))).toEqual([
+    expect(
+      hrSidebarNavigation.map(({ href, label }) => ({ href, label }))
+    ).toEqual([
       { href: "/hr?panel=jobsPanel", label: "Job Posts" },
+      {
+        href: "/hr?panel=employeeMasterPanel",
+        label: "Employee Master",
+      },
       {
         href: "/hr?panel=candidateSearchPanel",
         label: "Search Candidate",

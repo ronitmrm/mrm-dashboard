@@ -60,7 +60,7 @@ import {
   commercialOperationalEntryNavigation,
   consolidatedProductionNavigation,
   dashboardNavigationDestination,
-  hrNavigation,
+  hrSidebarNavigation,
   navigationHrefMatches,
   operationalEntryNavigation,
   personalDashboardNavigation,
@@ -188,7 +188,7 @@ export function UnifiedSidebarNavigation({
     visibleCommercialOperationalEntryNavigation.some((item) =>
       navigationHrefMatches(pathname, searchParams, item.href)
     )
-  const visibleHrNavigation = hrNavigation.filter((item) =>
+  const visibleHrNavigation = hrSidebarNavigation.filter((item) =>
     navigationAccess.hrHrefs.includes(item.href)
   )
   const visibleStoreNavigation = navigationAccess.storeHrefs
