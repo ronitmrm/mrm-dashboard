@@ -47,12 +47,14 @@ export function combinedRoleInputFromCsvRow(
 export function employeeAssignmentInputFromCsvRow(
   row: MasterCsvRow,
   rowNumber: number
-): EmployeeAssignmentCsvInput {
+): EmployeeAssignmentCsvInput | null {
   const targetType = csvValue(row, "target_type").toLowerCase()
   const targetCode = csvValue(row, "target_code", "post_code")
   const employeeName = csvValue(row, "employee_name")
   const employeeCode = csvValue(row, "employee_code")
-  const employeeEvent = csvValue(row, "employment_event", "employee_event")
+  if (!employeeName && !employeeCode) return null
+  const employeeEvent =
+    csvValue(row, "employment_event", "employee_event") || "Appointed"
   if (targetType !== "combined" && targetType !== "individual") {
     throw new Error(
       `CSV row ${rowNumber}: Target Type must be combined or individual.`
@@ -69,11 +71,6 @@ export function employeeAssignmentInputFromCsvRow(
       : ""
     throw new Error(
       `CSV row ${rowNumber}: Employment Event must be Appointed or Joined.${manualVacancyInstruction}`
-    )
-  }
-  if (employeeEvent !== "Removed" && !employeeName && !employeeCode) {
-    throw new Error(
-      `CSV row ${rowNumber}: Employee Name or Employee Code is required.`
     )
   }
   return {

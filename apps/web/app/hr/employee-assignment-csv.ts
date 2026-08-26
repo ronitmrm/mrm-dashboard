@@ -11,7 +11,6 @@ export const employeeAssignmentCsvColumns = [
   "designation",
   "employee_name",
   "employee_code",
-  "employment_event",
 ] as const
 
 function joined(values: string[]) {
@@ -39,7 +38,6 @@ export function employeeAssignmentCsvRows(input: {
     designation: joined(posts.map((post) => post.designation)),
     employee_code: "",
     employee_name: "",
-    employment_event: "",
     target_code: targetCode,
     target_type: targetType,
   })

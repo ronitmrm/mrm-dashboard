@@ -56,7 +56,6 @@ describe("employee assignment CSV", () => {
         designation: "Operator",
         employee_code: "",
         employee_name: "",
-        employment_event: "",
         target_code: "CMB-1",
         target_type: "combined",
       },
@@ -66,11 +65,11 @@ describe("employee assignment CSV", () => {
         designation: "Operator",
         employee_code: "",
         employee_name: "",
-        employment_event: "",
         target_code: "Q-001",
         target_type: "individual",
       },
     ])
+    expect(Object.keys(rows[0]!)).not.toContain("employment_event")
     expect(Object.keys(rows[0]!)).not.toContain("last_working_date")
   })
 
