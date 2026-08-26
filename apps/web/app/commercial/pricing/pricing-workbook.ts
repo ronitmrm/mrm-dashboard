@@ -9,6 +9,18 @@ export type PricingRegisterRow = Awaited<
 
 export type PricingViewRow = Record<string, string | number>
 
+const dashOnly = /^[\s\u2010-\u2015\u2212-]+$/u
+
+function normalizedText(result: unknown) {
+  if (result === null || result === undefined) return ""
+  const text = String(result)
+  return dashOnly.test(text) ? "-" : text
+}
+
+function dashIfEmpty(result: unknown) {
+  return normalizedText(result) || "-"
+}
+
 function value(
   record: Record<string, unknown>,
   key: string,
@@ -18,7 +30,7 @@ function value(
   if (result === null || result === undefined) return ""
   return typeof result === "number"
     ? result.toFixed(decimalPlaces)
-    : (result as string)
+    : normalizedText(result)
 }
 
 function percentValue(record: Record<string, unknown>, key: string) {
@@ -42,6 +54,7 @@ export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
   const inputs = row.quoteInputs
   const calculation = row.calculation
   const isCustomerPrice = Boolean(row.quoteNumber)
+  const quoteStatus = row.lifecycleStatus === "P" ? "P" : "Q"
   const customerValue = (
     record: Record<string, unknown>,
     key: string,
@@ -50,30 +63,30 @@ export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
   return {
     "Row Type": row.componentDepth > 0 ? row.itemType : row.itemType,
     "Pricing Scope": isCustomerPrice ? "Customer Price" : "Product Base",
-    "Customer Line Status": isCustomerPrice
-      ? row.componentDepth > 0
-        ? ""
-        : row.lifecycleStatus
-      : "-",
-    "Customer UID": row.customerUid,
+    "Customer Line Status": isCustomerPrice ? quoteStatus : "-",
+    "Customer UID": isCustomerPrice ? dashIfEmpty(row.customerUid) : "-",
     "Change Date": row.changeDate.toISOString(),
-    "Customer Part Code": row.customerPartCode ?? "",
+    "Customer Part Code": isCustomerPrice
+      ? dashIfEmpty(row.customerPartCode)
+      : "-",
     "Price Rev": isCustomerPrice ? row.revision : "-",
-    Under: row.parentUid ?? "",
+    Under: dashIfEmpty(row.parentUid),
     "BOM Level": row.componentDepth || "",
     "BOM Qty": row.componentQuantity.toFixed(2),
     UID: row.uid,
-    "Q/P": row.componentDepth > 0 ? "" : row.lifecycleStatus,
+    "Q/P": quoteStatus,
     Description: value(product, "description"),
     Size: row.websiteSize ?? "",
     "MRMPL Product Description": row.websiteProductDescription ?? "",
-    Shipping: row.shippingTerms ?? "",
-    Packaging: row.packaging ?? "",
+    Shipping: dashIfEmpty(row.shippingTerms),
+    Packaging: dashIfEmpty(row.packaging),
     Pricing: value(product, "pricingMethod"),
-    ENQ: row.enquiryNumber ?? "",
-    Line: row.lineNumber ?? "",
-    Customer: row.companyName,
-    "Enquiry Description": row.enquiryDescription,
+    ENQ: isCustomerPrice ? dashIfEmpty(row.enquiryNumber) : "-",
+    Line: isCustomerPrice ? (row.lineNumber ?? "-") : "-",
+    Customer: isCustomerPrice ? dashIfEmpty(row.companyName) : "-",
+    "Enquiry Description": isCustomerPrice
+      ? dashIfEmpty(row.enquiryDescription)
+      : "-",
     "Production Type": value(product, "productionType"),
     "Machine Type": value(context, "machineType"),
     Grade: value(context, "grade"),

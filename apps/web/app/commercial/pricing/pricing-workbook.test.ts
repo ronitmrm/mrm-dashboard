@@ -89,24 +89,61 @@ describe("Pricing spreadsheet workbook", () => {
       customerId: "",
       customerPartCode: null,
       customerUid: "",
+      lifecycleStatus: "D",
+      packaging: null,
+      parentUid: null,
       product: { ...row.product, productCostInr: 16.2957 },
       quoteNumber: "",
       revision: 0,
+      shippingTerms: null,
       status: "",
     }
 
     expect(toPricingViewRow(productBaseRow)).toMatchObject({
       "Customer Line Status": "-",
+      "Customer Part Code": "-",
+      "Customer UID": "-",
+      ENQ: "-",
+      "Enquiry Description": "-",
+      Line: "-",
       "Net Rate / KG Without Alloy Premium": "-",
+      Packaging: "-",
       "Price Rev": "-",
       "Pricing Scope": "Product Base",
       "Product Base Cost (INR/pc)": "16.30",
       Profit: "-",
+      "Q/P": "Q",
       "Quote Status": "-",
       "Rate / PCS In Currency": "-",
       "Scrap Rate (INR/kg)": "-",
+      Shipping: "-",
+      Under: "-",
     })
     expect(toPricingViewRow(row)["Pricing Scope"]).toBe("Customer Price")
+  })
+
+  test("uses one dash and repeats enquiry context on BOM children", () => {
+    const childRow: PricingRegisterRow = {
+      ...row,
+      componentDepth: 1,
+      enquiryDescription: "Package enquiry",
+      lifecycleStatus: "D",
+      lineNumber: 7,
+      packaging: "—",
+      parentUid: "M2",
+      shippingTerms: "–",
+      uid: "M2B",
+    }
+
+    expect(toPricingViewRow(childRow)).toMatchObject({
+      "Customer Line Status": "Q",
+      "Enquiry Description": "Package enquiry",
+      Line: 7,
+      Packaging: "-",
+      "Q/P": "Q",
+      Shipping: "-",
+      Under: "M2",
+    })
   })
 
   test("keeps product-derived answers on a package base row", () => {

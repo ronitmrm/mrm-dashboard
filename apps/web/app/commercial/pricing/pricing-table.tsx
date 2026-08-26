@@ -27,6 +27,41 @@ import {
   type PricingTableRow,
 } from "./pricing-table-state"
 
+const widePricingColumns = new Set([
+  "Description",
+  "MRMPL Product Description",
+  "Enquiry Description",
+  "Remarks",
+])
+
+const mediumPricingColumns = new Set([
+  "Change Date",
+  "Customer Part Code",
+  "Customer",
+  "Production Type",
+  "Shipping",
+  "Packaging",
+])
+
+const compactPricingColumns = new Set([
+  "Row Type",
+  "Pricing Scope",
+  "Customer Line Status",
+  "Price Rev",
+  "Under",
+  "BOM Level",
+  "BOM Qty",
+  "Q/P",
+  "ENQ",
+  "Line",
+])
+
+function pricingColumnWidth(header: string) {
+  if (widePricingColumns.has(header)) return "w-72 min-w-72 max-w-72"
+  if (mediumPricingColumns.has(header)) return "w-48 min-w-48 max-w-48"
+  if (compactPricingColumns.has(header)) return "w-32 min-w-32 max-w-32"
+  return "w-40 min-w-40 max-w-40"
+}
 export function PricingTable({
   filterStorageKey,
   revisionLinks = true,
@@ -135,7 +170,7 @@ export function PricingTable({
             <TableRow>
               {columns.map((column) => (
                 <TableHead
-                  className="max-w-56 whitespace-nowrap"
+                  className={`${pricingColumnWidth(column.label)} overflow-hidden whitespace-nowrap`}
                   data-filterable="true"
                   key={column.label}
                 >
@@ -169,14 +204,16 @@ export function PricingTable({
                     const cell = row.values[header]
                     return (
                       <TableCell
-                        className="max-w-56 whitespace-nowrap"
+                        className={`${pricingColumnWidth(header)} overflow-hidden text-ellipsis whitespace-nowrap`}
                         key={header}
+                        title={cell === "" ? undefined : String(cell)}
                       >
                         {header === "Customer Part Code" &&
-                        cell &&
+                        cell !== "-" &&
+                        row.customerId &&
                         revisionLinks ? (
                           <Link
-                            className="font-mono text-primary underline-offset-4 hover:underline"
+                            className="block truncate font-mono text-primary underline-offset-4 hover:underline"
                             href={
                               "/commercial/pricing/revisions?customer=" +
                               encodeURIComponent(row.customerId) +
@@ -186,7 +223,9 @@ export function PricingTable({
                           >
                             {cell}
                           </Link>
-                        ) : header === "Quote Status" && cell ? (
+                        ) : header === "Quote Status" &&
+                          cell &&
+                          cell !== "-" ? (
                           <Badge variant="secondary">{cell}</Badge>
                         ) : (
                           cell

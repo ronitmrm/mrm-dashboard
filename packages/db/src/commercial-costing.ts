@@ -206,9 +206,52 @@ export function mergeWorkingWorkbookCalculation(input: {
   return { ...importedCalculation, ...input.calculation }
 }
 
+export function mergeWorkingWorkbookProductContext(input: {
+  productContext: Record<string, unknown>
+  sourcePayload: Record<string, unknown>
+  sourceSystem: string | null
+  sourceTable: string | null
+}) {
+  const storedDieCode = input.productContext.dieCode
+  if (
+    storedDieCode !== null &&
+    storedDieCode !== undefined &&
+    String(storedDieCode).trim() !== "" &&
+    String(storedDieCode).trim() !== "-"
+  ) {
+    return input.productContext
+  }
+
+  const originalRow = workingWorkbookOriginalRow(
+    input.sourceSystem,
+    input.sourcePayload
+  )
+  const dieCodeIndex =
+    input.sourceTable === "Costing"
+      ? 13
+      : input.sourceTable === "Assembly"
+        ? 10
+        : null
+  if (!originalRow || dieCodeIndex === null) return input.productContext
+  const workbookDieCode = originalRow[dieCodeIndex]
+  if (
+    workbookDieCode === null ||
+    workbookDieCode === undefined ||
+    String(workbookDieCode).trim() === ""
+  ) {
+    return input.productContext
+  }
+  return { ...input.productContext, dieCode: String(workbookDieCode).trim() }
+}
 const pricingRegisterRow = (row: PricingRegisterDatabaseRow) => {
   const calculation = mergeWorkingWorkbookCalculation({
     calculation: row.calculation_json,
+    sourcePayload: { originalRow: row.quote_original_row },
+    sourceSystem: row.quote_source_system,
+    sourceTable: row.quote_source_table,
+  })
+  const productContext = mergeWorkingWorkbookProductContext({
+    productContext: row.product_context,
     sourcePayload: { originalRow: row.quote_original_row },
     sourceSystem: row.quote_source_system,
     sourceTable: row.quote_source_table,
@@ -241,7 +284,7 @@ const pricingRegisterRow = (row: PricingRegisterDatabaseRow) => {
         ? row.imported_packaging
         : null),
     parentUid: row.parent_uid,
-    productContext: row.product_context,
+    productContext,
     product: row.product_snapshot,
     quoteInputs: row.quote_inputs,
     quoteNumber: row.quote_number,
