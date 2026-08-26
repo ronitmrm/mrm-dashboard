@@ -312,13 +312,13 @@ describe("PostgreSQL product-costing and quote workflow", () => {
 
     expect(product).toMatchObject({
       alloyPremium: 20,
-      assemblyOperationCost: 0,
+      assemblyOperationCost: 999,
       extrusionCost: 10,
       forgingCost: 0,
       machiningPricePerPiece: 5,
       nextStageStatus: "Product Costing Complete",
       piecesPerKg: 2,
-      productCostInr: 5,
+      productCostInr: 532,
     })
 
     const quote = await repository.saveQuote({
@@ -340,11 +340,11 @@ describe("PostgreSQL product-costing and quote workflow", () => {
 
     expect(quote).toMatchObject({
       isActive: false,
-      rateInr: 142.2,
-      rateUsd: 1.7775,
+      rateInr: 741.6,
+      rateUsd: 9.27,
       revision: 1,
       status: "Draft",
-      totalRateInr: 142.2,
+      totalRateInr: 741.6,
     })
     const overheadOwnership = await pool.query<{
       product_overhead: string
@@ -1008,14 +1008,14 @@ describe("PostgreSQL product-costing and quote workflow", () => {
         INSERT INTO catalog.items (
           organization_id, uid, lifecycle_status, description, item_type,
           pricing_method, weight_100_pcs, direct_purchase_price_per_piece,
-          assembly_operation_cost, overhead_cost, rejection_percent,
+          checking, assembly_operation_cost, overhead_cost, rejection_percent,
           source_system, source_table, source_id
         )
         VALUES
           ($1, $2, 'P', 'Adjusted component', 'List', 'Direct Purchase',
-            100, 100, 0, 0, 0.10, 'test', 'products', $2),
+            100, 100, 0, 0, 0, 0.10, 'test', 'products', $2),
           ($1, $3, 'P', 'Assembly-only package', 'Package', 'Derived',
-            0, 0, 10, 5, 0.10, 'test', 'products', $3)
+            0, 0, 5, 10, 5, 0.10, 'test', 'products', $3)
         RETURNING id, item_type
       `,
       [organizationId, `M-COMPONENT-${suffix}`, `M-PACKAGE-${suffix}`]
@@ -1050,11 +1050,11 @@ describe("PostgreSQL product-costing and quote workflow", () => {
       enquiryItemId: packageEnquiryItemId,
       inputs: {
         conversionRate: 80,
-        packingCost: 0,
+        packingCost: 20,
         profitPercent: 0.2,
         purchaseTimes: 1,
         scrapRate: 0,
-        shippingCost: 0,
+        shippingCost: 10,
       },
       itemId: packageId,
       quantity: 1,
@@ -1062,8 +1062,8 @@ describe("PostgreSQL product-costing and quote workflow", () => {
 
     await expect(repository.getQuote(quote.id)).resolves.toMatchObject({
       components: [{ extendedCost: 143, quantity: 1, unitCost: 143 }],
-      rateInr: 1.98,
-      totalRateInr: 144.98,
+      rateInr: 6.24,
+      totalRateInr: 149.24,
     })
   })
   test("rolls Derived component base costs into Package product costing", async () => {

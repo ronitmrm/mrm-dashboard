@@ -8,7 +8,12 @@ import {
   withTransaction as transaction,
   type RepositoryPoolOptions,
 } from "./postgres-runtime"
-import { calculateCosting, type CostingResult } from "./pricing-calculation"
+import {
+  calculateCosting,
+  calculatePackageCosting,
+  calculateProductProcessCost,
+  type CostingResult,
+} from "./pricing-calculation"
 
 type ProductRow = {
   alloy_premium: string
@@ -590,9 +595,7 @@ function calculateProductQuote(product: ProductRow, inputs: QuoteInputs) {
     result: calculateCosting(
       {
         annealing: asNumber(product.annealing),
-        assemblyOperationCost: isBomParent(product.item_type)
-          ? asNumber(product.assembly_operation_cost)
-          : 0,
+        assemblyOperationCost: asNumber(product.assembly_operation_cost),
         buffing: asNumber(product.buffing),
         burningLossPercent: asNumber(product.burning_loss_percent),
         casting: asNumber(product.casting, 1),
@@ -2242,9 +2245,12 @@ export function createCommercialCostingRepository(
               )
             : null
         const isPackage = isBomParent(product.item_type)
-        const weight100Pcs = isPackage
-          ? await immediatePieceWeight(client, product)
-          : (input.weight100Pcs ?? asNumber(product.weight_100_pcs))
+        const productWeight100Pcs =
+          input.weight100Pcs ?? asNumber(product.weight_100_pcs)
+        const weight100Pcs =
+          isPackage && productWeight100Pcs <= 0
+            ? await immediatePieceWeight(client, product)
+            : productWeight100Pcs
         const piecesPerKg =
           !isPackage && input.piecesPerKg && input.piecesPerKg > 0
             ? input.piecesPerKg
@@ -2256,6 +2262,53 @@ export function createCommercialCostingRepository(
         const machiningCost = isDirectPurchase
           ? 0
           : (input.machiningCost ?? asNumber(product.machining_cost))
+        const washing = isDirectPurchase
+          ? 0
+          : (input.washing ?? asNumber(product.washing))
+        const checking = isDirectPurchase
+          ? 0
+          : (input.checking ?? asNumber(product.checking))
+        const marking = isDirectPurchase
+          ? 0
+          : (input.marking ?? asNumber(product.marking))
+        const plating = isDirectPurchase
+          ? 0
+          : (input.plating ?? asNumber(product.plating))
+        const annealing = isDirectPurchase
+          ? 0
+          : (input.annealing ?? asNumber(product.annealing))
+        const deburring = isDirectPurchase
+          ? 0
+          : (input.deburring ?? asNumber(product.deburring))
+        const buffing = isDirectPurchase
+          ? 0
+          : (input.buffing ?? asNumber(product.buffing))
+        const sealant = isDirectPurchase
+          ? 0
+          : (input.sealant ?? asNumber(product.sealant))
+        const assemblyOperationCost = isDirectPurchase
+          ? 0
+          : (input.assemblyOperationCost ??
+            asNumber(product.assembly_operation_cost))
+        const overheadCost = isDirectPurchase
+          ? 0
+          : (input.overheadCost ?? asNumber(product.overhead_cost))
+        const productProcess = calculateProductProcessCost({
+          annealing,
+          assemblyOperationCost,
+          buffing,
+          checking,
+          deburring,
+          machiningCost,
+          marking,
+          overheadCost,
+          plating,
+          sealant,
+          washing,
+          weight100Pcs,
+        })
+        const productProcessCostPerPiece =
+          piecesPerKg > 0 ? productProcess.processCostPerKg / piecesPerKg : 0
         const machiningPricePerPiece =
           piecesPerKg > 0 ? machiningCost / piecesPerKg : 0
         const directPurchasePricePerKg =
@@ -2265,17 +2318,6 @@ export function createCommercialCostingRepository(
           pricingMethod === "Direct Purchase" && piecesPerKg > 0
             ? directPurchasePricePerKg / piecesPerKg
             : asNumber(product.direct_purchase_price_per_piece)
-        const assemblyOperationCost = isPackage
-          ? (input.assemblyOperationCost ??
-            asNumber(product.assembly_operation_cost))
-          : 0
-        const overheadCost = isDirectPurchase
-          ? 0
-          : (input.overheadCost ?? asNumber(product.overhead_cost))
-        const packageProcessCostPerPiece =
-          isPackage && piecesPerKg > 0
-            ? (assemblyOperationCost + overheadCost) / piecesPerKg
-            : 0
         let componentCost = 0
         let hasOpenPackageChildren = false
         if (isPackage) {
@@ -2293,10 +2335,10 @@ export function createCommercialCostingRepository(
           }
         }
         const productCostInr = isPackage
-          ? componentCost + packageProcessCostPerPiece
+          ? componentCost + productProcessCostPerPiece
           : pricingMethod === "Direct Purchase"
             ? directPurchasePricePerPiece
-            : machiningPricePerPiece
+            : productProcessCostPerPiece
         const alloyPremium = isDirectPurchase
           ? 0
           : (input.alloyPremium ??
@@ -2347,20 +2389,14 @@ export function createCommercialCostingRepository(
             productCostInr,
             machiningPricePerPiece,
             machiningCost,
-            isDirectPurchase ? 0 : (input.washing ?? asNumber(product.washing)),
-            isDirectPurchase
-              ? 0
-              : (input.checking ?? asNumber(product.checking)),
-            isDirectPurchase ? 0 : (input.marking ?? asNumber(product.marking)),
-            isDirectPurchase ? 0 : (input.plating ?? asNumber(product.plating)),
-            isDirectPurchase
-              ? 0
-              : (input.annealing ?? asNumber(product.annealing)),
-            isDirectPurchase
-              ? 0
-              : (input.deburring ?? asNumber(product.deburring)),
-            isDirectPurchase ? 0 : (input.buffing ?? asNumber(product.buffing)),
-            isDirectPurchase ? 0 : (input.sealant ?? asNumber(product.sealant)),
+            washing,
+            checking,
+            marking,
+            plating,
+            annealing,
+            deburring,
+            buffing,
+            sealant,
             assemblyOperationCost,
             overheadCost,
             input.rejectionPercent ?? asNumber(product.rejection_percent),
@@ -2565,45 +2601,54 @@ export function createCommercialCostingRepository(
                   : asNumber(child.weight_100_pcs),
               }))
             )
-            const pieceWeightGrams = childrenForWeight.reduce(
+            const fallbackPieceWeightGrams = childrenForWeight.reduce(
               (total, child) => total + child.quantity * child.weight,
               0
             )
-            const piecesPerKg =
-              pieceWeightGrams > 0 ? 1000 / pieceWeightGrams : 0
+            const productWeight100Pcs = asNumber(product.weight_100_pcs)
+            const pieceWeightGrams =
+              productWeight100Pcs > 0
+                ? productWeight100Pcs
+                : fallbackPieceWeightGrams
             const packingCost = options.isRoot ? input.inputs.packingCost : 0
             const shippingCost = options.isRoot ? input.inputs.shippingCost : 0
-            const assemblyCostPerPiece =
-              piecesPerKg > 0
-                ? asNumber(product.assembly_operation_cost) / piecesPerKg
-                : 0
-            const overheadCostPerPiece =
-              piecesPerKg > 0
-                ? asNumber(product.overhead_cost) / piecesPerKg
-                : 0
-            const parentPackingCostPerPiece =
-              piecesPerKg > 0 ? packingCost / piecesPerKg : 0
-            const parentShippingCostPerPiece =
-              piecesPerKg > 0 ? shippingCost / piecesPerKg : 0
-            const packageProcessCostPerPiece =
-              assemblyCostPerPiece +
-              overheadCostPerPiece +
-              parentPackingCostPerPiece +
-              parentShippingCostPerPiece
             const profitPercent = options.isRoot
               ? input.inputs.profitPercent
               : (assemblyProfits.get(product.id) ?? 0)
-            const rejectionCost =
-              packageProcessCostPerPiece * asNumber(product.rejection_percent)
-            const totalA = packageProcessCostPerPiece + rejectionCost
-            const profitB = totalA * profitPercent
-            const totalAPlusB = totalA + profitB
-            const packageBeforeRejection =
-              childQuoteTotal + packageProcessCostPerPiece
-            const totalRateInr = childQuoteTotal + totalAPlusB
-            const rateUsd =
-              input.inputs.conversionRate > 0
-                ? totalRateInr / input.inputs.conversionRate
+            const packageCosting = calculatePackageCosting(
+              {
+                annealing: asNumber(product.annealing),
+                assemblyOperationCost: asNumber(
+                  product.assembly_operation_cost
+                ),
+                buffing: asNumber(product.buffing),
+                checking: asNumber(product.checking),
+                deburring: asNumber(product.deburring),
+                machiningCost: asNumber(product.machining_cost),
+                marking: asNumber(product.marking),
+                overheadCost: asNumber(product.overhead_cost),
+                plating: asNumber(product.plating),
+                rejectionPercent: asNumber(product.rejection_percent),
+                sealant: asNumber(product.sealant),
+                washing: asNumber(product.washing),
+                weight100Pcs: pieceWeightGrams,
+              },
+              {
+                conversionRate: input.inputs.conversionRate,
+                packingCost,
+                profitPercent,
+                shippingCost,
+              },
+              childQuoteTotal
+            )
+            const assemblyCostPerPiece =
+              packageCosting.piecesPerKg > 0
+                ? asNumber(product.assembly_operation_cost) /
+                  packageCosting.piecesPerKg
+                : 0
+            const overheadCostPerPiece =
+              packageCosting.piecesPerKg > 0
+                ? asNumber(product.overhead_cost) / packageCosting.piecesPerKg
                 : 0
             calculation = {
               assemblyCostPerPiece,
@@ -2611,24 +2656,28 @@ export function createCommercialCostingRepository(
               netRateWithAlloy: 0,
               netRateWithoutAlloy: 0,
               overheadCostPerPiece,
-              packageBeforeRejection,
-              packageProcessCostPerPiece,
-              parentPackingCostPerPiece,
-              parentShippingCostPerPiece,
-              piecesPerKg,
-              processCost: packageProcessCostPerPiece,
-              profitB,
-              rateInr: totalAPlusB,
-              rateUsd,
+              packageBeforeRejection:
+                childQuoteTotal + packageCosting.packageProcessCostPerPiece,
+              packageProcessCostPerPiece:
+                packageCosting.packageProcessCostPerPiece,
+              parentPackingCostPerPiece:
+                packageCosting.parentPackingCostPerPiece,
+              parentShippingCostPerPiece:
+                packageCosting.parentShippingCostPerPiece,
+              piecesPerKg: packageCosting.piecesPerKg,
+              processCost: packageCosting.packageProcessCostPerPiece,
+              profitB: packageCosting.profitB,
+              rateInr: packageCosting.rateInr,
+              rateUsd: packageCosting.rateUsd,
               rawMaterialCost: 0,
-              rejectionCost,
+              rejectionCost: packageCosting.rejectionCost,
               scrapRatePerGm: 0,
               scrapReturn: 0,
               scrapReturnPrice: 0,
               scrapReturnPriceIncludingBurningLoss: 0,
-              totalA,
-              totalAPlusB,
-              totalRateInr,
+              totalA: packageCosting.totalA,
+              totalAPlusB: packageCosting.totalAPlusB,
+              totalRateInr: packageCosting.totalRateInr,
               totalRodsCost: childQuoteTotal,
             }
             quoteInputs = {
