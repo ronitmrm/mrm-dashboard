@@ -32,6 +32,12 @@
 - Worker package: `packages/runtime` with durable PostgreSQL jobs and Redis delivery.
 - Runtime data source: PostgreSQL. Redis is disposable acceleration only.
 
+## Neon Postgres
+
+- The local development AND the dpeloyed prod environment - both use the `staging` branch of the neon db.
+- All the variables/connection-strings that you may need to interact with neon are probably present in the `apps/web/.env.local` file. use those directly instead of relying on the neon plugin. the neon cli is also always configured.
+- In any case - NEVER flush any secrets or variables in ANY buffers.
+
 ## Design System
 
 - Use the configured shadcn preset/style: `b2pl3ZuLI` / `radix-luma`.
