@@ -28,7 +28,7 @@ describe("PostgreSQL dashboard client cutover", () => {
   })
 
   test("the root dashboard is protected by Better Auth capability checks", async () => {
-    const source = await readFile(pageUrl, "utf8")
+    const source = (await readFile(pageUrl, "utf8")).replaceAll("\r\n", "\n")
 
     expect(source).toContain('requireAuthenticatedSession("/")')
     expect(source).toContain("initialDashboardTab,\n    requestedFloor")
