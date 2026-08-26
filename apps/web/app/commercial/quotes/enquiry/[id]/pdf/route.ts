@@ -24,9 +24,21 @@ export async function GET(
     connectionString: readAuthEnvironment().connectionString,
   })
   try {
-    const document = (await repository.getQuoteDocument(id, {
-      originatingSalespersonUserId: session.user.id,
-    })) as QuoteDocument
+    const scope = { originatingSalespersonUserId: session.user.id }
+    const artifact = await repository.getQuotePdfArtifact(id, scope)
+    if (artifact) {
+      if (!artifact.available) {
+        return new Response("Quote PDF is unavailable.", { status: 410 })
+      }
+      return Response.redirect(artifact.publicUrl, 307)
+    }
+    if (!(await repository.hasHistoricalQuote(id, scope))) {
+      return new Response("Sent Quote PDF was not found.", { status: 404 })
+    }
+    const document = (await repository.getQuoteDocument(
+      id,
+      scope
+    )) as QuoteDocument
     const market = await loadQuoteMarketContext({
       currency: document.currency,
       fallbackRate: document.conversionRate,

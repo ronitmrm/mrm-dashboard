@@ -2,7 +2,6 @@ import { createStoreRepository } from "@workspace/db"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
-import { buildStorePurchaseOrderPdf } from "@/lib/store/purchase-order-pdf"
 
 export async function GET(
   _request: Request,
@@ -13,31 +12,17 @@ export async function GET(
   const repository = createStoreRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
-  const document = await (async () => {
+  const artifact = await (async () => {
     const organizationId = await repository.organizationIdForCode("MRMPL")
-    return repository.getPurchaseOrder({
+    return repository.getPurchaseOrderPdfArtifact({
       organizationId,
       purchaseOrderId: id,
     })
   })().finally(() => repository.close())
-  if (!document)
+  if (!artifact)
     return new Response("Purchase Order not found.", { status: 404 })
-  const bytes = await buildStorePurchaseOrderPdf({
-    lines: document.lines,
-    orderDate: document.order.orderDate,
-    orderNumber: document.order.orderNumber,
-    orderType: document.order.orderType,
-    remark: document.order.remark,
-    supplierAddress: document.order.supplierAddress,
-    supplierCode: document.order.supplierCode,
-    supplierGstNumber: document.order.supplierGstNumber,
-    supplierName: document.order.supplierName,
-  })
-  const safeName = document.order.orderNumber.replace(/[^a-zA-Z0-9_-]/g, "-")
-  return new Response(Buffer.from(bytes), {
-    headers: {
-      "Content-Disposition": `attachment; filename="${safeName}.pdf"`,
-      "Content-Type": "application/pdf",
-    },
-  })
+  if (!artifact.available) {
+    return new Response("Purchase Order PDF is unavailable.", { status: 410 })
+  }
+  return Response.redirect(artifact.publicUrl, 307)
 }

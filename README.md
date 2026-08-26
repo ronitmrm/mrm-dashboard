@@ -110,11 +110,19 @@ pnpm --filter @workspace/migration rehearse:convex -- <arguments>
 The complete mapping, reconciliation, cutover, and rollback contract is in
 `docs/postgresql-migration-spec.md`.
 
-## Local file storage
+## Artifact storage
 
 PostgreSQL stores canonical file metadata, checksums, ownership, and entity
-links. Local attachment bytes live below `LOCAL_FILE_STORAGE_PATH`, which must
-remain outside version control.
+links. Every retained upload and issued Quote, PI, or Store Purchase Order now
+writes through the shared Artifact service to UploadThing and requires the
+server-only `UPLOADTHING_TOKEN`. UploadThing objects are `public-read`: app
+authorization protects upload and URL discovery, but possession of a public URL
+is sufficient to read its bytes until final-reference deletion.
 
-The checksum-verified backup and empty-root restore commands are documented in
+`LOCAL_FILE_STORAGE_PATH` is a read-only compatibility root for historical
+metadata that still names local bytes. No runtime interface creates or deletes
+files there. Keep the root outside version control until legacy rows and backups
+have completed their separately approved retirement.
+
+The legacy checksum-verified backup and empty-root restore commands are documented in
 [`docs/local-file-storage-backup-restore.md`](docs/local-file-storage-backup-restore.md).

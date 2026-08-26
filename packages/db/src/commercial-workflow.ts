@@ -419,6 +419,7 @@ async function designRowsWithRelations(
               AND file_link.target_schema = 'sales'
               AND file_link.target_table = 'design_tasks'
               AND file_link.target_id = ANY($2::uuid[])
+              AND file_link.is_current
             ORDER BY file_link.target_id, file.created_at DESC, file.id DESC
           `,
           [roots[0]!.organization_id, designIds]
@@ -433,7 +434,8 @@ async function designRowsWithRelations(
         WHERE file_link.target_schema = 'sales'
           AND file_link.target_table = 'enquiry_items'
           AND file_link.target_id = ANY($1::uuid[])
-          AND file_link.purpose = 'drawing'
+          AND file_link.purpose IN ('drawing', 'sales_clarification')
+          AND file_link.is_current
         ORDER BY file_link.target_id, file.created_at DESC, file.id DESC
       `,
       [itemIds]
@@ -1525,10 +1527,12 @@ async function getImportReviewWithClient(
   const review = await client.query<{
     enquiry_id: string
     id: string
+    organization_id: string
     status: string
   }>(
     `
-      SELECT review.id, review.enquiry_id, review.status
+      SELECT review.id, review.enquiry_id, review.organization_id,
+        review.status
       FROM sales.enquiry_import_reviews review
       JOIN sales.enquiries enquiry ON enquiry.id = review.enquiry_id
       WHERE review.id = $1
@@ -1539,6 +1543,26 @@ async function getImportReviewWithClient(
   if (!review.rows[0]) {
     throw new Error("Import review was not found.")
   }
+  const source = await client.query<{
+    file_name: string
+    public_url: string
+  }>(
+    `
+      SELECT file.file_name, object.public_url
+      FROM core.file_links link
+      JOIN core.files file ON file.id = link.file_id
+      JOIN core.file_objects object ON object.id = file.physical_object_id
+      WHERE link.organization_id = $1
+        AND link.target_schema = 'sales'
+        AND link.target_table = 'enquiry_import_reviews'
+        AND link.target_id = $2
+        AND link.purpose = 'import_source' AND link.is_current
+        AND file.lifecycle_state = 'current'
+        AND object.lifecycle_state <> 'deleted'
+      LIMIT 1
+    `,
+    [review.rows[0].organization_id, reviewId]
+  )
   const rows = await client.query<{
     applied_action: string | null
     created_enquiry_item_id: string | null
@@ -1576,7 +1600,295 @@ async function getImportReviewWithClient(
       status: row.status,
       suggestedAction: row.suggested_action,
     })),
+    sourceFile: source.rows[0]
+      ? {
+          fileName: source.rows[0].file_name,
+          publicUrl: source.rows[0].public_url,
+        }
+      : null,
     status: review.rows[0].status,
+  }
+}
+
+export async function authorizeImportReviewArtifactTarget(
+  client: PoolClient,
+  input: {
+    actorUserId?: string | null
+    enquiryId: string
+    organizationId: string
+    reviewId: string
+  },
+  options: { requireOpenState: boolean }
+) {
+  const target = await client.query<{ id: string }>(
+    `
+      SELECT review.id
+      FROM sales.enquiry_import_reviews review
+      JOIN sales.enquiries enquiry ON enquiry.id = review.enquiry_id
+      WHERE review.id = $1 AND review.enquiry_id = $2
+        AND review.organization_id = $3 AND enquiry.organization_id = $3
+        AND ($4::boolean = false OR review.status = 'Pending')
+        AND ($5::uuid IS NULL OR enquiry.created_by_user_id = $5)
+      FOR UPDATE OF review, enquiry
+    `,
+    [
+      input.reviewId,
+      input.enquiryId,
+      input.organizationId,
+      options.requireOpenState,
+      input.actorUserId ?? null,
+    ]
+  )
+  if (!target.rows[0]) {
+    throw new Error("Import Review source target was not found or is closed.")
+  }
+}
+
+type CreateImportReviewInput = {
+  actorUserId?: string | null
+  enquiryId: string
+  importKey: string
+  organizationId: string
+  reviewId?: string
+  rows: ImportRow[]
+}
+
+async function createImportReviewWithClient(
+  client: PoolClient,
+  input: CreateImportReviewInput
+) {
+  const enquiry = await client.query<{ customer_id: string; id: string }>(
+    `
+      SELECT id, customer_id FROM sales.enquiries
+      WHERE id = $1 AND organization_id = $2
+        AND ($3::uuid IS NULL OR created_by_user_id = $3)
+    `,
+    [input.enquiryId, input.organizationId, input.actorUserId ?? null]
+  )
+  if (!enquiry.rows[0]) {
+    throw new Error("ENQ was not found in this organization.")
+  }
+  const review = await client.query<{ id: string }>(
+    `
+      INSERT INTO sales.enquiry_import_reviews (
+        id, organization_id, enquiry_id, status, summary, source_system,
+        source_table, source_id, source_payload
+      )
+      VALUES (
+        coalesce($6::uuid, gen_random_uuid()), $1, $2, 'Pending', $3,
+        'mrm-dashboard', 'enquiry_import_reviews', $4, $5
+      )
+      ON CONFLICT (source_system, source_table, source_id)
+      DO UPDATE SET source_id = EXCLUDED.source_id
+      RETURNING id
+    `,
+    [
+      input.organizationId,
+      input.enquiryId,
+      `${input.rows.length} rows`,
+      input.importKey,
+      input,
+      input.reviewId ?? null,
+    ]
+  )
+  for (const row of input.rows) {
+    if (row.rowNumber <= 0) {
+      throw new Error("Import row number must be positive.")
+    }
+    if (
+      !asTrimmed(row.rawValues.part) &&
+      !asTrimmed(row.rawValues.description)
+    ) {
+      continue
+    }
+    const classification = await classifyImportRow(client, {
+      customerId: enquiry.rows[0]!.customer_id,
+      enquiryId: input.enquiryId,
+      organizationId: input.organizationId,
+      rawValues: row.rawValues,
+    })
+    await client.query(
+      `
+        INSERT INTO sales.enquiry_import_review_rows (
+          organization_id, review_id, row_number, status, raw_values,
+          matched_item_id, matched_enquiry_item_id,
+          matched_product_id, matched_quote_item_id, suggested_action,
+          match_note, source_system, source_table, source_id,
+          source_payload
+        )
+        VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+          'mrm-dashboard', 'enquiry_import_review_rows', $12, $13
+        )
+        ON CONFLICT (review_id, row_number) DO NOTHING
+      `,
+      [
+        input.organizationId,
+        review.rows[0]!.id,
+        row.rowNumber,
+        classification.status,
+        row.rawValues,
+        classification.matchedProductId,
+        classification.matchedEnquiryItemId,
+        classification.matchedProductId,
+        classification.matchedQuoteItemId,
+        classification.suggestedAction,
+        classification.matchNote,
+        `${input.importKey}:${row.rowNumber}`,
+        { classification, row },
+      ]
+    )
+  }
+  return getImportReviewWithClient(
+    client,
+    review.rows[0]!.id,
+    input.actorUserId
+      ? { originatingSalespersonUserId: input.actorUserId }
+      : undefined
+  )
+}
+
+export async function prepareImportReviewArtifactTarget(
+  client: PoolClient,
+  input: CreateImportReviewInput & { reviewId: string },
+  options: { isRetry: boolean }
+) {
+  if (options.isRetry) {
+    await authorizeImportReviewArtifactTarget(client, input, {
+      requireOpenState: false,
+    })
+    return
+  }
+  const review = await createImportReviewWithClient(client, input)
+  if (review.id !== input.reviewId) {
+    throw new Error("Import Review source target did not match its import key.")
+  }
+}
+
+export type CommercialAttachmentAuthorization =
+  | {
+      enquiryId: string
+      enquiryItemId: string
+      kind: "enquiry_item"
+      organizationId: string
+    }
+  | {
+      clarificationTaskId: string
+      enquiryId: string
+      enquiryItemId: string
+      kind: "sales_clarification"
+      organizationId: string
+    }
+  | {
+      designId: string
+      enquiryId: string
+      enquiryItemId: string
+      kind: "design"
+      organizationId: string
+    }
+
+export async function authorizeCommercialAttachmentTarget(
+  client: PoolClient,
+  input: CommercialAttachmentAuthorization,
+  options: { actorUserId?: string | null; requireOpenState: boolean }
+) {
+  if (input.kind === "sales_clarification") {
+    const target = await client.query<{ id: string }>(
+      `
+        SELECT clarification.id
+        FROM sales.clarification_tasks clarification
+        JOIN sales.enquiry_items enquiry_item
+          ON enquiry_item.id = clarification.enquiry_item_id
+        JOIN sales.enquiries enquiry ON enquiry.id = enquiry_item.enquiry_id
+        WHERE clarification.id = $1
+          AND clarification.enquiry_item_id = $2
+          AND clarification.enquiry_id = $3
+          AND clarification.organization_id = $4
+          AND enquiry_item.organization_id = $4
+          AND ($5::boolean = false OR (
+            clarification.target_stage = 'Sales'
+            AND clarification.status = 'Open'
+          ))
+          AND ($6::uuid IS NULL OR enquiry.created_by_user_id = $6)
+        FOR UPDATE OF clarification, enquiry_item, enquiry
+      `,
+      [
+        input.clarificationTaskId,
+        input.enquiryItemId,
+        input.enquiryId,
+        input.organizationId,
+        options.requireOpenState,
+        options.actorUserId ?? null,
+      ]
+    )
+    if (!target.rows[0]) {
+      throw new Error("Sales clarification attachment target was not found.")
+    }
+    return
+  }
+
+  if (input.kind === "design") {
+    const target = await client.query<{
+      design_status: string
+      next_stage_status: string
+    }>(
+      `
+        SELECT design.design_status, design.next_stage_status
+        FROM sales.design_tasks design
+        JOIN sales.enquiry_items enquiry_item
+          ON enquiry_item.id = design.enquiry_item_id
+        WHERE design.id = $1
+          AND design.enquiry_item_id = $2
+          AND enquiry_item.enquiry_id = $3
+          AND design.organization_id = $4
+          AND enquiry_item.organization_id = $4
+        FOR UPDATE OF design, enquiry_item
+      `,
+      [
+        input.designId,
+        input.enquiryItemId,
+        input.enquiryId,
+        input.organizationId,
+      ]
+    )
+    const row = target.rows[0]
+    if (!row) {
+      throw new Error("Design attachment target was not found.")
+    }
+    if (
+      options.requireOpenState &&
+      !designTaskIsEditable({
+        designStatus: row.design_status,
+        nextStageStatus: row.next_stage_status,
+      })
+    ) {
+      throw new Error(
+        "Design attachments cannot be changed because the next step has already started."
+      )
+    }
+    return
+  }
+
+  const target = await client.query<{ id: string }>(
+    `
+      SELECT enquiry_item.id
+      FROM sales.enquiry_items enquiry_item
+      JOIN sales.enquiries enquiry ON enquiry.id = enquiry_item.enquiry_id
+      WHERE enquiry_item.id = $1
+        AND enquiry_item.enquiry_id = $2
+        AND enquiry_item.organization_id = $3
+        AND ($4::uuid IS NULL OR enquiry.created_by_user_id = $4)
+      FOR UPDATE OF enquiry_item, enquiry
+    `,
+    [
+      input.enquiryItemId,
+      input.enquiryId,
+      input.organizationId,
+      options.actorUserId ?? null,
+    ]
+  )
+  if (!target.rows[0]) {
+    throw new Error("Enquiry attachment target was not found.")
   }
 }
 
@@ -3031,7 +3343,8 @@ export function createCommercialWorkflowRepository(
             WHERE file_link.target_schema = 'sales'
               AND file_link.target_table = 'enquiry_items'
               AND file_link.target_id = enquiry_item.id
-              AND file_link.purpose = 'drawing'
+              AND file_link.purpose IN ('drawing', 'sales_clarification')
+              AND file_link.is_current
             ORDER BY file.created_at DESC, file.id DESC
             LIMIT 1
           ) drawing ON true
@@ -4689,6 +5002,15 @@ export function createCommercialWorkflowRepository(
       return transaction(pool, async (client) => {
         const targetTable = input.targetTable ?? "enquiry_items"
         const purpose = input.purpose ?? "drawing"
+        await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
+          [
+            input.organizationId,
+            "sales",
+            targetTable,
+            input.targetId,
+            purpose,
+          ].join(":"),
+        ])
         const target = await client.query<{ id: string }>(
           targetTable === "design_tasks"
             ? `
@@ -4743,14 +5065,60 @@ export function createCommercialWorkflowRepository(
             input,
           ]
         )
+        const existingLink = await client.query(
+          `
+            SELECT id FROM core.file_links
+            WHERE file_id = $1 AND target_schema = 'sales'
+              AND target_table = $2 AND target_id = $3 AND purpose = $4
+          `,
+          [file.rows[0]!.id, targetTable, input.targetId, purpose]
+        )
+        if (existingLink.rows[0]) {
+          return {
+            fileName: file.rows[0]!.file_name,
+            id: file.rows[0]!.id,
+            storageKey: file.rows[0]!.storage_key,
+          }
+        }
+        const version = await client.query<{ value: number }>(
+          `
+            SELECT coalesce(max(version), 0)::integer + 1 AS value
+            FROM core.file_links
+            WHERE organization_id = $1 AND target_schema = 'sales'
+              AND target_table = $2 AND target_id = $3 AND purpose = $4
+          `,
+          [input.organizationId, targetTable, input.targetId, purpose]
+        )
+        await client.query(
+          `
+            UPDATE core.file_links
+            SET is_current = false, deactivated_at = now(), updated_at = now(),
+              row_version = row_version + 1
+            WHERE organization_id = $1 AND target_schema = 'sales'
+              AND target_table = $2 AND target_id = $3 AND purpose = $4
+              AND is_current
+          `,
+          [input.organizationId, targetTable, input.targetId, purpose]
+        )
+        await client.query(
+          `
+            UPDATE core.files prior
+            SET lifecycle_state = 'superseded', updated_at = now()
+            FROM core.file_links link
+            WHERE link.file_id = prior.id AND link.organization_id = $1
+              AND link.target_schema = 'sales' AND link.target_table = $2
+              AND link.target_id = $3 AND link.purpose = $4
+              AND NOT link.is_current AND prior.lifecycle_state = 'current'
+          `,
+          [input.organizationId, targetTable, input.targetId, purpose]
+        )
         await client.query(
           `
             INSERT INTO core.file_links (
               organization_id, file_id, target_schema, target_table,
-              target_id, purpose
+              target_id, purpose, version, is_current
             )
-            VALUES ($1, $2, 'sales', $3, $4, $5)
-            ON CONFLICT DO NOTHING
+            VALUES ($1, $2, 'sales', $3, $4, $5, $6, true)
           `,
           [
             input.organizationId,
@@ -4758,6 +5126,7 @@ export function createCommercialWorkflowRepository(
             targetTable,
             input.targetId,
             purpose,
+            version.rows[0]!.value,
           ]
         )
         return {
@@ -4770,7 +5139,12 @@ export function createCommercialWorkflowRepository(
 
     async listAttachments(input: {
       organizationId: string
-      purpose?: "cad" | "customer_marked" | "drawing" | "internal_drawing"
+      purpose?:
+        | "cad"
+        | "customer_marked"
+        | "drawing"
+        | "internal_drawing"
+        | "sales_clarification"
       targetId: string
       targetTable: "design_tasks" | "enquiry_items"
     }) {
@@ -4779,22 +5153,34 @@ export function createCommercialWorkflowRepository(
         created_at: Date
         file_name: string
         id: string
+        is_current: boolean
+        lifecycle_state: "current" | "deleted" | "superseded"
         media_type: string | null
+        object_lifecycle_state:
+          | "available"
+          | "deleted"
+          | "deletion_failed"
+          | null
         purpose: string
+        public_url: string | null
         storage_key: string
+        version: number
       }>(
         `
           SELECT file.id, file.file_name, file.media_type,
             file.byte_size::text, file.storage_key, file.created_at,
-            file_link.purpose
+            file.lifecycle_state, file_link.purpose, file_link.version,
+            file_link.is_current, object.public_url,
+            object.lifecycle_state AS object_lifecycle_state
           FROM core.file_links file_link
           JOIN core.files file ON file.id = file_link.file_id
+          LEFT JOIN core.file_objects object ON object.id = file.physical_object_id
           WHERE file_link.organization_id = $1
             AND file_link.target_schema = 'sales'
             AND file_link.target_table = $2
             AND file_link.target_id = $3
             AND ($4::text IS NULL OR file_link.purpose = $4)
-          ORDER BY file.created_at DESC, file.id DESC
+          ORDER BY file_link.version DESC, file.created_at DESC, file.id DESC
         `,
         [
           input.organizationId,
@@ -4808,15 +5194,25 @@ export function createCommercialWorkflowRepository(
         createdAt: row.created_at,
         fileName: row.file_name,
         id: row.id,
+        isCurrent: row.is_current,
+        lifecycleState: row.lifecycle_state,
         mediaType: row.media_type,
+        objectLifecycleState: row.object_lifecycle_state,
         purpose: row.purpose,
+        publicUrl: row.public_url,
         storageKey: row.storage_key,
+        version: row.version,
       }))
     },
 
     async listAttachmentsForTargets(input: {
       organizationId: string
-      purpose?: "cad" | "customer_marked" | "drawing" | "internal_drawing"
+      purpose?:
+        | "cad"
+        | "customer_marked"
+        | "drawing"
+        | "internal_drawing"
+        | "sales_clarification"
       targetIds: string[]
       targetTable: "design_tasks" | "enquiry_items"
     }) {
@@ -4832,23 +5228,36 @@ export function createCommercialWorkflowRepository(
         created_at: Date
         file_name: string
         id: string
+        is_current: boolean
+        lifecycle_state: "current" | "deleted" | "superseded"
         media_type: string | null
+        object_lifecycle_state:
+          | "available"
+          | "deleted"
+          | "deletion_failed"
+          | null
         purpose: string
+        public_url: string | null
         storage_key: string
         target_id: string
+        version: number
       }>(
         `
           SELECT file_link.target_id, file.id, file.file_name, file.media_type,
             file.byte_size::text, file.storage_key, file.created_at,
-            file_link.purpose
+            file.lifecycle_state, file_link.purpose, file_link.version,
+            file_link.is_current, object.public_url,
+            object.lifecycle_state AS object_lifecycle_state
           FROM core.file_links file_link
           JOIN core.files file ON file.id = file_link.file_id
+          LEFT JOIN core.file_objects object ON object.id = file.physical_object_id
           WHERE file_link.organization_id = $1
             AND file_link.target_schema = 'sales'
             AND file_link.target_table = $2
             AND file_link.target_id = ANY($3::uuid[])
             AND ($4::text IS NULL OR file_link.purpose = $4)
-          ORDER BY file_link.target_id, file.created_at DESC, file.id DESC
+          ORDER BY file_link.target_id, file_link.version DESC,
+            file.created_at DESC, file.id DESC
         `,
         [
           input.organizationId,
@@ -4868,9 +5277,14 @@ export function createCommercialWorkflowRepository(
           createdAt: row.created_at,
           fileName: row.file_name,
           id: row.id,
+          isCurrent: row.is_current,
+          lifecycleState: row.lifecycle_state,
           mediaType: row.media_type,
+          objectLifecycleState: row.object_lifecycle_state,
           purpose: row.purpose,
+          publicUrl: row.public_url,
           storageKey: row.storage_key,
+          version: row.version,
         })
         attachmentsByTarget.set(row.target_id, attachments)
       }
@@ -4887,18 +5301,26 @@ export function createCommercialWorkflowRepository(
         file_name: string
         id: string
         media_type: string | null
+        is_current: boolean
+        lifecycle_state: "current" | "deleted" | "superseded"
+        public_url: string | null
+        purpose: string
         storage_key: string
+        version: number
       }>(
         `
           SELECT file.id, file.file_name, file.media_type,
-            file.byte_size::text, file.storage_key, file.created_at
+            file.byte_size::text, file.storage_key, file.created_at,
+            file.lifecycle_state, file_link.is_current, file_link.version,
+            file_link.purpose, object.public_url
           FROM core.file_links file_link
           JOIN core.files file ON file.id = file_link.file_id
+          LEFT JOIN core.file_objects object ON object.id = file.physical_object_id
           WHERE file_link.organization_id = $1
             AND file_link.target_schema = 'sales'
             AND file_link.target_table = 'enquiry_items'
             AND file_link.target_id = $2
-            AND file_link.purpose = 'drawing'
+            AND file_link.purpose IN ('drawing', 'sales_clarification')
           ORDER BY file.created_at DESC, file.id DESC
         `,
         [input.organizationId, input.enquiryItemId]
@@ -4908,8 +5330,13 @@ export function createCommercialWorkflowRepository(
         createdAt: row.created_at,
         fileName: row.file_name,
         id: row.id,
+        isCurrent: row.is_current,
+        lifecycleState: row.lifecycle_state,
         mediaType: row.media_type,
+        purpose: row.purpose,
+        publicUrl: row.public_url,
         storageKey: row.storage_key,
+        version: row.version,
       }))
     },
 
@@ -4923,18 +5350,29 @@ export function createCommercialWorkflowRepository(
         file_name: string
         id: string
         media_type: string | null
+        lifecycle_state: "current" | "deleted" | "superseded"
+        object_lifecycle_state:
+          | "available"
+          | "deleted"
+          | "deletion_failed"
+          | null
+        public_url: string | null
         storage_key: string
       }>(
         `
           SELECT file.id, file.file_name, file.media_type,
-            file.byte_size::text, file.storage_key, file.created_at
+            file.byte_size::text, file.storage_key, file.created_at,
+            file.lifecycle_state, object.public_url,
+            object.lifecycle_state AS object_lifecycle_state
           FROM core.file_links file_link
           JOIN core.files file ON file.id = file_link.file_id
+          LEFT JOIN core.file_objects object ON object.id = file.physical_object_id
           WHERE file_link.organization_id = $1
             AND file_link.target_schema = 'sales'
             AND file_link.target_table = 'enquiry_items'
             AND file_link.target_id = $2
-            AND file_link.purpose = 'drawing'
+            AND file_link.purpose IN ('drawing', 'sales_clarification')
+            AND file_link.is_current
           ORDER BY file.created_at DESC, file.id DESC
           LIMIT 1
         `,
@@ -4944,12 +5382,19 @@ export function createCommercialWorkflowRepository(
       if (!row) {
         throw new Error("Drawing was not found.")
       }
+      if (
+        row.lifecycle_state === "deleted" ||
+        row.object_lifecycle_state === "deleted"
+      ) {
+        throw new Error("Drawing is deleted or unavailable.")
+      }
       return {
         byteSize: Number(row.byte_size),
         createdAt: row.created_at,
         fileName: row.file_name,
         id: row.id,
         mediaType: row.media_type,
+        publicUrl: row.public_url,
         storageKey: row.storage_key,
       }
     },
@@ -4961,93 +5406,9 @@ export function createCommercialWorkflowRepository(
       organizationId: string
       rows: ImportRow[]
     }) {
-      return transaction(pool, async (client) => {
-        const enquiry = await client.query<{
-          customer_id: string
-          id: string
-        }>(
-          `
-            SELECT id, customer_id FROM sales.enquiries
-            WHERE id = $1 AND organization_id = $2
-              AND ($3::uuid IS NULL OR created_by_user_id = $3)
-          `,
-          [input.enquiryId, input.organizationId, input.actorUserId ?? null]
-        )
-        if (!enquiry.rows[0]) {
-          throw new Error("ENQ was not found in this organization.")
-        }
-        const review = await client.query<{ id: string }>(
-          `
-            INSERT INTO sales.enquiry_import_reviews (
-              organization_id, enquiry_id, status, summary, source_system,
-              source_table, source_id, source_payload
-            )
-            VALUES (
-              $1, $2, 'Pending', $3, 'mrm-dashboard',
-              'enquiry_import_reviews', $4, $5
-            )
-            ON CONFLICT (source_system, source_table, source_id)
-            DO UPDATE SET source_id = EXCLUDED.source_id
-            RETURNING id
-          `,
-          [
-            input.organizationId,
-            input.enquiryId,
-            `${input.rows.length} rows`,
-            input.importKey,
-            input,
-          ]
-        )
-        for (const row of input.rows) {
-          if (row.rowNumber <= 0) {
-            throw new Error("Import row number must be positive.")
-          }
-          if (
-            !asTrimmed(row.rawValues.part) &&
-            !asTrimmed(row.rawValues.description)
-          ) {
-            continue
-          }
-          const classification = await classifyImportRow(client, {
-            customerId: enquiry.rows[0]!.customer_id,
-            enquiryId: input.enquiryId,
-            organizationId: input.organizationId,
-            rawValues: row.rawValues,
-          })
-          await client.query(
-            `
-              INSERT INTO sales.enquiry_import_review_rows (
-                organization_id, review_id, row_number, status, raw_values,
-                matched_item_id, matched_enquiry_item_id,
-                matched_product_id, matched_quote_item_id, suggested_action,
-                match_note, source_system, source_table, source_id,
-                source_payload
-              )
-              VALUES (
-                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
-                'mrm-dashboard', 'enquiry_import_review_rows', $12, $13
-              )
-              ON CONFLICT (review_id, row_number) DO NOTHING
-            `,
-            [
-              input.organizationId,
-              review.rows[0]!.id,
-              row.rowNumber,
-              classification.status,
-              row.rawValues,
-              classification.matchedProductId,
-              classification.matchedEnquiryItemId,
-              classification.matchedProductId,
-              classification.matchedQuoteItemId,
-              classification.suggestedAction,
-              classification.matchNote,
-              `${input.importKey}:${row.rowNumber}`,
-              { classification, row },
-            ]
-          )
-        }
-        return getImportReviewWithClient(client, review.rows[0]!.id)
-      })
+      return transaction(pool, (client) =>
+        createImportReviewWithClient(client, input)
+      )
     },
 
     async applyImportReview(input: {
@@ -5076,7 +5437,13 @@ export function createCommercialWorkflowRepository(
           throw new Error("Import review was not found.")
         }
         if (reviewRow.status === "Applied") {
-          return getImportReviewWithClient(client, input.reviewId)
+          return getImportReviewWithClient(
+            client,
+            input.reviewId,
+            input.actorUserId
+              ? { originatingSalespersonUserId: input.actorUserId }
+              : undefined
+          )
         }
         const decisions = new Map<number, string>()
         for (const decision of input.decisions) {
@@ -5310,7 +5677,13 @@ export function createCommercialWorkflowRepository(
           `,
           [input.reviewId]
         )
-        return getImportReviewWithClient(client, input.reviewId)
+        return getImportReviewWithClient(
+          client,
+          input.reviewId,
+          input.actorUserId
+            ? { originatingSalespersonUserId: input.actorUserId }
+            : undefined
+        )
       })
     },
 
@@ -5400,7 +5773,8 @@ export function createCommercialWorkflowRepository(
               WHERE file_link.target_schema = 'sales'
                 AND file_link.target_table = 'enquiry_items'
                 AND file_link.target_id = item.id
-                AND file_link.purpose = 'drawing'
+                AND file_link.purpose IN ('drawing', 'sales_clarification')
+                AND file_link.is_current
               ORDER BY file.created_at DESC, file.id DESC
               LIMIT 1
             ) drawing ON true
@@ -5440,7 +5814,7 @@ export function createCommercialWorkflowRepository(
         )
         const importReviews = await Promise.all(
           importReviewSummaries.rows.map((review) =>
-            getImportReviewWithClient(client, review.id)
+            getImportReviewWithClient(client, review.id, scope)
           )
         )
         return {
@@ -5847,7 +6221,8 @@ export function createCommercialWorkflowRepository(
             WHERE file_link.target_schema = 'sales'
               AND file_link.target_table = 'enquiry_items'
               AND file_link.target_id = enquiry_item.id
-              AND file_link.purpose = 'drawing'
+              AND file_link.purpose IN ('drawing', 'sales_clarification')
+              AND file_link.is_current
             ORDER BY file.created_at DESC, file.id DESC
             LIMIT 1
           ) drawing ON true
@@ -5971,7 +6346,8 @@ export function createCommercialWorkflowRepository(
                 WHERE file_link.target_schema = 'sales'
                   AND file_link.target_table = 'enquiry_items'
                   AND file_link.target_id = ANY($1::uuid[])
-                  AND file_link.purpose = 'drawing'
+                  AND file_link.purpose IN ('drawing', 'sales_clarification')
+                  AND file_link.is_current
                 ORDER BY file_link.target_id,
                   file.created_at DESC, file.id DESC
               `,
@@ -6474,7 +6850,8 @@ export function createCommercialWorkflowRepository(
                 WHERE file_link.target_schema = 'sales'
                   AND file_link.target_table = 'enquiry_items'
                   AND file_link.target_id = item.id
-                  AND file_link.purpose = 'drawing'
+                  AND file_link.purpose IN ('drawing', 'sales_clarification')
+                  AND file_link.is_current
                 ORDER BY file.created_at DESC, file.id DESC
                 LIMIT 1
               ) drawing ON true

@@ -1,4 +1,7 @@
-import { createCommercialOrdersRepository } from "@workspace/db"
+import {
+  createCommercialOrdersRepository,
+  proformaInvoiceXlsxArtifactPurpose,
+} from "@workspace/db"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
@@ -26,6 +29,16 @@ export async function GET(
       return new Response("Generate PI before exporting PI Excel.", {
         status: 404,
       })
+    }
+    if (invoice.status !== "Draft") {
+      const artifact = await repository.getProformaInvoiceArtifact(
+        invoice.id,
+        proformaInvoiceXlsxArtifactPurpose
+      )
+      if (!artifact?.available) {
+        return new Response("Sent PI workbook is unavailable.", { status: 410 })
+      }
+      return Response.redirect(artifact.publicUrl, 307)
     }
     return xlsxResponse(
       buildProformaInvoiceWorkbook(order),

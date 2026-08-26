@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto"
 import { Pool } from "pg"
 import { afterAll, beforeAll, describe, expect, test } from "vitest"
 
+import { createArtifactService } from "./artifacts"
 import {
   createCommercialMasterRepository,
   type CommercialMasterSnapshot,
@@ -14,6 +15,7 @@ const connectionString =
   "postgresql://mrmpl:mrmpl@127.0.0.1:5434/mrmpl_test"
 
 const pool = new Pool({ connectionString })
+const artifactReader = createArtifactService({ connectionString })
 const repository = createCommercialMasterRepository({ connectionString })
 let actorUserId: string
 let organizationId: string
@@ -112,12 +114,16 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
+  await artifactReader.close()
   await repository.close()
   await pool.end()
 })
 
 describe("Pricing commercial master maintenance", () => {
   test("bootstraps every source master with defaults, uniqueness, ordering, lookup, activation, and audit", async () => {
+    const artifactCountBefore = (
+      await artifactReader.listByOrganization({ organizationId })
+    ).length
     const result = await repository.importSnapshot({
       actorUserId,
       organizationId,
@@ -129,6 +135,10 @@ describe("Pricing commercial master maintenance", () => {
       ignored: 0,
     })
     expect(result.created).toBe(16)
+    const artifactCountAfter = (
+      await artifactReader.listByOrganization({ organizationId })
+    ).length
+    expect(artifactCountAfter).toBe(artifactCountBefore)
 
     await repository.upsertNamed({
       actorUserId,

@@ -1,9 +1,10 @@
 "use server"
 
-import { createHash, randomUUID } from "node:crypto"
-import nodePath from "node:path"
+import { createHash } from "node:crypto"
 
 import {
+  authorizeRecruitmentCandidateArtifactTarget,
+  createArtifactService,
   createMasterDataLifecycleRepository,
   createRecruitmentRepository,
   type MasterDataKind,
@@ -19,10 +20,7 @@ import { requireCapability } from "@/lib/auth/require-capability"
 import { hrTaskCapabilities } from "@/lib/auth/task-capabilities"
 import { hrReturnPath } from "@/lib/hr-return-path"
 import { istDateTimeInputToIso } from "@/lib/date-time"
-import {
-  deleteUserAttachment,
-  saveUserAttachment,
-} from "@/lib/user-attachment-storage"
+import { createUploadThingArtifactProvider } from "@/lib/uploadthing-artifact-provider"
 
 const hrPath = "/hr"
 
@@ -353,9 +351,7 @@ export async function saveCandidateAction(formData: FormData) {
   try {
     const organizationId = await repository.organizationIdForCode("MRMPL")
     const resume = formData.get("resume")
-    let resumeData:
-      | { bytes: Buffer; fileName: string; sourceId: string }
-      | undefined
+    let resumeData: { bytes: Buffer; fileName: string } | undefined
     if (resume instanceof File && resume.size > 0) {
       if (resume.size > 10 * 1024 * 1024) {
         throw new Error("Candidate resume must be 10 MB or smaller.")
@@ -370,7 +366,6 @@ export async function saveCandidateAction(formData: FormData) {
       resumeData = {
         bytes,
         fileName: resume.name.replace(/[<>:"/\\|?*]+/g, "_"),
-        sourceId: randomUUID(),
       }
     }
     const candidate = await repository.upsertCandidate({
@@ -388,34 +383,40 @@ export async function saveCandidateAction(formData: FormData) {
       source: value(formData, "source"),
     })
     if (resumeData) {
-      const { bytes, fileName, sourceId } = resumeData
-      const storageKey = nodePath.posix.join(
-        "attachments",
-        "candidate-resumes",
-        candidate.id,
-        sourceId,
-        fileName
-      )
-      await saveUserAttachment({
-        bytes,
-        mediaType: "application/pdf",
-        storageKey,
+      const { bytes, fileName } = resumeData
+      const sha256 = createHash("sha256").update(bytes).digest("hex")
+      const artifacts = createArtifactService({
+        connectionString: readAuthEnvironment().connectionString,
+        provider: createUploadThingArtifactProvider(),
       })
       try {
-        await repository.recordCandidateResume({
+        await artifacts.store({
           actorUserId: session.user.id,
-          byteSize: bytes.byteLength,
-          candidateId: candidate.id,
+          authorizeTarget: (client) =>
+            authorizeRecruitmentCandidateArtifactTarget(client, {
+              candidateId: candidate.id,
+              organizationId,
+            }),
+          bytes,
           fileName,
+          idempotencyKey: [
+            "candidate-resume",
+            candidate.id,
+            fileName,
+            sha256,
+          ].join(":"),
           mediaType: "application/pdf",
           organizationId,
-          sha256: createHash("sha256").update(bytes).digest("hex"),
-          sourceId,
-          storageKey,
+          origin: "uploaded",
+          purpose: "resume",
+          target: {
+            id: candidate.id,
+            schema: "recruitment",
+            table: "candidates",
+          },
         })
-      } catch (error) {
-        await deleteUserAttachment(storageKey).catch(() => undefined)
-        throw error
+      } finally {
+        await artifacts.close()
       }
     }
     outcome = { success: "Candidate saved successfully." }

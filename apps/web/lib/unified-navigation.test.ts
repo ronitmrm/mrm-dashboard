@@ -250,6 +250,7 @@ describe("unified navigation", () => {
     expect(
       administrationNavigation.map(({ href, label }) => ({ href, label }))
     ).toEqual([
+      { href: "/administration/artifacts", label: "Artifacts" },
       { href: "/administration/access", label: "Access Administration" },
       { href: "/account/password", label: "Password & Security" },
     ])

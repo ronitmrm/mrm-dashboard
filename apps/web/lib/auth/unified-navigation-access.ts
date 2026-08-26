@@ -15,9 +15,11 @@ import type { ProductionFloorCode } from "@workspace/db/production-floors"
 
 const operationsCapability = "operations.dashboard.read"
 const administrationCapability = "administration.access.read"
+const artifactCapability = "artifacts.read"
 
 export type UnifiedNavigationAccess = {
   administration: boolean
+  artifacts?: boolean
   commercialHrefs: string[]
   hrHrefs: string[]
   operations: boolean
@@ -34,6 +36,7 @@ async function readUnifiedNavigationAccess(
     operationsCapability,
     "hr.recruitment.read",
     administrationCapability,
+    artifactCapability,
     ...Object.values(productionPageCapabilities),
     ...Object.values(productionFloorPageCapabilities).flatMap(Object.values),
     ...storeNavigationAccess.map(([, capability]) => capability),
@@ -89,6 +92,7 @@ async function readUnifiedNavigationAccess(
 
   return {
     administration: grantedCapabilities.has(administrationCapability),
+    artifacts: grantedCapabilities.has(artifactCapability),
     commercialHrefs: commercialNavigationAccess
       .filter(([, capability]) => grantedCapabilities.has(capability))
       .map(([href]) => href),

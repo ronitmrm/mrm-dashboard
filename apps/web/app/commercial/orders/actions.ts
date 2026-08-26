@@ -1,11 +1,15 @@
 "use server"
 
-import { createHash, randomUUID } from "node:crypto"
-import path from "node:path"
+import { createHash } from "node:crypto"
 
 import {
+  authorizeCommercialOrderArtifactTarget,
+  authorizeProformaInvoiceArtifactTarget,
+  createArtifactService,
   createCommercialOrdersRepository,
   createCustomerRepository,
+  proformaInvoicePdfArtifactPurpose,
+  proformaInvoiceXlsxArtifactPurpose,
 } from "@workspace/db"
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
@@ -16,11 +20,13 @@ import { requireCapability } from "@/lib/auth/require-capability"
 import { commercialTaskCapabilities } from "@/lib/auth/task-capabilities"
 import { optionalText, requiredText } from "@/lib/form-data"
 import { readMasterCsv } from "@/lib/master-data-csv"
-import {
-  deleteUserAttachment,
-  saveUserAttachment,
-} from "@/lib/user-attachment-storage"
 import { validateUserAttachment } from "@/lib/user-attachment-security"
+import { createUploadThingArtifactProvider } from "@/lib/uploadthing-artifact-provider"
+
+import {
+  buildProformaInvoicePdf,
+  buildProformaInvoiceWorkbook,
+} from "./order-artifacts"
 
 import { parsePurchaseOrderCsvRows } from "./purchase-order-csv"
 
@@ -249,29 +255,40 @@ export async function uploadPurchaseOrderFileAction(formData: FormData) {
         purpose: "purchase-order",
       })
       const sha256 = createHash("sha256").update(bytes).digest("hex")
-      const sourceId = randomUUID()
-      const storageKey = path.posix.join(
-        "attachments",
-        "purchase-orders",
-        purchaseOrderId,
-        sourceId,
-        fileName
-      )
-      await saveUserAttachment({ bytes, mediaType, storageKey })
+      const order = await repository.getPurchaseOrder(purchaseOrderId)
+      const artifacts = createArtifactService({
+        connectionString: readAuthEnvironment().connectionString,
+        provider: createUploadThingArtifactProvider(),
+      })
       try {
-        await repository.recordPurchaseOrderFile({
+        await artifacts.store({
           actorUserId,
-          byteSize: bytes.byteLength,
+          authorizeTarget: (client, { isRetry }) =>
+            authorizeCommercialOrderArtifactTarget(
+              client,
+              { organizationId: order.organizationId, purchaseOrderId },
+              { requireOpenState: !isRetry }
+            ),
+          bytes,
           fileName,
+          idempotencyKey: [
+            "purchase-order-source",
+            purchaseOrderId,
+            fileName,
+            sha256,
+          ].join(":"),
           mediaType,
-          purchaseOrderId,
-          sha256,
-          sourceId,
-          storageKey,
+          organizationId: order.organizationId,
+          origin: "uploaded",
+          purpose: "source_po",
+          target: {
+            id: purchaseOrderId,
+            schema: "sales",
+            table: "purchase_orders",
+          },
         })
-      } catch (error) {
-        await deleteUserAttachment(storageKey).catch(() => undefined)
-        throw error
+      } finally {
+        await artifacts.close()
       }
     }
   )
@@ -331,15 +348,85 @@ export async function generateProformaInvoiceAction(formData: FormData) {
 
 export async function markProformaInvoiceSentAction(formData: FormData) {
   const purchaseOrderId = requiredText(formData, "purchase_order_id")
-  await withOrders(
+  const proformaInvoiceId = requiredText(formData, "proforma_invoice_id")
+  const session = await requireCapability(
     commercialTaskCapabilities.markProformaInvoiceSent,
-    `${ordersPath}/${purchaseOrderId}`,
-    (repository, actorUserId) =>
-      repository.markProformaInvoiceSent({
-        actorUserId,
-        proformaInvoiceId: requiredText(formData, "proforma_invoice_id"),
-      })
+    `${ordersPath}/${purchaseOrderId}`
   )
+  const environment = readAuthEnvironment()
+  const repository = createCommercialOrdersRepository({
+    connectionString: environment.connectionString,
+  })
+  const artifacts = createArtifactService({
+    connectionString: environment.connectionString,
+    provider: createUploadThingArtifactProvider(),
+  })
+  try {
+    await repository.markProformaInvoiceSent({
+      actorUserId: session.user.id,
+      proformaInvoiceId,
+      storeIssuedSet: async ({ document, organizationId }) => {
+        const invoice = document.invoices.find(
+          (candidate) => candidate.id === proformaInvoiceId
+        )
+        if (!invoice) throw new Error("Proforma invoice was not found.")
+        const safeNumber = invoice.invoiceNumber
+          .replace(/[^A-Za-z0-9._-]+/g, "-")
+          .replace(/^-+|-+$/g, "")
+        const workbook = XLSX.write(buildProformaInvoiceWorkbook(document), {
+          bookType: "xlsx",
+          type: "buffer",
+        }) as Buffer
+        await artifacts.storeSet([
+          {
+            actorUserId: session.user.id,
+            authorizeTarget: (client, { isRetry }) =>
+              authorizeProformaInvoiceArtifactTarget(
+                client,
+                { organizationId, proformaInvoiceId },
+                { requireDraftState: !isRetry }
+              ),
+            bytes: Buffer.from(await buildProformaInvoicePdf(document)),
+            fileName: `${safeNumber || "pi"}-pi.pdf`,
+            idempotencyKey: `issued-pi-pdf:${proformaInvoiceId}`,
+            mediaType: "application/pdf",
+            organizationId,
+            origin: "generated",
+            purpose: proformaInvoicePdfArtifactPurpose,
+            target: {
+              id: proformaInvoiceId,
+              schema: "sales",
+              table: "proforma_invoices",
+            },
+          },
+          {
+            actorUserId: session.user.id,
+            authorizeTarget: (client, { isRetry }) =>
+              authorizeProformaInvoiceArtifactTarget(
+                client,
+                { organizationId, proformaInvoiceId },
+                { requireDraftState: !isRetry }
+              ),
+            bytes: workbook,
+            fileName: `${safeNumber || "pi"}-pi.xlsx`,
+            idempotencyKey: `issued-pi-xlsx:${proformaInvoiceId}`,
+            mediaType:
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            organizationId,
+            origin: "generated",
+            purpose: proformaInvoiceXlsxArtifactPurpose,
+            target: {
+              id: proformaInvoiceId,
+              schema: "sales",
+              table: "proforma_invoices",
+            },
+          },
+        ])
+      },
+    })
+  } finally {
+    await Promise.all([artifacts.close(), repository.close()])
+  }
   revalidatePath(`${ordersPath}/${purchaseOrderId}`)
 }
 

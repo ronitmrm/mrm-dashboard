@@ -4,13 +4,28 @@ export {
   type AccessAuditChange,
 } from "./access-audit"
 export { createAuthorizationRepository } from "./authorization"
+export {
+  createArtifactService,
+  type DeleteArtifactInput,
+  type ArtifactStorageProvider,
+} from "./artifacts"
+export {
+  artifactStorageAllowanceBytes,
+  createArtifactLedgerRepository,
+  type ArtifactLedgerFilters,
+  type ArtifactLedgerUsage,
+} from "./artifact-ledger"
 export { createCatalogMasterRepository } from "./catalog-masters"
 export {
   type BoundedCommercialResult,
   type CommercialCoverage,
   commercialSelectorLimit,
 } from "./commercial-bounds"
-export { createCommercialCostingRepository } from "./commercial-costing"
+export {
+  authorizeQuoteArtifactTarget,
+  createCommercialCostingRepository,
+  quotePdfArtifactPurpose,
+} from "./commercial-costing"
 export {
   commercialTermTypes,
   createCommercialMasterRepository,
@@ -21,7 +36,13 @@ export {
   type WebsiteFieldType,
   websiteFieldTypes,
 } from "./commercial-masters"
-export { createCommercialOrdersRepository } from "./commercial-orders"
+export {
+  authorizeCommercialOrderArtifactTarget,
+  authorizeProformaInvoiceArtifactTarget,
+  createCommercialOrdersRepository,
+  proformaInvoicePdfArtifactPurpose,
+  proformaInvoiceXlsxArtifactPurpose,
+} from "./commercial-orders"
 export {
   createCommercialReportingRepository,
   deriveThreadStandard,
@@ -35,7 +56,13 @@ export {
   bulkRevisionFields,
   createCommercialRevisionsRepository,
 } from "./commercial-revisions"
-export { createCommercialWorkflowRepository } from "./commercial-workflow"
+export {
+  authorizeCommercialAttachmentTarget,
+  authorizeImportReviewArtifactTarget,
+  createCommercialWorkflowRepository,
+  prepareImportReviewArtifactTarget,
+  type CommercialAttachmentAuthorization,
+} from "./commercial-workflow"
 export { createCustomerRepository } from "./customers"
 export { createDashboardPlanningRepository } from "./dashboard-planning"
 export {
@@ -57,13 +84,18 @@ export {
   type MasterDataKind,
 } from "./master-data-lifecycle"
 export {
+  authorizeStoreItemTypeArtifactTarget,
+  authorizeStorePurchaseOrderArtifactTarget,
+  authorizeStoreReceiptArtifactTarget,
   createStoreRepository,
+  storePurchaseOrderPdfArtifactPurpose,
   type StoreAssetType,
   type StoreHolderType,
   type StoreTrackingMode,
 } from "./store"
 export { storeUnitId } from "./store-item-codes"
 export {
+  authorizeRecruitmentCandidateArtifactTarget,
   createRecruitmentRepository,
   type RecruitmentCandidateRow,
   type RecruitmentCandidateApplicationHistoryRow,

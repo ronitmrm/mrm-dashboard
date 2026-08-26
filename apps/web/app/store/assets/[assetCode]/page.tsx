@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto"
+
 import { createStoreRepository, storeUnitId } from "@workspace/db"
 import Link from "next/link"
 import { notFound } from "next/navigation"
@@ -251,6 +253,7 @@ export default async function StoreAssetWorkspacePage({
             </CardHeader>
             <CardContent>
               <form action={createStoreRepairPurchaseOrderAction}>
+                <input name="issuance_id" type="hidden" value={randomUUID()} />
                 <input
                   name="asset_code"
                   type="hidden"

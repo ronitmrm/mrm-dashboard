@@ -44,6 +44,9 @@ Set these values in `apps/web/.env.local`:
 DATABASE_URL=postgres://mrmpl:mrmpl@localhost:5434/mrmpl
 TEST_DATABASE_URL=postgres://mrmpl:mrmpl@localhost:5434/mrmpl_test
 REDIS_URL=redis://localhost:6380
+# Server-only UploadThing app token. Required for every new retained Artifact.
+UPLOADTHING_TOKEN=replace-with-your-uploadthing-token
+# Optional read-only compatibility root for historical local-file rows.
 LOCAL_FILE_STORAGE_PATH=/absolute/path/to/mrm-dashboard/local-data
 BETTER_AUTH_SECRET=replace-with-the-generated-secret
 BETTER_AUTH_URL=http://localhost:3001
@@ -52,6 +55,13 @@ NEXT_PUBLIC_APP_URL=http://localhost:3001
 
 Leave `MRM_MANAGED_RUNTIME`, the role-specific managed database URLs, and the
 Upstash REST variables empty.
+
+Configure the UploadThing app for `public-read` objects. Keep
+`UPLOADTHING_TOKEN` server-only; never use a `NEXT_PUBLIC_` name. The free app
+assumption is 2 GB storage with unlimited uploads/downloads. The Artifacts
+ledger reports unique live physical bytes against that allowance but does not
+enforce billing. `LOCAL_FILE_STORAGE_PATH` is optional for fresh installs and
+must never receive new application writes.
 
 Start PostgreSQL and Redis. This waits for both containers, applies current
 database migrations, and verifies connectivity:

@@ -659,6 +659,11 @@ export const hrNavigation = [
 
 export const administrationNavigation = [
   {
+    href: "/administration/artifacts",
+    icon: Database,
+    label: "Artifacts",
+  },
+  {
     href: "/administration/access",
     icon: ShieldCheck,
     label: "Access Administration",

@@ -70,9 +70,10 @@ below.
 - Redis is required as a local runtime service for rate limiting, cache and
   invalidation verification, but losing Redis must not lose a canonical write,
   authorization assignment, durable refresh request, or read-model version.
-- Uploaded documents remain on an explicit persistent local filesystem volume
-  for this delivery. Object-storage migration stays behind the production
-  deployment gate.
+- New retained uploads and official issued documents use the shared Artifact
+  service and UploadThing. Historical metadata without a physical Artifact
+  object may still read from `LOCAL_FILE_STORAGE_PATH`; the application has no
+  local write or delete interface.
 - HR recruitment source JSON is imported through `packages/migration` into the
   normalized `recruitment` schema. The unified application then owns its
   authentication, authorization, reads, and writes.

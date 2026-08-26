@@ -1,4 +1,7 @@
-import { createCommercialOrdersRepository } from "@workspace/db"
+import {
+  createCommercialOrdersRepository,
+  proformaInvoicePdfArtifactPurpose,
+} from "@workspace/db"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
@@ -25,6 +28,16 @@ export async function GET(
       return new Response("Generate PI before opening the PI PDF.", {
         status: 404,
       })
+    }
+    if (invoice.status !== "Draft") {
+      const artifact = await repository.getProformaInvoiceArtifact(
+        invoice.id,
+        proformaInvoicePdfArtifactPurpose
+      )
+      if (!artifact?.available) {
+        return new Response("Sent PI PDF is unavailable.", { status: 410 })
+      }
+      return Response.redirect(artifact.publicUrl, 307)
     }
     const bytes = await buildProformaInvoicePdf(order)
     const safeName = invoice.invoiceNumber.replace(/[\r\n"]/g, "_")
