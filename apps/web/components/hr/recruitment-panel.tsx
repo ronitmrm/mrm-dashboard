@@ -443,9 +443,7 @@ function ApprovedPostPanel({
           ) : null
         }
         dataEntryHref="/hr?panel=approvedPostPanel&masterView=dataEntry"
-        exportAction={
-          <DataDownloadButton href="/hr/approved-posts/export" />
-        }
+        exportAction={<DataDownloadButton href="/hr/approved-posts/export" />}
         masterTablesHref="/hr?panel=approvedPostPanel&masterView=masterTables"
       />
       {canWrite && showDataEntry ? (
@@ -513,11 +511,7 @@ function CombinedRolePanel({
         activeView={activeView}
         csvDownloadAction={
           <MasterDataCsvDownloadButton
-            columns={[
-              "combined_role_name",
-              "post_codes",
-              "primary_post_code",
-            ]}
+            columns={["combined_role_name", "post_codes", "primary_post_code"]}
             fileName="combined-approved-posts-template.csv"
           />
         }
@@ -594,17 +588,7 @@ function EmployeePanel({
         activeView={activeView}
         allMastersHref="/?tab=dataEntryTab"
         csvDownloadAction={
-          <MasterDataCsvDownloadButton
-            columns={[
-              "target_type",
-              "target_code",
-              "employee_name",
-              "employee_code",
-              "employment_event",
-              "last_working_date",
-            ]}
-            fileName="employee-assignment-template.csv"
-          />
+          <MasterDataCsvDownloadButton href="/hr/employee-assignments/template.csv" />
         }
         csvImportAction={
           canManageEmployees ? (
@@ -632,20 +616,8 @@ function EmployeePanel({
           <Card>
             <CardHeader>
               <CardTitle>Bulk Employee Assignment</CardTitle>
-              <CardDescription>
-                Start With The Combined Jobs Sheet And Upload It. Then Download
-                A Fresh Template And Complete Individual Posts. Empty Rows Are
-                Ignored, And Each Complete File Is Checked Before Any Post Is
-                Changed. Use Appointed, Joined, Resigned, Or Removed In The
-                Employment Event Column.
-              </CardDescription>
             </CardHeader>
-            <CardContent className="grid gap-4 lg:grid-cols-[auto_1fr] lg:items-end">
-              <Button asChild variant="outline">
-                <a href="/hr/employee-assignments/template">
-                  Download Excel Template
-                </a>
-              </Button>
+            <CardContent>
               <EmployeeAssignmentUpload />
             </CardContent>
           </Card>

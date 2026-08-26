@@ -53,9 +53,14 @@ export function csvValue(row: MasterCsvRow, ...keys: string[]) {
 
 export function masterCsvResponse(
   rows: Array<Record<string, unknown>>,
-  fileName: string
+  fileName: string,
+  columns?: readonly string[]
 ) {
-  const csv = XLSX.utils.sheet_to_csv(XLSX.utils.json_to_sheet(rows))
+  const csv = XLSX.utils.sheet_to_csv(
+    XLSX.utils.json_to_sheet(rows, {
+      header: columns ? [...columns] : undefined,
+    })
+  )
   return new Response(`\uFEFF${csv}`, {
     headers: {
       "Content-Disposition": `attachment; filename="${fileName}"`,

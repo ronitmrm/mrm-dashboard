@@ -83,7 +83,7 @@ describe("HR master workspace", () => {
     )
     expect(employeePanelSource).toContain("csvDownloadAction={")
     expect(employeePanelSource).toContain(
-      'fileName="employee-assignment-template.csv"'
+      'href="/hr/employee-assignments/template.csv"'
     )
     expect(employeePanelSource).toContain("csvImportAction={")
     expect(employeePanelSource).toContain(

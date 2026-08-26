@@ -1,6 +1,6 @@
 import { csvValue, type MasterCsvRow } from "./master-data-csv"
 
-const employeeEvents = ["Appointed", "Joined", "Resigned", "Removed"] as const
+const employeeEvents = ["Appointed", "Joined"] as const
 type EmployeeEvent = (typeof employeeEvents)[number]
 type EmployeeAssignmentTargetType = "combined" | "individual"
 
@@ -53,7 +53,6 @@ export function employeeAssignmentInputFromCsvRow(
   const employeeName = csvValue(row, "employee_name")
   const employeeCode = csvValue(row, "employee_code")
   const employeeEvent = csvValue(row, "employment_event", "employee_event")
-  const lastWorkingDate = csvValue(row, "last_working_date")
   if (targetType !== "combined" && targetType !== "individual") {
     throw new Error(
       `CSV row ${rowNumber}: Target Type must be combined or individual.`
@@ -63,8 +62,13 @@ export function employeeAssignmentInputFromCsvRow(
     throw new Error(`CSV row ${rowNumber}: Target Code is required.`)
   }
   if (!employeeEvents.includes(employeeEvent as EmployeeEvent)) {
+    const manualVacancyInstruction = ["Resigned", "Removed"].includes(
+      employeeEvent
+    )
+      ? " Vacate occupied posts manually first."
+      : ""
     throw new Error(
-      `CSV row ${rowNumber}: Employment Event must be Appointed, Joined, Resigned, or Removed.`
+      `CSV row ${rowNumber}: Employment Event must be Appointed or Joined.${manualVacancyInstruction}`
     )
   }
   if (employeeEvent !== "Removed" && !employeeName && !employeeCode) {
@@ -72,16 +76,11 @@ export function employeeAssignmentInputFromCsvRow(
       `CSV row ${rowNumber}: Employee Name or Employee Code is required.`
     )
   }
-  if (employeeEvent === "Resigned" && !lastWorkingDate) {
-    throw new Error(
-      `CSV row ${rowNumber}: Last Working Date is required for Resigned.`
-    )
-  }
   return {
     employeeCode: employeeCode || null,
     employeeEvent: employeeEvent as EmployeeEvent,
     employeeName: employeeName || null,
-    lastWorkingDate: lastWorkingDate || null,
+    lastWorkingDate: null,
     rowNumber,
     targetCode,
     targetType: targetType as EmployeeAssignmentTargetType,
