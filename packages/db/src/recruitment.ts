@@ -2681,6 +2681,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           targetCode: string
           targetType: "combined" | "individual"
         }>
+        requireVacantTargets?: boolean
       }
     ) {
       if (!input.assignments.length) {
@@ -2728,6 +2729,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           is_primary: boolean
           post_code: string
           post_id: string
+          post_status: string
           target_code: string
           target_type: "combined" | "individual"
         }
@@ -2751,7 +2753,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
                   SELECT lower(combined.vacancy_code) AS target_code,
                   'combined'::text AS target_type,
                   combined.id AS combined_role_id, post.id AS post_id,
-                  link.is_primary, post.post_code,
+                  link.is_primary, post.post_code, post.status AS post_status,
                   post.employee_name, post.employee_code
                 FROM recruitment.combined_roles combined
                 JOIN recruitment.combined_role_posts link
@@ -2785,6 +2787,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
                   lower(post.post_code) AS target_code,
                   'individual'::text AS target_type,
                   post.combined_role_id, false AS is_primary, post.post_code,
+                  post.status AS post_status,
                   post.employee_name, post.employee_code
                 FROM recruitment.posts post
                 WHERE post.organization_id = $1
@@ -2829,6 +2832,29 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
                   : "individual post"
               }.`
             )
+          }
+        }
+
+        if (input.requireVacantTargets) {
+          for (const row of orderedAssignments) {
+            const key = `${row.targetType}:${row.targetCode.toLowerCase()}`
+            const occupied = targetsByCode
+              .get(key)!
+              .some(
+                (target) =>
+                  target.post_status !== "Vacant" ||
+                  optional(target.employee_name) ||
+                  optional(target.employee_code)
+              )
+            if (occupied) {
+              const sheet =
+                row.targetType === "combined"
+                  ? "Combined Jobs"
+                  : "Individual Posts"
+              throw new Error(
+                `${sheet} row ${row.rowNumber}: ${row.targetCode} is occupied. Vacate it manually before bulk assignment.`
+              )
+            }
           }
         }
 

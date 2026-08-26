@@ -57,8 +57,22 @@ describe("HR master CSV inputs", () => {
         },
         4
       )
+    ).toThrow("CSV row 4: Employment Event must be Appointed or Joined.")
+  })
+
+  it("requires occupied posts to be vacated outside the CSV", () => {
+    expect(() =>
+      employeeAssignmentInputFromCsvRow(
+        {
+          employee_name: "Asha Shah",
+          employment_event: "Resigned",
+          target_code: "POST-01",
+          target_type: "individual",
+        },
+        5
+      )
     ).toThrow(
-      "CSV row 4: Employment Event must be Appointed, Joined, Resigned, or Removed."
+      "CSV row 5: Employment Event must be Appointed or Joined. Vacate occupied posts manually first."
     )
   })
 })

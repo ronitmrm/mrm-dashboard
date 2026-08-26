@@ -185,6 +185,63 @@ describe("assignEmployee", () => {
       )
     ).toBe(false)
   })
+
+  test("requires a CSV assignment target to be vacant", async () => {
+    const postId = "00000000-0000-4000-8000-000000000001"
+    const query = vi.fn(async (statement: string) => {
+      if (statement.includes("lower(post.post_code) AS target_code")) {
+        return {
+          rowCount: 1,
+          rows: [
+            {
+              combined_role_id: null,
+              employee_code: "EMP-1",
+              employee_name: "Existing Employee",
+              is_primary: false,
+              post_code: "POST-01",
+              post_id: postId,
+              post_status: "Occupied",
+              target_code: "post-01",
+              target_type: "individual",
+            },
+          ],
+        }
+      }
+      return { rowCount: 0, rows: [] }
+    })
+    const client = {
+      query,
+      release: vi.fn(),
+    } as unknown as PoolClient
+    const pool = {
+      connect: vi.fn(async () => client),
+    } as unknown as Pool
+    const repository = createRecruitmentRepository({ pool })
+
+    await expect(
+      repository.bulkAssignEmployees({
+        assignments: [
+          {
+            employeeCode: "EMP-2",
+            employeeEvent: "Joined",
+            employeeName: "New Employee",
+            rowNumber: 2,
+            targetCode: "POST-01",
+            targetType: "individual",
+          },
+        ],
+        organizationId: "00000000-0000-4000-8000-000000000010",
+        requireVacantTargets: true,
+      })
+    ).rejects.toThrow(
+      "Individual Posts row 2: POST-01 is occupied. Vacate it manually before bulk assignment."
+    )
+    expect(
+      query.mock.calls.some(([statement]) =>
+        statement.includes("UPDATE recruitment.posts")
+      )
+    ).toBe(false)
+  })
 })
 
 describe("updateCombinedRole", () => {
@@ -275,7 +332,9 @@ describe("masters", () => {
     "generates the %s code from its name",
     async (kind, table, name, expectedCode) => {
       const query = vi.fn(
-        async (...args: [statement: string, parameters?: readonly unknown[]]) => {
+        async (
+          ...args: [statement: string, parameters?: readonly unknown[]]
+        ) => {
           const [statement] = args
           if (statement.includes(`INSERT INTO recruitment.${table}`)) {
             return {
@@ -351,7 +410,9 @@ describe("masters", () => {
 
   test("rejects a reused name", async () => {
     const query = vi.fn(async (statement: string) => {
-      if (statement.includes("SELECT code, name FROM recruitment.departments")) {
+      if (
+        statement.includes("SELECT code, name FROM recruitment.departments")
+      ) {
         return { rows: [{ code: "DEP001", name: "Human Resources" }] }
       }
       return { rows: [] }

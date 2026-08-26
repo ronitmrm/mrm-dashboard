@@ -271,6 +271,7 @@ export async function importEmployeeAssignmentsCsvAction(formData: FormData) {
       actorUserId: context.actorUserId,
       assignments,
       organizationId: context.organizationId,
+      requireVacantTargets: true,
     })
     outcome = {
       success: `Uploaded ${result.assignmentCount} assignments across ${result.updatedPostCount} approved posts.`,
