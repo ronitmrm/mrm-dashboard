@@ -131,7 +131,10 @@ Customer Price rows come from active or editable root Quotes and their immutable
 recursive Product and calculation snapshots. Package / Assembly customer pricing displays each ordered BOM component first and
 one parent total row last. The parent row retains its applicable assembly cost,
 rejection, and profit; material-only casting, scrap, alloy, extrusion, forging,
-and rolled-up Product Base inputs are not applicable there. Its BOM Component
+raw-material formula outputs, the legacy Assembled Part / Total Rods Cost fields,
+and rolled-up Product Base inputs are not applicable there and display `-`.
+Empty package metadata and unused zero-only optional process cells also display
+`-`, while non-zero applicable process inputs remain visible. Its BOM Component
 Cost is the sum of component customer prices times BOM quantities; Total Rate in
 INR combines that component cost with the adjusted parent process before one
 currency conversion. Package / Assembly rows otherwise retain parent, BOM depth,

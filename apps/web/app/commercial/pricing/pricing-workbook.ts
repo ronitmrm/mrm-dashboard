@@ -74,6 +74,60 @@ function isCustomerPackageSummary(row: PricingRegisterRow) {
   )
 }
 
+const packageNotApplicableColumns = [
+  "Product Base Cost (INR/pc)",
+  "Casting",
+  "Scrap Rate (INR/kg)",
+  "Alloy Premium (INR/kg)",
+  "Ext. Cost (INR/kg)",
+  "Forg Cost+ Nitric Blasting (INR/kg)",
+  "BL %",
+  "OR Purchase Times",
+  "Assembled Part",
+  "Net Rate / KG Without Alloy Premium",
+  "Net Rate / KG With Alloy Premium",
+  "Scrap Rate / gm",
+  "RM Cost",
+  "Scrap Return",
+  "Scrap Return Price ( Inc. Burning Loss )",
+  "Scrap Return Price",
+  "Total Rods Cost",
+] as const
+
+const packageDashWhenEmptyColumns = [
+  "BOM Level",
+  "Description",
+  "Size",
+  "MRMPL Product Description",
+  "Pricing",
+  "Production Type",
+  "Machine Type",
+  "Grade",
+  "Rod Type",
+  "Rod Size",
+  "Die Code",
+  "1 Piece Weight ( gm )",
+  "No of Piece / KG",
+  "Remarks",
+] as const
+
+const packageDashWhenZeroColumns = [
+  "Direct (INR/kg)",
+  "Direct (INR/pc)",
+  "M/c Cost (INR/kg)",
+  "M/c Cost (INR/pc)",
+  "Washing (INR/kg)",
+  "Checking (INR/kg)",
+  "Marking (INR/kg)",
+  "Plating (INR/kg)",
+  "Anneling (INR/kg)",
+  "Debbring (INR/kg)",
+  "Buffing (INR/kg)",
+  "Sealant (INR/kg)",
+  "Overhead (INR/kg)",
+  "Assembly Cost (INR/kg)",
+] as const
+
 export function orderPricingRows(rows: PricingRegisterRow[]) {
   const ordered: PricingRegisterRow[] = []
   let group: PricingRegisterRow[] = []
@@ -117,7 +171,7 @@ export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
     key: string,
     decimalPlaces = 2
   ) => (isCustomerPrice ? value(record, key, decimalPlaces) : "-")
-  return {
+  const view: PricingViewRow = {
     "Row Type": isPackageSummary ? "Package Total" : row.itemType,
     "Pricing Scope": isCustomerPrice ? "Customer Price" : "Product Base",
     "Customer Line Status": isCustomerPrice ? quoteStatus : "-",
@@ -242,6 +296,19 @@ export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
       : "-",
     Remarks: value(context, "remarks"),
   }
+
+  if (isPackageSummary) {
+    for (const column of packageNotApplicableColumns) view[column] = "-"
+    for (const column of packageDashWhenEmptyColumns) {
+      if (!normalizedText(view[column])) view[column] = "-"
+    }
+    for (const column of packageDashWhenZeroColumns) {
+      const result = normalizedText(view[column])
+      if (!result || Number(result) === 0) view[column] = "-"
+    }
+  }
+
+  return view
 }
 
 export const pricingHeaders = Object.keys(
