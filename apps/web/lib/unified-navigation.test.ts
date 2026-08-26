@@ -295,7 +295,7 @@ describe("unified navigation", () => {
       hrMasterNavigation.map(({ href, label }) => ({ href, label }))
     ).toContainEqual({
       href: "/hr?panel=employeeMasterPanel",
-      label: "Employee Assignment",
+      label: "Employee Master",
     })
   })
 

@@ -248,13 +248,20 @@ _Avoid_: Independently occupied members, one employee per member.
 
 **Employee ID**:
 The numeric-only Employee Master identifier confirmed when a person joins. New
-or corrected Employee IDs never accept letters; HR may correct the ID for the
-same named occupied employee without treating that correction as a replacement.
-_Avoid_: Alphanumeric employee code, changing the employee through an ID edit.
+or corrected Employee IDs never accept letters. In the explicit Employee Master
+editor, HR may correct a mistyped employee name, ID, or both while keeping an
+appointed or occupied person on the same Approved Post; ordinary assignment
+still cannot replace that person before the post is vacated.
+_Avoid_: Alphanumeric employee code, treating a correction as a normal employee
+replacement.
 
 **Employee Master**:
-The HR & Recruitment workspace for one-at-a-time employee updates and the existing bulk employee-assignment import.
-_Avoid_: Bulk-only employee maintenance, editing Approved Post structure here.
+The table-only HR & Recruitment workspace for one-at-a-time employee corrections,
+employment status updates, and Approved Post Job Template edits. Master Data
+retains employee bulk assignment under Data Entry and its table under Master
+Tables, without a separate single-employee form.
+_Avoid_: Single-employee editing inside Master Data Entry, bulk-only employee
+maintenance.
 
 **Department Master Rename**:
 An HR master change that keeps the Department's stable identity. Choosing to apply

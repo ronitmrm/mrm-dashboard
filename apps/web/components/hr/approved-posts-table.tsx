@@ -370,7 +370,9 @@ export function ApprovedPostsTable({
         <Card>
           <CardHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="space-y-1.5">
-              <CardTitle>Approved Posts</CardTitle>
+              <CardTitle>
+                {employeeManagement ? "Employee Master" : "Approved Posts"}
+              </CardTitle>
               <CardDescription>
                 {hasFilters
                   ? `Showing ${filteredPosts.length} of ${posts.length} sanctioned staffing positions`
@@ -702,7 +704,7 @@ export function ApprovedPostsTable({
                 </>
               ) : null}
               <SheetHeader>
-                <SheetTitle>Update Employee Status</SheetTitle>
+                <SheetTitle>Edit Employee</SheetTitle>
                 <SheetDescription>
                   {selectedEmployeePost.postCode} ·{" "}
                   {selectedEmployeePost.designation}
@@ -710,6 +712,7 @@ export function ApprovedPostsTable({
               </SheetHeader>
               <div className="flex flex-1 flex-col gap-5 px-6 pb-2">
                 <SingleEmployeeAssignmentFields
+                  allowIdentityCorrection
                   combinedRoles={combinedRoles}
                   initialPostId={selectedEmployeePost.id}
                   key={selectedEmployeePost.id}
@@ -718,7 +721,7 @@ export function ApprovedPostsTable({
                 />
               </div>
               <SheetFooter>
-                <Button type="submit">Update Employee Status</Button>
+                <Button type="submit">Save Employee</Button>
               </SheetFooter>
             </form>
           </SheetContent>

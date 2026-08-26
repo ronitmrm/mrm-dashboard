@@ -591,7 +591,7 @@ export const hrMasterNavigation = [
   {
     href: "/hr?panel=employeeMasterPanel",
     icon: UsersRound,
-    label: "Employee Assignment",
+    label: "Employee Master",
     panelId: "employeeMasterPanel",
     requiredCapability: "hr.employees.read",
   },

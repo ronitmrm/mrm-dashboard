@@ -268,6 +268,7 @@ export async function assignEmployeeAction(formData: FormData) {
         employeeCode: value(formData, "employee_code"),
         employeeEvent: value(formData, "employee_event"),
         employeeName: value(formData, "employee_name"),
+        identityCorrection: value(formData, "identity_correction") === "true",
         lastWorkingDate: value(formData, "last_working_date"),
         postId: value(formData, "post_id"),
       })
