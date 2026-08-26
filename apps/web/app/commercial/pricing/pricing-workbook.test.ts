@@ -13,7 +13,8 @@ const row: PricingRegisterRow = {
   calculation: {
     netRateWithAlloy: 130,
     netRateWithoutAlloy: 110,
-    rateUsd: 1.25,
+    rateUsd: 1.2500000000000002,
+    scrapRatePerGm: 0.5685000000000001,
     totalRateInr: 100,
   },
   changeDate: new Date("2026-07-22T00:00:00.000Z"),
@@ -36,6 +37,9 @@ const row: PricingRegisterRow = {
   product: {
     burningLossPercent: 0.03,
     description: "Valve",
+    directPurchasePricePerKg: 120,
+    directPurchasePricePerPiece: 1.2,
+    pricingMethod: "Derived",
     rejectionPercent: 0.05,
     uid: "Q001",
   },
@@ -56,9 +60,13 @@ const row: PricingRegisterRow = {
 describe("Pricing spreadsheet workbook", () => {
   test("preserves the source sheet, filename, headers and percent display", () => {
     const view = toPricingViewRow(row)
-    expect(view["Rejection %"]).toBe(5)
-    expect(view["BL %"]).toBe(3)
-    expect(view.Profit).toBe(20)
+    expect(view["Rejection %"]).toBe("5.00")
+    expect(view["BL %"]).toBe("3.00")
+    expect(view.Profit).toBe("20.00")
+    expect(view["Scrap Rate / gm"]).toBe("0.57")
+    expect(view["Rate / PCS In Currency"]).toBe("1.2500")
+    expect(view["Direct (INR/kg)"]).toBe("-")
+    expect(view["Direct (INR/pc)"]).toBe("-")
     expect(view.Size).toBe("1/2 inch")
     expect(view["MRMPL Product Description"]).toBe("Purchased valve")
     expect(pricingWorkbookFilename).toBe("pricing-view.xlsx")
@@ -69,7 +77,7 @@ describe("Pricing spreadsheet workbook", () => {
     const values = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1 })
     expect(values[0]).toEqual(pricingHeaders)
     expect(values[1]?.[pricingHeaders.indexOf("Rate / PCS In Currency")]).toBe(
-      1.25
+      "1.2500"
     )
   })
 
@@ -92,7 +100,7 @@ describe("Pricing spreadsheet workbook", () => {
       "Net Rate / KG Without Alloy Premium": "-",
       "Price Rev": "-",
       "Pricing Scope": "Product Base",
-      "Product Base Cost (INR/pc)": 16.2957,
+      "Product Base Cost (INR/pc)": "16.30",
       Profit: "-",
       "Quote Status": "-",
       "Rate / PCS In Currency": "-",
@@ -125,10 +133,10 @@ describe("Pricing spreadsheet workbook", () => {
     }
 
     expect(toPricingViewRow(packageRow)).toMatchObject({
-      "Assembly Cost (INR/kg)": 5,
-      "No of Piece / KG": 66.2251655629139,
-      "Product Base Cost (INR/pc)": 2.36,
-      "Rejection %": 2,
+      "Assembly Cost (INR/kg)": "5.00",
+      "No of Piece / KG": "66.23",
+      "Product Base Cost (INR/pc)": "2.36",
+      "Rejection %": "2.00",
       "Total Rate / PCS In INR": "-",
     })
   })

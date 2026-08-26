@@ -9,16 +9,31 @@ export type PricingRegisterRow = Awaited<
 
 export type PricingViewRow = Record<string, string | number>
 
-function value(record: Record<string, unknown>, key: string) {
+function value(
+  record: Record<string, unknown>,
+  key: string,
+  decimalPlaces = 2
+) {
   const result = record[key]
-  return result === null || result === undefined
-    ? ""
-    : (result as string | number)
+  if (result === null || result === undefined) return ""
+  return typeof result === "number"
+    ? result.toFixed(decimalPlaces)
+    : (result as string)
 }
 
 function percentValue(record: Record<string, unknown>, key: string) {
-  const result = value(record, key)
-  return result === "" ? "" : Number(result) * 100
+  const result = record[key]
+  if (result === null || result === undefined) return ""
+  const number = Number(result)
+  return Number.isFinite(number) ? (number * 100).toFixed(2) : ""
+}
+
+function directValue(record: Record<string, unknown>, key: string) {
+  const pricingMethod = record.pricingMethod
+  if (pricingMethod === null || pricingMethod === undefined) return ""
+  return String(pricingMethod).trim().toLowerCase() === "direct purchase"
+    ? value(record, key)
+    : "-"
 }
 
 export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
@@ -27,8 +42,11 @@ export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
   const inputs = row.quoteInputs
   const calculation = row.calculation
   const isCustomerPrice = Boolean(row.quoteNumber)
-  const customerValue = (record: Record<string, unknown>, key: string) =>
-    isCustomerPrice ? value(record, key) : "-"
+  const customerValue = (
+    record: Record<string, unknown>,
+    key: string,
+    decimalPlaces = 2
+  ) => (isCustomerPrice ? value(record, key, decimalPlaces) : "-")
   return {
     "Row Type": row.componentDepth > 0 ? row.itemType : row.itemType,
     "Pricing Scope": isCustomerPrice ? "Customer Price" : "Product Base",
@@ -43,7 +61,7 @@ export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
     "Price Rev": isCustomerPrice ? row.revision : "-",
     Under: row.parentUid ?? "",
     "BOM Level": row.componentDepth || "",
-    "BOM Qty": row.componentQuantity,
+    "BOM Qty": row.componentQuantity.toFixed(2),
     UID: row.uid,
     "Q/P": row.componentDepth > 0 ? "" : row.lifecycleStatus,
     Description: value(product, "description"),
@@ -70,8 +88,8 @@ export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
     "Alloy Premium (INR/kg)": value(product, "alloyPremium"),
     "Ext. Cost (INR/kg)": value(product, "extrusionCost"),
     "Forg Cost+ Nitric Blasting (INR/kg)": value(product, "forgingCost"),
-    "Direct (INR/kg)": value(product, "directPurchasePricePerKg"),
-    "Direct (INR/pc)": value(product, "directPurchasePricePerPiece"),
+    "Direct (INR/kg)": directValue(product, "directPurchasePricePerKg"),
+    "Direct (INR/pc)": directValue(product, "directPurchasePricePerPiece"),
     "M/c Cost (INR/kg)": value(product, "machiningCost"),
     "M/c Cost (INR/pc)": value(product, "machiningPricePerPiece"),
     "Washing (INR/kg)": value(product, "washing"),
@@ -117,7 +135,7 @@ export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
     "Rate / PCS In INR": customerValue(calculation, "rateInr"),
     "Total Rate / PCS In INR": customerValue(calculation, "totalRateInr"),
     Currency: row.currency,
-    "Rate / PCS In Currency": customerValue(calculation, "rateUsd"),
+    "Rate / PCS In Currency": customerValue(calculation, "rateUsd", 4),
     "Quote Status": isCustomerPrice
       ? row.componentDepth > 0
         ? ""
