@@ -263,9 +263,10 @@ export async function importEmployeeAssignmentsCsvAction(formData: FormData) {
       formData.get("master_csv_file"),
       "Employee Assignment CSV"
     )
-    const assignments = rows.map((row, index) =>
-      employeeAssignmentInputFromCsvRow(row, index + 2)
-    )
+    const assignments = rows.flatMap((row, index) => {
+      const assignment = employeeAssignmentInputFromCsvRow(row, index + 2)
+      return assignment ? [assignment] : []
+    })
     context = await repositoryContext(hrTaskCapabilities.bulkAssignEmployees)
     const result = await context.repository.bulkAssignEmployees({
       actorUserId: context.actorUserId,

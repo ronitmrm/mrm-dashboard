@@ -46,6 +46,42 @@ describe("HR master CSV inputs", () => {
     })
   })
 
+  it("defaults a completed employee assignment row to Appointed", () => {
+    expect(
+      employeeAssignmentInputFromCsvRow(
+        {
+          employee_code: "36",
+          employee_name: "Bhavesh D Khichda",
+          target_code: "AF-HO-1",
+          target_type: "individual",
+        },
+        3
+      )
+    ).toEqual({
+      employeeCode: "36",
+      employeeEvent: "Appointed",
+      employeeName: "Bhavesh D Khichda",
+      lastWorkingDate: null,
+      rowNumber: 3,
+      targetCode: "AF-HO-1",
+      targetType: "individual",
+    })
+  })
+
+  it("ignores an untouched vacancy row", () => {
+    expect(
+      employeeAssignmentInputFromCsvRow(
+        {
+          employee_code: "",
+          employee_name: "",
+          target_code: "AF-AS-1",
+          target_type: "individual",
+        },
+        2
+      )
+    ).toBeNull()
+  })
+
   it("rejects an invalid employee assignment event", () => {
     expect(() =>
       employeeAssignmentInputFromCsvRow(
