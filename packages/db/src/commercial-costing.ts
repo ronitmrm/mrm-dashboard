@@ -99,7 +99,14 @@ type PricingRegisterDatabaseRow = {
   product_snapshot: Record<string, unknown>
   quote_inputs: Record<string, unknown>
   quote_number: string
+  quote_original_row: unknown[]
+  quote_source_system: string | null
+  quote_source_table: string | null
   revision: number
+  imported_packaging: string | null
+  imported_shipping_terms: string | null
+  root_source_system: string | null
+  root_source_table: string | null
   root_company_name: string
   root_customer_part_code: string
   root_quote_item_id: string
@@ -124,40 +131,135 @@ const exportBatchSize = (value: number) =>
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
-const pricingRegisterRow = (row: PricingRegisterDatabaseRow) => ({
-  calculation: row.calculation_json,
-  changeDate: row.change_date,
-  companyName: row.company_name,
-  componentDepth: row.component_depth,
-  componentQuantity: asNumber(row.component_quantity, 1),
-  currency: row.currency,
-  customerId: row.customer_id,
-  customerPartCode: row.customer_part_code,
-  customerUid: row.customer_uid,
-  enquiryDescription: row.enquiry_description,
-  enquiryNumber: row.enquiry_number,
-  id: row.id,
-  isActive: row.is_active,
-  itemType: row.item_type,
-  lifecycleStatus: row.lifecycle_status,
-  lineNumber: row.line_number,
-  packaging: row.packaging,
-  parentUid: row.parent_uid,
-  productContext: row.product_context,
-  product: row.product_snapshot,
-  quoteInputs: row.quote_inputs,
-  quoteNumber: row.quote_number,
-  rowKey: row.row_key,
-  revision: row.revision,
-  sentAt: row.sent_at,
-  shippingTerms: row.shipping_terms,
-  status: row.status,
-  unitPrice: asNumber(row.unit_price),
-  uid: row.uid,
-  websiteProductDescription: row.website_product_description,
-  websiteSize: row.website_size,
-})
+const workingWorkbookFormulaColumns = {
+  Assembly: {
+    netRateWithoutAlloy: 39,
+    netRateWithAlloy: 40,
+    scrapRatePerGm: 41,
+    rawMaterialCost: 42,
+    scrapReturn: 43,
+    scrapReturnPriceIncludingBurningLoss: 44,
+    scrapReturnPrice: 45,
+    totalRodsCost: 46,
+    rejectionCost: 47,
+    totalA: 48,
+    profitB: 49,
+    totalAPlusB: 50,
+    rateInr: 51,
+    totalRateInr: 52,
+    rateUsd: 53,
+  },
+  Costing: {
+    netRateWithoutAlloy: 42,
+    netRateWithAlloy: 43,
+    scrapRatePerGm: 44,
+    rawMaterialCost: 45,
+    scrapReturn: 46,
+    scrapReturnPriceIncludingBurningLoss: 47,
+    scrapReturnPrice: 48,
+    totalRodsCost: 49,
+    rejectionCost: 50,
+    totalA: 51,
+    profitB: 52,
+    totalAPlusB: 53,
+    rateInr: 54,
+    totalRateInr: 55,
+    rateUsd: 56,
+  },
+} as const
 
+function workingWorkbookOriginalRow(
+  sourceSystem: string | null,
+  sourcePayload: Record<string, unknown>
+) {
+  const originalRow = sourcePayload.originalRow
+  return sourceSystem === "working_xlsx" && Array.isArray(originalRow)
+    ? originalRow
+    : null
+}
+
+export function mergeWorkingWorkbookCalculation(input: {
+  calculation: Record<string, unknown>
+  sourcePayload: Record<string, unknown>
+  sourceSystem: string | null
+  sourceTable: string | null
+}) {
+  const originalRow = workingWorkbookOriginalRow(
+    input.sourceSystem,
+    input.sourcePayload
+  )
+  const columns =
+    input.sourceTable === "Assembly"
+      ? workingWorkbookFormulaColumns.Assembly
+      : input.sourceTable === "Costing"
+        ? workingWorkbookFormulaColumns.Costing
+        : null
+  if (!originalRow || !columns) return input.calculation
+
+  const importedCalculation: Record<string, number> = {}
+  for (const [key, index] of Object.entries(columns)) {
+    const cell = originalRow[index]
+    if (typeof cell === "number" && Number.isFinite(cell)) {
+      importedCalculation[key] = cell
+    }
+  }
+  return { ...importedCalculation, ...input.calculation }
+}
+
+const pricingRegisterRow = (row: PricingRegisterDatabaseRow) => {
+  const calculation = mergeWorkingWorkbookCalculation({
+    calculation: row.calculation_json,
+    sourcePayload: { originalRow: row.quote_original_row },
+    sourceSystem: row.quote_source_system,
+    sourceTable: row.quote_source_table,
+  })
+  const isWorkingWorkbookMigration = row.root_source_system === "working_xlsx"
+  return {
+    calculation,
+    changeDate: row.change_date,
+    companyName: row.company_name,
+    componentDepth: row.component_depth,
+    componentQuantity: asNumber(row.component_quantity, 1),
+    currency: row.currency,
+    customerId: row.customer_id,
+    customerPartCode: row.customer_part_code,
+    customerUid: row.customer_uid,
+    enquiryDescription: row.enquiry_description,
+    enquiryNumber:
+      row.enquiry_number ??
+      (isWorkingWorkbookMigration
+        ? `MIG-${row.quote_number}-R${row.revision}`
+        : null),
+    id: row.id,
+    isActive: row.is_active,
+    itemType: row.item_type,
+    lifecycleStatus: row.lifecycle_status,
+    lineNumber: row.line_number,
+    packaging:
+      row.packaging ??
+      (isWorkingWorkbookMigration && row.root_source_table === "Costing"
+        ? row.imported_packaging
+        : null),
+    parentUid: row.parent_uid,
+    productContext: row.product_context,
+    product: row.product_snapshot,
+    quoteInputs: row.quote_inputs,
+    quoteNumber: row.quote_number,
+    rowKey: row.row_key,
+    revision: row.revision,
+    sentAt: row.sent_at,
+    shippingTerms:
+      row.shipping_terms ??
+      (isWorkingWorkbookMigration && row.root_source_table === "Costing"
+        ? row.imported_shipping_terms
+        : null),
+    status: row.status,
+    unitPrice: asNumber(row.unit_price),
+    uid: row.uid,
+    websiteProductDescription: row.website_product_description,
+    websiteSize: row.website_size,
+  }
+}
 const isBomParent = (itemType: string) =>
   ["package", "assembly"].includes(itemType.toLowerCase())
 
@@ -939,17 +1041,29 @@ export function createCommercialCostingRepository(
           root.id AS root_quote_item_id,
           root.root_company_name, root.root_customer_part_code,
           root.quote_number, root.revision, root.status, root.is_active,
-          root.sent_at, CASE WHEN tree.component_depth = 0
+          root.sent_at, member.source_system AS quote_source_system,
+          member.source_table AS quote_source_table,
+          COALESCE(member.source_payload -> 'originalRow', '[]'::jsonb)
+            AS quote_original_row,
+          root.source_system AS root_source_system,
+          root.source_table AS root_source_table,
+          root.source_payload -> 'originalRow' ->> 9 AS imported_packaging,
+          root.source_payload -> 'originalRow' ->> 8
+            AS imported_shipping_terms,
+          CASE WHEN tree.component_depth = 0
             THEN root.customer_part_code ELSE NULL END
             AS customer_part_code,
           COALESCE(member.unit_price, 0)::text AS unit_price,
           customer.id AS customer_id, customer.customer_uid,
           customer.company_name, item.uid,
-          CASE WHEN item.lifecycle_status = 'P'
-            THEN website.product_description ELSE NULL END
-            AS website_product_description,
-          CASE WHEN item.lifecycle_status = 'P'
-            THEN website.size ELSE NULL END AS website_size,
+          COALESCE(
+            NULLIF(btrim(website.product_description), ''), item.description
+          ) AS website_product_description,
+          COALESCE(
+            NULLIF(btrim(website.size), ''),
+            NULLIF(btrim(item.source_payload ->> 'productSize'), ''),
+            NULLIF(btrim(item.rod_size), '')
+          ) AS website_size,
           COALESCE(snapshot.item_type, item.item_type) AS item_type,
           item.lifecycle_status, enquiry.enquiry_number,
           enquiry.currency, enquiry_item.line_number,
@@ -1040,12 +1154,26 @@ export function createCommercialCostingRepository(
           item.id AS root_quote_item_id, ''::text AS root_company_name,
           item.uid AS root_customer_part_code, ''::text AS quote_number,
           0 AS revision, ''::text AS status, false AS is_active,
-          NULL::timestamptz AS sent_at, NULL::text AS customer_part_code,
+          NULL::timestamptz AS sent_at,
+          NULL::text AS quote_source_system,
+          NULL::text AS quote_source_table,
+          '[]'::jsonb AS quote_original_row,
+          NULL::text AS root_source_system,
+          NULL::text AS root_source_table,
+          NULL::text AS imported_packaging,
+          NULL::text AS imported_shipping_terms,
+          NULL::text AS customer_part_code,
           item.product_cost_inr::text AS unit_price,
           ''::text AS customer_id, ''::text AS customer_uid,
           ''::text AS company_name, item.uid,
-          website.product_description AS website_product_description,
-          website.size AS website_size, item.item_type,
+          COALESCE(
+            NULLIF(btrim(website.product_description), ''), item.description
+          ) AS website_product_description,
+          COALESCE(
+            NULLIF(btrim(website.size), ''),
+            NULLIF(btrim(item.source_payload ->> 'productSize'), ''),
+            NULLIF(btrim(item.rod_size), '')
+          ) AS website_size, item.item_type,
           item.lifecycle_status, NULL::text AS enquiry_number,
           'INR'::text AS currency, NULL::integer AS line_number,
           ''::text AS enquiry_description, NULL::text AS parent_uid,
@@ -2978,17 +3106,29 @@ export function createCommercialCostingRepository(
             tree.root_quote_item_id::text || ':' ||
               array_to_string(tree.path, '/') AS row_key,
             root.quote_number, root.revision, root.status, root.is_active,
-            root.sent_at, CASE WHEN tree.component_depth = 0
+            root.sent_at, member.source_system AS quote_source_system,
+            member.source_table AS quote_source_table,
+            COALESCE(member.source_payload -> 'originalRow', '[]'::jsonb)
+              AS quote_original_row,
+            root.source_system AS root_source_system,
+            root.source_table AS root_source_table,
+            root.source_payload -> 'originalRow' ->> 9 AS imported_packaging,
+            root.source_payload -> 'originalRow' ->> 8
+              AS imported_shipping_terms,
+            CASE WHEN tree.component_depth = 0
               THEN root.customer_part_code ELSE NULL END
               AS customer_part_code,
             COALESCE(member.unit_price, 0)::text AS unit_price,
             customer.id AS customer_id, customer.customer_uid,
             customer.company_name, item.uid,
-            CASE WHEN item.lifecycle_status = 'P'
-              THEN website.product_description ELSE NULL END
-              AS website_product_description,
-            CASE WHEN item.lifecycle_status = 'P'
-              THEN website.size ELSE NULL END AS website_size,
+            COALESCE(
+              NULLIF(btrim(website.product_description), ''), item.description
+            ) AS website_product_description,
+            COALESCE(
+              NULLIF(btrim(website.size), ''),
+              NULLIF(btrim(item.source_payload ->> 'productSize'), ''),
+              NULLIF(btrim(item.rod_size), '')
+            ) AS website_size,
             COALESCE(snapshot.item_type, item.item_type) AS item_type,
             item.lifecycle_status, enquiry.enquiry_number,
             enquiry.currency, enquiry_item.line_number,
