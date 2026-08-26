@@ -1,6 +1,9 @@
 import { describe, expect, test } from "vitest"
 
-import { mergeWorkingWorkbookCalculation } from "./commercial-costing"
+import {
+  mergeWorkingWorkbookCalculation,
+  mergeWorkingWorkbookProductContext,
+} from "./commercial-costing"
 
 describe("WORKING workbook pricing fallback", () => {
   test("fills missing Costing formulas while preserving corrected calculations", () => {
@@ -36,5 +39,28 @@ describe("WORKING workbook pricing fallback", () => {
         sourceTable: "Costing",
       })
     ).toEqual({ totalA: 10 })
+  })
+  test("fills an applicable die code from each WORKING sheet", () => {
+    const costingRow: unknown[] = Array.from({ length: 58 })
+    costingRow[13] = "PE02"
+    const assemblyRow: unknown[] = Array.from({ length: 54 })
+    assemblyRow[10] = "FE07"
+
+    expect(
+      mergeWorkingWorkbookProductContext({
+        productContext: { dieCode: null, grade: "C3604" },
+        sourcePayload: { originalRow: costingRow },
+        sourceSystem: "working_xlsx",
+        sourceTable: "Costing",
+      })
+    ).toMatchObject({ dieCode: "PE02", grade: "C3604" })
+    expect(
+      mergeWorkingWorkbookProductContext({
+        productContext: { dieCode: "STORED" },
+        sourcePayload: { originalRow: assemblyRow },
+        sourceSystem: "working_xlsx",
+        sourceTable: "Assembly",
+      })
+    ).toMatchObject({ dieCode: "STORED" })
   })
 })
