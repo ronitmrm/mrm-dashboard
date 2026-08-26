@@ -60,6 +60,7 @@ describe("assignEmployee", () => {
   test("assigns the employee to every post in a combined role", async () => {
     const selectedPostId = "00000000-0000-4000-8000-000000000001"
     const relatedPostId = "00000000-0000-4000-8000-000000000002"
+
     const query = vi.fn(
       async (statement: string, parameters?: readonly unknown[]) => {
         if (statement.includes("FROM recruitment.combined_role_posts")) {
@@ -111,7 +112,7 @@ describe("assignEmployee", () => {
     const repository = createRecruitmentRepository({ pool })
 
     await repository.assignEmployee({
-      employeeCode: "EMP-104",
+      employeeCode: "104",
       employeeEvent: "Appointed",
       employeeName: "Combined employee",
       organizationId: "00000000-0000-4000-8000-000000000010",
@@ -122,6 +123,50 @@ describe("assignEmployee", () => {
       statement.includes("UPDATE recruitment.posts")
     )
     expect(updateCall?.[1]?.[7]).toEqual([selectedPostId, relatedPostId])
+  })
+
+  test("corrects the employee ID for the same occupied employee", async () => {
+    const postId = "00000000-0000-4000-8000-000000000001"
+    const query = vi.fn(
+      async (statement: string, parameters?: readonly unknown[]) => {
+        if (statement.includes("SELECT id, employee_name, employee_code")) {
+          return {
+            rows: [
+              {
+                can_replace: false,
+                combined_role_id: null,
+                employee_code: "10A4",
+                employee_name: "Current Employee",
+                id: postId,
+                last_working_date: null,
+                status: "Occupied",
+              },
+            ],
+          }
+        }
+        if (statement.includes("UPDATE recruitment.posts")) {
+          return { rows: [{ id: postId }] }
+        }
+        return { rows: [], parameters }
+      }
+    )
+    const client = { query, release: vi.fn() } as unknown as PoolClient
+    const repository = createRecruitmentRepository({
+      pool: { connect: vi.fn(async () => client) } as unknown as Pool,
+    })
+
+    await repository.assignEmployee({
+      employeeCode: "104",
+      employeeEvent: "Joined",
+      employeeName: "Current Employee",
+      organizationId: "00000000-0000-4000-8000-000000000010",
+      postId,
+    })
+
+    const update = (
+      query.mock.calls as unknown as Array<[string, unknown[]]>
+    ).find(([statement]) => statement.includes("UPDATE recruitment.posts"))
+    expect(update?.[1]?.[1]).toBe("104")
   })
 
   test("rejects a bulk workbook before updating when any target is invalid", async () => {
@@ -245,7 +290,7 @@ describe("assignEmployee", () => {
 })
 
 describe("updateCombinedRole", () => {
-  test("applies the selected job template to every combined post", async () => {
+  test("applies the selected template and occupied employee to every combined post", async () => {
     const organizationId = "00000000-0000-4000-8000-000000000010"
     const combinedRoleId = "00000000-0000-4000-8000-000000000020"
     const primaryPostId = "00000000-0000-4000-8000-000000000030"
@@ -272,8 +317,26 @@ describe("updateCombinedRole", () => {
       if (statement.includes("SELECT id, post_code, status")) {
         return {
           rows: [
-            { id: primaryPostId, post_code: "POST-1", status: "Vacant" },
-            { id: memberPostId, post_code: "POST-2", status: "Vacant" },
+            {
+              appointedApplicationId: "00000000-0000-4000-8000-000000000050",
+              employeeCode: "104",
+              employeeName: "Combined Employee",
+              id: primaryPostId,
+              joiningDate: "2026-08-20",
+              lastWorkingDate: null,
+              post_code: "POST-1",
+              status: "Occupied",
+            },
+            {
+              appointedApplicationId: null,
+              employeeCode: null,
+              employeeName: null,
+              id: memberPostId,
+              joiningDate: null,
+              lastWorkingDate: null,
+              post_code: "POST-2",
+              status: "Vacant",
+            },
           ],
         }
       }
@@ -313,10 +376,98 @@ describe("updateCombinedRole", () => {
     const updatePosts = (
       query.mock.calls as unknown as Array<[string, unknown[]]>
     ).find(([statement]) => statement.includes("requirement_template_id = $3"))
+    expect(updatePosts?.[0]).toContain("employee_code = CASE")
     expect(updatePosts?.[1]).toEqual([
       combinedRoleId,
       "CMB-1",
       templateId,
+      true,
+      "Combined Employee",
+      "104",
+      "Occupied",
+      "2026-08-20",
+      null,
+      "00000000-0000-4000-8000-000000000050",
+      null,
+      organizationId,
+      [primaryPostId, memberPostId],
+    ])
+  })
+})
+
+describe("createCombinedRole", () => {
+  test("copies an existing occupant to every newly combined post", async () => {
+    const organizationId = "00000000-0000-4000-8000-000000000010"
+    const combinedRoleId = "00000000-0000-4000-8000-000000000020"
+    const primaryPostId = "00000000-0000-4000-8000-000000000030"
+    const memberPostId = "00000000-0000-4000-8000-000000000031"
+    const applicationId = "00000000-0000-4000-8000-000000000050"
+    const query = vi.fn(async (statement: string) => {
+      if (statement.includes("SELECT post.id, post.post_code")) {
+        return {
+          rows: [
+            {
+              appointedApplicationId: applicationId,
+              belongs_to_active_combined_role: false,
+              employeeCode: "104",
+              employeeName: "Combined Employee",
+              id: primaryPostId,
+              joiningDate: "2026-08-20",
+              lastWorkingDate: null,
+              post_code: "POST-1",
+              status: "Occupied",
+            },
+            {
+              appointedApplicationId: null,
+              belongs_to_active_combined_role: false,
+              employeeCode: null,
+              employeeName: null,
+              id: memberPostId,
+              joiningDate: null,
+              lastWorkingDate: null,
+              post_code: "POST-2",
+              status: "Vacant",
+            },
+          ],
+        }
+      }
+      if (
+        statement.includes(
+          "SELECT vacancy_code FROM recruitment.combined_roles"
+        )
+      ) {
+        return { rows: [] }
+      }
+      if (statement.includes("INSERT INTO recruitment.combined_roles")) {
+        return { rows: [{ id: combinedRoleId }] }
+      }
+      return { rows: [] }
+    })
+    const client = { query, release: vi.fn() } as unknown as PoolClient
+    const repository = createRecruitmentRepository({
+      pool: { connect: vi.fn(async () => client) } as unknown as Pool,
+    })
+
+    await repository.createCombinedRole({
+      organizationId,
+      postIds: [primaryPostId, memberPostId],
+      primaryPostId,
+    })
+
+    const updatePosts = (
+      query.mock.calls as unknown as Array<[string, unknown[]]>
+    ).find(([statement]) => statement.includes("SET combined_role_id = $1"))
+    expect(updatePosts?.[0]).toContain("employee_code = CASE")
+    expect(updatePosts?.[1]).toEqual([
+      combinedRoleId,
+      expect.any(String),
+      true,
+      "Combined Employee",
+      "104",
+      "Occupied",
+      "2026-08-20",
+      null,
+      applicationId,
       null,
       organizationId,
       [primaryPostId, memberPostId],
@@ -1522,7 +1673,7 @@ describe("deriveRecruitmentPostStatus", () => {
   test("marks a post occupied when an employee code is assigned", () => {
     expect(
       deriveRecruitmentPostStatus({
-        employeeCode: "EMP-104",
+        employeeCode: "104",
         employeeName: null,
         storedStatus: "Vacant",
       })
@@ -1542,7 +1693,7 @@ describe("deriveRecruitmentPostStatus", () => {
   test("keeps a deliberately inactive post inactive", () => {
     expect(
       deriveRecruitmentPostStatus({
-        employeeCode: "EMP-104",
+        employeeCode: "104",
         employeeName: "Assigned employee",
         storedStatus: "Inactive",
       })
@@ -1554,7 +1705,7 @@ describe("deriveRecruitmentPostStatus", () => {
     (storedStatus) => {
       expect(
         deriveRecruitmentPostStatus({
-          employeeCode: "EMP-104",
+          employeeCode: "104",
           employeeName: "Assigned employee",
           storedStatus,
         })
@@ -1629,12 +1780,12 @@ describe("deriveRecruitmentEmployeeAssignment", () => {
   test("records an appointment before the person joins", () => {
     expect(
       deriveRecruitmentEmployeeAssignment({
-        employeeCode: "EMP-104",
+        employeeCode: "104",
         employeeEvent: "Appointed",
         employeeName: "New employee",
       })
     ).toEqual({
-      employeeCode: "EMP-104",
+      employeeCode: "104",
       employeeName: "New employee",
       lastWorkingDate: null,
       status: "Appointed",
@@ -1644,12 +1795,12 @@ describe("deriveRecruitmentEmployeeAssignment", () => {
   test("changes an existing appointment to occupied when the person joins", () => {
     expect(
       deriveRecruitmentEmployeeAssignment({
-        currentEmployeeCode: "EMP-104",
+        currentEmployeeCode: "104",
         currentEmployeeName: "New employee",
         employeeEvent: "Joined",
       })
     ).toEqual({
-      employeeCode: "EMP-104",
+      employeeCode: "104",
       employeeName: "New employee",
       lastWorkingDate: null,
       status: "Occupied",
@@ -1659,13 +1810,13 @@ describe("deriveRecruitmentEmployeeAssignment", () => {
   test("retains the employee identity when they resign", () => {
     expect(
       deriveRecruitmentEmployeeAssignment({
-        currentEmployeeCode: "EMP-104",
+        currentEmployeeCode: "104",
         currentEmployeeName: "New employee",
         employeeEvent: "Resigned",
         lastWorkingDate: "2026-08-31",
       })
     ).toEqual({
-      employeeCode: "EMP-104",
+      employeeCode: "104",
       employeeName: "New employee",
       lastWorkingDate: "2026-08-31",
       status: "Resigned",
@@ -1675,7 +1826,7 @@ describe("deriveRecruitmentEmployeeAssignment", () => {
   test("clears the assignment and returns the post to vacant", () => {
     expect(
       deriveRecruitmentEmployeeAssignment({
-        currentEmployeeCode: "EMP-104",
+        currentEmployeeCode: "104",
         currentEmployeeName: "New employee",
         employeeEvent: "Removed",
       })
@@ -1690,7 +1841,7 @@ describe("deriveRecruitmentEmployeeAssignment", () => {
   test("requires a last working date for a resignation", () => {
     expect(() =>
       deriveRecruitmentEmployeeAssignment({
-        currentEmployeeCode: "EMP-104",
+        currentEmployeeCode: "104",
         employeeEvent: "Resigned",
       })
     ).toThrow("Last working date is required")
@@ -1808,7 +1959,7 @@ describe("recruitmentPostDeletionBlocker", () => {
     expect(
       recruitmentPostDeletionBlocker({
         combinedRoleLinks: 0,
-        employeeCode: "EMP-104",
+        employeeCode: "104",
         employeeName: "Assigned employee",
         jobPostLinks: 0,
       })

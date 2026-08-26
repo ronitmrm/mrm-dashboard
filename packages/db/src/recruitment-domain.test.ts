@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest"
 
 import {
+  deriveCombinedPostAssignment,
   deriveRecruitmentEmployeeAssignment,
   deriveRecruitmentPostStatus,
   listRecruitableApprovedPosts,
@@ -50,6 +51,71 @@ describe("deriveRecruitmentEmployeeAssignment", () => {
         employeeEvent: "Joined",
       })
     ).toThrow("Employee ID is required before the candidate can join.")
+  })
+
+  test("rejects alphabetic characters in an employee ID", () => {
+    expect(() =>
+      deriveRecruitmentEmployeeAssignment({
+        employeeCode: "10A4",
+        employeeEvent: "Joined",
+        employeeName: "Candidate One",
+      })
+    ).toThrow("Employee ID must contain numbers only.")
+  })
+})
+
+describe("deriveCombinedPostAssignment", () => {
+  test("uses an occupied member for every post in a combined role", () => {
+    expect(
+      deriveCombinedPostAssignment([
+        {
+          appointedApplicationId: null,
+          employeeCode: null,
+          employeeName: null,
+          joiningDate: null,
+          lastWorkingDate: null,
+          status: "Vacant",
+        },
+        {
+          appointedApplicationId: "application-1",
+          employeeCode: "104",
+          employeeName: "Candidate One",
+          joiningDate: "2026-08-20",
+          lastWorkingDate: null,
+          status: "Occupied",
+        },
+      ])
+    ).toEqual({
+      appointedApplicationId: "application-1",
+      employeeCode: "104",
+      employeeName: "Candidate One",
+      joiningDate: "2026-08-20",
+      lastWorkingDate: null,
+      status: "Occupied",
+    })
+  })
+
+  test("rejects combining posts occupied by different employees", () => {
+    expect(() =>
+      deriveCombinedPostAssignment([
+        {
+          appointedApplicationId: null,
+          employeeCode: "104",
+          employeeName: "Candidate One",
+          joiningDate: null,
+          lastWorkingDate: null,
+          status: "Occupied",
+        },
+        {
+          appointedApplicationId: null,
+          employeeCode: "105",
+          employeeName: "Candidate Two",
+          joiningDate: null,
+          lastWorkingDate: null,
+          status: "Occupied",
+        },
+      ])
+    ).toThrow("Combined approved posts are assigned to different employees.")
   })
 })
 

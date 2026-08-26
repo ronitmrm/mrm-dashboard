@@ -70,8 +70,12 @@ export function deriveRecruitmentEmployeeAssignment(input: {
       status: "Vacant",
     }
   }
+  const providedEmployeeCode = optionalText(input.employeeCode)
+  if (providedEmployeeCode && !/^\d+$/.test(providedEmployeeCode)) {
+    throw new Error("Employee ID must contain numbers only.")
+  }
   const employeeCode =
-    optionalText(input.employeeCode) ?? optionalText(input.currentEmployeeCode)
+    providedEmployeeCode ?? optionalText(input.currentEmployeeCode)
   const employeeName =
     optionalText(input.employeeName) ?? optionalText(input.currentEmployeeName)
   if (event === "Joined" && !employeeCode) {
@@ -96,6 +100,62 @@ export function deriveRecruitmentEmployeeAssignment(input: {
     employeeName,
     lastWorkingDate: status === "Resigned" ? lastWorkingDate : null,
     status,
+  }
+}
+
+type CombinedPostAssignmentSource = {
+  appointedApplicationId?: string | null
+  employeeCode?: string | null
+  employeeName?: string | null
+  joiningDate?: string | null
+  lastWorkingDate?: string | null
+  status: string
+}
+
+function sameEmployee(
+  left: CombinedPostAssignmentSource,
+  right: CombinedPostAssignmentSource
+) {
+  const leftCode = optionalText(left.employeeCode)?.toLocaleLowerCase("en-IN")
+  const rightCode = optionalText(right.employeeCode)?.toLocaleLowerCase("en-IN")
+  if (leftCode && rightCode) return leftCode === rightCode
+
+  const leftName = optionalText(left.employeeName)?.toLocaleLowerCase("en-IN")
+  const rightName = optionalText(right.employeeName)?.toLocaleLowerCase("en-IN")
+  return Boolean(leftName && rightName && leftName === rightName)
+}
+
+export function deriveCombinedPostAssignment(
+  posts: readonly CombinedPostAssignmentSource[]
+) {
+  const assignedPosts = posts.filter(
+    (post) => optionalText(post.employeeCode) || optionalText(post.employeeName)
+  )
+  if (!assignedPosts.length) return null
+
+  const statusPriority: Readonly<Record<string, number>> = {
+    Appointed: 2,
+    Occupied: 3,
+    Resigned: 1,
+  }
+  const source = [...assignedPosts].sort(
+    (left, right) =>
+      (statusPriority[right.status] ?? 0) - (statusPriority[left.status] ?? 0)
+  )[0]!
+
+  if (assignedPosts.some((post) => !sameEmployee(source, post))) {
+    throw new Error(
+      "Combined approved posts are assigned to different employees. Vacate the conflicting posts before combining them."
+    )
+  }
+
+  return {
+    appointedApplicationId: optionalText(source.appointedApplicationId),
+    employeeCode: optionalText(source.employeeCode),
+    employeeName: optionalText(source.employeeName),
+    joiningDate: optionalText(source.joiningDate),
+    lastWorkingDate: optionalText(source.lastWorkingDate),
+    status: source.status,
   }
 }
 

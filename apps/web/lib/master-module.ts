@@ -184,7 +184,7 @@ const universalMasterDefinitions = [
       {
         access: "hrEmployees",
         id: "employee_assignments",
-        label: "Employee Assignment",
+        label: "Employee Master",
       },
       {
         access: "hrJobTemplates",
@@ -275,8 +275,8 @@ export const masterUnitOptions: readonly MasterOption[] = [
 ]
 
 export function availableMasterUnits(access: MasterModuleAccess) {
-  return masterUnitOptions.filter(({ id }) =>
-    availableMainMasters(id as MasterUnit, access).length > 0
+  return masterUnitOptions.filter(
+    ({ id }) => availableMainMasters(id as MasterUnit, access).length > 0
   )
 }
 
@@ -530,7 +530,8 @@ export function masterSelectionMatchesDestination(
               ? values.panel === "employeeMasterPanel"
               : selection.sub === "job_templates"
                 ? values.panel === "postMasterPanel"
-                : values.panel === "mastersPanel" && values.kind === selection.sub
+                : values.panel === "mastersPanel" &&
+                  values.kind === selection.sub
       : false
   }
   if (pathname === "/commercial/masters") {

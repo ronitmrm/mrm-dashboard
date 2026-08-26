@@ -95,9 +95,7 @@ export function SingleEmployeeAssignmentFields({
   const awaitingJoiningConfirmation = Boolean(
     appointed && selected?.post.joiningConfirmationDue
   )
-  const employeeIdentityLocked =
-    selected?.post.status === "Occupied" ||
-    selected?.post.status === "Resigned"
+  const employeeIdentityLocked = selected?.post.status === "Resigned"
 
   function selectTarget(nextPostId: string) {
     const next = targets.find(({ post }) => post.id === nextPostId)
@@ -122,28 +120,28 @@ export function SingleEmployeeAssignmentFields({
             required
             value={postId}
           >
-          <NativeSelectOption value="">
-            Select Post Or Combined Job
-          </NativeSelectOption>
-          {combinedTargets.length ? (
-            <NativeSelectOptGroup label="Combined Jobs">
-              {combinedTargets.map(({ combinedRole, post }) => (
-                <NativeSelectOption key={combinedRole!.id} value={post.id}>
-                  {combinedRole!.vacancyCode} · {combinedRole!.name} · Includes{" "}
-                  {combinedRole!.postCodes.join(", ")}
-                </NativeSelectOption>
-              ))}
-            </NativeSelectOptGroup>
-          ) : null}
-          {individualTargets.length ? (
-            <NativeSelectOptGroup label="Individual Approved Posts">
-              {individualTargets.map(({ post }) => (
-                <NativeSelectOption key={post.id} value={post.id}>
-                  {post.postCode} · {post.designation} · {post.status}
-                </NativeSelectOption>
-              ))}
-            </NativeSelectOptGroup>
-          ) : null}
+            <NativeSelectOption value="">
+              Select Post Or Combined Job
+            </NativeSelectOption>
+            {combinedTargets.length ? (
+              <NativeSelectOptGroup label="Combined Jobs">
+                {combinedTargets.map(({ combinedRole, post }) => (
+                  <NativeSelectOption key={combinedRole!.id} value={post.id}>
+                    {combinedRole!.vacancyCode} · {combinedRole!.name} ·
+                    Includes {combinedRole!.postCodes.join(", ")}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelectOptGroup>
+            ) : null}
+            {individualTargets.length ? (
+              <NativeSelectOptGroup label="Individual Approved Posts">
+                {individualTargets.map(({ post }) => (
+                  <NativeSelectOption key={post.id} value={post.id}>
+                    {post.postCode} · {post.designation} · {post.status}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelectOptGroup>
+            ) : null}
           </NativeSelect>
           {selected?.combinedRole ? (
             <FieldDescription>
@@ -184,11 +182,14 @@ export function SingleEmployeeAssignmentFields({
         <Input
           id="employee-code"
           name="employee_code"
+          inputMode="numeric"
+          pattern="[0-9]+"
           onChange={(change) => setEmployeeCode(change.target.value)}
           readOnly={employeeIdentityLocked}
           required={event === "Joined"}
           value={employeeCode}
         />
+        <FieldDescription>Employee ID Accepts Numbers Only.</FieldDescription>
         {event === "Joined" && !employeeCode.trim() ? (
           <FieldDescription>
             Employee ID Is Required Before The Candidate Can Join And The Post

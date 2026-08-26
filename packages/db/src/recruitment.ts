@@ -14,6 +14,7 @@ import {
   recruitmentAdvisoryLockKey,
 } from "./recruitment-codes"
 import {
+  deriveCombinedPostAssignment,
   deriveRecruitmentEmployeeAssignment,
   deriveRecruitmentPostStatus,
   isActiveRecruitmentApplicationStatus,
@@ -593,9 +594,12 @@ async function assignEmployeeInTransaction(
   const requestedEmployeeCode =
     optional(input.employeeCode) ?? currentEmployeeCode
   const normal = (value: string | null) => value?.trim().toLowerCase() ?? ""
-  const changesAssignedPerson =
-    normal(requestedEmployeeName) !== normal(currentEmployeeName) ||
+  const changesEmployeeName =
+    normal(requestedEmployeeName) !== normal(currentEmployeeName)
+  const changesEmployeeCode =
     normal(requestedEmployeeCode) !== normal(currentEmployeeCode)
+  const changesAssignedPerson =
+    changesEmployeeName || (!currentEmployeeName && changesEmployeeCode)
   const canAssignNewPerson = existingAssignment.can_replace
   if (
     (employeeEvent === "Appointed" || employeeEvent === "Joined") &&
@@ -2358,12 +2362,22 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         }
 
         const selectedPosts = await client.query<{
+          appointedApplicationId: string | null
+          employeeCode: string | null
+          employeeName: string | null
           id: string
+          joiningDate: string | null
+          lastWorkingDate: string | null
           post_code: string
           status: string
         }>(
           `
-            SELECT id, post_code, status
+            SELECT id, post_code, status,
+              appointed_application_id::text AS "appointedApplicationId",
+              employee_code AS "employeeCode",
+              employee_name AS "employeeName",
+              joining_date::text AS "joiningDate",
+              last_working_date::text AS "lastWorkingDate"
             FROM recruitment.posts
             WHERE organization_id = $1 AND id = ANY($2::uuid[])
             ORDER BY post_code
@@ -2377,6 +2391,9 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         if (selectedPosts.rows.some((post) => post.status === "Inactive")) {
           throw new Error("Inactive approved posts cannot be combined.")
         }
+        const combinedAssignment = deriveCombinedPostAssignment(
+          selectedPosts.rows
+        )
 
         const conflictingMembership = await client.query<{ post_code: string }>(
           `
@@ -2466,15 +2483,38 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           `
             UPDATE recruitment.posts
             SET combined_role_id = $1, vacancy_code = $2,
-              requirement_template_id = $3, updated_by_user_id = $4,
+              requirement_template_id = $3,
+              employee_name = CASE WHEN $4::boolean THEN $5 ELSE employee_name END,
+              employee_code = CASE WHEN $4::boolean THEN $6 ELSE employee_code END,
+              status = CASE WHEN $4::boolean THEN $7 ELSE status END,
+              joining_date = CASE
+                WHEN $4::boolean THEN migration.try_date($8)
+                ELSE joining_date
+              END,
+              last_working_date = CASE
+                WHEN $4::boolean THEN migration.try_date($9)
+                ELSE last_working_date
+              END,
+              appointed_application_id = CASE
+                WHEN $4::boolean THEN nullif($10, '')::uuid
+                ELSE appointed_application_id
+              END,
+              updated_by_user_id = $11,
               updated_at = now(),
               row_version = row_version + 1
-            WHERE organization_id = $5 AND id = ANY($6::uuid[])
+            WHERE organization_id = $12 AND id = ANY($13::uuid[])
           `,
           [
             combinedRoleId,
             vacancyCode,
             templateId,
+            Boolean(combinedAssignment),
+            combinedAssignment?.employeeName ?? null,
+            combinedAssignment?.employeeCode ?? null,
+            combinedAssignment?.status ?? null,
+            combinedAssignment?.joiningDate ?? null,
+            combinedAssignment?.lastWorkingDate ?? null,
+            combinedAssignment?.appointedApplicationId ?? null,
             input.actorUserId ?? null,
             input.organizationId,
             postIds,
@@ -2547,11 +2587,22 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         )
         const selectedPosts = await client.query<{
           belongs_to_active_combined_role: boolean
+          appointedApplicationId: string | null
+          employeeCode: string | null
+          employeeName: string | null
           id: string
+          joiningDate: string | null
+          lastWorkingDate: string | null
           post_code: string
+          status: string
         }>(
           `
-            SELECT post.id, post.post_code,
+            SELECT post.id, post.post_code, post.status,
+              post.appointed_application_id::text AS "appointedApplicationId",
+              post.employee_code AS "employeeCode",
+              post.employee_name AS "employeeName",
+              post.joining_date::text AS "joiningDate",
+              post.last_working_date::text AS "lastWorkingDate",
               EXISTS (
                 SELECT 1
                 FROM recruitment.combined_role_posts active_link
@@ -2581,6 +2632,9 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           )
         }
 
+        const combinedAssignment = deriveCombinedPostAssignment(
+          selectedPosts.rows
+        )
         const existingCodes = await client.query<{
           vacancy_code: string | null
         }>(
@@ -2629,13 +2683,35 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           `
             UPDATE recruitment.posts
             SET combined_role_id = $1, vacancy_code = $2,
-              updated_by_user_id = $3, updated_at = now(),
+              employee_name = CASE WHEN $3::boolean THEN $4 ELSE employee_name END,
+              employee_code = CASE WHEN $3::boolean THEN $5 ELSE employee_code END,
+              status = CASE WHEN $3::boolean THEN $6 ELSE status END,
+              joining_date = CASE
+                WHEN $3::boolean THEN migration.try_date($7)
+                ELSE joining_date
+              END,
+              last_working_date = CASE
+                WHEN $3::boolean THEN migration.try_date($8)
+                ELSE last_working_date
+              END,
+              appointed_application_id = CASE
+                WHEN $3::boolean THEN nullif($9, '')::uuid
+                ELSE appointed_application_id
+              END,
+              updated_by_user_id = $10, updated_at = now(),
               row_version = row_version + 1
-            WHERE organization_id = $4 AND id = ANY($5::uuid[])
+            WHERE organization_id = $11 AND id = ANY($12::uuid[])
           `,
           [
             combinedRoleId,
             identity.vacancyCode,
+            Boolean(combinedAssignment),
+            combinedAssignment?.employeeName ?? null,
+            combinedAssignment?.employeeCode ?? null,
+            combinedAssignment?.status ?? null,
+            combinedAssignment?.joiningDate ?? null,
+            combinedAssignment?.lastWorkingDate ?? null,
+            combinedAssignment?.appointedApplicationId ?? null,
             input.actorUserId ?? null,
             input.organizationId,
             postIds,
