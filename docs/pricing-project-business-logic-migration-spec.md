@@ -505,7 +505,10 @@ Each target integration test must assert canonical rows, historical rows, actor 
 1. **Resolved in LM-00:** current executable source behavior is authoritative. Nonblank active prices supersede by organization/customer/normalized customer code; blank codes retain enquiry-item lineage. PO matching returns the source-ranked first valid candidate rather than rejecting ambiguity.
 2. **Resolved dependency boundary:** HR Recruitment is an external proxied Python service whose repository and data were not present in either supplied project or export. The migration must preserve the proxy boundary and cannot claim that external data was migrated without a separately supplied source.
 3. **Resolved in LM-00:** live Westmetall/Frankfurter quote-PDF behavior remains live/no-store with source-equivalent fallback semantics. Persisting fetched rates would be a functional change.
-4. **Implementation chosen, acceptance pending:** attachment bytes use ignored local storage and PostgreSQL retains metadata, ownership, size, MIME type, and SHA-256. LM-09 must prove the accepted backup/restore procedure for the local attachment root.
+4. **Superseded by the 2026-08-23 Artifact cutover:** LM-09 proved the legacy
+   backup/restore procedure. Every new retained file now uses the shared
+   PostgreSQL Artifact lifecycle and UploadThing; local storage is read-only
+   compatibility for historical rows.
 5. **Still requires retirement approval:** classify each known archive warning as a signed exception or a required correction before source retirement.
 
 ## 19. Definition of delivered
@@ -727,10 +730,11 @@ LM-06 is complete on `feat/logic-migration`.
 
 Delivered behavior:
 
-- Customer PO files are checksum-backed normalized `core.files` evidence.
-  Upload failure removes the newly written bytes, replacement changes only the
-  current PO link, retained file/audit rows remain append-only, and authenticated
-  download resolves only a contained `LOCAL_FILE_STORAGE_PATH` path.
+- Customer PO files are checksum-backed normalized `core.files` evidence. This
+  checkpoint originally used contained local paths; the 2026-08-23 Artifact
+  cutover supersedes its byte-storage boundary. New Customer PO sources use
+  UploadThing `public-read` objects, while authorized application routes retain
+  legacy local-read compatibility.
 - PO import uses the LM-00 ranked source matcher and retains unmatched,
   difference, Keep Our Price, Accept PO Price/revision-request, PI Draft, Sent,
   Approved, and pre-approval Cancelled outcomes without recalculating historical

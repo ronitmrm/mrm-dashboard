@@ -1,93 +1,50 @@
-import { mkdtemp, rm } from "node:fs/promises"
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 
 import { describe, expect, test } from "vitest"
 
-import { createUserAttachmentStorage } from "./user-attachment-storage"
+import { readUserAttachment } from "./user-attachment-storage"
+import * as legacyAttachmentStorage from "./user-attachment-storage"
 
-describe("user attachment storage", () => {
-  test("keeps attachment storage local when Vercel variables are present", async () => {
+describe("legacy user attachment storage", () => {
+  test("exposes read compatibility without a local-write interface", () => {
+    expect(Object.keys(legacyAttachmentStorage)).toEqual(["readUserAttachment"])
+  })
+
+  test("reads historical local bytes from the configured root", async () => {
     const localRoot = await mkdtemp(path.join(tmpdir(), "mrm-attachments-"))
-    const previousEnvironment = {
-      blobToken: process.env.BLOB_READ_WRITE_TOKEN,
-      localRoot: process.env.LOCAL_FILE_STORAGE_PATH,
-      managed: process.env.MRM_MANAGED_RUNTIME,
-      vercel: process.env.VERCEL,
-    }
-    delete process.env.BLOB_READ_WRITE_TOKEN
+    const previousLocalRoot = process.env.LOCAL_FILE_STORAGE_PATH
     process.env.LOCAL_FILE_STORAGE_PATH = localRoot
-    process.env.MRM_MANAGED_RUNTIME = "1"
-    process.env.VERCEL = "1"
     const storageKey = "attachments/candidate-resumes/candidate-1/resume.pdf"
+    const filePath = path.join(localRoot, ...storageKey.split("/"))
 
     try {
-      const storage = createUserAttachmentStorage()
-      await storage.save({
-        bytes: Buffer.from("%PDF-local-only\n"),
-        mediaType: "application/pdf",
-        storageKey,
-      })
-
-      const saved = await storage.read(storageKey)
-      expect(await new Response(saved.body).text()).toBe("%PDF-local-only\n")
-
-      await storage.delete(storageKey)
-      await expect(storage.read(storageKey)).rejects.toThrow(
-        "Attachment file was not found."
-      )
+      await mkdir(path.dirname(filePath), { recursive: true })
+      await writeFile(filePath, "%PDF-legacy\n")
+      const saved = await readUserAttachment(storageKey)
+      expect(await new Response(saved.body).text()).toBe("%PDF-legacy\n")
     } finally {
-      for (const [key, value] of Object.entries(previousEnvironment)) {
-        const environmentKey = {
-          blobToken: "BLOB_READ_WRITE_TOKEN",
-          localRoot: "LOCAL_FILE_STORAGE_PATH",
-          managed: "MRM_MANAGED_RUNTIME",
-          vercel: "VERCEL",
-        }[key]!
-        if (value === undefined) delete process.env[environmentKey]
-        else process.env[environmentKey] = value
-      }
+      if (previousLocalRoot === undefined)
+        delete process.env.LOCAL_FILE_STORAGE_PATH
+      else process.env.LOCAL_FILE_STORAGE_PATH = previousLocalRoot
       await rm(localRoot, { force: true, recursive: true })
     }
   })
 
-  test("keeps managed local uploads on the configured local filesystem", async () => {
+  test("rejects paths outside the configured legacy root", async () => {
     const localRoot = await mkdtemp(path.join(tmpdir(), "mrm-attachments-"))
-    const previousEnvironment = {
-      localRoot: process.env.LOCAL_FILE_STORAGE_PATH,
-      localManaged: process.env.MRM_LOCAL_MANAGED_RUNTIME,
-      managed: process.env.MRM_MANAGED_RUNTIME,
-    }
+    const previousLocalRoot = process.env.LOCAL_FILE_STORAGE_PATH
     process.env.LOCAL_FILE_STORAGE_PATH = localRoot
-    process.env.MRM_LOCAL_MANAGED_RUNTIME = "1"
-    process.env.MRM_MANAGED_RUNTIME = "1"
-    const storageKey = "attachments/local/resume.pdf"
-
     try {
-      const storage = createUserAttachmentStorage()
-      await storage.save({
-        bytes: Buffer.from("%PDF-local\n"),
-        mediaType: "application/pdf",
-        storageKey,
-      })
-
-      const saved = await storage.read(storageKey)
-      expect(await new Response(saved.body).text()).toBe("%PDF-local\n")
+      await expect(readUserAttachment("../outside.pdf")).rejects.toThrow(
+        "Attachment storage key is invalid."
+      )
     } finally {
-      if (previousEnvironment.localRoot === undefined) {
+      if (previousLocalRoot === undefined) {
         delete process.env.LOCAL_FILE_STORAGE_PATH
       } else {
-        process.env.LOCAL_FILE_STORAGE_PATH = previousEnvironment.localRoot
-      }
-      if (previousEnvironment.localManaged === undefined) {
-        delete process.env.MRM_LOCAL_MANAGED_RUNTIME
-      } else {
-        process.env.MRM_LOCAL_MANAGED_RUNTIME = previousEnvironment.localManaged
-      }
-      if (previousEnvironment.managed === undefined) {
-        delete process.env.MRM_MANAGED_RUNTIME
-      } else {
-        process.env.MRM_MANAGED_RUNTIME = previousEnvironment.managed
+        process.env.LOCAL_FILE_STORAGE_PATH = previousLocalRoot
       }
       await rm(localRoot, { force: true, recursive: true })
     }

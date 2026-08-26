@@ -6,14 +6,14 @@ Status: Approved classification; retention durations require business approval
 
 ## Classes
 
-| Class                    | Examples                                                                                            | Handling                                                                                                                                       |
-| ------------------------ | --------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| Restricted identity      | Legacy user rows, password hashes, sessions, verification records                                   | Keep only inside sealed source artifacts for the shortest approved period. Exclude from working extracts, staging, logs, and canonical import. |
-| Confidential business    | Customers, enquiries, quotes, prices, purchase orders, production, quality, maintenance, attendance | Encrypt artifacts and backups at rest and in transit. Limit access to named migration operators and approvers.                                 |
-| Confidential files       | Drawings, attachments, resumes, purchase-order and design files                                     | Inventory by checksum, preserve source paths as evidence, and transfer only to approved persistent object storage.                             |
-| Operational audit        | Corrections, reversals, actor text, migration conflicts, reconciliation evidence                    | Append-only. Preserve provenance and approved exception decisions.                                                                             |
-| Disposable derived state | Convex snapshot chunks, PostgreSQL read models, Redis caches                                        | Rebuild from canonical PostgreSQL data. Do not treat as migration authority.                                                                   |
-| Sanitized fixtures       | Synthetic or irreversibly redacted migration test data                                              | May be committed when it contains no production identity or confidential business values.                                                      |
+| Class                    | Examples                                                                                            | Handling                                                                                                                                                      |
+| ------------------------ | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Restricted identity      | Legacy user rows, password hashes, sessions, verification records                                   | Keep only inside sealed source artifacts for the shortest approved period. Exclude from working extracts, staging, logs, and canonical import.                |
+| Confidential business    | Customers, enquiries, quotes, prices, purchase orders, production, quality, maintenance, attendance | Encrypt artifacts and backups at rest and in transit. Limit access to named migration operators and approvers.                                                |
+| Confidential files       | Drawings, attachments, resumes, purchase-order and design files                                     | Retain through the approved UploadThing `public-read` exception; protect upload and URL discovery in the app and never treat a disclosed URL as confidential. |
+| Operational audit        | Corrections, reversals, actor text, migration conflicts, reconciliation evidence                    | Append-only. Preserve provenance and approved exception decisions.                                                                                            |
+| Disposable derived state | Convex snapshot chunks, PostgreSQL read models, Redis caches                                        | Rebuild from canonical PostgreSQL data. Do not treat as migration authority.                                                                                  |
+| Sanitized fixtures       | Synthetic or irreversibly redacted migration test data                                              | May be committed when it contains no production identity or confidential business values.                                                                     |
 
 ## Rules
 
@@ -24,6 +24,16 @@ Status: Approved classification; retention durations require business approval
 - Raw payloads and conflict evidence must never be written to application logs.
 - Production artifacts, exports, workbooks, database files, and attachment
   trees are never committed.
+- Retained UploadThing objects use the approved `public-read` exception. App
+  authorization protects upload and URL discovery, but anyone holding a
+  disclosed object URL can read it until the final physical object is deleted.
+  Public URLs must therefore never be logged or treated as confidential links.
+- Artifact bytes are immutable. Exact bytes deduplicate only inside one
+  Organization, while every filename, purpose, version, and business link stays
+  logically distinct in PostgreSQL.
+- Manual deletion requires `artifacts.delete`, exact-target confirmation, a
+  reason, and an audited tombstone. The provider object is deleted only after
+  its final live logical reference; no automatic retention cleanup exists.
 - Access to migration credentials expires after cutover.
 - Old Convex and SQLite sources remain read-only through the signed acceptance
   window.
@@ -34,6 +44,6 @@ Status: Approved classification; retention durations require business approval
 
 - Retention duration for sealed Convex and SQLite artifacts.
 - Retention duration for failed rehearsal artifacts and conflict evidence.
-- Object-storage provider, region, lifecycle policy, and legal retention for
-  business files.
+- UploadThing region and legal retention for business files. Provider,
+  `public-read` ACL, immutable lifecycle, and manual-only deletion are approved.
 - Historical HR JSON and resume retention after normalized recruitment import.

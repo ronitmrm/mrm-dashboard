@@ -24,6 +24,12 @@ export async function GET(
       documentId,
       organizationId,
     })
+    if (file.publicUrl) {
+      return Response.redirect(file.publicUrl, 307)
+    }
+    if (!file.storageKey) {
+      throw new Error("Store document is unavailable.")
+    }
     const attachment = await readUserAttachment(file.storageKey)
     return new Response(attachment.body, {
       headers: userAttachmentDownloadHeaders(

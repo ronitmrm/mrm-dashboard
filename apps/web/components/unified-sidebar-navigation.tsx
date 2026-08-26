@@ -200,7 +200,9 @@ export function UnifiedSidebarNavigation({
       : []
   const visibleAdministrationNavigation = administrationNavigation.filter(
     (item) =>
-      item.href !== "/administration/access" || navigationAccess.administration
+      (item.href !== "/administration/access" ||
+        navigationAccess.administration) &&
+      (item.href !== "/administration/artifacts" || navigationAccess.artifacts)
   )
   const normalizedMenuSearch = menuSearch.trim().toLowerCase()
   const filteredCommercialNavigation = filterNavigationItems(
@@ -310,7 +312,7 @@ export function UnifiedSidebarNavigation({
   const filteredAdministrationNavigation = filterNavigationItems(
     visibleAdministrationNavigation,
     normalizedMenuSearch,
-    "administration access account password security"
+    "administration artifacts files access account password security"
   )
   const dashboardMatchesSearch =
     !normalizedMenuSearch ||

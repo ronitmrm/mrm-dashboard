@@ -701,6 +701,411 @@ async function getQuoteWithClient(client: PoolClient, quoteItemId: string) {
   }
 }
 
+export const quotePdfArtifactPurpose = "issued_quote_pdf"
+
+export async function authorizeQuoteArtifactTarget(
+  client: PoolClient,
+  input: { organizationId: string; quoteItemId: string },
+  options: { actorUserId?: string | null; requireReadyState: boolean }
+) {
+  const quote = await client.query<{ id: string }>(
+    `
+      SELECT quote.id
+      FROM sales.quote_items quote
+      LEFT JOIN sales.enquiry_items enquiry_item
+        ON enquiry_item.id = quote.enquiry_item_id
+      LEFT JOIN sales.enquiries enquiry
+        ON enquiry.id = coalesce(quote.enquiry_id, enquiry_item.enquiry_id)
+      WHERE quote.id = $1 AND quote.organization_id = $2
+        AND (
+          NOT $3::boolean
+          OR quote.status = 'Ready'
+        )
+        AND ($4::uuid IS NULL OR enquiry.created_by_user_id = $4)
+    `,
+    [
+      input.quoteItemId,
+      input.organizationId,
+      options.requireReadyState,
+      options.actorUserId ?? null,
+    ]
+  )
+  if (!quote.rows[0]) {
+    throw new Error("Quote PDF target was not found or is not ready.")
+  }
+}
+
+async function getQuoteDocumentWithClient(
+  queryable: Pool | PoolClient,
+  enquiryId: string,
+  scope?: SalesWorkScope
+) {
+  const header = await queryable.query<{
+    company_name: string
+    conversion_rate: string
+    currency: string
+    customer_uid: string
+    enquiry_number: string
+    incoterms: string | null
+    packaging_terms: string | null
+    payment_terms: string | null
+    shipment_mode: string | null
+  }>(
+    `
+      SELECT enquiry.enquiry_number, enquiry.currency,
+        enquiry.conversion_rate::text, enquiry.incoterms,
+        enquiry.payment_terms, enquiry.shipment_mode,
+        enquiry.packaging_terms, customer.customer_uid,
+        customer.company_name
+      FROM sales.enquiries enquiry
+      JOIN sales.customers customer ON customer.id = enquiry.customer_id
+      WHERE enquiry.id = $1
+        AND ($2::uuid IS NULL OR enquiry.created_by_user_id = $2)
+    `,
+    [enquiryId, scope?.originatingSalespersonUserId ?? null]
+  )
+  if (!header.rows[0]) {
+    throw new Error("Enquiry was not found.")
+  }
+  const lines = await queryable.query<{
+    customer_part_code: string | null
+    description: string
+    line_number: number
+    price: string | null
+    quantity: string
+    quote_number: string | null
+    revision: number | null
+    sent_at: Date | null
+    status: string | null
+  }>(
+    `
+      SELECT enquiry_item.line_number,
+        COALESCE(selected.customer_part_code,
+          enquiry_item.customer_part_code) AS customer_part_code,
+        enquiry_item.description, enquiry_item.quantity::text,
+        selected.quote_number, selected.revision, selected.status,
+        selected.sent_at, selected.unit_price::text AS price
+      FROM sales.enquiry_items enquiry_item
+      LEFT JOIN LATERAL (
+        SELECT quote.customer_part_code, quote.quote_number,
+          quote.revision, quote.status, quote.sent_at, quote.unit_price,
+          quote.created_at, quote.updated_at
+        FROM sales.quote_items quote
+        WHERE quote.enquiry_item_id = enquiry_item.id
+        ORDER BY CASE
+            WHEN quote.sent_at IS NOT NULL
+              AND quote.created_at <= quote.sent_at THEN 0
+            WHEN quote.sent_at IS NULL
+              AND quote.status IN ('Draft', 'Ready') THEN 1
+            WHEN quote.sent_at IS NOT NULL THEN 2
+            WHEN quote.status = 'Accepted' THEN 3
+            WHEN quote.is_active THEN 4
+            ELSE 5
+          END,
+          CASE
+            WHEN quote.sent_at IS NOT NULL
+              AND quote.created_at <= quote.sent_at THEN quote.sent_at
+            ELSE quote.updated_at
+          END DESC,
+          quote.created_at DESC, quote.id DESC
+        LIMIT 1
+      ) selected ON true
+      WHERE enquiry_item.enquiry_id = $1
+      ORDER BY enquiry_item.line_number
+    `,
+    [enquiryId]
+  )
+  const organization = await queryable.query<{ organization_id: string }>(
+    "SELECT organization_id FROM sales.enquiries WHERE id = $1",
+    [enquiryId]
+  )
+  const terms = await queryable.query<{
+    label: string
+    sort_order: number
+    value: string
+  }>(
+    `
+      SELECT label, value, sort_order
+      FROM sales.quote_term_templates
+      WHERE organization_id = $1 AND active
+      ORDER BY sort_order, label
+    `,
+    [organization.rows[0]!.organization_id]
+  )
+  const row = header.rows[0]
+  return {
+    companyName: row.company_name,
+    conversionRate: asNumber(row.conversion_rate, 1),
+    currency: row.currency,
+    customerUid: row.customer_uid,
+    enquiryNumber: row.enquiry_number,
+    incoterms: row.incoterms,
+    lines: lines.rows.map((line) => ({
+      customerPartCode: line.customer_part_code,
+      description: line.description,
+      lineNumber: line.line_number,
+      price: line.price === null ? null : asNumber(line.price),
+      quantity: asNumber(line.quantity),
+      quoteNumber: line.quote_number,
+      revision: line.revision,
+      sentAt: line.sent_at,
+      status: line.status,
+    })),
+    packagingTerms: row.packaging_terms,
+    paymentTerms: row.payment_terms,
+    revision: Math.max(0, ...lines.rows.map((line) => line.revision ?? 0)),
+    shipmentMode: row.shipment_mode,
+    terms: terms.rows.map((term) => ({
+      label: term.label,
+      sortOrder: term.sort_order,
+      value: term.value,
+    })),
+  }
+}
+
+async function hasIssuedQuotePdf(client: PoolClient, quoteItemId: string) {
+  const artifact = await client.query<{ exists: boolean }>(
+    `
+      SELECT EXISTS (
+        SELECT 1
+        FROM core.file_links link
+        JOIN core.files file ON file.id = link.file_id
+        JOIN core.file_objects object ON object.id = file.physical_object_id
+        WHERE link.target_schema = 'sales'
+          AND link.target_table = 'quote_items'
+          AND link.target_id = $1
+          AND link.purpose = $2
+          AND link.is_current
+          AND file.lifecycle_state <> 'deleted'
+          AND object.lifecycle_state <> 'deleted'
+      ) AS exists
+    `,
+    [quoteItemId, quotePdfArtifactPurpose]
+  )
+  return artifact.rows[0]!.exists
+}
+
+type QuoteSendInput = {
+  actorUserId?: string | null
+  followupDueOn: string
+  quoteItemId: string
+  storeIssuedPdf?: (input: {
+    document: Awaited<ReturnType<typeof getQuoteDocumentWithClient>>
+    organizationId: string
+    quoteItemId: string
+  }) => Promise<void>
+}
+
+async function transitionQuoteToSent(
+  client: PoolClient,
+  input: QuoteSendInput
+) {
+  const root = await client.query<{
+    company_name: string
+    enquiry_id: string | null
+    enquiry_item_id: string | null
+    organization_id: string
+    status: string
+  }>(
+    `
+      SELECT quote.organization_id, quote.enquiry_item_id, quote.status,
+        coalesce(quote.enquiry_id, enquiry_item.enquiry_id) AS enquiry_id,
+        customer.company_name
+      FROM sales.quote_items quote
+      JOIN sales.customers customer ON customer.id = quote.customer_id
+      LEFT JOIN sales.enquiry_items enquiry_item
+        ON enquiry_item.id = quote.enquiry_item_id
+      LEFT JOIN sales.enquiries enquiry
+        ON enquiry.id = coalesce(quote.enquiry_id, enquiry_item.enquiry_id)
+      WHERE quote.id = $1
+        AND ($2::uuid IS NULL OR enquiry.created_by_user_id = $2)
+      FOR UPDATE OF quote
+    `,
+    [input.quoteItemId, input.actorUserId ?? null]
+  )
+  if (!root.rows[0]) {
+    throw new Error("Quote was not found.")
+  }
+  if (root.rows[0].status === "Draft") {
+    throw new Error(
+      "Complete Customer Parameter Costing before sending this quote."
+    )
+  }
+  if (root.rows[0].status !== "Ready" && root.rows[0].status !== "Sent") {
+    throw new Error("Only a ready quote can be sent.")
+  }
+  const tree = await client.query<{ id: string; depth: number }>(
+    `
+      WITH RECURSIVE quote_tree AS (
+        SELECT $1::uuid AS id, 0 AS depth
+        UNION ALL
+        SELECT component.child_quote_item_id, quote_tree.depth + 1
+        FROM quote_tree
+        JOIN sales.quote_product_snapshots snapshot
+          ON snapshot.quote_item_id = quote_tree.id
+        JOIN sales.quote_package_components component
+          ON component.quote_product_snapshot_id = snapshot.id
+        WHERE component.child_quote_item_id IS NOT NULL
+      )
+      SELECT DISTINCT id, max(depth)::integer AS depth
+      FROM quote_tree
+      GROUP BY id
+      ORDER BY depth DESC
+    `,
+    [input.quoteItemId]
+  )
+  for (const member of tree.rows) {
+    const quote = await client.query<{
+      customer_id: string
+      price_lineage_key: string | null
+      revision: number
+      sent_at: Date | null
+    }>(
+      `
+        SELECT customer_id, price_lineage_key, revision, sent_at
+        FROM sales.quote_items
+        WHERE id = $1
+        FOR UPDATE
+      `,
+      [member.id]
+    )
+    const quoteRow = quote.rows[0]!
+    if (quoteRow.sent_at) {
+      continue
+    }
+    await client.query(
+      "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+      [
+        [
+          "pricing-active",
+          root.rows[0].organization_id,
+          quoteRow.customer_id,
+          quoteRow.price_lineage_key ?? "legacy-null",
+        ].join(":"),
+      ]
+    )
+    const revision = await client.query<{ revision: number }>(
+      `
+        SELECT COALESCE(max(revision), 0)::integer + 1 AS revision
+        FROM sales.quote_items
+        WHERE organization_id = $1
+          AND customer_id = $2
+          AND price_lineage_key = $3
+          AND id <> $4
+      `,
+      [
+        root.rows[0].organization_id,
+        quoteRow.customer_id,
+        quoteRow.price_lineage_key,
+        member.id,
+      ]
+    )
+    await client.query(
+      `
+        UPDATE sales.quote_items
+        SET status = 'Superseded', is_active = false,
+          superseded_by_quote_item_id = $1, updated_at = now(),
+          row_version = row_version + 1
+        WHERE organization_id = $2
+          AND customer_id = $3
+          AND price_lineage_key = $4
+          AND is_active
+          AND id <> $1
+      `,
+      [
+        member.id,
+        root.rows[0].organization_id,
+        quoteRow.customer_id,
+        quoteRow.price_lineage_key,
+      ]
+    )
+    await client.query(
+      `
+        UPDATE sales.quote_items
+        SET status = 'Sent', is_active = true, sent_at = now(),
+          revision = $1, superseded_by_quote_item_id = NULL,
+          updated_by_user_id = $2, updated_at = now(),
+          row_version = row_version + 1
+        WHERE id = $3
+      `,
+      [revision.rows[0]!.revision, input.actorUserId ?? null, member.id]
+    )
+  }
+  if (input.storeIssuedPdf) {
+    const enquiryId = root.rows[0].enquiry_id
+    if (!enquiryId) {
+      throw new Error("Quote must belong to an Enquiry before it can be sent.")
+    }
+    if (!(await hasIssuedQuotePdf(client, input.quoteItemId))) {
+      await input.storeIssuedPdf({
+        document: await getQuoteDocumentWithClient(
+          client,
+          enquiryId,
+          input.actorUserId
+            ? { originatingSalespersonUserId: input.actorUserId }
+            : undefined
+        ),
+        organizationId: root.rows[0].organization_id,
+        quoteItemId: input.quoteItemId,
+      })
+      if (!(await hasIssuedQuotePdf(client, input.quoteItemId))) {
+        throw new Error("Sent Quote PDF was not stored.")
+      }
+    }
+  }
+  if (root.rows[0].enquiry_item_id) {
+    await client.query(
+      `
+        UPDATE sales.design_tasks
+        SET next_stage_status = 'Quoted', updated_by_user_id = $1,
+          updated_at = now(), row_version = row_version + 1
+        WHERE enquiry_item_id = $2
+      `,
+      [input.actorUserId ?? null, root.rows[0].enquiry_item_id]
+    )
+  }
+  if (root.rows[0].enquiry_id) {
+    const note = `Quote sent to ${root.rows[0].company_name}.`
+    await client.query(
+      `
+        INSERT INTO sales.followups (
+          organization_id, enquiry_id, quote_item_id, due_on, channel,
+          status, note, created_by_user_id, updated_by_user_id,
+          source_system, source_table, source_id, source_payload
+        )
+        SELECT
+          $1, $2, $6::uuid, $7::date, 'Email', 'Pending', $3,
+          $4, $4, 'mrm-dashboard', 'followups', $5,
+          jsonb_build_object('quoteItemId', $6::text)
+        WHERE NOT EXISTS (
+          SELECT 1
+          FROM sales.followups followup
+          WHERE followup.quote_item_id = $6::uuid
+            AND followup.status = 'Pending'
+        )
+      `,
+      [
+        root.rows[0].organization_id,
+        root.rows[0].enquiry_id,
+        note,
+        input.actorUserId ?? null,
+        randomUUID(),
+        input.quoteItemId,
+        input.followupDueOn,
+      ]
+    )
+  }
+  await writeAuditEvent(client, {
+    actorUserId: input.actorUserId,
+    eventType: "quote.sent",
+    metadata: { quoteTreeSize: tree.rows.length },
+    organizationId: root.rows[0].organization_id,
+    targetId: input.quoteItemId,
+    targetTable: "quote_items",
+  })
+  return getQuoteWithClient(client, input.quoteItemId)
+}
+
 async function persistQuote(
   client: PoolClient,
   input: {
@@ -2323,190 +2728,18 @@ export function createCommercialCostingRepository(
       if (!/^\d{4}-\d{2}-\d{2}$/.test(input.followupDueOn)) {
         throw new Error("Follow-Up Date must use YYYY-MM-DD.")
       }
-      return transaction(pool, async (client) => {
-        const root = await client.query<{
-          company_name: string
-          enquiry_id: string | null
-          enquiry_item_id: string | null
-          organization_id: string
-          status: string
-        }>(
-          `
-            SELECT quote.organization_id, quote.enquiry_item_id, quote.status,
-              coalesce(quote.enquiry_id, enquiry_item.enquiry_id) AS enquiry_id,
-              customer.company_name
-            FROM sales.quote_items quote
-            JOIN sales.customers customer ON customer.id = quote.customer_id
-            LEFT JOIN sales.enquiry_items enquiry_item
-              ON enquiry_item.id = quote.enquiry_item_id
-            LEFT JOIN sales.enquiries enquiry
-              ON enquiry.id = coalesce(quote.enquiry_id, enquiry_item.enquiry_id)
-            WHERE quote.id = $1
-              AND ($2::uuid IS NULL OR enquiry.created_by_user_id = $2)
-            FOR UPDATE OF quote
-          `,
-          [input.quoteItemId, input.actorUserId ?? null]
-        )
-        if (!root.rows[0]) {
-          throw new Error("Quote was not found.")
-        }
-        if (root.rows[0].status === "Draft") {
-          throw new Error(
-            "Complete Customer Parameter Costing before sending this quote."
-          )
-        }
-        if (root.rows[0].status !== "Ready" && root.rows[0].status !== "Sent") {
-          throw new Error("Only a ready quote can be sent.")
-        }
-        const tree = await client.query<{ id: string; depth: number }>(
-          `
-            WITH RECURSIVE quote_tree AS (
-              SELECT $1::uuid AS id, 0 AS depth
-              UNION ALL
-              SELECT component.child_quote_item_id, quote_tree.depth + 1
-              FROM quote_tree
-              JOIN sales.quote_product_snapshots snapshot
-                ON snapshot.quote_item_id = quote_tree.id
-              JOIN sales.quote_package_components component
-                ON component.quote_product_snapshot_id = snapshot.id
-              WHERE component.child_quote_item_id IS NOT NULL
-            )
-            SELECT DISTINCT id, max(depth)::integer AS depth
-            FROM quote_tree
-            GROUP BY id
-            ORDER BY depth DESC
-          `,
-          [input.quoteItemId]
-        )
-        for (const member of tree.rows) {
-          const quote = await client.query<{
-            customer_id: string
-            price_lineage_key: string | null
-            revision: number
-            sent_at: Date | null
-          }>(
-            `
-              SELECT customer_id, price_lineage_key, revision, sent_at
-              FROM sales.quote_items
-              WHERE id = $1
-              FOR UPDATE
-            `,
-            [member.id]
-          )
-          const quoteRow = quote.rows[0]!
-          if (quoteRow.sent_at) {
-            continue
-          }
-          await client.query(
-            "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
-            [
-              [
-                "pricing-active",
-                root.rows[0].organization_id,
-                quoteRow.customer_id,
-                quoteRow.price_lineage_key ?? "legacy-null",
-              ].join(":"),
-            ]
-          )
-          const revision = await client.query<{ revision: number }>(
-            `
-              SELECT COALESCE(max(revision), 0)::integer + 1 AS revision
-              FROM sales.quote_items
-              WHERE organization_id = $1
-                AND customer_id = $2
-                AND price_lineage_key = $3
-                AND id <> $4
-            `,
-            [
-              root.rows[0].organization_id,
-              quoteRow.customer_id,
-              quoteRow.price_lineage_key,
-              member.id,
-            ]
-          )
-          await client.query(
-            `
-              UPDATE sales.quote_items
-              SET status = 'Superseded', is_active = false,
-                superseded_by_quote_item_id = $1, updated_at = now(),
-                row_version = row_version + 1
-              WHERE organization_id = $2
-                AND customer_id = $3
-                AND price_lineage_key = $4
-                AND is_active
-                AND id <> $1
-            `,
-            [
-              member.id,
-              root.rows[0].organization_id,
-              quoteRow.customer_id,
-              quoteRow.price_lineage_key,
-            ]
-          )
-          await client.query(
-            `
-              UPDATE sales.quote_items
-              SET status = 'Sent', is_active = true, sent_at = now(),
-                revision = $1, superseded_by_quote_item_id = NULL,
-                updated_by_user_id = $2, updated_at = now(),
-                row_version = row_version + 1
-              WHERE id = $3
-            `,
-            [revision.rows[0]!.revision, input.actorUserId ?? null, member.id]
-          )
-        }
-        if (root.rows[0].enquiry_item_id) {
-          await client.query(
-            `
-              UPDATE sales.design_tasks
-              SET next_stage_status = 'Quoted', updated_by_user_id = $1,
-                updated_at = now(), row_version = row_version + 1
-              WHERE enquiry_item_id = $2
-            `,
-            [input.actorUserId ?? null, root.rows[0].enquiry_item_id]
-          )
-        }
-        if (root.rows[0].enquiry_id) {
-          const note = `Quote sent to ${root.rows[0].company_name}.`
-          await client.query(
-            `
-              INSERT INTO sales.followups (
-                organization_id, enquiry_id, quote_item_id, due_on, channel,
-                status, note, created_by_user_id, updated_by_user_id,
-                source_system, source_table, source_id, source_payload
-              )
-              SELECT
-                $1, $2, $6, $7::date, 'Email', 'Pending', $3,
-                $4, $4, 'mrm-dashboard', 'followups', $5,
-                jsonb_build_object('quoteItemId', $6::text)
-              WHERE NOT EXISTS (
-                SELECT 1
-                FROM sales.followups followup
-                WHERE followup.quote_item_id = $6
-                  AND followup.status = 'Pending'
-              )
-            `,
-            [
-              root.rows[0].organization_id,
-              root.rows[0].enquiry_id,
-              note,
-              input.actorUserId ?? null,
-              randomUUID(),
-              input.quoteItemId,
-              input.followupDueOn,
-            ]
-          )
-        }
-        await writeAuditEvent(client, {
-          actorUserId: input.actorUserId,
-          eventType: "quote.sent",
-          metadata: { quoteTreeSize: tree.rows.length },
-          organizationId: root.rows[0].organization_id,
-          targetId: input.quoteItemId,
-          targetTable: "quote_items",
-        })
-        return getQuoteWithClient(client, input.quoteItemId)
-      })
+      return transaction(pool, (client) => transitionQuoteToSent(client, input))
+    },
+
+    async issueQuote(
+      input: QuoteSendInput & {
+        storeIssuedPdf: NonNullable<QuoteSendInput["storeIssuedPdf"]>
+      }
+    ) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(input.followupDueOn)) {
+        throw new Error("Follow-Up Date must use YYYY-MM-DD.")
+      }
+      return transaction(pool, (client) => transitionQuoteToSent(client, input))
     },
 
     async getQuote(quoteItemId: string, scope?: SalesWorkScope) {
@@ -3005,127 +3238,80 @@ export function createCommercialCostingRepository(
     },
 
     async getQuoteDocument(enquiryId: string, scope?: SalesWorkScope) {
-      const header = await pool.query<{
-        company_name: string
-        conversion_rate: string
-        currency: string
-        customer_uid: string
-        enquiry_number: string
-        incoterms: string | null
-        packaging_terms: string | null
-        payment_terms: string | null
-        shipment_mode: string | null
+      return getQuoteDocumentWithClient(pool, enquiryId, scope)
+    },
+
+    async getQuotePdfArtifact(enquiryId: string, scope?: SalesWorkScope) {
+      const artifact = await pool.query<{
+        byte_size: string
+        file_name: string
+        file_lifecycle_state: string
+        object_lifecycle_state: string
+        public_url: string
+        sha256: string
       }>(
         `
-          SELECT enquiry.enquiry_number, enquiry.currency,
-            enquiry.conversion_rate::text, enquiry.incoterms,
-            enquiry.payment_terms, enquiry.shipment_mode,
-            enquiry.packaging_terms, customer.customer_uid,
-            customer.company_name
-          FROM sales.enquiries enquiry
-          JOIN sales.customers customer ON customer.id = enquiry.customer_id
-          WHERE enquiry.id = $1
-            AND ($2::uuid IS NULL OR enquiry.created_by_user_id = $2)
+          SELECT file.file_name, file.byte_size::text, object.sha256,
+            object.public_url,
+            file.lifecycle_state AS file_lifecycle_state,
+            object.lifecycle_state AS object_lifecycle_state
+          FROM sales.quote_items quote
+          JOIN core.file_links link
+            ON link.target_schema = 'sales'
+            AND link.target_table = 'quote_items'
+            AND link.target_id = quote.id
+            AND link.purpose = $2
+          JOIN core.files file ON file.id = link.file_id
+          JOIN core.file_objects object ON object.id = file.physical_object_id
+          LEFT JOIN sales.enquiry_items enquiry_item
+            ON enquiry_item.id = quote.enquiry_item_id
+          JOIN sales.enquiries enquiry
+            ON enquiry.id = coalesce(quote.enquiry_id, enquiry_item.enquiry_id)
+          WHERE coalesce(quote.enquiry_id, enquiry_item.enquiry_id) = $1
+            AND quote.sent_at IS NOT NULL
+            AND ($3::uuid IS NULL OR enquiry.created_by_user_id = $3)
+          ORDER BY quote.sent_at DESC, link.version DESC,
+            file.created_at DESC, file.id DESC
+          LIMIT 1
+        `,
+        [
+          enquiryId,
+          quotePdfArtifactPurpose,
+          scope?.originatingSalespersonUserId ?? null,
+        ]
+      )
+      const row = artifact.rows[0]
+      return row
+        ? {
+            available:
+              row.file_lifecycle_state !== "deleted" &&
+              row.object_lifecycle_state !== "deleted",
+            byteSize: Number(row.byte_size),
+            fileName: row.file_name,
+            publicUrl: row.public_url,
+            sha256: row.sha256,
+          }
+        : null
+    },
+
+    async hasHistoricalQuote(enquiryId: string, scope?: SalesWorkScope) {
+      const result = await pool.query<{ exists: boolean }>(
+        `
+          SELECT EXISTS (
+            SELECT 1
+            FROM sales.quote_items quote
+            LEFT JOIN sales.enquiry_items enquiry_item
+              ON enquiry_item.id = quote.enquiry_item_id
+            JOIN sales.enquiries enquiry
+              ON enquiry.id = coalesce(quote.enquiry_id, enquiry_item.enquiry_id)
+            WHERE enquiry.id = $1
+              AND quote.sent_at IS NOT NULL
+              AND ($2::uuid IS NULL OR enquiry.created_by_user_id = $2)
+          ) AS exists
         `,
         [enquiryId, scope?.originatingSalespersonUserId ?? null]
       )
-      if (!header.rows[0]) {
-        throw new Error("Enquiry was not found.")
-      }
-      const lines = await pool.query<{
-        customer_part_code: string | null
-        description: string
-        line_number: number
-        price: string | null
-        quantity: string
-        quote_number: string | null
-        revision: number | null
-        sent_at: Date | null
-        status: string | null
-      }>(
-        `
-          SELECT enquiry_item.line_number,
-            COALESCE(selected.customer_part_code,
-              enquiry_item.customer_part_code) AS customer_part_code,
-            enquiry_item.description, enquiry_item.quantity::text,
-            selected.quote_number, selected.revision, selected.status,
-            selected.sent_at, selected.unit_price::text AS price
-          FROM sales.enquiry_items enquiry_item
-          LEFT JOIN LATERAL (
-            SELECT quote.customer_part_code, quote.quote_number,
-              quote.revision, quote.status, quote.sent_at, quote.unit_price,
-              quote.created_at, quote.updated_at
-            FROM sales.quote_items quote
-            WHERE quote.enquiry_item_id = enquiry_item.id
-            ORDER BY CASE
-                WHEN quote.sent_at IS NOT NULL
-                  AND quote.created_at <= quote.sent_at THEN 0
-                WHEN quote.sent_at IS NULL
-                  AND quote.status IN ('Draft', 'Ready') THEN 1
-                WHEN quote.sent_at IS NOT NULL THEN 2
-                WHEN quote.status = 'Accepted' THEN 3
-                WHEN quote.is_active THEN 4
-                ELSE 5
-              END,
-              CASE
-                WHEN quote.sent_at IS NOT NULL
-                  AND quote.created_at <= quote.sent_at THEN quote.sent_at
-                ELSE quote.updated_at
-              END DESC,
-              quote.created_at DESC, quote.id DESC
-            LIMIT 1
-          ) selected ON true
-          WHERE enquiry_item.enquiry_id = $1
-          ORDER BY enquiry_item.line_number
-        `,
-        [enquiryId]
-      )
-      const organization = await pool.query<{ organization_id: string }>(
-        "SELECT organization_id FROM sales.enquiries WHERE id = $1",
-        [enquiryId]
-      )
-      const terms = await pool.query<{
-        label: string
-        sort_order: number
-        value: string
-      }>(
-        `
-          SELECT label, value, sort_order
-          FROM sales.quote_term_templates
-          WHERE organization_id = $1 AND active
-          ORDER BY sort_order, label
-        `,
-        [organization.rows[0]!.organization_id]
-      )
-      const row = header.rows[0]
-      return {
-        companyName: row.company_name,
-        conversionRate: asNumber(row.conversion_rate, 1),
-        currency: row.currency,
-        customerUid: row.customer_uid,
-        enquiryNumber: row.enquiry_number,
-        incoterms: row.incoterms,
-        lines: lines.rows.map((line) => ({
-          customerPartCode: line.customer_part_code,
-          description: line.description,
-          lineNumber: line.line_number,
-          price: line.price === null ? null : asNumber(line.price),
-          quantity: asNumber(line.quantity),
-          quoteNumber: line.quote_number,
-          revision: line.revision,
-          sentAt: line.sent_at,
-          status: line.status,
-        })),
-        packagingTerms: row.packaging_terms,
-        paymentTerms: row.payment_terms,
-        revision: Math.max(0, ...lines.rows.map((line) => line.revision ?? 0)),
-        shipmentMode: row.shipment_mode,
-        terms: terms.rows.map((term) => ({
-          label: term.label,
-          sortOrder: term.sort_order,
-          value: term.value,
-        })),
-      }
+      return result.rows[0]!.exists
     },
 
     async listPricingRegister(

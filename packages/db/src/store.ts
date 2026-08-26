@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto"
+
 import type { PoolClient } from "pg"
 
 import {
@@ -17,6 +19,42 @@ export type StoreHolderType =
   | "SUPPLIER"
   | "UNIT"
   | "VENDOR"
+
+export const storePurchaseOrderPdfArtifactPurpose =
+  "issued_store_purchase_order_pdf"
+
+type StorePurchaseOrderDocument = {
+  lines: Array<{
+    assetCategory: string
+    assetName: string
+    assetSubcategory: string
+    itemName: string
+    orderedQuantity: string
+    receivedQuantity: string
+    typeCode: string
+    unit: string
+    unitPrice: string
+  }>
+  order: {
+    id: string
+    orderDate: string
+    orderNumber: string
+    remark: string | null
+    status: string
+    supplierCode: string
+    supplierAddress: string | null
+    supplierEmail: string | null
+    supplierGstNumber: string | null
+    supplierName: string
+    orderType: "GOODS" | "REPAIR"
+  }
+}
+
+type StoreIssuedPdfWriter = (input: {
+  document: StorePurchaseOrderDocument
+  organizationId: string
+  purchaseOrderId: string
+}) => Promise<unknown>
 
 type StoreRequisitionBatchInput = {
   actorUserId?: string | null
@@ -55,6 +93,10 @@ function positiveQuantity(value: number, label = "Quantity") {
     throw new Error(`${label} must be greater than zero.`)
   }
   return value
+}
+
+function issuanceFingerprint(value: unknown) {
+  return createHash("sha256").update(JSON.stringify(value)).digest("hex")
 }
 
 function storeAssetType(value: unknown): StoreAssetType {
@@ -193,8 +235,291 @@ async function machineIdForReference(
   return result.rows[0].id
 }
 
+async function getStorePurchaseOrderWithClient(
+  client: PoolClient,
+  input: { organizationId: string; purchaseOrderId: string },
+  options: { includePending?: boolean } = {}
+): Promise<StorePurchaseOrderDocument | null> {
+  const order = await client.query<StorePurchaseOrderDocument["order"]>(
+    `
+      SELECT purchase_order.id,
+        purchase_order.order_number AS "orderNumber",
+        purchase_order.order_date::text AS "orderDate",
+        purchase_order.status, purchase_order.remark,
+        purchase_order.order_type AS "orderType",
+        supplier.code AS "supplierCode",
+        supplier.name AS "supplierName", supplier.email AS "supplierEmail",
+        supplier.gst_number AS "supplierGstNumber",
+        supplier.address AS "supplierAddress"
+      FROM store.purchase_orders purchase_order
+      JOIN store.suppliers supplier ON supplier.id = purchase_order.supplier_id
+      WHERE purchase_order.id = $1 AND purchase_order.organization_id = $2
+        AND ($3::boolean OR purchase_order.issuance_state = 'issued')
+    `,
+    [input.purchaseOrderId, input.organizationId, options.includePending ?? false]
+  )
+  if (!order.rows[0]) return null
+  const lines = await client.query<StorePurchaseOrderDocument["lines"][number]>(
+    `
+      SELECT item.type_code AS "typeCode", item.identification_name AS "itemName",
+        item.asset_name AS "assetName", item.asset_category AS "assetCategory",
+        item.asset_subcategory AS "assetSubcategory", item.unit,
+        trim_scale(line.ordered_quantity)::text AS "orderedQuantity",
+        trim_scale(line.received_quantity)::text AS "receivedQuantity",
+        line.unit_price::text AS "unitPrice"
+      FROM store.purchase_order_lines line
+      JOIN store.item_types item ON item.id = line.item_type_id
+      WHERE line.purchase_order_id = $1 AND line.organization_id = $2
+      UNION ALL
+      SELECT asset.asset_code AS "typeCode",
+        purchase_order.service_description AS "itemName",
+        item.asset_name AS "assetName", item.asset_category AS "assetCategory",
+        item.asset_subcategory AS "assetSubcategory", 'Job' AS unit,
+        '1' AS "orderedQuantity",
+        CASE WHEN purchase_order.status = 'Completed' THEN '1' ELSE '0' END
+          AS "receivedQuantity",
+        purchase_order.service_price::text AS "unitPrice"
+      FROM store.purchase_orders purchase_order
+      JOIN store.assets asset ON asset.id = purchase_order.repair_asset_id
+      JOIN store.item_types item ON item.id = asset.item_type_id
+      WHERE purchase_order.id = $1
+        AND purchase_order.organization_id = $2
+        AND purchase_order.order_type = 'REPAIR'
+    `,
+    [input.purchaseOrderId, input.organizationId]
+  )
+  return { lines: lines.rows, order: order.rows[0] }
+}
+
+async function hasIssuedStorePurchaseOrderPdf(
+  client: PoolClient,
+  input: { organizationId: string; purchaseOrderId: string }
+) {
+  const result = await client.query<{ id: string }>(
+    `
+      SELECT file.id
+      FROM core.file_links link
+      JOIN core.files file ON file.id = link.file_id
+      JOIN core.file_objects object ON object.id = file.physical_object_id
+      WHERE link.organization_id = $1
+        AND link.target_schema = 'store'
+        AND link.target_table = 'purchase_orders'
+        AND link.target_id = $2
+        AND link.purpose = $3
+        AND link.is_current
+        AND file.lifecycle_state <> 'deleted'
+        AND object.lifecycle_state <> 'deleted'
+      LIMIT 1
+    `,
+    [
+      input.organizationId,
+      input.purchaseOrderId,
+      storePurchaseOrderPdfArtifactPurpose,
+    ]
+  )
+  return Boolean(result.rows[0])
+}
+
+export async function authorizeStorePurchaseOrderArtifactTarget(
+  client: PoolClient,
+  input: { organizationId: string; purchaseOrderId: string },
+  options: { requirePendingState?: boolean } = {}
+) {
+  const target = await client.query<{ issuance_state: string }>(
+    `
+      SELECT issuance_state
+      FROM store.purchase_orders
+      WHERE id = $1 AND organization_id = $2
+      FOR KEY SHARE
+    `,
+    [requiredText(input.purchaseOrderId, "Store Purchase Order"), input.organizationId]
+  )
+  if (!target.rows[0]) throw new Error("Store Purchase Order was not found.")
+  if (options.requirePendingState && target.rows[0].issuance_state !== "pending") {
+    throw new Error("Issued Store Purchase Order PDFs cannot be replaced.")
+  }
+}
+
+export async function authorizeStoreItemTypeArtifactTarget(
+  client: PoolClient,
+  input: { itemTypeId: string; organizationId: string }
+) {
+  const target = await client.query<{ id: string }>(
+    `
+      SELECT id FROM store.item_types
+      WHERE id = $1 AND organization_id = $2 AND active
+      FOR KEY SHARE
+    `,
+    [requiredText(input.itemTypeId, "Store Item Type"), input.organizationId]
+  )
+  if (!target.rows[0]) throw new Error("Store Item Type was not found.")
+}
+
+export async function authorizeStoreReceiptArtifactTarget(
+  client: PoolClient,
+  input: { organizationId: string; receiptId: string }
+) {
+  const target = await client.query<{ id: string }>(
+    `
+      SELECT id FROM store.receipts
+      WHERE id = $1 AND organization_id = $2
+      FOR KEY SHARE
+    `,
+    [requiredText(input.receiptId, "Store receipt"), input.organizationId]
+  )
+  if (!target.rows[0]) throw new Error("Store receipt was not found.")
+}
+
 export function createStoreRepository(options: RepositoryPoolOptions) {
   const { close, pool } = repositoryPool(options)
+
+  const issuePurchaseOrder = async (input: {
+    organizationId: string
+    purchaseOrderId: string
+    storeIssuedPdf: StoreIssuedPdfWriter
+  }) => {
+    const prepared = await withTransaction(pool, (client) =>
+      getStorePurchaseOrderWithClient(
+        client,
+        {
+          organizationId: input.organizationId,
+          purchaseOrderId: input.purchaseOrderId,
+        },
+        { includePending: true }
+      )
+    )
+    if (!prepared) throw new Error("Store Purchase Order was not found.")
+    const alreadyStored = await withTransaction(pool, (client) =>
+      hasIssuedStorePurchaseOrderPdf(client, input)
+    )
+    if (!alreadyStored) {
+      await input.storeIssuedPdf({
+        document: prepared,
+        organizationId: input.organizationId,
+        purchaseOrderId: input.purchaseOrderId,
+      })
+    }
+    return withTransaction(pool, async (client) => {
+      const order = await client.query<{
+        created_by_user_id: string | null
+        issuance_state: string
+        order_number: string
+        order_type: "GOODS" | "REPAIR"
+        remark: string | null
+        repair_asset_id: string | null
+        supplier_code: string
+        supplier_id: string
+        supplier_name: string
+      }>(
+        `
+          SELECT purchase_order.issuance_state, purchase_order.order_number,
+            purchase_order.order_type, purchase_order.remark,
+            purchase_order.repair_asset_id, purchase_order.created_by_user_id,
+            supplier.id AS supplier_id, supplier.code AS supplier_code,
+            supplier.name AS supplier_name
+          FROM store.purchase_orders purchase_order
+          JOIN store.suppliers supplier ON supplier.id = purchase_order.supplier_id
+          WHERE purchase_order.id = $1 AND purchase_order.organization_id = $2
+          FOR UPDATE OF purchase_order
+        `,
+        [input.purchaseOrderId, input.organizationId]
+      )
+      if (!order.rows[0]) throw new Error("Store Purchase Order was not found.")
+      if (!(await hasIssuedStorePurchaseOrderPdf(client, input))) {
+        throw new Error(
+          "The Store Purchase Order PDF was not stored. Retry this issuance."
+        )
+      }
+      if (order.rows[0].issuance_state === "pending") {
+        if (order.rows[0].order_type === "REPAIR") {
+          const asset = await client.query<{
+            current_holder_name: string | null
+            current_holder_reference: string | null
+            current_holder_type: StoreHolderType
+            current_location_id: string | null
+            id: string
+            item_type_id: string
+          }>(
+            `
+              SELECT id, item_type_id, current_location_id,
+                current_holder_type, current_holder_reference,
+                current_holder_name
+              FROM store.assets
+              WHERE id = $1 AND organization_id = $2
+              FOR UPDATE
+            `,
+            [order.rows[0].repair_asset_id, input.organizationId]
+          )
+          if (!asset.rows[0]) throw new Error("Repair asset was not found.")
+          const fallbackLocation = await client.query<{ id: string }>(
+            `SELECT id FROM store.locations
+             WHERE organization_id = $1 AND active ORDER BY created_at LIMIT 1`,
+            [input.organizationId]
+          )
+          const locationId =
+            asset.rows[0].current_location_id ?? fallbackLocation.rows[0]?.id
+          if (!locationId) throw new Error("A Store location is required.")
+          await client.query(
+            `
+              UPDATE store.assets
+              SET status = 'UNDER_MAINTENANCE',
+                current_holder_type = 'SUPPLIER',
+                current_holder_reference = $1,
+                current_holder_name = $2,
+                current_supplier_id = $3,
+                current_vendor_id = NULL,
+                current_machine_id = NULL,
+                current_location_id = NULL,
+                updated_at = now(), updated_by_user_id = $4
+              WHERE id = $5
+            `,
+            [
+              order.rows[0].supplier_code,
+              order.rows[0].supplier_name,
+              order.rows[0].supplier_id,
+              order.rows[0].created_by_user_id,
+              asset.rows[0].id,
+            ]
+          )
+          await client.query(
+            `
+              INSERT INTO store.stock_movements (
+                organization_id, item_type_id, asset_id, location_id,
+                movement_type, quantity, from_holder_type,
+                from_holder_reference, from_holder_name, to_holder_type,
+                to_holder_reference, to_holder_name, remark,
+                created_by_user_id
+              ) VALUES ($1, $2, $3, $4, 'TRANSFER_OUT', -1,
+                $5, $6, $7, 'SUPPLIER', $8, $9, $10, $11)
+            `,
+            [
+              input.organizationId,
+              asset.rows[0].item_type_id,
+              asset.rows[0].id,
+              locationId,
+              asset.rows[0].current_holder_type,
+              asset.rows[0].current_holder_reference,
+              asset.rows[0].current_holder_name,
+              order.rows[0].supplier_code,
+              order.rows[0].supplier_name,
+              order.rows[0].remark ??
+                `Sent for repair under ${order.rows[0].order_number}.`,
+              order.rows[0].created_by_user_id,
+            ]
+          )
+        }
+        await client.query(
+          `
+            UPDATE store.purchase_orders
+            SET issuance_state = 'issued', issued_at = now(), updated_at = now()
+            WHERE id = $1
+          `,
+          [input.purchaseOrderId]
+        )
+      }
+      return prepared
+    })
+  }
 
   const createRequisitionBatch = async (input: StoreRequisitionBatchInput) =>
     withTransaction(pool, async (client) => {
@@ -1003,100 +1328,62 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       return result.rows
     },
 
-    async createPurchaseOrder(input: {
-      actorUserId?: string | null
-      itemTypeId: string
-      orderDate?: string | null
-      organizationId: string
-      quantity: number
-      remark?: string | null
-      supplierId: string
-      unitPrice: string
-    }) {
-      return withTransaction(pool, async (client) => {
-        const quantity = positiveQuantity(input.quantity)
-        const unitPrice = Number(input.unitPrice)
-        if (!Number.isFinite(unitPrice) || unitPrice < 0) {
-          throw new Error("Unit price must be zero or greater.")
-        }
-        const references = await client.query(
-          `
-            SELECT 1
-            FROM store.suppliers supplier
-            JOIN store.item_types item ON item.organization_id = supplier.organization_id
-            WHERE supplier.organization_id = $1 AND supplier.id = $2
-              AND item.id = $3 AND supplier.active AND item.active
-          `,
-          [input.organizationId, input.supplierId, input.itemTypeId]
-        )
-        if (!references.rows[0]) {
-          throw new Error("Select a valid Supplier and Store Item Type.")
-        }
-        const orderNumber = await nextDocumentNumber(client, {
-          counterKey: "PURCHASE_ORDER",
-          organizationId: input.organizationId,
-          prefix: "STR-PO",
-        })
-        const order = await client.query<{ id: string }>(
-          `
-            INSERT INTO store.purchase_orders (
-              organization_id, order_number, supplier_id, order_date, remark,
-              created_by_user_id, updated_by_user_id
-            ) VALUES ($1, $2, $3, COALESCE(NULLIF($4, '')::date, current_date),
-              $5, $6, $6)
-            RETURNING id
-          `,
-          [
-            input.organizationId,
-            orderNumber,
-            input.supplierId,
-            input.orderDate ?? null,
-            input.remark?.trim() || null,
-            input.actorUserId ?? null,
-          ]
-        )
-        const line = await client.query<{ id: string }>(
-          `
-            INSERT INTO store.purchase_order_lines (
-              organization_id, purchase_order_id, item_type_id,
-              ordered_quantity, unit_price, created_by_user_id,
-              updated_by_user_id
-            ) VALUES ($1, $2, $3, $4, $5, $6, $6)
-            RETURNING id
-          `,
-          [
-            input.organizationId,
-            order.rows[0]!.id,
-            input.itemTypeId,
-            quantity,
-            input.unitPrice,
-            input.actorUserId ?? null,
-          ]
-        )
-        return {
-          id: line.rows[0]!.id,
-          orderNumber,
-          purchaseOrderId: order.rows[0]!.id,
-        }
-      })
-    },
-
     async createRepairPurchaseOrder(input: {
       actorUserId?: string | null
       assetCode: string
+      issuanceId: string
       orderDate?: string | null
       organizationId: string
       remark?: string | null
       serviceDescription: string
       servicePrice: string
+      storeIssuedPdf: StoreIssuedPdfWriter
       supplierId: string
     }) {
       const servicePrice = Number(input.servicePrice)
       if (!Number.isFinite(servicePrice) || servicePrice < 0) {
         throw new Error("Repair price must be zero or greater.")
       }
+      const issuanceId = requiredText(input.issuanceId, "Issuance ID")
+      const fingerprint = issuanceFingerprint({
+        assetCode: requiredText(input.assetCode, "Unit ID").toLowerCase(),
+        orderDate: input.orderDate?.trim() || null,
+        orderType: "REPAIR",
+        remark: input.remark?.trim() || null,
+        serviceDescription: requiredText(
+          input.serviceDescription,
+          "Repair description"
+        ),
+        servicePrice: Number(input.servicePrice).toFixed(2),
+        supplierId: input.supplierId,
+      })
       try {
-        return await withTransaction(pool, async (client) => {
+        const prepared = await withTransaction(pool, async (client) => {
+          await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
+            `${input.organizationId}:store-po:${issuanceId}`,
+          ])
+          const existing = await client.query<{
+            id: string
+            issuance_fingerprint: string
+            order_number: string
+          }>(
+            `
+              SELECT id, issuance_fingerprint, order_number
+              FROM store.purchase_orders
+              WHERE organization_id = $1 AND issuance_id = $2::uuid
+              LIMIT 1
+            `,
+            [input.organizationId, issuanceId]
+          )
+          if (existing.rows[0]) {
+            if (existing.rows[0].issuance_fingerprint !== fingerprint) {
+              throw new Error("Issuance ID was already used for another Store PO.")
+            }
+            return {
+              id: existing.rows[0].id,
+              orderNumber: existing.rows[0].order_number,
+            }
+          }
           const asset = await client.query<{
             current_holder_name: string | null
             current_holder_reference: string | null
@@ -1152,10 +1439,11 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
               INSERT INTO store.purchase_orders (
                 organization_id, order_number, supplier_id, order_date,
                 order_type, repair_asset_id, service_description,
-                service_price, remark, created_by_user_id, updated_by_user_id
+                service_price, remark, issuance_id, issuance_fingerprint,
+                issuance_state, created_by_user_id, updated_by_user_id
               ) VALUES ($1, $2, $3,
                 COALESCE(NULLIF($4, '')::date, current_date),
-                'REPAIR', $5, $6, $7, $8, $9, $9)
+                'REPAIR', $5, $6, $7, $8, $9::uuid, $10, 'pending', $11, $11)
               RETURNING id
             `,
             [
@@ -1167,58 +1455,19 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
               requiredText(input.serviceDescription, "Repair description"),
               input.servicePrice,
               input.remark?.trim() || null,
-              input.actorUserId ?? null,
-            ]
-          )
-          await client.query(
-            `
-              UPDATE store.assets
-              SET status = 'UNDER_MAINTENANCE',
-                current_holder_type = 'SUPPLIER',
-                current_holder_reference = $1,
-                current_holder_name = $2,
-                current_supplier_id = $3,
-                current_vendor_id = NULL,
-                current_machine_id = NULL,
-                current_location_id = NULL,
-                updated_at = now(), updated_by_user_id = $4
-              WHERE id = $5
-            `,
-            [
-              supplier.rows[0].code,
-              supplier.rows[0].name,
-              supplier.rows[0].id,
-              input.actorUserId ?? null,
-              asset.rows[0].id,
-            ]
-          )
-          await client.query(
-            `
-              INSERT INTO store.stock_movements (
-                organization_id, item_type_id, asset_id, location_id,
-                movement_type, quantity, from_holder_type,
-                from_holder_reference, from_holder_name, to_holder_type,
-                to_holder_reference, to_holder_name, remark,
-                created_by_user_id
-              ) VALUES ($1, $2, $3, $4, 'TRANSFER_OUT', -1,
-                $5, $6, $7, 'SUPPLIER', $8, $9, $10, $11)
-            `,
-            [
-              input.organizationId,
-              asset.rows[0].item_type_id,
-              asset.rows[0].id,
-              locationId,
-              asset.rows[0].current_holder_type,
-              asset.rows[0].current_holder_reference,
-              asset.rows[0].current_holder_name,
-              supplier.rows[0].code,
-              supplier.rows[0].name,
-              input.remark?.trim() || `Sent for repair under ${orderNumber}.`,
+              issuanceId,
+              fingerprint,
               input.actorUserId ?? null,
             ]
           )
           return { id: order.rows[0]!.id, orderNumber }
         })
+        await issuePurchaseOrder({
+          organizationId: input.organizationId,
+          purchaseOrderId: prepared.id,
+          storeIssuedPdf: input.storeIssuedPdf,
+        })
+        return prepared
       } catch (error) {
         if (
           constraintName(error) ===
@@ -1248,6 +1497,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             AND purchase_order.repair_asset_id = asset.id
             AND asset.organization_id = purchase_order.organization_id
             AND lower(asset.asset_code) = lower($4)
+            AND purchase_order.issuance_state = 'issued'
             AND purchase_order.status = 'Open'
           RETURNING purchase_order.id
         `,
@@ -1266,6 +1516,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
 
     async createPurchaseOrdersFromSelection(input: {
       actorUserId?: string | null
+      issuanceId: string
       items: Array<{
         itemTypeId: string
         quantity: number
@@ -1274,11 +1525,13 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       orderDate?: string | null
       organizationId: string
       remark?: string | null
+      storeIssuedPdf: StoreIssuedPdfWriter
     }) {
-      return withTransaction(pool, async (client) => {
+      const prepared = await withTransaction(pool, async (client) => {
         if (!input.items.length) {
           throw new Error("Select at least one Store item to order.")
         }
+        const issuanceId = requiredText(input.issuanceId, "Issuance ID")
         const selections = new Map<
           string,
           { quantity: number; supplierId: string | null }
@@ -1293,6 +1546,55 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           })
         }
         const orderDate = input.orderDate?.trim() || null
+        const fingerprint = issuanceFingerprint({
+          items: [...selections]
+            .map(([itemTypeId, selection]) => ({ itemTypeId, ...selection }))
+            .sort((left, right) => left.itemTypeId.localeCompare(right.itemTypeId)),
+          orderDate,
+          orderType: "GOODS",
+          remark: input.remark?.trim() || null,
+        })
+        await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
+          `${input.organizationId}:store-po:${issuanceId}`,
+        ])
+        const existing = await client.query<{
+          id: string
+          issuance_fingerprint: string
+          line_count: number
+          order_number: string
+          supplier_id: string
+        }>(
+          `
+            SELECT purchase_order.id, purchase_order.issuance_fingerprint,
+              purchase_order.order_number, purchase_order.supplier_id,
+              count(line.id)::integer AS line_count
+            FROM store.purchase_orders purchase_order
+            LEFT JOIN store.purchase_order_lines line
+              ON line.purchase_order_id = purchase_order.id
+            WHERE purchase_order.organization_id = $1
+              AND purchase_order.issuance_id = $2::uuid
+            GROUP BY purchase_order.id
+            ORDER BY purchase_order.order_number
+          `,
+          [input.organizationId, issuanceId]
+        )
+        if (existing.rows.length) {
+          if (
+            existing.rows.some(
+              (order) => order.issuance_fingerprint !== fingerprint
+            )
+          ) {
+            throw new Error("Issuance ID was already used for another Store PO.")
+          }
+          return {
+            orders: existing.rows.map((order) => ({
+              id: order.id,
+              lineCount: order.line_count,
+              orderNumber: order.order_number,
+              supplierId: order.supplier_id,
+            })),
+          }
+        }
         const prices = await client.query<{
           item_type_id: string
           supplier_id: string
@@ -1363,9 +1665,11 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             `
               INSERT INTO store.purchase_orders (
                 organization_id, order_number, supplier_id, order_date,
-                remark, created_by_user_id, updated_by_user_id
+                remark, issuance_id, issuance_fingerprint, issuance_state,
+                created_by_user_id, updated_by_user_id
               ) VALUES ($1, $2, $3,
-                COALESCE(NULLIF($4, '')::date, current_date), $5, $6, $6)
+                COALESCE(NULLIF($4, '')::date, current_date),
+                $5, $6::uuid, $7, 'pending', $8, $8)
               RETURNING id
             `,
             [
@@ -1374,6 +1678,8 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
               supplierId,
               orderDate,
               input.remark?.trim() || null,
+              issuanceId,
+              fingerprint,
               input.actorUserId ?? null,
             ]
           )
@@ -1405,6 +1711,14 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         }
         return { orders }
       })
+      for (const order of prepared.orders) {
+        await issuePurchaseOrder({
+          organizationId: input.organizationId,
+          purchaseOrderId: order.id,
+          storeIssuedPdf: input.storeIssuedPdf,
+        })
+      }
+      return prepared
     },
 
     async listPurchaseOrders(organizationId: string) {
@@ -1477,6 +1791,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           LEFT JOIN store.assets repair_asset
             ON repair_asset.id = purchase_order.repair_asset_id
           WHERE purchase_order.organization_id = $1
+            AND purchase_order.issuance_state = 'issued'
           ORDER BY purchase_order.order_date DESC, purchase_order.created_at DESC
           LIMIT 500
         `,
@@ -1489,76 +1804,46 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       organizationId: string
       purchaseOrderId: string
     }) {
-      const order = await pool.query<{
-        id: string
-        orderDate: string
-        orderNumber: string
-        remark: string | null
-        status: string
-        supplierCode: string
-        supplierAddress: string | null
-        supplierEmail: string | null
-        supplierGstNumber: string | null
-        supplierName: string
-        orderType: "GOODS" | "REPAIR"
-      }>(
-        `
-          SELECT purchase_order.id,
-            purchase_order.order_number AS "orderNumber",
-            purchase_order.order_date::text AS "orderDate",
-            purchase_order.status, purchase_order.remark,
-            purchase_order.order_type AS "orderType",
-            supplier.code AS "supplierCode",
-            supplier.name AS "supplierName", supplier.email AS "supplierEmail",
-            supplier.gst_number AS "supplierGstNumber",
-            supplier.address AS "supplierAddress"
-          FROM store.purchase_orders purchase_order
-          JOIN store.suppliers supplier ON supplier.id = purchase_order.supplier_id
-          WHERE purchase_order.id = $1 AND purchase_order.organization_id = $2
-        `,
-        [input.purchaseOrderId, input.organizationId]
+      return withTransaction(pool, (client) =>
+        getStorePurchaseOrderWithClient(client, input)
       )
-      if (!order.rows[0]) return null
-      const lines = await pool.query<{
-        assetCategory: string
-        assetName: string
-        assetSubcategory: string
-        itemName: string
-        orderedQuantity: string
-        receivedQuantity: string
-        typeCode: string
-        unit: string
-        unitPrice: string
+    },
+
+    async getPurchaseOrderPdfArtifact(input: {
+      organizationId: string
+      purchaseOrderId: string
+    }) {
+      const result = await pool.query<{
+        available: boolean
+        fileName: string
+        publicUrl: string
       }>(
         `
-          SELECT item.type_code AS "typeCode", item.identification_name AS "itemName",
-            item.asset_name AS "assetName", item.asset_category AS "assetCategory",
-            item.asset_subcategory AS "assetSubcategory", item.unit,
-            trim_scale(line.ordered_quantity)::text AS "orderedQuantity",
-            trim_scale(line.received_quantity)::text AS "receivedQuantity",
-            line.unit_price::text AS "unitPrice"
-          FROM store.purchase_order_lines line
-          JOIN store.item_types item ON item.id = line.item_type_id
-          WHERE line.purchase_order_id = $1 AND line.organization_id = $2
-          UNION ALL
-          SELECT asset.asset_code AS "typeCode",
-            purchase_order.service_description AS "itemName",
-            item.asset_name AS "assetName", item.asset_category AS "assetCategory",
-            item.asset_subcategory AS "assetSubcategory", 'Job' AS unit,
-            '1' AS "orderedQuantity",
-            CASE WHEN purchase_order.status = 'Completed' THEN '1' ELSE '0' END
-              AS "receivedQuantity",
-            purchase_order.service_price::text AS "unitPrice"
+          SELECT file.file_name AS "fileName", object.public_url AS "publicUrl",
+            (file.lifecycle_state <> 'deleted'
+              AND object.lifecycle_state <> 'deleted') AS available
           FROM store.purchase_orders purchase_order
-          JOIN store.assets asset ON asset.id = purchase_order.repair_asset_id
-          JOIN store.item_types item ON item.id = asset.item_type_id
+          JOIN core.file_links link
+            ON link.organization_id = purchase_order.organization_id
+           AND link.target_schema = 'store'
+           AND link.target_table = 'purchase_orders'
+           AND link.target_id = purchase_order.id
+           AND link.purpose = $3
+          JOIN core.files file ON file.id = link.file_id
+          JOIN core.file_objects object ON object.id = file.physical_object_id
           WHERE purchase_order.id = $1
             AND purchase_order.organization_id = $2
-            AND purchase_order.order_type = 'REPAIR'
+            AND purchase_order.issuance_state = 'issued'
+          ORDER BY link.version DESC, file.created_at DESC, file.id DESC
+          LIMIT 1
         `,
-        [input.purchaseOrderId, input.organizationId]
+        [
+          input.purchaseOrderId,
+          input.organizationId,
+          storePurchaseOrderPdfArtifactPurpose,
+        ]
       )
-      return { lines: lines.rows, order: order.rows[0] }
+      return result.rows[0] ?? null
     },
 
     async listSupplierPrices(organizationId: string) {
@@ -1601,20 +1886,49 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         fileName: string
         id: string
         itemTypeId: string
+        publicUrl: string | null
         storageKey: string
       }>(
         `
-          SELECT document.id, document.item_type_id AS "itemTypeId",
-            document.file_name AS "fileName",
-            document.storage_key AS "storageKey"
-          FROM store.documents document
-          JOIN store.item_types item ON item.id = document.item_type_id
-          WHERE document.organization_id = $1
-            AND document.document_type = 'ASSET_DRAWING'
-            AND document.file_name IS NOT NULL
-            AND document.storage_key IS NOT NULL
-            AND item.active
-          ORDER BY document.created_at DESC
+          SELECT drawing.id, drawing."itemTypeId", drawing."fileName",
+            drawing."storageKey", drawing."publicUrl"
+          FROM (
+            SELECT file.id, link.target_id AS "itemTypeId",
+              file.file_name AS "fileName", file.storage_key AS "storageKey",
+              object.public_url AS "publicUrl", file.created_at
+            FROM core.file_links link
+            JOIN core.files file ON file.id = link.file_id
+            JOIN core.file_objects object ON object.id = file.physical_object_id
+            JOIN store.item_types item ON item.id = link.target_id
+            WHERE link.organization_id = $1
+              AND link.target_schema = 'store'
+              AND link.target_table = 'item_types'
+              AND link.purpose = 'asset_drawing' AND link.is_current
+              AND file.lifecycle_state = 'current'
+              AND object.lifecycle_state <> 'deleted'
+              AND item.organization_id = $1 AND item.active
+            UNION ALL
+            SELECT document.id, document.item_type_id AS "itemTypeId",
+              document.file_name AS "fileName",
+              document.storage_key AS "storageKey", NULL::text AS "publicUrl",
+              document.created_at
+            FROM store.documents document
+            JOIN store.item_types item ON item.id = document.item_type_id
+            WHERE document.organization_id = $1
+              AND document.document_type = 'ASSET_DRAWING'
+              AND document.file_name IS NOT NULL
+              AND document.storage_key IS NOT NULL
+              AND item.active
+              AND NOT EXISTS (
+                SELECT 1 FROM core.file_links link
+                WHERE link.organization_id = document.organization_id
+                  AND link.target_schema = 'store'
+                  AND link.target_table = 'item_types'
+                  AND link.target_id = document.item_type_id
+                  AND link.purpose = 'asset_drawing' AND link.is_current
+              )
+          ) drawing
+          ORDER BY drawing.created_at DESC
         `,
         [organizationId]
       )
@@ -1683,17 +1997,34 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
     }) {
       const result = await pool.query<{
         fileName: string
-        storageKey: string
+        publicUrl: string | null
+        storageKey: string | null
       }>(
         `
-          SELECT document.file_name AS "fileName",
-            document.storage_key AS "storageKey"
-          FROM store.documents document
-          WHERE document.id = $1 AND document.organization_id = $2
-            AND document.item_type_id = $3
-            AND document.document_type = 'ASSET_DRAWING'
-            AND document.file_name IS NOT NULL
-            AND document.storage_key IS NOT NULL
+          SELECT drawing."fileName", drawing."storageKey", drawing."publicUrl"
+          FROM (
+            SELECT file.id, file.file_name AS "fileName",
+              file.storage_key AS "storageKey", object.public_url AS "publicUrl"
+            FROM core.file_links link
+            JOIN core.files file ON file.id = link.file_id
+            JOIN core.file_objects object ON object.id = file.physical_object_id
+            WHERE file.id = $1 AND link.organization_id = $2
+              AND link.target_schema = 'store'
+              AND link.target_table = 'item_types' AND link.target_id = $3
+              AND link.purpose = 'asset_drawing' AND link.is_current
+              AND file.lifecycle_state = 'current'
+              AND object.lifecycle_state <> 'deleted'
+            UNION ALL
+            SELECT document.id, document.file_name AS "fileName",
+              document.storage_key AS "storageKey", NULL::text AS "publicUrl"
+            FROM store.documents document
+            WHERE document.id = $1 AND document.organization_id = $2
+              AND document.item_type_id = $3
+              AND document.document_type = 'ASSET_DRAWING'
+              AND document.file_name IS NOT NULL
+              AND document.storage_key IS NOT NULL
+          ) drawing
+          LIMIT 1
         `,
         [input.documentId, input.organizationId, input.itemTypeId]
       )
@@ -2106,8 +2437,6 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       actorUserId?: string | null
       billDate?: string | null
       billNumber?: string | null
-      guaranteeCardFileName?: string | null
-      guaranteeCardStorageKey?: string | null
       locationId: string
       manufacturerSerialNumbers?: string[]
       organizationId: string
@@ -2142,6 +2471,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
               ON purchase_order.id = line.purchase_order_id
             JOIN store.item_types item ON item.id = line.item_type_id
             WHERE line.id = $1 AND line.organization_id = $2
+              AND purchase_order.issuance_state = 'issued'
             FOR UPDATE OF line, purchase_order, item
           `,
           [input.purchaseOrderLineId, input.organizationId]
@@ -2300,24 +2630,6 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             ]
           )
         }
-        if (input.guaranteeCardFileName?.trim()) {
-          await client.query(
-            `
-              INSERT INTO store.documents (
-                organization_id, receipt_id, document_type, bill_number,
-                file_name, storage_key, created_by_user_id
-              ) VALUES ($1, $2, 'GUARANTEE_CARD', $3, $4, $5, $6)
-            `,
-            [
-              input.organizationId,
-              receipt.rows[0]!.id,
-              input.billNumber?.trim() || null,
-              input.guaranteeCardFileName.trim(),
-              input.guaranteeCardStorageKey?.trim() || null,
-              input.actorUserId ?? null,
-            ]
-          )
-        }
         await client.query(
           `
             UPDATE store.purchase_order_lines
@@ -2352,7 +2664,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           `,
           [input.actorUserId ?? null, input.purchaseOrderLineId]
         )
-        return { assetCodes, receiptNumber }
+        return { assetCodes, receiptId: receipt.rows[0]!.id, receiptNumber }
       })
     },
 
@@ -2933,6 +3245,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           WHERE purchase_order.organization_id = $1
             AND purchase_order.repair_asset_id = $2
             AND purchase_order.order_type = 'REPAIR'
+            AND purchase_order.issuance_state = 'issued'
           ORDER BY purchase_order.order_date DESC, purchase_order.created_at DESC
         `,
         [input.organizationId, asset.rows[0].id]
@@ -2942,26 +3255,75 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         documentType: string
         fileName: string | null
         id: string
+        publicUrl: string | null
         storageKey: string | null
       }>(
         `
-          SELECT document.id, document.document_type AS "documentType",
-            document.bill_number AS "billNumber", document.file_name AS "fileName",
-            document.storage_key AS "storageKey"
-          FROM store.documents document
-          WHERE document.organization_id = $1
-            AND (
-              document.asset_id = $2
-              OR document.receipt_id = (
-                SELECT line.receipt_id FROM store.assets linked_asset
-                JOIN store.receipt_lines line ON line.id = linked_asset.receipt_line_id
-                WHERE linked_asset.id = $2
+          SELECT document.id, document."documentType", document."billNumber",
+            document."fileName", document."storageKey", document."publicUrl"
+          FROM (
+            SELECT file.id,
+              CASE link.purpose
+                WHEN 'asset_drawing' THEN 'ASSET_DRAWING'
+                WHEN 'guarantee_card' THEN 'GUARANTEE_CARD'
+              END AS "documentType",
+              NULL::text AS "billNumber", file.file_name AS "fileName",
+              file.storage_key AS "storageKey", object.public_url AS "publicUrl",
+              file.created_at
+            FROM store.assets linked_asset
+            LEFT JOIN store.receipt_lines receipt_line
+              ON receipt_line.id = linked_asset.receipt_line_id
+            JOIN core.file_links link ON link.organization_id = linked_asset.organization_id
+              AND link.target_schema = 'store'
+              AND (
+                (link.target_table = 'item_types'
+                  AND link.target_id = linked_asset.item_type_id
+                  AND link.purpose = 'asset_drawing')
+                OR (link.target_table = 'receipts'
+                  AND link.target_id = receipt_line.receipt_id
+                  AND link.purpose = 'guarantee_card')
               )
-              OR document.item_type_id = (
-                SELECT linked_asset.item_type_id FROM store.assets linked_asset
-                WHERE linked_asset.id = $2
+              AND link.is_current
+            JOIN core.files file ON file.id = link.file_id
+              AND file.lifecycle_state = 'current'
+            JOIN core.file_objects object ON object.id = file.physical_object_id
+              AND object.lifecycle_state <> 'deleted'
+            WHERE linked_asset.organization_id = $1 AND linked_asset.id = $2
+            UNION ALL
+            SELECT legacy.id, legacy.document_type AS "documentType",
+              legacy.bill_number AS "billNumber", legacy.file_name AS "fileName",
+              legacy.storage_key AS "storageKey", NULL::text AS "publicUrl",
+              legacy.created_at
+            FROM store.documents legacy
+            WHERE legacy.organization_id = $1
+              AND (
+                legacy.asset_id = $2
+                OR legacy.receipt_id = (
+                  SELECT line.receipt_id FROM store.assets linked_asset
+                  JOIN store.receipt_lines line ON line.id = linked_asset.receipt_line_id
+                  WHERE linked_asset.id = $2
+                )
+                OR legacy.item_type_id = (
+                  SELECT linked_asset.item_type_id FROM store.assets linked_asset
+                  WHERE linked_asset.id = $2
+                )
               )
-            )
+              AND NOT EXISTS (
+                SELECT 1 FROM core.file_links link
+                WHERE link.organization_id = legacy.organization_id
+                  AND link.target_schema = 'store' AND link.is_current
+                  AND (
+                    (legacy.document_type = 'ASSET_DRAWING'
+                      AND link.target_table = 'item_types'
+                      AND link.target_id = legacy.item_type_id
+                      AND link.purpose = 'asset_drawing')
+                    OR (legacy.document_type = 'GUARANTEE_CARD'
+                      AND link.target_table = 'receipts'
+                      AND link.target_id = legacy.receipt_id
+                      AND link.purpose = 'guarantee_card')
+                  )
+              )
+          ) document
           ORDER BY document.created_at DESC
         `,
         [input.organizationId, asset.rows[0].id]
@@ -3443,23 +3805,49 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
     }) {
       const result = await pool.query<{
         fileName: string
-        storageKey: string
+        publicUrl: string | null
+        storageKey: string | null
       }>(
         `
-          SELECT document.file_name AS "fileName",
-            document.storage_key AS "storageKey"
-          FROM store.documents document
-          JOIN store.assets asset ON asset.organization_id = document.organization_id
-          LEFT JOIN store.receipt_lines line ON line.id = asset.receipt_line_id
-          WHERE document.id = $1 AND document.organization_id = $2
-            AND lower(asset.asset_code) = lower($3)
-            AND (
-              document.asset_id = asset.id
-              OR document.receipt_id = line.receipt_id
-              OR document.item_type_id = asset.item_type_id
-            )
-            AND document.file_name IS NOT NULL
-            AND document.storage_key IS NOT NULL
+          SELECT document."fileName", document."storageKey", document."publicUrl"
+          FROM (
+            SELECT file.id, file.file_name AS "fileName",
+              file.storage_key AS "storageKey", object.public_url AS "publicUrl"
+            FROM store.assets asset
+            LEFT JOIN store.receipt_lines line ON line.id = asset.receipt_line_id
+            JOIN core.file_links link ON link.organization_id = asset.organization_id
+              AND link.target_schema = 'store'
+              AND (
+                (link.target_table = 'item_types'
+                  AND link.target_id = asset.item_type_id
+                  AND link.purpose = 'asset_drawing')
+                OR (link.target_table = 'receipts'
+                  AND link.target_id = line.receipt_id
+                  AND link.purpose = 'guarantee_card')
+              )
+              AND link.is_current
+            JOIN core.files file ON file.id = link.file_id
+              AND file.lifecycle_state = 'current'
+            JOIN core.file_objects object ON object.id = file.physical_object_id
+              AND object.lifecycle_state <> 'deleted'
+            WHERE file.id = $1 AND asset.organization_id = $2
+              AND lower(asset.asset_code) = lower($3)
+            UNION ALL
+            SELECT legacy.id, legacy.file_name AS "fileName",
+              legacy.storage_key AS "storageKey", NULL::text AS "publicUrl"
+            FROM store.documents legacy
+            JOIN store.assets asset ON asset.organization_id = legacy.organization_id
+            LEFT JOIN store.receipt_lines line ON line.id = asset.receipt_line_id
+            WHERE legacy.id = $1 AND legacy.organization_id = $2
+              AND lower(asset.asset_code) = lower($3)
+              AND (
+                legacy.asset_id = asset.id
+                OR legacy.receipt_id = line.receipt_id
+                OR legacy.item_type_id = asset.item_type_id
+              )
+              AND legacy.file_name IS NOT NULL
+              AND legacy.storage_key IS NOT NULL
+          ) document
           LIMIT 1
         `,
         [input.documentId, input.organizationId, input.assetCode]

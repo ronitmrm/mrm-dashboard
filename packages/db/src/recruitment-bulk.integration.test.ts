@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto"
 import { Pool } from "pg"
 import { afterAll, beforeAll, describe, expect, test } from "vitest"
 
+import { createArtifactService } from "./artifacts"
 import { migrateDatabase } from "./migrate"
 import { createRecruitmentRepository } from "./recruitment"
 
@@ -11,12 +12,14 @@ const connectionString =
   "postgresql://mrmpl:mrmpl@127.0.0.1:5434/mrmpl_test"
 
 const pool = new Pool({ connectionString })
+const artifactReader = createArtifactService({ connectionString })
 
 beforeAll(async () => {
   await migrateDatabase({ connectionString })
 })
 
 afterAll(async () => {
+  await artifactReader.close()
   await pool.end()
 })
 
@@ -296,6 +299,9 @@ describe("PostgreSQL recruitment bulk operations", () => {
     const repository = createRecruitmentRepository({ pool: trackedPool })
 
     try {
+      const artifactCountBefore = (
+        await artifactReader.listByOrganization({ organizationId })
+      ).length
       const single = await repository.bulkAssignEmployees({
         assignments: [
           {
@@ -364,6 +370,10 @@ describe("PostgreSQL recruitment bulk operations", () => {
       )
       expect(Number(stored.rows[0]!.count)).toBe(102)
       expect(Number(audits.rows[0]!.count)).toBe(102)
+      const artifactCountAfter = (
+        await artifactReader.listByOrganization({ organizationId })
+      ).length
+      expect(artifactCountAfter).toBe(artifactCountBefore)
 
       const bulkTargetIds = [
         ...posts.rows.slice(1, 100).map((post) => post.id),

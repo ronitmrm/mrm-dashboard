@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto"
+
 import Link from "next/link"
 import { createStoreRepository } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
@@ -129,6 +131,7 @@ export default async function StoreStockPage({
             <form action="/store/requests/new" id={actionFormId} method="get" />
           ) : mode === "order" ? (
             <form action={createStorePurchaseOrdersAction} id={actionFormId}>
+              <input name="issuance_id" type="hidden" value={randomUUID()} />
               <input name="order_date" type="hidden" value={istDateValue()} />
               <input
                 name="remark"

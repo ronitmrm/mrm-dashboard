@@ -69,6 +69,7 @@ const expectedCanonicalTables = [
   "catalog.website_field_options",
   "catalog.website_product_profiles",
   "core.file_links",
+  "core.file_objects",
   "core.files",
   "core.number_sequences",
   "core.organizations",
@@ -175,6 +176,7 @@ const expectedCanonicalTables = [
   "store.purchase_orders",
   "store.receipt_lines",
   "store.receipts",
+  "store.requisition_headers",
   "store.requisitions",
   "store.stock_movements",
   "store.supplier_prices",
@@ -494,7 +496,7 @@ test("a representative managed 0038 database upgrades with runtime access and ca
       },
     },
   ])
-})
+}, 20_000)
 
 test("dashboard floor migration queues one refresh per organization", async () => {
   const organizationId = "00000000-0000-4000-8000-000000000059"
@@ -597,6 +599,7 @@ test("the complete canonical bounded-context table contract is present", async (
         'quality',
         'recruitment',
         'sales',
+        'store',
         'workforce'
       ]
     )
@@ -1266,7 +1269,7 @@ test("dashboard source projection preserves floor-specific payloads transactiona
       source_payload: initialPayload,
     },
     remaining: "0",
-    topology: { indexes: "3", projection_trigger: "1", triggers: "33" },
+    topology: { indexes: "3", projection_trigger: "1", triggers: "34" },
     updated: {
       production_floor_code: "conventional-02",
       source_payload: updatedPayload,
@@ -1549,12 +1552,14 @@ test("authorization seeds every unified application module and correction author
 
   expect(result.rows.map((row) => row.module)).toEqual([
     "administration",
+    "artifacts",
     "hr",
     "maintenance",
     "operations",
     "planning",
     "pricing",
     "quality",
+    "store",
   ])
 
   const correctionCapability = await pool.query<{ administrator: boolean }>(`

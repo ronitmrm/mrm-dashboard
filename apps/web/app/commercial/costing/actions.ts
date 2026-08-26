@@ -1,9 +1,12 @@
 "use server"
 
 import {
+  authorizeQuoteArtifactTarget,
+  createArtifactService,
   createCommercialCostingRepository,
   createCommercialOrdersRepository,
   createCommercialWorkflowRepository,
+  quotePdfArtifactPurpose,
 } from "@workspace/db"
 import { revalidatePath } from "next/cache"
 
@@ -11,6 +14,8 @@ import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { commercialTaskCapabilities } from "@/lib/auth/task-capabilities"
 import { optionalText, requiredText } from "@/lib/form-data"
+import { buildQuotePdf, loadQuoteMarketContext } from "@/lib/pricing/quote-pdf"
+import { createUploadThingArtifactProvider } from "@/lib/uploadthing-artifact-provider"
 
 const customerCostingPath = "/commercial/customer-costing"
 const productCostingPath = "/commercial/product-costing"
@@ -247,11 +252,45 @@ export async function sendQuoteAction(formData: FormData) {
   const orders = createCommercialOrdersRepository({
     connectionString: environment.connectionString,
   })
+  const artifacts = createArtifactService({
+    connectionString: environment.connectionString,
+    provider: createUploadThingArtifactProvider(),
+  })
   try {
-    await costing.sendQuote({
+    await costing.issueQuote({
       actorUserId: session.user.id,
       followupDueOn,
       quoteItemId,
+      storeIssuedPdf: async ({ document, organizationId }) => {
+        const market = await loadQuoteMarketContext({
+          currency: document.currency,
+          fallbackRate: document.conversionRate,
+        })
+        const bytes = Buffer.from(await buildQuotePdf(document, market))
+        const safeEnquiryNumber = document.enquiryNumber
+          .replace(/[^A-Za-z0-9._-]+/g, "-")
+          .replace(/^-+|-+$/g, "")
+        await artifacts.store({
+          actorUserId: session.user.id,
+          authorizeTarget: (client, { isRetry }) =>
+            authorizeQuoteArtifactTarget(
+              client,
+              { organizationId, quoteItemId },
+              {
+                actorUserId: session.user.id,
+                requireReadyState: !isRetry,
+              }
+            ),
+          bytes,
+          fileName: `${safeEnquiryNumber || "quote"}-Rev-${document.revision}-quote.pdf`,
+          idempotencyKey: `issued-quote-pdf:${quoteItemId}`,
+          mediaType: "application/pdf",
+          organizationId,
+          origin: "generated",
+          purpose: quotePdfArtifactPurpose,
+          target: { id: quoteItemId, schema: "sales", table: "quote_items" },
+        })
+      },
     })
     const requestIds =
       await orders.listResolvableQuoteRevisionRequestIds(quoteItemId)
@@ -263,7 +302,7 @@ export async function sendQuoteAction(formData: FormData) {
       })
     }
   } finally {
-    await Promise.all([costing.close(), orders.close()])
+    await Promise.all([artifacts.close(), costing.close(), orders.close()])
   }
   revalidatePath(customerCostingPath)
   revalidatePath("/commercial/quotes")

@@ -3,7 +3,17 @@ import { randomUUID } from "node:crypto"
 import { Pool } from "pg"
 import { afterAll, beforeAll, describe, expect, test } from "vitest"
 
-import { createCommercialOrdersRepository } from "./commercial-orders"
+import {
+  createArtifactService,
+  type ArtifactStorageProvider,
+} from "./artifacts"
+import {
+  authorizeCommercialOrderArtifactTarget,
+  authorizeProformaInvoiceArtifactTarget,
+  createCommercialOrdersRepository,
+  proformaInvoicePdfArtifactPurpose,
+  proformaInvoiceXlsxArtifactPurpose,
+} from "./commercial-orders"
 import { migrateDatabase } from "./migrate"
 
 const connectionString =
@@ -12,8 +22,80 @@ const connectionString =
 
 const pool = new Pool({ connectionString })
 const repository = createCommercialOrdersRepository({ connectionString })
+const artifactReader = createArtifactService({ connectionString })
 let customerId: string
 let organizationId: string
+
+class PurchaseOrderArtifactProvider implements ArtifactStorageProvider {
+  readonly uploads: Buffer[] = []
+
+  async delete() {}
+
+  async upload(input: Parameters<ArtifactStorageProvider["upload"]>[0]) {
+    this.uploads.push(input.bytes)
+    const key = `po-source-${randomUUID()}`
+    return {
+      key,
+      url: `https://files.example.test/${key}`,
+    }
+  }
+}
+
+async function markProformaInvoiceSent(proformaInvoiceId: string) {
+  const artifacts = createArtifactService({
+    connectionString,
+    provider: new PurchaseOrderArtifactProvider(),
+  })
+  try {
+    return await repository.markProformaInvoiceSent({
+      proformaInvoiceId,
+      storeIssuedSet: async () => {
+        const target = {
+          id: proformaInvoiceId,
+          schema: "sales",
+          table: "proforma_invoices",
+        }
+        const authorizeTarget = (client: Parameters<
+          typeof authorizeProformaInvoiceArtifactTarget
+        >[0], { isRetry }: { isRetry: boolean }) =>
+          authorizeProformaInvoiceArtifactTarget(
+            client,
+            { organizationId, proformaInvoiceId },
+            { requireDraftState: !isRetry }
+          )
+        await artifacts.storeSet([
+          {
+            actorUserId: null,
+            authorizeTarget,
+            bytes: Buffer.from(`test PI PDF ${proformaInvoiceId}`),
+            fileName: "test-pi.pdf",
+            idempotencyKey: `issued-pi-pdf:${proformaInvoiceId}`,
+            mediaType: "application/pdf",
+            organizationId,
+            origin: "generated",
+            purpose: proformaInvoicePdfArtifactPurpose,
+            target,
+          },
+          {
+            actorUserId: null,
+            authorizeTarget,
+            bytes: Buffer.from(`test PI workbook ${proformaInvoiceId}`),
+            fileName: "test-pi.xlsx",
+            idempotencyKey: `issued-pi-xlsx:${proformaInvoiceId}`,
+            mediaType:
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            organizationId,
+            origin: "generated",
+            purpose: proformaInvoiceXlsxArtifactPurpose,
+            target,
+          },
+        ])
+      },
+    })
+  } finally {
+    await artifacts.close()
+  }
+}
 
 async function createItem(uid: string, uidKind = "INTERNAL") {
   const result = await pool.query<{ id: string }>(
@@ -138,6 +220,7 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
+  await artifactReader.close()
   await repository.close()
   await pool.end()
 })
@@ -214,10 +297,7 @@ describe("commercial purchase orders and proforma invoices", () => {
       purchaseOrderId: order.id,
     })
     expect(invoice).toMatchObject({ status: "Draft", totalAmount: 625 })
-    await repository.markProformaInvoiceSent({
-      actorUserId: null,
-      proformaInvoiceId: invoice.id,
-    })
+    await markProformaInvoiceSent(invoice.id)
     await expect(
       pool.query(
         "UPDATE sales.proforma_invoice_lines SET unit_price = unit_price + 1 WHERE proforma_invoice_id = $1",
@@ -350,9 +430,7 @@ describe("commercial purchase orders and proforma invoices", () => {
     const invoice = await repository.generateProformaInvoice({
       purchaseOrderId: order.id,
     })
-    await repository.markProformaInvoiceSent({
-      proformaInvoiceId: invoice.id,
-    })
+    await markProformaInvoiceSent(invoice.id)
     await repository.approveProformaInvoice({
       proformaInvoiceId: invoice.id,
     })
@@ -421,7 +499,110 @@ describe("commercial purchase orders and proforma invoices", () => {
     expect(orderedAudit.rowCount).toBe(1)
   })
 
-  test("retains PO source-file metadata and exposes the current file", async () => {
+  test("retains deduplicated, versioned PO sources and exposes the newest file", async () => {
+    const order = await repository.createPurchaseOrder({
+      customerId,
+      organizationId,
+      poDate: "2026-07-22",
+      poNumber: `PO-${randomUUID()}`,
+    })
+    const provider = new PurchaseOrderArtifactProvider()
+    const artifacts = createArtifactService({ connectionString, provider })
+    const target = { id: order.id, schema: "sales", table: "purchase_orders" }
+    const firstBytes = Buffer.from(`first customer purchase order ${order.id}`)
+    const newestBytes = Buffer.from(
+      `revised customer purchase order ${order.id}`
+    )
+    const authorizeTarget =
+      (isRetry: boolean) =>
+      (client: Parameters<typeof authorizeCommercialOrderArtifactTarget>[0]) =>
+        authorizeCommercialOrderArtifactTarget(
+          client,
+          { organizationId, purchaseOrderId: order.id },
+          { requireOpenState: !isRetry }
+        )
+
+    try {
+      const first = await artifacts.store({
+        actorUserId: null,
+        authorizeTarget: (client, { isRetry }) =>
+          authorizeTarget(isRetry)(client),
+        bytes: firstBytes,
+        fileName: "customer-po-v1.pdf",
+        idempotencyKey: `po-source:${order.id}:v1`,
+        mediaType: "application/pdf",
+        organizationId,
+        origin: "uploaded",
+        purpose: "source_po",
+        target,
+      })
+      const repeated = await artifacts.store({
+        actorUserId: null,
+        authorizeTarget: (client, { isRetry }) =>
+          authorizeTarget(isRetry)(client),
+        bytes: firstBytes,
+        fileName: "customer-po-copy.pdf",
+        idempotencyKey: `po-source:${order.id}:copy`,
+        mediaType: "application/pdf",
+        organizationId,
+        origin: "uploaded",
+        purpose: "source_po",
+        target,
+      })
+      const newest = await artifacts.store({
+        actorUserId: null,
+        authorizeTarget: (client, { isRetry }) =>
+          authorizeTarget(isRetry)(client),
+        bytes: newestBytes,
+        fileName: "customer-po-v2.pdf",
+        idempotencyKey: `po-source:${order.id}:v2`,
+        mediaType: "application/pdf",
+        organizationId,
+        origin: "uploaded",
+        purpose: "source_po",
+        target,
+      })
+
+      expect(first.providerKey).toBe(repeated.providerKey)
+      expect(provider.uploads).toHaveLength(2)
+      expect(
+        await artifacts.listHistory({
+          organizationId,
+          purpose: "source_po",
+          target,
+        })
+      ).toMatchObject([
+        { fileName: "customer-po-v2.pdf", isCurrent: true, version: 3 },
+        {
+          fileName: "customer-po-copy.pdf",
+          isCurrent: false,
+          lifecycleState: "superseded",
+          version: 2,
+        },
+        {
+          fileName: "customer-po-v1.pdf",
+          isCurrent: false,
+          lifecycleState: "superseded",
+          version: 1,
+        },
+      ])
+      await expect(
+        repository.getPurchaseOrderFile(order.id)
+      ).resolves.toMatchObject({
+        byteSize: newestBytes.byteLength,
+        fileName: "customer-po-v2.pdf",
+        mediaType: "application/pdf",
+        publicUrl: newest.publicUrl,
+      })
+      expect((await repository.getPurchaseOrder(order.id)).fileName).toBe(
+        "customer-po-v2.pdf"
+      )
+    } finally {
+      await artifacts.close()
+    }
+  })
+
+  test("keeps legacy local PO source metadata downloadable", async () => {
     const order = await repository.createPurchaseOrder({
       customerId,
       organizationId,
@@ -429,26 +610,25 @@ describe("commercial purchase orders and proforma invoices", () => {
       poNumber: `PO-${randomUUID()}`,
     })
     const sourceId = randomUUID()
-    const file = await repository.recordPurchaseOrderFile({
+    const storageKey = `attachments/purchase-orders/${order.id}/${sourceId}/legacy-po.pdf`
+    await repository.recordPurchaseOrderFile({
       byteSize: 12,
-      fileName: "customer-po.pdf",
+      fileName: "legacy-po.pdf",
       mediaType: "application/pdf",
       purchaseOrderId: order.id,
       sha256: "abc123",
       sourceId,
-      storageKey: `attachments/purchase-orders/${order.id}/${sourceId}/customer-po.pdf`,
+      storageKey,
     })
-    expect(file.fileName).toBe("customer-po.pdf")
+
     await expect(repository.getPurchaseOrderFile(order.id)).resolves.toEqual({
       byteSize: 12,
-      fileName: "customer-po.pdf",
+      fileName: "legacy-po.pdf",
       mediaType: "application/pdf",
+      publicUrl: null,
       sha256: "abc123",
-      storageKey: `attachments/purchase-orders/${order.id}/${sourceId}/customer-po.pdf`,
+      storageKey,
     })
-    expect((await repository.getPurchaseOrder(order.id)).fileName).toBe(
-      "customer-po.pdf"
-    )
   })
 
   test("keeps our price or creates a visible costing revision request", async () => {
@@ -536,6 +716,9 @@ describe("commercial purchase orders and proforma invoices", () => {
   })
 
   test("imports lines atomically and reuses one quote-request enquiry", async () => {
+    const artifactCountBefore = (
+      await artifactReader.listByOrganization({ organizationId })
+    ).length
     const order = await repository.createPurchaseOrder({
       customerId,
       organizationId,
@@ -586,6 +769,10 @@ describe("commercial purchase orders and proforma invoices", () => {
     expect(
       (await repository.getPurchaseOrder(order.id)).lines[0]
     ).toMatchObject({ matchStatus: "Quote Required" })
+    const artifactCountAfter = (
+      await artifactReader.listByOrganization({ organizationId })
+    ).length
+    expect(artifactCountAfter).toBe(artifactCountBefore)
   })
 
   test("exports every purchase-order report row across stable batches", async () => {

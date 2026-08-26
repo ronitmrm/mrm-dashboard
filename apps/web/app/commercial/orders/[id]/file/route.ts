@@ -20,6 +20,12 @@ export async function GET(
   })
   try {
     const file = await repository.getPurchaseOrderFile(id)
+    if (file.publicUrl) {
+      return Response.redirect(file.publicUrl, 307)
+    }
+    if (!file.storageKey) {
+      throw new Error("Purchase-order source file is unavailable.")
+    }
     const attachment = await readUserAttachment(file.storageKey)
     return new Response(attachment.body, {
       headers: userAttachmentDownloadHeaders(

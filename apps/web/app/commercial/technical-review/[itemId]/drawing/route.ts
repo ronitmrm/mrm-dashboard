@@ -27,10 +27,21 @@ export async function GET(
       enquiryItemId: itemId,
       organizationId,
     })
+    if (drawing.publicUrl) {
+      return Response.redirect(drawing.publicUrl, 307)
+    }
     const file = await readUserAttachment(drawing.storageKey)
     return new Response(file.body, {
       headers: userAttachmentDownloadHeaders(drawing.fileName, file.byteSize),
     })
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message.includes("deleted or unavailable")
+    ) {
+      return new Response("Drawing is deleted or unavailable.", { status: 410 })
+    }
+    throw error
   } finally {
     await workflow.close()
     await customers.close()

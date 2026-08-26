@@ -49,3 +49,13 @@ commercial-order, Store, HR, or Production access.
 
 **User Override**: An exceptional permission change applied to one Staff
 Account after its Application Roles. A deny override wins over a role grant.
+
+**Artifact Read Access**: The `artifacts.read` capability allows an authorized
+user to discover Artifact metadata and public URLs in the Organization-scoped
+Administration ledger. It does not make the bytes private; anyone who already
+possesses an UploadThing `public-read` URL can read them.
+
+**Artifact Delete Access**: The separate `artifacts.delete` capability permits
+audited manual deletion with exact-target confirmation and a reason. Read access
+never implies delete access. Administrators receive both capabilities by
+default; normal module permissions continue governing routine file discovery.

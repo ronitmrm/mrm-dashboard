@@ -9,7 +9,10 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  await requireHrPage("hr.candidate_search.read", "/hr?panel=candidateSearchPanel")
+  await requireHrPage(
+    "hr.candidate_search.read",
+    "/hr?panel=candidateSearchPanel"
+  )
   const { id } = await params
   const repository = createRecruitmentRepository({
     connectionString: readAuthEnvironment().connectionString,
@@ -17,6 +20,12 @@ export async function GET(
   try {
     const organizationId = await repository.organizationIdForCode("MRMPL")
     const resume = await repository.getCandidateResume(organizationId, id)
+    if (resume.publicUrl) {
+      return Response.redirect(resume.publicUrl, 307)
+    }
+    if (!resume.storageKey) {
+      throw new Error("Candidate resume is unavailable.")
+    }
     const file = await readUserAttachment(resume.storageKey)
     return new Response(file.body, {
       headers: userAttachmentDownloadHeaders(resume.fileName, file.byteSize),

@@ -34,6 +34,22 @@ export {
   recruitmentPostDeletionBlocker,
 } from "./recruitment-domain"
 
+export async function authorizeRecruitmentCandidateArtifactTarget(
+  client: PoolClient,
+  input: { candidateId: string; organizationId: string }
+) {
+  const candidate = await client.query<{ id: string }>(
+    `
+      SELECT id
+      FROM recruitment.candidates
+      WHERE id = $1 AND organization_id = $2
+      FOR UPDATE
+    `,
+    [input.candidateId, input.organizationId]
+  )
+  if (!candidate.rows[0]) throw new Error("Candidate was not found.")
+}
+
 type MutationContext = {
   actorUserId?: string | null
   organizationId: string
@@ -1247,6 +1263,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
               AND file_link.target_table = 'candidates'
               AND file_link.target_id = candidate.id
               AND file_link.purpose = 'resume'
+              AND file_link.is_current
             ORDER BY file.created_at DESC, file.id DESC
             LIMIT 1
           ) resume ON true
@@ -3307,29 +3324,60 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
 
     async getCandidateResume(organizationId: string, candidateId: string) {
       const result = await pool.query<{
+        byte_size: string | null
         file_name: string
+        lifecycle_state: string
         media_type: string | null
-        storage_key: string
+        object_lifecycle_state: string | null
+        public_url: string | null
+        sha256: string | null
+        storage_key: string | null
       }>(
         `
-          SELECT file.file_name, file.media_type, file.storage_key
-          FROM core.file_links file_link
-          JOIN core.files file ON file.id = file_link.file_id
-          WHERE file_link.organization_id = $1
-            AND file_link.target_schema = 'recruitment'
-            AND file_link.target_table = 'candidates'
-            AND file_link.target_id = $2
-            AND file_link.purpose = 'resume'
-          ORDER BY file.created_at DESC, file.id DESC
-          LIMIT 1
+          SELECT coalesce(artifact.file_name, legacy.file_name) AS file_name,
+            coalesce(artifact.media_type, legacy.media_type) AS media_type,
+            coalesce(artifact.byte_size, legacy.byte_size)::text AS byte_size,
+            coalesce(artifact.sha256, legacy.sha256) AS sha256,
+            coalesce(artifact.storage_key, legacy.storage_key) AS storage_key,
+            artifact.public_url,
+            coalesce(artifact.lifecycle_state, 'current') AS lifecycle_state,
+            artifact.object_lifecycle_state
+          FROM recruitment.candidates candidate
+          LEFT JOIN LATERAL (
+            SELECT file.file_name, file.media_type, file.byte_size,
+              file.sha256, file.storage_key, file.lifecycle_state,
+              object.public_url,
+              object.lifecycle_state AS object_lifecycle_state
+            FROM core.file_links link
+            JOIN core.files file ON file.id = link.file_id
+            LEFT JOIN core.file_objects object
+              ON object.id = file.physical_object_id
+            WHERE link.organization_id = candidate.organization_id
+              AND link.target_schema = 'recruitment'
+              AND link.target_table = 'candidates'
+              AND link.target_id = candidate.id
+              AND link.purpose = 'resume' AND link.is_current
+            LIMIT 1
+          ) artifact ON true
+          LEFT JOIN core.files legacy ON legacy.id::text = candidate.resume_reference
+          WHERE candidate.organization_id = $1 AND candidate.id = $2
         `,
         [organizationId, required(candidateId, "Candidate")]
       )
       const file = result.rows[0]
-      if (!file) throw new Error("Candidate resume was not found.")
+      if (!file?.file_name) throw new Error("Candidate resume was not found.")
+      if (
+        file.lifecycle_state === "deleted" ||
+        file.object_lifecycle_state === "deleted"
+      ) {
+        throw new Error("Candidate resume is deleted or unavailable.")
+      }
       return {
+        byteSize: file.byte_size === null ? null : Number(file.byte_size),
         fileName: file.file_name,
         mediaType: file.media_type,
+        publicUrl: file.public_url,
+        sha256: file.sha256,
         storageKey: file.storage_key,
       }
     },

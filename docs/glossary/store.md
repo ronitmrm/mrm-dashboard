@@ -154,9 +154,10 @@ price history, bill, warranty, and guarantee documents.
 
 **Asset Drawing**: A PDF, JPG, or PNG drawing attached to one Store Item Type,
 not to an individual Unit ID. Every Physical Asset of that Store Item Type sees
-the same current drawing. The file is limited to 10 MB and uses the configured
-attachment storage; adding this feature does not introduce a new object-storage
-provider.
+the same current drawing. The file is limited to 10 MB and uses the shared
+Artifact lifecycle. Replacements retain immutable superseded versions, and
+exact bytes may reuse one Organization-scoped UploadThing object without
+merging logical drawing links. Historical Store document rows remain readable.
 
 **Asset Movement**: An immutable change in the holder of one Non Consumable
 Unit ID between the Store, a Department, a Machine, or a Vendor. A Store Return
