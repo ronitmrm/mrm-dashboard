@@ -66,12 +66,44 @@ function machiningValue(record: Record<string, unknown>, key: string) {
   return isDirectPricing(record) ? "-" : value(record, key)
 }
 
+function isCustomerPackageSummary(row: PricingRegisterRow) {
+  return (
+    Boolean(row.quoteNumber) &&
+    row.componentDepth === 0 &&
+    ["package", "assembly"].includes(row.itemType.toLowerCase())
+  )
+}
+
+export function orderPricingRows(rows: PricingRegisterRow[]) {
+  const ordered: PricingRegisterRow[] = []
+  let group: PricingRegisterRow[] = []
+
+  const flush = () => {
+    const [root, ...components] = group
+    if (!root) return
+    if (components.length && isCustomerPackageSummary(root)) {
+      ordered.push(...components, root)
+    } else {
+      ordered.push(...group)
+    }
+    group = []
+  }
+
+  for (const row of rows) {
+    if (row.componentDepth === 0) flush()
+    group.push(row)
+  }
+  flush()
+  return ordered
+}
+
 export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
   const product = row.product
   const context = row.productContext
   const inputs = row.quoteInputs
   const calculation = row.calculation
   const isCustomerPrice = Boolean(row.quoteNumber)
+  const isPackageSummary = isCustomerPackageSummary(row)
   const quoteStatus = row.lifecycleStatus === "P" ? "P" : "Q"
   const missingPricingValues = new Set<string>()
   if (isCustomerPrice && !row.customerPartCode?.trim()) {
@@ -86,7 +118,7 @@ export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
     decimalPlaces = 2
   ) => (isCustomerPrice ? value(record, key, decimalPlaces) : "-")
   return {
-    "Row Type": row.componentDepth > 0 ? row.itemType : row.itemType,
+    "Row Type": isPackageSummary ? "Package Total" : row.itemType,
     "Pricing Scope": isCustomerPrice ? "Customer Price" : "Product Base",
     "Customer Line Status": isCustomerPrice ? quoteStatus : "-",
     "Customer UID": isCustomerPrice ? dashIfEmpty(row.customerUid) : "-",
@@ -120,12 +152,22 @@ export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
     "Die Code": value(context, "dieCode"),
     "1 Piece Weight ( gm )": value(product, "weight100Pcs"),
     "No of Piece / KG": value(calculation, "piecesPerKg"),
-    "Product Base Cost (INR/pc)": value(product, "productCostInr"),
-    Casting: value(product, "casting"),
-    "Scrap Rate (INR/kg)": customerValue(inputs, "scrapRate"),
-    "Alloy Premium (INR/kg)": value(product, "alloyPremium"),
-    "Ext. Cost (INR/kg)": value(product, "extrusionCost"),
-    "Forg Cost+ Nitric Blasting (INR/kg)": value(product, "forgingCost"),
+    "Product Base Cost (INR/pc)": isPackageSummary
+      ? "-"
+      : value(product, "productCostInr"),
+    Casting: isPackageSummary ? "-" : value(product, "casting"),
+    "Scrap Rate (INR/kg)": isPackageSummary
+      ? "-"
+      : customerValue(inputs, "scrapRate"),
+    "Alloy Premium (INR/kg)": isPackageSummary
+      ? "-"
+      : value(product, "alloyPremium"),
+    "Ext. Cost (INR/kg)": isPackageSummary
+      ? "-"
+      : value(product, "extrusionCost"),
+    "Forg Cost+ Nitric Blasting (INR/kg)": isPackageSummary
+      ? "-"
+      : value(product, "forgingCost"),
     "Direct (INR/kg)": directValue(
       product,
       "directPurchasePricePerKg",
@@ -137,10 +179,7 @@ export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
       "machiningPricePerPiece"
     ),
     "M/c Cost (INR/kg)": machiningValue(product, "machiningCost"),
-    "M/c Cost (INR/pc)": machiningValue(
-      product,
-      "machiningPricePerPiece"
-    ),
+    "M/c Cost (INR/pc)": machiningValue(product, "machiningPricePerPiece"),
     "Washing (INR/kg)": value(product, "washing"),
     "Checking (INR/kg)": value(product, "checking"),
     "Marking (INR/kg)": value(product, "marking"),
@@ -182,6 +221,9 @@ export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
     "Total - A + B": customerValue(calculation, "totalAPlusB"),
     "Rate / PCS In INR": customerValue(calculation, "rateInr"),
     "Total Rate / PCS In INR": customerValue(calculation, "totalRateInr"),
+    "BOM Component Cost (INR/pc)": isPackageSummary
+      ? customerValue(calculation, "childQuoteTotal")
+      : "-",
     Currency: "USD",
     "Rate / PCS In Currency": customerValue(calculation, "rateUsd", 4),
     "Pricing Completeness":
@@ -241,7 +283,7 @@ export const pricingHeaders = Object.keys(
 
 export function buildPricingWorkbook(rows: PricingRegisterRow[]) {
   const workbook = XLSX.utils.book_new()
-  const sheet = XLSX.utils.json_to_sheet(rows.map(toPricingViewRow), {
+  const sheet = XLSX.utils.json_to_sheet(toPricingViewRows(rows), {
     header: pricingHeaders,
   })
   sheet["!cols"] = pricingHeaders.map((header) => ({
@@ -251,4 +293,7 @@ export function buildPricingWorkbook(rows: PricingRegisterRow[]) {
   return workbook
 }
 
+export function toPricingViewRows(rows: PricingRegisterRow[]) {
+  return orderPricingRows(rows).map(toPricingViewRow)
+}
 export const pricingWorkbookFilename = "pricing-view.xlsx"

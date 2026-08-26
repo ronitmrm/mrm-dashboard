@@ -128,8 +128,14 @@ decimal places; sending that exact replacement resolves the PO revision.
 **Pricing Register**: The combined current-pricing spreadsheet. Product Base
 rows expose ordered Product Master costs even before a customer Quote exists;
 Customer Price rows come from active or editable root Quotes and their immutable
-recursive Product and calculation snapshots. Package / Assembly rows retain
-parent, BOM depth, quantity, commercial inputs, formula evidence, and currency.
+recursive Product and calculation snapshots. Package / Assembly customer pricing displays each ordered BOM component first and
+one parent total row last. The parent row retains its applicable assembly cost,
+rejection, and profit; material-only casting, scrap, alloy, extrusion, forging,
+and rolled-up Product Base inputs are not applicable there. Its BOM Component
+Cost is the sum of component customer prices times BOM quantities; Total Rate in
+INR combines that component cost with the adjusted parent process before one
+currency conversion. Package / Assembly rows otherwise retain parent, BOM depth,
+quantity, commercial inputs, formula evidence, and currency.
 Purchased Products also show their current Website Product size and MRMPL Product
 Description. Selecting a Customer Part Code opens its complete retained Quote
 revision history. Product Base rows never invent customer or Quote values.

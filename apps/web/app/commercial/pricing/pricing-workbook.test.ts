@@ -6,6 +6,7 @@ import {
   pricingHeaders,
   pricingWorkbookFilename,
   toPricingViewRow,
+  toPricingViewRows,
   type PricingRegisterRow,
 } from "./pricing-workbook"
 
@@ -116,8 +117,7 @@ describe("Pricing spreadsheet workbook", () => {
     expect(toPricingViewRow(incompleteRow)).toMatchObject({
       Currency: "USD",
       "Conversion Cost": "95.00",
-      "Missing Pricing Values":
-        "Customer Part Code; Production Type; Rod Size",
+      "Missing Pricing Values": "Customer Part Code; Production Type; Rod Size",
       "Pricing Completeness": "Missing Values",
     })
   })
@@ -217,6 +217,71 @@ describe("Pricing spreadsheet workbook", () => {
       "Product Base Cost (INR/pc)": "2.36",
       "Rejection %": "2.00",
       "Total Rate / PCS In INR": "-",
+    })
+  })
+
+  test("shows an M2 customer package as three BOM rows followed by one final M2 row", () => {
+    const packageRow: PricingRegisterRow = {
+      ...row,
+      calculation: {
+        childQuoteTotal: 19.23,
+        rateInr: 0.59,
+        rateUsd: 0.21,
+        totalRateInr: 19.82,
+      },
+      itemType: "Package",
+      product: {
+        alloyPremium: 7,
+        assemblyOperationCost: 5,
+        casting: 1,
+        description: "M2 package",
+        extrusionCost: 26,
+        forgingCost: 12,
+        productCostInr: 2.94,
+        rejectionPercent: 0.02,
+      },
+      quoteInputs: {
+        ...row.quoteInputs,
+        profitPercent: 0.15,
+        scrapRate: 835,
+      },
+      rowKey: "m2-root:m2-root",
+      uid: "M2",
+    }
+    const component = (uid: string): PricingRegisterRow => ({
+      ...row,
+      componentDepth: 1,
+      itemType: "Solid",
+      parentUid: "M2",
+      product: { description: uid },
+      rowKey: `m2-root:${uid}`,
+      uid,
+    })
+
+    const views = toPricingViewRows([
+      packageRow,
+      component("M2B"),
+      component("R26"),
+      component("R51"),
+    ])
+
+    expect(views.map((view) => view.UID)).toEqual(["M2B", "R26", "R51", "M2"])
+    expect(pricingHeaders.indexOf("BOM Component Cost (INR/pc)")).toBe(
+      pricingHeaders.indexOf("Total Rate / PCS In INR") + 1
+    )
+    expect(views.at(-1)).toMatchObject({
+      "Alloy Premium (INR/kg)": "-",
+      "Assembly Cost (INR/kg)": "5.00",
+      "BOM Component Cost (INR/pc)": "19.23",
+      Casting: "-",
+      "Ext. Cost (INR/kg)": "-",
+      "Forg Cost+ Nitric Blasting (INR/kg)": "-",
+      "Product Base Cost (INR/pc)": "-",
+      "Rate / PCS In INR": "0.59",
+      "Rate / PCS In Currency": "0.2100",
+      "Rejection %": "2.00",
+      "Scrap Rate (INR/kg)": "-",
+      "Total Rate / PCS In INR": "19.82",
     })
   })
 })
