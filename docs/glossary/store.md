@@ -11,7 +11,11 @@ combined only when creating a Store Item Type.
 
 **Store Item Type**: The unique combination of Asset Type and one selected
 Store Classification Master path. It owns one permanent Asset Code and one
-Identification. During Data Entry, the exact Asset Type, Asset Category,
+Identification. Identification records the distinguishing make, model, size,
+grade, or specification needed to recognize the item within that classification.
+Data Entry controls its Drawing Number: new and edited Store Item Types use
+their Asset Code as their Drawing Number. During Data Entry, the exact Asset
+Type, Asset Category,
 Asset Subcategory, and Asset Name combination is checked before saving. An
 existing combination displays and reuses its existing Asset Code without
 creating another Store Item Type; only a new combination generates a new Asset
