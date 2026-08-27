@@ -6,6 +6,7 @@ import {
   authorizeStoreItemTypeArtifactTarget,
   authorizeStorePurchaseOrderArtifactTarget,
   authorizeStoreReceiptArtifactTarget,
+  authorizeStoreSupplierPriceArtifactTarget,
   createArtifactService,
   createMasterDataLifecycleRepository,
   createStoreRepository,
@@ -234,11 +235,67 @@ export async function createStoreSupplierAction(formData: FormData) {
   revalidateStore()
 }
 
+async function saveSupplierQuote(upload: FormDataEntryValue | null) {
+  if (!(upload instanceof File) || upload.size === 0) return null
+  if (upload.size > 10 * 1024 * 1024) {
+    throw new Error("Supplier quote must be 10 MB or smaller.")
+  }
+  const bytes = Buffer.from(await upload.arrayBuffer())
+  const validated = validateUserAttachment({
+    bytes,
+    fileName: upload.name,
+    purpose: "supplier-quote",
+  })
+  return { bytes, fileName: validated.fileName, mediaType: "application/pdf" }
+}
+
+async function storeSupplierQuoteArtifact(input: {
+  actorUserId: string
+  bytes: Buffer
+  fileName: string
+  mediaType: string
+  organizationId: string
+  supplierPriceId: string
+}) {
+  const artifacts = createArtifactService({
+    connectionString: readAuthEnvironment().connectionString,
+    provider: createUploadThingArtifactProvider(),
+  })
+  try {
+    const sha256 = createHash("sha256").update(input.bytes).digest("hex")
+    await artifacts.store({
+      actorUserId: input.actorUserId,
+      authorizeTarget: (client) =>
+        authorizeStoreSupplierPriceArtifactTarget(client, input),
+      bytes: input.bytes,
+      fileName: input.fileName,
+      idempotencyKey: [
+        "store-supplier-quote",
+        input.supplierPriceId,
+        input.fileName,
+        sha256,
+      ].join(":"),
+      mediaType: input.mediaType,
+      organizationId: input.organizationId,
+      origin: "uploaded",
+      purpose: "supplier_quote",
+      target: {
+        id: input.supplierPriceId,
+        schema: "store",
+        table: "supplier_prices",
+      },
+    })
+  } finally {
+    await artifacts.close()
+  }
+}
+
 export async function createStoreSupplierPriceAction(formData: FormData) {
+  const savedQuote = await saveSupplierQuote(formData.get("supplier_quote"))
   await withStore(
     "store.masters.write",
-    (repository, actorUserId, organizationId) =>
-      repository.createSupplierPrice({
+    async (repository, actorUserId, organizationId) => {
+      const price = await repository.createSupplierPrice({
         actorUserId,
         itemTypeId: requiredText(formData, "item_type_id"),
         organizationId,
@@ -247,7 +304,33 @@ export async function createStoreSupplierPriceAction(formData: FormData) {
         unitPrice: requiredText(formData, "unit_price"),
         validFrom: optionalText(formData, "valid_from"),
       })
+      if (savedQuote) {
+        await storeSupplierQuoteArtifact({
+          ...savedQuote,
+          actorUserId,
+          organizationId,
+          supplierPriceId: price.id,
+        })
+      }
+    }
   )
+  revalidateStore()
+}
+
+export async function uploadStoreSupplierQuoteAction(formData: FormData) {
+  const savedQuote = await saveSupplierQuote(formData.get("supplier_quote"))
+  if (!savedQuote) throw new Error("Select a Supplier quote PDF to upload.")
+  await withStore(
+    "store.masters.write",
+    (_repository, actorUserId, organizationId) =>
+      storeSupplierQuoteArtifact({
+        ...savedQuote,
+        actorUserId,
+        organizationId,
+        supplierPriceId: requiredText(formData, "supplier_price_id"),
+      })
+  )
+  revalidatePath("/store/assets/[assetCode]", "page")
   revalidateStore()
 }
 

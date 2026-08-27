@@ -11309,7 +11309,6 @@ function MasterTablesPanel({
   const selectedSpec =
     specs.find((spec) => spec.entryType === preferredEntryType) ?? specs[0]
 
-  const [tableResetKey, setTableResetKey] = useState(0)
   const [deleteRow, setDeleteRow] = useState<DashboardPayload | null>(null)
   const [replacementRecordId, setReplacementRecordId] = useState("")
   const [deleteReason, setDeleteReason] = useState("")
@@ -11388,34 +11387,6 @@ function MasterTablesPanel({
         }
         productionFloorCode={productionFloorCode}
       />
-      <Card>
-        <CardHeader>
-          <CardTitle>Master Tables</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-3">
-          <div className="flex flex-wrap items-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setTableResetKey((current) => current + 1)}
-            >
-              Clear Filters
-            </Button>
-            <Button
-              type="button"
-              onClick={() =>
-                openDataEntry(selectedSpec.entryType, {
-                  __returnTab: "masterTablesTab",
-                })
-              }
-            >
-              <Plus className="size-4" />
-              Add Row
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
       {selectedSpec.entryType === "store_masters" && storeMasterData ? (
         <StoreMasterWorkspace
           canManage={canManageStoreMasters}
@@ -11442,7 +11413,7 @@ function MasterTablesPanel({
               </div>
             ) : (
               <div className="overflow-x-auto rounded-md border">
-                <Table key={`${selectedSpec.entryType}-${tableResetKey}`}>
+                <Table key={selectedSpec.entryType}>
                   <TableHeader>
                     <TableRow>
                       {columns.map((column) => (

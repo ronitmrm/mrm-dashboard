@@ -1,9 +1,10 @@
 import path from "node:path"
 
-type AttachmentPurpose = "drawing" | "purchase-order"
+type AttachmentPurpose = "drawing" | "purchase-order" | "supplier-quote"
 
 const allowedExtensions: Record<AttachmentPurpose, ReadonlySet<string>> = {
   drawing: new Set([".pdf", ".dwg", ".dxf", ".png", ".jpg", ".jpeg"]),
+  "supplier-quote": new Set([".pdf"]),
   "purchase-order": new Set([
     ".pdf",
     ".xlsx",
@@ -16,6 +17,7 @@ const allowedExtensions: Record<AttachmentPurpose, ReadonlySet<string>> = {
 
 const allowedDescription: Record<AttachmentPurpose, string> = {
   drawing: "PDF, DWG, DXF, PNG, or JPEG",
+  "supplier-quote": "PDF",
   "purchase-order": "PDF, XLSX, DOCX, PNG, or JPEG",
 }
 
@@ -112,12 +114,12 @@ export function validateUserAttachment({
   const extension = path.extname(safeName).toLowerCase()
   if (!allowedExtensions[purpose].has(extension)) {
     throw new Error(
-      `${purpose === "drawing" ? "Drawing" : "PO source"} files must be a ${allowedDescription[purpose]}.`
+      `${purpose === "drawing" ? "Drawing" : purpose === "supplier-quote" ? "Supplier quote" : "PO source"} files must be a ${allowedDescription[purpose]}.`
     )
   }
   if (!signatureMatches(extension, bytes)) {
     throw new Error(
-      `${purpose === "drawing" ? "Drawing" : "PO source"} file content does not match its extension.`
+      `${purpose === "drawing" ? "Drawing" : purpose === "supplier-quote" ? "Supplier quote" : "PO source"} file content does not match its extension.`
     )
   }
   return { fileName: safeName, mediaType: "application/octet-stream" }

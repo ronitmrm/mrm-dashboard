@@ -31,11 +31,14 @@ import { Textarea } from "@workspace/ui/components/textarea"
 import {
   StoreAssetWorkspacePane,
   StoreAssetWorkspaceTabs,
+  StoreItemWorkspacePane,
+  StoreItemWorkspaceTabs,
 } from "@/components/store-asset-workspace-tabs"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { formatIstDateTime, istDateValue } from "@/lib/date-time"
 import { storeAssetWorkspaceHref } from "@/lib/store-asset-workspace"
 import {
+  listGrantedCapabilities,
   requireCapability,
 } from "@/lib/auth/require-capability"
 import { listGrantedStoreActions } from "@/lib/auth/store-action-access"
@@ -47,6 +50,8 @@ import {
   moveStoreAssetAction,
   scheduleStoreAssetMaintenanceAction,
   setStoreAssetLifecycleAction,
+  uploadStoreItemDrawingAction,
+  uploadStoreSupplierQuoteAction,
 } from "../../actions"
 
 export default async function StoreAssetWorkspacePage({
@@ -65,6 +70,14 @@ export default async function StoreAssetWorkspacePage({
   const canRepair = capabilities.has("store.asset_repair.write")
   const canManageLifecycle = capabilities.has("store.asset_lifecycle.write")
   const canManage = canMove || canMaintain || canRepair
+  const canManageMasters = Boolean(
+    (
+      await listGrantedCapabilities(session.user.id, [
+        "store.masters.write",
+        "store.manage",
+      ])
+    ).length
+  )
   const repository = createStoreRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
@@ -98,7 +111,12 @@ export default async function StoreAssetWorkspacePage({
   })().finally(() => repository.close())
   if (!data.workspace) notFound()
   if (data.kind === "item") {
-    return <StoreItemWorkspace workspace={data.workspace} />
+    return (
+      <StoreItemWorkspace
+        canManage={canManageMasters}
+        workspace={data.workspace}
+      />
+    )
   }
   const {
     asset,
@@ -156,12 +174,18 @@ export default async function StoreAssetWorkspacePage({
               label="Purchase Order"
               value={asset.orderNumber || "Legacy receipt"}
             />
-            <Info label="Supplier" value={asset.supplierName || "Not recorded"} />
+            <Info
+              label="Supplier"
+              value={asset.supplierName || "Not recorded"}
+            />
             <Info
               label="Purchase Price"
               value={asset.unitPrice ? `₹ ${asset.unitPrice}` : "Not recorded"}
             />
-            <Info label="Acquired On" value={asset.acquiredOn || "Not recorded"} />
+            <Info
+              label="Acquired On"
+              value={asset.acquiredOn || "Not recorded"}
+            />
           </div>
         </StoreAssetWorkspacePane>
 
@@ -177,12 +201,13 @@ export default async function StoreAssetWorkspacePage({
         {canManage ? (
           <>
             <StoreAssetWorkspacePane tab="movement">
-          {canMove ? <Card>
+              {canMove ? (
+                <Card>
             <CardHeader>
               <CardTitle>Move / Assign Asset</CardTitle>
               <CardDescription>
-                Non Consumables can move to a Department, Machine, registered
-                Vendor, or return to Store.
+                      Non Consumables can move to a Department, Machine,
+                      registered Vendor, or return to Store.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -194,7 +219,9 @@ export default async function StoreAssetWorkspacePage({
                 />
                 <FieldGroup className="gap-4">
                   <Field>
-                    <FieldLabel htmlFor="holder-type">Assign To</FieldLabel>
+                          <FieldLabel htmlFor="holder-type">
+                            Assign To
+                          </FieldLabel>
                     <NativeSelect id="holder-type" name="holder_type">
                       <NativeSelectOption value="MACHINE">
                         Machine
@@ -217,7 +244,10 @@ export default async function StoreAssetWorkspacePage({
                         Select only when assigning to Vendor
                       </NativeSelectOption>
                       {data.vendors.map((vendor) => (
-                        <NativeSelectOption key={vendor.id} value={vendor.id}>
+                              <NativeSelectOption
+                                key={vendor.id}
+                                value={vendor.id}
+                              >
                           {vendor.code} — {vendor.name}
                         </NativeSelectOption>
                       ))}
@@ -239,21 +269,27 @@ export default async function StoreAssetWorkspacePage({
                 </Button>
               </form>
             </CardContent>
-          </Card> : null}
+                </Card>
+              ) : null}
             </StoreAssetWorkspacePane>
 
             <StoreAssetWorkspacePane tab="repairs">
-          {canRepair ? <Card>
+              {canRepair ? (
+                <Card>
             <CardHeader>
               <CardTitle>Create Repair PO</CardTitle>
               <CardDescription>
-                Creates a service PO and moves this Unit ID to the selected
-                Supplier without duplicating a repair Vendor.
+                      Creates a service PO and moves this Unit ID to the
+                      selected Supplier without duplicating a repair Vendor.
               </CardDescription>
             </CardHeader>
             <CardContent>
               <form action={createStoreRepairPurchaseOrderAction}>
-                <input name="issuance_id" type="hidden" value={randomUUID()} />
+                      <input
+                        name="issuance_id"
+                        type="hidden"
+                        value={randomUUID()}
+                      />
                 <input
                   name="asset_code"
                   type="hidden"
@@ -261,7 +297,9 @@ export default async function StoreAssetWorkspacePage({
                 />
                 <FieldGroup className="gap-4">
                   <Field>
-                    <FieldLabel htmlFor="repair-supplier">Supplier</FieldLabel>
+                          <FieldLabel htmlFor="repair-supplier">
+                            Supplier
+                          </FieldLabel>
                     <NativeSelect
                       id="repair-supplier"
                       name="supplier_id"
@@ -312,14 +350,16 @@ export default async function StoreAssetWorkspacePage({
                 </Button>
               </form>
             </CardContent>
-          </Card> : null}
+                </Card>
+              ) : null}
             </StoreAssetWorkspacePane>
 
             <StoreAssetWorkspacePane
               className="grid gap-4 xl:grid-cols-2"
               tab="maintenance"
             >
-          {canMaintain ? <Card>
+              {canMaintain ? (
+                <Card>
             <CardHeader>
               <CardTitle>Add Timetable</CardTitle>
               <CardDescription>
@@ -371,9 +411,11 @@ export default async function StoreAssetWorkspacePage({
                 </Button>
               </form>
             </CardContent>
-          </Card> : null}
+                </Card>
+              ) : null}
 
-          {canMaintain ? <Card>
+              {canMaintain ? (
+                <Card>
             <CardHeader>
               <CardTitle>Complete Maintenance</CardTitle>
               <CardDescription>
@@ -390,8 +432,13 @@ export default async function StoreAssetWorkspacePage({
                 />
                 <FieldGroup className="gap-4">
                   <Field>
-                    <FieldLabel htmlFor="maintenance-type">Type</FieldLabel>
-                    <NativeSelect id="maintenance-type" name="maintenance_type">
+                          <FieldLabel htmlFor="maintenance-type">
+                            Type
+                          </FieldLabel>
+                          <NativeSelect
+                            id="maintenance-type"
+                            name="maintenance_type"
+                          >
                       <NativeSelectOption value="MAINTENANCE">
                         Maintenance
                       </NativeSelectOption>
@@ -404,7 +451,9 @@ export default async function StoreAssetWorkspacePage({
                     </NativeSelect>
                   </Field>
                   <Field>
-                    <FieldLabel htmlFor="schedule-id">Timetable</FieldLabel>
+                          <FieldLabel htmlFor="schedule-id">
+                            Timetable
+                          </FieldLabel>
                     <NativeSelect id="schedule-id" name="schedule_id">
                       <NativeSelectOption value="">
                         Unscheduled / Breakdown
@@ -431,7 +480,10 @@ export default async function StoreAssetWorkspacePage({
                     name="completed_by"
                     required
                   />
-                  <TextField label="Supplier / Lab" name="supplier_name" />
+                        <TextField
+                          label="Supplier / Lab"
+                          name="supplier_name"
+                        />
                   <TextField
                     label="Certificate Number"
                     name="certificate_number"
@@ -453,7 +505,8 @@ export default async function StoreAssetWorkspacePage({
                 </Button>
               </form>
             </CardContent>
-          </Card> : null}
+                </Card>
+              ) : null}
             </StoreAssetWorkspacePane>
           </>
         ) : null}
@@ -464,9 +517,9 @@ export default async function StoreAssetWorkspacePage({
           <CardHeader>
             <CardTitle>Asset Lifecycle</CardTitle>
             <CardDescription>
-              A broken or scrapped physical asset keeps its history. A purchased
-              replacement receives a new Unit ID. Use Store Return above to make
-              an asset available again.
+                  A broken or scrapped physical asset keeps its history. A
+                  purchased replacement receives a new Unit ID. Use Store Return
+                  above to make an asset available again.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -474,14 +527,20 @@ export default async function StoreAssetWorkspacePage({
               action={setStoreAssetLifecycleAction}
               className="grid gap-4 md:grid-cols-4"
             >
-              <input name="asset_code" type="hidden" value={asset.assetCode} />
+                  <input
+                    name="asset_code"
+                    type="hidden"
+                    value={asset.assetCode}
+                  />
               <Field>
                 <FieldLabel htmlFor="asset-status">New Status</FieldLabel>
                 <NativeSelect id="asset-status" name="asset_status">
                   <NativeSelectOption value="UNDER_MAINTENANCE">
                     Under Maintenance
                   </NativeSelectOption>
-                  <NativeSelectOption value="BROKEN">Broken</NativeSelectOption>
+                      <NativeSelectOption value="BROKEN">
+                        Broken
+                      </NativeSelectOption>
                   <NativeSelectOption value="SCRAPPED">
                     Scrapped
                   </NativeSelectOption>
@@ -538,7 +597,9 @@ export default async function StoreAssetWorkspacePage({
                   {canRepair ? (
                     <TableCell>
                       {order.status === "Open" ? (
-                        <form action={completeStoreRepairPurchaseOrderAction}>
+                            <form
+                              action={completeStoreRepairPurchaseOrderAction}
+                            >
                           <input
                             name="asset_code"
                             type="hidden"
@@ -605,7 +666,9 @@ export default async function StoreAssetWorkspacePage({
                     <TableCell>{schedule.frequencyDays} days</TableCell>
                     <TableCell>{schedule.lastCompletedOn || "—"}</TableCell>
                     <TableCell
-                      className={due ? "font-semibold text-destructive" : ""}
+                          className={
+                            due ? "font-semibold text-destructive" : ""
+                          }
                     >
                       {schedule.nextDueOn}
                     </TableCell>
@@ -652,8 +715,12 @@ export default async function StoreAssetWorkspacePage({
             </TableHeader>
             <TableBody>
               {movements.map((movement, index) => (
-                <TableRow key={`${movement.movedAt.toISOString()}-${index}`}>
-                  <TableCell>{formatIstDateTime(movement.movedAt)}</TableCell>
+                    <TableRow
+                      key={`${movement.movedAt.toISOString()}-${index}`}
+                    >
+                      <TableCell>
+                        {formatIstDateTime(movement.movedAt)}
+                      </TableCell>
                   <TableCell>
                     <Badge variant="outline">{movement.movementType}</Badge>
                   </TableCell>
@@ -824,18 +891,18 @@ export default async function StoreAssetWorkspacePage({
 
 type StoreItemWorkspaceData = NonNullable<
   Awaited<
-    ReturnType<
-      ReturnType<typeof createStoreRepository>["getItemTypeWorkspace"]
-    >
+    ReturnType<ReturnType<typeof createStoreRepository>["getItemTypeWorkspace"]>
   >
 >
 
 function StoreItemWorkspace({
+  canManage,
   workspace,
 }: {
+  canManage: boolean
   workspace: StoreItemWorkspaceData
 }) {
-  const { assets, item, supplierPrices } = workspace
+  const { assets, drawing, item, supplierPrices } = workspace
   const isNonConsumable = item.assetType === "NON_CONSUMABLE"
 
   return (
@@ -859,6 +926,8 @@ function StoreItemWorkspace({
         </div>
       </div>
 
+      <StoreItemWorkspaceTabs>
+        <StoreItemWorkspacePane tab="overview">
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Info label="Asset Name" value={item.assetName} />
         <Info label="Identification" value={item.identificationName} />
@@ -906,7 +975,9 @@ function StoreItemWorkspace({
                   <TableCell>
                     <Badge
                       variant={
-                        asset.status === "BROKEN" ? "destructive" : "outline"
+                            asset.status === "BROKEN"
+                              ? "destructive"
+                              : "outline"
                       }
                     >
                       {asset.status}
@@ -917,8 +988,12 @@ function StoreItemWorkspace({
                       asset.locationName ||
                       asset.holderType}
                   </TableCell>
-                  <TableCell>{asset.acquiredOn || "Not recorded"}</TableCell>
-                  <TableCell>{asset.nextDueOn || "Not scheduled"}</TableCell>
+                      <TableCell>
+                        {asset.acquiredOn || "Not recorded"}
+                      </TableCell>
+                      <TableCell>
+                        {asset.nextDueOn || "Not scheduled"}
+                      </TableCell>
                 </TableRow>
               ))}
               {!assets.length ? (
@@ -937,10 +1012,65 @@ function StoreItemWorkspace({
           </Table>
         </CardContent>
       </Card>
+        </StoreItemWorkspacePane>
 
+        <StoreItemWorkspacePane tab="drawings">
       <Card>
         <CardHeader>
-          <CardTitle>Suppliers & Price History</CardTitle>
+              <CardTitle>Asset Drawing</CardTitle>
+              <CardDescription>
+                Drawing Number is {item.typeCode}. Keep the latest PDF, JPG, or
+                PNG here.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4">
+              {drawing ? (
+                <Button asChild className="w-fit" variant="outline">
+                  <a href={`/store/items/${item.id}/drawings/${drawing.id}`}>
+                    Open {drawing.fileName}
+                  </a>
+                </Button>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No drawing uploaded for this Asset Code.
+                </p>
+              )}
+              {canManage ? (
+                <form
+                  action={uploadStoreItemDrawingAction}
+                  className="grid max-w-xl gap-3 sm:grid-cols-[1fr_auto] sm:items-end"
+                  encType="multipart/form-data"
+                >
+                  <input name="item_type_id" type="hidden" value={item.id} />
+                  <Field>
+                    <FieldLabel htmlFor="item-workspace-drawing">
+                      {drawing ? "Replace Drawing" : "Upload Drawing"}
+                    </FieldLabel>
+                    <Input
+                      accept="application/pdf,image/jpeg,image/png"
+                      id="item-workspace-drawing"
+                      name="asset_drawing"
+                      required
+                      type="file"
+                    />
+                  </Field>
+                  <Button type="submit">
+                    {drawing ? "Replace" : "Upload"}
+                  </Button>
+                </form>
+              ) : null}
+            </CardContent>
+          </Card>
+        </StoreItemWorkspacePane>
+
+        <StoreItemWorkspacePane tab="supplier-quotes">
+          <Card>
+            <CardHeader>
+              <CardTitle>Supplier Quotes & Price History</CardTitle>
+              <CardDescription>
+                Quote PDFs stay attached to the exact supplier price and
+                effective date.
+              </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
           <Table>
@@ -950,18 +1080,18 @@ function StoreItemWorkspace({
                 <TableHead>Supplier</TableHead>
                 <TableHead>Price</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Contact</TableHead>
-                <TableHead>Quote</TableHead>
+                    <TableHead>Reference</TableHead>
+                    <TableHead>Quote PDF</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {supplierPrices.map((price, index) => (
-                <TableRow
-                  key={`${price.supplierCode}-${price.validFrom}-${index}`}
-                >
+                  {supplierPrices.map((price) => (
+                    <TableRow key={price.id}>
                   <TableCell>{price.validFrom}</TableCell>
                   <TableCell>
-                    <span className="font-medium">{price.supplierName}</span>
+                        <span className="font-medium">
+                          {price.supplierName}
+                        </span>
                     <span className="block text-xs text-muted-foreground">
                       {price.supplierCode}
                     </span>
@@ -972,10 +1102,52 @@ function StoreItemWorkspace({
                       {price.active ? "Available" : "History"}
                     </Badge>
                   </TableCell>
+                      <TableCell>{price.quoteReference || "—"}</TableCell>
                   <TableCell>
-                    {price.email || price.contactDetails || "Not recorded"}
+                        <div className="grid min-w-64 gap-2">
+                          {price.quoteDocumentId ? (
+                            <Button
+                              asChild
+                              className="w-fit"
+                              size="sm"
+                              variant="outline"
+                            >
+                              <a
+                                href={`/store/supplier-prices/${price.id}/quotes/${price.quoteDocumentId}`}
+                              >
+                                {price.quoteFileName || "Open Quote PDF"}
+                              </a>
+                            </Button>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">
+                              Not uploaded
+                            </span>
+                          )}
+                          {canManage ? (
+                            <form
+                              action={uploadStoreSupplierQuoteAction}
+                              className="flex gap-2"
+                              encType="multipart/form-data"
+                            >
+                              <input
+                                name="supplier_price_id"
+                                type="hidden"
+                                value={price.id}
+                              />
+                              <Input
+                                accept="application/pdf"
+                                aria-label={`Quote PDF for ${price.supplierCode}`}
+                                name="supplier_quote"
+                                required
+                                type="file"
+                              />
+                              <Button size="sm" type="submit" variant="outline">
+                                {price.quoteDocumentId ? "Replace" : "Upload"}
+                              </Button>
+                            </form>
+                          ) : null}
+                        </div>
                   </TableCell>
-                  <TableCell>{price.quoteReference || "—"}</TableCell>
                 </TableRow>
               ))}
               {!supplierPrices.length ? (
@@ -992,10 +1164,11 @@ function StoreItemWorkspace({
           </Table>
         </CardContent>
       </Card>
+        </StoreItemWorkspacePane>
+      </StoreItemWorkspaceTabs>
     </div>
   )
 }
-
 function Info({ label, value }: { label: string; value: string }) {
   return (
     <Card>

@@ -87,6 +87,7 @@ export {
   authorizeStoreItemTypeArtifactTarget,
   authorizeStorePurchaseOrderArtifactTarget,
   authorizeStoreReceiptArtifactTarget,
+  authorizeStoreSupplierPriceArtifactTarget,
   createStoreRepository,
   storePurchaseOrderPdfArtifactPurpose,
   type StoreAssetType,

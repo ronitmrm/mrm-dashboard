@@ -53,6 +53,7 @@ describe("user attachment security", () => {
     ],
     ["drawing", "drawing.jpeg", bytes(0xff, 0xd8, 0xff, 0xe0)],
     ["purchase-order", "source.pdf", Buffer.from("%PDF-1.7\n")],
+    ["supplier-quote", "quotation.pdf", Buffer.from("%PDF-1.7\n")],
     ["purchase-order", "source.xlsx", zipWithEntry("xl/workbook.xml")],
     ["purchase-order", "source.docx", zipWithEntry("word/document.xml")],
   ] as const)("accepts a valid %s attachment named %s", (purpose, name, data) => {

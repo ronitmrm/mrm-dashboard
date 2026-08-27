@@ -32,5 +32,8 @@ describe("Store Purchase Order PDF", () => {
     const pdf = await PDFDocument.load(bytes)
     expect(pdf.getTitle()).toBe("STR-PO-2026-000001 Purchase Order")
     expect(pdf.getPageCount()).toBe(1)
+    expect(pdf.getSubject()).toBe("Branded Store Purchase Order")
+    expect(pdf.getCreator()).toBe("MRM Dashboard")
+    expect(pdf.getPageCount()).toBe(1)
   })
 })
