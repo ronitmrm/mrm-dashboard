@@ -138,7 +138,9 @@ Assembled Part column is not displayed. Material-only casting, scrap, alloy,
 extrusion, forging, raw-material formula outputs, Total Rods Cost, and rolled-up
 Product Base inputs are not applicable on the parent and display `-`. Marking,
 plating, annealing, deburring, buffing, and sealant retain numeric zero when zero
-and show their actual values when non-zero. Package / Assembly rows otherwise
+and show their actual values when non-zero. Forging is not applicable to Barstock
+products and displays `-`. Rejection, burning-loss, and profit values include a
+visible `%` suffix. Package / Assembly rows otherwise
 retain parent, BOM depth, quantity, commercial inputs, formula evidence, and
 currency.
 Purchased Products also show their current Website Product size and MRMPL Product

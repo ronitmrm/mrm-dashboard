@@ -37,7 +37,7 @@ function percentValue(record: Record<string, unknown>, key: string) {
   const result = record[key]
   if (result === null || result === undefined) return ""
   const number = Number(result)
-  return Number.isFinite(number) ? (number * 100).toFixed(2) : ""
+  return Number.isFinite(number) ? `${(number * 100).toFixed(2)}%` : ""
 }
 
 function isDirectPricing(record: Record<string, unknown>) {
@@ -64,6 +64,13 @@ function directValue(
 
 function machiningValue(record: Record<string, unknown>, key: string) {
   return isDirectPricing(record) ? "-" : value(record, key)
+}
+
+function forgingValue(record: Record<string, unknown>) {
+  const productionType = String(record.productionType ?? "")
+    .trim()
+    .toLowerCase()
+  return productionType === "barstock" ? "-" : value(record, "forgingCost")
 }
 
 function isCustomerPackageSummary(row: PricingRegisterRow) {
@@ -203,7 +210,7 @@ export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
       : value(product, "extrusionCost"),
     "Forg Cost+ Nitric Blasting (INR/kg)": isPackageSummary
       ? "-"
-      : value(product, "forgingCost"),
+      : forgingValue(product),
     "Direct (INR/kg)": directValue(
       product,
       "directPurchasePricePerKg",
