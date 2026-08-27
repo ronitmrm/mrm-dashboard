@@ -19,7 +19,11 @@ import {
 } from "@workspace/ui/lib/table-filter-state"
 import Link from "next/link"
 
-import { pricingHeaders } from "./pricing-workbook"
+import {
+  isPricingFormulaCell,
+  isPricingFormulaHeader,
+  pricingHeaders,
+} from "./pricing-workbook"
 import {
   filterPricingTableRows,
   pricingFilterColumns,
@@ -50,7 +54,6 @@ const compactPricingColumns = new Set([
   "Customer Line Status",
   "Price Rev",
   "Under",
-  "BOM Level",
   "BOM Qty",
   "Q/P",
   "ENQ",
@@ -128,7 +131,14 @@ export function PricingTable({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
-      <div className="flex shrink-0 justify-end text-xs text-muted-foreground">
+      <div className="flex shrink-0 items-center justify-between gap-3 text-xs text-muted-foreground">
+        <div className="flex items-center gap-2">
+          <span
+            aria-hidden="true"
+            className="size-3 rounded-sm border border-sky-300 bg-sky-100 dark:border-sky-700 dark:bg-sky-950/60"
+          />
+          Formula-derived cells
+        </div>
         <div className="flex items-center gap-2">
           <Button
             disabled={currentPage === 0}
@@ -165,7 +175,11 @@ export function PricingTable({
             <TableRow>
               {columns.map((column) => (
                 <TableHead
-                  className={`${pricingColumnWidth(column.label)} overflow-hidden whitespace-nowrap`}
+                  className={`${pricingColumnWidth(column.label)} overflow-hidden whitespace-nowrap ${
+                    isPricingFormulaHeader(column.label)
+                      ? "bg-sky-100/80 dark:bg-sky-950/40"
+                      : ""
+                  }`}
                   data-filterable="true"
                   key={column.label}
                 >
@@ -197,9 +211,14 @@ export function PricingTable({
                 >
                   {pricingHeaders.map((header) => {
                     const cell = row.values[header]
+                    const formulaCell = isPricingFormulaCell(header, row.values)
                     return (
                       <TableCell
-                        className={`${pricingColumnWidth(header)} overflow-hidden text-ellipsis whitespace-nowrap`}
+                        className={`${pricingColumnWidth(header)} overflow-hidden text-ellipsis whitespace-nowrap ${
+                          formulaCell
+                            ? "bg-sky-50/80 dark:bg-sky-950/30"
+                            : ""
+                        }`}
                         key={header}
                         title={cell === "" ? undefined : String(cell)}
                       >

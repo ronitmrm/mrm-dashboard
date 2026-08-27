@@ -108,7 +108,6 @@ const packageNotApplicableColumns = [
 ] as const
 
 const packageDashWhenEmptyColumns = [
-  "BOM Level",
   "Description",
   "Size",
   "MRMPL Product Description",
@@ -139,6 +138,54 @@ const packageDerivedWeightFields = new Set([
   "one-piece weight (g)*",
   "pieces per kg",
 ])
+
+export const pricingFormulaHeaders = [
+  "No of Piece / KG",
+  "Direct (INR/pc)",
+  "M/c Cost (INR/pc)",
+  "Net Rate / KG Without Alloy Premium",
+  "Net Rate / KG With Alloy Premium",
+  "Scrap Rate / gm",
+  "RM Cost",
+  "Scrap Return",
+  "Scrap Return Price ( Inc. Burning Loss )",
+  "Scrap Return Price",
+  "Total Rods Cost",
+  "Rejection",
+  "Total - A",
+  "Profit - B",
+  "Total - A + B",
+  "Rate / PCS In INR",
+  "Total Rate / PCS In INR",
+  "BOM Component Cost (INR/pc)",
+  "Total Package Price Including BOM Component Cost (INR/pc)",
+  "Rate / PCS In Currency",
+] as const
+
+const pricingFormulaHeaderSet = new Set<string>(pricingFormulaHeaders)
+
+export function isPricingFormulaHeader(header: string) {
+  return pricingFormulaHeaderSet.has(header)
+}
+
+const derivedWeightRowTypes = new Set([
+  "Package Total",
+  "Package",
+  "Assembly",
+])
+
+export function isPricingFormulaCell(
+  header: string,
+  row: PricingViewRow
+) {
+  const cell = normalizedText(row[header])
+  if (!cell || cell === "-") return false
+  return (
+    isPricingFormulaHeader(header) ||
+    (header === "1 Piece Weight ( gm )" &&
+      derivedWeightRowTypes.has(normalizedText(row["Row Type"])))
+  )
+}
 
 export function orderPricingRows(rows: PricingRegisterRow[]) {
   return rows
@@ -200,7 +247,6 @@ export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
       : "-",
     "Price Rev": isCustomerPrice ? row.revision : "-",
     Under: dashIfEmpty(row.parentUid),
-    "BOM Level": row.componentDepth || "",
     "BOM Qty": row.componentQuantity.toFixed(2),
     UID: row.uid,
     "Q/P": quoteStatus,
