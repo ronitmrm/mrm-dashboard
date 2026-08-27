@@ -1,3 +1,4 @@
+import { Search } from "lucide-react"
 import Link from "next/link"
 import { notFound, redirect } from "next/navigation"
 
@@ -100,15 +101,15 @@ export default async function NewDesignWorkspacePage({
         </Button>
       </section>
 
-      <Card>
-        <CardHeader>
+      <Card className="overflow-hidden">
+        <CardHeader className="border-b bg-muted/20">
           <CardTitle>New Product Design Workspace</CardTitle>
           <CardDescription>
             Save incomplete work to keep the line In Progress. Mark the BOM
             complete only when the Design work is finished.
           </CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-6">
+        <CardContent className="grid gap-8 pt-6">
           {!editable ? (
             <p className="rounded-2xl border bg-muted/40 p-3 text-sm">
               This Design task is read-only because its downstream work has
@@ -175,33 +176,46 @@ export default async function NewDesignWorkspacePage({
           </section>
 
           {editable ? (
-            <form
-              className="flex flex-col gap-2 sm:flex-row sm:items-end"
-              id="design-product-search"
-            >
-              <Field className="max-w-md flex-1">
-                <FieldLabel htmlFor="design-product-query">
-                  Find Existing BOM Component
-                </FieldLabel>
-                <Input
-                  defaultValue={productSearch}
-                  id="design-product-query"
-                  name="product"
-                  placeholder="Product UID or description"
+            <section className="rounded-xl border bg-muted/20 p-4 lg:p-5">
+              <div className="mb-4">
+                <h3 className="font-medium">BOM Component Lookup</h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Find an ordered product before selecting it in a BOM line.
+                </p>
+              </div>
+              <form
+                className="flex flex-col gap-2 sm:flex-row sm:items-end"
+                id="design-product-search"
+                role="search"
+              >
+                <Field className="max-w-2xl flex-1">
+                  <FieldLabel htmlFor="design-product-query">
+                    Product UID Or Description
+                  </FieldLabel>
+                  <Input
+                    autoComplete="off"
+                    defaultValue={productSearch}
+                    id="design-product-query"
+                    name="product"
+                    placeholder="Search by Product UID or description…"
+                  />
+                </Field>
+                <Button type="submit" variant="outline">
+                  <Search aria-hidden="true" className="size-4" />
+                  Search Products
+                </Button>
+              </form>
+              <div className="mt-3">
+                <BoundedResultNotice
+                  actionHref="#design-product-query"
+                  actionLabel="Refine Product Search"
+                  coverage={productOptions.coverage}
+                  searchQuery={productSearch}
+                  section="BOM Component Options"
                 />
-              </Field>
-              <Button type="submit" variant="outline">
-                Search
-              </Button>
-            </form>
+              </div>
+            </section>
           ) : null}
-          <BoundedResultNotice
-            actionHref="#design-product-search"
-            actionLabel="Refine product search"
-            coverage={productOptions.coverage}
-            searchQuery={productSearch}
-            section="BOM component options"
-          />
 
           <form action={saveDesignAction}>
             <input
