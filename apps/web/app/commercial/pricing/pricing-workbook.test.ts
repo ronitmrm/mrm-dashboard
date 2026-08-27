@@ -62,9 +62,9 @@ const row: PricingRegisterRow = {
 describe("Pricing spreadsheet workbook", () => {
   test("preserves the source sheet, filename, headers and percent display", () => {
     const view = toPricingViewRow(row)
-    expect(view["Rejection %"]).toBe("5.00")
-    expect(view["BL %"]).toBe("3.00")
-    expect(view.Profit).toBe("20.00")
+    expect(view["Rejection %"]).toBe("5.00%")
+    expect(view["BL %"]).toBe("3.00%")
+    expect(view.Profit).toBe("20.00%")
     expect(view["Scrap Rate / gm"]).toBe("0.57")
     expect(view["Rate / PCS In Currency"]).toBe("1.2500")
     expect(view["Direct (INR/kg)"]).toBe("-")
@@ -105,6 +105,22 @@ describe("Pricing spreadsheet workbook", () => {
     })
   })
 
+  test("shows forging as not applicable for a Barstock product", () => {
+    const barstockRow: PricingRegisterRow = {
+      ...row,
+      product: {
+        ...row.product,
+        forgingCost: 0,
+        productionType: "Barstock",
+      },
+    }
+
+    expect(
+      toPricingViewRow(barstockRow)[
+        "Forg Cost+ Nitric Blasting (INR/kg)"
+      ]
+    ).toBe("-")
+  })
   test("identifies incomplete prices and defaults their USD terms", () => {
     const incompleteRow: PricingRegisterRow = {
       ...row,
@@ -215,7 +231,7 @@ describe("Pricing spreadsheet workbook", () => {
       "Assembly Cost (INR/kg)": "5.00",
       "No of Piece / KG": "66.23",
       "Product Base Cost (INR/pc)": "2.36",
-      "Rejection %": "2.00",
+      "Rejection %": "2.00%",
       "Total Rate / PCS In INR": "-",
     })
   })
@@ -329,7 +345,7 @@ describe("Pricing spreadsheet workbook", () => {
       "Production Type": "-",
       "Rate / PCS In INR": "0.69",
       "Rate / PCS In Currency": "0.2366",
-      "Rejection %": "2.00",
+      "Rejection %": "2.00%",
       "RM Cost": "-",
       "Rod Size": "-",
       "Rod Type": "-",
