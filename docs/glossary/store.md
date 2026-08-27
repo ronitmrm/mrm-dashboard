@@ -20,7 +20,9 @@ Asset Subcategory, and Asset Name combination is checked before saving. An
 existing combination displays and reuses its existing Asset Code without
 creating another Store Item Type; only a new combination generates a new Asset
 Code. Its Master Table shows Asset Type, Category, Subcategory, Asset Name, and
-Identification in separate columns.
+Identification in separate columns. When a Store Item Type applies to a
+manufactured product, its Product Portfolio UID is selected from active internal
+Portfolio products instead of entered as free text.
 
 **Asset Type**: The stock-control choice for a Store Item Type. It is either
 Consumable or Non Consumable; users select it from a dropdown and never enter
