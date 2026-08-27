@@ -3,9 +3,27 @@ import { describe, expect, test } from "vitest"
 import {
   mergeWorkingWorkbookCalculation,
   mergeWorkingWorkbookProductContext,
+  resolvePricingLifecycleStatus,
 } from "./commercial-costing"
 
 describe("WORKING workbook pricing fallback", () => {
+  test("uses the customer-specific Costing Type for migrated quote rows", () => {
+    expect(
+      resolvePricingLifecycleStatus({
+        catalogLifecycleStatus: "P",
+        importedCostingType: "Q",
+        rootSourceSystem: "working_xlsx",
+      })
+    ).toBe("Q")
+    expect(
+      resolvePricingLifecycleStatus({
+        catalogLifecycleStatus: "P",
+        importedCostingType: "Q",
+        rootSourceSystem: "mrm-dashboard",
+      })
+    ).toBe("P")
+  })
+
   test("fills missing Costing formulas while preserving corrected calculations", () => {
     const originalRow: unknown[] = Array.from({ length: 58 })
     originalRow[42] = 858

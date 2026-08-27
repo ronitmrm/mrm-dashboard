@@ -113,6 +113,7 @@ type PricingRegisterDatabaseRow = {
   revision: number
   imported_packaging: string | null
   imported_shipping_terms: string | null
+  imported_costing_type: string | null
   root_source_system: string | null
   root_source_table: string | null
   root_company_name: string
@@ -251,6 +252,20 @@ export function mergeWorkingWorkbookProductContext(input: {
   }
   return { ...input.productContext, dieCode: String(workbookDieCode).trim() }
 }
+export function resolvePricingLifecycleStatus(input: {
+  catalogLifecycleStatus: string
+  importedCostingType: string | null
+  rootSourceSystem: string | null
+}) {
+  if (input.rootSourceSystem !== "working_xlsx") {
+    return input.catalogLifecycleStatus
+  }
+  const importedCostingType = input.importedCostingType?.trim().toUpperCase()
+  return importedCostingType === "P" || importedCostingType === "Q"
+    ? importedCostingType
+    : input.catalogLifecycleStatus
+}
+
 const pricingRegisterRow = (row: PricingRegisterDatabaseRow) => {
   const calculation = mergeWorkingWorkbookCalculation({
     calculation: row.calculation_json,
@@ -284,7 +299,11 @@ const pricingRegisterRow = (row: PricingRegisterDatabaseRow) => {
     id: row.id,
     isActive: row.is_active,
     itemType: row.item_type,
-    lifecycleStatus: row.lifecycle_status,
+    lifecycleStatus: resolvePricingLifecycleStatus({
+      catalogLifecycleStatus: row.lifecycle_status,
+      importedCostingType: row.imported_costing_type,
+      rootSourceSystem: row.root_source_system,
+    }),
     lineNumber: row.line_number,
     packaging:
       row.packaging ??
@@ -1516,6 +1535,8 @@ export function createCommercialCostingRepository(
           root.source_payload -> 'originalRow' ->> 9 AS imported_packaging,
           root.source_payload -> 'originalRow' ->> 8
             AS imported_shipping_terms,
+          root.source_payload ->> 'costingType' AS imported_costing_type,
+
           CASE WHEN tree.component_depth = 0
             THEN root.customer_part_code ELSE NULL END
             AS customer_part_code,
@@ -1640,6 +1661,7 @@ export function createCommercialCostingRepository(
           NULL::text AS root_source_table,
           NULL::text AS imported_packaging,
           NULL::text AS imported_shipping_terms,
+          NULL::text AS imported_costing_type,
           NULL::text AS customer_part_code,
           item.product_cost_inr::text AS unit_price,
           ''::text AS customer_id, ''::text AS customer_uid,
@@ -3418,6 +3440,8 @@ export function createCommercialCostingRepository(
             root.source_payload -> 'originalRow' ->> 9 AS imported_packaging,
             root.source_payload -> 'originalRow' ->> 8
               AS imported_shipping_terms,
+            root.source_payload ->> 'costingType' AS imported_costing_type,
+
             CASE WHEN tree.component_depth = 0
               THEN root.customer_part_code ELSE NULL END
               AS customer_part_code,
