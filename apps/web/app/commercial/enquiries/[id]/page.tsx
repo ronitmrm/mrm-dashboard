@@ -9,6 +9,7 @@ import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -40,6 +41,7 @@ import { Textarea } from "@workspace/ui/components/textarea"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { DataDownloadButton } from "@/components/data-download-button"
+import { EnquiryLineImportButton } from "@/components/enquiry-line-import-button"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { selectedEnquiryLine } from "@/lib/pricing/enquiry-detail"
 import { isActiveEnquiryCustomer } from "@/lib/pricing/enquiry-customers"
@@ -178,11 +180,6 @@ export default async function EnquiryDetailPage({
             <DataDownloadButton
               href={`/commercial/enquiries/${id}/lines/export.xlsx`}
             />
-            <Button asChild size="sm" variant="outline">
-              <Link href="/commercial/enquiries/template.csv">
-                Line Import Template
-              </Link>
-            </Button>
           </div>
         </div>
         {snapshot.enquiry.technicalHandoverStatus !== "Handed Over" ? (
@@ -340,137 +337,99 @@ export default async function EnquiryDetailPage({
         </CardContent>
       </Card>
 
-      <div className="grid gap-6 xl:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Add Line Item</CardTitle>
-            <CardDescription>
-              Drawings Are Stored Locally; Postgresql Keeps The Checksum,
-              Metadata, And Relational Link.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form action={addEnquiryItemAction}>
-              <input type="hidden" name="enquiry_id" value={id} />
-              <input
-                type="hidden"
-                name="organization_id"
-                value={snapshot.enquiry.organizationId}
-              />
-              <FieldGroup>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Field>
-                    <FieldLabel htmlFor="line-part">Part</FieldLabel>
-                    <Input id="line-part" name="part" required />
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="line-description">
-                      Description
-                    </FieldLabel>
-                    <Input id="line-description" name="description" required />
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="line-quantity">Quantity</FieldLabel>
-                    <Input
-                      id="line-quantity"
-                      name="quantity"
-                      type="number"
-                      min="0"
-                      step="0.00000001"
-                      defaultValue="0"
-                    />
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="line-target-price">
-                      Target Price
-                    </FieldLabel>
-                    <Input
-                      id="line-target-price"
-                      name="target_price"
-                      type="number"
-                      min="0"
-                      step="0.000001"
-                      defaultValue="0"
-                    />
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="line-grade">Grade</FieldLabel>
-                    <Input id="line-grade" name="grade" />
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="line-drawing-reference">
-                      Drawing Reference
-                    </FieldLabel>
-                    <Input
-                      id="line-drawing-reference"
-                      name="drawing_reference"
-                    />
-                  </Field>
-                </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Add Line Item</CardTitle>
+          <CardDescription>
+            Drawings Are Stored Locally; Postgresql Keeps The Checksum,
+            Metadata, And Relational Link.
+          </CardDescription>
+          <CardAction className="flex flex-wrap gap-2 max-sm:col-span-2 max-sm:col-start-1 max-sm:row-span-1 max-sm:row-start-3 max-sm:mt-2 max-sm:justify-self-start">
+            <DataDownloadButton
+              href="/commercial/enquiries/template.csv"
+              label="Download CSV Template"
+            />
+            <EnquiryLineImportButton
+              action={importEnquiryLinesAction}
+              enquiryId={id}
+              organizationId={snapshot.enquiry.organizationId}
+            />
+          </CardAction>
+        </CardHeader>
+        <CardContent>
+          <form action={addEnquiryItemAction}>
+            <input type="hidden" name="enquiry_id" value={id} />
+            <input
+              type="hidden"
+              name="organization_id"
+              value={snapshot.enquiry.organizationId}
+            />
+            <FieldGroup>
+              <div className="grid gap-4 sm:grid-cols-2">
                 <Field>
-                  <FieldLabel htmlFor="line-drawing">Drawing File</FieldLabel>
+                  <FieldLabel htmlFor="line-part">Part</FieldLabel>
+                  <Input id="line-part" name="part" required />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="line-description">
+                    Description
+                  </FieldLabel>
+                  <Input id="line-description" name="description" required />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="line-quantity">Quantity</FieldLabel>
                   <Input
-                    id="line-drawing"
-                    name="drawing_file"
-                    type="file"
-                    accept=".pdf,.dwg,.dxf,.png,.jpg,.jpeg"
+                    id="line-quantity"
+                    name="quantity"
+                    type="number"
+                    min="0"
+                    step="0.00000001"
+                    defaultValue="0"
                   />
-                  <FieldDescription>Maximum File Size: 25 Mb.</FieldDescription>
                 </Field>
                 <Field>
-                  <FieldLabel htmlFor="line-remarks">Remarks</FieldLabel>
-                  <Textarea id="line-remarks" name="remarks" />
-                </Field>
-                <Button type="submit">Add Line</Button>
-              </FieldGroup>
-            </form>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Import Line Items</CardTitle>
-            <CardDescription>
-              Upload Csv, Xls, Or Xlsx. Every Nonblank Row Is Classified Before
-              An Explicit Review Decision.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form action={importEnquiryLinesAction}>
-              <input type="hidden" name="enquiry_id" value={id} />
-              <input
-                type="hidden"
-                name="organization_id"
-                value={snapshot.enquiry.organizationId}
-              />
-              <FieldGroup>
-                <Field>
-                  <FieldLabel htmlFor="import-file">Import File</FieldLabel>
+                  <FieldLabel htmlFor="line-target-price">
+                    Target Price
+                  </FieldLabel>
                   <Input
-                    id="import-file"
-                    name="template_file"
-                    type="file"
-                    accept=".csv,.xls,.xlsx"
-                    required
+                    id="line-target-price"
+                    name="target_price"
+                    type="number"
+                    min="0"
+                    step="0.000001"
+                    defaultValue="0"
                   />
-                  <FieldDescription>
-                    The Content Hash Is The Idempotency Key; Uploading The Same
-                    File Reopens The Same Review.
-                  </FieldDescription>
                 </Field>
-                <div className="flex flex-wrap gap-3">
-                  <Button type="submit">Classify Import Rows</Button>
-                  <Button asChild type="button" variant="outline">
-                    <Link href="/commercial/enquiries/template.csv">
-                      Download Csv Template
-                    </Link>
-                  </Button>
-                </div>
-              </FieldGroup>
-            </form>
-          </CardContent>
-        </Card>
-      </div>
+                <Field>
+                  <FieldLabel htmlFor="line-grade">Grade</FieldLabel>
+                  <Input id="line-grade" name="grade" />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="line-drawing-reference">
+                    Drawing Reference
+                  </FieldLabel>
+                  <Input id="line-drawing-reference" name="drawing_reference" />
+                </Field>
+              </div>
+              <Field>
+                <FieldLabel htmlFor="line-drawing">Drawing File</FieldLabel>
+                <Input
+                  id="line-drawing"
+                  name="drawing_file"
+                  type="file"
+                  accept=".pdf,.dwg,.dxf,.png,.jpg,.jpeg"
+                />
+                <FieldDescription>Maximum File Size: 25 Mb.</FieldDescription>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="line-remarks">Remarks</FieldLabel>
+                <Textarea id="line-remarks" name="remarks" />
+              </Field>
+              <Button type="submit">Add Line</Button>
+            </FieldGroup>
+          </form>
+        </CardContent>
+      </Card>
 
       {snapshot.importReviews.some((review) => review.status === "Pending") ? (
         <section className="grid gap-4">
