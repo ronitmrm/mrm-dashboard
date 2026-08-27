@@ -1,4 +1,4 @@
-import { CheckCircle2, CircleDot, Clock3, Search } from "lucide-react"
+import { Search } from "lucide-react"
 import Link from "next/link"
 import { notFound, redirect } from "next/navigation"
 
@@ -99,78 +99,6 @@ export default async function NewDesignWorkspacePage({
             Open Enquiry
           </Link>
         </Button>
-      </section>
-
-      <section
-        aria-label="Workflow status"
-        className="rounded-xl border bg-card p-4 shadow-sm"
-      >
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-              Current Activity
-            </p>
-            <h3 className="mt-1 font-semibold">
-              New Product Design In Progress
-            </h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Define the product, complete its BOM, attach drawings, then hand
-              the line to Product Costing.
-            </p>
-          </div>
-          <Badge variant="secondary">{selectedItem.designStatus}</Badge>
-        </div>
-        <ol className="mt-4 grid overflow-hidden rounded-lg border sm:grid-cols-2 xl:grid-cols-4">
-          <li className="flex items-center gap-3 border-b p-3 sm:border-r xl:border-b-0">
-            <CheckCircle2
-              aria-hidden="true"
-              className="size-5 shrink-0 text-primary"
-            />
-            <div className="min-w-0">
-              <p className="text-xs text-muted-foreground">Enquiry</p>
-              <p className="truncate text-sm font-medium">Logged</p>
-            </div>
-          </li>
-          <li className="flex items-center gap-3 border-b p-3 xl:border-r xl:border-b-0">
-            <CheckCircle2
-              aria-hidden="true"
-              className="size-5 shrink-0 text-primary"
-            />
-            <div className="min-w-0">
-              <p className="text-xs text-muted-foreground">Technical Review</p>
-              <p className="truncate text-sm font-medium">
-                {selectedItem.technicalReviewStatus}
-              </p>
-            </div>
-          </li>
-          <li
-            aria-current="step"
-            className="flex items-center gap-3 border-b bg-primary/8 p-3 sm:border-r sm:border-b-0"
-          >
-            <CircleDot
-              aria-hidden="true"
-              className="size-5 shrink-0 text-primary"
-            />
-            <div className="min-w-0">
-              <p className="text-xs text-muted-foreground">Design</p>
-              <p className="truncate text-sm font-medium">
-                {selectedItem.designStatus}
-              </p>
-            </div>
-          </li>
-          <li className="flex items-center gap-3 p-3">
-            <Clock3
-              aria-hidden="true"
-              className="size-5 shrink-0 text-muted-foreground"
-            />
-            <div className="min-w-0">
-              <p className="text-xs text-muted-foreground">Product Costing</p>
-              <p className="truncate text-sm font-medium">
-                {selectedItem.nextStageStatus}
-              </p>
-            </div>
-          </li>
-        </ol>
       </section>
 
       <Card className="overflow-hidden">
