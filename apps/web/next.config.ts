@@ -2,8 +2,8 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import type { NextConfig } from "next"
 
-import { browserSecurityHeaders } from "./lib/security-headers"
-import { maxDashboardProxyRequestBytes } from "./lib/dashboard-route-policy"
+import { browserSecurityHeaders } from "./lib/security-headers.ts"
+import { maxDashboardProxyRequestBytes } from "./lib/dashboard-route-policy.ts"
 
 const appDir = path.dirname(fileURLToPath(import.meta.url))
 const workspaceRoot = path.join(appDir, "../..")
