@@ -371,11 +371,12 @@ export function DesignTaskEditor({
       </div>
 
       <div
+        className="max-w-4xl"
         hidden={activeSection !== "product"}
         id="design-panel-product"
         role="tabpanel"
       >
-        <FieldSet className="rounded-xl border bg-muted/20 p-5">
+        <FieldSet className="gap-4 rounded-xl border bg-muted/20 p-4">
           <FieldLegend>
             {portfolioDecisionLocked
               ? "New Product Design"
@@ -387,7 +388,7 @@ export function DesignTaskEditor({
               : "Match an ordered internal product, or create a controlled quoted part."}{" "}
             Q, C, and nested A identifiers are allocated atomically on save.
           </FieldDescription>
-          <div className="grid gap-x-4 gap-y-5 md:grid-cols-2 xl:grid-cols-[repeat(auto-fit,minmax(14rem,1fr))]">
+          <div className="grid gap-4 md:grid-cols-2">
             {portfolioDecisionLocked ? (
               <input
                 name="portfolio_match_status"
