@@ -71,6 +71,10 @@ type ProductOption = {
   uid: string
 }
 
+const equalFieldGridClassName =
+  "grid gap-x-4 gap-y-5 md:grid-cols-2 xl:grid-cols-4"
+const fieldLabelClassName = "flex h-full w-full flex-col justify-between gap-2"
+
 function TextField({
   defaultValue,
   label,
@@ -85,8 +89,8 @@ function TextField({
   type?: string
 }) {
   return (
-    <Field>
-      <FieldLabel>
+    <Field className="min-w-0">
+      <FieldLabel className={fieldLabelClassName}>
         {label}
         <Input
           autoComplete="off"
@@ -116,11 +120,12 @@ function ChoiceField({
   options: readonly string[]
 }) {
   return (
-    <Field>
-      <FieldLabel>
+    <Field className="min-w-0">
+      <FieldLabel className={fieldLabelClassName}>
         {label}
         <NativeSelect
           autoComplete="off"
+          className="w-full"
           defaultValue={defaultValue}
           name={name}
           onChange={(event) => onChange?.(event.currentTarget.value)}
@@ -150,8 +155,10 @@ function BomRow({
   row: BomLine
 }) {
   return (
-    <section className="grid gap-5 rounded-xl border bg-background p-5 shadow-sm md:grid-cols-2 xl:grid-cols-3">
-      <div className="flex items-center gap-2 md:col-span-2 xl:col-span-3">
+    <section
+      className={`rounded-xl border bg-background p-5 shadow-sm ${equalFieldGridClassName}`}
+    >
+      <div className="flex items-center gap-2 md:col-span-2 xl:col-span-4">
         <h4 className="font-medium">BOM Line {index + 1}</h4>
         <span className="rounded-full border bg-muted px-2 py-0.5 text-xs text-muted-foreground">
           {row.componentSource || "New"} · {row.componentItemType || "List"}
@@ -181,11 +188,12 @@ function BomRow({
         name="bom_component_item_type"
         options={["List", "Assembly"]}
       />
-      <Field>
-        <FieldLabel>
+      <Field className="min-w-0">
+        <FieldLabel className={fieldLabelClassName}>
           Existing Ordered Product
           <NativeSelect
             autoComplete="off"
+            className="w-full"
             defaultValue={row.existingProductId ?? ""}
             name="bom_existing_product_id"
           >
@@ -262,16 +270,19 @@ function BomRow({
         label="Process Required"
         name="bom_process_required"
       />
-      <div className="md:col-span-2">
-        <TextField
-          defaultValue={row.notes ?? ""}
-          label="Line Notes"
-          name="bom_notes"
-        />
-      </div>
+      <TextField
+        defaultValue={row.notes ?? ""}
+        label="Line Notes"
+        name="bom_notes"
+      />
       {canRemove ? (
-        <div className="flex items-end justify-end md:col-span-2 xl:col-span-1">
-          <Button onClick={onRemove} type="button" variant="outline">
+        <div className="flex min-h-[4.75rem] items-end">
+          <Button
+            className="w-full"
+            onClick={onRemove}
+            type="button"
+            variant="outline"
+          >
             Remove Line
           </Button>
         </div>
@@ -336,7 +347,7 @@ export function DesignTaskEditor({
             : "Match an ordered internal product, or create a controlled quoted part."}{" "}
           Q, C, and nested A identifiers are allocated atomically on save.
         </FieldDescription>
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-x-4 gap-y-5 md:grid-cols-2 xl:grid-cols-[repeat(auto-fit,minmax(14rem,1fr))]">
           {portfolioDecisionLocked ? (
             <input
               name="portfolio_match_status"
@@ -357,11 +368,12 @@ export function DesignTaskEditor({
             />
           )}
           {portfolioDecision === "Matches Existing Portfolio" ? (
-            <Field>
-              <FieldLabel>
+            <Field className="min-w-0">
+              <FieldLabel className={fieldLabelClassName}>
                 Ordered Portfolio Product
                 <NativeSelect
                   autoComplete="off"
+                  className="w-full"
                   defaultValue={initial.matchedProductId ?? ""}
                   name="matched_product_id"
                   required
@@ -406,130 +418,145 @@ export function DesignTaskEditor({
               Product definition, ownership, manufacturing support, and review
               notes.
             </FieldDescription>
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              <TextField
-                defaultValue={initial.designerName ?? ""}
-                label="Designer"
-                name="designer_name"
-              />
-              <TextField
-                defaultValue={initial.targetCompletionDate ?? ""}
-                label="Target Completion"
-                name="target_completion_date"
-                type="date"
-              />
-              <TextField
-                defaultValue={initial.internalPartSize ?? ""}
-                label="Internal Part Size"
-                name="internal_part_size"
-              />
-              <TextField
-                defaultValue={initial.internalPartSubCategory ?? ""}
-                label="Internal Subcategory"
-                name="internal_part_sub_category"
-              />
-              <TextField
-                defaultValue={initial.internalPartCategory ?? ""}
-                label="Internal Category"
-                name="internal_part_category"
-              />
-              <TextField
-                defaultValue={initial.manufacturingProcess ?? ""}
-                label="Manufacturing Process"
-                name="manufacturing_process"
-              />
-              {itemType === "Package" ? (
-                <TextField
-                  defaultValue={initial.packageProcessRequired ?? ""}
-                  label="Package Process"
-                  name="package_process_required"
-                />
-              ) : null}
-              <TextField
-                defaultValue={initial.componentsRequired ?? ""}
-                label="Components Required"
-                name="components_required"
-              />
-              <ChoiceField
-                defaultValue={initial.designBomCompleted}
-                label="BOM Complete"
-                name="design_bom_completed"
-                options={["No", "Yes"]}
-              />
-              <ChoiceField
-                defaultValue={initial.toolingRequired}
-                label="Tooling Required"
-                name="tooling_required"
-                onChange={setToolingRequired}
-                options={["No", "Yes"]}
-              />
-              {toolingRequired === "Yes" ? (
-                <TextField
-                  defaultValue={initial.toolingApproxCost}
-                  label="Tooling Approximate Cost"
-                  name="tooling_approx_cost"
-                  type="number"
-                />
-              ) : null}
-              <ChoiceField
-                defaultValue={initial.fixtureRequired}
-                label="Fixture Required"
-                name="fixture_required"
-                onChange={setFixtureRequired}
-                options={["No", "Yes"]}
-              />
-              {fixtureRequired === "Yes" ? (
-                <TextField
-                  defaultValue={initial.fixtureApproxCost}
-                  label="Fixture Approximate Cost"
-                  name="fixture_approx_cost"
-                  type="number"
-                />
-              ) : null}
-              <ChoiceField
-                defaultValue={initial.gaugesRequired}
-                label="Inspection / Gauges Required"
-                name="gauges_required"
-                onChange={setGaugesRequired}
-                options={["No", "Yes"]}
-              />
-              {gaugesRequired === "Yes" ? (
-                <TextField
-                  defaultValue={initial.inspectionApproxCost}
-                  label="Inspection Approximate Cost"
-                  name="inspection_approx_cost"
-                  type="number"
-                />
-              ) : null}
-              <TextField
-                defaultValue={initial.checkedBy ?? ""}
-                label="Checked By"
-                name="checked_by"
-              />
-            </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              <Field>
-                <FieldLabel>
-                  Operation Notes
-                  <Textarea
-                    autoComplete="off"
-                    className="min-h-28 resize-y"
-                    defaultValue={initial.operationNotes ?? ""}
-                    name="operation_notes"
+            <div className="grid gap-7">
+              <section className="grid gap-4">
+                <h4 className="text-sm font-medium">Product Details</h4>
+                <div className={equalFieldGridClassName}>
+                  <TextField
+                    defaultValue={initial.designerName ?? ""}
+                    label="Designer"
+                    name="designer_name"
                   />
-                </FieldLabel>
-              </Field>
-              <Field>
-                <FieldLabel>
-                  Design Remarks
-                  <Textarea
-                    autoComplete="off"
-                    className="min-h-28 resize-y"
-                    defaultValue={initial.designRemarks ?? ""}
-                    name="design_remarks"
+                  <TextField
+                    defaultValue={initial.targetCompletionDate ?? ""}
+                    label="Target Completion"
+                    name="target_completion_date"
+                    type="date"
                   />
-                </FieldLabel>
-              </Field>
+                  <TextField
+                    defaultValue={initial.internalPartSize ?? ""}
+                    label="Internal Part Size"
+                    name="internal_part_size"
+                  />
+                  <TextField
+                    defaultValue={initial.internalPartSubCategory ?? ""}
+                    label="Internal Subcategory"
+                    name="internal_part_sub_category"
+                  />
+                  <TextField
+                    defaultValue={initial.internalPartCategory ?? ""}
+                    label="Internal Category"
+                    name="internal_part_category"
+                  />
+                  <TextField
+                    defaultValue={initial.manufacturingProcess ?? ""}
+                    label="Manufacturing Process"
+                    name="manufacturing_process"
+                  />
+                  {itemType === "Package" ? (
+                    <TextField
+                      defaultValue={initial.packageProcessRequired ?? ""}
+                      label="Package Process"
+                      name="package_process_required"
+                    />
+                  ) : null}
+                  <TextField
+                    defaultValue={initial.componentsRequired ?? ""}
+                    label="Components Required"
+                    name="components_required"
+                  />
+                </div>
+              </section>
+
+              <section className="grid gap-4">
+                <h4 className="text-sm font-medium">Design Controls</h4>
+                <div className={equalFieldGridClassName}>
+                  <ChoiceField
+                    defaultValue={initial.designBomCompleted}
+                    label="BOM Complete"
+                    name="design_bom_completed"
+                    options={["No", "Yes"]}
+                  />
+                  <ChoiceField
+                    defaultValue={initial.toolingRequired}
+                    label="Tooling Required"
+                    name="tooling_required"
+                    onChange={setToolingRequired}
+                    options={["No", "Yes"]}
+                  />
+                  {toolingRequired === "Yes" ? (
+                    <TextField
+                      defaultValue={initial.toolingApproxCost}
+                      label="Tooling Approximate Cost"
+                      name="tooling_approx_cost"
+                      type="number"
+                    />
+                  ) : null}
+                  <ChoiceField
+                    defaultValue={initial.fixtureRequired}
+                    label="Fixture Required"
+                    name="fixture_required"
+                    onChange={setFixtureRequired}
+                    options={["No", "Yes"]}
+                  />
+                  {fixtureRequired === "Yes" ? (
+                    <TextField
+                      defaultValue={initial.fixtureApproxCost}
+                      label="Fixture Approximate Cost"
+                      name="fixture_approx_cost"
+                      type="number"
+                    />
+                  ) : null}
+                  <ChoiceField
+                    defaultValue={initial.gaugesRequired}
+                    label="Inspection / Gauges Required"
+                    name="gauges_required"
+                    onChange={setGaugesRequired}
+                    options={["No", "Yes"]}
+                  />
+                  {gaugesRequired === "Yes" ? (
+                    <TextField
+                      defaultValue={initial.inspectionApproxCost}
+                      label="Inspection Approximate Cost"
+                      name="inspection_approx_cost"
+                      type="number"
+                    />
+                  ) : null}
+                  <TextField
+                    defaultValue={initial.checkedBy ?? ""}
+                    label="Checked By"
+                    name="checked_by"
+                  />
+                </div>
+              </section>
+
+              <section className="grid gap-4">
+                <h4 className="text-sm font-medium">Notes</h4>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <Field className="min-w-0">
+                    <FieldLabel className="w-full">
+                      Operation Notes
+                      <Textarea
+                        autoComplete="off"
+                        className="min-h-28 resize-y"
+                        defaultValue={initial.operationNotes ?? ""}
+                        name="operation_notes"
+                      />
+                    </FieldLabel>
+                  </Field>
+                  <Field className="min-w-0">
+                    <FieldLabel className="w-full">
+                      Design Remarks
+                      <Textarea
+                        autoComplete="off"
+                        className="min-h-28 resize-y"
+                        defaultValue={initial.designRemarks ?? ""}
+                        name="design_remarks"
+                      />
+                    </FieldLabel>
+                  </Field>
+                </div>
+              </section>
             </div>
           </FieldSet>
 
