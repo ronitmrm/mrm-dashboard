@@ -138,7 +138,7 @@ describe("Pricing spreadsheet workbook", () => {
     })
   })
 
-  test("labels product-base pricing and exposes its stored INR cost", () => {
+  test("labels product-base pricing without inventing customer values", () => {
     const productBaseRow: PricingRegisterRow = {
       ...row,
       companyName: "",
@@ -167,7 +167,6 @@ describe("Pricing spreadsheet workbook", () => {
       Packaging: "-",
       "Price Rev": "-",
       "Pricing Scope": "Product Base",
-      "Product Base Cost (INR/pc)": "16.30",
       Profit: "-",
       "Q/P": "Q",
       "Quote Status": "-",
@@ -183,11 +182,13 @@ describe("Pricing spreadsheet workbook", () => {
     const childRow: PricingRegisterRow = {
       ...row,
       componentDepth: 1,
+      customerPartCode: null,
       enquiryDescription: "Package enquiry",
-      lifecycleStatus: "D",
+      lifecycleStatus: "Q",
       lineNumber: 7,
       packaging: "—",
       parentUid: "M2",
+      pricingMissingFields: ["Customer Part Code"],
       shippingTerms: "–",
       uid: "M2B",
     }
@@ -196,7 +197,9 @@ describe("Pricing spreadsheet workbook", () => {
       "Customer Line Status": "Q",
       "Enquiry Description": "Package enquiry",
       Line: 7,
+      "Missing Pricing Values": "-",
       Packaging: "-",
+      "Pricing Completeness": "Complete",
       "Q/P": "Q",
       "Quote Status": "-",
       Shipping: "-",
@@ -230,7 +233,6 @@ describe("Pricing spreadsheet workbook", () => {
     expect(toPricingViewRow(packageRow)).toMatchObject({
       "Assembly Cost (INR/kg)": "5.00",
       "No of Piece / KG": "66.23",
-      "Product Base Cost (INR/pc)": "2.36",
       "Rejection %": "2.00%",
       "Total Rate / PCS In INR": "-",
     })
@@ -311,6 +313,7 @@ describe("Pricing spreadsheet workbook", () => {
 
     expect(views.map((view) => view.UID)).toEqual(["M2", "M2B", "R26", "R51"])
     expect(pricingHeaders).not.toContain("Assembled Part")
+    expect(pricingHeaders).not.toContain("Product Base Cost (INR/pc)")
     expect(pricingHeaders.indexOf("BOM Component Cost (INR/pc)")).toBe(
       pricingHeaders.indexOf("Total Rate / PCS In INR") + 1
     )
@@ -341,7 +344,6 @@ describe("Pricing spreadsheet workbook", () => {
       "Overhead (INR/kg)": "-",
       "Packing (INR/kg)": "0.15",
       "Plating (INR/kg)": "0.00",
-      "Product Base Cost (INR/pc)": "-",
       "Production Type": "-",
       "Rate / PCS In INR": "0.69",
       "Rate / PCS In Currency": "0.2366",
