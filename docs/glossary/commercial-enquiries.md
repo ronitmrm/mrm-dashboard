@@ -134,9 +134,9 @@ Total Rate / PCS In INR is only the adjusted parent process price. BOM Component
 Cost is the sum of component customer prices times BOM quantities. Total Package
 Price Including BOM Component Cost is their combined INR price, and Rate / PCS In
 Currency divides that combined price by the conversion rate once. The legacy
-Assembled Part column is not displayed. Material-only casting, scrap, alloy,
-extrusion, forging, raw-material formula outputs, Total Rods Cost, and rolled-up
-Product Base inputs are not applicable on the parent and display `-`. Marking,
+Assembled Part and Product Base Cost columns are not displayed. Material-only
+casting, scrap, alloy, extrusion, forging, raw-material formula outputs, and Total
+Rods Cost are not applicable on the parent and display `-`. Marking,
 plating, annealing, deburring, buffing, and sealant retain numeric zero when zero
 and show their actual values when non-zero. Forging is not applicable to Barstock
 products and displays `-`. Rejection, burning-loss, and profit values include a
@@ -145,7 +145,11 @@ retain parent, BOM depth, quantity, commercial inputs, formula evidence, and
 currency.
 Purchased Products also show their current Website Product size and MRMPL Product
 Description. Selecting a Customer Part Code opens its complete retained Quote
-revision history. Product Base rows never invent customer or Quote values.
+revision history. Customer Part Code is required only on a root customer line;
+BOM component rows inherit the package context and may omit it. A component sold
+separately is a root line with its own Customer Part Code. BOM Level is structural
+depth: root `0`, direct component `1`, nested component `2`, and so on. Product
+Base rows never invent customer or Quote values.
 
 **Quote Follow-Up Task**: The pending Sales task created atomically when a
 Quote is sent. Sales must choose its Follow-Up Date during Quote send; the task

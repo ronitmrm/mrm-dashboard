@@ -82,7 +82,6 @@ function isCustomerPackageSummary(row: PricingRegisterRow) {
 }
 
 const packageNotApplicableColumns = [
-  "Product Base Cost (INR/pc)",
   "Casting",
   "Scrap Rate (INR/kg)",
   "Alloy Premium (INR/kg)",
@@ -149,10 +148,16 @@ export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
       ? totalPackagePriceInr / conversionRate
       : calculation.rateUsd
   const missingPricingValues = new Set<string>()
-  if (isCustomerPrice && !row.customerPartCode?.trim()) {
+  if (isCustomerPrice && row.componentDepth === 0 && !row.customerPartCode?.trim()) {
     missingPricingValues.add("Customer Part Code")
   }
   for (const field of row.pricingMissingFields) {
+    if (
+      row.componentDepth > 0 &&
+      field.trim().toLowerCase() === "customer part code"
+    ) {
+      continue
+    }
     missingPricingValues.add(field)
   }
   const customerValue = (
@@ -195,9 +200,7 @@ export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
     "Die Code": value(context, "dieCode"),
     "1 Piece Weight ( gm )": value(product, "weight100Pcs"),
     "No of Piece / KG": value(calculation, "piecesPerKg"),
-    "Product Base Cost (INR/pc)": isPackageSummary
-      ? "-"
-      : value(product, "productCostInr"),
+
     Casting: isPackageSummary ? "-" : value(product, "casting"),
     "Scrap Rate (INR/kg)": isPackageSummary
       ? "-"
