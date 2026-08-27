@@ -266,6 +266,7 @@ describe("Pricing spreadsheet workbook", () => {
       quoteInputs: {
         ...row.quoteInputs,
         assembledPartInr: 21.79,
+        conversionRate: 95,
         packingCost: 0.15,
         profitPercent: 0.15,
         purchaseTimes: 1,
@@ -327,7 +328,7 @@ describe("Pricing spreadsheet workbook", () => {
       "Product Base Cost (INR/pc)": "-",
       "Production Type": "-",
       "Rate / PCS In INR": "0.69",
-      "Rate / PCS In Currency": "0.2379",
+      "Rate / PCS In Currency": "0.2366",
       "Rejection %": "2.00",
       "RM Cost": "-",
       "Rod Size": "-",

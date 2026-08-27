@@ -133,6 +133,14 @@ export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
   const isCustomerPrice = Boolean(row.quoteNumber)
   const isPackageSummary = isCustomerPackageSummary(row)
   const quoteStatus = row.lifecycleStatus === "P" ? "P" : "Q"
+  const conversionRate = Number(inputs.conversionRate)
+  const totalPackagePriceInr = Number(calculation.totalRateInr)
+  const rateInCurrency =
+    isPackageSummary &&
+    conversionRate > 0 &&
+    Number.isFinite(totalPackagePriceInr)
+      ? totalPackagePriceInr / conversionRate
+      : calculation.rateUsd
   const missingPricingValues = new Set<string>()
   if (isCustomerPrice && !row.customerPartCode?.trim()) {
     missingPricingValues.add("Customer Part Code")
@@ -256,7 +264,11 @@ export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
     "Total Package Price Including BOM Component Cost (INR/pc)":
       isPackageSummary ? customerValue(calculation, "totalRateInr") : "-",
     Currency: "USD",
-    "Rate / PCS In Currency": customerValue(calculation, "rateUsd", 4),
+    "Rate / PCS In Currency": customerValue(
+      { rateInCurrency },
+      "rateInCurrency",
+      4
+    ),
     "Pricing Completeness":
       row.lifecycleStatus === "D"
         ? "Dead"
