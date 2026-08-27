@@ -64,7 +64,6 @@ import {
   type ApprovedPostFilterKey,
 } from "@/components/hr/approved-post-filter-columns"
 import { SingleEmployeeAssignmentFields } from "@/components/hr/single-employee-assignment-fields"
-import { DataDownloadButton } from "@/components/data-download-button"
 
 type TemplateOption = Pick<
   RecruitmentTemplateRow,
@@ -368,7 +367,7 @@ export function ApprovedPostsTable({
         open={editingPost !== null}
       >
         <Card>
-          <CardHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <CardHeader>
             <div className="space-y-1.5">
               <CardTitle>
                 {employeeManagement ? "Employee Master" : "Approved Posts"}
@@ -379,7 +378,6 @@ export function ApprovedPostsTable({
                   : `${posts.length} sanctioned staffing positions`}
               </CardDescription>
             </div>
-            <DataDownloadButton href="/hr/approved-posts/export" />
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex min-h-8 items-center justify-end gap-3">
