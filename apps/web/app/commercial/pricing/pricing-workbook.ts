@@ -135,6 +135,11 @@ const packageDashWhenZeroColumns = [
   "Assembly Cost (INR/kg)",
 ] as const
 
+const packageDerivedWeightFields = new Set([
+  "one-piece weight (g)*",
+  "pieces per kg",
+])
+
 export function orderPricingRows(rows: PricingRegisterRow[]) {
   return rows
 }
@@ -165,6 +170,12 @@ export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
     missingPricingValues.add("Customer Part Code")
   }
   for (const field of row.pricingMissingFields) {
+    if (
+      isPackageOrAssemblyRow &&
+      packageDerivedWeightFields.has(field.trim().toLowerCase())
+    ) {
+      continue
+    }
     if (
       row.componentDepth > 0 &&
       field.trim().toLowerCase() === "customer part code"

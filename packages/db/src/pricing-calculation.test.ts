@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest"
 
 import {
+  calculateBomPieceWeight,
   calculatePackageCosting,
   calculateProductProcessCost,
   isForgingCostApplicable,
@@ -22,6 +23,22 @@ describe("approved Pricing formulas", () => {
     for (const type of ["Barstock", "Moulded", "Package", null, undefined]) {
       expect(isForgingCostApplicable(type)).toBe(false)
     }
+  })
+
+  test("derives Package and nested Assembly weight from BOM quantities", () => {
+    expect(
+      calculateBomPieceWeight([
+        { pieceWeightGrams: 2, quantity: 2 },
+        {
+          components: [
+            { pieceWeightGrams: 3, quantity: 1 },
+            { pieceWeightGrams: 4, quantity: 2 },
+          ],
+          pieceWeightGrams: 999,
+          quantity: 3,
+        },
+      ])
+    ).toBe(37)
   })
 
   test("derives M2 and M2B Product Base cost from every product-owned process", () => {

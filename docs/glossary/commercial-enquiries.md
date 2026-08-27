@@ -41,6 +41,10 @@ Portfolio search occurs on the Current Portfolio page, not inside the task.
 for one released line. It changes Pending Design to In Progress and opens that
 line's separate new-Product Design workspace. Saving incomplete work remains In
 Progress; completing its required BOM changes it to Design Complete.
+For a new quoted Package or Assembly, Design owns the recursive BOM definition
+before Product Parameter Costing starts. A matched existing Product reuses its
+current Product Master BOM. Costing consumes that BOM; it does not redefine its
+components or quantities.
 _Avoid_: Inline portfolio search, opening every Design editor inside the queue,
 automatic start on Technical Review completion.
 
@@ -62,6 +66,10 @@ INR/kg divided by Pieces per kg. For a Package or Assembly, it is the
 BOM-quantity sum of component Product Base Prices plus the parent Product's own
 unadjusted full process cost per piece. Product Base Price is derived and must
 not be copied from a customer workbook formula result.
+A Package or Assembly One-Piece Weight is also derived recursively as the sum of
+each direct component's One-Piece Weight multiplied by its BOM quantity. A nested
+Package or Assembly contributes its recursively derived weight. Pieces per Kg is
+`1000 / One-Piece Weight`; neither value is a parent-level manual input.
 
 **Customer Parameter Costing**: The customer- and Enquiry-specific price step
 after Product Parameter Costing. It applies scrap/purchase factors, profit,
@@ -148,6 +156,9 @@ Moulded, displays `-`. Rejection, burning-loss, and profit values include a
 visible `%` suffix. Package / Assembly rows otherwise
 retain parent, BOM depth, quantity, commercial inputs, formula evidence, and
 currency.
+Package / Assembly completeness never reports One-Piece Weight or Pieces per Kg
+as missing parent inputs; their derived values come from the recursive BOM. Any
+missing component weight remains visible on the affected component row.
 Purchased Products also show their current Website Product size and MRMPL Product
 Description. Selecting a Customer Part Code opens its complete retained Quote
 revision history. Customer Part Code is required only on a root customer line;

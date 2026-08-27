@@ -1,6 +1,10 @@
 import Link from "next/link"
 
 import { createCommercialCostingRepository } from "@workspace/db"
+import {
+  calculateBomPieceWeight,
+  type BomPieceWeightComponent,
+} from "@workspace/db/pricing-calculation"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
@@ -110,16 +114,30 @@ export default async function ProductParameterCostingPage({
     }
   })()
   const { queue, reference, selectedProduct, selectedTask, summary } = data
-  const directChildren =
-    selectedTask && selectedProduct
-      ? selectedTask.bomItems.filter(
-          (item) => item.parentItemId === selectedProduct.id
-        )
-      : []
-  const calculatedPieceWeight = directChildren.reduce(
-    (total, item) => total + item.lineQuantity * item.weight100Pcs,
-    0
-  )
+  const bomItems = selectedTask?.bomItems ?? []
+  const weightComponentsFor = (
+    parentItemId: string,
+    ancestors = new Set<string>()
+  ): BomPieceWeightComponent[] => {
+    if (ancestors.has(parentItemId)) return []
+    const nextAncestors = new Set(ancestors)
+    nextAncestors.add(parentItemId)
+    return bomItems
+      .filter((item) => item.parentItemId === parentItemId)
+      .map((item) => {
+        const components = ["Package", "Assembly"].includes(item.itemType)
+          ? weightComponentsFor(item.itemId, nextAncestors)
+          : []
+        return {
+          components,
+          pieceWeightGrams: item.weight100Pcs,
+          quantity: item.lineQuantity,
+        }
+      })
+  }
+  const calculatedPieceWeight = selectedProduct
+    ? calculateBomPieceWeight(weightComponentsFor(selectedProduct.id))
+    : 0
   const costingProduct =
     selectedProduct &&
     ["Package", "Assembly"].includes(selectedProduct.itemType) &&

@@ -738,8 +738,8 @@ describe("PostgreSQL product-costing and quote workflow", () => {
         VALUES
           ($1, $2, 'P', 'Leaf A', 'List', 100, 10, 0, 0, 'test', 'products', $2),
           ($1, $3, 'P', 'Leaf B', 'List', 50, 5, 0, 0, 'test', 'products', $3),
-          ($1, $4, 'P', 'Nested assembly', 'Assembly', 150, 0, 15, 0, 'test', 'products', $4),
-          ($1, $5, 'Q', 'Root package', 'Package', 0, 0, 30, 0.05, 'test', 'products', $5)
+          ($1, $4, 'P', 'Nested assembly', 'Assembly', 999, 0, 15, 0, 'test', 'products', $4),
+          ($1, $5, 'Q', 'Root package', 'Package', 777, 0, 30, 0.05, 'test', 'products', $5)
         RETURNING id, uid, item_type
       `,
       [
@@ -822,9 +822,14 @@ describe("PostgreSQL product-costing and quote workflow", () => {
 
     const register = await repository.listPricingRegister(organizationCode)
     const packageRows = register.filter(
-      (row) =>
-        row.customerPartCode === `PACKAGE-${suffix}` || row.componentDepth > 0
+      (row) => row.rowKey.startsWith(`${quote.id}:`)
     )
+    const rootRow = packageRows.find((row) => row.uid === `PK-${suffix}`)!
+    const assemblyRow = packageRows.find((row) => row.uid === `A-${suffix}`)!
+    expect(rootRow.product.weight100Pcs).toBe(350)
+    expect(rootRow.calculation.piecesPerKg).toBeCloseTo(1000 / 350, 8)
+    expect(assemblyRow.product.weight100Pcs).toBe(150)
+    expect(assemblyRow.calculation.piecesPerKg).toBeCloseTo(1000 / 150, 8)
     expect(packageRows.some((row) => row.componentDepth === 2)).toBe(true)
     expect(
       packageRows.every((row) => typeof row.calculation === "object")
