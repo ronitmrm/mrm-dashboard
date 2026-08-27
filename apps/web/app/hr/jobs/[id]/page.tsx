@@ -30,15 +30,13 @@ import { ArrowLeft, BriefcaseBusiness, UserPlus } from "lucide-react"
 import { InterviewOutcomeForm } from "@/components/hr/interview-outcome-form"
 import { JobInterviewScheduleForm } from "@/components/hr/interview-schedule-form"
 import { CandidateApplicationActions } from "@/components/hr/candidate-application-actions"
+import { JobLifecycleActions } from "@/components/hr/job-lifecycle-actions"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { formatIstDateTime as formatDateTime } from "@/lib/date-time"
 import { listGrantedCapabilities } from "@/lib/auth/require-capability"
 import { requireHrPage } from "@/lib/auth/require-hr-page"
 import { hrTaskCapabilities } from "@/lib/auth/task-capabilities"
-import {
-  recruitmentInterviewerOptions,
-  sharedEmployeeMasterRows,
-} from "@/lib/shared-employee-master"
+import { recruitmentInterviewerOptions } from "@/lib/shared-employee-master"
 
 export const dynamic = "force-dynamic"
 
@@ -110,6 +108,8 @@ export default async function JobWorkspacePage({
     Object.values(hrTaskCapabilities)
   )
   const canWrite = grants.length > 0
+  const canCloseJob = grants.includes(hrTaskCapabilities.closeJob)
+  const canDeleteJob = grants.includes(hrTaskCapabilities.deleteJob)
   const repository = createRecruitmentRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
@@ -128,9 +128,7 @@ export default async function JobWorkspacePage({
   if (!workspace) notFound()
 
   const { applications, interviews, job } = workspace
-  const interviewerOptions = recruitmentInterviewerOptions(
-    sharedEmployeeMasterRows(posts)
-  )
+  const interviewerOptions = recruitmentInterviewerOptions(posts)
   return (
     <div className="grid gap-6">
       <section className="grid gap-3">
@@ -154,16 +152,26 @@ export default async function JobWorkspacePage({
               {job.postCode ?? "—"}
             </p>
           </div>
-          {canWrite ? (
-            <Button asChild className="shrink-0" size="sm">
-              <Link
-                href={`/hr?panel=candidateSearchPanel&job=${encodeURIComponent(job.id)}&returnJob=${encodeURIComponent(job.id)}`}
-              >
-                <UserPlus data-icon="inline-start" />
-                Assign Candidates
-              </Link>
-            </Button>
-          ) : null}
+          <div className="flex flex-wrap justify-end gap-2">
+            {canWrite && job.status === "Open" ? (
+              <Button asChild className="shrink-0" size="sm">
+                <Link
+                  href={`/hr?panel=candidateSearchPanel&job=${encodeURIComponent(job.id)}&returnJob=${encodeURIComponent(job.id)}`}
+                >
+                  <UserPlus data-icon="inline-start" />
+                  Assign Candidates
+                </Link>
+              </Button>
+            ) : null}
+            <JobLifecycleActions
+              applicantCount={job.applicantCount}
+              canClose={canCloseJob}
+              canDelete={canDeleteJob}
+              jobId={job.id}
+              jobTitle={job.title}
+              status={job.status}
+            />
+          </div>
         </div>
       </section>
 
@@ -189,7 +197,7 @@ export default async function JobWorkspacePage({
         ))}
       </section>
 
-      {canWrite ? (
+      {canWrite && job.status === "Open" ? (
         <section className="grid gap-6 xl:grid-cols-2">
           <Card>
             <CardHeader>

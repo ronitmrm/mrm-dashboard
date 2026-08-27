@@ -48,15 +48,12 @@ export function sharedEmployeeMasterRows(
     (left, right) =>
       left.employeeName.localeCompare(right.employeeName, "en-IN", {
         numeric: true,
-      }) || left.postCode.localeCompare(right.postCode, "en-IN", { numeric: true })
+      }) ||
+      left.postCode.localeCompare(right.postCode, "en-IN", { numeric: true })
   )
 }
 
-const machinistDepartmentCodes = new Set([
-  "PPC-CVM",
-  "PPC-CV02M",
-  "PPC-FGM",
-])
+const machinistDepartmentCodes = new Set(["PPC-CVM", "PPC-CV02M", "PPC-FGM"])
 
 const qualityDepartmentCodes = new Set([
   "PPC-CVIQ",
@@ -83,6 +80,7 @@ type EmployeeOptionSource = {
   department?: unknown
   departmentCode?: unknown
   designation?: unknown
+  employeeCode?: unknown
   empId?: unknown
   employeeName?: unknown
   status?: unknown
@@ -127,14 +125,16 @@ function isLeadershipEmployee(row: EmployeeOptionSource) {
 
 function employeeOptions(
   rows: readonly EmployeeOptionSource[],
-  matches: (row: EmployeeOptionSource) => boolean
+  matches: (row: EmployeeOptionSource) => boolean,
+  eligibleStatus: (row: EmployeeOptionSource) => boolean = (row) =>
+    String(row.status).trim() === "Active"
 ): EmployeeOption[] {
   const options = new Map<string, EmployeeOption>()
 
   for (const row of rows) {
-    if (String(row.status).trim() !== "Active" || !matches(row)) continue
-    const code = String(row.empId).trim()
-    const name = String(row.employeeName).trim()
+    if (!eligibleStatus(row) || !matches(row)) continue
+    const code = String(row.empId ?? row.employeeCode ?? "").trim()
+    const name = String(row.employeeName ?? "").trim()
     if (!code || !name) continue
     const key = code.toLocaleLowerCase("en-IN")
     if (!options.has(key)) options.set(key, { code, name })
@@ -212,7 +212,8 @@ function isProductionPlanner(
       productionFloorCode &&
     (plannerDepartmentCodes.has(
       String(row.departmentCode).trim().toUpperCase()
-    ) || /\bplanner\b/i.test(String(row.designation)))
+    ) ||
+      /\bplanner\b/i.test(String(row.designation)))
   )
 }
 
@@ -245,20 +246,28 @@ export function productionDispatchApproverOptions(
 export function recruitmentInterviewerOptions(
   rows: readonly EmployeeOptionSource[]
 ) {
-  return employeeOptions(rows, isLeadershipEmployee)
+  return employeeOptions(rows, isLeadershipEmployee, (row) => {
+    const status = String(row.status).trim()
+    if (status === "Active" || status === "Occupied") return true
+    return (
+      status === "Appointed" && Boolean(String(row.employeeCode ?? "").trim())
+    )
+  })
 }
 
 export function productionWorkerOptions(
   rows: readonly EmployeeOptionSource[],
   productionFloorCode: ProductionFloorCode
 ) {
-  return employeeOptions(rows, (row) =>
-    /\bworker\b/i.test(String(row.designation)) &&
-    belongsToProductionDepartment(
-      row,
-      productionFloorCode,
-      shopFloorDepartmentCodes,
-      /\bshop\s+floor\b/i
-    )
+  return employeeOptions(
+    rows,
+    (row) =>
+      /\bworker\b/i.test(String(row.designation)) &&
+      belongsToProductionDepartment(
+        row,
+        productionFloorCode,
+        shopFloorDepartmentCodes,
+        /\bshop\s+floor\b/i
+      )
   )
 }

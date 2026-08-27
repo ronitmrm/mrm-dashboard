@@ -13,7 +13,7 @@ describe("button and function capability catalog", () => {
     expect(new Set(keys).size).toBe(keys.length)
     expect(Object.keys(administrationTaskCapabilities)).toHaveLength(8)
     expect(Object.keys(commercialTaskCapabilities)).toHaveLength(52)
-    expect(Object.keys(hrTaskCapabilities)).toHaveLength(21)
+    expect(Object.keys(hrTaskCapabilities)).toHaveLength(23)
   })
 
   it("uses task keys rather than legacy page-write keys", () => {

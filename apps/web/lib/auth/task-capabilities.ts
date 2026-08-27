@@ -69,10 +69,12 @@ export const hrTaskCapabilities = {
   assignCandidate: "hr.candidates.assign",
   assignEmployee: "hr.employees.assign",
   bulkAssignEmployees: "hr.employees.bulk_assign",
+  closeJob: "hr.jobs.close",
   completeCandidateAppointment: "hr.candidates.appointments.complete",
   createCombinedRole: "hr.combined_roles.create",
   createJob: "hr.jobs.create",
   deleteCandidateEvent: "hr.candidates.events.delete",
+  deleteJob: "hr.jobs.delete",
   deletePost: "hr.approved_posts.delete",
   deleteRecruitmentMaster: "hr.masters.delete",
   logCandidateEvent: "hr.candidates.events.log",
@@ -111,8 +113,7 @@ export const taskCapabilityLabels = {
   [commercialTaskCapabilities.addBomLine]: "Add Bom Line",
   [commercialTaskCapabilities.addEnquiryItem]: "Add Line",
   [commercialTaskCapabilities.addPurchaseOrderLine]: "Match And Add Line",
-  [commercialTaskCapabilities.applyEngineeringChangeDecision]:
-    "Record",
+  [commercialTaskCapabilities.applyEngineeringChangeDecision]: "Record",
   [commercialTaskCapabilities.applyEnquiryImportReview]:
     "Apply Reviewed Decisions",
   [commercialTaskCapabilities.approveProformaInvoice]:
@@ -128,8 +129,7 @@ export const taskCapabilityLabels = {
     "Complete Clarification",
   [commercialTaskCapabilities.createBulkPriceRevision]: "Create Revision",
   [commercialTaskCapabilities.createCustomer]: "Add Customer",
-  [commercialTaskCapabilities.createEngineeringChangeNote]:
-    "Create ECN",
+  [commercialTaskCapabilities.createEngineeringChangeNote]: "Create ECN",
   [commercialTaskCapabilities.createEnquiry]: "Log Enquiry",
   [commercialTaskCapabilities.createPoQuoteRequest]: "Create Quote Request",
   [commercialTaskCapabilities.createPurchaseOrder]: "Create Purchase Order",
@@ -140,8 +140,7 @@ export const taskCapabilityLabels = {
   [commercialTaskCapabilities.deleteEnquiry]: "Delete Enquiry",
   [commercialTaskCapabilities.deleteMaster]: "Delete Master",
   [commercialTaskCapabilities.generateProformaInvoice]: "Generate Pi",
-  [commercialTaskCapabilities.handOverEnquiry]:
-    "Hand Over To Technical Review",
+  [commercialTaskCapabilities.handOverEnquiry]: "Hand Over To Technical Review",
   [commercialTaskCapabilities.importEnquiryLines]: "Classify Import Rows",
   [commercialTaskCapabilities.importEnquiryRegister]: "Upload Enquiry Register",
   [commercialTaskCapabilities.importMasters]: "Upload Masters",
@@ -178,11 +177,12 @@ export const taskCapabilityLabels = {
   [hrTaskCapabilities.assignCandidate]: "Assign Selected Candidates To Job",
   [hrTaskCapabilities.assignEmployee]: "Update Employee Status",
   [hrTaskCapabilities.bulkAssignEmployees]: "Upload Assignments",
-  [hrTaskCapabilities.completeCandidateAppointment]:
-    "Save Appointment Details",
+  [hrTaskCapabilities.closeJob]: "Close Job",
+  [hrTaskCapabilities.completeCandidateAppointment]: "Save Appointment Details",
   [hrTaskCapabilities.createCombinedRole]: "Create Combined Role",
   [hrTaskCapabilities.createJob]: "Create Recruitment Opening",
   [hrTaskCapabilities.deleteCandidateEvent]: "Delete",
+  [hrTaskCapabilities.deleteJob]: "Delete Job",
   [hrTaskCapabilities.deletePost]: "Delete",
   [hrTaskCapabilities.deleteRecruitmentMaster]: "Delete Master",
   [hrTaskCapabilities.logCandidateEvent]: "Add To Candidate Timeline",

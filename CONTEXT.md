@@ -334,9 +334,11 @@ _Avoid_: Freely selected interview stage.
 
 **Interview Assessment**:
 The preset question scores, interviewer, decision, and comments recorded for
-one recruitment interview round. The interviewer is an active Employee Master
-employee whose designation is HOD, Manager, or Management, regardless of
+one recruitment interview round. The interviewer is an Employee Master person
+whose designation is HOD, Manager, or Management, regardless of
 department.
+Occupied employees are eligible; an Appointed record is also eligible when it
+already has an Employee ID, preserving imported current-employee assignments.
 _Avoid_: Overall score without question-level marks.
 
 **Recruitment Assignment Command**:
