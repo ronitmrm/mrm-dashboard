@@ -220,33 +220,39 @@ describe("Pricing spreadsheet workbook", () => {
     })
   })
 
-  test("shows an M2 customer package as three BOM rows followed by one final M2 row", () => {
+  test("shows the M2 package first and separates process, BOM, combined INR, and currency totals", () => {
     const packageRow: PricingRegisterRow = {
       ...row,
       calculation: {
-        childQuoteTotal: 19.23,
+        childQuoteTotal: 21.79,
         netRateWithAlloy: 0,
         netRateWithoutAlloy: 0,
-        rateInr: 0.59,
-        rateUsd: 0.21,
+        rateInr: 0.69,
+        rateUsd: 0.2379,
         rawMaterialCost: 0,
         scrapRatePerGm: 0,
         scrapReturn: 0,
-        totalRateInr: 19.82,
-        totalRodsCost: 19.23,
+        totalRateInr: 22.48,
+        totalRodsCost: 21.79,
       },
       itemType: "Package",
       product: {
         alloyPremium: 7,
+        annealing: 0,
         assemblyOperationCost: 5,
+        buffing: 0,
         casting: 1,
+        deburring: 0,
         description: "M2 package",
         extrusionCost: 26,
         forgingCost: 12,
         machiningCost: 0,
+        marking: 0,
         overheadCost: 0,
+        plating: 0,
         productCostInr: 2.94,
         rejectionPercent: 0.02,
+        sealant: 0,
         washing: 0,
       },
       productContext: {
@@ -259,7 +265,7 @@ describe("Pricing spreadsheet workbook", () => {
       },
       quoteInputs: {
         ...row.quoteInputs,
-        assembledPartInr: 19.23,
+        assembledPartInr: 21.79,
         packingCost: 0.15,
         profitPercent: 0.15,
         purchaseTimes: 1,
@@ -286,32 +292,42 @@ describe("Pricing spreadsheet workbook", () => {
       component("R51"),
     ])
 
-    expect(views.map((view) => view.UID)).toEqual(["M2B", "R26", "R51", "M2"])
+    expect(views.map((view) => view.UID)).toEqual(["M2", "M2B", "R26", "R51"])
+    expect(pricingHeaders).not.toContain("Assembled Part")
     expect(pricingHeaders.indexOf("BOM Component Cost (INR/pc)")).toBe(
       pricingHeaders.indexOf("Total Rate / PCS In INR") + 1
     )
-    expect(views.at(-1)).toMatchObject({
+    expect(
+      pricingHeaders.indexOf(
+        "Total Package Price Including BOM Component Cost (INR/pc)"
+      )
+    ).toBe(pricingHeaders.indexOf("BOM Component Cost (INR/pc)") + 1)
+    expect(views[0]).toMatchObject({
       "Alloy Premium (INR/kg)": "-",
-      "Assembled Part": "-",
+      "Anneling (INR/kg)": "0.00",
       "Assembly Cost (INR/kg)": "5.00",
       "BL %": "-",
-      "BOM Component Cost (INR/pc)": "19.23",
+      "BOM Component Cost (INR/pc)": "21.79",
+      "Buffing (INR/kg)": "0.00",
       Casting: "-",
+      "Debbring (INR/kg)": "0.00",
       "Die Code": "-",
       "Ext. Cost (INR/kg)": "-",
       "Forg Cost+ Nitric Blasting (INR/kg)": "-",
       Grade: "-",
       "M/c Cost (INR/kg)": "-",
       "Machine Type": "-",
+      "Marking (INR/kg)": "0.00",
       "Net Rate / KG With Alloy Premium": "-",
       "Net Rate / KG Without Alloy Premium": "-",
       "OR Purchase Times": "-",
       "Overhead (INR/kg)": "-",
       "Packing (INR/kg)": "0.15",
+      "Plating (INR/kg)": "0.00",
       "Product Base Cost (INR/pc)": "-",
       "Production Type": "-",
-      "Rate / PCS In INR": "0.59",
-      "Rate / PCS In Currency": "0.2100",
+      "Rate / PCS In INR": "0.69",
+      "Rate / PCS In Currency": "0.2379",
       "Rejection %": "2.00",
       "RM Cost": "-",
       "Rod Size": "-",
@@ -319,8 +335,10 @@ describe("Pricing spreadsheet workbook", () => {
       "Scrap Rate (INR/kg)": "-",
       "Scrap Rate / gm": "-",
       "Scrap Return": "-",
+      "Sealant (INR/kg)": "0.00",
       "Shipping (INR/kg)": "0.09",
-      "Total Rate / PCS In INR": "19.82",
+      "Total Package Price Including BOM Component Cost (INR/pc)": "22.48",
+      "Total Rate / PCS In INR": "0.69",
       "Total Rods Cost": "-",
       "Washing (INR/kg)": "-",
     })
