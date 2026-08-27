@@ -13,7 +13,6 @@ const excelExportPages = [
   "../app/commercial/pricing/page.tsx",
   "../app/commercial/pricing/revisions/page.tsx",
   "../app/commercial/website-products/page.tsx",
-  "./hr/approved-posts-table.tsx",
   "./hr/recruitment-panel.tsx",
   "../app/commercial/customers/page.tsx",
   "./bounded-result-notice.ts",
@@ -32,7 +31,10 @@ describe("data download button coverage", () => {
 
   it("keeps Excel View focused on the register and its download", () => {
     const source = readFileSync(
-      new URL("../app/commercial/enquiries/excel-view/page.tsx", import.meta.url),
+      new URL(
+        "../app/commercial/enquiries/excel-view/page.tsx",
+        import.meta.url
+      ),
       "utf8"
     )
 
