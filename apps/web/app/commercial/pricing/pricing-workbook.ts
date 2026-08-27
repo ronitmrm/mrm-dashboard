@@ -76,12 +76,12 @@ function forgingValue(record: Record<string, unknown>) {
     : "-"
 }
 
+function isPackageOrAssembly(row: PricingRegisterRow) {
+  return ["package", "assembly"].includes(row.itemType.toLowerCase())
+}
+
 function isCustomerPackageSummary(row: PricingRegisterRow) {
-  return (
-    Boolean(row.quoteNumber) &&
-    row.componentDepth === 0 &&
-    ["package", "assembly"].includes(row.itemType.toLowerCase())
-  )
+  return Boolean(row.quoteNumber) && isPackageOrAssembly(row)
 }
 
 const packageNotApplicableColumns = [
@@ -90,6 +90,11 @@ const packageNotApplicableColumns = [
   "Alloy Premium (INR/kg)",
   "Ext. Cost (INR/kg)",
   "Forg Cost+ Nitric Blasting (INR/kg)",
+  "Grade",
+  "Rod Type",
+  "Rod Size",
+  "M/c Cost (INR/kg)",
+  "M/c Cost (INR/pc)",
   "BL %",
   "OR Purchase Times",
   "Net Rate / KG Without Alloy Premium",
@@ -140,6 +145,7 @@ export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
   const inputs = row.quoteInputs
   const calculation = row.calculation
   const isCustomerPrice = Boolean(row.quoteNumber)
+  const isPackageOrAssemblyRow = isPackageOrAssembly(row)
   const isPackageSummary = isCustomerPackageSummary(row)
   const quoteStatus = row.lifecycleStatus === "P" ? "P" : "Q"
   const conversionRate = Number(inputs.conversionRate)
@@ -303,7 +309,7 @@ export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
     Remarks: value(context, "remarks"),
   }
 
-  if (isPackageSummary) {
+  if (isPackageOrAssemblyRow) {
     for (const column of packageNotApplicableColumns) view[column] = "-"
     for (const column of packageDashWhenEmptyColumns) {
       if (!normalizedText(view[column])) view[column] = "-"

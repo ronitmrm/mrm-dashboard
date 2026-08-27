@@ -129,15 +129,18 @@ decimal places; sending that exact replacement resolves the PO revision.
 rows expose ordered Product Master costs even before a customer Quote exists;
 Customer Price rows come from active or editable root Quotes and their immutable
 recursive Product and calculation snapshots. Package / Assembly customer pricing
-displays the parent first, followed by its ordered BOM components. On the parent,
-Total Rate / PCS In INR is only the adjusted parent process price. BOM Component
-Cost is the sum of component customer prices times BOM quantities. Total Package
-Price Including BOM Component Cost is their combined INR price, and Rate / PCS In
+displays each summary before its ordered BOM components. Every Package or Assembly,
+including an intermediate Assembly, uses the same summary rules: Total Rate / PCS
+In INR is only that summary's adjusted process price, BOM Component Cost is the sum
+of its direct component customer prices times BOM quantities, and Total Package
+Price Including BOM Component Cost is their combined INR price. Rate / PCS In
 Currency divides that combined price by the saved customer conversion rate once.
 Customer rows display that same saved rate; rows without a source rate display `-`. The legacy
 Assembled Part and Product Base Cost columns are not displayed. Material-only
 casting, scrap, alloy, extrusion, forging, raw-material formula outputs, and Total
-Rods Cost are not applicable on the parent and display `-`. Marking,
+Rods Cost are not applicable on a Package or Assembly summary and display `-`.
+Grade, Rod Type, Rod Size, Burning Loss, and machining cost are also not applicable
+to those summaries and display `-`. Marking,
 plating, annealing, deburring, buffing, and sealant retain numeric zero when zero
 and show their actual values when non-zero. Forging cost is applicable only when
 Production Type is Casting or Forging; every other type, including Barstock and
