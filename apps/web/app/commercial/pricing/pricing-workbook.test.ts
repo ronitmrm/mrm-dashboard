@@ -242,9 +242,17 @@ describe("Pricing spreadsheet workbook", () => {
       product: {
         assemblyOperationCost: 5,
         description: "3/16 X 1/8 Male Compression X Male Nptf Adapter",
+        burningLossPercent: 0.05,
+        machiningCost: 180,
+        machiningPricePerPiece: 5.5,
         productCostInr: 2.36,
         rejectionPercent: 0.02,
         uid: "M2",
+      },
+      productContext: {
+        grade: "C3604",
+        rodSize: "16 mm",
+        rodType: "SOLID",
       },
       quoteNumber: "",
       revision: 0,
@@ -254,8 +262,14 @@ describe("Pricing spreadsheet workbook", () => {
 
     expect(toPricingViewRow(packageRow)).toMatchObject({
       "Assembly Cost (INR/kg)": "5.00",
+      "BL %": "-",
+      Grade: "-",
+      "M/c Cost (INR/kg)": "-",
+      "M/c Cost (INR/pc)": "-",
       "No of Piece / KG": "66.23",
       "Rejection %": "2.00%",
+      "Rod Size": "-",
+      "Rod Type": "-",
       "Total Rate / PCS In INR": "-",
     })
   })
@@ -382,6 +396,60 @@ describe("Pricing spreadsheet workbook", () => {
       "Total Rate / PCS In INR": "0.69",
       "Total Rods Cost": "-",
       "Washing (INR/kg)": "-",
+    })
+  })
+
+  test("treats a nested Assembly as a package summary", () => {
+    const assemblyRow: PricingRegisterRow = {
+      ...row,
+      calculation: {
+        childQuoteTotal: 54.41,
+        rateInr: 14.01,
+        rateUsd: 0.1483,
+        totalRateInr: 68.42,
+      },
+      componentDepth: 1,
+      itemType: "Assembly",
+      parentUid: "M1110",
+      product: {
+        alloyPremium: 7,
+        assemblyOperationCost: 353,
+        burningLossPercent: 0.05,
+        casting: 4.06,
+        extrusionCost: 26,
+        forgingCost: 12,
+        machiningCost: 180,
+        machiningPricePerPiece: 5.5,
+        productionType: "Assembly",
+      },
+      productContext: {
+        grade: "C3604",
+        rodSize: "16 mm",
+        rodType: "SOLID",
+      },
+      quoteInputs: {
+        ...row.quoteInputs,
+        conversionRate: 94.5,
+        scrapRate: 915,
+      },
+      uid: "M1110A",
+    }
+
+    expect(toPricingViewRow(assemblyRow)).toMatchObject({
+      "Alloy Premium (INR/kg)": "-",
+      "Assembly Cost (INR/kg)": "353.00",
+      "BL %": "-",
+      "BOM Component Cost (INR/pc)": "54.41",
+      "Ext. Cost (INR/kg)": "-",
+      Grade: "-",
+      "M/c Cost (INR/kg)": "-",
+      "M/c Cost (INR/pc)": "-",
+      "Rate / PCS In Currency": "0.7240",
+      "Rod Size": "-",
+      "Rod Type": "-",
+      "Scrap Rate (INR/kg)": "-",
+      "Total Package Price Including BOM Component Cost (INR/pc)": "68.42",
+      "Total Rate / PCS In INR": "14.01",
     })
   })
 })
