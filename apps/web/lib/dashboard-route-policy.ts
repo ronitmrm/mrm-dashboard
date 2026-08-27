@@ -40,11 +40,11 @@ export function dashboardMutationCapabilities(path: string) {
 }
 
 export class DashboardRequestPolicyError extends Error {
-  constructor(
-    public readonly status: number,
-    message: string
-  ) {
+  public readonly status: number
+
+  constructor(status: number, message: string) {
     super(message)
+    this.status = status
   }
 }
 
