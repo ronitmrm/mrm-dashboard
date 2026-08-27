@@ -88,11 +88,60 @@ export default async function NewDesignWorkspacePage({
             {selectedItem.description}
           </p>
         </div>
-        <Button asChild size="sm" variant="outline">
-          <Link href={`/commercial/enquiries/${selectedItem.enquiryId}`}>
-            Open Enquiry
-          </Link>
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {editable ? (
+            <details className="group relative" open={Boolean(productSearch)}>
+              <Button asChild size="sm" variant="outline">
+                <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+                  <Search aria-hidden="true" className="size-4" />
+                  <span className="group-open:hidden">Find BOM Component</span>
+                  <span className="hidden group-open:inline">Close Lookup</span>
+                </summary>
+              </Button>
+              <section className="absolute top-full right-0 z-50 mt-2 w-[min(44rem,calc(100vw-2rem))] rounded-xl border bg-background p-4 shadow-xl">
+                <p className="mb-4 text-xs text-muted-foreground">
+                  Search ordered products before selecting one in a BOM line.
+                </p>
+                <form
+                  className="flex flex-col gap-2 sm:flex-row sm:items-end"
+                  id="design-product-search"
+                  role="search"
+                >
+                  <Field className="min-w-0 flex-1">
+                    <FieldLabel htmlFor="design-product-query">
+                      Product UID Or Description
+                    </FieldLabel>
+                    <Input
+                      autoComplete="off"
+                      defaultValue={productSearch}
+                      id="design-product-query"
+                      name="product"
+                      placeholder="Search by Product UID or description…"
+                    />
+                  </Field>
+                  <Button type="submit" variant="outline">
+                    <Search aria-hidden="true" className="size-4" />
+                    Search Products
+                  </Button>
+                </form>
+                <div className="mt-3">
+                  <BoundedResultNotice
+                    actionHref="#design-product-query"
+                    actionLabel="Refine Product Search"
+                    coverage={productOptions.coverage}
+                    searchQuery={productSearch}
+                    section="BOM Component Options"
+                  />
+                </div>
+              </section>
+            </details>
+          ) : null}
+          <Button asChild size="sm" variant="outline">
+            <Link href={`/commercial/enquiries/${selectedItem.enquiryId}`}>
+              Open Enquiry
+            </Link>
+          </Button>
+        </div>
       </section>
 
       <Card className="overflow-hidden">
@@ -127,44 +176,78 @@ export default async function NewDesignWorkspacePage({
                 />
               </span>
             </summary>
-            <section className="grid gap-4 border-t p-4 lg:grid-cols-2">
-              <div className="rounded-lg border bg-background p-4">
-                <h3 className="font-medium">Logged Enquiry</h3>
-                <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+            <section className="grid border-t bg-background lg:grid-cols-3">
+              <div className="p-5 lg:border-r">
+                <h3 className="text-sm font-semibold">Part Requirements</h3>
+                <dl className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
                   {[
                     ["Quantity", selectedItem.quantity],
                     ["Grade", selectedItem.grade],
                     ["Target Price", selectedItem.targetPrice],
                     ["Drawing Reference", selectedItem.drawingReference],
+                  ].map(([label, value]) => (
+                    <div key={label}>
+                      <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                        {label}
+                      </dt>
+                      <dd className="mt-1 text-sm leading-5 font-medium">
+                        {display(value)}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+              <div className="border-t p-5 lg:border-t-0 lg:border-r">
+                <h3 className="text-sm font-semibold">Commercial Terms</h3>
+                <dl className="mt-4 grid gap-4">
+                  {[
                     ["Delivery Terms", selectedItem.deliveryTerms],
                     ["Payment Terms", selectedItem.paymentTerms],
                     ["Line Remarks", selectedItem.lineRemarks],
                     ["Enquiry Remarks", selectedItem.enquiryRemarks],
                   ].map(([label, value]) => (
-                    <div className="contents" key={label}>
-                      <dt className="text-muted-foreground">{label}</dt>
-                      <dd>{display(value)}</dd>
+                    <div key={label}>
+                      <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                        {label}
+                      </dt>
+                      <dd className="mt-1 text-sm leading-5 font-medium">
+                        {display(value)}
+                      </dd>
                     </div>
                   ))}
                 </dl>
               </div>
-              <div className="rounded-lg border bg-background p-4">
-                <h3 className="font-medium">Technical Release</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {selectedItem.technicalReviewStatus} ·{" "}
+              <div className="border-t p-5 lg:border-t-0">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-sm font-semibold">Technical Release</h3>
+                  <Badge variant="secondary">
+                    {selectedItem.technicalReviewStatus}
+                  </Badge>
+                </div>
+                <p className="mt-3 text-sm leading-5 text-muted-foreground">
                   {display(selectedItem.technicalRemarks)}
                 </p>
                 {selectedItem.feasibilityReason ? (
-                  <p className="mt-2 text-sm">
-                    Feasibility: {selectedItem.feasibilityReason}
-                  </p>
-                ) : null}
-                <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  {technicalReviewChecklist.map(([key, label]) => (
-                    <p className="text-sm" key={key}>
-                      <span className="text-muted-foreground">{label}:</span>{" "}
-                      {selectedItem.technicalChecklist[key] ? "Yes" : "No"}
+                  <div className="mt-4 rounded-md bg-muted/40 px-3 py-2">
+                    <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                      Feasibility
                     </p>
+                    <p className="mt-1 text-sm font-medium">
+                      {selectedItem.feasibilityReason}
+                    </p>
+                  </div>
+                ) : null}
+                <div className="mt-4 grid gap-2">
+                  {technicalReviewChecklist.map(([key, label]) => (
+                    <div
+                      className="flex items-start justify-between gap-3 rounded-md bg-muted/40 px-3 py-2 text-sm"
+                      key={key}
+                    >
+                      <span className="text-muted-foreground">{label}</span>
+                      <span className="font-medium">
+                        {selectedItem.technicalChecklist[key] ? "Yes" : "No"}
+                      </span>
+                    </div>
                   ))}
                 </div>
                 {selectedItem.customerDrawingFileName ? (
@@ -179,54 +262,6 @@ export default async function NewDesignWorkspacePage({
               </div>
             </section>
           </details>
-
-          {editable ? (
-            <details className="group" open={Boolean(productSearch)}>
-              <Button asChild size="sm" variant="outline">
-                <summary className="ml-auto cursor-pointer list-none [&::-webkit-details-marker]:hidden">
-                  <Search aria-hidden="true" className="size-4" />
-                  <span className="group-open:hidden">Find BOM Component</span>
-                  <span className="hidden group-open:inline">Close Lookup</span>
-                </summary>
-              </Button>
-              <section className="mt-3 rounded-xl border bg-muted/20 p-4">
-                <p className="mb-4 text-xs text-muted-foreground">
-                  Search ordered products before selecting one in a BOM line.
-                </p>
-                <form
-                  className="flex flex-col gap-2 sm:flex-row sm:items-end"
-                  id="design-product-search"
-                  role="search"
-                >
-                  <Field className="max-w-2xl flex-1">
-                    <FieldLabel htmlFor="design-product-query">
-                      Product UID Or Description
-                    </FieldLabel>
-                    <Input
-                      autoComplete="off"
-                      defaultValue={productSearch}
-                      id="design-product-query"
-                      name="product"
-                      placeholder="Search by Product UID or description…"
-                    />
-                  </Field>
-                  <Button type="submit" variant="outline">
-                    <Search aria-hidden="true" className="size-4" />
-                    Search Products
-                  </Button>
-                </form>
-                <div className="mt-3">
-                  <BoundedResultNotice
-                    actionHref="#design-product-query"
-                    actionLabel="Refine Product Search"
-                    coverage={productOptions.coverage}
-                    searchQuery={productSearch}
-                    section="BOM Component Options"
-                  />
-                </div>
-              </section>
-            </details>
-          ) : null}
 
           <form action={saveDesignAction}>
             <input
