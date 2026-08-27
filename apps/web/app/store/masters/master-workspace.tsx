@@ -53,7 +53,6 @@ import {
   createStoreSupplierAction,
   createStoreVendorAction,
   deleteStoreMasterAction,
-  uploadStoreItemDrawingAction,
 } from "../actions"
 import {
   findExistingStoreItem,
@@ -303,32 +302,7 @@ export function StoreMasterWorkspace({
                         <TableCell>{item.unit}</TableCell>
                         {canManage ? (
                           <TableCell>
-                            <div className="grid min-w-72 gap-2">
-                              <form
-                                action={uploadStoreItemDrawingAction}
-                                className="flex gap-2"
-                                encType="multipart/form-data"
-                              >
-                                <input
-                                  name="item_type_id"
-                                  type="hidden"
-                                  value={item.id}
-                                />
-                                <Input
-                                  accept="application/pdf,image/jpeg,image/png"
-                                  aria-label={`Drawing for ${item.typeCode}`}
-                                  name="asset_drawing"
-                                  required
-                                  type="file"
-                                />
-                                <Button
-                                  size="sm"
-                                  type="submit"
-                                  variant="outline"
-                                >
-                                  {drawing ? "Replace" : "Upload"}
-                                </Button>
-                              </form>
+                            <div>
                               <div className="flex justify-end gap-1">
                                 <Button
                                   onClick={() => setEditRow(row)}
@@ -812,7 +786,10 @@ function masterForm(
       )
     case "SUPPLIER_PRICE":
       return (
-        <form action={createStoreSupplierPriceAction}>
+        <form
+          action={createStoreSupplierPriceAction}
+          encType="multipart/form-data"
+        >
           <FieldGroup className="grid gap-4 md:grid-cols-3">
             <SelectField
               label="Store Item"
@@ -840,6 +817,15 @@ function masterForm(
             />
             <TextField label="Effective From" name="valid_from" type="date" />
             <TextField label="Quote Reference" name="quote_reference" />
+            <Field>
+              <FieldLabel htmlFor="master-supplier-quote">Quote PDF</FieldLabel>
+              <Input
+                accept="application/pdf"
+                id="master-supplier-quote"
+                name="supplier_quote"
+                type="file"
+              />
+            </Field>
           </FieldGroup>
           <Button
             className="mt-5"

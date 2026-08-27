@@ -66,7 +66,14 @@ record.
 **Supplier Price Revision**: One dated price quoted by one Supplier for one
 Store Item Type. Saving a new active revision makes the previous revision for
 that exact Supplier and Store Item inactive; history is never overwritten.
-There is at most one active revision per Supplier and Store Item.
+There is at most one active revision per Supplier and Store Item. An optional
+Supplier Quote PDF is attached to the exact revision rather than to the Item or
+Supplier generally.
+
+**Supplier Quote PDF**: The PDF evidence for one Supplier Price Revision. It is
+limited to 10 MB, stored through the shared Artifact lifecycle, and available
+from the Supplier Quotes tab in the Store Item Workspace. Replacing the current
+file retains immutable superseded Artifact versions.
 
 **Recommended Supplier Price**: The cheapest active Supplier Price Revision
 effective on the Purchase Order date. It is selected by default. Store may
@@ -148,10 +155,11 @@ For Consumables it is the signed movement-ledger balance at the requested
 Store. For Physical Assets it is the count of Available Unit IDs at that
 Store. Every open request therefore sees the effect of the latest allocation.
 
-**Store Item Workspace**: The permanent view for one Asset Code containing the
-Store Item identity and classification, every Supplier Price revision and
-Supplier able to supply it, and every physical Unit ID created for the item.
-For a Non Consumable, each Unit ID opens its individual Asset Workspace.
+**Store Item Workspace**: The permanent view for one Asset Code. Its Overview
+tab contains identity, classification, stock, and every physical Unit ID; its
+Drawings tab owns the current Asset Drawing upload; and its Supplier Quotes tab
+contains every Supplier Price Revision and its Quote PDF. For a Non Consumable,
+each Unit ID opens its individual Asset Workspace.
 
 **Asset Workspace**: The permanent view for one Non Consumable Unit ID containing its
 identity, current assignment, Department/Machine/Supplier/Vendor movement history,

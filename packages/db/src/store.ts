@@ -355,6 +355,24 @@ export async function authorizeStoreItemTypeArtifactTarget(
   if (!target.rows[0]) throw new Error("Store Item Type was not found.")
 }
 
+export async function authorizeStoreSupplierPriceArtifactTarget(
+  client: PoolClient,
+  input: { organizationId: string; supplierPriceId: string }
+) {
+  const target = await client.query<{ id: string }>(
+    `
+      SELECT id FROM store.supplier_prices
+      WHERE id = $1 AND organization_id = $2
+      FOR KEY SHARE
+    `,
+    [
+      requiredText(input.supplierPriceId, "Store Supplier Price"),
+      input.organizationId,
+    ]
+  )
+  if (!target.rows[0]) throw new Error("Store Supplier Price was not found.")
+}
+
 export async function authorizeStoreReceiptArtifactTarget(
   client: PoolClient,
   input: { organizationId: string; receiptId: string }
@@ -2032,6 +2050,38 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       return result.rows[0]
     },
 
+    async getSupplierPriceQuote(input: {
+      documentId: string
+      organizationId: string
+      supplierPriceId: string
+    }) {
+      const result = await pool.query<{
+        fileName: string
+        publicUrl: string | null
+        storageKey: string | null
+      }>(
+        `
+          SELECT file.file_name AS "fileName", file.storage_key AS "storageKey",
+            object.public_url AS "publicUrl"
+          FROM core.file_links link
+          JOIN core.files file ON file.id = link.file_id
+          JOIN core.file_objects object ON object.id = file.physical_object_id
+          JOIN store.supplier_prices price ON price.id = link.target_id
+          WHERE file.id = $1 AND link.organization_id = $2
+            AND link.target_schema = 'store'
+            AND link.target_table = 'supplier_prices' AND link.target_id = $3
+            AND link.purpose = 'supplier_quote' AND link.is_current
+            AND file.lifecycle_state = 'current'
+            AND object.lifecycle_state <> 'deleted'
+            AND price.organization_id = $2
+          LIMIT 1
+        `,
+        [input.documentId, input.organizationId, input.supplierPriceId]
+      )
+      if (!result.rows[0]) throw new Error("Supplier quote was not found.")
+      return result.rows[0]
+    },
+
     async createItemType(input: {
       actorUserId?: string | null
       assetCategoryId: string
@@ -3032,7 +3082,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         [input.organizationId, requiredText(input.typeCode, "Asset Code")]
       )
       if (!item.rows[0]) return null
-      const [assets, supplierPrices] = await Promise.all([
+      const [assets, drawing, supplierPrices] = await Promise.all([
         pool.query<{
           acquiredOn: string | null
           assetCode: string
@@ -3062,9 +3112,57 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           [input.organizationId, item.rows[0].id]
         ),
         pool.query<{
+          fileName: string
+          id: string
+          publicUrl: string | null
+          storageKey: string | null
+        }>(
+          `
+            SELECT drawing.id, drawing."fileName", drawing."storageKey",
+              drawing."publicUrl"
+            FROM (
+              SELECT file.id, file.file_name AS "fileName",
+                file.storage_key AS "storageKey", object.public_url AS "publicUrl",
+                file.created_at
+              FROM core.file_links link
+              JOIN core.files file ON file.id = link.file_id
+              JOIN core.file_objects object ON object.id = file.physical_object_id
+              WHERE link.organization_id = $1
+                AND link.target_schema = 'store'
+                AND link.target_table = 'item_types' AND link.target_id = $2
+                AND link.purpose = 'asset_drawing' AND link.is_current
+                AND file.lifecycle_state = 'current'
+                AND object.lifecycle_state <> 'deleted'
+              UNION ALL
+              SELECT document.id, document.file_name AS "fileName",
+                document.storage_key AS "storageKey", NULL::text AS "publicUrl",
+                document.created_at
+              FROM store.documents document
+              WHERE document.organization_id = $1 AND document.item_type_id = $2
+                AND document.document_type = 'ASSET_DRAWING'
+                AND document.file_name IS NOT NULL
+                AND document.storage_key IS NOT NULL
+                AND NOT EXISTS (
+                  SELECT 1 FROM core.file_links link
+                  WHERE link.organization_id = document.organization_id
+                    AND link.target_schema = 'store'
+                    AND link.target_table = 'item_types'
+                    AND link.target_id = document.item_type_id
+                    AND link.purpose = 'asset_drawing' AND link.is_current
+                )
+            ) drawing
+            ORDER BY drawing.created_at DESC
+            LIMIT 1
+          `,
+          [input.organizationId, item.rows[0].id]
+        ),
+        pool.query<{
           active: boolean
           contactDetails: string | null
           email: string | null
+          id: string
+          quoteDocumentId: string | null
+          quoteFileName: string | null
           quoteReference: string | null
           supplierCode: string
           supplierName: string
@@ -3072,14 +3170,30 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           validFrom: string
         }>(
           `
-            SELECT price.active, supplier.code AS "supplierCode",
+            SELECT price.id, price.active, supplier.code AS "supplierCode",
               supplier.name AS "supplierName", supplier.email,
               supplier.contact_details AS "contactDetails",
               price.unit_price::text AS "unitPrice",
               price.valid_from::text AS "validFrom",
-              price.quote_reference AS "quoteReference"
+              price.quote_reference AS "quoteReference",
+              quote.id AS "quoteDocumentId", quote.file_name AS "quoteFileName"
             FROM store.supplier_prices price
             JOIN store.suppliers supplier ON supplier.id = price.supplier_id
+            LEFT JOIN LATERAL (
+              SELECT file.id, file.file_name
+              FROM core.file_links link
+              JOIN core.files file ON file.id = link.file_id
+                AND file.lifecycle_state = 'current'
+              JOIN core.file_objects object ON object.id = file.physical_object_id
+                AND object.lifecycle_state <> 'deleted'
+              WHERE link.organization_id = price.organization_id
+                AND link.target_schema = 'store'
+                AND link.target_table = 'supplier_prices'
+                AND link.target_id = price.id
+                AND link.purpose = 'supplier_quote' AND link.is_current
+              ORDER BY file.created_at DESC
+              LIMIT 1
+            ) quote ON true
             WHERE price.organization_id = $1 AND price.item_type_id = $2
             ORDER BY price.active DESC, price.valid_from DESC,
               price.created_at DESC
@@ -3089,6 +3203,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       ])
       return {
         assets: assets.rows,
+        drawing: drawing.rows[0] ?? null,
         item: item.rows[0],
         supplierPrices: supplierPrices.rows,
       }

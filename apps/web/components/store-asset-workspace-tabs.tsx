@@ -81,3 +81,59 @@ export function StoreAssetWorkspacePane({
     </section>
   )
 }
+type ItemWorkspaceTabKey = "overview" | "drawings" | "supplier-quotes"
+
+const itemWorkspaceTabContext = createContext<ItemWorkspaceTabKey>("overview")
+
+export function StoreItemWorkspaceTabs({ children }: { children?: ReactNode }) {
+  const [activeTab, setActiveTab] = useState<ItemWorkspaceTabKey>("overview")
+  const tabs: Array<{ key: ItemWorkspaceTabKey; label: string }> = [
+    { key: "overview", label: "Overview" },
+    { key: "drawings", label: "Drawings" },
+    { key: "supplier-quotes", label: "Supplier Quotes" },
+  ]
+
+  return (
+    <div className="grid gap-4">
+      <nav
+        aria-label="Store Item Workspace sections"
+        className="flex gap-0 overflow-x-auto border-b"
+      >
+        {tabs.map((tab) => (
+          <Button
+            aria-pressed={activeTab === tab.key}
+            className="shrink-0 rounded-none border-b-2 border-transparent bg-transparent shadow-none aria-pressed:border-[var(--color-accent)] aria-pressed:text-foreground"
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            size="sm"
+            type="button"
+            variant="ghost"
+          >
+            {tab.label}
+          </Button>
+        ))}
+      </nav>
+      <itemWorkspaceTabContext.Provider value={activeTab}>
+        {children}
+      </itemWorkspaceTabContext.Provider>
+    </div>
+  )
+}
+
+export function StoreItemWorkspacePane({
+  children,
+  className = "grid gap-4",
+  tab,
+}: {
+  children?: ReactNode
+  className?: string
+  tab: ItemWorkspaceTabKey
+}) {
+  const activeTab = useContext(itemWorkspaceTabContext)
+  if (activeTab !== tab) return null
+  return (
+    <section aria-label={`${tab} section`} className={className}>
+      {children}
+    </section>
+  )
+}
