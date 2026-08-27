@@ -2,7 +2,10 @@ import {
   defaultProductionFloorCode,
   normalizeProductionFloorCode,
 } from "@workspace/db/production-floors"
-import { createStoreRepository } from "@workspace/db"
+import {
+  createCommercialWorkflowRepository,
+  createStoreRepository,
+} from "@workspace/db"
 import { redirect } from "next/navigation"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
@@ -98,8 +101,10 @@ export default async function Page({
   )
   const storeMasterData = capabilities.has("store.masters.read")
     ? await (async () => {
-        const repository = createStoreRepository({
-          connectionString: readAuthEnvironment().connectionString,
+        const connectionString = readAuthEnvironment().connectionString
+        const repository = createStoreRepository({ connectionString })
+        const workflow = createCommercialWorkflowRepository({
+          connectionString,
         })
         try {
           const organizationId = await repository.organizationIdForCode("MRMPL")
@@ -111,6 +116,7 @@ export default async function Page({
             vendors,
             masters,
             itemDrawings,
+            portfolioProducts,
           ] = await Promise.all([
             repository.listItemTypes(organizationId),
             repository.listLocations(organizationId),
@@ -119,18 +125,20 @@ export default async function Page({
             repository.listVendors(organizationId),
             repository.listAssetClassificationMasters(organizationId),
             repository.listItemTypeDrawings(organizationId),
+            workflow.listDesignPortfolioProducts("MRMPL"),
           ])
           return {
             itemDrawings,
             items,
             locations,
             masters,
+            portfolioProducts,
             supplierPrices,
             suppliers,
             vendors,
           }
         } finally {
-          await repository.close()
+          await Promise.all([repository.close(), workflow.close()])
         }
       })()
     : null
