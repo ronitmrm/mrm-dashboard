@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest"
 import {
   calculatePackageCosting,
   calculateProductProcessCost,
+  isForgingCostApplicable,
 } from "./pricing-calculation"
 
 const noOptionalProcess = {
@@ -15,6 +16,14 @@ const noOptionalProcess = {
 }
 
 describe("approved Pricing formulas", () => {
+  test("allows forging cost only for Casting and Forging production", () => {
+    expect(isForgingCostApplicable("Casting")).toBe(true)
+    expect(isForgingCostApplicable(" forging ")).toBe(true)
+    for (const type of ["Barstock", "Moulded", "Package", null, undefined]) {
+      expect(isForgingCostApplicable(type)).toBe(false)
+    }
+  })
+
   test("derives M2 and M2B Product Base cost from every product-owned process", () => {
     const m2 = calculateProductProcessCost({
       ...noOptionalProcess,

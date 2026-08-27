@@ -1,4 +1,5 @@
 import type { createCommercialCostingRepository } from "@workspace/db"
+import { isForgingCostApplicable } from "@workspace/db/pricing-calculation"
 import * as XLSX from "xlsx"
 
 export type PricingRegisterRow = Awaited<
@@ -70,7 +71,9 @@ function forgingValue(record: Record<string, unknown>) {
   const productionType = String(record.productionType ?? "")
     .trim()
     .toLowerCase()
-  return productionType === "barstock" ? "-" : value(record, "forgingCost")
+  return isForgingCostApplicable(productionType)
+    ? value(record, "forgingCost")
+    : "-"
 }
 
 function isCustomerPackageSummary(row: PricingRegisterRow) {
@@ -148,7 +151,11 @@ export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
       ? totalPackagePriceInr / conversionRate
       : calculation.rateUsd
   const missingPricingValues = new Set<string>()
-  if (isCustomerPrice && row.componentDepth === 0 && !row.customerPartCode?.trim()) {
+  if (
+    isCustomerPrice &&
+    row.componentDepth === 0 &&
+    !row.customerPartCode?.trim()
+  ) {
     missingPricingValues.add("Customer Part Code")
   }
   for (const field of row.pricingMissingFields) {
@@ -240,7 +247,7 @@ export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
     "Assembly Cost (INR/kg)": value(product, "assemblyOperationCost"),
     "Rejection %": percentValue(product, "rejectionPercent"),
     "BL %": percentValue(product, "burningLossPercent"),
-    "Conversion Cost": "95.00",
+    "Conversion Cost": dashIfEmpty(customerValue(inputs, "conversionRate")),
     Profit: isCustomerPrice ? percentValue(inputs, "profitPercent") : "-",
     "OR Purchase Times": customerValue(inputs, "purchaseTimes"),
     "Net Rate / KG Without Alloy Premium": customerValue(

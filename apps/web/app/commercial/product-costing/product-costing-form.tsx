@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { useState } from "react"
 
+import { isForgingCostApplicable } from "@workspace/db/pricing-calculation"
 import { Button } from "@workspace/ui/components/button"
 import { Field, FieldGroup, FieldLabel } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
@@ -163,7 +164,7 @@ export function ProductCostingForm({
   const isRoot = product.id === rootItemId
   const isBomParent = ["Package", "Assembly"].includes(product.itemType)
   const isDirectPurchase = pricingMethod === "Direct Purchase"
-  const isBarstock = product.productionType?.toLowerCase() === "barstock"
+  const hasForgingCost = isForgingCostApplicable(product.productionType)
   const piecesPerKg =
     product.weight100Pcs > 0 ? 1000 / product.weight100Pcs : product.piecesPerKg
   const directPricePerPiece =
@@ -461,13 +462,13 @@ export function ProductCostingForm({
                 <Field>
                   <FieldLabel>Forging Cost (INR/kg)</FieldLabel>
                   <Input
-                    defaultValue={isBarstock ? 0 : product.forgingCost}
-                    disabled={isBarstock}
+                    defaultValue={hasForgingCost ? product.forgingCost : 0}
+                    disabled={!hasForgingCost}
                     name="forging_cost"
                     step="any"
                     type="number"
                   />
-                  {isBarstock ? (
+                  {!hasForgingCost ? (
                     <input name="forging_cost" type="hidden" value="0" />
                   ) : null}
                 </Field>

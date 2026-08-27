@@ -133,13 +133,15 @@ displays the parent first, followed by its ordered BOM components. On the parent
 Total Rate / PCS In INR is only the adjusted parent process price. BOM Component
 Cost is the sum of component customer prices times BOM quantities. Total Package
 Price Including BOM Component Cost is their combined INR price, and Rate / PCS In
-Currency divides that combined price by the conversion rate once. The legacy
+Currency divides that combined price by the saved customer conversion rate once.
+Customer rows display that same saved rate; rows without a source rate display `-`. The legacy
 Assembled Part and Product Base Cost columns are not displayed. Material-only
 casting, scrap, alloy, extrusion, forging, raw-material formula outputs, and Total
 Rods Cost are not applicable on the parent and display `-`. Marking,
 plating, annealing, deburring, buffing, and sealant retain numeric zero when zero
-and show their actual values when non-zero. Forging is not applicable to Barstock
-products and displays `-`. Rejection, burning-loss, and profit values include a
+and show their actual values when non-zero. Forging cost is applicable only when
+Production Type is Casting or Forging; every other type, including Barstock and
+Moulded, displays `-`. Rejection, burning-loss, and profit values include a
 visible `%` suffix. Package / Assembly rows otherwise
 retain parent, BOM depth, quantity, commercial inputs, formula evidence, and
 currency.

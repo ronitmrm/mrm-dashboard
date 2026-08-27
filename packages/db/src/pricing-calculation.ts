@@ -72,6 +72,11 @@ export type CostingResult = {
 
 const safeNumber = (value: number) => (Number.isFinite(value) ? value : 0)
 
+export function isForgingCostApplicable(productionType?: string | null) {
+  const normalized = productionType?.trim().toLowerCase()
+  return normalized === "casting" || normalized === "forging"
+}
+
 export function calculateProductProcessCost(product: ProductProcessCostInput) {
   const piecesPerKg = product.weight100Pcs > 0 ? 1000 / product.weight100Pcs : 0
   const processCostPerKg =
