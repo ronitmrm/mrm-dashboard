@@ -71,6 +71,8 @@ type ProductOption = {
   uid: string
 }
 
+type DesignSection = "product" | "controls" | "bom" | "files"
+
 const equalFieldGridClassName =
   "grid gap-x-4 gap-y-5 md:grid-cols-2 xl:grid-cols-4"
 const fieldLabelClassName = "flex h-full w-full flex-col justify-between gap-2"
@@ -321,6 +323,7 @@ export function DesignTaskEditor({
     initial.fixtureRequired
   )
   const [gaugesRequired, setGaugesRequired] = useState(initial.gaugesRequired)
+  const [activeSection, setActiveSection] = useState<DesignSection>("product")
   const nextKey = useRef(initial.bomLines.length)
   const [rows, setRows] = useState(() =>
     (initial.bomLines.length ? initial.bomLines : [blankBomLine(1)]).map(
@@ -335,301 +338,370 @@ export function DesignTaskEditor({
       <input name="design_status" type="hidden" value="Pending Design" />
       <input name="revision_no" type="hidden" value="0" />
       <input name="approval_status" type="hidden" value="Pending" />
-      <FieldSet className="rounded-xl border bg-muted/20 p-5">
-        <FieldLegend>
-          {portfolioDecisionLocked
-            ? "New Product Design"
-            : "Portfolio Decision"}
-        </FieldLegend>
-        <FieldDescription>
-          {portfolioDecisionLocked
-            ? "The portfolio review confirmed that a new controlled product is required."
-            : "Match an ordered internal product, or create a controlled quoted part."}{" "}
-          Q, C, and nested A identifiers are allocated atomically on save.
-        </FieldDescription>
-        <div className="grid gap-x-4 gap-y-5 md:grid-cols-2 xl:grid-cols-[repeat(auto-fit,minmax(14rem,1fr))]">
-          {portfolioDecisionLocked ? (
-            <input
-              name="portfolio_match_status"
-              type="hidden"
-              value="New Quoted Part"
-            />
-          ) : (
-            <ChoiceField
-              defaultValue={initial.portfolioMatchStatus}
-              label="Decision"
-              name="portfolio_match_status"
-              onChange={setPortfolioDecision}
-              options={[
-                "Pending",
-                "New Quoted Part",
-                "Matches Existing Portfolio",
-              ]}
-            />
-          )}
-          {portfolioDecision === "Matches Existing Portfolio" ? (
-            <Field className="min-w-0">
-              <FieldLabel className={fieldLabelClassName}>
-                Ordered Portfolio Product
-                <NativeSelect
-                  autoComplete="off"
-                  className="w-full"
-                  defaultValue={initial.matchedProductId ?? ""}
-                  name="matched_product_id"
-                  required
-                >
-                  <NativeSelectOption value="">
-                    Select product
-                  </NativeSelectOption>
-                  {products.map((product) => (
-                    <NativeSelectOption key={product.id} value={product.id}>
-                      {product.uid} · {product.description}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
-              </FieldLabel>
-            </Field>
-          ) : null}
-          {isNewDesign ? (
-            <>
+      <div
+        aria-label="Design workspace sections"
+        className="grid grid-cols-2 gap-1 rounded-xl border bg-muted/40 p-1 lg:grid-cols-4"
+        role="tablist"
+      >
+        {[
+          ["product", "Product Details"],
+          ["controls", "Design Controls"],
+          ["bom", "BOM"],
+          ["files", "Files"],
+        ].map(([section, label]) => {
+          const selected = activeSection === section
+          return (
+            <Button
+              aria-controls={`design-panel-${section}`}
+              aria-selected={selected}
+              className="h-10 w-full"
+              key={section}
+              onClick={() => setActiveSection(section as DesignSection)}
+              role="tab"
+              type="button"
+              variant={selected ? "default" : "ghost"}
+            >
+              {label}
+            </Button>
+          )
+        })}
+      </div>
+
+      <div
+        hidden={activeSection !== "product"}
+        id="design-panel-product"
+        role="tabpanel"
+      >
+        <FieldSet className="rounded-xl border bg-muted/20 p-5">
+          <FieldLegend>
+            {portfolioDecisionLocked
+              ? "New Product Design"
+              : "Portfolio Decision"}
+          </FieldLegend>
+          <FieldDescription>
+            {portfolioDecisionLocked
+              ? "The portfolio review confirmed that a new controlled product is required."
+              : "Match an ordered internal product, or create a controlled quoted part."}{" "}
+            Q, C, and nested A identifiers are allocated atomically on save.
+          </FieldDescription>
+          <div className="grid gap-x-4 gap-y-5 md:grid-cols-2 xl:grid-cols-[repeat(auto-fit,minmax(14rem,1fr))]">
+            {portfolioDecisionLocked ? (
+              <input
+                name="portfolio_match_status"
+                type="hidden"
+                value="New Quoted Part"
+              />
+            ) : (
               <ChoiceField
-                defaultValue={initial.itemType}
-                label="Item Type"
-                name="item_type"
-                onChange={setItemType}
-                options={["List", "Package"]}
+                defaultValue={initial.portfolioMatchStatus}
+                label="Decision"
+                name="portfolio_match_status"
+                onChange={setPortfolioDecision}
+                options={[
+                  "Pending",
+                  "New Quoted Part",
+                  "Matches Existing Portfolio",
+                ]}
               />
-              <TextField
-                defaultValue={initial.quotedPartUid ?? "Allocated on save"}
-                label="Q / C Number"
-                name="quoted_part_uid"
-                readOnly
-              />
-            </>
-          ) : null}
-        </div>
-      </FieldSet>
+            )}
+            {portfolioDecision === "Matches Existing Portfolio" ? (
+              <Field className="min-w-0">
+                <FieldLabel className={fieldLabelClassName}>
+                  Ordered Portfolio Product
+                  <NativeSelect
+                    autoComplete="off"
+                    className="w-full"
+                    defaultValue={initial.matchedProductId ?? ""}
+                    name="matched_product_id"
+                    required
+                  >
+                    <NativeSelectOption value="">
+                      Select product
+                    </NativeSelectOption>
+                    {products.map((product) => (
+                      <NativeSelectOption key={product.id} value={product.id}>
+                        {product.uid} · {product.description}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                </FieldLabel>
+              </Field>
+            ) : null}
+            {isNewDesign ? (
+              <>
+                <ChoiceField
+                  defaultValue={initial.itemType}
+                  label="Item Type"
+                  name="item_type"
+                  onChange={setItemType}
+                  options={["List", "Package"]}
+                />
+                <TextField
+                  defaultValue={initial.quotedPartUid ?? "Allocated on save"}
+                  label="Q / C Number"
+                  name="quoted_part_uid"
+                  readOnly
+                />
+              </>
+            ) : null}
+          </div>
+        </FieldSet>
+      </div>
 
       {isNewDesign ? (
         <>
-          <FieldSet className="rounded-xl border bg-muted/20 p-5">
-            <FieldLegend>Design Dossier</FieldLegend>
-            <FieldDescription>
-              Product definition, ownership, manufacturing support, and review
-              notes.
-            </FieldDescription>
-            <div className="grid gap-7">
-              <section className="grid gap-4">
-                <h4 className="text-sm font-medium">Product Details</h4>
-                <div className={equalFieldGridClassName}>
-                  <TextField
-                    defaultValue={initial.designerName ?? ""}
-                    label="Designer"
-                    name="designer_name"
-                  />
-                  <TextField
-                    defaultValue={initial.targetCompletionDate ?? ""}
-                    label="Target Completion"
-                    name="target_completion_date"
-                    type="date"
-                  />
-                  <TextField
-                    defaultValue={initial.internalPartSize ?? ""}
-                    label="Internal Part Size"
-                    name="internal_part_size"
-                  />
-                  <TextField
-                    defaultValue={initial.internalPartSubCategory ?? ""}
-                    label="Internal Subcategory"
-                    name="internal_part_sub_category"
-                  />
-                  <TextField
-                    defaultValue={initial.internalPartCategory ?? ""}
-                    label="Internal Category"
-                    name="internal_part_category"
-                  />
-                  <TextField
-                    defaultValue={initial.manufacturingProcess ?? ""}
-                    label="Manufacturing Process"
-                    name="manufacturing_process"
-                  />
-                  {itemType === "Package" ? (
+          <div
+            hidden={activeSection !== "product" && activeSection !== "controls"}
+            id={
+              activeSection === "controls" ? "design-panel-controls" : undefined
+            }
+            role="tabpanel"
+          >
+            <FieldSet className="rounded-xl border bg-muted/20 p-5">
+              <FieldLegend>
+                {activeSection === "product"
+                  ? "Product Definition"
+                  : "Design Controls & Notes"}
+              </FieldLegend>
+              <FieldDescription>
+                {activeSection === "product"
+                  ? "Define ownership, classification, and manufacturing details."
+                  : "Record design requirements, review ownership, and working notes."}
+              </FieldDescription>
+              <div className="grid gap-7">
+                <section
+                  className="grid gap-4"
+                  hidden={activeSection !== "product"}
+                >
+                  <h4 className="text-sm font-medium">Product Details</h4>
+                  <div className={equalFieldGridClassName}>
                     <TextField
-                      defaultValue={initial.packageProcessRequired ?? ""}
-                      label="Package Process"
-                      name="package_process_required"
+                      defaultValue={initial.designerName ?? ""}
+                      label="Designer"
+                      name="designer_name"
                     />
-                  ) : null}
-                  <TextField
-                    defaultValue={initial.componentsRequired ?? ""}
-                    label="Components Required"
-                    name="components_required"
-                  />
-                </div>
-              </section>
-
-              <section className="grid gap-4">
-                <h4 className="text-sm font-medium">Design Controls</h4>
-                <div className={equalFieldGridClassName}>
-                  <ChoiceField
-                    defaultValue={initial.designBomCompleted}
-                    label="BOM Complete"
-                    name="design_bom_completed"
-                    options={["No", "Yes"]}
-                  />
-                  <ChoiceField
-                    defaultValue={initial.toolingRequired}
-                    label="Tooling Required"
-                    name="tooling_required"
-                    onChange={setToolingRequired}
-                    options={["No", "Yes"]}
-                  />
-                  {toolingRequired === "Yes" ? (
                     <TextField
-                      defaultValue={initial.toolingApproxCost}
-                      label="Tooling Approximate Cost"
-                      name="tooling_approx_cost"
-                      type="number"
+                      defaultValue={initial.targetCompletionDate ?? ""}
+                      label="Target Completion"
+                      name="target_completion_date"
+                      type="date"
                     />
-                  ) : null}
-                  <ChoiceField
-                    defaultValue={initial.fixtureRequired}
-                    label="Fixture Required"
-                    name="fixture_required"
-                    onChange={setFixtureRequired}
-                    options={["No", "Yes"]}
-                  />
-                  {fixtureRequired === "Yes" ? (
                     <TextField
-                      defaultValue={initial.fixtureApproxCost}
-                      label="Fixture Approximate Cost"
-                      name="fixture_approx_cost"
-                      type="number"
+                      defaultValue={initial.internalPartSize ?? ""}
+                      label="Internal Part Size"
+                      name="internal_part_size"
                     />
-                  ) : null}
-                  <ChoiceField
-                    defaultValue={initial.gaugesRequired}
-                    label="Inspection / Gauges Required"
-                    name="gauges_required"
-                    onChange={setGaugesRequired}
-                    options={["No", "Yes"]}
-                  />
-                  {gaugesRequired === "Yes" ? (
                     <TextField
-                      defaultValue={initial.inspectionApproxCost}
-                      label="Inspection Approximate Cost"
-                      name="inspection_approx_cost"
-                      type="number"
+                      defaultValue={initial.internalPartSubCategory ?? ""}
+                      label="Internal Subcategory"
+                      name="internal_part_sub_category"
                     />
-                  ) : null}
-                  <TextField
-                    defaultValue={initial.checkedBy ?? ""}
-                    label="Checked By"
-                    name="checked_by"
-                  />
-                </div>
-              </section>
-
-              <section className="grid gap-4">
-                <h4 className="text-sm font-medium">Notes</h4>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <Field className="min-w-0">
-                    <FieldLabel className="w-full">
-                      Operation Notes
-                      <Textarea
-                        autoComplete="off"
-                        className="min-h-28 resize-y"
-                        defaultValue={initial.operationNotes ?? ""}
-                        name="operation_notes"
+                    <TextField
+                      defaultValue={initial.internalPartCategory ?? ""}
+                      label="Internal Category"
+                      name="internal_part_category"
+                    />
+                    <TextField
+                      defaultValue={initial.manufacturingProcess ?? ""}
+                      label="Manufacturing Process"
+                      name="manufacturing_process"
+                    />
+                    {itemType === "Package" ? (
+                      <TextField
+                        defaultValue={initial.packageProcessRequired ?? ""}
+                        label="Package Process"
+                        name="package_process_required"
                       />
+                    ) : null}
+                    <TextField
+                      defaultValue={initial.componentsRequired ?? ""}
+                      label="Components Required"
+                      name="components_required"
+                    />
+                  </div>
+                </section>
+
+                <section
+                  className="grid gap-4"
+                  hidden={activeSection !== "controls"}
+                >
+                  <h4 className="text-sm font-medium">Design Controls</h4>
+                  <div className={equalFieldGridClassName}>
+                    <ChoiceField
+                      defaultValue={initial.designBomCompleted}
+                      label="BOM Complete"
+                      name="design_bom_completed"
+                      options={["No", "Yes"]}
+                    />
+                    <ChoiceField
+                      defaultValue={initial.toolingRequired}
+                      label="Tooling Required"
+                      name="tooling_required"
+                      onChange={setToolingRequired}
+                      options={["No", "Yes"]}
+                    />
+                    {toolingRequired === "Yes" ? (
+                      <TextField
+                        defaultValue={initial.toolingApproxCost}
+                        label="Tooling Approximate Cost"
+                        name="tooling_approx_cost"
+                        type="number"
+                      />
+                    ) : null}
+                    <ChoiceField
+                      defaultValue={initial.fixtureRequired}
+                      label="Fixture Required"
+                      name="fixture_required"
+                      onChange={setFixtureRequired}
+                      options={["No", "Yes"]}
+                    />
+                    {fixtureRequired === "Yes" ? (
+                      <TextField
+                        defaultValue={initial.fixtureApproxCost}
+                        label="Fixture Approximate Cost"
+                        name="fixture_approx_cost"
+                        type="number"
+                      />
+                    ) : null}
+                    <ChoiceField
+                      defaultValue={initial.gaugesRequired}
+                      label="Inspection / Gauges Required"
+                      name="gauges_required"
+                      onChange={setGaugesRequired}
+                      options={["No", "Yes"]}
+                    />
+                    {gaugesRequired === "Yes" ? (
+                      <TextField
+                        defaultValue={initial.inspectionApproxCost}
+                        label="Inspection Approximate Cost"
+                        name="inspection_approx_cost"
+                        type="number"
+                      />
+                    ) : null}
+                    <TextField
+                      defaultValue={initial.checkedBy ?? ""}
+                      label="Checked By"
+                      name="checked_by"
+                    />
+                  </div>
+                </section>
+
+                <section
+                  className="grid gap-4"
+                  hidden={activeSection !== "controls"}
+                >
+                  <h4 className="text-sm font-medium">Notes</h4>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <Field className="min-w-0">
+                      <FieldLabel className="w-full">
+                        Operation Notes
+                        <Textarea
+                          autoComplete="off"
+                          className="min-h-28 resize-y"
+                          defaultValue={initial.operationNotes ?? ""}
+                          name="operation_notes"
+                        />
+                      </FieldLabel>
+                    </Field>
+                    <Field className="min-w-0">
+                      <FieldLabel className="w-full">
+                        Design Remarks
+                        <Textarea
+                          autoComplete="off"
+                          className="min-h-28 resize-y"
+                          defaultValue={initial.designRemarks ?? ""}
+                          name="design_remarks"
+                        />
+                      </FieldLabel>
+                    </Field>
+                  </div>
+                </section>
+              </div>
+            </FieldSet>
+          </div>
+
+          <div
+            hidden={activeSection !== "bom"}
+            id="design-panel-bom"
+            role="tabpanel"
+          >
+            <FieldSet className="rounded-xl border bg-muted/20 p-5">
+              <FieldLegend>
+                {itemType === "Package" ? "Package / Assembly BOM" : "List BOM"}
+              </FieldLegend>
+              <FieldDescription>
+                Nested children are valid only below Assembly rows. Existing
+                rows must select an ordered internal product.
+              </FieldDescription>
+              <div className="flex justify-end">
+                {itemType === "Package" ? (
+                  <Button
+                    onClick={() => {
+                      const key = nextKey.current++
+                      setRows((current) => [
+                        ...current,
+                        {
+                          key: `bom-${key}`,
+                          row: blankBomLine(current.length + 1),
+                        },
+                      ])
+                    }}
+                    type="button"
+                    variant="outline"
+                  >
+                    Add BOM Line
+                  </Button>
+                ) : null}
+              </div>
+              <div className="grid gap-4">
+                {visibleRows.map(({ key, row }, index) => (
+                  <BomRow
+                    canRemove={itemType === "Package" && visibleRows.length > 1}
+                    index={index}
+                    key={key}
+                    onRemove={() =>
+                      setRows((current) =>
+                        current.filter((entry) => entry.key !== key)
+                      )
+                    }
+                    products={products}
+                    row={row}
+                  />
+                ))}
+              </div>
+            </FieldSet>
+          </div>
+
+          <div
+            hidden={activeSection !== "files"}
+            id="design-panel-files"
+            role="tabpanel"
+          >
+            <FieldSet className="rounded-xl border bg-muted/20 p-5">
+              <FieldLegend>Design Files</FieldLegend>
+              <FieldDescription>
+                Attach the current internal drawing, marked customer drawing,
+                and CAD evidence.
+              </FieldDescription>
+              <div className="grid gap-4 md:grid-cols-3">
+                {[
+                  ["internal_drawing_file", "Internal Drawing"],
+                  ["customer_marked_file", "Customer Marked Drawing"],
+                  ["cad_file", "CAD File"],
+                ].map(([name, label]) => (
+                  <Field
+                    className="rounded-xl border bg-background p-4"
+                    key={name}
+                  >
+                    <FieldLabel>
+                      {label}
+                      <Input name={name} type="file" />
                     </FieldLabel>
                   </Field>
-                  <Field className="min-w-0">
-                    <FieldLabel className="w-full">
-                      Design Remarks
-                      <Textarea
-                        autoComplete="off"
-                        className="min-h-28 resize-y"
-                        defaultValue={initial.designRemarks ?? ""}
-                        name="design_remarks"
-                      />
-                    </FieldLabel>
-                  </Field>
-                </div>
-              </section>
-            </div>
-          </FieldSet>
-
-          <FieldSet className="rounded-xl border bg-muted/20 p-5">
-            <FieldLegend>
-              {itemType === "Package" ? "Package / Assembly BOM" : "List BOM"}
-            </FieldLegend>
-            <FieldDescription>
-              Nested children are valid only below Assembly rows. Existing rows
-              must select an ordered internal product.
-            </FieldDescription>
-            <div className="flex justify-end">
-              {itemType === "Package" ? (
-                <Button
-                  onClick={() => {
-                    const key = nextKey.current++
-                    setRows((current) => [
-                      ...current,
-                      {
-                        key: `bom-${key}`,
-                        row: blankBomLine(current.length + 1),
-                      },
-                    ])
-                  }}
-                  type="button"
-                  variant="outline"
-                >
-                  Add BOM Line
-                </Button>
-              ) : null}
-            </div>
-            <div className="grid gap-4">
-              {visibleRows.map(({ key, row }, index) => (
-                <BomRow
-                  canRemove={itemType === "Package" && visibleRows.length > 1}
-                  index={index}
-                  key={key}
-                  onRemove={() =>
-                    setRows((current) =>
-                      current.filter((entry) => entry.key !== key)
-                    )
-                  }
-                  products={products}
-                  row={row}
-                />
-              ))}
-            </div>
-          </FieldSet>
-
-          <FieldSet className="rounded-xl border bg-muted/20 p-5">
-            <FieldLegend>Design Files</FieldLegend>
-            <FieldDescription>
-              Attach the current internal drawing, marked customer drawing, and
-              CAD evidence.
-            </FieldDescription>
-            <div className="grid gap-4 md:grid-cols-3">
-              {[
-                ["internal_drawing_file", "Internal Drawing"],
-                ["customer_marked_file", "Customer Marked Drawing"],
-                ["cad_file", "CAD File"],
-              ].map(([name, label]) => (
-                <Field
-                  className="rounded-xl border bg-background p-4"
-                  key={name}
-                >
-                  <FieldLabel>
-                    {label}
-                    <Input name={name} type="file" />
-                  </FieldLabel>
-                </Field>
-              ))}
-            </div>
-          </FieldSet>
+                ))}
+              </div>
+            </FieldSet>
+          </div>
         </>
       ) : null}
 
