@@ -37,6 +37,15 @@ Enquiry line. It shows the complete Technical Review in a structured form and
 offers separate actions to search the Current Portfolio or open the Design form.
 Portfolio search occurs on the Current Portfolio page, not inside the task.
 
+**Current Product Portfolio**: The Design-readable, non-pricing catalog used to
+find an existing Product before opening the new-Product Design form. It exposes
+only Product UID, List / Package type, Size, Category, Subcategory, MRMPL
+Description, and Product Type. Design users search this page through the
+`pricing.products.read` capability and do not use or receive access to the
+Pricing Register.
+_Avoid_: Sending Design users to Pricing or exposing prices and formula inputs
+in portfolio search.
+
 **Design Work Start**: The Design team's explicit choice to open the Design form
 for one released line. It changes Pending Design to In Progress and opens that
 line's separate new-Product Design workspace. Saving incomplete work remains In

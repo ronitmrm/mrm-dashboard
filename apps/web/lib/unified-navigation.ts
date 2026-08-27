@@ -443,7 +443,11 @@ export const commercialNavigation = [
     icon: Factory,
     label: "Design Tasks",
   },
-
+  {
+    href: "/commercial/products",
+    icon: PackageSearch,
+    label: "Product Portfolio",
+  },
   {
     href: "/commercial/assemblies",
     icon: Boxes,
