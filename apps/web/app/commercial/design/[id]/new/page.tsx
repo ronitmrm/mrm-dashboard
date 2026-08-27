@@ -1,4 +1,4 @@
-import { Search } from "lucide-react"
+import { ChevronDown, Search } from "lucide-react"
 import Link from "next/link"
 import { notFound, redirect } from "next/navigation"
 
@@ -6,13 +6,7 @@ import { createCommercialWorkflowRepository } from "@workspace/db"
 import { designTaskIsEditable } from "@workspace/db/commercial-design-domain"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@workspace/ui/components/card"
+import { Card, CardContent } from "@workspace/ui/components/card"
 import { Field, FieldGroup, FieldLabel } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
 import { Separator } from "@workspace/ui/components/separator"
@@ -102,14 +96,7 @@ export default async function NewDesignWorkspacePage({
       </section>
 
       <Card className="overflow-hidden">
-        <CardHeader className="border-b bg-muted/20">
-          <CardTitle>New Product Design Workspace</CardTitle>
-          <CardDescription>
-            Save incomplete work to keep the line In Progress. Mark the BOM
-            complete only when the Design work is finished.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-8 pt-6">
+        <CardContent className="grid gap-6 p-4 lg:p-6">
           {!editable ? (
             <p className="rounded-2xl border bg-muted/40 p-3 text-sm">
               This Design task is read-only because its downstream work has
@@ -123,98 +110,122 @@ export default async function NewDesignWorkspacePage({
             </p>
           ) : null}
 
-          <section className="grid gap-4 lg:grid-cols-2">
-            <div className="rounded-2xl border p-4">
-              <h3 className="font-medium">Logged Enquiry</h3>
-              <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
-                {[
-                  ["Quantity", selectedItem.quantity],
-                  ["Grade", selectedItem.grade],
-                  ["Target Price", selectedItem.targetPrice],
-                  ["Drawing Reference", selectedItem.drawingReference],
-                  ["Delivery Terms", selectedItem.deliveryTerms],
-                  ["Payment Terms", selectedItem.paymentTerms],
-                  ["Line Remarks", selectedItem.lineRemarks],
-                  ["Enquiry Remarks", selectedItem.enquiryRemarks],
-                ].map(([label, value]) => (
-                  <div className="contents" key={label}>
-                    <dt className="text-muted-foreground">{label}</dt>
-                    <dd>{display(value)}</dd>
-                  </div>
-                ))}
-              </dl>
-            </div>
-            <div className="rounded-2xl border p-4">
-              <h3 className="font-medium">Technical Release</h3>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {selectedItem.technicalReviewStatus} ·{" "}
-                {display(selectedItem.technicalRemarks)}
-              </p>
-              {selectedItem.feasibilityReason ? (
-                <p className="mt-2 text-sm">
-                  Feasibility: {selectedItem.feasibilityReason}
-                </p>
-              ) : null}
-              <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                {technicalReviewChecklist.map(([key, label]) => (
-                  <p className="text-sm" key={key}>
-                    <span className="text-muted-foreground">{label}:</span>{" "}
-                    {selectedItem.technicalChecklist[key] ? "Yes" : "No"}
-                  </p>
-                ))}
-              </div>
-              {selectedItem.customerDrawingFileName ? (
-                <Button asChild className="mt-4" size="sm" variant="outline">
-                  <Link
-                    href={`/commercial/enquiry-items/${selectedItem.enquiryItemId}/drawing`}
-                  >
-                    Open Customer Drawing
-                  </Link>
-                </Button>
-              ) : null}
-            </div>
-          </section>
-
-          {editable ? (
-            <section className="rounded-xl border bg-muted/20 p-4 lg:p-5">
-              <div className="mb-4">
-                <h3 className="font-medium">BOM Component Lookup</h3>
+          <details className="group rounded-xl border bg-muted/20">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 [&::-webkit-details-marker]:hidden">
+              <div>
+                <p className="font-medium">Source Details</p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Find an ordered product before selecting it in a BOM line.
+                  {selectedItem.quantity} pcs · {display(selectedItem.grade)} ·{" "}
+                  {selectedItem.technicalReviewStatus}
                 </p>
               </div>
-              <form
-                className="flex flex-col gap-2 sm:flex-row sm:items-end"
-                id="design-product-search"
-                role="search"
-              >
-                <Field className="max-w-2xl flex-1">
-                  <FieldLabel htmlFor="design-product-query">
-                    Product UID Or Description
-                  </FieldLabel>
-                  <Input
-                    autoComplete="off"
-                    defaultValue={productSearch}
-                    id="design-product-query"
-                    name="product"
-                    placeholder="Search by Product UID or description…"
-                  />
-                </Field>
-                <Button type="submit" variant="outline">
-                  <Search aria-hidden="true" className="size-4" />
-                  Search Products
-                </Button>
-              </form>
-              <div className="mt-3">
-                <BoundedResultNotice
-                  actionHref="#design-product-query"
-                  actionLabel="Refine Product Search"
-                  coverage={productOptions.coverage}
-                  searchQuery={productSearch}
-                  section="BOM Component Options"
+              <span className="flex items-center gap-2 text-sm font-medium text-primary">
+                View Enquiry & Technical Details
+                <ChevronDown
+                  aria-hidden="true"
+                  className="size-4 transition-transform group-open:rotate-180"
                 />
+              </span>
+            </summary>
+            <section className="grid gap-4 border-t p-4 lg:grid-cols-2">
+              <div className="rounded-lg border bg-background p-4">
+                <h3 className="font-medium">Logged Enquiry</h3>
+                <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+                  {[
+                    ["Quantity", selectedItem.quantity],
+                    ["Grade", selectedItem.grade],
+                    ["Target Price", selectedItem.targetPrice],
+                    ["Drawing Reference", selectedItem.drawingReference],
+                    ["Delivery Terms", selectedItem.deliveryTerms],
+                    ["Payment Terms", selectedItem.paymentTerms],
+                    ["Line Remarks", selectedItem.lineRemarks],
+                    ["Enquiry Remarks", selectedItem.enquiryRemarks],
+                  ].map(([label, value]) => (
+                    <div className="contents" key={label}>
+                      <dt className="text-muted-foreground">{label}</dt>
+                      <dd>{display(value)}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+              <div className="rounded-lg border bg-background p-4">
+                <h3 className="font-medium">Technical Release</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {selectedItem.technicalReviewStatus} ·{" "}
+                  {display(selectedItem.technicalRemarks)}
+                </p>
+                {selectedItem.feasibilityReason ? (
+                  <p className="mt-2 text-sm">
+                    Feasibility: {selectedItem.feasibilityReason}
+                  </p>
+                ) : null}
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {technicalReviewChecklist.map(([key, label]) => (
+                    <p className="text-sm" key={key}>
+                      <span className="text-muted-foreground">{label}:</span>{" "}
+                      {selectedItem.technicalChecklist[key] ? "Yes" : "No"}
+                    </p>
+                  ))}
+                </div>
+                {selectedItem.customerDrawingFileName ? (
+                  <Button asChild className="mt-4" size="sm" variant="outline">
+                    <Link
+                      href={`/commercial/enquiry-items/${selectedItem.enquiryItemId}/drawing`}
+                    >
+                      Open Customer Drawing
+                    </Link>
+                  </Button>
+                ) : null}
               </div>
             </section>
+          </details>
+
+          {editable ? (
+            <details className="group" open={Boolean(productSearch)}>
+              <Button asChild size="sm" variant="outline">
+                <summary className="ml-auto cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+                  <Search aria-hidden="true" className="size-4" />
+                  <span className="group-open:hidden">Find BOM Component</span>
+                  <span className="hidden group-open:inline">Close Lookup</span>
+                </summary>
+              </Button>
+              <section className="mt-3 rounded-xl border bg-muted/20 p-4">
+                <p className="mb-4 text-xs text-muted-foreground">
+                  Search ordered products before selecting one in a BOM line.
+                </p>
+                <form
+                  className="flex flex-col gap-2 sm:flex-row sm:items-end"
+                  id="design-product-search"
+                  role="search"
+                >
+                  <Field className="max-w-2xl flex-1">
+                    <FieldLabel htmlFor="design-product-query">
+                      Product UID Or Description
+                    </FieldLabel>
+                    <Input
+                      autoComplete="off"
+                      defaultValue={productSearch}
+                      id="design-product-query"
+                      name="product"
+                      placeholder="Search by Product UID or description…"
+                    />
+                  </Field>
+                  <Button type="submit" variant="outline">
+                    <Search aria-hidden="true" className="size-4" />
+                    Search Products
+                  </Button>
+                </form>
+                <div className="mt-3">
+                  <BoundedResultNotice
+                    actionHref="#design-product-query"
+                    actionLabel="Refine Product Search"
+                    coverage={productOptions.coverage}
+                    searchQuery={productSearch}
+                    section="BOM Component Options"
+                  />
+                </div>
+              </section>
+            </details>
           ) : null}
 
           <form action={saveDesignAction}>
