@@ -3194,6 +3194,75 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       })
     },
 
+    async closeJob(input: MutationContext & { jobId: string }) {
+      return transaction(pool, async (client) => {
+        const jobId = required(input.jobId, "Recruitment opening")
+        const existing = await client.query<
+          Record<string, unknown> & { id: string; status: string }
+        >(
+          `
+            SELECT * FROM recruitment.job_posts
+            WHERE id = $1 AND organization_id = $2
+            FOR UPDATE
+          `,
+          [jobId, input.organizationId]
+        )
+        const job = existing.rows[0]
+        if (!job) throw new Error("Recruitment opening was not found.")
+        if (job.status !== "Open") {
+          throw new Error("Only an open recruitment job can be closed.")
+        }
+        const updated = await client.query<
+          Record<string, unknown> & { id: string; status: string }
+        >(
+          `
+            UPDATE recruitment.job_posts
+            SET status = 'Closed', closed_on = current_date,
+              updated_by_user_id = $1, updated_at = now(),
+              row_version = row_version + 1
+            WHERE id = $2 AND organization_id = $3
+            RETURNING *
+          `,
+          [input.actorUserId ?? null, jobId, input.organizationId]
+        )
+        await audit(client, {
+          ...input,
+          afterState: updated.rows[0],
+          beforeState: job,
+          eventType: "recruitment.job.closed",
+          targetId: jobId,
+          targetTable: "job_posts",
+        })
+        return updated.rows[0]!
+      })
+    },
+
+    async deleteJob(input: MutationContext & { jobId: string }) {
+      return transaction(pool, async (client) => {
+        const jobId = required(input.jobId, "Recruitment opening")
+        const deleted = await client.query<{
+          deleted_job: Record<string, unknown> & { id: string }
+        }>(
+          `
+            SELECT recruitment.delete_job_post($1, $2) AS deleted_job
+          `,
+          [input.organizationId, jobId]
+        )
+        const deletedJob = deleted.rows[0]?.deleted_job
+        if (!deletedJob) {
+          throw new Error("Recruitment opening was not found.")
+        }
+        await audit(client, {
+          ...input,
+          beforeState: deletedJob,
+          eventType: "recruitment.job.deleted",
+          targetId: jobId,
+          targetTable: "job_posts",
+        })
+        return { id: jobId }
+      })
+    },
+
     async upsertCandidate(
       input: MutationContext & {
         candidateId?: string | null

@@ -339,6 +339,32 @@ export async function createJobAction(formData: FormData) {
   )
 }
 
+export async function closeJobAction(formData: FormData) {
+  await mutate(
+    formData,
+    hrTaskCapabilities.closeJob,
+    (repository, context) =>
+      repository.closeJob({
+        ...context,
+        jobId: value(formData, "job_id"),
+      }),
+    "Job closed. Candidate history was retained."
+  )
+}
+
+export async function deleteJobAction(formData: FormData) {
+  await mutate(
+    formData,
+    hrTaskCapabilities.deleteJob,
+    (repository, context) =>
+      repository.deleteJob({
+        ...context,
+        jobId: value(formData, "job_id"),
+      }),
+    "Job post deleted."
+  )
+}
+
 export async function saveCandidateAction(formData: FormData) {
   const returnTo = hrReturnPath(formData)
   const session = await requireCapability(

@@ -12,7 +12,8 @@ import {
 } from "./shared-employee-master"
 
 function post(
-  values: Partial<RecruitmentPostRow> & Pick<RecruitmentPostRow, "id" | "status">
+  values: Partial<RecruitmentPostRow> &
+    Pick<RecruitmentPostRow, "id" | "status">
 ) {
   return {
     combinedRoleId: null,
@@ -125,9 +126,9 @@ describe("shared Employee Master", () => {
       }),
     ])
 
-    expect(
-      productionMachinistOptions(rows, "conventional")
-    ).toEqual([{ code: "73", name: "Dharaviya Ketanbhai" }])
+    expect(productionMachinistOptions(rows, "conventional")).toEqual([
+      { code: "73", name: "Dharaviya Ketanbhai" },
+    ])
   })
 
   it("offers only active Workers from the selected unit's Shop Floor department", () => {
@@ -295,9 +296,7 @@ describe("shared Employee Master", () => {
       }),
     ])
 
-    expect(
-      productionDispatchApproverOptions(rows, "conventional"),
-    ).toEqual([
+    expect(productionDispatchApproverOptions(rows, "conventional")).toEqual([
       { code: "PLAN-1", name: "Asha Planner" },
       { code: "PLAN-2", name: "Bharat Planner" },
       { code: "SF-1", name: "Chetan Shop Floor" },
@@ -353,6 +352,27 @@ describe("shared Employee Master", () => {
       { code: "MGR-1", name: "Bina" },
       { code: "MGT-1", name: "Chirag" },
     ])
+  })
+
+  it("offers appointed leadership who already have Employee IDs as interviewers", () => {
+    expect(
+      recruitmentInterviewerOptions([
+        post({
+          designation: "Hod",
+          employeeCode: "101",
+          employeeName: "Appointed Hod",
+          id: "1",
+          status: "Appointed",
+        }),
+        post({
+          designation: "Manager",
+          employeeCode: null,
+          employeeName: "Future Manager",
+          id: "2",
+          status: "Appointed",
+        }),
+      ])
+    ).toEqual([{ code: "101", name: "Appointed Hod" }])
   })
 
   it("keeps every active post available when one employee has several assignments", () => {

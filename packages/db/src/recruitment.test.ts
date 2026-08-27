@@ -1282,6 +1282,78 @@ describe("job workspace", () => {
   })
 })
 
+describe("job lifecycle", () => {
+  test("closes an open recruitment job while retaining its history", async () => {
+    const jobId = "00000000-0000-4000-8000-000000000101"
+    const organizationId = "00000000-0000-4000-8000-000000000102"
+    const query = vi.fn(
+      async (statement: string, values?: readonly unknown[]) => {
+        void values
+        if (statement.includes("SELECT * FROM recruitment.job_posts")) {
+          return { rows: [{ id: jobId, status: "Open" }] }
+        }
+        if (statement.includes("UPDATE recruitment.job_posts")) {
+          return { rows: [{ id: jobId, status: "Closed" }] }
+        }
+        return { rows: [] }
+      }
+    )
+    const client = { query, release: vi.fn() } as unknown as PoolClient
+    const repository = createRecruitmentRepository({
+      pool: { connect: vi.fn(async () => client) } as unknown as Pool,
+    })
+
+    await repository.closeJob({ jobId, organizationId })
+
+    expect(
+      query.mock.calls.some(
+        ([statement, values]) =>
+          statement.includes("SET status = 'Closed'") &&
+          values?.includes(jobId) &&
+          values?.includes(organizationId)
+      )
+    ).toBe(true)
+  })
+
+  test("deletes an empty recruitment job through the guarded database command", async () => {
+    const jobId = "00000000-0000-4000-8000-000000000111"
+    const organizationId = "00000000-0000-4000-8000-000000000112"
+    const query = vi.fn(async (statement: string) => {
+      if (statement.includes("recruitment.delete_job_post")) {
+        return {
+          rows: [
+            {
+              deleted_job: {
+                id: jobId,
+                job_number: "HO-1",
+                status: "Open",
+              },
+            },
+          ],
+        }
+      }
+      return { rows: [] }
+    })
+    const client = { query, release: vi.fn() } as unknown as PoolClient
+    const repository = createRecruitmentRepository({
+      pool: { connect: vi.fn(async () => client) } as unknown as Pool,
+    })
+
+    await repository.deleteJob({ jobId, organizationId })
+
+    expect(
+      query.mock.calls.some(([statement]) =>
+        statement.includes("SELECT recruitment.delete_job_post")
+      )
+    ).toBe(true)
+    expect(
+      query.mock.calls.some(([statement]) =>
+        statement.includes("DELETE FROM recruitment.job_posts")
+      )
+    ).toBe(false)
+  })
+})
+
 describe("candidate application cycles", () => {
   test.each(["Assigned", "Interview", "Hold"])(
     "treats %s as an active application",

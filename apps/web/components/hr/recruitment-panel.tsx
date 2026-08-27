@@ -80,10 +80,7 @@ import { MasterTables } from "@/components/hr/master-tables"
 import { RecruitablePostFields } from "@/components/hr/recruitable-post-fields"
 import { TemplateScopeFields } from "@/components/hr/template-scope-fields"
 import { candidateSourceOptions } from "@/lib/recruitment-candidate-sources"
-import {
-  recruitmentInterviewerOptions,
-  sharedEmployeeMasterRows,
-} from "@/lib/shared-employee-master"
+import { recruitmentInterviewerOptions } from "@/lib/shared-employee-master"
 import {
   recruitmentMasterHref,
   type RecruitmentMasterKind,
@@ -911,9 +908,7 @@ function InterviewsPanel({
   RecruitmentPanelProps,
   "canWrite" | "interviews" | "posts" | "selectedAppointmentApplicationId"
 >) {
-  const interviewerOptions = recruitmentInterviewerOptions(
-    sharedEmployeeMasterRows(posts)
-  )
+  const interviewerOptions = recruitmentInterviewerOptions(posts)
   return (
     <>
       <InterviewScheduleBoard
