@@ -9,6 +9,7 @@ import {
   type RepositoryPoolOptions,
 } from "./postgres-runtime"
 import {
+  calculateBomPieceWeight,
   calculateCosting,
   calculatePackageCosting,
   calculateProductProcessCost,
@@ -424,15 +425,25 @@ async function rolledProductCost(
   return total
 }
 
-async function immediatePieceWeight(client: PoolClient, product: ProductRow) {
+async function bomPieceWeight(
+  client: PoolClient,
+  product: ProductRow,
+  ancestors = new Set<string>()
+): Promise<number> {
   if (!isBomParent(product.item_type)) {
     return asNumber(product.weight_100_pcs)
   }
+  if (ancestors.has(product.id)) return 0
+  const nextAncestors = new Set(ancestors)
+  nextAncestors.add(product.id)
   const children = await getImmediateChildren(client, product.id)
-  return children.reduce(
-    (total, child) =>
-      total + asNumber(child.quantity, 1) * asNumber(child.weight_100_pcs),
-    0
+  return calculateBomPieceWeight(
+    await Promise.all(
+      children.map(async (child) => ({
+        pieceWeightGrams: await bomPieceWeight(client, child, nextAncestors),
+        quantity: asNumber(child.quantity, 1),
+      }))
+    )
   )
 }
 
@@ -2248,9 +2259,7 @@ export function createCommercialCostingRepository(
         const productWeight100Pcs =
           input.weight100Pcs ?? asNumber(product.weight_100_pcs)
         const weight100Pcs =
-          isPackage && productWeight100Pcs <= 0
-            ? await immediatePieceWeight(client, product)
-            : productWeight100Pcs
+          isPackage ? await bomPieceWeight(client, product) : productWeight100Pcs
         const piecesPerKg =
           !isPackage && input.piecesPerKg && input.piecesPerKg > 0
             ? input.piecesPerKg
@@ -2574,6 +2583,7 @@ export function createCommercialCostingRepository(
           let calculation: QuoteCalculation
           const components: PackageComponent[] = []
           let quoteInputs: QuoteInputs
+          let snapshotProduct = product
 
           if (isBomParent(product.item_type)) {
             const children = await getImmediateChildren(client, product.id)
@@ -2592,23 +2602,7 @@ export function createCommercialCostingRepository(
                 unitCost: childQuote.calculation.totalRateInr,
               })
             }
-            const childrenForWeight = await Promise.all(
-              children.map(async (child) => ({
-                quantity: asNumber(child.quantity, 1),
-                weight: isBomParent(child.item_type)
-                  ? await immediatePieceWeight(client, child)
-                  : asNumber(child.weight_100_pcs),
-              }))
-            )
-            const fallbackPieceWeightGrams = childrenForWeight.reduce(
-              (total, child) => total + child.quantity * child.weight,
-              0
-            )
-            const productWeight100Pcs = asNumber(product.weight_100_pcs)
-            const pieceWeightGrams =
-              productWeight100Pcs > 0
-                ? productWeight100Pcs
-                : fallbackPieceWeightGrams
+            const pieceWeightGrams = await bomPieceWeight(client, product)
             const packingCost = options.isRoot ? input.inputs.packingCost : 0
             const shippingCost = options.isRoot ? input.inputs.shippingCost : 0
             const profitPercent = options.isRoot
@@ -2640,6 +2634,11 @@ export function createCommercialCostingRepository(
               },
               childQuoteTotal
             )
+            snapshotProduct = {
+              ...product,
+              pieces_per_kg: String(packageCosting.piecesPerKg),
+              weight_100_pcs: String(pieceWeightGrams),
+            }
             const assemblyCostPerPiece =
               packageCosting.piecesPerKg > 0
                 ? asNumber(product.assembly_operation_cost) /
@@ -2715,7 +2714,7 @@ export function createCommercialCostingRepository(
             enquiryItemId: input.enquiryItemId,
             enquiryNumber: row.enquiry_number,
             inputs: quoteInputs,
-            item: product,
+            item: snapshotProduct,
             organizationId: row.organization_id,
             packaging: input.packaging ?? null,
             quantity: input.quantity,

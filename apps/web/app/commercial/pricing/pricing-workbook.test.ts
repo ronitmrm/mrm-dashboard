@@ -411,6 +411,7 @@ describe("Pricing spreadsheet workbook", () => {
       componentDepth: 1,
       itemType: "Assembly",
       parentUid: "M1110",
+      pricingMissingFields: ["One-Piece Weight (g)*", "Pieces per Kg"],
       product: {
         alloyPremium: 7,
         assemblyOperationCost: 353,
@@ -444,6 +445,8 @@ describe("Pricing spreadsheet workbook", () => {
       Grade: "-",
       "M/c Cost (INR/kg)": "-",
       "M/c Cost (INR/pc)": "-",
+      "Missing Pricing Values": "-",
+      "Pricing Completeness": "Complete",
       "Rate / PCS In Currency": "0.7240",
       "Rod Size": "-",
       "Rod Type": "-",

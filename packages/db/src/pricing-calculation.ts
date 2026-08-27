@@ -72,6 +72,25 @@ export type CostingResult = {
 
 const safeNumber = (value: number) => (Number.isFinite(value) ? value : 0)
 
+export type BomPieceWeightComponent = {
+  components?: readonly BomPieceWeightComponent[]
+  pieceWeightGrams: number
+  quantity: number
+}
+
+export function calculateBomPieceWeight(
+  components: readonly BomPieceWeightComponent[]
+): number {
+  return safeNumber(
+    components.reduce((total, component) => {
+      const unitWeight = component.components?.length
+        ? calculateBomPieceWeight(component.components)
+        : safeNumber(component.pieceWeightGrams)
+      return total + safeNumber(component.quantity) * unitWeight
+    }, 0)
+  )
+}
+
 export function isForgingCostApplicable(productionType?: string | null) {
   const normalized = productionType?.trim().toLowerCase()
   return normalized === "casting" || normalized === "forging"
