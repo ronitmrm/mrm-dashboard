@@ -608,6 +608,7 @@ function EmployeePanel({
             "dataEntry",
             "employee-assignment"
           )}
+          exportAction={<DataDownloadButton href="/hr/approved-posts/export" />}
           masterTablesHref={recruitmentMasterHref(
             "masterTables",
             "employee-assignment"
