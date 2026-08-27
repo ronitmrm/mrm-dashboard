@@ -83,7 +83,6 @@ const packageNotApplicableColumns = [
   "Forg Cost+ Nitric Blasting (INR/kg)",
   "BL %",
   "OR Purchase Times",
-  "Assembled Part",
   "Net Rate / KG Without Alloy Premium",
   "Net Rate / KG With Alloy Premium",
   "Scrap Rate / gm",
@@ -118,37 +117,12 @@ const packageDashWhenZeroColumns = [
   "M/c Cost (INR/pc)",
   "Washing (INR/kg)",
   "Checking (INR/kg)",
-  "Marking (INR/kg)",
-  "Plating (INR/kg)",
-  "Anneling (INR/kg)",
-  "Debbring (INR/kg)",
-  "Buffing (INR/kg)",
-  "Sealant (INR/kg)",
   "Overhead (INR/kg)",
   "Assembly Cost (INR/kg)",
 ] as const
 
 export function orderPricingRows(rows: PricingRegisterRow[]) {
-  const ordered: PricingRegisterRow[] = []
-  let group: PricingRegisterRow[] = []
-
-  const flush = () => {
-    const [root, ...components] = group
-    if (!root) return
-    if (components.length && isCustomerPackageSummary(root)) {
-      ordered.push(...components, root)
-    } else {
-      ordered.push(...group)
-    }
-    group = []
-  }
-
-  for (const row of rows) {
-    if (row.componentDepth === 0) flush()
-    group.push(row)
-  }
-  flush()
-  return ordered
+  return rows
 }
 
 export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
@@ -251,7 +225,6 @@ export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
     "Conversion Cost": "95.00",
     Profit: isCustomerPrice ? percentValue(inputs, "profitPercent") : "-",
     "OR Purchase Times": customerValue(inputs, "purchaseTimes"),
-    "Assembled Part": customerValue(inputs, "assembledPartInr"),
     "Net Rate / KG Without Alloy Premium": customerValue(
       calculation,
       "netRateWithoutAlloy"
@@ -274,10 +247,14 @@ export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
     "Profit - B": customerValue(calculation, "profitB"),
     "Total - A + B": customerValue(calculation, "totalAPlusB"),
     "Rate / PCS In INR": customerValue(calculation, "rateInr"),
-    "Total Rate / PCS In INR": customerValue(calculation, "totalRateInr"),
+    "Total Rate / PCS In INR": isPackageSummary
+      ? customerValue(calculation, "rateInr")
+      : customerValue(calculation, "totalRateInr"),
     "BOM Component Cost (INR/pc)": isPackageSummary
       ? customerValue(calculation, "childQuoteTotal")
       : "-",
+    "Total Package Price Including BOM Component Cost (INR/pc)":
+      isPackageSummary ? customerValue(calculation, "totalRateInr") : "-",
     Currency: "USD",
     "Rate / PCS In Currency": customerValue(calculation, "rateUsd", 4),
     "Pricing Completeness":

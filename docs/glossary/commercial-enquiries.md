@@ -128,17 +128,19 @@ decimal places; sending that exact replacement resolves the PO revision.
 **Pricing Register**: The combined current-pricing spreadsheet. Product Base
 rows expose ordered Product Master costs even before a customer Quote exists;
 Customer Price rows come from active or editable root Quotes and their immutable
-recursive Product and calculation snapshots. Package / Assembly customer pricing displays each ordered BOM component first and
-one parent total row last. The parent row retains its applicable assembly cost,
-rejection, and profit; material-only casting, scrap, alloy, extrusion, forging,
-raw-material formula outputs, the legacy Assembled Part / Total Rods Cost fields,
-and rolled-up Product Base inputs are not applicable there and display `-`.
-Empty package metadata and unused zero-only optional process cells also display
-`-`, while non-zero applicable process inputs remain visible. Its BOM Component
-Cost is the sum of component customer prices times BOM quantities; Total Rate in
-INR combines that component cost with the adjusted parent process before one
-currency conversion. Package / Assembly rows otherwise retain parent, BOM depth,
-quantity, commercial inputs, formula evidence, and currency.
+recursive Product and calculation snapshots. Package / Assembly customer pricing
+displays the parent first, followed by its ordered BOM components. On the parent,
+Total Rate / PCS In INR is only the adjusted parent process price. BOM Component
+Cost is the sum of component customer prices times BOM quantities. Total Package
+Price Including BOM Component Cost is their combined INR price, and Rate / PCS In
+Currency divides that combined price by the conversion rate once. The legacy
+Assembled Part column is not displayed. Material-only casting, scrap, alloy,
+extrusion, forging, raw-material formula outputs, Total Rods Cost, and rolled-up
+Product Base inputs are not applicable on the parent and display `-`. Marking,
+plating, annealing, deburring, buffing, and sealant retain numeric zero when zero
+and show their actual values when non-zero. Package / Assembly rows otherwise
+retain parent, BOM depth, quantity, commercial inputs, formula evidence, and
+currency.
 Purchased Products also show their current Website Product size and MRMPL Product
 Description. Selecting a Customer Part Code opens its complete retained Quote
 revision history. Product Base rows never invent customer or Quote values.
