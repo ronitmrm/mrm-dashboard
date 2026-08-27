@@ -53,6 +53,12 @@ or showing another Customer's un-ordered quoted Products.
 for one released line. It changes Pending Design to In Progress and opens that
 line's separate new-Product Design workspace. Saving incomplete work remains In
 Progress; completing its required BOM changes it to Design Complete.
+The Designer is selected from active staff whose account or Approved Post has
+the Design Team Profile. Internal Category, Internal Subcategory, and
+Manufacturing Process are selected from the company-wide Design Category,
+Design Subcategory, and Design Process masters; a Subcategory remains within
+its parent Category. Components Required is a Yes / No decision. Component
+identity, structure, and quantities belong in the BOM rather than that decision.
 For a new quoted Package or Assembly, Design owns the recursive BOM definition
 before Product Parameter Costing starts. A matched existing Product reuses its
 current Product Master BOM. Costing consumes that BOM; it does not redefine its

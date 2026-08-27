@@ -51,13 +51,16 @@ export default async function NewDesignWorkspacePage({
         designStatus: selectedItem.designStatus,
         nextStageStatus: selectedItem.nextStageStatus,
       })
-      const productOptions = editable
-        ? await workflow.searchDesignPortfolioProducts("MRMPL", productSearch)
-        : {
-            coverage: { limit: 50, returned: 0, truncated: false },
-            rows: [],
-          }
-      return { editable, productOptions, selectedItem }
+      const [designOptions, productOptions] = await Promise.all([
+        workflow.getDesignWorkspaceOptions("MRMPL"),
+        editable
+          ? workflow.searchDesignPortfolioProducts("MRMPL", productSearch)
+          : Promise.resolve({
+              coverage: { limit: 50, returned: 0, truncated: false },
+              rows: [],
+            }),
+      ])
+      return { designOptions, editable, productOptions, selectedItem }
     } finally {
       await workflow.close()
     }
@@ -66,7 +69,7 @@ export default async function NewDesignWorkspacePage({
   if (data.selectedItem.portfolioMatchStatus !== "New Quoted Part") {
     redirect(`/commercial/design/${id}`)
   }
-  const { editable, productOptions, selectedItem } = data
+  const { designOptions, editable, productOptions, selectedItem } = data
 
   return (
     <div className="flex min-h-[calc(100svh-4rem)] flex-col gap-6">
@@ -285,6 +288,7 @@ export default async function NewDesignWorkspacePage({
               value={selectedItem.organizationId}
             />
             <DesignTaskEditor
+              designOptions={designOptions}
               editable={editable}
               portfolioDecisionLocked
               initial={{

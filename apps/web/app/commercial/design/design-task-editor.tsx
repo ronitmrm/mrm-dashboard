@@ -71,6 +71,13 @@ type ProductOption = {
   uid: string
 }
 
+type DesignOptions = {
+  categories: string[]
+  designers: string[]
+  processes: string[]
+  subcategories: Array<{ category: string; name: string }>
+}
+
 const designSections = [
   { id: "product", label: "Product Details" },
   { id: "controls", label: "Design Controls" },
@@ -117,16 +124,20 @@ function TextField({
 
 function ChoiceField({
   defaultValue,
+  disabled = false,
   label,
   name,
   onChange,
   options,
+  placeholder,
 }: {
   defaultValue: string
+  disabled?: boolean
   label: string
   name: string
   onChange?: (value: string) => void
   options: readonly string[]
+  placeholder?: string
 }) {
   return (
     <Field className="min-w-0">
@@ -136,9 +147,13 @@ function ChoiceField({
           autoComplete="off"
           className="w-full"
           defaultValue={defaultValue}
+          disabled={disabled}
           name={name}
           onChange={(event) => onChange?.(event.currentTarget.value)}
         >
+          {placeholder ? (
+            <NativeSelectOption value="">{placeholder}</NativeSelectOption>
+          ) : null}
           {options.map((option) => (
             <NativeSelectOption key={option} value={option}>
               {option}
@@ -309,11 +324,13 @@ const blankBomLine = (lineNumber: number): BomLine => ({
 })
 
 export function DesignTaskEditor({
+  designOptions,
   editable,
   initial,
   products,
   portfolioDecisionLocked = false,
 }: {
+  designOptions: DesignOptions
   editable: boolean
   initial: EditorInitial
   products: ProductOption[]
@@ -330,6 +347,13 @@ export function DesignTaskEditor({
     initial.fixtureRequired
   )
   const [gaugesRequired, setGaugesRequired] = useState(initial.gaugesRequired)
+  const initialCategory = designOptions.categories.includes(
+    initial.internalPartCategory ?? ""
+  )
+    ? initial.internalPartCategory!
+    : ""
+  const [internalPartCategory, setInternalPartCategory] =
+    useState(initialCategory)
   const [activeSection, setActiveSection] = useState<DesignSection>("product")
   const nextKey = useRef(initial.bomLines.length)
   const [rows, setRows] = useState(() =>
@@ -339,6 +363,14 @@ export function DesignTaskEditor({
   )
   const isNewDesign = portfolioDecision === "New Quoted Part"
   const visibleRows = itemType === "List" ? rows.slice(0, 1) : rows
+  const subcategoryOptions = designOptions.subcategories
+    .filter((option) => option.category === internalPartCategory)
+    .map((option) => option.name)
+  const initialSubcategory = subcategoryOptions.includes(
+    initial.internalPartSubCategory ?? ""
+  )
+    ? initial.internalPartSubCategory!
+    : ""
 
   return (
     <fieldset className="grid gap-8" disabled={!editable}>
@@ -479,10 +511,18 @@ export function DesignTaskEditor({
                 >
                   <h4 className="text-sm font-medium">Product Details</h4>
                   <div className={equalFieldGridClassName}>
-                    <TextField
-                      defaultValue={initial.designerName ?? ""}
+                    <ChoiceField
+                      defaultValue={
+                        designOptions.designers.includes(
+                          initial.designerName ?? ""
+                        )
+                          ? initial.designerName!
+                          : ""
+                      }
                       label="Designer"
                       name="designer_name"
+                      options={designOptions.designers}
+                      placeholder="Select design team member"
                     />
                     <TextField
                       defaultValue={initial.targetCompletionDate ?? ""}
@@ -495,20 +535,39 @@ export function DesignTaskEditor({
                       label="Internal Part Size"
                       name="internal_part_size"
                     />
-                    <TextField
-                      defaultValue={initial.internalPartSubCategory ?? ""}
-                      label="Internal Subcategory"
-                      name="internal_part_sub_category"
-                    />
-                    <TextField
-                      defaultValue={initial.internalPartCategory ?? ""}
+                    <ChoiceField
+                      defaultValue={initialCategory}
                       label="Internal Category"
                       name="internal_part_category"
+                      onChange={setInternalPartCategory}
+                      options={designOptions.categories}
+                      placeholder="Select category"
                     />
-                    <TextField
-                      defaultValue={initial.manufacturingProcess ?? ""}
+                    <ChoiceField
+                      defaultValue={initialSubcategory}
+                      disabled={!internalPartCategory}
+                      key={internalPartCategory || "no-category"}
+                      label="Internal Subcategory"
+                      name="internal_part_sub_category"
+                      options={subcategoryOptions}
+                      placeholder={
+                        internalPartCategory
+                          ? "Select subcategory"
+                          : "Select category first"
+                      }
+                    />
+                    <ChoiceField
+                      defaultValue={
+                        designOptions.processes.includes(
+                          initial.manufacturingProcess ?? ""
+                        )
+                          ? initial.manufacturingProcess!
+                          : ""
+                      }
                       label="Manufacturing Process"
                       name="manufacturing_process"
+                      options={designOptions.processes}
+                      placeholder="Select process"
                     />
                     {itemType === "Package" ? (
                       <TextField
@@ -517,10 +576,13 @@ export function DesignTaskEditor({
                         name="package_process_required"
                       />
                     ) : null}
-                    <TextField
-                      defaultValue={initial.componentsRequired ?? ""}
-                      label="Components Required"
+                    <ChoiceField
+                      defaultValue={
+                        initial.componentsRequired === "Yes" ? "Yes" : "No"
+                      }
+                      label="Components Required?"
                       name="components_required"
+                      options={["No", "Yes"]}
                     />
                   </div>
                 </section>

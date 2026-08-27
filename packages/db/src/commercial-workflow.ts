@@ -3510,6 +3510,97 @@ export function createCommercialWorkflowRepository(
       }))
     },
 
+    async getDesignWorkspaceOptions(organizationCode: string) {
+      const [designers, categories, subcategories, processes] =
+        await Promise.all([
+          pool.query<{ name: string }>(
+            `
+              SELECT DISTINCT btrim(post.employee_name) AS name
+              FROM recruitment.posts post
+              JOIN core.organizations organization
+                ON organization.id = post.organization_id
+              WHERE lower(organization.code) = lower($1)
+                AND nullif(btrim(post.employee_name), '') IS NOT NULL
+                AND (
+                  post.status = 'Occupied'
+                  OR (
+                    post.status = 'Appointed'
+                    AND post.joining_date <= current_date
+                  )
+                  OR (
+                    post.status = 'Resigned'
+                    AND post.last_working_date >= current_date
+                  )
+                )
+                AND (
+                  EXISTS (
+                    SELECT 1
+                    FROM identity.post_role_assignments assignment
+                    JOIN identity.roles role ON role.id = assignment.role_id
+                    WHERE assignment.post_id = post.id
+                      AND role.key = 'design-team'
+                  )
+                  OR EXISTS (
+                    SELECT 1
+                    FROM identity.employee_links employee_link
+                    JOIN identity.user_roles user_role
+                      ON user_role.user_id = employee_link.user_id
+                    JOIN identity.roles role ON role.id = user_role.role_id
+                    WHERE employee_link.organization_id = post.organization_id
+                      AND lower(btrim(employee_link.employee_code)) =
+                        lower(btrim(post.employee_code))
+                      AND role.key = 'design-team'
+                  )
+                )
+              ORDER BY name
+            `,
+            [organizationCode.trim()]
+          ),
+          pool.query<{ name: string }>(
+            `
+              SELECT category.name
+              FROM catalog.item_categories category
+              JOIN core.organizations organization
+                ON organization.id = category.organization_id
+              WHERE lower(organization.code) = lower($1)
+              ORDER BY lower(category.name)
+            `,
+            [organizationCode.trim()]
+          ),
+          pool.query<{ category: string; name: string }>(
+            `
+              SELECT category.name AS category, subcategory.name
+              FROM catalog.item_subcategories subcategory
+              JOIN catalog.item_categories category
+                ON category.id = subcategory.category_id
+              JOIN core.organizations organization
+                ON organization.id = subcategory.organization_id
+              WHERE lower(organization.code) = lower($1)
+              ORDER BY lower(category.name), lower(subcategory.name)
+            `,
+            [organizationCode.trim()]
+          ),
+          pool.query<{ name: string }>(
+            `
+              SELECT process.name
+              FROM catalog.design_processes process
+              JOIN core.organizations organization
+                ON organization.id = process.organization_id
+              WHERE lower(organization.code) = lower($1)
+              ORDER BY lower(process.name)
+            `,
+            [organizationCode.trim()]
+          ),
+        ])
+
+      return {
+        categories: categories.rows.map((row) => row.name),
+        designers: designers.rows.map((row) => row.name),
+        processes: processes.rows.map((row) => row.name),
+        subcategories: subcategories.rows,
+      }
+    },
+
     async listDesignQueue(organizationCode: string) {
       const items = await pool.query<
         DesignQueueDatabaseRow & {
