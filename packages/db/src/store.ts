@@ -2039,7 +2039,6 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       assetSubcategoryId: string
       assetType: StoreAssetType
       applicableItemCode?: string | null
-      drawingNumber?: string | null
       identificationName: string
       minimumStock?: number
       organizationId: string
@@ -2112,7 +2111,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             input.assetNameId,
             requiredText(input.identificationName, "Identification name"),
             input.applicableItemCode?.trim() || null,
-            input.drawingNumber?.trim() || null,
+            typeCode,
             trackingMode,
             requiredText(input.unit, "Unit"),
             input.minimumStock ?? 0,
@@ -2130,7 +2129,6 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       assetSubcategoryId: string
       assetType: StoreAssetType
       applicableItemCode?: string | null
-      drawingNumber?: string | null
       id: string
       identificationName: string
       minimumStock?: number
@@ -2146,10 +2144,10 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
              asset_name = $4, asset_category_id = $5,
              asset_subcategory_id = $6, asset_name_id = $7,
              identification_name = $8, applicable_item_code = $9,
-             drawing_number = $10, tracking_mode = $11, unit = $12,
-             minimum_stock = $13, updated_by_user_id = $14,
+             drawing_number = type_code, tracking_mode = $10, unit = $11,
+             minimum_stock = $12, updated_by_user_id = $13,
              updated_at = now()
-           WHERE id = $15 AND organization_id = $16
+           WHERE id = $14 AND organization_id = $15
            RETURNING id`,
           [
             assetType === "NON_CONSUMABLE" ? "Non Consumable" : "Consumable",
@@ -2161,7 +2159,6 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             input.assetNameId,
             requiredText(input.identificationName, "Identification name"),
             input.applicableItemCode?.trim() || null,
-            input.drawingNumber?.trim() || null,
             trackingModeForAssetType(assetType),
             requiredText(input.unit, "Unit"),
             input.minimumStock ?? 0,
@@ -2213,7 +2210,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             item.asset_name_id AS "assetNameId",
             item.identification_name AS "identificationName",
             item.applicable_item_code AS "applicableItemCode",
-            item.drawing_number AS "drawingNumber",
+            item.type_code AS "drawingNumber",
             item.tracking_mode AS "trackingMode", item.unit,
             trim_scale(item.minimum_stock)::text AS "minimumStock",
             current_price.supplier_id AS "currentSupplierId",

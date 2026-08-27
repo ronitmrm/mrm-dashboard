@@ -877,10 +877,23 @@ describe("Store requests", () => {
       })
     )
     const items = await store.listItemTypes(organizationId)
+    expect(items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          drawingNumber: first.typeCode,
+          id: first.id,
+        }),
+        expect.objectContaining({
+          drawingNumber: second.typeCode,
+          id: second.id,
+        }),
+      ])
+    )
     const migratedLegacyItem = items.find(
       (item) => item.id === legacyItemTypeId
     )
     expect(migratedLegacyItem?.typeCode).toMatch(/^NC\d{3,}$/)
+    expect(migratedLegacyItem?.drawingNumber).toBe(migratedLegacyItem?.typeCode)
     const migratedLegacyAsset = await pool.query<{
       asset_code: string
       next_asset_number: number

@@ -12,7 +12,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
-import { Field, FieldGroup, FieldLabel } from "@workspace/ui/components/field"
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
 import {
   Dialog,
@@ -57,6 +62,24 @@ import {
   storeMasterOptions,
   type StoreMasterKey,
 } from "@/lib/store-master-selection"
+
+const STORE_UNIT_OPTIONS = [
+  { label: "Number (No.)", value: "No." },
+  { label: "Pair", value: "Pair" },
+  { label: "Set", value: "Set" },
+  { label: "Pack", value: "Pack" },
+  { label: "Box", value: "Box" },
+  { label: "Roll", value: "Roll" },
+  { label: "Gram (g)", value: "g" },
+  { label: "Kilogram (kg)", value: "kg" },
+  { label: "Milliliter (mL)", value: "mL" },
+  { label: "Liter (L)", value: "L" },
+  { label: "Millimeter (mm)", value: "mm" },
+  { label: "Centimeter (cm)", value: "cm" },
+  { label: "Meter (m)", value: "m" },
+  { label: "Square meter (m²)", value: "m²" },
+  { label: "Cubic meter (m³)", value: "m³" },
+] as const
 
 type StoreMasterRow = {
   code?: string
@@ -884,6 +907,12 @@ function StoreItemTypeForm({
   const [categoryId, setCategoryId] = useState(initialCategoryId)
   const [subcategoryId, setSubcategoryId] = useState(initialSubcategoryId)
   const [assetNameId, setAssetNameId] = useState(initialAssetNameId)
+  const selectedUnit = defaults.unit ?? "No."
+  const unitOptions = STORE_UNIT_OPTIONS.some(
+    (option) => option.value === selectedUnit
+  )
+    ? [...STORE_UNIT_OPTIONS]
+    : [{ label: selectedUnit, value: selectedUnit }, ...STORE_UNIT_OPTIONS]
   const subcategories = data.masters.subcategories.filter(
     (row) => row.categoryId === categoryId
   )
@@ -936,12 +965,22 @@ function StoreItemTypeForm({
             readOnly
           />
         ) : null}
-        <TextField
-          defaultValue={defaults.identification_name}
-          label="Identification"
-          name="identification_name"
-          required
-        />
+        <Field>
+          <FieldLabel htmlFor="master-identification_name">
+            Identification
+          </FieldLabel>
+          <Input
+            defaultValue={defaults.identification_name}
+            id="master-identification_name"
+            name="identification_name"
+            placeholder="e.g. Bosch GWS 600, 100 mm"
+            required
+          />
+          <FieldDescription>
+            Enter the make, model, size, grade, or specification that identifies
+            this item.
+          </FieldDescription>
+        </Field>
         {editing ? (
           <input name="asset_type" type="hidden" value={defaults.asset_type} />
         ) : null}
@@ -992,15 +1031,17 @@ function StoreItemTypeForm({
           name="applicable_item_code"
         />
         <TextField
-          defaultValue={defaults.drawing_number}
+          defaultValue={editing ? defaults.type_code : undefined}
           label="Drawing Number"
-          name="drawing_number"
+          name="drawing_number_display"
+          placeholder="Generated with Asset Code"
+          readOnly
         />
-        <TextField
-          defaultValue={defaults.unit ?? "Nos"}
+        <SelectField
+          defaultValue={selectedUnit}
           label="Unit"
           name="unit"
-          required
+          options={unitOptions}
         />
         <TextField
           defaultValue={defaults.minimum_stock ?? "0"}
