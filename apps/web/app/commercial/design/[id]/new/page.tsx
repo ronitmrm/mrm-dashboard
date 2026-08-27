@@ -69,7 +69,7 @@ export default async function NewDesignWorkspacePage({
   const { editable, productOptions, selectedItem } = data
 
   return (
-    <div className="grid gap-6">
+    <div className="flex min-h-[calc(100svh-4rem)] flex-col gap-6">
       <section className="flex flex-wrap items-start justify-between gap-3">
         <div className="grid gap-2">
           <Button asChild className="w-fit" size="sm" variant="ghost">
@@ -144,8 +144,8 @@ export default async function NewDesignWorkspacePage({
         </div>
       </section>
 
-      <Card className="overflow-hidden">
-        <CardContent className="grid gap-6 p-4 lg:p-6">
+      <Card className="flex-1 overflow-hidden">
+        <CardContent className="flex h-full flex-col gap-6 p-4 lg:p-6">
           {!editable ? (
             <p className="rounded-2xl border bg-muted/40 p-3 text-sm">
               This Design task is read-only because its downstream work has
@@ -330,7 +330,7 @@ export default async function NewDesignWorkspacePage({
             </div>
           ) : null}
 
-          <Separator />
+          <Separator className="mt-auto" />
           <div className="grid gap-4 lg:grid-cols-2">
             <form action={requestDesignClarificationAction}>
               <input
