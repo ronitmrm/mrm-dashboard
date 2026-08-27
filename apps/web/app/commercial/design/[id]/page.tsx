@@ -70,9 +70,6 @@ export default async function DesignTaskDetailPage({
     redirect("/commercial/design")
   }
 
-  const portfolioSearch =
-    selectedItem.customerPartCode?.trim() || selectedItem.description
-
   return (
     <div className="grid gap-6">
       <section className="flex flex-wrap items-start justify-between gap-3">
@@ -224,8 +221,8 @@ export default async function DesignTaskDetailPage({
         <CardHeader>
           <CardTitle>Choose Next Step</CardTitle>
           <CardDescription>
-            Search the Current Portfolio in its own page, or proceed to the
-            separate Design form for this part.
+            Review all ordered products and Customer-specific quoted products,
+            or proceed to the separate Design form for this part.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-3">
@@ -233,10 +230,10 @@ export default async function DesignTaskDetailPage({
             <Link
               href={{
                 pathname: "/commercial/products",
-                query: { q: portfolioSearch },
+                query: { customer: selectedItem.customerUid },
               }}
             >
-              Search Product Portfolio
+              Open Product Portfolio
             </Link>
           </Button>
           <form action={startDesignWorkAction}>
