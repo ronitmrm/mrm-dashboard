@@ -12,6 +12,7 @@ import {
   calculateCosting,
   calculatePackageCosting,
   calculateProductProcessCost,
+  isForgingCostApplicable,
   type CostingResult,
 } from "./pricing-calculation"
 
@@ -551,10 +552,9 @@ function calculateProductQuote(product: ProductRow, inputs: QuoteInputs) {
   const storedCost = storedProductCost(product)
   const alloyPremium = asNumber(product.alloy_premium)
   const extrusionCost = asNumber(product.extrusion_cost)
-  const forgingCost =
-    product.production_type?.toLowerCase() === "barstock"
-      ? 0
-      : asNumber(product.forging_cost)
+  const forgingCost = !isForgingCostApplicable(product.production_type)
+    ? 0
+    : asNumber(product.forging_cost)
 
   if (storedCost > 0) {
     const rejectionCost = storedCost * asNumber(product.rejection_percent)
@@ -2354,8 +2354,7 @@ export function createCommercialCostingRepository(
               asNumber(product.extrusion_cost)
             ))
         const forgingCost =
-          isDirectPurchase ||
-          product.production_type?.toLowerCase() === "barstock"
+          isDirectPurchase || !isForgingCostApplicable(product.production_type)
             ? 0
             : (input.forgingCost ?? asNumber(product.forging_cost))
         const updated = await client.query<ProductRow>(

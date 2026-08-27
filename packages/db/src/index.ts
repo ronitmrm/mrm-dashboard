@@ -167,6 +167,7 @@ export {
 } from "./postgres-runtime"
 export {
   calculateCosting,
+  isForgingCostApplicable,
   type CostingResult,
   type ProductCostingInput,
   type QuoteCostingInput,

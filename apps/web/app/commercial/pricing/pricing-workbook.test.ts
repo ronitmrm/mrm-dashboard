@@ -69,6 +69,7 @@ describe("Pricing spreadsheet workbook", () => {
     expect(view["Rate / PCS In Currency"]).toBe("1.2500")
     expect(view["Direct (INR/kg)"]).toBe("-")
     expect(view["Direct (INR/pc)"]).toBe("-")
+    expect(view["Conversion Cost"]).toBe("80.00")
     expect(view.Size).toBe("1/2 inch")
     expect(view["MRMPL Product Description"]).toBe("Purchased valve")
     expect(pricingWorkbookFilename).toBe("pricing-view.xlsx")
@@ -116,10 +117,31 @@ describe("Pricing spreadsheet workbook", () => {
     }
 
     expect(
-      toPricingViewRow(barstockRow)[
+      toPricingViewRow(barstockRow)["Forg Cost+ Nitric Blasting (INR/kg)"]
+    ).toBe("-")
+  })
+
+  test("shows forging only for Casting and Forging products", () => {
+    const forgingFor = (productionType: string) => {
+      const productionRow: PricingRegisterRow = {
+        ...row,
+        product: {
+          ...row.product,
+          forgingCost: 12,
+          productionType,
+        },
+      }
+
+      return toPricingViewRow(productionRow)[
         "Forg Cost+ Nitric Blasting (INR/kg)"
       ]
-    ).toBe("-")
+    }
+
+    expect(forgingFor("Casting")).toBe("12.00")
+    expect(forgingFor("Forging")).toBe("12.00")
+    for (const productionType of ["Barstock", "Moulded", "Package"]) {
+      expect(forgingFor(productionType)).toBe("-")
+    }
   })
   test("identifies incomplete prices and defaults their USD terms", () => {
     const incompleteRow: PricingRegisterRow = {
@@ -132,7 +154,7 @@ describe("Pricing spreadsheet workbook", () => {
 
     expect(toPricingViewRow(incompleteRow)).toMatchObject({
       Currency: "USD",
-      "Conversion Cost": "95.00",
+      "Conversion Cost": "-",
       "Missing Pricing Values": "Customer Part Code; Production Type; Rod Size",
       "Pricing Completeness": "Missing Values",
     })

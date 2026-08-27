@@ -8,7 +8,10 @@ import {
   withTransaction as transaction,
   type RepositoryPoolOptions,
 } from "./postgres-runtime"
-import { calculateCosting } from "./pricing-calculation"
+import {
+  calculateCosting,
+  isForgingCostApplicable,
+} from "./pricing-calculation"
 
 type QuoteRow = {
   alloy_premium: string
@@ -747,10 +750,9 @@ function revisedCalculation(
             assembledPartInr,
             conversionRate,
             extCost: asNumber(product.extrusion_cost),
-            forgingCost:
-              product.production_type?.toLowerCase() === "barstock"
-                ? 0
-                : asNumber(product.forging_cost),
+            forgingCost: !isForgingCostApplicable(product.production_type)
+              ? 0
+              : asNumber(product.forging_cost),
             packingCost: overrideNumber(
               override,
               "packing_cost",

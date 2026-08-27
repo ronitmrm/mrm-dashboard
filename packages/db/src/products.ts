@@ -9,6 +9,7 @@ import {
   selectorSearchTerm,
 } from "./commercial-bounds"
 import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
+import { isForgingCostApplicable } from "./pricing-calculation"
 import { items } from "./schema/products"
 import { organizations } from "./schema/organizations"
 
@@ -87,8 +88,7 @@ export function createProductRepository(options: RepositoryPoolOptions) {
       const machiningPricePerPiece =
         piecesPerKg > 0 ? machiningCost / piecesPerKg : 0
       const isPackage = input.itemType === "Package"
-      const isBarstock =
-        input.productionType?.trim().toLowerCase() === "barstock"
+      const hasForgingCost = isForgingCostApplicable(input.productionType)
 
       const [created] = await database
         .insert(items)
@@ -110,7 +110,7 @@ export function createProductRepository(options: RepositoryPoolOptions) {
             input.directPurchasePricePerPiece
           ),
           extrusionCost: decimal(input.extrusionCost),
-          forgingCost: decimal(isBarstock ? 0 : input.forgingCost),
+          forgingCost: decimal(hasForgingCost ? input.forgingCost : 0),
           itemType: input.itemType ?? "List",
           lifecycleStatus: input.lifecycleStatus ?? "P",
           machineTypeId: input.machineTypeId ?? null,
