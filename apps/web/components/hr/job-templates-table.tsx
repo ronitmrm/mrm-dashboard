@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useState } from "react"
 
 import type {
   RecruitmentCombinedRoleRow,
@@ -45,6 +45,7 @@ import {
   TableHeader,
   TableRow,
 } from "@workspace/ui/components/table"
+import { useExcelTable } from "@workspace/ui/hooks/use-excel-table"
 import { Textarea } from "@workspace/ui/components/textarea"
 import { Trash2 } from "lucide-react"
 
@@ -52,11 +53,7 @@ import {
   deleteRecruitmentMasterAction,
   saveTemplateAction,
 } from "@/app/hr/actions"
-import {
-  ExcelColumnFilter,
-  matchesColumnFilter,
-  uniqueFilterOptions,
-} from "@workspace/ui/components/excel-column-filter"
+import { ExcelColumnFilter } from "@workspace/ui/components/excel-column-filter"
 import { TemplateScopeFields } from "@/components/hr/template-scope-fields"
 
 type FilterKey =
@@ -66,15 +63,6 @@ type FilterKey =
   | "education"
   | "experience"
   | "name"
-
-const emptyFilters: Record<FilterKey, string[] | null> = {
-  code: null,
-  department: null,
-  designation: null,
-  education: null,
-  experience: null,
-  name: null,
-}
 
 function JobTemplateEditor({
   combinedRoles,
@@ -215,36 +203,8 @@ export function JobTemplatesTable({
           null)
         : null
     )
-  const [filters, setFilters] = useState({ ...emptyFilters })
   const [deletingTemplate, setDeletingTemplate] =
     useState<RecruitmentTemplateRow | null>(null)
-  const options = useMemo(
-    () => ({
-      code: uniqueFilterOptions(templates.map((row) => row.templateCode)),
-      department: uniqueFilterOptions(
-        templates.map((row) => row.combinedRoleName ?? row.department)
-      ),
-      designation: uniqueFilterOptions(templates.map((row) => row.designation)),
-      education: uniqueFilterOptions(templates.map((row) => row.education)),
-      experience: uniqueFilterOptions(
-        templates.map((row) => row.experienceRequirement)
-      ),
-      name: uniqueFilterOptions(templates.map((row) => row.name)),
-    }),
-    [templates]
-  )
-  const visibleTemplates = templates.filter(
-    (row) =>
-      matchesColumnFilter(row.templateCode, filters.code) &&
-      matchesColumnFilter(row.name, filters.name) &&
-      matchesColumnFilter(
-        row.combinedRoleName ?? row.department,
-        filters.department
-      ) &&
-      matchesColumnFilter(row.designation, filters.designation) &&
-      matchesColumnFilter(row.education, filters.education) &&
-      matchesColumnFilter(row.experienceRequirement, filters.experience)
-  )
   const filterKeys: Array<{ key: FilterKey; label: string }> = [
     { key: "code", label: "Code" },
     { key: "name", label: "Name" },
@@ -253,6 +213,23 @@ export function JobTemplatesTable({
     { key: "education", label: "Education" },
     { key: "experience", label: "Experience" },
   ]
+  const table = useExcelTable({
+    rows: templates,
+    columns: filterKeys.map(({ key, label }) => ({
+      key,
+      label,
+      values: (row: RecruitmentTemplateRow) => [
+        key === "code"
+          ? row.templateCode
+          : key === "department"
+            ? (row.combinedRoleName ?? row.department)
+            : key === "experience"
+              ? row.experienceRequirement
+              : String(row[key]),
+      ],
+    })),
+  })
+  const visibleTemplates = table.visibleRows
 
   return (
     <Sheet
@@ -269,7 +246,18 @@ export function JobTemplatesTable({
             Profiles
           </CardDescription>
         </CardHeader>
-        <CardContent className="overflow-x-auto">
+        <CardContent className="space-y-2 overflow-x-auto">
+          <div className="flex justify-end">
+            <Button
+              disabled={!table.hasFilters}
+              onClick={table.clearFilters}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              Clear All Filters
+            </Button>
+          </div>
           <Table>
             <TableHeader>
               <TableRow>
@@ -285,14 +273,7 @@ export function JobTemplatesTable({
                   <TableHead key={key}>
                     <ExcelColumnFilter
                       label={label}
-                      onApply={(selected) =>
-                        setFilters((current) => ({
-                          ...current,
-                          [key]: selected,
-                        }))
-                      }
-                      options={options[key]}
-                      selected={filters[key]}
+                      {...table.filterProps(key)}
                     />
                   </TableHead>
                 ))}

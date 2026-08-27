@@ -36,17 +36,14 @@ import {
   TableHeader,
   TableRow,
 } from "@workspace/ui/components/table"
+import { useExcelTable } from "@workspace/ui/hooks/use-excel-table"
 import { Pencil } from "lucide-react"
 import Link from "next/link"
 import { useMemo, useState } from "react"
 
 import { updateCombinedRoleAction } from "@/app/hr/actions"
 import { CombinedPostPicker } from "@/components/hr/combined-post-picker"
-import {
-  ExcelColumnFilter,
-  matchesColumnFilter,
-  uniqueFilterOptions,
-} from "@workspace/ui/components/excel-column-filter"
+import { ExcelColumnFilter } from "@workspace/ui/components/excel-column-filter"
 
 function CombinedStatusBadge({ status }: { status: string }) {
   return (
@@ -77,15 +74,6 @@ export function CombinedRolesTable({
   const [selectedPostIds, setSelectedPostIds] = useState<Set<string>>(
     () => new Set()
   )
-  const [filters, setFilters] = useState<Record<string, string[] | null>>({
-    code: null,
-    name: null,
-    posts: null,
-    primary: null,
-    status: null,
-    templates: null,
-  })
-
   function startEditing(role: RecruitmentCombinedRoleRow) {
     const memberCodes = new Set(role.postCodes)
     const memberPosts = posts.filter((post) => memberCodes.has(post.postCode))
@@ -168,28 +156,6 @@ export function CombinedRolesTable({
       }),
     [combinedRoles, posts, templates]
   )
-  const filterOptions = useMemo(
-    () => ({
-      code: uniqueFilterOptions(roleValues.map((row) => row.code)),
-      name: uniqueFilterOptions(roleValues.map((row) => row.name)),
-      posts: uniqueFilterOptions(roleValues.map((row) => row.posts)),
-      primary: uniqueFilterOptions(roleValues.map((row) => row.primary)),
-      status: uniqueFilterOptions(roleValues.map((row) => row.status)),
-      templates: uniqueFilterOptions(
-        roleValues.map((row) => row.templateLabel)
-      ),
-    }),
-    [roleValues]
-  )
-  const visibleRoles = roleValues.filter(
-    (row) =>
-      matchesColumnFilter(row.code, filters.code ?? null) &&
-      matchesColumnFilter(row.name, filters.name ?? null) &&
-      matchesColumnFilter(row.posts, filters.posts ?? null) &&
-      matchesColumnFilter(row.primary, filters.primary ?? null) &&
-      matchesColumnFilter(row.templateLabel, filters.templates ?? null) &&
-      matchesColumnFilter(row.status, filters.status ?? null)
-  )
   const filterColumns = [
     ["code", "Combined code"],
     ["name", "Name"],
@@ -198,6 +164,17 @@ export function CombinedRolesTable({
     ["templates", "Job templates"],
     ["status", "Status"],
   ] as const
+  const table = useExcelTable({
+    rows: roleValues,
+    columns: filterColumns.map(([key, label]) => ({
+      key,
+      label,
+      values: (row: (typeof roleValues)[number]) => [
+        key === "templates" ? row.templateLabel : String(row[key]),
+      ],
+    })),
+  })
+  const visibleRoles = table.visibleRows
 
   return (
     <Sheet
@@ -214,7 +191,18 @@ export function CombinedRolesTable({
             Active Groups
           </CardDescription>
         </CardHeader>
-        <CardContent className="overflow-x-auto">
+        <CardContent className="space-y-2 overflow-x-auto">
+          <div className="flex justify-end">
+            <Button
+              disabled={!table.hasFilters}
+              onClick={table.clearFilters}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              Clear All Filters
+            </Button>
+          </div>
           <Table>
             <TableHeader>
               <TableRow>
@@ -233,14 +221,7 @@ export function CombinedRolesTable({
                   <TableHead key={key}>
                     <ExcelColumnFilter
                       label={label}
-                      onApply={(selected) =>
-                        setFilters((current) => ({
-                          ...current,
-                          [key]: selected,
-                        }))
-                      }
-                      options={filterOptions[key]}
-                      selected={filters[key] ?? null}
+                      {...table.filterProps(key)}
                     />
                   </TableHead>
                 ))}

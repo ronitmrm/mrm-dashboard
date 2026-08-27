@@ -6540,10 +6540,7 @@ const shopFloorStages: Array<{
 
 type RoleTaskKind = "shopFloor" | "machinist" | "quality"
 
-const roleTaskCopy: Record<
-  RoleTaskKind,
-  { title: string; empty: string }
-> = {
+const roleTaskCopy: Record<RoleTaskKind, { title: string; empty: string }> = {
   shopFloor: {
     title: "Shop Floor Tasks",
     empty: "No raw-material placement tasks are pending.",
@@ -10607,10 +10604,7 @@ function WorkOrderGapRow({
       >
         {displayValue(row.rmStatus)}
       </TableCell>
-      <TableCell
-        className="min-w-44"
-        data-filter-values={JSON.stringify(gaps)}
-      >
+      <TableCell className="min-w-44" data-filter-values={JSON.stringify(gaps)}>
         <div className="flex flex-wrap gap-1.5">
           {gaps.map((gap) => (
             <Badge key={gap} variant="outline">
@@ -11931,12 +11925,7 @@ function MachineMasterPanel({
   const [historyResultFilter, setHistoryResultFilter] = useState("")
   const [selectedReportKey, setSelectedReportKey] = useState("")
   const [isScheduleFormOpen, setIsScheduleFormOpen] = useState(false)
-  const [scheduleCodeFilter, setScheduleCodeFilter] = useState("")
-  const [scheduleTitleFilter, setScheduleTitleFilter] = useState("")
-  const [scheduleChecklistFilter, setScheduleChecklistFilter] = useState("")
-  const [scheduleFrequencyFilter, setScheduleFrequencyFilter] = useState("")
-  const [scheduleFirstDueFilter, setScheduleFirstDueFilter] = useState("")
-  const [scheduleStatusFilter, setScheduleStatusFilter] = useState("")
+  const [visibleScheduleCount, setVisibleScheduleCount] = useState(0)
 
   const selectedMaintenance = maintenanceMasterRows.find(
     (row) =>
@@ -11948,91 +11937,6 @@ function MachineMasterPanel({
   const machineSchedules = selectedMachineNo
     ? maintenanceSchedulesForMachine(scheduleRows, selectedMachineNo)
     : []
-  const scheduleCodeOptions = useMemo(
-    () =>
-      uniqueValues(
-        machineSchedules
-          .map((row) => displayValue(row.maintenanceCode))
-          .filter((value) => value !== "-")
-      ),
-    [machineSchedules]
-  )
-  const scheduleTitleOptions = useMemo(
-    () =>
-      uniqueValues(
-        machineSchedules
-          .map((row) => displayValue(row.maintenanceTitle))
-          .filter((value) => value !== "-")
-      ),
-    [machineSchedules]
-  )
-  const scheduleChecklistOptions = useMemo(
-    () =>
-      uniqueValues(
-        machineSchedules
-          .map((row) => displayValue(row.checklistCode))
-          .filter((value) => value !== "-")
-      ),
-    [machineSchedules]
-  )
-  const scheduleFrequencyOptions = useMemo(
-    () =>
-      uniqueValues(
-        machineSchedules
-          .map((row) => displayValue(row.frequencyDays))
-          .filter((value) => value !== "-")
-      ),
-    [machineSchedules]
-  )
-  const scheduleFirstDueOptions = useMemo(
-    () =>
-      uniqueValues(
-        machineSchedules
-          .map((row) => displayValue(row.firstDueDate))
-          .filter((value) => value !== "-")
-      ),
-    [machineSchedules]
-  )
-  const scheduleStatusOptions = useMemo(
-    () =>
-      uniqueValues(
-        machineSchedules
-          .map((row) => displayValue(row.status || "Active"))
-          .filter((value) => value !== "-")
-      ),
-    [machineSchedules]
-  )
-  const hasScheduleFilters = Boolean(
-    scheduleCodeFilter ||
-    scheduleTitleFilter ||
-    scheduleChecklistFilter ||
-    scheduleFrequencyFilter ||
-    scheduleFirstDueFilter ||
-    scheduleStatusFilter
-  )
-  const filteredMachineSchedules = useMemo(
-    () =>
-      machineSchedules.filter((row) =>
-        maintenanceScheduleMatches(
-          row,
-          scheduleCodeFilter,
-          scheduleTitleFilter,
-          scheduleChecklistFilter,
-          scheduleFrequencyFilter,
-          scheduleFirstDueFilter,
-          scheduleStatusFilter
-        )
-      ),
-    [
-      machineSchedules,
-      scheduleCodeFilter,
-      scheduleTitleFilter,
-      scheduleChecklistFilter,
-      scheduleFrequencyFilter,
-      scheduleFirstDueFilter,
-      scheduleStatusFilter,
-    ]
-  )
   const machineHistory = selectedMachineNo
     ? maintenanceHistoryRowsForMachine(completionRows, selectedMachineNo)
     : []
@@ -12323,28 +12227,11 @@ function MachineMasterPanel({
             <CardTitle>Assigned Maintenance Schedules</CardTitle>
             <CardDescription>
               {machineSchedules.length
-                ? `${formatNumber(filteredMachineSchedules.length)} of ${formatNumber(machineSchedules.length)} schedules shown`
+                ? `${formatNumber(visibleScheduleCount)} of ${formatNumber(machineSchedules.length)} schedules shown`
                 : "No Schedules Assigned Yet"}
             </CardDescription>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {hasScheduleFilters ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  setScheduleCodeFilter("")
-                  setScheduleTitleFilter("")
-                  setScheduleChecklistFilter("")
-                  setScheduleFrequencyFilter("")
-                  setScheduleFirstDueFilter("")
-                  setScheduleStatusFilter("")
-                }}
-              >
-                Clear Filters
-              </Button>
-            ) : null}
             <Button
               type="button"
               size="sm"
@@ -12491,7 +12378,11 @@ function MachineMasterPanel({
           ) : null}
           {machineSchedules.length ? (
             <div className="overflow-auto rounded-lg border">
-              <Table>
+              <Table
+                onFilteredRowCountChange={(visible) =>
+                  setVisibleScheduleCount(visible)
+                }
+              >
                 <TableHeader className="sticky top-0 z-10 bg-background">
                   <TableRow>
                     <TableHead>Code</TableHead>
@@ -12501,60 +12392,10 @@ function MachineMasterPanel({
                     <TableHead>First Due</TableHead>
                     <TableHead>Status</TableHead>
                   </TableRow>
-                  <TableRow className="bg-muted/40">
-                    <TableHead>
-                      <MachineMasterColumnFilter
-                        label="Code"
-                        value={scheduleCodeFilter}
-                        onChange={setScheduleCodeFilter}
-                        options={scheduleCodeOptions}
-                      />
-                    </TableHead>
-                    <TableHead>
-                      <MachineMasterColumnFilter
-                        label="Title"
-                        value={scheduleTitleFilter}
-                        onChange={setScheduleTitleFilter}
-                        options={scheduleTitleOptions}
-                      />
-                    </TableHead>
-                    <TableHead>
-                      <MachineMasterColumnFilter
-                        label="Checklist"
-                        value={scheduleChecklistFilter}
-                        onChange={setScheduleChecklistFilter}
-                        options={scheduleChecklistOptions}
-                      />
-                    </TableHead>
-                    <TableHead>
-                      <MachineMasterColumnFilter
-                        label="Frequency"
-                        value={scheduleFrequencyFilter}
-                        onChange={setScheduleFrequencyFilter}
-                        options={scheduleFrequencyOptions}
-                      />
-                    </TableHead>
-                    <TableHead>
-                      <MachineMasterColumnFilter
-                        label="First Due"
-                        value={scheduleFirstDueFilter}
-                        onChange={setScheduleFirstDueFilter}
-                        options={scheduleFirstDueOptions}
-                      />
-                    </TableHead>
-                    <TableHead>
-                      <MachineMasterColumnFilter
-                        label="Status"
-                        value={scheduleStatusFilter}
-                        onChange={setScheduleStatusFilter}
-                        options={scheduleStatusOptions}
-                      />
-                    </TableHead>
-                  </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredMachineSchedules.length ? (
-                    filteredMachineSchedules.map((row) => (
+                  {machineSchedules.length ? (
+                    machineSchedules.map((row) => (
                       <TableRow key={maintenanceScheduleKey(row)}>
                         <TableCell>
                           {displayValue(row.maintenanceCode)}
@@ -16650,34 +16491,6 @@ function FilterSelect({
   )
 }
 
-function MachineMasterColumnFilter({
-  label,
-  value,
-  onChange,
-  options,
-}: {
-  label: string
-  value: string
-  onChange: (value: string) => void
-  options: string[]
-}) {
-  return (
-    <SearchableSelect
-      aria-label={`Filter ${label}`}
-      className="h-8 w-full min-w-32 rounded-md border bg-background px-2 text-xs font-normal outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-    >
-      <option value="">All</option>
-      {options.map((option) => (
-        <option key={option} value={option}>
-          {option}
-        </option>
-      ))}
-    </SearchableSelect>
-  )
-}
-
 function ExcelStyleFilters({
   filters,
 }: {
@@ -19417,24 +19230,6 @@ function machineProductionUnitLabel(row: DashboardPayload) {
   )
 }
 
-function maintenanceScheduleMatches(
-  row: DashboardPayload,
-  codeFilter: string,
-  titleFilter: string,
-  checklistFilter: string,
-  frequencyFilter: string,
-  firstDueFilter: string,
-  statusFilter: string
-) {
-  return (
-    typedFilterMatches(displayValue(row.maintenanceCode), codeFilter) &&
-    typedFilterMatches(displayValue(row.maintenanceTitle), titleFilter) &&
-    typedFilterMatches(displayValue(row.checklistCode), checklistFilter) &&
-    typedFilterMatches(displayValue(row.frequencyDays), frequencyFilter) &&
-    typedFilterMatches(displayValue(row.firstDueDate), firstDueFilter) &&
-    typedFilterMatches(displayValue(row.status || "Active"), statusFilter)
-  )
-}
 function maintenanceScheduleKey(row: DashboardPayload) {
   return [row.machineNo || row.machine, row.maintenanceCode]
     .map((value) => str(value).toLowerCase())

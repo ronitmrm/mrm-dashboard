@@ -2,19 +2,24 @@
 
 import * as React from "react"
 import { createPortal } from "react-dom"
+import { FilterX } from "lucide-react"
 
+import { Button } from "@workspace/ui/components/button"
 import {
   ExcelColumnFilter,
-  matchesColumnFilter,
   uniqueFilterOptions,
 } from "@workspace/ui/components/excel-column-filter"
 import { cn } from "@workspace/ui/lib/utils"
 import {
+  filterOptionsForTableColumn,
+  filterRowsByTableColumns,
   filtersForTableColumns,
   parsePersistedTableFilters,
   serializeTableFilters,
+  sortRowsByTableColumn,
   type TableColumnFilters,
   type TableFilterColumn,
+  type TableSort,
 } from "@workspace/ui/lib/table-filter-state"
 import {
   isTableSecondaryPlaceholder,
@@ -160,11 +165,14 @@ function Table({
   const previousColumnsRef = React.useRef<TableFilterColumn[]>([])
   const hydratedFilterSchemaRef = React.useRef<string | null>(null)
   const skipNextFilterPersistRef = React.useRef(false)
+  const rowOrderRef = React.useRef(new WeakMap<HTMLTableRowElement, number>())
+  const nextRowOrderRef = React.useRef(0)
   const [columns, setColumns] = React.useState<TableFilterColumn[]>([])
   const [filterHosts, setFilterHosts] = React.useState<
     Record<number, HTMLElement>
   >({})
   const [filters, setFilters] = React.useState<TableColumnFilters>({})
+  const [sort, setSort] = React.useState<TableSort | null>(null)
 
   const refreshTable = React.useCallback(() => {
     const table = tableRef.current
@@ -202,6 +210,9 @@ function Table({
       snapshot.columns,
       filters
     )
+    const schemaChanged = applicableFilters !== filters
+    let applicableSort = schemaChanged ? null : sort
+
     if (filterStorageKey && snapshot.columns.length) {
       const schemaKey = `${filterStorageKey}:${JSON.stringify(
         snapshot.columns.map(({ index, label }) => ({ index, label }))
@@ -219,8 +230,17 @@ function Table({
         hydratedFilterSchemaRef.current = schemaKey
       }
     }
+    if (
+      applicableSort &&
+      !snapshot.columns.some(
+        (column) => column.index === applicableSort?.columnIndex
+      )
+    ) {
+      applicableSort = null
+    }
     previousColumnsRef.current = snapshot.columns
     if (applicableFilters !== filters) setFilters(applicableFilters)
+    if (applicableSort !== sort) setSort(applicableSort)
     setFilterHosts((current) => {
       const currentHosts = Object.values(current)
       const nextHosts = Object.values(nextFilterHosts)
@@ -229,26 +249,68 @@ function Table({
         ? current
         : nextFilterHosts
     })
+
+    const valuesForColumn = (row: HTMLTableRowElement, columnIndex: number) =>
+      cellFilterValues(row.cells.item(columnIndex))
+    const facetedColumns = snapshot.columns.map((column) => ({
+      ...column,
+      options: filterOptionsForTableColumn(
+        snapshot.rows,
+        snapshot.columns,
+        applicableFilters,
+        column.index,
+        valuesForColumn
+      ),
+    }))
     setColumns((current) =>
-      sameColumns(current, snapshot.columns) ? current : snapshot.columns
+      sameColumns(current, facetedColumns) ? current : facetedColumns
     )
 
-    let visibleRows = 0
+    const matchingRows = new Set(
+      filterRowsByTableColumns(
+        snapshot.rows,
+        snapshot.columns,
+        applicableFilters,
+        valuesForColumn
+      )
+    )
     for (const row of snapshot.rows) {
-      row.hidden = snapshot.columns.some((column) => {
-        const selected = applicableFilters[column.index] ?? null
-        const values = cellFilterValues(row.cells.item(column.index))
-        return !values.some((value) => matchesColumnFilter(value, selected))
-      })
-      if (!row.hidden) visibleRows += 1
+      row.hidden = !matchingRows.has(row)
+      if (!rowOrderRef.current.has(row)) {
+        rowOrderRef.current.set(row, nextRowOrderRef.current)
+        nextRowOrderRef.current += 1
+      }
     }
-    onFilteredRowCountChange?.(visibleRows, snapshot.rows.length)
+
+    const rowsInOriginalOrder = [...snapshot.rows].sort(
+      (left, right) =>
+        (rowOrderRef.current.get(left) ?? 0) -
+        (rowOrderRef.current.get(right) ?? 0)
+    )
+    const sortedRows = sortRowsByTableColumn(
+      rowsInOriginalOrder,
+      applicableSort,
+      valuesForColumn
+    )
+    const rowSet = new Set(snapshot.rows)
+    for (const body of Array.from(table.tBodies)) {
+      const currentRows = Array.from(body.rows).filter((row) => rowSet.has(row))
+      const nextRows = sortedRows.filter((row) => row.parentElement === body)
+      if (
+        currentRows.length === nextRows.length &&
+        currentRows.some((row, index) => row !== nextRows[index])
+      ) {
+        body.append(...nextRows)
+      }
+    }
+    onFilteredRowCountChange?.(matchingRows.size, snapshot.rows.length)
   }, [
     excelFilters,
     filterMode,
     filterStorageKey,
     filters,
     onFilteredRowCountChange,
+    sort,
   ])
 
   React.useLayoutEffect(() => {
@@ -318,14 +380,37 @@ function Table({
                     [column.index]: selected,
                   }))
                 }
+                onSort={(direction) =>
+                  setSort({ columnIndex: column.index, direction })
+                }
                 options={column.options}
                 selected={filters[column.index] ?? null}
+                sortDirection={
+                  sort?.columnIndex === column.index
+                    ? sort.direction
+                    : undefined
+                }
               />,
               host,
               String(column.index)
             )
           : null
       })}
+      {columns.length ? (
+        <div className="flex justify-end pb-2">
+          <Button
+            aria-label="Clear all table filters"
+            disabled={!Object.values(filters).some(Array.isArray)}
+            onClick={() => setFilters({})}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            <FilterX data-icon="inline-start" />
+            Clear All Filters
+          </Button>
+        </div>
+      ) : null}
       <div
         data-slot="table-container"
         className={cn(
