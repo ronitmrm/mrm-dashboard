@@ -71,7 +71,14 @@ type ProductOption = {
   uid: string
 }
 
-type DesignSection = "product" | "controls" | "bom" | "files"
+const designSections = [
+  { id: "product", label: "Product Details" },
+  { id: "controls", label: "Design Controls" },
+  { id: "bom", label: "BOM" },
+  { id: "files", label: "Files" },
+] as const
+
+type DesignSection = (typeof designSections)[number]["id"]
 
 const equalFieldGridClassName =
   "grid gap-x-4 gap-y-5 md:grid-cols-2 xl:grid-cols-4"
@@ -332,36 +339,82 @@ export function DesignTaskEditor({
   )
   const isNewDesign = portfolioDecision === "New Quoted Part"
   const visibleRows = itemType === "List" ? rows.slice(0, 1) : rows
+  const activeSectionIndex = designSections.findIndex(
+    (section) => section.id === activeSection
+  )
+  const activeSectionLabel =
+    designSections[activeSectionIndex]?.label ?? "Product Details"
 
   return (
     <fieldset className="grid gap-8" disabled={!editable}>
       <input name="design_status" type="hidden" value="Pending Design" />
       <input name="revision_no" type="hidden" value="0" />
       <input name="approval_status" type="hidden" value="Pending" />
+      <section
+        aria-label="Design task progress"
+        className="rounded-xl border bg-background p-4 shadow-sm"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+              Design Task Progress
+            </p>
+            <p className="mt-1 text-sm font-medium">
+              Step {activeSectionIndex + 1} of {designSections.length}
+            </p>
+          </div>
+          <span className="rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary">
+            Working On: {activeSectionLabel}
+          </span>
+        </div>
+        <div aria-hidden="true" className="mt-4 grid grid-cols-4 gap-2">
+          {designSections.map((section, index) => (
+            <span
+              className={
+                index <= activeSectionIndex
+                  ? "h-1.5 rounded-full bg-primary"
+                  : "h-1.5 rounded-full bg-muted"
+              }
+              key={section.id}
+            />
+          ))}
+        </div>
+        <ol className="mt-2 grid grid-cols-4 gap-2 text-center text-xs">
+          {designSections.map((section) => (
+            <li
+              className={
+                section.id === activeSection
+                  ? "font-medium text-primary"
+                  : "text-muted-foreground"
+              }
+              key={section.id}
+            >
+              {section.label}
+            </li>
+          ))}
+        </ol>
+      </section>
+
       <div
         aria-label="Design workspace sections"
         className="grid grid-cols-2 gap-1 rounded-xl border bg-muted/40 p-1 lg:grid-cols-4"
         role="tablist"
       >
-        {[
-          ["product", "Product Details"],
-          ["controls", "Design Controls"],
-          ["bom", "BOM"],
-          ["files", "Files"],
-        ].map(([section, label]) => {
-          const selected = activeSection === section
+        {designSections.map((section) => {
+          const selected = activeSection === section.id
           return (
             <Button
-              aria-controls={`design-panel-${section}`}
+              aria-controls={`design-panel-${section.id}`}
               aria-selected={selected}
               className="h-10 w-full"
-              key={section}
-              onClick={() => setActiveSection(section as DesignSection)}
+              key={section.id}
+              onClick={() => setActiveSection(section.id)}
               role="tab"
+              tabIndex={selected ? 0 : -1}
               type="button"
               variant={selected ? "default" : "ghost"}
             >
-              {label}
+              {section.label}
             </Button>
           )
         })}
