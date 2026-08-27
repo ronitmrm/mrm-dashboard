@@ -216,7 +216,7 @@ export function PricingTable({
                       <TableCell
                         className={`${pricingColumnWidth(header)} overflow-hidden text-ellipsis whitespace-nowrap ${
                           formulaCell
-                            ? "bg-sky-50/80 dark:bg-sky-950/30"
+                            ? "!bg-sky-100 dark:!bg-sky-950/60"
                             : ""
                         }`}
                         key={header}
