@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { ListFilter } from "lucide-react"
+import { ArrowDownAZ, ArrowDownZA, ListFilter } from "lucide-react"
 
 import { Button } from "@workspace/ui/components/button"
 import { Checkbox } from "@workspace/ui/components/checkbox"
@@ -11,41 +11,40 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@workspace/ui/components/popover"
+import {
+  matchesTableColumnFilter,
+  prepareFilterDraftForSearch,
+  uniqueTableFilterOptions,
+  type TableSortDirection,
+} from "@workspace/ui/lib/table-filter-state"
 
-const dashOnly = /^[\s\u2010-\u2015\u2212-]+$/u
-
-function normalizedFilterValue(value: string | null | undefined) {
-  const normalized = value?.trim() ?? ""
-  return !normalized || dashOnly.test(normalized) ? "-" : normalized
-}
-
-export function uniqueFilterOptions(
-  values: Array<string | null | undefined>
-) {
-  return [...new Set(values.map(normalizedFilterValue))].sort(
-    (left, right) => left.localeCompare(right, "en-IN", { numeric: true })
-  )
+export function uniqueFilterOptions(values: Array<string | null | undefined>) {
+  return uniqueTableFilterOptions(values)
 }
 
 export function matchesColumnFilter(
   value: string | null | undefined,
   selected: string[] | null
 ) {
-  return selected === null || selected.includes(normalizedFilterValue(value))
+  return matchesTableColumnFilter(value, selected)
 }
 
 export function ExcelColumnFilter({
   allLabel = "All",
   label,
   onApply,
+  onSort,
   options,
   selected,
+  sortDirection,
 }: {
   allLabel?: string
   label: string
   onApply: (selected: string[] | null) => void
+  onSort?: (direction: TableSortDirection) => void
   options: string[]
   selected: string[] | null
+  sortDirection?: TableSortDirection
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState("")
@@ -97,10 +96,49 @@ export function ExcelColumnFilter({
       </PopoverTrigger>
       <PopoverContent align="start" className="w-64 space-y-3 p-3">
         <p className="text-sm font-medium">Filter {label}</p>
+        {onSort ? (
+          <div className="grid grid-cols-2 gap-1 border-b pb-2">
+            <Button
+              onClick={() => {
+                onSort("asc")
+                setOpen(false)
+              }}
+              size="sm"
+              type="button"
+              variant={sortDirection === "asc" ? "secondary" : "ghost"}
+            >
+              <ArrowDownAZ data-icon="inline-start" />
+              Sort A–Z
+            </Button>
+            <Button
+              onClick={() => {
+                onSort("desc")
+                setOpen(false)
+              }}
+              size="sm"
+              type="button"
+              variant={sortDirection === "desc" ? "secondary" : "ghost"}
+            >
+              <ArrowDownZA data-icon="inline-start" />
+              Sort Z–A
+            </Button>
+          </div>
+        ) : null}
         <Input
           aria-label={`Search ${label} values`}
           className="h-8 text-xs"
-          onChange={(event) => setQuery(event.target.value)}
+          onChange={(event) => {
+            const nextQuery = event.target.value
+            setDraft((current) =>
+              prepareFilterDraftForSearch({
+                draft: current,
+                nextQuery,
+                options,
+                previousQuery: query,
+              })
+            )
+            setQuery(nextQuery)
+          }}
           placeholder="Search Values..."
           value={query}
         />
@@ -158,7 +196,12 @@ export function ExcelColumnFilter({
           </Button>
           <Button
             onClick={() => {
-              onApply(draft.length === options.length ? null : draft)
+              onApply(
+                draft.length === options.length &&
+                  options.every((option) => draft.includes(option))
+                  ? null
+                  : draft
+              )
               setOpen(false)
             }}
             size="sm"

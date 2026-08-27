@@ -19,13 +19,10 @@ import {
   TableHeader,
   TableRow,
 } from "@workspace/ui/components/table"
+import { useExcelTable } from "@workspace/ui/hooks/use-excel-table"
 
 import { assignCandidateAction } from "@/app/hr/actions"
-import {
-  ExcelColumnFilter,
-  matchesColumnFilter,
-  uniqueFilterOptions,
-} from "@workspace/ui/components/excel-column-filter"
+import { ExcelColumnFilter } from "@workspace/ui/components/excel-column-filter"
 
 type CandidateOption = {
   activeApplicationJobIds: string[]
@@ -55,17 +52,6 @@ type FilterKey =
   | "phone"
   | "source"
   | "status"
-
-const emptyFilters: Record<FilterKey, string[] | null> = {
-  company: null,
-  departments: null,
-  email: null,
-  experience: null,
-  name: null,
-  phone: null,
-  source: null,
-  status: null,
-}
 
 function AssignmentSubmitButton({
   disabled,
@@ -105,7 +91,6 @@ export function CandidateAssignmentForm({
         ? (initialJobId ?? "")
         : ""
   )
-  const [filters, setFilters] = useState({ ...emptyFilters })
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<string[]>([])
   const selectedCandidateSet = useMemo(
     () => new Set(selectedCandidateIds),
@@ -126,27 +111,6 @@ export function CandidateAssignmentForm({
       })),
     [candidates]
   )
-  const options = useMemo(
-    () =>
-      Object.fromEntries(
-        (Object.keys(emptyFilters) as FilterKey[]).map((key) => [
-          key,
-          uniqueFilterOptions(candidateValues.map((row) => row[key])),
-        ])
-      ) as Record<FilterKey, string[]>,
-    [candidateValues]
-  )
-  const visibleCandidates = candidateValues.filter((row) =>
-    (Object.keys(emptyFilters) as FilterKey[]).every((key) =>
-      matchesColumnFilter(row[key], filters[key])
-    )
-  )
-  const eligibleVisibleCandidateIds = visibleCandidates
-    .filter(
-      ({ candidate }) =>
-        jobId && !candidate.activeApplicationJobIds.includes(jobId)
-    )
-    .map(({ candidate }) => candidate.id)
   const columns: Array<{ key: FilterKey; label: string }> = [
     { key: "name", label: "Name" },
     { key: "phone", label: "Phone" },
@@ -157,6 +121,21 @@ export function CandidateAssignmentForm({
     { key: "source", label: "Source" },
     { key: "status", label: "Status" },
   ]
+  const table = useExcelTable({
+    rows: candidateValues,
+    columns: columns.map(({ key, label }) => ({
+      key,
+      label,
+      values: (row: (typeof candidateValues)[number]) => [row[key]],
+    })),
+  })
+  const visibleCandidates = table.visibleRows
+  const eligibleVisibleCandidateIds = visibleCandidates
+    .filter(
+      ({ candidate }) =>
+        jobId && !candidate.activeApplicationJobIds.includes(jobId)
+    )
+    .map(({ candidate }) => candidate.id)
 
   function changeJob(nextJobId: string) {
     setJobId(nextJobId)
@@ -166,7 +145,11 @@ export function CandidateAssignmentForm({
   return (
     <form action={assignCandidateAction}>
       {fixedJob || returnJobId ? (
-        <input name="return_job_id" type="hidden" value={fixedJob?.id ?? returnJobId} />
+        <input
+          name="return_job_id"
+          type="hidden"
+          value={fixedJob?.id ?? returnJobId}
+        />
       ) : (
         <input name="panel" type="hidden" value="candidateSearchPanel" />
       )}
@@ -235,6 +218,15 @@ export function CandidateAssignmentForm({
             >
               Clear Selection
             </Button>
+            <Button
+              disabled={!table.hasFilters}
+              onClick={table.clearFilters}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              Clear All Filters
+            </Button>
           </div>
         </div>
 
@@ -253,14 +245,7 @@ export function CandidateAssignmentForm({
                   <TableHead key={key}>
                     <ExcelColumnFilter
                       label={label}
-                      onApply={(selected) =>
-                        setFilters((current) => ({
-                          ...current,
-                          [key]: selected,
-                        }))
-                      }
-                      options={options[key]}
-                      selected={filters[key]}
+                      {...table.filterProps(key)}
                     />
                   </TableHead>
                 ))}

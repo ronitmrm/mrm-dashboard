@@ -33,6 +33,7 @@ import {
   TableHeader,
   TableRow,
 } from "@workspace/ui/components/table"
+import { useExcelTable } from "@workspace/ui/hooks/use-excel-table"
 import { Textarea } from "@workspace/ui/components/textarea"
 import { Pencil, Trash2 } from "lucide-react"
 
@@ -41,11 +42,7 @@ import {
   updateCandidateEventAction,
 } from "@/app/hr/actions"
 import { formatIstDateTime } from "@/lib/date-time"
-import {
-  ExcelColumnFilter,
-  matchesColumnFilter,
-  uniqueFilterOptions,
-} from "@workspace/ui/components/excel-column-filter"
+import { ExcelColumnFilter } from "@workspace/ui/components/excel-column-filter"
 
 type FilterKey =
   | "candidate"
@@ -56,17 +53,6 @@ type FilterKey =
   | "phone"
   | "title"
   | "type"
-
-const emptyFilters: Record<FilterKey, string[] | null> = {
-  candidate: null,
-  date: null,
-  department: null,
-  job: null,
-  notes: null,
-  phone: null,
-  title: null,
-  type: null,
-}
 
 const conversationTypes = [
   "Phone Call",
@@ -105,7 +91,6 @@ export function ConversationLogsTable({
 }) {
   const [editingEvent, setEditingEvent] =
     useState<RecruitmentCandidateEventRow | null>(null)
-  const [filters, setFilters] = useState({ ...emptyFilters })
   const rows = useMemo(
     () =>
       events.map((event) => ({
@@ -121,22 +106,6 @@ export function ConversationLogsTable({
       })),
     [events]
   )
-  const options = useMemo(
-    () =>
-      Object.fromEntries(
-        (Object.keys(emptyFilters) as FilterKey[]).map((key) => [
-          key,
-          uniqueFilterOptions(rows.map((row) => row[key])),
-        ])
-      ) as Record<FilterKey, string[]>,
-    [rows]
-  )
-  const activeKeys = (Object.keys(emptyFilters) as FilterKey[]).filter(
-    (key) => showCandidate || (key !== "candidate" && key !== "phone")
-  )
-  const visibleRows = rows.filter((row) =>
-    activeKeys.every((key) => matchesColumnFilter(row[key], filters[key]))
-  )
   const columns = [
     ...(showCandidate
       ? [
@@ -151,6 +120,15 @@ export function ConversationLogsTable({
     ["job", "Job"],
     ["date", "Date and time"],
   ] as Array<[FilterKey, string]>
+  const table = useExcelTable({
+    rows,
+    columns: columns.map(([key, label]) => ({
+      key,
+      label,
+      values: (row: (typeof rows)[number]) => [row[key]],
+    })),
+  })
+  const visibleRows = table.visibleRows
   const columnCount = columns.length + (canWrite ? 1 : 0)
 
   return (
@@ -167,7 +145,18 @@ export function ConversationLogsTable({
             Showing {visibleRows.length} Of {events.length} Timestamped Logs
           </CardDescription>
         </CardHeader>
-        <CardContent className="overflow-x-auto">
+        <CardContent className="space-y-2 overflow-x-auto">
+          <div className="flex justify-end">
+            <Button
+              disabled={!table.hasFilters}
+              onClick={table.clearFilters}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              Clear All Filters
+            </Button>
+          </div>
           <Table>
             <TableHeader>
               <TableRow>
@@ -183,14 +172,7 @@ export function ConversationLogsTable({
                   <TableHead key={key}>
                     <ExcelColumnFilter
                       label={label}
-                      onApply={(selected) =>
-                        setFilters((current) => ({
-                          ...current,
-                          [key]: selected,
-                        }))
-                      }
-                      options={options[key]}
-                      selected={filters[key]}
+                      {...table.filterProps(key)}
                     />
                   </TableHead>
                 ))}

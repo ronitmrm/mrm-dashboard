@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useState } from "react"
 
 import type { RecruitmentMasterSnapshot } from "@workspace/db"
 import { Button } from "@workspace/ui/components/button"
@@ -33,18 +33,15 @@ import {
   TableHeader,
   TableRow,
 } from "@workspace/ui/components/table"
-import { Pencil, Trash2 } from "lucide-react"
+import { useExcelTable } from "@workspace/ui/hooks/use-excel-table"
+import { FilterX, Pencil, Trash2 } from "lucide-react"
 
 import {
   deleteRecruitmentMasterAction,
   renameRecruitmentMasterAction,
 } from "@/app/hr/actions"
 
-import {
-  ExcelColumnFilter,
-  matchesColumnFilter,
-  uniqueFilterOptions,
-} from "@workspace/ui/components/excel-column-filter"
+import { ExcelColumnFilter } from "@workspace/ui/components/excel-column-filter"
 
 function MasterTable({
   canWrite,
@@ -59,8 +56,6 @@ function MasterTable({
   rows: RecruitmentMasterSnapshot["departments"]
   title: string
 }) {
-  const [codeFilter, setCodeFilter] = useState<string[] | null>(null)
-  const [nameFilter, setNameFilter] = useState<string[] | null>(null)
   const [editingRow, setEditingRow] = useState<(typeof rows)[number] | null>(
     null
   )
@@ -68,18 +63,22 @@ function MasterTable({
     null
   )
   const canEdit = canWrite
-  const options = useMemo(
-    () => ({
-      codes: uniqueFilterOptions(rows.map((row) => row.code)),
-      names: uniqueFilterOptions(rows.map((row) => row.name)),
-    }),
-    [rows]
-  )
-  const visibleRows = rows.filter(
-    (row) =>
-      matchesColumnFilter(row.code, codeFilter) &&
-      matchesColumnFilter(row.name, nameFilter)
-  )
+  const table = useExcelTable({
+    rows,
+    columns: [
+      {
+        key: "code",
+        label: `${title} code`,
+        values: (row) => [row.code],
+      },
+      {
+        key: "name",
+        label: `${title} name`,
+        values: (row) => [row.name],
+      },
+    ],
+  })
+  const visibleRows = table.visibleRows
 
   return (
     <>
@@ -90,7 +89,19 @@ function MasterTable({
             Showing {visibleRows.length} Of {rows.length} Active Records
           </CardDescription>
         </CardHeader>
-        <CardContent className="overflow-x-auto">
+        <CardContent className="space-y-2 overflow-x-auto">
+          <div className="flex justify-end">
+            <Button
+              disabled={!table.hasFilters}
+              onClick={table.clearFilters}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              <FilterX data-icon="inline-start" />
+              Clear All Filters
+            </Button>
+          </div>
           <Table>
             <TableHeader>
               <TableRow>
@@ -104,17 +115,13 @@ function MasterTable({
                 <TableHead>
                   <ExcelColumnFilter
                     label={`${title} code`}
-                    onApply={setCodeFilter}
-                    options={options.codes}
-                    selected={codeFilter}
+                    {...table.filterProps("code")}
                   />
                 </TableHead>
                 <TableHead>
                   <ExcelColumnFilter
                     label={`${title} name`}
-                    onApply={setNameFilter}
-                    options={options.names}
-                    selected={nameFilter}
+                    {...table.filterProps("name")}
                   />
                 </TableHead>
                 {canEdit ? <TableHead /> : null}

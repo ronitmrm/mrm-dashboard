@@ -19,11 +19,6 @@ import {
 import { Field, FieldLabel } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@workspace/ui/components/popover"
-import {
   NativeSelect,
   NativeSelectOption,
 } from "@workspace/ui/components/native-select"
@@ -43,15 +38,16 @@ import {
   TableHeader,
   TableRow,
 } from "@workspace/ui/components/table"
+import { ExcelColumnFilter } from "@workspace/ui/components/excel-column-filter"
+import { useExcelTable } from "@workspace/ui/hooks/use-excel-table"
 import {
   BriefcaseBusiness,
   FilterX,
-  ListFilter,
   Pencil,
   Trash2,
   UserRoundCog,
 } from "lucide-react"
-import { useMemo, useState } from "react"
+import { useState } from "react"
 
 import {
   assignEmployeeAction,
@@ -59,196 +55,13 @@ import {
   deletePostAction,
   updatePostAction,
 } from "@/app/hr/actions"
-import {
-  APPROVED_POST_FILTER_COLUMNS,
-  type ApprovedPostFilterKey,
-} from "@/components/hr/approved-post-filter-columns"
+import { APPROVED_POST_FILTER_COLUMNS } from "@/components/hr/approved-post-filter-columns"
 import { SingleEmployeeAssignmentFields } from "@/components/hr/single-employee-assignment-fields"
 
 type TemplateOption = Pick<
   RecruitmentTemplateRow,
   "id" | "name" | "templateCode"
 >
-
-type ApprovedPostFilters = Record<ApprovedPostFilterKey, string[] | null>
-
-const EMPTY_FILTERS: ApprovedPostFilters = {
-  postCode: null,
-  vacancyCode: null,
-  department: null,
-  designation: null,
-  template: null,
-  employeeName: null,
-  employeeCode: null,
-  joiningDate: null,
-  lastWorkingDate: null,
-  status: null,
-}
-
-function uniqueOptions(values: string[]) {
-  return Array.from(new Set(values)).sort((left, right) =>
-    left.localeCompare(right, undefined, { numeric: true })
-  )
-}
-
-function matchesFilter(value: string, filter: string[] | null) {
-  return filter === null || filter.includes(value)
-}
-
-function ApprovedPostColumnFilter({
-  filterKey,
-  label,
-  onApply,
-  options,
-  selected,
-}: {
-  filterKey: ApprovedPostFilterKey
-  label: string
-  onApply: (value: string[] | null) => void
-  options: string[]
-  selected: string[] | null
-}) {
-  const [open, setOpen] = useState(false)
-  const [query, setQuery] = useState("")
-  const [draftSelected, setDraftSelected] = useState<string[]>(
-    () => selected ?? options
-  )
-  const visibleOptions = options.filter((option) =>
-    option.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())
-  )
-  const allVisibleSelected =
-    visibleOptions.length > 0 &&
-    visibleOptions.every((option) => draftSelected.includes(option))
-  const someVisibleSelected = visibleOptions.some((option) =>
-    draftSelected.includes(option)
-  )
-  const active = selected !== null
-  const titleId = `approved-post-${filterKey}-filter-title`
-
-  function changeOpen(nextOpen: boolean) {
-    if (nextOpen) {
-      setDraftSelected(selected ?? options)
-      setQuery("")
-    }
-    setOpen(nextOpen)
-  }
-
-  function toggleOption(option: string, checked: boolean) {
-    setDraftSelected((current) =>
-      checked
-        ? current.includes(option)
-          ? current
-          : [...current, option]
-        : current.filter((value) => value !== option)
-    )
-  }
-
-  function toggleVisibleOptions(checked: boolean) {
-    setDraftSelected((current) => {
-      const visible = new Set(visibleOptions)
-      return checked
-        ? Array.from(new Set([...current, ...visibleOptions]))
-        : current.filter((value) => !visible.has(value))
-    })
-  }
-
-  return (
-    <Popover onOpenChange={changeOpen} open={open}>
-      <PopoverTrigger asChild>
-        <Button
-          aria-label={`Filter ${label}`}
-          className="h-8 min-w-24 justify-between gap-2 px-2 text-xs font-normal"
-          size="sm"
-          type="button"
-          variant={active ? "default" : "outline"}
-        >
-          <span>{active ? `${selected.length} selected` : "All"}</span>
-          <ListFilter className="size-3.5" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent
-        align="start"
-        aria-labelledby={titleId}
-        className="max-h-[var(--radix-popover-content-available-height)] w-64 gap-3 overflow-hidden rounded-xl p-3"
-      >
-        <p className="font-medium" id={titleId}>
-          Filter {label}
-        </p>
-        <Input
-          aria-label={`Search ${label} values`}
-          className="h-8 text-xs"
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search Values..."
-          value={query}
-        />
-        <label className="flex cursor-pointer items-center gap-2 rounded-md border-b px-1 pb-2 text-xs font-medium">
-          <Checkbox
-            checked={
-              allVisibleSelected
-                ? true
-                : someVisibleSelected
-                  ? "indeterminate"
-                  : false
-            }
-            onCheckedChange={(checked) =>
-              toggleVisibleOptions(checked === true)
-            }
-          />
-          Select All{query ? " Matching" : ""}
-        </label>
-        <div className="min-h-20 flex-1 space-y-1 overflow-y-auto pr-1">
-          {visibleOptions.length ? (
-            visibleOptions.map((option) => (
-              <label
-                className="flex cursor-pointer items-center gap-2 rounded-md px-1 py-1.5 text-xs hover:bg-muted"
-                key={option}
-              >
-                <Checkbox
-                  checked={draftSelected.includes(option)}
-                  onCheckedChange={(checked) =>
-                    toggleOption(option, checked === true)
-                  }
-                />
-                <span className="min-w-0 truncate" title={option}>
-                  {option}
-                </span>
-              </label>
-            ))
-          ) : (
-            <p className="py-4 text-center text-xs text-muted-foreground">
-              No Values Found.
-            </p>
-          )}
-        </div>
-        <div className="flex items-center justify-between gap-2 border-t pt-2">
-          <Button
-            onClick={() => {
-              onApply(null)
-              setOpen(false)
-            }}
-            size="sm"
-            type="button"
-            variant="ghost"
-          >
-            Clear Filter
-          </Button>
-          <Button
-            onClick={() => {
-              onApply(
-                draftSelected.length === options.length ? null : draftSelected
-              )
-              setOpen(false)
-            }}
-            size="sm"
-            type="button"
-          >
-            Apply
-          </Button>
-        </div>
-      </PopoverContent>
-    </Popover>
-  )
-}
 
 function PostStatusBadge({ status }: { status: string }) {
   const variant =
@@ -285,9 +98,6 @@ export function ApprovedPostsTable({
   const [selectedEmployeePost, setSelectedEmployeePost] =
     useState<RecruitmentPostRow | null>(null)
   const [employeeEditorOpen, setEmployeeEditorOpen] = useState(false)
-  const [filters, setFilters] = useState<ApprovedPostFilters>(() => ({
-    ...EMPTY_FILTERS,
-  }))
   const openJobPostCodes = new Set(
     jobs
       .filter((job) => job.status === "Open" && job.postCode)
@@ -295,68 +105,26 @@ export function ApprovedPostsTable({
   )
   const showActions = canWrite || employeeManagement
   const columnCount = 10 + (employeeManagement ? 1 : 0) + (showActions ? 1 : 0)
-  const hasFilters = Object.values(filters).some((filter) => filter !== null)
-  const filterOptions = useMemo(
-    () => ({
-      postCode: uniqueOptions(posts.map((row) => row.postCode)),
-      vacancyCode: uniqueOptions(posts.map((row) => row.vacancyCode)),
-      department: uniqueOptions(posts.map((row) => row.department)),
-      designation: uniqueOptions(posts.map((row) => row.designation)),
-      template: uniqueOptions(
-        posts.map((row) => row.requirementTemplateCode ?? "No template")
-      ),
-      employeeName: uniqueOptions(
-        posts.map((row) => row.employeeName ?? "Unassigned")
-      ),
-      employeeCode: uniqueOptions(
-        posts.map((row) => row.employeeCode ?? "Unassigned")
-      ),
-      joiningDate: uniqueOptions(
-        posts.map((row) => row.joiningDate ?? "Not appointed")
-      ),
-      lastWorkingDate: uniqueOptions(
-        posts.map((row) => row.lastWorkingDate ?? "Not applicable")
-      ),
-      status: uniqueOptions(posts.map((row) => row.status)),
-    }),
-    [posts]
-  )
-  const filteredPosts = useMemo(
-    () =>
-      posts.filter(
-        (row) =>
-          matchesFilter(row.postCode, filters.postCode) &&
-          matchesFilter(row.vacancyCode, filters.vacancyCode) &&
-          matchesFilter(row.department, filters.department) &&
-          matchesFilter(row.designation, filters.designation) &&
-          matchesFilter(
-            row.requirementTemplateCode ?? "No template",
-            filters.template
-          ) &&
-          matchesFilter(
-            row.employeeName ?? "Unassigned",
-            filters.employeeName
-          ) &&
-          matchesFilter(
-            row.employeeCode ?? "Unassigned",
-            filters.employeeCode
-          ) &&
-          matchesFilter(
-            row.joiningDate ?? "Not appointed",
-            filters.joiningDate
-          ) &&
-          matchesFilter(
-            row.lastWorkingDate ?? "Not applicable",
-            filters.lastWorkingDate
-          ) &&
-          matchesFilter(row.status, filters.status)
-      ),
-    [filters, posts]
-  )
-
-  function updateFilter(key: ApprovedPostFilterKey, value: string[] | null) {
-    setFilters((current) => ({ ...current, [key]: value }))
-  }
+  const table = useExcelTable({
+    rows: posts,
+    columns: APPROVED_POST_FILTER_COLUMNS.map(({ key, label }) => ({
+      key,
+      label,
+      values: (row: RecruitmentPostRow) => [
+        key === "template"
+          ? (row.requirementTemplateCode ?? "No template")
+          : key === "employeeName" || key === "employeeCode"
+            ? (row[key] ?? "Unassigned")
+            : key === "joiningDate"
+              ? (row.joiningDate ?? "Not appointed")
+              : key === "lastWorkingDate"
+                ? (row.lastWorkingDate ?? "Not applicable")
+                : String(row[key]),
+      ],
+    })),
+  })
+  const hasFilters = table.hasFilters
+  const filteredPosts = table.visibleRows
 
   return (
     <>
@@ -393,17 +161,16 @@ export function ApprovedPostsTable({
                     Update Selected Employee
                   </Button>
                 ) : null}
-                {hasFilters ? (
-                  <Button
-                    onClick={() => setFilters({ ...EMPTY_FILTERS })}
-                    size="sm"
-                    type="button"
-                    variant="outline"
-                  >
-                    <FilterX data-icon="inline-start" />
-                    Clear Filters
-                  </Button>
-                ) : null}
+                <Button
+                  disabled={!hasFilters}
+                  onClick={table.clearFilters}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  <FilterX data-icon="inline-start" />
+                  Clear All Filters
+                </Button>
               </div>
             </div>
             <div className="overflow-x-auto rounded-lg border">
@@ -429,12 +196,9 @@ export function ApprovedPostsTable({
                     {employeeManagement ? <TableHead /> : null}
                     {APPROVED_POST_FILTER_COLUMNS.map((column) => (
                       <TableHead key={column.key}>
-                        <ApprovedPostColumnFilter
-                          filterKey={column.key}
+                        <ExcelColumnFilter
                           label={column.label}
-                          onApply={(value) => updateFilter(column.key, value)}
-                          options={filterOptions[column.key]}
-                          selected={filters[column.key]}
+                          {...table.filterProps(column.key)}
                         />
                       </TableHead>
                     ))}

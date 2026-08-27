@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { FilterX } from "lucide-react"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import { ExcelColumnFilter } from "@workspace/ui/components/excel-column-filter"
@@ -16,6 +17,7 @@ import {
   parsePersistedTableFilters,
   serializeTableFilters,
   type TableColumnFilters,
+  type TableSort,
 } from "@workspace/ui/lib/table-filter-state"
 import Link from "next/link"
 
@@ -25,9 +27,11 @@ import {
   pricingHeaders,
 } from "./pricing-workbook"
 import {
+  facetedPricingFilterColumns,
   filterPricingTableRows,
   pricingFilterColumns,
   pricingPageSize,
+  sortPricingTableRows,
   type PricingTableRow,
 } from "./pricing-table-state"
 
@@ -81,7 +85,13 @@ export function PricingTable({
   )
   const [filters, setFilters] = useState<TableColumnFilters>({})
   const [filtersHydrated, setFiltersHydrated] = useState(false)
+  const [sort, setSort] = useState<TableSort | null>(null)
   const [pageIndex, setPageIndex] = useState(0)
+
+  const facetedColumns = useMemo(
+    () => facetedPricingFilterColumns(rows, columns, filters),
+    [columns, filters, rows]
+  )
 
   useEffect(() => {
     const hydrationTimer = window.setTimeout(() => {
@@ -115,8 +125,13 @@ export function PricingTable({
   }, [columns, filterStorageKey, filters, filtersHydrated])
 
   const filteredRows = useMemo(
-    () => filterPricingTableRows(rows, columns, filters),
-    [columns, filters, rows]
+    () =>
+      sortPricingTableRows(
+        filterPricingTableRows(rows, columns, filters),
+        columns,
+        sort
+      ),
+    [columns, filters, rows, sort]
   )
   const pageCount = Math.max(
     1,
@@ -140,6 +155,20 @@ export function PricingTable({
           Formula-derived cells
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            aria-label="Clear all pricing table filters"
+            disabled={!Object.values(filters).some(Array.isArray)}
+            onClick={() => {
+              setFilters({})
+              setPageIndex(0)
+            }}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            <FilterX data-icon="inline-start" />
+            Clear All Filters
+          </Button>
           <Button
             disabled={currentPage === 0}
             onClick={() => setPageIndex((value) => Math.max(0, value - 1))}
@@ -173,7 +202,7 @@ export function PricingTable({
         >
           <TableHeader className="sticky top-0 z-10 bg-background">
             <TableRow>
-              {columns.map((column) => (
+              {facetedColumns.map((column) => (
                 <TableHead
                   className={`${pricingColumnWidth(column.label)} overflow-hidden whitespace-nowrap ${
                     isPricingFormulaHeader(column.label)
@@ -194,8 +223,20 @@ export function PricingTable({
                         }))
                         setPageIndex(0)
                       }}
+                      onSort={(direction) => {
+                        setSort({
+                          columnIndex: column.index,
+                          direction,
+                        })
+                        setPageIndex(0)
+                      }}
                       options={column.options}
                       selected={filters[column.index] ?? null}
+                      sortDirection={
+                        sort?.columnIndex === column.index
+                          ? sort.direction
+                          : undefined
+                      }
                     />
                   </div>
                 </TableHead>
@@ -215,9 +256,7 @@ export function PricingTable({
                     return (
                       <TableCell
                         className={`${pricingColumnWidth(header)} overflow-hidden text-ellipsis whitespace-nowrap ${
-                          formulaCell
-                            ? "!bg-sky-100 dark:!bg-sky-950/60"
-                            : ""
+                          formulaCell ? "!bg-sky-100 dark:!bg-sky-950/60" : ""
                         }`}
                         key={header}
                         title={cell === "" ? undefined : String(cell)}

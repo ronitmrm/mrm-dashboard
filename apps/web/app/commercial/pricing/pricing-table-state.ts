@@ -1,10 +1,11 @@
+import { uniqueFilterOptions } from "@workspace/ui/components/excel-column-filter"
 import {
-  matchesColumnFilter,
-  uniqueFilterOptions,
-} from "@workspace/ui/components/excel-column-filter"
-import type {
+  filterOptionsForTableColumn,
+  filterRowsByTableColumns,
+  sortRowsByTableColumn,
   TableColumnFilters,
   TableFilterColumn,
+  type TableSort,
 } from "@workspace/ui/lib/table-filter-state"
 
 export type PricingTableRow = {
@@ -32,20 +33,48 @@ export function pricingFilterColumns(
   }))
 }
 
+function pricingValuesForColumn(
+  columns: TableFilterColumn[],
+  row: PricingTableRow,
+  columnIndex: number
+) {
+  const column = columns.find((candidate) => candidate.index === columnIndex)
+  return [filterValue(column ? row.values[column.label] : undefined)]
+}
+
+export function facetedPricingFilterColumns(
+  rows: PricingTableRow[],
+  columns: TableFilterColumn[],
+  filters: TableColumnFilters
+) {
+  return columns.map((column) => ({
+    ...column,
+    options: filterOptionsForTableColumn(
+      rows,
+      columns,
+      filters,
+      column.index,
+      (row, columnIndex) => pricingValuesForColumn(columns, row, columnIndex)
+    ),
+  }))
+}
+
 export function filterPricingTableRows(
   rows: PricingTableRow[],
   columns: TableFilterColumn[],
   filters: TableColumnFilters
 ) {
-  const activeFilters = columns.flatMap((column) => {
-    const selected = filters[column.index] ?? null
-    return selected === null ? [] : [{ column, selected }]
-  })
-  if (!activeFilters.length) return rows
+  return filterRowsByTableColumns(rows, columns, filters, (row, columnIndex) =>
+    pricingValuesForColumn(columns, row, columnIndex)
+  )
+}
 
-  return rows.filter((row) =>
-    activeFilters.every(({ column, selected }) =>
-      matchesColumnFilter(filterValue(row.values[column.label]), selected)
-    )
+export function sortPricingTableRows(
+  rows: PricingTableRow[],
+  columns: TableFilterColumn[],
+  sort: TableSort | null
+) {
+  return sortRowsByTableColumn(rows, sort, (row, columnIndex) =>
+    pricingValuesForColumn(columns, row, columnIndex)
   )
 }
