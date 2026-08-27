@@ -154,6 +154,10 @@ export { createDatabase } from "./database"
 export { createInitialAdministratorProvisioner } from "./initial-administrator"
 export { createUserDashboardRepository } from "./user-dashboard"
 export { migrateDatabase } from "./migrate"
+export {
+  createProductPortfolioRepository,
+  type ProductPortfolioRow,
+} from "./product-portfolio"
 export { createProductRepository } from "./products"
 export {
   connectionTargetSummary,

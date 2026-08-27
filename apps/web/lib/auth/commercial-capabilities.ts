@@ -106,7 +106,7 @@ export const commercialPageAccess = [
   ),
   page(
     "commercial.products",
-    "Products",
+    "Product Portfolio",
     "/commercial/products",
     commercialCapabilities.products
   ),

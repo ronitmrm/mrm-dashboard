@@ -1,5 +1,5 @@
-import { permanentRedirect } from "next/navigation"
+import { ProductPortfolioPage } from "./product-portfolio-page"
 
-export default function ProductsPage() {
-  permanentRedirect("/commercial/pricing")
-}
+export const dynamic = "force-dynamic"
+
+export default ProductPortfolioPage

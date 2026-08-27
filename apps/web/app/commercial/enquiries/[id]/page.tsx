@@ -176,11 +176,6 @@ export default async function EnquiryDetailPage({
               {snapshot.enquiry.technicalHandoverStatus}
             </Badge>
           </div>
-          <div className="flex flex-wrap gap-2 pt-2">
-            <DataDownloadButton
-              href={`/commercial/enquiries/${id}/lines/export.xlsx`}
-            />
-          </div>
         </div>
         {snapshot.enquiry.technicalHandoverStatus !== "Handed Over" ? (
           <form action={handOverEnquiryAction}>
