@@ -89,6 +89,7 @@ function TextField({
       <FieldLabel>
         {label}
         <Input
+          autoComplete="off"
           defaultValue={defaultValue}
           min={type === "number" ? "0" : undefined}
           name={name}
@@ -119,6 +120,7 @@ function ChoiceField({
       <FieldLabel>
         {label}
         <NativeSelect
+          autoComplete="off"
           defaultValue={defaultValue}
           name={name}
           onChange={(event) => onChange?.(event.currentTarget.value)}
@@ -148,10 +150,16 @@ function BomRow({
   row: BomLine
 }) {
   return (
-    <div className="grid gap-3 rounded-2xl border p-4 md:grid-cols-2 xl:grid-cols-4">
+    <section className="grid gap-5 rounded-xl border bg-background p-5 shadow-sm md:grid-cols-2 xl:grid-cols-3">
+      <div className="flex items-center gap-2 md:col-span-2 xl:col-span-3">
+        <h4 className="font-medium">BOM Line {index + 1}</h4>
+        <span className="rounded-full border bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+          {row.componentSource || "New"} · {row.componentItemType || "List"}
+        </span>
+      </div>
       <TextField
         defaultValue={row.lineNumber || index + 1}
-        label="Line"
+        label="Line Number"
         name="bom_line_number"
         type="number"
       />
@@ -177,6 +185,7 @@ function BomRow({
         <FieldLabel>
           Existing Ordered Product
           <NativeSelect
+            autoComplete="off"
             defaultValue={row.existingProductId ?? ""}
             name="bom_existing_product_id"
           >
@@ -253,7 +262,7 @@ function BomRow({
         label="Process Required"
         name="bom_process_required"
       />
-      <div className="md:col-span-2 xl:col-span-3">
+      <div className="md:col-span-2">
         <TextField
           defaultValue={row.notes ?? ""}
           label="Line Notes"
@@ -261,13 +270,13 @@ function BomRow({
         />
       </div>
       {canRemove ? (
-        <div className="flex items-end justify-end">
+        <div className="flex items-end justify-end md:col-span-2 xl:col-span-1">
           <Button onClick={onRemove} type="button" variant="outline">
             Remove Line
           </Button>
         </div>
       ) : null}
-    </div>
+    </section>
   )
 }
 
@@ -311,11 +320,11 @@ export function DesignTaskEditor({
   const visibleRows = itemType === "List" ? rows.slice(0, 1) : rows
 
   return (
-    <fieldset className="grid gap-6" disabled={!editable}>
+    <fieldset className="grid gap-8" disabled={!editable}>
       <input name="design_status" type="hidden" value="Pending Design" />
       <input name="revision_no" type="hidden" value="0" />
       <input name="approval_status" type="hidden" value="Pending" />
-      <FieldSet>
+      <FieldSet className="rounded-xl border bg-muted/20 p-5">
         <FieldLegend>
           {portfolioDecisionLocked
             ? "New Product Design"
@@ -327,7 +336,7 @@ export function DesignTaskEditor({
             : "Match an ordered internal product, or create a controlled quoted part."}{" "}
           Q, C, and nested A identifiers are allocated atomically on save.
         </FieldDescription>
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {portfolioDecisionLocked ? (
             <input
               name="portfolio_match_status"
@@ -352,6 +361,7 @@ export function DesignTaskEditor({
               <FieldLabel>
                 Ordered Portfolio Product
                 <NativeSelect
+                  autoComplete="off"
                   defaultValue={initial.matchedProductId ?? ""}
                   name="matched_product_id"
                   required
@@ -390,9 +400,13 @@ export function DesignTaskEditor({
 
       {isNewDesign ? (
         <>
-          <FieldSet>
+          <FieldSet className="rounded-xl border bg-muted/20 p-5">
             <FieldLegend>Design Dossier</FieldLegend>
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <FieldDescription>
+              Product definition, ownership, manufacturing support, and review
+              notes.
+            </FieldDescription>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               <TextField
                 defaultValue={initial.designerName ?? ""}
                 label="Designer"
@@ -498,6 +512,8 @@ export function DesignTaskEditor({
                 <FieldLabel>
                   Operation Notes
                   <Textarea
+                    autoComplete="off"
+                    className="min-h-28 resize-y"
                     defaultValue={initial.operationNotes ?? ""}
                     name="operation_notes"
                   />
@@ -507,6 +523,8 @@ export function DesignTaskEditor({
                 <FieldLabel>
                   Design Remarks
                   <Textarea
+                    autoComplete="off"
+                    className="min-h-28 resize-y"
                     defaultValue={initial.designRemarks ?? ""}
                     name="design_remarks"
                   />
@@ -515,19 +533,15 @@ export function DesignTaskEditor({
             </div>
           </FieldSet>
 
-          <FieldSet>
-            <div className="flex flex-wrap items-end justify-between gap-3">
-              <div>
-                <FieldLegend>
-                  {itemType === "Package"
-                    ? "Package / Assembly BOM"
-                    : "List BOM"}
-                </FieldLegend>
-                <FieldDescription>
-                  Nested children are valid only below Assembly rows. Existing
-                  rows must select an ordered internal product.
-                </FieldDescription>
-              </div>
+          <FieldSet className="rounded-xl border bg-muted/20 p-5">
+            <FieldLegend>
+              {itemType === "Package" ? "Package / Assembly BOM" : "List BOM"}
+            </FieldLegend>
+            <FieldDescription>
+              Nested children are valid only below Assembly rows. Existing rows
+              must select an ordered internal product.
+            </FieldDescription>
+            <div className="flex justify-end">
               {itemType === "Package" ? (
                 <Button
                   onClick={() => {
@@ -547,7 +561,7 @@ export function DesignTaskEditor({
                 </Button>
               ) : null}
             </div>
-            <div className="grid gap-3">
+            <div className="grid gap-4">
               {visibleRows.map(({ key, row }, index) => (
                 <BomRow
                   canRemove={itemType === "Package" && visibleRows.length > 1}
@@ -565,15 +579,22 @@ export function DesignTaskEditor({
             </div>
           </FieldSet>
 
-          <FieldSet>
+          <FieldSet className="rounded-xl border bg-muted/20 p-5">
             <FieldLegend>Design Files</FieldLegend>
+            <FieldDescription>
+              Attach the current internal drawing, marked customer drawing, and
+              CAD evidence.
+            </FieldDescription>
             <div className="grid gap-4 md:grid-cols-3">
               {[
                 ["internal_drawing_file", "Internal Drawing"],
                 ["customer_marked_file", "Customer Marked Drawing"],
                 ["cad_file", "CAD File"],
               ].map(([name, label]) => (
-                <Field key={name}>
+                <Field
+                  className="rounded-xl border bg-background p-4"
+                  key={name}
+                >
                   <FieldLabel>
                     {label}
                     <Input name={name} type="file" />
@@ -585,9 +606,12 @@ export function DesignTaskEditor({
         </>
       ) : null}
 
-      <Button className="w-fit" type="submit">
-        Save Design Task
-      </Button>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-muted/20 p-4">
+        <p className="text-sm text-muted-foreground">
+          Save incomplete work at any time. Mark BOM Complete only when ready.
+        </p>
+        <Button type="submit">Save Design Task</Button>
+      </div>
     </fieldset>
   )
 }
