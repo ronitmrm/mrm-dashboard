@@ -153,9 +153,10 @@ plating, annealing, deburring, buffing, and sealant retain numeric zero when zer
 and show their actual values when non-zero. Forging cost is applicable only when
 Production Type is Casting or Forging; every other type, including Barstock and
 Moulded, displays `-`. Rejection, burning-loss, and profit values include a
-visible `%` suffix. Package / Assembly rows otherwise
-retain parent, BOM depth, quantity, commercial inputs, formula evidence, and
-currency.
+visible `%` suffix. Populated formula-derived cells use a light-blue fill in the
+Pricing and Price Revisions tables; input/source cells retain the standard fill.
+Package / Assembly rows otherwise retain parent, BOM quantity, commercial inputs,
+formula evidence, and currency.
 Package / Assembly completeness never reports One-Piece Weight or Pieces per Kg
 as missing parent inputs; their derived values come from the recursive BOM. Any
 missing component weight remains visible on the affected component row.
@@ -163,9 +164,9 @@ Purchased Products also show their current Website Product size and MRMPL Produc
 Description. Selecting a Customer Part Code opens its complete retained Quote
 revision history. Customer Part Code is required only on a root customer line;
 BOM component rows inherit the package context and may omit it. A component sold
-separately is a root line with its own Customer Part Code. BOM Level is structural
-depth: root `0`, direct component `1`, nested component `2`, and so on. Product
-Base rows never invent customer or Quote values.
+separately is a root line with its own Customer Part Code. BOM hierarchy depth
+remains internal structural metadata and is not displayed as a Pricing column.
+Product Base rows never invent customer or Quote values.
 
 **Quote Follow-Up Task**: The pending Sales task created atomically when a
 Quote is sent. Sales must choose its Follow-Up Date during Quote send; the task

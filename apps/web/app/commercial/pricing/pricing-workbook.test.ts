@@ -3,6 +3,8 @@ import * as XLSX from "xlsx"
 
 import {
   buildPricingWorkbook,
+  isPricingFormulaCell,
+  pricingFormulaHeaders,
   pricingHeaders,
   pricingWorkbookFilename,
   toPricingViewRow,
@@ -60,6 +62,50 @@ const row: PricingRegisterRow = {
 }
 
 describe("Pricing spreadsheet workbook", () => {
+  test("omits BOM Level and identifies every displayed pricing formula", () => {
+    expect(pricingHeaders).not.toContain("BOM Level")
+    expect(pricingFormulaHeaders).toEqual([
+      "No of Piece / KG",
+      "Direct (INR/pc)",
+      "M/c Cost (INR/pc)",
+      "Net Rate / KG Without Alloy Premium",
+      "Net Rate / KG With Alloy Premium",
+      "Scrap Rate / gm",
+      "RM Cost",
+      "Scrap Return",
+      "Scrap Return Price ( Inc. Burning Loss )",
+      "Scrap Return Price",
+      "Total Rods Cost",
+      "Rejection",
+      "Total - A",
+      "Profit - B",
+      "Total - A + B",
+      "Rate / PCS In INR",
+      "Total Rate / PCS In INR",
+      "BOM Component Cost (INR/pc)",
+      "Total Package Price Including BOM Component Cost (INR/pc)",
+      "Rate / PCS In Currency",
+    ])
+    expect(
+      pricingFormulaHeaders.every((header) => pricingHeaders.includes(header))
+    ).toBe(true)
+    const view = toPricingViewRow(row)
+    expect(
+      isPricingFormulaCell("Net Rate / KG Without Alloy Premium", view)
+    ).toBe(true)
+    expect(isPricingFormulaCell("BOM Component Cost (INR/pc)", view)).toBe(
+      false
+    )
+    expect(
+      isPricingFormulaCell("1 Piece Weight ( gm )", {
+        ...view,
+        "1 Piece Weight ( gm )": "15.10",
+        "Row Type": "Package Total",
+      })
+    ).toBe(true)
+    expect(isPricingFormulaCell("1 Piece Weight ( gm )", view)).toBe(false)
+  })
+
   test("preserves the source sheet, filename, headers and percent display", () => {
     const view = toPricingViewRow(row)
     expect(view["Rejection %"]).toBe("5.00%")

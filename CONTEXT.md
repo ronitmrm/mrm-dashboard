@@ -23,7 +23,7 @@ _Avoid_: Applying parent rejection or profit to component prices, flattening all
 The manufacturing overhead rate in INR/kg owned by Product Parameter Costing and reused by every Customer Price for that Product. For a Package or Assembly, it joins only the parent's own assembly process amount. Customer Parameter Costing may consume the Product Overhead but cannot enter or override it.
 _Avoid_: Customer overhead, quote overhead, overhead per piece.
 **Pricing Register**:
-The current customer-price spreadsheet built from active or editable root Quotes and their immutable recursive Product and calculation snapshots. It keeps Package / Assembly parent, depth, quantity, commercial inputs, formula evidence, currency, and purchased-product website descriptions together; selecting a Customer Part Code opens its complete retained Quote revision history.
+The current customer-price spreadsheet built from active or editable root Quotes and their immutable recursive Product and calculation snapshots. It keeps Package / Assembly parent, BOM quantity, commercial inputs, formula evidence, currency, and purchased-product website descriptions together; BOM hierarchy depth remains internal and is not displayed. Populated formula-derived cells use a light-blue fill. Selecting a Customer Part Code opens its complete retained Quote revision history.
 _Avoid_: Product Master price, mutable calculation sheet, unscoped full-history load.
 
 **Setup**:
