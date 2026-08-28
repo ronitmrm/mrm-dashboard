@@ -91,10 +91,17 @@ const unitMasterDefinitions = [
   },
 ] as const satisfies readonly MasterDefinition[]
 
+const websiteProductMasterKinds = new Set<string>([
+  "materialGrade",
+  "category",
+  "subcategory",
+  "application",
+  "certification",
+  "websiteField",
+])
+
 const commercialSubMasters = commercialMasterKinds
-  .filter(
-    ({ entryKind }) => entryKind !== "category" && entryKind !== "subcategory"
-  )
+  .filter(({ entryKind }) => !websiteProductMasterKinds.has(entryKind))
   .map((selection) => ({
     id: commercialMasterWorkspaceKind(selection),
     label: selection.label,

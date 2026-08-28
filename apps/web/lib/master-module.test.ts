@@ -257,14 +257,30 @@ describe("master module selection", () => {
     )
   })
 
-  it("lists product taxonomy only under Website Products", () => {
+  it("lists shared product masters only under Website Products", () => {
     const pricing = subMastersFor("commercial_pricing_masters", fullAccess)!
     const website = subMastersFor("commercial_website_products", fullAccess)!
 
-    expect(pricing.options.map(({ id }) => id)).not.toContain("category")
-    expect(pricing.options.map(({ id }) => id)).not.toContain("subcategory")
-    expect(website.options.map(({ id }) => id)).toContain("category")
-    expect(website.options.map(({ id }) => id)).toContain("subcategory")
+    const sharedProductMasterIds = [
+      "materialGrade",
+      "category",
+      "subcategory",
+      "application",
+      "certification",
+      "websiteField",
+    ]
+
+    const pricingIds = pricing.options.map(({ id }) => id)
+    for (const id of sharedProductMasterIds) {
+      expect(pricingIds).not.toContain(id)
+    }
+    expect(website.options.map(({ id }) => id)).toEqual(
+      expect.arrayContaining(sharedProductMasterIds)
+    )
+    expect(pricing.options).toContainEqual({
+      id: "process",
+      label: "Manufacturing process",
+    })
   })
 
   it("rejects invalid, mismatched, and unauthorized relationships", () => {
@@ -291,7 +307,7 @@ describe("master module selection", () => {
   it("preserves the complete context in form, tab, and back links", () => {
     const selection = resolveMasterSelection(
       {
-        main: "commercial_pricing_masters",
+        main: "commercial_website_products",
         sub: "materialGrade",
         unit: "universal",
       },
@@ -299,26 +315,26 @@ describe("master module selection", () => {
     )!
 
     expect(masterFormHref(selection, "masterTables")).toBe(
-      "/commercial/masters?masterView=masterTables&kind=materialGrade&masterUnit=universal&masterMain=commercial_pricing_masters&masterSub=materialGrade"
+      "/commercial/masters?masterView=masterTables&kind=materialGrade&masterUnit=universal&masterMain=commercial_website_products&masterSub=materialGrade"
     )
     expect(masterSelectionHref(selection)).toBe(
-      "/masters?unit=universal&main=commercial_pricing_masters&sub=materialGrade"
+      "/masters?unit=universal&main=commercial_website_products&sub=materialGrade"
     )
     expect(masterSelectionHref(selection, "masterTables")).toBe(
-      "/masters?unit=universal&main=commercial_pricing_masters&sub=materialGrade&view=masterTables"
+      "/masters?unit=universal&main=commercial_website_products&sub=materialGrade&view=masterTables"
     )
     expect(masterOpenHref(selection, "masterTables")).toBe(
-      "/masters/open?unit=universal&main=commercial_pricing_masters&sub=materialGrade&view=masterTables"
+      "/masters/open?unit=universal&main=commercial_website_products&sub=materialGrade&view=masterTables"
     )
     expect(
       withMasterSelectionContext(
         "/commercial/masters?masterView=masterTables&kind=materialGrade",
         new URLSearchParams(
-          "masterUnit=universal&masterMain=commercial_pricing_masters&masterSub=materialGrade"
+          "masterUnit=universal&masterMain=commercial_website_products&masterSub=materialGrade"
         )
       )
     ).toBe(
-      "/commercial/masters?masterView=masterTables&kind=materialGrade&masterUnit=universal&masterMain=commercial_pricing_masters&masterSub=materialGrade"
+      "/commercial/masters?masterView=masterTables&kind=materialGrade&masterUnit=universal&masterMain=commercial_website_products&masterSub=materialGrade"
     )
   })
 
