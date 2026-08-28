@@ -257,6 +257,16 @@ describe("master module selection", () => {
     )
   })
 
+  it("lists product taxonomy only under Website Products", () => {
+    const pricing = subMastersFor("commercial_pricing_masters", fullAccess)!
+    const website = subMastersFor("commercial_website_products", fullAccess)!
+
+    expect(pricing.options.map(({ id }) => id)).not.toContain("category")
+    expect(pricing.options.map(({ id }) => id)).not.toContain("subcategory")
+    expect(website.options.map(({ id }) => id)).toContain("category")
+    expect(website.options.map(({ id }) => id)).toContain("subcategory")
+  })
+
   it("rejects invalid, mismatched, and unauthorized relationships", () => {
     expect(
       resolveMasterSelection(
