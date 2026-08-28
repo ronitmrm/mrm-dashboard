@@ -23,7 +23,6 @@ import {
 
 import { importMastersWorkbookAction } from "./actions"
 import { MasterMaintenanceForm } from "./master-maintenance-form"
-import { CompanyWideMasterScope } from "@/components/company-wide-master-scope"
 import { DataDownloadButton } from "@/components/data-download-button"
 import { MasterDataViewTabs } from "@/components/master-data-view-tabs"
 import {
@@ -161,19 +160,6 @@ export default async function MastersPage({
 
       {showDataEntry ? (
         <>
-          <Card>
-            <CardHeader>
-              <CardTitle>Master Workbook</CardTitle>
-              <CardDescription>
-                Source-Compatible CSV/Xls/Xlsx, Aliases, Defaults, And Atomic
-                Import.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-5">
-              <CompanyWideMasterScope />
-            </CardContent>
-          </Card>
-
           {canUpdate && snapshot ? (
             <Card>
               <CardHeader>
