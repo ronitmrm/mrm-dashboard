@@ -23,6 +23,10 @@ export function designTaskHref(input: {
     : reviewHref
 }
 
+export function designTaskSavedHref(enquiryItemId: string) {
+  return `/commercial/design/${enquiryItemId}/new?saved=1`
+}
+
 export function designTaskStatusAfterStart(status: string) {
   if (status === "Pending Design") return "In Progress"
   if (status === "In Progress" || status === "Changes Required") {
