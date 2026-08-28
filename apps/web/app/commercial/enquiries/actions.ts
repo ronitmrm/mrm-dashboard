@@ -10,6 +10,7 @@ import {
   prepareImportReviewArtifactTarget,
   type CommercialAttachmentAuthorization,
 } from "@workspace/db"
+import { designTaskSavedHref } from "@workspace/db/commercial-design-domain"
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 
@@ -574,6 +575,7 @@ export async function saveDesignAction(formData: FormData) {
   revalidatePath(designPath)
   revalidatePath(`${designPath}/${enquiryItemId}`)
   revalidatePath(`${designPath}/${enquiryItemId}/new`)
+  redirect(designTaskSavedHref(enquiryItemId))
 }
 
 export async function requestDesignClarificationAction(formData: FormData) {

@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation"
 
 import { createCommercialWorkflowRepository } from "@workspace/db"
 import { designTaskIsEditable } from "@workspace/db/commercial-design-domain"
+import { Alert, AlertDescription } from "@workspace/ui/components/alert"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import { Card, CardContent } from "@workspace/ui/components/card"
@@ -35,11 +36,12 @@ export default async function NewDesignWorkspacePage({
   searchParams,
 }: {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ product?: string }>
+  searchParams: Promise<{ product?: string; saved?: string }>
 }) {
   const { id } = await params
   await requireCapability("pricing.design.read", `/commercial/design/${id}/new`)
-  const productSearch = (await searchParams).product?.trim() ?? ""
+  const resolvedSearchParams = await searchParams
+  const productSearch = resolvedSearchParams.product?.trim() ?? ""
   const workflow = createCommercialWorkflowRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
@@ -149,6 +151,13 @@ export default async function NewDesignWorkspacePage({
 
       <Card className="flex-1 overflow-hidden">
         <CardContent className="flex h-full flex-col gap-6 p-4 lg:p-6">
+          {resolvedSearchParams.saved === "1" ? (
+            <Alert>
+              <AlertDescription>
+                Design task saved successfully.
+              </AlertDescription>
+            </Alert>
+          ) : null}
           {!editable ? (
             <p className="rounded-2xl border bg-muted/40 p-3 text-sm">
               This Design task is read-only because its downstream work has

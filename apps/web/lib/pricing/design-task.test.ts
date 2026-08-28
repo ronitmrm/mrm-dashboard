@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest"
 
 import {
   designPortfolioDecisions,
+  designTaskSavedHref,
   designStatuses,
   designTaskHref,
   designTaskStatusAfterStart,
@@ -11,6 +12,12 @@ import {
 } from "@workspace/db/commercial-design-domain"
 
 describe("Pricing Design Task contract", () => {
+  test("returns to the workspace with visible save confirmation state", () => {
+    expect(designTaskSavedHref("line-1")).toBe(
+      "/commercial/design/line-1/new?saved=1"
+    )
+  })
+
   test("routes portfolio review before a separate new-design workspace", () => {
     expect(
       designTaskHref({
