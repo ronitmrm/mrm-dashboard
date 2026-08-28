@@ -644,10 +644,16 @@ export function DesignTaskEditor({
                         type="number"
                       />
                     ) : null}
-                    <TextField
-                      defaultValue={initial.checkedBy ?? ""}
+                    <ChoiceField
+                      defaultValue={
+                        designOptions.designers.includes(initial.checkedBy ?? "")
+                          ? initial.checkedBy!
+                          : ""
+                      }
                       label="Checked By"
                       name="checked_by"
+                      options={designOptions.designers}
+                      placeholder="Select design team member"
                     />
                   </div>
                 </section>

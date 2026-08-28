@@ -5,6 +5,7 @@ import {
   designTaskSavedHref,
   designStatuses,
   designTaskHref,
+  designTaskShouldPrepareCosting,
   designTaskStatusAfterStart,
   designTaskIsEditable,
   designTaskIsOpen,
@@ -12,6 +13,27 @@ import {
 } from "@workspace/db/commercial-design-domain"
 
 describe("Pricing Design Task contract", () => {
+  test("hands a completed Design task to Product Costing on save", () => {
+    expect(
+      designTaskShouldPrepareCosting({
+        designBomCompleted: "Yes",
+        nextStageStatus: "Not Started",
+      })
+    ).toBe(true)
+    expect(
+      designTaskShouldPrepareCosting({
+        designBomCompleted: "No",
+        nextStageStatus: "Not Started",
+      })
+    ).toBe(false)
+    expect(
+      designTaskShouldPrepareCosting({
+        designBomCompleted: "Yes",
+        nextStageStatus: "Product Costing",
+      })
+    ).toBe(false)
+  })
+
   test("returns to the workspace with visible save confirmation state", () => {
     expect(designTaskSavedHref("line-1")).toBe(
       "/commercial/design/line-1/new?saved=1"

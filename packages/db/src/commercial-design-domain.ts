@@ -52,6 +52,16 @@ export function designTaskIsEditable(input: {
   )
 }
 
+export function designTaskShouldPrepareCosting(input: {
+  designBomCompleted: string
+  nextStageStatus: string
+}) {
+  return (
+    input.designBomCompleted === "Yes" &&
+    ["Not Started", "Changes Required"].includes(input.nextStageStatus)
+  )
+}
+
 export function deriveDesignTaskState(input: {
   designBomCompleted: string
   existingNextStageStatus: string

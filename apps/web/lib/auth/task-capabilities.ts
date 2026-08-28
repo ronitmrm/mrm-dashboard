@@ -156,7 +156,7 @@ export const taskCapabilityLabels = {
   [commercialTaskCapabilities.reverseDesignCostingHandoff]:
     "Return Handoff To Not Started",
   [commercialTaskCapabilities.reverseProductEntry]: "Reverse Product Entry",
-  [commercialTaskCapabilities.saveDesign]: "Prepare Product Costing",
+  [commercialTaskCapabilities.saveDesign]: "Save Design Task",
   [commercialTaskCapabilities.saveQuote]: "Prepare Quote",
   [commercialTaskCapabilities.sendQuote]: "Send Quote",
   [commercialTaskCapabilities.sendQuoteBackToCosting]: "Return To Costing",

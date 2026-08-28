@@ -10,7 +10,10 @@ import {
   prepareImportReviewArtifactTarget,
   type CommercialAttachmentAuthorization,
 } from "@workspace/db"
-import { designTaskSavedHref } from "@workspace/db/commercial-design-domain"
+import {
+  designTaskSavedHref,
+  designTaskShouldPrepareCosting,
+} from "@workspace/db/commercial-design-domain"
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 
@@ -522,22 +525,23 @@ export async function saveDesignAction(formData: FormData) {
       })
     }
   }
+  const designBomCompleted =
+    optionalText(formData, "design_bom_completed") ??
+    (optionalText(formData, "design_status") === "Design Complete"
+      ? "Yes"
+      : "No")
   await withWorkflow(
     commercialTaskCapabilities.saveDesign,
     `${enquiriesPath}/${enquiryId}`,
-    (workflow, actorUserId) =>
-      workflow.saveDesign({
+    async (workflow, actorUserId) => {
+      const savedDesign = await workflow.saveDesign({
         approvalStatus: optionalText(formData, "approval_status") ?? "Pending",
         actorUserId,
         assemblyRequired: optionalText(formData, "assembly_required") ?? "No",
         bomLines,
         checkedBy: optionalText(formData, "checked_by"),
         componentsRequired: optionalText(formData, "components_required"),
-        designBomCompleted:
-          optionalText(formData, "design_bom_completed") ??
-          (optionalText(formData, "design_status") === "Design Complete"
-            ? "Yes"
-            : "No"),
+        designBomCompleted,
         designBomRequired:
           optionalText(formData, "design_bom_required") ?? "Yes",
         designRemarks: optionalText(formData, "design_remarks"),
@@ -570,11 +574,21 @@ export async function saveDesignAction(formData: FormData) {
         toolingApproxCost: numeric(formData, "tooling_approx_cost"),
         toolingRequired: optionalText(formData, "tooling_required") ?? "No",
       })
+      if (
+        designTaskShouldPrepareCosting({
+          designBomCompleted,
+          nextStageStatus: savedDesign.nextStageStatus,
+        })
+      ) {
+        await workflow.prepareCostingFromDesign(enquiryItemId, actorUserId)
+      }
+    }
   )
   revalidatePath(`${enquiriesPath}/${enquiryId}`)
   revalidatePath(designPath)
   revalidatePath(`${designPath}/${enquiryItemId}`)
   revalidatePath(`${designPath}/${enquiryItemId}/new`)
+  revalidatePath("/commercial/product-costing")
   redirect(designTaskSavedHref(enquiryItemId))
 }
 
