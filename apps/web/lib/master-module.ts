@@ -91,10 +91,14 @@ const unitMasterDefinitions = [
   },
 ] as const satisfies readonly MasterDefinition[]
 
-const commercialSubMasters = commercialMasterKinds.map((selection) => ({
-  id: commercialMasterWorkspaceKind(selection),
-  label: selection.label,
-}))
+const commercialSubMasters = commercialMasterKinds
+  .filter(
+    ({ entryKind }) => entryKind !== "category" && entryKind !== "subcategory"
+  )
+  .map((selection) => ({
+    id: commercialMasterWorkspaceKind(selection),
+    label: selection.label,
+  }))
 
 const websiteProductSubMasters = [
   {

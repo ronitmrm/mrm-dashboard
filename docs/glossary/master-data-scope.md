@@ -63,6 +63,10 @@ Design Subcategory, Website Application, Website Certification, and Website
 Field Option. These selections reuse the existing Commercial forms and tables;
 they do not create duplicate master records. Legacy Commercial URLs remain the
 implementation routes for forms, tables, exports, and saved links.
+Design Category and Design Subcategory appear only under Website Products in
+Master Selection. Commercial Pricing and Design workflows reuse those same
+company-wide records without listing a second copy under Commercial Pricing
+Masters.
 
 **Production-unit Master**: A master whose records differ by Production Unit.
 Its Data Entry and CSV import require one of the recognized Production Units.
