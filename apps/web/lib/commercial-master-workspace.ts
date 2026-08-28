@@ -26,7 +26,7 @@ export const commercialMasterKinds = [
   },
   {
     entryKind: "process",
-    label: "Design process",
+    label: "Manufacturing process",
     tableKind: "commercial_process",
   },
   {
