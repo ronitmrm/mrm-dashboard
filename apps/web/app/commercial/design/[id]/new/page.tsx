@@ -19,7 +19,6 @@ import { requireCapability } from "@/lib/auth/require-capability"
 import { technicalReviewChecklist } from "@/lib/pricing/technical-review"
 
 import {
-  prepareCostingAction,
   requestDesignClarificationAction,
   saveDesignAction,
 } from "../../../enquiries/actions"
@@ -344,7 +343,7 @@ export default async function NewDesignWorkspacePage({
           ) : null}
 
           <Separator className="mt-auto" />
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid gap-4">
             <form action={requestDesignClarificationAction}>
               <input
                 name="enquiry_id"
@@ -373,34 +372,6 @@ export default async function NewDesignWorkspacePage({
                 </Button>
               </FieldGroup>
             </form>
-            {["Design Complete", "Not Required"].includes(
-              selectedItem.designStatus
-            ) &&
-            ["Not Started", "Changes Required"].includes(
-              selectedItem.nextStageStatus
-            ) ? (
-              <form action={prepareCostingAction}>
-                <input
-                  name="enquiry_id"
-                  type="hidden"
-                  value={selectedItem.enquiryId}
-                />
-                <input
-                  name="enquiry_item_id"
-                  type="hidden"
-                  value={selectedItem.enquiryItemId}
-                />
-                <FieldGroup>
-                  <p className="text-sm text-muted-foreground">
-                    Create or update the controlled product and hand this line
-                    to Product Costing.
-                  </p>
-                  <Button className="w-fit" type="submit">
-                    Prepare Product Costing
-                  </Button>
-                </FieldGroup>
-              </form>
-            ) : null}
           </div>
         </CardContent>
       </Card>
