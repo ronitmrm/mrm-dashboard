@@ -206,6 +206,13 @@ function numeric(row: MasterImportRow, ...keys: string[]) {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
+function optionalNumeric(row: MasterImportRow, ...keys: string[]) {
+  const value = cell(row, ...keys)
+  if (!value) return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
 function active(row: MasterImportRow) {
   const value = cell(row, "active").toLowerCase()
   return !["false", "inactive", "in active", "0", "no"].includes(value)
@@ -461,7 +468,7 @@ export function parseMastersWorkbook(
     if (grade && rodType)
       result.materialRates.push({
         active: active(row),
-        alloyPremium: numeric(row, "alloy_premium"),
+        alloyPremium: optionalNumeric(row, "alloy_premium"),
         extrusionCost: numeric(row, "ext_cost"),
         grade,
         rodType,

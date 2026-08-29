@@ -76,7 +76,7 @@ export type CommercialMasterSnapshot = {
   materialGrades: Array<{ name: string }>
   materialRates: Array<{
     active: boolean
-    alloyPremium: number
+    alloyPremium: number | null
     extrusionCost: number
     grade: string
     rodType: string
@@ -521,7 +521,9 @@ async function upsertMaterialRateClient(
       ids.gradeId,
       ids.rodTypeId,
       input.active ?? true,
-      Math.max(0, number(input.alloyPremium)),
+      input.alloyPremium == null
+        ? null
+        : Math.max(0, number(input.alloyPremium)),
       Math.max(0, number(input.extrusionCost)),
       input.actorUserId ?? null,
       randomUUID(),
@@ -944,7 +946,8 @@ export function createCommercialMasterRepository(
         materialGrades: materialGrades.rows.map((row) => ({ name: row.name })),
         materialRates: materialRates.rows.map((row) => ({
           active: row.active,
-          alloyPremium: Number(row.alloy_premium),
+          alloyPremium:
+            row.alloy_premium === null ? null : Number(row.alloy_premium),
           extrusionCost: Number(row.extrusion_cost),
           grade: row.grade,
           rodType: row.rod_type,
@@ -1257,7 +1260,8 @@ export function createCommercialMasterRepository(
       return row
         ? {
             active: row.active,
-            alloyPremium: Number(row.alloy_premium),
+            alloyPremium:
+              row.alloy_premium === null ? null : Number(row.alloy_premium),
             extrusionCost: Number(row.extrusion_cost),
             grade: row.grade,
             rodType: row.rod_type,

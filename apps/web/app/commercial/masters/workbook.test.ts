@@ -188,6 +188,32 @@ describe("Pricing masters workbook", () => {
     })
   })
 
+  test("keeps a blank supplier alloy premium unset", () => {
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.json_to_sheet([
+        {
+          alloy_premium: "",
+          ext_cost: 35,
+          grade: "LF-CW510L",
+          rod_type: "SOLID",
+        },
+      ]),
+      "Material Rates"
+    )
+
+    expect(parseMastersWorkbook(workbook).materialRates).toEqual([
+      {
+        active: true,
+        alloyPremium: null,
+        extrusionCost: 35,
+        grade: "LF-CW510L",
+        rodType: "SOLID",
+      },
+    ])
+  })
+
   test("round-trips canonical source master data", () => {
     const workbook = buildMastersWorkbook(snapshot)
     const output = XLSX.write(workbook, {
