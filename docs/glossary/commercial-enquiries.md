@@ -42,7 +42,11 @@ find an existing Product before opening the new-Product Design form. It exposes
 only Product UID, List / Package type, Product Size, Rod Size, Category,
 Subcategory, MRMPL Description, and Product Type. Product Size, Category, and
 Subcategory reuse the canonical Product metadata shown by Pricing; Rod Size is
-the Product's separate raw-material section. Each Product UID appears once as
+the Product's separate raw-material section. Every nonblank Category and
+Category/Subcategory pair displayed by the permanent internal Portfolio also
+exists in the editable Design Category and Design Subcategory masters; legacy
+Portfolio classifications are backfilled into those masters without creating
+duplicates. Each Product UID appears once as
 its own Product, regardless of how many Package BOMs use it; Package membership
 never repeats a List Product under each parent. Membership includes every permanent internal
 Product UID (the ordered portfolio across all Customers), plus active Sent

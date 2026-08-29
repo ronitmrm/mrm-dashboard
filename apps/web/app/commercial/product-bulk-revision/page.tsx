@@ -158,7 +158,65 @@ export default async function ProductBulkRevisionPage({
         <MetricCard label="Current Stage" value="Product" />
       </section>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(22rem,0.55fr)]">
+      <div className="grid gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Start A Product Revision</CardTitle>
+            <CardDescription>
+              Record Why Product Cost Parameters Need To Change Across Active
+              Customer Prices.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {summary.organizationId ? (
+              <form
+                action={createBulkPriceRevisionAction}
+                className="grid gap-4"
+              >
+                <input
+                  name="organization_id"
+                  type="hidden"
+                  value={summary.organizationId}
+                />
+                <input
+                  name="revision_route"
+                  type="hidden"
+                  value="Product Parameter Bulk Revision"
+                />
+                <Field>
+                  <FieldLabel htmlFor="product-revision-effective">
+                    Effective Date
+                  </FieldLabel>
+                  <Input
+                    defaultValue={localDate()}
+                    id="product-revision-effective"
+                    name="effective_on"
+                    required
+                    type="date"
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="product-revision-reason">
+                    Reason
+                  </FieldLabel>
+                  <Textarea
+                    id="product-revision-reason"
+                    name="reason"
+                    required
+                  />
+                </Field>
+                <Button className="w-fit" type="submit">
+                  Send Product Revision To Costing
+                </Button>
+              </form>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                The Mrmpl Organization Must Be Loaded First.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle>Product Revision Queue</CardTitle>
@@ -216,64 +274,6 @@ export default async function ProductBulkRevisionPage({
                 </TableBody>
               </Table>
             </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Start A Product Revision</CardTitle>
-            <CardDescription>
-              Record Why Product Cost Parameters Need To Change Across Active
-              Customer Prices.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {summary.organizationId ? (
-              <form
-                action={createBulkPriceRevisionAction}
-                className="grid gap-4"
-              >
-                <input
-                  name="organization_id"
-                  type="hidden"
-                  value={summary.organizationId}
-                />
-                <input
-                  name="revision_route"
-                  type="hidden"
-                  value="Product Parameter Bulk Revision"
-                />
-                <Field>
-                  <FieldLabel htmlFor="product-revision-effective">
-                    Effective Date
-                  </FieldLabel>
-                  <Input
-                    defaultValue={localDate()}
-                    id="product-revision-effective"
-                    name="effective_on"
-                    required
-                    type="date"
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="product-revision-reason">
-                    Reason
-                  </FieldLabel>
-                  <Textarea
-                    id="product-revision-reason"
-                    name="reason"
-                    required
-                  />
-                </Field>
-                <Button className="w-fit" type="submit">
-                  Send Product Revision To Costing
-                </Button>
-              </form>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                The Mrmpl Organization Must Be Loaded First.
-              </p>
-            )}
           </CardContent>
         </Card>
       </div>
