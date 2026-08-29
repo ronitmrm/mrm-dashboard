@@ -67,7 +67,8 @@ requires the Designer, target date, internal size, Category, Subcategory,
 Checked By, every conditional requirement cost, a completed valid BOM with the
 required new-component material, process, and piece-weight inputs, and current
 Internal Drawing and CAD files. Product Type and Production Type are required on
-each new List BOM line, not on a Package parent or Assembly BOM row.
+each new List BOM line. Assembly BOM rows have no Product Type, but may select
+their post-assembly Production Type and Pricing Process Columns Required.
 When a Package BOM line selects an Existing Product, its Product UID/name,
 Product Size, Category/Subcategory, material, Product Type, Production Type,
 weights, Pricing process columns, and notes come from that controlled Product
@@ -83,8 +84,8 @@ no separate Prepare Product Costing action. Internal Category and Internal
 Subcategory are selected from their company-wide masters. Product Type uses the
 Design Process master and is limited to Barstock, Forged, Moulded, or Punching;
 Forging, Conventional, and CNC are not Product Types. Production Type uses the
-Product Machine Type master and is limited to CNC, Conventional, or DP (Direct
-Purchase). A Subcategory remains within its parent Category. Package Process
+Product Machine Type master and is limited to CNC, Conventional, DP (Direct
+Purchase), M/C Assembly, or Assembly. A Subcategory remains within its parent Category. Package Process
 and Components Required are not
 separate Product Details inputs; component identity, structure, and quantities
 belong in the BOM.
@@ -98,29 +99,35 @@ process definition row: its source is New, component type is List, quantity is
 one, and its parent, package-component name, and child UID are not applicable.
 The Item Type explicitly selected by Design is authoritative on save; List BOM
 display values must never cause the task to be inferred as a Package.
-Its Part UID is the main Q/C Number allocated on save. A Package exposes Add and
-Remove Component actions. Each component line opens Current Product Portfolio
+Its Part UID is the main Q/C Number allocated on save. A Package BOM begins with
+a visible Package parent card for the controlled Product. Add Component creates
+a top-level List or Assembly below that parent; Remove Component removes only a
+component line. Each component line opens Current Product Portfolio
 through its own Select Product action; the draft is saved first, and choosing a
 Product returns to that same line as Existing. A line without a selected Product
 is New. Every component chooses List or Assembly, while only a component nested
 below an earlier Assembly selects that Assembly as its parent; other lines are
-automatically top-level and require no Parent entry. Every new List or Assembly
+automatically top-level and require no Parent entry. A line created below an
+Assembly is always a List and cannot be changed to another Assembly. Every new List or Assembly
 component in a Package selects its own Product Size, Category, and Subcategory;
 its Product Name is generated in that order and the classification flows to the
 controlled component Product. Changing an earlier line to Assembly makes it
 available immediately as a parent for later lines. A new Assembly is a BOM
 container, not a manufactured List part: it requires at least one child BOM
 line, exposes Add List Part to create a child already assigned to that Assembly,
-and has no Rod, Grade, Product Type, Production Type, manual weight, or Pricing
-Process inputs. Its One-Piece Weight is displayed as the recursive sum of each
-child's One-Piece Weight multiplied by that child's BOM quantity.
+and has no Rod, Grade, Product Type, or manual weight. Its One-Piece Weight is
+displayed as the recursive sum of each child's One-Piece Weight multiplied by
+that child's BOM quantity. It may select Production Type and Pricing Process
+Columns Required for operations performed after assembly.
 For a new List, its Product Name is generated as Product Size + Category +
 Subcategory. New BOM material fields reuse Product master choices: Rod Size uses
 existing Product Rod Size values, while Rod Type and Grade use their active
 masters. Product Type (Barstock, Forged, Moulded, or Punching) is distinct from
-Production Type (CNC, Conventional, or DP); both reuse their Product masters and
-flow from each List BOM line to the corresponding Product Parameter Costing and
-Pricing fields. Package parents and Assembly BOM rows have neither value. BOM
+Production Type (CNC, Conventional, DP, M/C Assembly, or Assembly); both reuse
+their Product masters and flow from each List BOM line to the corresponding
+Product Parameter Costing and Pricing fields. Package parents have neither
+value; Assembly rows may carry Production Type and their own post-assembly
+Pricing process selection. BOM
 headings match
 Product Parameter Costing: Product Type, Production Type, Blank Piece Weight
 ( gm ), and 1 Piece Weight ( gm ). Pricing Process Columns Required selects the exact
@@ -139,6 +146,10 @@ version and supersedes the former version without overwriting its bytes; exact
 bytes may share one Organization-scoped physical object.
 Each uploaded Commercial Attachment may be up to 25 MB; the request envelope
 allows the multipart overhead needed to carry that validated file size.
+Design Files separates the Package/List root and every BOM line into its own
+file tab. Each tab keeps its Internal Drawing, Customer Marked Drawing, and CAD
+evidence attached to that exact Product or BOM line, so different component
+drawings are not merged into one undifferentiated Design file set.
 _Avoid_: Mutable file paths, overwriting stored bytes, merging logical purposes.
 
 **Product Base Price**: The Product-owned INR-per-piece cost before any

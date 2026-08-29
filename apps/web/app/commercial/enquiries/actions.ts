@@ -26,6 +26,9 @@ import { commercialTaskCapabilities } from "@/lib/auth/task-capabilities"
 import {
   type CommercialArtifactPurpose,
   commercialAttachmentLimitBytes,
+  designBomAttachmentFieldName,
+  designBomAttachmentPurpose,
+  type DesignAttachmentKind,
   validateCommercialAttachment,
 } from "@/lib/commercial-attachment"
 import { optionalText, requiredText } from "@/lib/form-data"
@@ -90,6 +93,7 @@ async function persistAttachment(
     authorization: CommercialAttachmentAuthorization
     capability: string
     enquiryId: string
+    linkPurpose?: string
     organizationId: string
     purpose?: CommercialArtifactPurpose
     targetId: string
@@ -110,6 +114,7 @@ async function persistAttachment(
     fileName: file.name,
     purpose: input.purpose ?? "drawing",
   })
+  const linkPurpose = input.linkPurpose ?? purpose
   const sha256 = createHash("sha256").update(bytes).digest("hex")
   const service = createArtifactService({
     connectionString: readAuthEnvironment().connectionString,
@@ -129,14 +134,14 @@ async function persistAttachment(
         "commercial-attachment",
         input.targetTable ?? "enquiry_items",
         input.targetId,
-        purpose,
+        linkPurpose,
         fileName,
         sha256,
       ].join(":"),
       mediaType,
       organizationId: input.organizationId,
       origin: "uploaded",
-      purpose,
+      purpose: linkPurpose,
       supersedesPurposes:
         purpose === "drawing" || purpose === "sales_clarification"
           ? ["drawing", "sales_clarification"]
@@ -545,6 +550,39 @@ export async function saveDesignAction(formData: FormData) {
         targetId: designId,
         targetTable: "design_tasks",
       })
+    }
+  }
+  const bomAttachmentKinds = [
+    "internal_drawing",
+    "customer_marked",
+    "cad",
+  ] as const satisfies readonly DesignAttachmentKind[]
+  for (const line of bomLines) {
+    for (const kind of bomAttachmentKinds) {
+      const file = formData.get(
+        designBomAttachmentFieldName({ kind, lineNumber: line.lineNumber })
+      )
+      if (file instanceof File && file.size > 0) {
+        await persistAttachment(file, {
+          authorization: {
+            designId,
+            enquiryId,
+            enquiryItemId,
+            kind: "design",
+            organizationId,
+          },
+          capability: commercialTaskCapabilities.saveDesign,
+          enquiryId,
+          linkPurpose: designBomAttachmentPurpose({
+            kind,
+            lineNumber: line.lineNumber,
+          }),
+          organizationId,
+          purpose: kind,
+          targetId: designId,
+          targetTable: "design_tasks",
+        })
+      }
     }
   }
   const designBomCompleted =

@@ -1,6 +1,7 @@
 "use client"
 
 import { useRef, useState } from "react"
+import Link from "next/link"
 
 import {
   designAssemblyPieceWeight,
@@ -103,6 +104,12 @@ type DesignOptions = {
   rodSizes: string[]
   rodTypes: string[]
   subcategories: Array<{ category: string; name: string }>
+}
+
+type DesignAttachment = {
+  fileName: string
+  href: string
+  purpose: string
 }
 
 const designSections = [
@@ -236,6 +243,47 @@ function ChoiceField({
   )
 }
 
+function DesignFileFields({
+  attachments,
+  namePrefix = "",
+}: {
+  attachments: DesignAttachment[]
+  namePrefix?: string
+}) {
+  return (
+    <div className="grid gap-4">
+      <div className="grid gap-4 md:grid-cols-3">
+        {[
+          ["internal_drawing", "Internal Drawing"],
+          ["customer_marked", "Customer Marked Drawing"],
+          ["cad", "CAD File"],
+        ].map(([kind, label]) => (
+          <Field className="rounded-xl border bg-background p-4" key={kind}>
+            <FieldLabel>
+              {label}
+              <Input name={`${namePrefix}${kind}_file`} type="file" />
+            </FieldLabel>
+          </Field>
+        ))}
+      </div>
+      {attachments.length ? (
+        <div className="flex flex-wrap gap-2">
+          {attachments.map((attachment) => (
+            <Button
+              asChild
+              key={`${attachment.purpose}-${attachment.href}`}
+              size="sm"
+              variant="outline"
+            >
+              <Link href={attachment.href}>{attachment.fileName}</Link>
+            </Button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 function BomRow({
   assemblyWeight,
   canRemove,
@@ -311,11 +359,14 @@ function BomRow({
   const selectedProduct = availableProducts.find(
     ({ id }) => id === selectedProductId
   )
-  const effectiveComponentType = isListProduct
-    ? "List"
-    : isExistingComponent
-      ? (selectedProduct?.itemType ?? componentItemType)
-      : componentItemType
+  const isAssemblyChild =
+    row.parentLineNumber !== null && row.parentLineNumber !== undefined
+  const effectiveComponentType =
+    isListProduct || isAssemblyChild
+      ? "List"
+      : isExistingComponent
+        ? (selectedProduct?.itemType ?? componentItemType)
+        : componentItemType
   const isIndividualList = effectiveComponentType === "List"
   const isNewPackageComponent = !isListProduct && !isExistingComponent
   const initialComponentCategory = designOptions.categories.includes(
@@ -357,11 +408,9 @@ function BomRow({
     isExistingComponent || productTypeOptions.includes(requestedProductType)
       ? requestedProductType
       : ""
-  const requestedProductionType = isIndividualList
-    ? isExistingComponent
-      ? (selectedProduct?.productionType ?? row.manufacturingProcess ?? "")
-      : (row.manufacturingProcess ?? "")
-    : ""
+  const requestedProductionType = isExistingComponent
+    ? (selectedProduct?.productionType ?? row.manufacturingProcess ?? "")
+    : (row.manufacturingProcess ?? "")
   const effectiveProductionType =
     isExistingComponent ||
     productionTypeOptions.includes(requestedProductionType)
@@ -401,6 +450,45 @@ function BomRow({
       : isExistingComponent
         ? (selectedProduct?.pieceWeight ?? 0)
         : 0
+  const processSelectionField = (
+    <Field className="min-w-0 md:col-span-2 xl:col-span-4">
+      <FieldLabel>Pricing Process Columns Required</FieldLabel>
+      <input
+        name="bom_process_required"
+        type="hidden"
+        value={effectiveSelectedProcesses.join(", ")}
+      />
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        {costingProcessOptions.map(([value, label]) => {
+          const checkboxId = `bom-${index}-process-${value.toLowerCase()}`
+          return (
+            <label
+              className="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border bg-background px-3 py-2 text-sm font-medium has-data-checked:border-primary/50 has-data-checked:bg-[var(--color-brand-tint)]"
+              htmlFor={checkboxId}
+              key={value}
+            >
+              <Checkbox
+                checked={effectiveSelectedProcesses.includes(value)}
+                disabled={isExistingComponent}
+                id={checkboxId}
+                onCheckedChange={(checked) =>
+                  setSelectedProcesses((current) =>
+                    checked
+                      ? [
+                          ...current.filter((process) => process !== value),
+                          value,
+                        ]
+                      : current.filter((process) => process !== value)
+                  )
+                }
+              />
+              <span>{label}</span>
+            </label>
+          )
+        })}
+      </div>
+    </Field>
+  )
 
   return (
     <section
@@ -494,7 +582,7 @@ function BomRow({
       />
       <ChoiceField
         defaultValue={effectiveComponentType}
-        disabled={isListProduct || isExistingComponent}
+        disabled={isListProduct || isAssemblyChild || isExistingComponent}
         key={`${itemType}-component-type`}
         label="Component Type"
         name="bom_component_item_type"
@@ -709,45 +797,7 @@ function BomRow({
             }
             type="number"
           />
-          <Field className="min-w-0 md:col-span-2 xl:col-span-4">
-            <FieldLabel>Pricing Process Columns Required</FieldLabel>
-            <input
-              name="bom_process_required"
-              type="hidden"
-              value={effectiveSelectedProcesses.join(", ")}
-            />
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-              {costingProcessOptions.map(([value, label]) => {
-                const checkboxId = `bom-${index}-process-${value.toLowerCase()}`
-                return (
-                  <label
-                    className="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border bg-background px-3 py-2 text-sm font-medium has-data-checked:border-primary/50 has-data-checked:bg-[var(--color-brand-tint)]"
-                    htmlFor={checkboxId}
-                    key={value}
-                  >
-                    <Checkbox
-                      checked={effectiveSelectedProcesses.includes(value)}
-                      disabled={isExistingComponent}
-                      id={checkboxId}
-                      onCheckedChange={(checked) =>
-                        setSelectedProcesses((current) =>
-                          checked
-                            ? [
-                                ...current.filter(
-                                  (process) => process !== value
-                                ),
-                                value,
-                              ]
-                            : current.filter((process) => process !== value)
-                        )
-                      }
-                    />
-                    <span>{label}</span>
-                  </label>
-                )
-              })}
-            </div>
-          </Field>
+          {processSelectionField}
         </>
       ) : (
         <>
@@ -755,9 +805,19 @@ function BomRow({
           <input name="bom_rod_type" type="hidden" value="" />
           <input name="bom_grade" type="hidden" value="" />
           <input name="bom_production_type" type="hidden" value="" />
-          <input name="bom_manufacturing_process" type="hidden" value="" />
           <input name="bom_casting" type="hidden" value="" />
-          <input name="bom_process_required" type="hidden" value="" />
+          <ChoiceField
+            defaultValue={effectiveProductionType}
+            disabled={isExistingComponent}
+            key={`${index}-${effectiveProductionType}`}
+            label="Production Type"
+            name="bom_manufacturing_process"
+            options={optionsWithCurrent(
+              productionTypeOptions,
+              effectiveProductionType
+            )}
+            placeholder="Select Production Type"
+          />
           <TextField
             defaultValue={displayedAssemblyWeight}
             disabled
@@ -775,6 +835,7 @@ function BomRow({
               Quantity.
             </FieldDescription>
           </Field>
+          {processSelectionField}
         </>
       )}
       <TextField
@@ -816,6 +877,7 @@ const blankBomLine = (
 })
 
 export function DesignTaskEditor({
+  attachments = [],
   designOptions,
   editable,
   initial,
@@ -824,6 +886,7 @@ export function DesignTaskEditor({
   products,
   portfolioDecisionLocked = false,
 }: {
+  attachments?: DesignAttachment[]
   designOptions: DesignOptions
   editable: boolean
   initial: EditorInitial
@@ -864,6 +927,7 @@ export function DesignTaskEditor({
   )
   const [activeSection, setActiveSection] =
     useState<DesignSection>(initialSection)
+  const [activeFileGroup, setActiveFileGroup] = useState("root")
   const nextKey = useRef(initial.bomLines.length)
   const [rows, setRows] = useState(() =>
     (initial.bomLines.length ? initial.bomLines : [blankBomLine(1)]).map(
@@ -1229,21 +1293,45 @@ export function DesignTaskEditor({
                   ? "A List is one manufactured part. Enter its material, weight, and process details in this single row. The main Q/C Number becomes its Part UID."
                   : "Add each Package component. Existing components select an ordered Product; new components receive a UID on save. Parent Line is used only for a child below an Assembly component."}
               </FieldDescription>
-              <div className="flex flex-wrap items-center justify-between gap-3">
+              {itemType === "Package" ? (
+                <section className="grid gap-4 rounded-xl border bg-background p-5 shadow-sm md:grid-cols-2 xl:grid-cols-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3 md:col-span-2 xl:col-span-4">
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-medium">Package Parent</h4>
+                      <span className="rounded-full border bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                        Root · Package
+                      </span>
+                    </div>
+                    <Button
+                      onClick={() => addBomLine()}
+                      size="sm"
+                      type="button"
+                      variant="outline"
+                    >
+                      Add Component Line
+                    </Button>
+                  </div>
+                  <TextField
+                    defaultValue={initial.quotedPartUid ?? ""}
+                    disabled
+                    label="Package UID (automatic)"
+                    name="package_parent_uid"
+                    submittedValue=""
+                  />
+                  <TextField
+                    defaultValue={generatedProductName}
+                    disabled
+                    label="Package Name (automatic)"
+                    name="package_parent_name"
+                    submittedValue=""
+                  />
+                </section>
+              ) : (
                 <p className="text-sm text-muted-foreground">
-                  {itemType === "List"
-                    ? "Choose Package in Product Details to build a multi-component BOM."
-                    : "Use Add Component for every direct or nested part in the Package."}
+                  Choose Package in Product Details to build a multi-component
+                  BOM.
                 </p>
-                <Button
-                  disabled={itemType === "List"}
-                  onClick={() => addBomLine()}
-                  type="button"
-                  variant="outline"
-                >
-                  Add Component Line
-                </Button>
-              </div>
+              )}
               <div className="grid gap-4">
                 {visibleRows.map(({ key, row }, index) => (
                   <BomRow
@@ -1367,26 +1455,68 @@ export function DesignTaskEditor({
             <FieldSet className="rounded-xl border bg-muted/20 p-5">
               <FieldLegend>Design Files</FieldLegend>
               <FieldDescription>
-                Attach the current internal drawing, marked customer drawing,
-                and CAD evidence.
+                Keep the root Product and every BOM line&apos;s drawings in their
+                own file group.
               </FieldDescription>
-              <div className="grid gap-4 md:grid-cols-3">
-                {[
-                  ["internal_drawing_file", "Internal Drawing"],
-                  ["customer_marked_file", "Customer Marked Drawing"],
-                  ["cad_file", "CAD File"],
-                ].map(([name, label]) => (
-                  <Field
-                    className="rounded-xl border bg-background p-4"
-                    key={name}
-                  >
-                    <FieldLabel>
-                      {label}
-                      <Input name={name} type="file" />
-                    </FieldLabel>
-                  </Field>
-                ))}
+              <div
+                aria-label="Design file groups"
+                className="flex flex-wrap gap-2 rounded-xl border bg-muted/40 p-2"
+                role="tablist"
+              >
+                <Button
+                  aria-selected={activeFileGroup === "root"}
+                  onClick={() => setActiveFileGroup("root")}
+                  role="tab"
+                  size="sm"
+                  type="button"
+                  variant={activeFileGroup === "root" ? "default" : "ghost"}
+                >
+                  {itemType === "Package" ? "Package Files" : "List Files"}
+                </Button>
+                {visibleRows.map(({ row }) => {
+                  const group = String(row.lineNumber)
+                  return (
+                    <Button
+                      aria-selected={activeFileGroup === group}
+                      key={group}
+                      onClick={() => setActiveFileGroup(group)}
+                      role="tab"
+                      size="sm"
+                      type="button"
+                      variant={
+                        activeFileGroup === group ? "default" : "ghost"
+                      }
+                    >
+                      BOM Line {row.lineNumber} Files
+                    </Button>
+                  )
+                })}
               </div>
+              <div hidden={activeFileGroup !== "root"} role="tabpanel">
+                <DesignFileFields
+                  attachments={attachments.filter((attachment) =>
+                    ["cad", "customer_marked", "internal_drawing"].includes(
+                      attachment.purpose
+                    )
+                  )}
+                />
+              </div>
+              {visibleRows.map(({ row }) => (
+                <div
+                  hidden={activeFileGroup !== String(row.lineNumber)}
+                  key={row.lineNumber}
+                  role="tabpanel"
+                >
+                  <DesignFileFields
+                    attachments={attachments.filter((attachment) =>
+                      attachment.purpose.startsWith(
+                        `bom_line_${row.lineNumber}_`
+                      )
+                    )}
+                    namePrefix={`bom_line_${row.lineNumber}_`}
+                  />
+                </div>
+              ))}
             </FieldSet>
           </div>
         </>

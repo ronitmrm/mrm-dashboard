@@ -288,6 +288,11 @@ export default async function NewDesignWorkspacePage({
               value={selectedItem.organizationId}
             />
             <DesignTaskEditor
+              attachments={selectedItem.attachments.map((attachment) => ({
+                fileName: attachment.fileName,
+                href: `/commercial/design/${selectedItem.designId}/file/${attachment.purpose}`,
+                purpose: attachment.purpose,
+              }))}
               designOptions={designOptions}
               editable={editable}
               initialSection={
@@ -323,20 +328,6 @@ export default async function NewDesignWorkspacePage({
               products={productOptions.rows}
             />
           </form>
-
-          {selectedItem.attachments.length ? (
-            <div className="flex flex-wrap gap-2">
-              {selectedItem.attachments.map((attachment) => (
-                <Button asChild key={attachment.id} size="sm" variant="outline">
-                  <Link
-                    href={`/commercial/design/${selectedItem.designId}/file/${attachment.purpose}`}
-                  >
-                    {attachment.purpose}: {attachment.fileName}
-                  </Link>
-                </Button>
-              ))}
-            </div>
-          ) : null}
 
           <Separator className="mt-auto" />
           <div className="grid gap-4">

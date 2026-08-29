@@ -40,7 +40,7 @@ const initial = {
 const designOptions = {
   categories: ["Fitting"],
   designers: ["Designer"],
-  machineTypes: ["CNC", "Conventional", "DP"],
+  machineTypes: ["CNC", "Conventional", "DP", "M/C Assembly", "Assembly"],
   materialGrades: ["C3604"],
   processes: [
     "Barstock",
@@ -57,6 +57,53 @@ const designOptions = {
 }
 
 describe("DesignTaskEditor", () => {
+  test("starts a Package BOM with its visible Package parent", () => {
+    const markup = renderToStaticMarkup(
+      <DesignTaskEditor
+        designOptions={designOptions}
+        editable
+        initial={initial}
+        products={[]}
+      />
+    )
+
+    expect(markup).toContain("Package Parent")
+    expect(markup).toContain("Add Component Line")
+    expect(markup.indexOf("Package Parent")).toBeLessThan(
+      markup.indexOf("BOM Line 1")
+    )
+  })
+
+  test("separates root and BOM-line drawings into file tabs", () => {
+    const markup = renderToStaticMarkup(
+      <DesignTaskEditor
+        attachments={[
+          {
+            fileName: "line-1-internal.pdf",
+            href: "/commercial/design/design-1/file/bom_line_1_internal_drawing",
+            purpose: "bom_line_1_internal_drawing",
+          },
+        ]}
+        designOptions={designOptions}
+        editable
+        initial={initial}
+        products={[]}
+      />
+    )
+
+    expect(markup).toContain('aria-label="Design file groups"')
+    expect(markup).toContain("Package Files")
+    expect(markup).toContain("BOM Line 1 Files")
+    expect(markup).toContain('name="internal_drawing_file"')
+    expect(markup).toContain('name="bom_line_1_internal_drawing_file"')
+    expect(markup).toContain('name="bom_line_1_customer_marked_file"')
+    expect(markup).toContain('name="bom_line_1_cad_file"')
+    expect(markup).toContain("line-1-internal.pdf")
+    expect(markup).toContain(
+      'href="/commercial/design/design-1/file/bom_line_1_internal_drawing"'
+    )
+  })
+
   test("keeps read-only tabs navigable and asks each new Package List component for Product identity", () => {
     const markup = renderToStaticMarkup(
       <DesignTaskEditor
@@ -218,7 +265,9 @@ describe("DesignTaskEditor", () => {
               componentSource: "New",
               componentSubcategory: "Adapter",
               lineNumber: 1,
+              manufacturingProcess: "M/C Assembly",
               pieceWeight: 999,
+              processRequired: "Washing, Marking",
               quantity: 1,
             },
             {
@@ -255,6 +304,23 @@ describe("DesignTaskEditor", () => {
     expect(markup).not.toContain('value="999"')
     expect(markup).not.toContain(
       "Select a parent only when this component sits inside an earlier Assembly line."
+    )
+    const childLineMarkup = markup.slice(
+      markup.indexOf("BOM Line 2"),
+      markup.indexOf("BOM Line 3")
+    )
+    expect(childLineMarkup).toContain(
+      'type="hidden" name="bom_component_item_type" value="List"'
+    )
+    const assemblyLineMarkup = markup.slice(
+      markup.indexOf("BOM Line 1"),
+      markup.indexOf("BOM Line 2")
+    )
+    expect(assemblyLineMarkup).toContain("Production Type")
+    expect(assemblyLineMarkup).toContain("M/C Assembly")
+    expect(assemblyLineMarkup).toContain("Pricing Process Columns Required")
+    expect(assemblyLineMarkup).toContain(
+      'name="bom_process_required" value="Washing, Marking"'
     )
   })
 })
