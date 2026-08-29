@@ -61,17 +61,18 @@ no tab-level Save action completes the task. The workspace order is Product
 Details, BOM, Files, then Design Controls. Design Complete is an explicit final
 action on Design Controls after every tab's requirements are satisfied. Completion
 requires the Designer, target date, internal size,
-Category, Subcategory, Manufacturing Process, Checked By, every conditional
+Category, Subcategory, Production Type, Checked By, every conditional
 requirement cost, a completed valid BOM with the required new-component material,
 process, and piece-weight inputs, and current Internal Drawing and CAD files.
 Customer-marked drawing, Operation Notes, and Design Remarks remain optional.
-Incomplete saves remain In Progress and stay in the active Design queue.
+An incomplete completion attempt remains In Progress, stays in the active Design
+queue, opens Design Controls, and displays each missing field in a visible remark.
 The Designer is selected from active staff whose account or Approved Post has
 the Design Team Profile. Checked By uses that same active Design Team staff
 list. Completing and saving Design automatically creates or updates the
 controlled Product and hands the line to Product Parameter Costing; Design has
 no separate Prepare Product Costing action. Internal Category, Internal
-Subcategory, and Manufacturing Process are selected from the company-wide Design Category,
+Subcategory, and Production Type are selected from the company-wide Design Category,
 Design Subcategory, and Manufacturing Process masters; a Subcategory remains
 within its parent Category. Components Required is a Yes / No decision.
 Component identity, structure, and quantities belong in the BOM rather than
@@ -86,6 +87,14 @@ one, and its parent, package-component name, and child UID are not applicable.
 Its Part UID is the main Q/C Number allocated on save. A Package exposes Add and
 Remove Component actions; every component chooses New or Existing and List or
 Assembly, while only nested Package components use Parent Line.
+For a new List, its Product Name is generated as Product Size + Category +
+Subcategory. New BOM material fields reuse Product master choices: Rod Size uses
+existing Product Rod Size values, while Rod Type and Grade use their active
+masters. BOM headings match Product Parameter Costing: Production Type, Casting,
+and 1 Piece Weight ( gm ). Pricing Process Columns Required selects the exact
+optional Product Parameter Costing columns (Washing, Checking, Marking, Plating,
+Annealing, Deburring, Buffing, and Sealant); the saved selection controls which
+cost inputs are applicable in Product Parameter Costing.
 _Avoid_: Inline portfolio search, opening every Design editor inside the queue,
 automatic start on Technical Review completion, manual Costing handoff from
 the Design workspace.

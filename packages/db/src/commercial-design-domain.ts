@@ -13,6 +13,17 @@ export const designPortfolioDecisions = [
   "Matches Existing Portfolio",
 ] as const
 
+export function designProductName(input: {
+  category?: string | null
+  size?: string | null
+  subcategory?: string | null
+}) {
+  return [input.size, input.category, input.subcategory]
+    .map((value) => value?.trim())
+    .filter((value): value is string => Boolean(value))
+    .join(" ")
+}
+
 export function designTaskHref(input: {
   enquiryItemId: string
   portfolioMatchStatus: string
@@ -117,7 +128,7 @@ export function designTaskCompletionMissingFields(
     ["Internal Part Size", input.internalPartSize],
     ["Internal Category", input.internalPartCategory],
     ["Internal Subcategory", input.internalPartSubCategory],
-    ["Manufacturing Process", input.manufacturingProcess],
+    ["Production Type", input.manufacturingProcess],
     ["Checked By", input.checkedBy],
   ] as const
 
@@ -151,13 +162,13 @@ export function designTaskCompletionMissingFields(
     }
     if (!hasText(line.grade)) missing.push(`${prefix} Grade`)
     if (!hasText(line.manufacturingProcess)) {
-      missing.push(`${prefix} Manufacturing Process`)
+      missing.push(`${prefix} Production Type`)
     }
     if (!line.pieceWeight || line.pieceWeight <= 0) {
-      missing.push(`${prefix} Piece Weight`)
+      missing.push(`${prefix} 1 Piece Weight ( gm )`)
     }
     if (!hasText(line.processRequired)) {
-      missing.push(`${prefix} Process Required`)
+      missing.push(`${prefix} Pricing Process Columns Required`)
     }
   }
 

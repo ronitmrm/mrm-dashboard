@@ -10,11 +10,22 @@ import {
   designTaskIsEditable,
   designTaskIsOpen,
   designTaskCompletionMissingFields,
+  designProductName,
   deriveDesignTaskState,
   normalizeDesignAllocatedUid,
 } from "@workspace/db/commercial-design-domain"
 
 describe("Pricing Design Task contract", () => {
+  test("builds the Product Name in Pricing order", () => {
+    expect(
+      designProductName({
+        category: "Flare Fitting",
+        size: "1/4 X 1/4",
+        subcategory: "Male Flare X Male Nptf Adapter",
+      })
+    ).toBe("1/4 X 1/4 Flare Fitting Male Flare X Male Nptf Adapter")
+  })
+
   test("hands a completed Design task to Product Costing on save", () => {
     expect(
       designTaskShouldPrepareCosting({
@@ -201,12 +212,12 @@ describe("Pricing Design Task contract", () => {
       "Internal Part Size",
       "Internal Category",
       "Internal Subcategory",
-      "Manufacturing Process",
+      "Production Type",
       "Checked By",
       "BOM Line 1 Grade",
-      "BOM Line 1 Manufacturing Process",
-      "BOM Line 1 Piece Weight",
-      "BOM Line 1 Process Required",
+      "BOM Line 1 Production Type",
+      "BOM Line 1 1 Piece Weight ( gm )",
+      "BOM Line 1 Pricing Process Columns Required",
       "Internal Drawing",
       "CAD File",
     ])
