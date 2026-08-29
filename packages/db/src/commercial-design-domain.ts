@@ -22,6 +22,18 @@ export const designWorkspaceSections = [
 
 export type DesignWorkspaceSection = (typeof designWorkspaceSections)[number]
 
+export const designProductionTypes = ["CNC", "Conventional"] as const
+
+export function designProductionTypeOptions(masterValues: readonly string[]) {
+  const valuesByName = new Map(
+    masterValues.map((value) => [value.trim().toLowerCase(), value.trim()])
+  )
+  return designProductionTypes.flatMap((productionType) => {
+    const masterValue = valuesByName.get(productionType.toLowerCase())
+    return masterValue ? [masterValue] : []
+  })
+}
+
 export function designWorkspaceSection(value: string | null | undefined) {
   return designWorkspaceSections.find((section) => section === value)
 }
@@ -207,10 +219,10 @@ export function designTaskCompletionMissingFields(
     }
     if (!hasText(line.grade)) missing.push(`${prefix} Grade`)
     if (!hasText(line.productionType)) {
-      missing.push(`${prefix} Production Type`)
+      missing.push(`${prefix} Product Type`)
     }
     if (!hasText(line.manufacturingProcess)) {
-      missing.push(`${prefix} Machine Type`)
+      missing.push(`${prefix} Production Type`)
     }
     if (!line.pieceWeight || line.pieceWeight <= 0) {
       missing.push(`${prefix} 1 Piece Weight ( gm )`)

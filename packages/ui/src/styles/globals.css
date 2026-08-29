@@ -278,6 +278,20 @@
   }
 }
 
+/* Large grouped surfaces use one strong border across every application area. */
+@layer components {
+  :where(
+    [data-slot="card"],
+    [data-slot="field-set"],
+    [role="tablist"],
+    .rounded-lg.border,
+    .rounded-xl.border,
+    .rounded-2xl.border
+  ) {
+    border-color: var(--color-panel-border);
+  }
+}
+
 /* IDs, metrics, quantities, and table data keep digit widths stable. */
 [data-slot="table"],
 [data-slot="metric-card"],

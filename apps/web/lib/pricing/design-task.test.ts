@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest"
 
 import {
   designItemType,
+  designProductionTypeOptions,
   designPortfolioDecisions,
   designTaskSavedHref,
   designStatuses,
@@ -17,6 +18,13 @@ import {
 } from "@workspace/db/commercial-design-domain"
 
 describe("Pricing Design Task contract", () => {
+  test("limits Production Type to CNC and Conventional master values", () => {
+    expect(designProductionTypeOptions(["Conventional", "DP", "CNC"])).toEqual([
+      "CNC",
+      "Conventional",
+    ])
+  })
+
   test("keeps an explicitly selected List as a List on draft save", () => {
     expect(
       designItemType({
@@ -234,8 +242,8 @@ describe("Pricing Design Task contract", () => {
       "Production Type",
       "Checked By",
       "BOM Line 1 Grade",
+      "BOM Line 1 Product Type",
       "BOM Line 1 Production Type",
-      "BOM Line 1 Machine Type",
       "BOM Line 1 1 Piece Weight ( gm )",
       "BOM Line 1 Pricing Process Columns Required",
       "Internal Drawing",
@@ -269,7 +277,7 @@ describe("Pricing Design Task contract", () => {
         internalPartSize: "10mm",
         internalPartSubCategory: "Stem",
         itemType: "List",
-        manufacturingProcess: "Barstock",
+        manufacturingProcess: "Conventional",
         targetCompletionDate: "2026-08-29",
         toolingApproxCost: 0,
         toolingRequired: "No",

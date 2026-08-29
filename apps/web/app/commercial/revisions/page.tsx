@@ -542,7 +542,7 @@ export default async function CommercialRevisionsPage() {
                           </NativeSelect>
                         </Field>
                         <Field>
-                          <FieldLabel>Production Type</FieldLabel>
+                          <FieldLabel>Product Type</FieldLabel>
                           <Input name="production_type" />
                         </Field>
                         <Field>

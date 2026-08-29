@@ -194,14 +194,14 @@ describe("Pricing spreadsheet workbook", () => {
       ...row,
       currency: "",
       customerPartCode: null,
-      pricingMissingFields: ["Production Type", "Rod Size"],
+      pricingMissingFields: ["Product Type", "Rod Size"],
       quoteInputs: {},
     }
 
     expect(toPricingViewRow(incompleteRow)).toMatchObject({
       Currency: "USD",
       "Conversion Cost": "-",
-      "Missing Pricing Values": "Customer Part Code; Production Type; Rod Size",
+      "Missing Pricing Values": "Customer Part Code; Product Type; Rod Size",
       "Pricing Completeness": "Missing Values",
     })
   })
@@ -404,6 +404,9 @@ describe("Pricing spreadsheet workbook", () => {
         "Total Package Price Including BOM Component Cost (INR/pc)"
       )
     ).toBe(pricingHeaders.indexOf("BOM Component Cost (INR/pc)") + 1)
+    expect(pricingHeaders).toContain("Product Type")
+    expect(pricingHeaders).toContain("Production Type")
+    expect(pricingHeaders).not.toContain("Machine Type")
     expect(views[0]).toMatchObject({
       "Alloy Premium (INR/kg)": "-",
       "Anneling (INR/kg)": "0.00",
@@ -418,7 +421,7 @@ describe("Pricing spreadsheet workbook", () => {
       "Forg Cost+ Nitric Blasting (INR/kg)": "-",
       Grade: "-",
       "M/c Cost (INR/kg)": "-",
-      "Machine Type": "-",
+      "Production Type": "-",
       "Marking (INR/kg)": "0.00",
       "Net Rate / KG With Alloy Premium": "-",
       "Net Rate / KG Without Alloy Premium": "-",
@@ -426,7 +429,7 @@ describe("Pricing spreadsheet workbook", () => {
       "Overhead (INR/kg)": "-",
       "Packing (INR/kg)": "0.15",
       "Plating (INR/kg)": "0.00",
-      "Production Type": "-",
+      "Product Type": "-",
       "Rate / PCS In INR": "0.69",
       "Rate / PCS In Currency": "0.2366",
       "Rejection %": "2.00%",

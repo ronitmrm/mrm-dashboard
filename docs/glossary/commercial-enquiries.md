@@ -62,7 +62,7 @@ from which it was submitted. The workspace order is Product
 Details, BOM, Files, then Design Controls. Design Complete is an explicit final
 action on Design Controls after every tab's requirements are satisfied. Completion
 requires the Designer, target date, internal size,
-Category, Subcategory, Production Type, Checked By, every conditional
+Category, Subcategory, Product Type, Production Type, Checked By, every conditional
 requirement cost, a completed valid BOM with the required new-component material,
 process, and piece-weight inputs, and current Internal Drawing and CAD files.
 Customer-marked drawing, Operation Notes, and Design Remarks remain optional.
@@ -72,9 +72,10 @@ The Designer is selected from active staff whose account or Approved Post has
 the Design Team Profile. Checked By uses that same active Design Team staff
 list. Completing and saving Design automatically creates or updates the
 controlled Product and hands the line to Product Parameter Costing; Design has
-no separate Prepare Product Costing action. Internal Category, Internal
-Subcategory, and Production Type are selected from the company-wide Design Category,
-Design Subcategory, and Manufacturing Process masters; a Subcategory remains
+no separate Prepare Product Costing action. Internal Category and Internal
+Subcategory are selected from their company-wide masters. Product Type (for
+example Barstock) uses the Design Process master. Production Type uses the Product
+Machine Type master and is limited to CNC or Conventional; a Subcategory remains
 within its parent Category. Components Required is a Yes / No decision.
 Component identity, structure, and quantities belong in the BOM rather than
 that decision.
@@ -93,11 +94,11 @@ Assembly, while only nested Package components use Parent Line.
 For a new List, its Product Name is generated as Product Size + Category +
 Subcategory. New BOM material fields reuse Product master choices: Rod Size uses
 existing Product Rod Size values, while Rod Type and Grade use their active
-masters. Product Details Production Type (for example Barstock) is distinct from
-the BOM Machine Type (for example Conventional or CNC); both reuse their Product
-masters and flow to the corresponding Product Parameter Costing and Pricing
-fields. BOM headings match Product Parameter Costing: Production Type, Machine
-Type, Casting, and 1 Piece Weight ( gm ). Pricing Process Columns Required selects the exact
+masters. Product Type (for example Barstock) is distinct from Production Type
+(CNC or Conventional); both reuse their Product masters and flow to the
+corresponding Product Parameter Costing and Pricing fields. BOM headings match
+Product Parameter Costing: Product Type, Production Type, Casting, and 1 Piece
+Weight ( gm ). Pricing Process Columns Required selects the exact
 optional Product Parameter Costing columns (Washing, Checking, Marking, Plating,
 Annealing, Deburring, Buffing, and Sealant); the saved selection controls which
 cost inputs are applicable in Product Parameter Costing.
@@ -210,7 +211,7 @@ Grade, Rod Type, Rod Size, Burning Loss, and machining cost are also not applica
 to those summaries and display `-`. Marking,
 plating, annealing, deburring, buffing, and sealant retain numeric zero when zero
 and show their actual values when non-zero. Forging cost is applicable only when
-Production Type is Casting or Forging; every other type, including Barstock and
+Product Type is Casting or Forging; every other type, including Barstock and
 Moulded, displays `-`. Rejection, burning-loss, and profit values include a
 visible `%` suffix. Populated formula-derived cells use a light-blue fill in the
 Pricing and Price Revisions tables; input/source cells retain the standard fill.

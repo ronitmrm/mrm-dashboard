@@ -2,7 +2,10 @@
 
 import { useRef, useState } from "react"
 
-import { designProductName } from "@workspace/db/commercial-design-domain"
+import {
+  designProductName,
+  designProductionTypeOptions,
+} from "@workspace/db/commercial-design-domain"
 import { Button } from "@workspace/ui/components/button"
 import { Checkbox } from "@workspace/ui/components/checkbox"
 import {
@@ -253,13 +256,18 @@ function BomRow({
       .map((process) => process.trim())
       .filter(Boolean)
   )
-  const effectiveProductionType = isListProduct
+  const productionTypeOptions = designProductionTypeOptions(
+    designOptions.machineTypes
+  )
+  const effectiveProductType = row.productionType ?? ""
+  const requestedProductionType = isListProduct
     ? productionType
-    : (row.productionType ?? "")
-  const effectiveMachineType =
-    row.manufacturingProcess === effectiveProductionType
-      ? ""
-      : (row.manufacturingProcess ?? "")
+    : (row.manufacturingProcess ?? "")
+  const effectiveProductionType = productionTypeOptions.includes(
+    requestedProductionType
+  )
+    ? requestedProductionType
+    : ""
 
   return (
     <section
@@ -395,26 +403,23 @@ function BomRow({
         placeholder="Select Material Grade"
       />
       <ChoiceField
+        defaultValue={effectiveProductType}
+        disabled={isExistingComponent}
+        label="Product Type"
+        name="bom_production_type"
+        options={optionsWithCurrent(
+          designOptions.processes,
+          effectiveProductType
+        )}
+        placeholder="Select Product Type"
+      />
+      <ChoiceField
         defaultValue={effectiveProductionType}
         disabled={isListProduct || isExistingComponent}
         key={`${index}-${effectiveProductionType}`}
         label="Production Type"
-        name="bom_production_type"
-        options={optionsWithCurrent(
-          designOptions.processes,
-          effectiveProductionType
-        )}
-        placeholder="Select Production Type"
-      />
-      <ChoiceField
-        defaultValue={effectiveMachineType}
-        disabled={isExistingComponent}
-        label="Machine Type"
         name="bom_manufacturing_process"
-        options={optionsWithCurrent(
-          designOptions.machineTypes,
-          effectiveMachineType
-        )}
+        options={productionTypeOptions}
         placeholder="Select Conventional or CNC"
       />
       <TextField
@@ -512,6 +517,9 @@ export function DesignTaskEditor({
   products: ProductOption[]
   portfolioDecisionLocked?: boolean
 }) {
+  const productionTypeOptions = designProductionTypeOptions(
+    designOptions.machineTypes
+  )
   const [portfolioDecision, setPortfolioDecision] = useState(
     portfolioDecisionLocked ? "New Quoted Part" : initial.portfolioMatchStatus
   )
@@ -542,9 +550,10 @@ export function DesignTaskEditor({
       ? initial.internalPartSubCategory!
       : ""
   )
-  const [productionType, setProductionType] = useState(
-    initial.manufacturingProcess ?? ""
-  )
+  const [productionType, setProductionType] = useState(() => {
+    const current = initial.manufacturingProcess ?? ""
+    return productionTypeOptions.includes(current) ? current : ""
+  })
   const [activeSection, setActiveSection] =
     useState<DesignSection>(initialSection)
   const nextKey = useRef(initial.bomLines.length)
@@ -760,10 +769,7 @@ export function DesignTaskEditor({
                       label="Production Type"
                       name="manufacturing_process"
                       onChange={setProductionType}
-                      options={optionsWithCurrent(
-                        designOptions.processes,
-                        productionType
-                      )}
+                      options={productionTypeOptions}
                       placeholder="Select Production Type"
                     />
                     {itemType === "Package" ? (
