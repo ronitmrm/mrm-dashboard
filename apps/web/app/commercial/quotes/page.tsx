@@ -149,7 +149,7 @@ export default async function QuotesPage() {
                         ) : quote.status === "Draft" && quote.enquiryItemId ? (
                           <Button asChild size="sm" variant="outline">
                             <Link
-                              href={`/commercial/customer-costing?task=${encodeURIComponent(quote.enquiryItemId)}#customer-cost-form`}
+                              href={`/commercial/customer-costing/${encodeURIComponent(quote.enquiryItemId)}`}
                             >
                               Continue Costing
                             </Link>

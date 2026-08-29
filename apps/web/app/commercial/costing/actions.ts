@@ -90,7 +90,6 @@ export async function updateProductCostingAction(formData: FormData) {
             ? "complete"
             : "in_progress",
         actorUserId,
-        alloyPremium: optionalNumber(formData, "alloy_premium"),
         annealing: numberValue(formData, "annealing", 0),
         assemblyOperationCost: numberValue(
           formData,
@@ -107,7 +106,6 @@ export async function updateProductCostingAction(formData: FormData) {
           "direct_purchase_price_per_kg",
           0
         ),
-        extrusionCost: optionalNumber(formData, "extrusion_cost"),
         forgingCost: numberValue(formData, "forging_cost", 0),
         itemId: requiredText(formData, "item_id"),
         machineTypeId: optionalText(formData, "machine_type_id") ?? null,
@@ -128,6 +126,8 @@ export async function updateProductCostingAction(formData: FormData) {
       })
   )
   revalidatePath(productCostingPath)
+  const taskId = optionalText(formData, "task_id")
+  if (taskId) revalidatePath(`${productCostingPath}/${taskId}`)
   revalidatePath(customerCostingPath)
   revalidatePath("/commercial/pricing")
 }
@@ -218,6 +218,8 @@ export async function saveQuoteAction(formData: FormData) {
       })
   )
   revalidatePath(customerCostingPath)
+  const enquiryItemId = requiredText(formData, "enquiry_item_id")
+  revalidatePath(`${customerCostingPath}/${enquiryItemId}`)
   revalidatePath("/commercial/quotes")
 }
 

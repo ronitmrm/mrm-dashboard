@@ -106,7 +106,7 @@ export default async function QuoteDetailPage({
               ) : quote.status === "Draft" && quote.enquiryItemId ? (
                 <Button asChild>
                   <Link
-                    href={`/commercial/customer-costing?task=${encodeURIComponent(quote.enquiryItemId)}#customer-cost-form`}
+                    href={`/commercial/customer-costing/${encodeURIComponent(quote.enquiryItemId)}`}
                   >
                     Continue Costing
                   </Link>
