@@ -2,7 +2,9 @@
 
 import { useRef, useState } from "react"
 
+import { designProductName } from "@workspace/db/commercial-design-domain"
 import { Button } from "@workspace/ui/components/button"
+import { Checkbox } from "@workspace/ui/components/checkbox"
 import {
   Field,
   FieldDescription,
@@ -74,7 +76,10 @@ type ProductOption = {
 type DesignOptions = {
   categories: string[]
   designers: string[]
+  materialGrades: string[]
   processes: string[]
+  rodSizes: string[]
+  rodTypes: string[]
   subcategories: Array<{ category: string; name: string }>
 }
 
@@ -91,11 +96,35 @@ const equalFieldGridClassName =
   "grid gap-x-4 gap-y-5 md:grid-cols-2 xl:grid-cols-4"
 const fieldLabelClassName = "flex h-full w-full flex-col justify-between gap-2"
 
+const costingProcessOptions = [
+  ["Washing", "Washing (INR/kg)"],
+  ["Checking", "Checking (INR/kg)"],
+  ["Marking", "Marking (INR/kg)"],
+  ["Plating", "Plating (INR/kg)"],
+  ["Annealing", "Annealing (INR/kg)"],
+  ["Deburring", "Deburring (INR/kg)"],
+  ["Buffing", "Buffing (INR/kg)"],
+  ["Sealant", "Sealant (INR/kg)"],
+] as const
+
+function optionsWithCurrent(
+  options: readonly string[] | undefined,
+  current?: string | null
+) {
+  const availableOptions = options ?? []
+  const value = current?.trim()
+  if (!value || availableOptions.includes(value)) return availableOptions
+  return [...availableOptions, value].sort((left, right) =>
+    left.localeCompare(right)
+  )
+}
+
 function TextField({
   defaultValue,
   disabled = false,
   label,
   name,
+  onChange,
   placeholder,
   readOnly = false,
   type = "text",
@@ -104,6 +133,7 @@ function TextField({
   disabled?: boolean
   label: string
   name: string
+  onChange?: (value: string) => void
   placeholder?: string
   readOnly?: boolean
   type?: string
@@ -121,6 +151,7 @@ function TextField({
           disabled={disabled}
           min={type === "number" ? "0" : undefined}
           name={disabled ? undefined : name}
+          onChange={(event) => onChange?.(event.currentTarget.value)}
           placeholder={placeholder}
           readOnly={readOnly}
           step={type === "number" ? "0.000001" : undefined}
@@ -179,16 +210,22 @@ function ChoiceField({
 
 function BomRow({
   canRemove,
+  designOptions,
+  generatedProductName,
   index,
   itemType,
   onRemove,
+  productionType,
   products,
   row,
 }: {
   canRemove: boolean
+  designOptions: DesignOptions
+  generatedProductName: string
   index: number
   itemType: string
   onRemove: () => void
+  productionType: string
   products: ProductOption[]
   row: BomLine
 }) {
@@ -202,6 +239,15 @@ function BomRow({
   const effectiveSource = isListProduct ? "New" : componentSource
   const effectiveComponentType = isListProduct ? "List" : componentItemType
   const isExistingComponent = effectiveSource === "Existing"
+  const [selectedProcesses, setSelectedProcesses] = useState(() =>
+    (row.processRequired ?? "")
+      .split(/[,;\n]+/)
+      .map((process) => process.trim())
+      .filter(Boolean)
+  )
+  const effectiveProductionType = isListProduct
+    ? productionType
+    : (row.manufacturingProcess ?? "")
 
   return (
     <section
@@ -296,60 +342,108 @@ function BomRow({
       />
       <TextField
         defaultValue={
-          isListProduct || isExistingComponent ? "" : (row.packagePart ?? "")
+          isListProduct
+            ? generatedProductName
+            : isExistingComponent
+              ? ""
+              : (row.packagePart ?? "")
         }
         disabled={isListProduct || isExistingComponent}
-        label="New Component Name"
+        key={isListProduct ? generatedProductName : undefined}
+        label={
+          isListProduct ? "Product Name (automatic)" : "New Component Name"
+        }
         name="bom_package_part"
         placeholder="Describe the component being created"
       />
       <input name="bom_item" type="hidden" value={row.bomItem ?? ""} />
-      <TextField
+      <ChoiceField
         defaultValue={row.rodSize ?? ""}
         disabled={isExistingComponent}
         label="Rod Size"
         name="bom_rod_size"
+        options={optionsWithCurrent(designOptions.rodSizes, row.rodSize)}
+        placeholder="Select Product Rod Size"
       />
-      <TextField
+      <ChoiceField
         defaultValue={row.rodType ?? ""}
         disabled={isExistingComponent}
         label="Rod Type"
         name="bom_rod_type"
+        options={optionsWithCurrent(designOptions.rodTypes, row.rodType)}
+        placeholder="Select Rod Type"
       />
-      <TextField
+      <ChoiceField
         defaultValue={row.grade ?? ""}
         disabled={isExistingComponent}
         label="Grade"
         name="bom_grade"
+        options={optionsWithCurrent(designOptions.materialGrades, row.grade)}
+        placeholder="Select Material Grade"
       />
-      <TextField
-        defaultValue={row.manufacturingProcess ?? ""}
-        disabled={isExistingComponent}
-        label="Component Manufacturing Process"
+      <ChoiceField
+        defaultValue={effectiveProductionType}
+        disabled={isListProduct || isExistingComponent}
+        key={`${index}-${effectiveProductionType}`}
+        label="Production Type"
         name="bom_manufacturing_process"
-        placeholder="How this part is manufactured"
+        options={optionsWithCurrent(
+          designOptions.processes,
+          effectiveProductionType
+        )}
+        placeholder="Select Production Type"
       />
       <TextField
         defaultValue={row.casting ?? ""}
         disabled={isExistingComponent}
-        label="Casting Weight"
+        label="Casting"
         name="bom_casting"
         type="number"
       />
       <TextField
         defaultValue={row.pieceWeight ?? ""}
         disabled={isExistingComponent}
-        label="Piece Weight"
+        label="1 Piece Weight ( gm )"
         name="bom_piece_weight"
         type="number"
       />
-      <TextField
-        defaultValue={row.processRequired ?? ""}
-        disabled={isExistingComponent}
-        label="Process Required"
-        name="bom_process_required"
-        placeholder="e.g. Cutting, machining, washing"
-      />
+      <Field className="min-w-0 md:col-span-2 xl:col-span-4">
+        <FieldLabel>Pricing Process Columns Required</FieldLabel>
+        <input
+          name="bom_process_required"
+          type="hidden"
+          value={selectedProcesses.join(", ")}
+        />
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          {costingProcessOptions.map(([value, label]) => {
+            const checkboxId = `bom-${index}-process-${value.toLowerCase()}`
+            return (
+              <label
+                className="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border bg-background px-3 py-2 text-sm font-medium has-data-checked:border-primary/50 has-data-checked:bg-[var(--color-brand-tint)]"
+                htmlFor={checkboxId}
+                key={value}
+              >
+                <Checkbox
+                  checked={selectedProcesses.includes(value)}
+                  disabled={isExistingComponent}
+                  id={checkboxId}
+                  onCheckedChange={(checked) =>
+                    setSelectedProcesses((current) =>
+                      checked
+                        ? [
+                            ...current.filter((process) => process !== value),
+                            value,
+                          ]
+                        : current.filter((process) => process !== value)
+                    )
+                  }
+                />
+                <span>{label}</span>
+              </label>
+            )
+          })}
+        </div>
+      </Field>
       <TextField
         defaultValue={row.notes ?? ""}
         label="Line Notes"
@@ -383,12 +477,14 @@ export function DesignTaskEditor({
   designOptions,
   editable,
   initial,
+  initialSection = "product",
   products,
   portfolioDecisionLocked = false,
 }: {
   designOptions: DesignOptions
   editable: boolean
   initial: EditorInitial
+  initialSection?: DesignSection
   products: ProductOption[]
   portfolioDecisionLocked?: boolean
 }) {
@@ -410,7 +506,23 @@ export function DesignTaskEditor({
     : ""
   const [internalPartCategory, setInternalPartCategory] =
     useState(initialCategory)
-  const [activeSection, setActiveSection] = useState<DesignSection>("product")
+  const [internalPartSize, setInternalPartSize] = useState(
+    initial.internalPartSize ?? ""
+  )
+  const [internalPartSubCategory, setInternalPartSubCategory] = useState(() =>
+    designOptions.subcategories.some(
+      (option) =>
+        option.category === initialCategory &&
+        option.name === initial.internalPartSubCategory
+    )
+      ? initial.internalPartSubCategory!
+      : ""
+  )
+  const [productionType, setProductionType] = useState(
+    initial.manufacturingProcess ?? ""
+  )
+  const [activeSection, setActiveSection] =
+    useState<DesignSection>(initialSection)
   const nextKey = useRef(initial.bomLines.length)
   const [rows, setRows] = useState(() =>
     (initial.bomLines.length ? initial.bomLines : [blankBomLine(1)]).map(
@@ -422,11 +534,11 @@ export function DesignTaskEditor({
   const subcategoryOptions = designOptions.subcategories
     .filter((option) => option.category === internalPartCategory)
     .map((option) => option.name)
-  const initialSubcategory = subcategoryOptions.includes(
-    initial.internalPartSubCategory ?? ""
-  )
-    ? initial.internalPartSubCategory!
-    : ""
+  const generatedProductName = designProductName({
+    category: internalPartCategory,
+    size: internalPartSize,
+    subcategory: internalPartSubCategory,
+  })
 
   return (
     <fieldset className="grid gap-8" disabled={!editable}>
@@ -591,21 +703,26 @@ export function DesignTaskEditor({
                       defaultValue={initial.internalPartSize ?? ""}
                       label="Internal Part Size"
                       name="internal_part_size"
+                      onChange={setInternalPartSize}
                     />
                     <ChoiceField
                       defaultValue={initialCategory}
                       label="Internal Category"
                       name="internal_part_category"
-                      onChange={setInternalPartCategory}
+                      onChange={(category) => {
+                        setInternalPartCategory(category)
+                        setInternalPartSubCategory("")
+                      }}
                       options={designOptions.categories}
                       placeholder="Select category"
                     />
                     <ChoiceField
-                      defaultValue={initialSubcategory}
+                      defaultValue={internalPartSubCategory}
                       disabled={!internalPartCategory}
                       key={internalPartCategory || "no-category"}
                       label="Internal Subcategory"
                       name="internal_part_sub_category"
+                      onChange={setInternalPartSubCategory}
                       options={subcategoryOptions}
                       placeholder={
                         internalPartCategory
@@ -614,17 +731,15 @@ export function DesignTaskEditor({
                       }
                     />
                     <ChoiceField
-                      defaultValue={
-                        designOptions.processes.includes(
-                          initial.manufacturingProcess ?? ""
-                        )
-                          ? initial.manufacturingProcess!
-                          : ""
-                      }
-                      label="Manufacturing Process"
+                      defaultValue={productionType}
+                      label="Production Type"
                       name="manufacturing_process"
-                      options={designOptions.processes}
-                      placeholder="Select process"
+                      onChange={setProductionType}
+                      options={optionsWithCurrent(
+                        designOptions.processes,
+                        productionType
+                      )}
+                      placeholder="Select Production Type"
                     />
                     {itemType === "Package" ? (
                       <TextField
@@ -800,6 +915,8 @@ export function DesignTaskEditor({
                 {visibleRows.map(({ key, row }, index) => (
                   <BomRow
                     canRemove={itemType === "Package" && visibleRows.length > 1}
+                    designOptions={designOptions}
+                    generatedProductName={generatedProductName}
                     index={index}
                     itemType={itemType}
                     key={key}
@@ -808,6 +925,7 @@ export function DesignTaskEditor({
                         current.filter((entry) => entry.key !== key)
                       )
                     }
+                    productionType={productionType}
                     products={products}
                     row={row}
                   />

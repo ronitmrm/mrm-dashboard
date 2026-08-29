@@ -643,7 +643,9 @@ export async function saveDesignAction(formData: FormData) {
       incomplete: completionMissingFields.join("|"),
       saved: "1",
     })
-    redirect(`${designPath}/${enquiryItemId}/new?${params}`)
+    redirect(
+      `${designPath}/${enquiryItemId}/new?${params}#design-completion-remark`
+    )
   }
   redirect(designTaskSavedHref(enquiryItemId))
 }

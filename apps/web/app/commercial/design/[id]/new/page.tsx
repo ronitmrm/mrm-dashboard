@@ -4,7 +4,11 @@ import { notFound, redirect } from "next/navigation"
 
 import { createCommercialWorkflowRepository } from "@workspace/db"
 import { designTaskIsEditable } from "@workspace/db/commercial-design-domain"
-import { Alert, AlertDescription } from "@workspace/ui/components/alert"
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from "@workspace/ui/components/alert"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import { Card, CardContent } from "@workspace/ui/components/card"
@@ -156,12 +160,25 @@ export default async function NewDesignWorkspacePage({
 
       <Card className="flex-1 overflow-hidden">
         <CardContent className="flex h-full flex-col gap-6 p-4 lg:p-6">
-          {resolvedSearchParams.saved === "1" ? (
+          {incompleteFields.length ? (
+            <Alert id="design-completion-remark" variant="destructive">
+              <AlertTitle>Design task is not complete</AlertTitle>
+              <AlertDescription>
+                <p>
+                  The draft was saved and remains in the Design queue. Complete
+                  these required fields before it can move to Product Costing:
+                </p>
+                <ul className="mt-2 list-disc space-y-1 pl-5">
+                  {incompleteFields.map((field) => (
+                    <li key={field}>{field}</li>
+                  ))}
+                </ul>
+              </AlertDescription>
+            </Alert>
+          ) : resolvedSearchParams.saved === "1" ? (
             <Alert>
               <AlertDescription>
-                {incompleteFields.length
-                  ? `Draft saved. Complete the required fields: ${incompleteFields.join(", ")}.`
-                  : "Design task saved successfully."}
+                Design task saved successfully.
               </AlertDescription>
             </Alert>
           ) : null}
@@ -306,6 +323,7 @@ export default async function NewDesignWorkspacePage({
             <DesignTaskEditor
               designOptions={designOptions}
               editable={editable}
+              initialSection={incompleteFields.length ? "controls" : undefined}
               portfolioDecisionLocked
               initial={{
                 bomLines: selectedItem.bomLines,

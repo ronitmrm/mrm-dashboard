@@ -12,6 +12,7 @@ import {
 } from "./commercial-bounds"
 import {
   deriveDesignTaskState,
+  designProductName,
   designTaskIsEditable,
   designTaskStatusAfterStart,
   normalizeDesignAllocatedUid,
@@ -3512,10 +3513,17 @@ export function createCommercialWorkflowRepository(
     },
 
     async getDesignWorkspaceOptions(organizationCode: string) {
-      const [designers, categories, subcategories, processes] =
-        await Promise.all([
-          pool.query<{ name: string }>(
-            `
+      const [
+        designers,
+        categories,
+        subcategories,
+        processes,
+        materialGrades,
+        rodTypes,
+        rodSizes,
+      ] = await Promise.all([
+        pool.query<{ name: string }>(
+          `
               SELECT DISTINCT btrim(post.employee_name) AS name
               FROM recruitment.posts post
               JOIN core.organizations organization
@@ -3555,10 +3563,10 @@ export function createCommercialWorkflowRepository(
                 )
               ORDER BY name
             `,
-            [organizationCode.trim()]
-          ),
-          pool.query<{ name: string }>(
-            `
+          [organizationCode.trim()]
+        ),
+        pool.query<{ name: string }>(
+          `
               SELECT category.name
               FROM catalog.item_categories category
               JOIN core.organizations organization
@@ -3566,10 +3574,10 @@ export function createCommercialWorkflowRepository(
               WHERE lower(organization.code) = lower($1)
               ORDER BY lower(category.name)
             `,
-            [organizationCode.trim()]
-          ),
-          pool.query<{ category: string; name: string }>(
-            `
+          [organizationCode.trim()]
+        ),
+        pool.query<{ category: string; name: string }>(
+          `
               SELECT category.name AS category, subcategory.name
               FROM catalog.item_subcategories subcategory
               JOIN catalog.item_categories category
@@ -3579,10 +3587,10 @@ export function createCommercialWorkflowRepository(
               WHERE lower(organization.code) = lower($1)
               ORDER BY lower(category.name), lower(subcategory.name)
             `,
-            [organizationCode.trim()]
-          ),
-          pool.query<{ name: string }>(
-            `
+          [organizationCode.trim()]
+        ),
+        pool.query<{ name: string }>(
+          `
               SELECT process.name
               FROM catalog.design_processes process
               JOIN core.organizations organization
@@ -3590,14 +3598,52 @@ export function createCommercialWorkflowRepository(
               WHERE lower(organization.code) = lower($1)
               ORDER BY lower(process.name)
             `,
-            [organizationCode.trim()]
-          ),
-        ])
+          [organizationCode.trim()]
+        ),
+        pool.query<{ name: string }>(
+          `
+              SELECT grade.name
+              FROM catalog.material_grades grade
+              JOIN core.organizations organization
+                ON organization.id = grade.organization_id
+              WHERE lower(organization.code) = lower($1)
+              ORDER BY lower(grade.name)
+            `,
+          [organizationCode.trim()]
+        ),
+        pool.query<{ name: string }>(
+          `
+              SELECT rod_type.name
+              FROM catalog.rod_types rod_type
+              JOIN core.organizations organization
+                ON organization.id = rod_type.organization_id
+              WHERE lower(organization.code) = lower($1)
+              ORDER BY lower(rod_type.name)
+            `,
+          [organizationCode.trim()]
+        ),
+        pool.query<{ name: string }>(
+          `
+              SELECT DISTINCT btrim(item.rod_size) AS name
+              FROM catalog.items item
+              JOIN core.organizations organization
+                ON organization.id = item.organization_id
+              WHERE lower(organization.code) = lower($1)
+                AND item.lifecycle_status = 'P'
+                AND nullif(btrim(item.rod_size), '') IS NOT NULL
+              ORDER BY name
+            `,
+          [organizationCode.trim()]
+        ),
+      ])
 
       return {
         categories: categories.rows.map((row) => row.name),
         designers: designers.rows.map((row) => row.name),
+        materialGrades: materialGrades.rows.map((row) => row.name),
         processes: processes.rows.map((row) => row.name),
+        rodSizes: rodSizes.rows.map((row) => row.name),
+        rodTypes: rodTypes.rows.map((row) => row.name),
         subcategories: subcategories.rows,
       }
     },
@@ -4473,13 +4519,11 @@ export function createCommercialWorkflowRepository(
             ))
           : null
         const internalPartName =
-          [
-            input.internalPartSize,
-            input.internalPartSubCategory,
-            input.internalPartCategory,
-          ]
-            .filter(Boolean)
-            .join(" ") || null
+          designProductName({
+            category: input.internalPartCategory,
+            size: input.internalPartSize,
+            subcategory: input.internalPartSubCategory,
+          }) || null
         const inputBomLines = candidateBomLines
         if (designStatus === "Design Complete" && inputBomLines.length === 0) {
           throw new Error(
@@ -4781,7 +4825,9 @@ export function createCommercialWorkflowRepository(
               task.design_status, task.next_stage_status,
               task.matched_product_id, task.quoted_part_uid, task.item_type,
               task.manufacturing_process, task.package_process_required,
-              task.design_remarks, item.description
+              task.design_remarks,
+              COALESCE(NULLIF(btrim(task.internal_part_name), ''), item.description)
+                AS description
             FROM sales.design_tasks task
             JOIN sales.enquiry_items item
               ON item.id = task.enquiry_item_id
