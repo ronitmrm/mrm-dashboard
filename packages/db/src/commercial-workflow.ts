@@ -6867,16 +6867,83 @@ export function createCommercialWorkflowRepository(
     ) {
       const { containsPattern, query } = selectorSearchTerm(value)
       const products = await pool.query<{
+        blank_piece_weight: string | null
+        category: string | null
         description: string
+        grade: string | null
         id: string
         item_type: string
+        line_notes: string | null
+        piece_weight: string | null
+        process_required: string | null
+        product_size: string | null
+        product_type: string | null
+        production_type: string | null
+        rod_size: string | null
+        rod_type: string | null
+        subcategory: string | null
         uid: string
       }>(
         `
-          SELECT item.id, item.uid, item.description, item.item_type
+          SELECT item.id, item.uid, item.description, item.item_type,
+            COALESCE(
+              NULLIF(btrim(profile.size), ''),
+              NULLIF(btrim(item.source_payload ->> 'productSize'), ''),
+              NULLIF(btrim(design.internal_part_size), '')
+            ) AS product_size,
+            COALESCE(
+              NULLIF(btrim(profile.category), ''),
+              NULLIF(btrim(item.source_payload ->> 'category'), ''),
+              NULLIF(btrim(design.internal_part_category), '')
+            ) AS category,
+            COALESCE(
+              NULLIF(btrim(profile.sub_category), ''),
+              NULLIF(btrim(item.source_payload ->> 'subcategory'), ''),
+              NULLIF(btrim(design.internal_part_sub_category), '')
+            ) AS subcategory,
+            NULLIF(btrim(item.rod_size), '') AS rod_size,
+            rod_type.name AS rod_type,
+            grade.name AS grade,
+            item.production_type AS product_type,
+            machine_type.name AS production_type,
+            item.casting::text AS blank_piece_weight,
+            COALESCE(
+              NULLIF(btrim(item.source_payload #>> '{firstMaterialLine,piece_weight}'), ''),
+              NULLIF(btrim(item.source_payload #>> '{firstMaterialLine,pieceWeight}'), ''),
+              NULLIF(btrim(item.source_payload #>> '{bomLine,piece_weight}'), ''),
+              NULLIF(btrim(item.source_payload #>> '{bomLine,pieceWeight}'), ''),
+              item.weight_100_pcs::text
+            ) AS piece_weight,
+            COALESCE(
+              NULLIF(btrim(item.source_payload #>> '{firstMaterialLine,process_required}'), ''),
+              NULLIF(btrim(item.source_payload #>> '{firstMaterialLine,processRequired}'), ''),
+              NULLIF(btrim(item.source_payload #>> '{bomLine,process_required}'), ''),
+              NULLIF(btrim(item.source_payload #>> '{bomLine,processRequired}'), ''),
+              NULLIF(concat_ws(', ',
+                CASE WHEN item.washing <> 0 THEN 'Washing' END,
+                CASE WHEN item.checking <> 0 THEN 'Checking' END,
+                CASE WHEN item.marking <> 0 THEN 'Marking' END,
+                CASE WHEN item.plating <> 0 THEN 'Plating' END,
+                CASE WHEN item.annealing <> 0 THEN 'Annealing' END,
+                CASE WHEN item.deburring <> 0 THEN 'Deburring' END,
+                CASE WHEN item.buffing <> 0 THEN 'Buffing' END,
+                CASE WHEN item.sealant <> 0 THEN 'Sealant' END
+              ), '')
+            ) AS process_required,
+            item.remarks AS line_notes
           FROM catalog.items item
           JOIN core.organizations organization
             ON organization.id = item.organization_id
+          LEFT JOIN catalog.website_product_profiles profile
+            ON profile.item_id = item.id
+          LEFT JOIN sales.design_tasks design
+            ON design.id::text = item.source_payload ->> 'designTaskId'
+          LEFT JOIN catalog.rod_types rod_type
+            ON rod_type.id = item.rod_type_id
+          LEFT JOIN catalog.material_grades grade
+            ON grade.id = item.material_grade_id
+          LEFT JOIN catalog.machine_types machine_type
+            ON machine_type.id = item.machine_type_id
           WHERE lower(organization.code) = lower($1)
             AND item.uid_kind = 'INTERNAL'
             AND item.lifecycle_status = 'P'
@@ -6904,9 +6971,25 @@ export function createCommercialWorkflowRepository(
       )
       return selectorResult(
         products.rows.map((row) => ({
+          blankPieceWeight:
+            row.blank_piece_weight === null
+              ? null
+              : Number(row.blank_piece_weight),
+          category: row.category,
           description: row.description,
+          grade: row.grade,
           id: row.id,
           itemType: row.item_type,
+          lineNotes: row.line_notes,
+          pieceWeight:
+            row.piece_weight === null ? null : Number(row.piece_weight),
+          processRequired: row.process_required,
+          productSize: row.product_size,
+          productType: row.product_type,
+          productionType: row.production_type,
+          rodSize: row.rod_size,
+          rodType: row.rod_type,
+          subcategory: row.subcategory,
           uid: row.uid,
         }))
       )

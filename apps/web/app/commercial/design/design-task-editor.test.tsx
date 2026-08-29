@@ -85,4 +85,74 @@ describe("DesignTaskEditor", () => {
     expect(markup).toContain('value="Punching">Punching</option>')
     expect(markup).not.toContain('value="Forging">Forging</option>')
   })
+
+  test("shows an Existing Product's canonical BOM details read-only", () => {
+    const markup = renderToStaticMarkup(
+      <DesignTaskEditor
+        designOptions={designOptions}
+        editable
+        initial={{
+          ...initial,
+          bomLines: [
+            {
+              componentCode: "",
+              componentItemType: "List",
+              componentSource: "Existing",
+              existingProductId: "product-25",
+              lineNumber: 1,
+              quantity: 2,
+            },
+          ],
+        }}
+        products={[
+          {
+            blankPieceWeight: 50.5,
+            category: "Compression Fitting",
+            description: "Existing Male Adapter",
+            grade: "C3604",
+            id: "product-25",
+            itemType: "List",
+            lineNotes: "Use approved route",
+            pieceWeight: 23.52,
+            processRequired: "Washing, Plating",
+            productSize: "1/4 X 3/8",
+            productType: "Barstock",
+            productionType: "CNC",
+            rodSize: "16 Round",
+            rodType: "Solid",
+            subcategory: "Male Compression Adapter",
+            uid: "M25",
+          },
+        ]}
+      />
+    )
+
+    expect(markup).toContain('value="M25"')
+    expect(markup).toContain('value="Existing Male Adapter"')
+    expect(markup).toContain('value="1/4 X 3/8"')
+    expect(markup).toContain('value="Compression Fitting"')
+    expect(markup).toContain('value="Male Compression Adapter"')
+    expect(markup).toContain('value="16 Round"')
+    expect(markup).toContain('value="C3604"')
+    expect(markup).toContain('value="Barstock"')
+    expect(markup).toContain('value="CNC"')
+    expect(markup).toContain('value="50.5"')
+    expect(markup).toContain('value="23.52"')
+    expect(markup).toContain('value="Washing, Plating"')
+    expect(markup).toContain('value="Use approved route"')
+    expect(markup).toContain(
+      'type="hidden" name="bom_component_product_size" value="1/4 X 3/8"'
+    )
+    expect(markup).toContain(
+      'type="hidden" name="bom_production_type" value="Barstock"'
+    )
+    expect(markup).toContain(
+      'type="hidden" name="bom_manufacturing_process" value="CNC"'
+    )
+    expect(markup).toContain(
+      'type="hidden" name="bom_notes" value="Use approved route"'
+    )
+    expect(markup).toContain('type="hidden" name="bom_rod_size"')
+    expect(markup).toContain('type="hidden" name="bom_process_required"')
+  })
 })

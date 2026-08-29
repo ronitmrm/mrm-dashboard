@@ -75,9 +75,21 @@ type EditorInitial = {
 }
 
 type ProductOption = {
+  blankPieceWeight: number | null
+  category: string | null
   description: string
+  grade: string | null
   id: string
   itemType: string
+  lineNotes: string | null
+  pieceWeight: number | null
+  processRequired: string | null
+  productSize: string | null
+  productType: string | null
+  productionType: string | null
+  rodSize: string | null
+  rodType: string | null
+  subcategory: string | null
   uid: string
 }
 
@@ -249,9 +261,43 @@ function BomRow({
   const [componentItemType, setComponentItemType] = useState(
     row.componentItemType || "List"
   )
+  const [selectedProductId, setSelectedProductId] = useState(
+    row.existingProductId ?? ""
+  )
   const effectiveSource = isListProduct ? "New" : componentSource
-  const effectiveComponentType = isListProduct ? "List" : componentItemType
   const isExistingComponent = effectiveSource === "Existing"
+  const fallbackProduct: ProductOption | null =
+    selectedProductId && !products.some(({ id }) => id === selectedProductId)
+      ? {
+          blankPieceWeight: row.casting ?? null,
+          category: row.componentCategory ?? null,
+          description: row.packagePart ?? row.componentCode,
+          grade: row.grade ?? null,
+          id: selectedProductId,
+          itemType: row.componentItemType ?? "List",
+          lineNotes: row.notes ?? null,
+          pieceWeight: row.pieceWeight ?? null,
+          processRequired: row.processRequired ?? null,
+          productSize: row.componentProductSize ?? null,
+          productType: row.productionType ?? null,
+          productionType: row.manufacturingProcess ?? null,
+          rodSize: row.rodSize ?? null,
+          rodType: row.rodType ?? null,
+          subcategory: row.componentSubcategory ?? null,
+          uid: row.componentCode,
+        }
+      : null
+  const availableProducts = fallbackProduct
+    ? [fallbackProduct, ...products]
+    : products
+  const selectedProduct = availableProducts.find(
+    ({ id }) => id === selectedProductId
+  )
+  const effectiveComponentType = isListProduct
+    ? "List"
+    : isExistingComponent
+      ? (selectedProduct?.itemType ?? componentItemType)
+      : componentItemType
   const isIndividualList = effectiveComponentType === "List"
   const isNewPackageList =
     !isListProduct && !isExistingComponent && effectiveComponentType === "List"
@@ -285,18 +331,39 @@ function BomRow({
     designOptions.machineTypes
   )
   const productTypeOptions = designProductTypeOptions(designOptions.processes)
-  const requestedProductType = isIndividualList ? row.productionType ?? "" : ""
-  const effectiveProductType = productTypeOptions.includes(requestedProductType)
-    ? requestedProductType
+  const requestedProductType = isIndividualList
+    ? isExistingComponent
+      ? (selectedProduct?.productType ?? row.productionType ?? "")
+      : (row.productionType ?? "")
     : ""
+  const effectiveProductType =
+    isExistingComponent || productTypeOptions.includes(requestedProductType)
+      ? requestedProductType
+      : ""
   const requestedProductionType = isIndividualList
-    ? (row.manufacturingProcess ?? "")
+    ? isExistingComponent
+      ? (selectedProduct?.productionType ?? row.manufacturingProcess ?? "")
+      : (row.manufacturingProcess ?? "")
     : ""
-  const effectiveProductionType = productionTypeOptions.includes(
-    requestedProductionType
-  )
-    ? requestedProductionType
-    : ""
+  const effectiveProductionType =
+    isExistingComponent || productionTypeOptions.includes(requestedProductionType)
+      ? requestedProductionType
+      : ""
+  const effectiveSelectedProcesses = isExistingComponent
+    ? (selectedProduct?.processRequired ?? row.processRequired ?? "")
+        .split(/[,;\n]+/)
+        .map((process) => process.trim())
+        .filter(Boolean)
+    : selectedProcesses
+  const effectiveProductSize = isExistingComponent
+    ? (selectedProduct?.productSize ?? row.componentProductSize ?? "")
+    : componentProductSize
+  const effectiveCategory = isExistingComponent
+    ? (selectedProduct?.category ?? row.componentCategory ?? "")
+    : componentCategory
+  const effectiveSubcategory = isExistingComponent
+    ? (selectedProduct?.subcategory ?? row.componentSubcategory ?? "")
+    : componentSubcategory
   const componentSubcategoryOptions = designOptions.subcategories
     .filter((option) => option.category === componentCategory)
     .map((option) => option.name)
@@ -314,6 +381,7 @@ function BomRow({
   return (
     <section
       className={`rounded-xl border bg-background p-5 shadow-sm ${equalFieldGridClassName}`}
+      key={isExistingComponent ? selectedProductId : "new-component"}
     >
       <div className="flex items-center gap-2 md:col-span-2 xl:col-span-4">
         <h4 className="font-medium">BOM Line {index + 1}</h4>
@@ -346,7 +414,7 @@ function BomRow({
       />
       <ChoiceField
         defaultValue={effectiveComponentType}
-        disabled={isListProduct}
+        disabled={isListProduct || isExistingComponent}
         key={`${itemType}-component-type`}
         label="Component Type"
         name="bom_component_item_type"
@@ -359,12 +427,13 @@ function BomRow({
           <NativeSelect
             autoComplete="off"
             className="w-full"
-            defaultValue={row.existingProductId ?? ""}
+            defaultValue={selectedProductId}
             disabled={!isExistingComponent}
             name={isExistingComponent ? "bom_existing_product_id" : undefined}
+            onChange={(event) => setSelectedProductId(event.currentTarget.value)}
           >
             <NativeSelectOption value="">None</NativeSelectOption>
-            {products.map((product) => (
+            {availableProducts.map((product) => (
               <NativeSelectOption key={product.id} value={product.id}>
                 {product.uid} · {product.description}
               </NativeSelectOption>
@@ -381,7 +450,11 @@ function BomRow({
         value={isListProduct ? "" : (row.packagePartUid ?? "")}
       />
       <TextField
-        defaultValue={row.componentCode ?? ""}
+        defaultValue={
+          isExistingComponent
+            ? (selectedProduct?.uid ?? row.componentCode)
+            : (row.componentCode ?? "")
+        }
         label={
           isListProduct ? "Part UID (automatic)" : "Component UID (automatic)"
         }
@@ -404,11 +477,11 @@ function BomRow({
       />
       <TextField
         defaultValue={
-          automaticProductName !== null
+          isExistingComponent
+            ? (selectedProduct?.description ?? row.packagePart ?? "")
+            : automaticProductName !== null
             ? automaticProductName
-            : isExistingComponent
-              ? ""
-              : (row.packagePart ?? "")
+            : (row.packagePart ?? "")
         }
         disabled={automaticProductName !== null || isExistingComponent}
         key={automaticProductName ?? undefined}
@@ -421,35 +494,43 @@ function BomRow({
         placeholder="Describe the component being created"
         submittedValue={isListProduct ? "" : undefined}
       />
-      {isNewPackageList ? (
+      {isNewPackageList || isExistingComponent ? (
         <>
           <TextField
-            defaultValue={componentProductSize}
+            defaultValue={effectiveProductSize}
+            disabled={isExistingComponent}
             label="Product Size"
             name="bom_component_product_size"
             onChange={setComponentProductSize}
           />
           <ChoiceField
-            defaultValue={componentCategory}
+            defaultValue={effectiveCategory}
+            disabled={isExistingComponent}
             label="Component Category"
             name="bom_component_category"
             onChange={(category) => {
               setComponentCategory(category)
               setComponentSubcategory("")
             }}
-            options={designOptions.categories}
+            options={optionsWithCurrent(
+              designOptions.categories,
+              effectiveCategory
+            )}
             placeholder="Select category"
           />
           <ChoiceField
-            defaultValue={componentSubcategory}
-            disabled={!componentCategory}
-            key={componentCategory || "no-component-category"}
+            defaultValue={effectiveSubcategory}
+            disabled={isExistingComponent || !effectiveCategory}
+            key={effectiveCategory || "no-component-category"}
             label="Component Subcategory"
             name="bom_component_subcategory"
             onChange={setComponentSubcategory}
-            options={componentSubcategoryOptions}
+            options={optionsWithCurrent(
+              componentSubcategoryOptions,
+              effectiveSubcategory
+            )}
             placeholder={
-              componentCategory ? "Select subcategory" : "Select category first"
+              effectiveCategory ? "Select subcategory" : "Select category first"
             }
           />
         </>
@@ -462,27 +543,48 @@ function BomRow({
       )}
       <input name="bom_item" type="hidden" value={row.bomItem ?? ""} />
       <ChoiceField
-        defaultValue={row.rodSize ?? ""}
+        defaultValue={
+          isExistingComponent
+            ? (selectedProduct?.rodSize ?? row.rodSize ?? "")
+            : (row.rodSize ?? "")
+        }
         disabled={!isIndividualList || isExistingComponent}
         label="Rod Size"
         name="bom_rod_size"
-        options={optionsWithCurrent(designOptions.rodSizes, row.rodSize)}
+        options={optionsWithCurrent(
+          designOptions.rodSizes,
+          isExistingComponent ? selectedProduct?.rodSize : row.rodSize
+        )}
         placeholder="Select Product Rod Size"
       />
       <ChoiceField
-        defaultValue={row.rodType ?? ""}
+        defaultValue={
+          isExistingComponent
+            ? (selectedProduct?.rodType ?? row.rodType ?? "")
+            : (row.rodType ?? "")
+        }
         disabled={isExistingComponent}
         label="Rod Type"
         name="bom_rod_type"
-        options={optionsWithCurrent(designOptions.rodTypes, row.rodType)}
+        options={optionsWithCurrent(
+          designOptions.rodTypes,
+          isExistingComponent ? selectedProduct?.rodType : row.rodType
+        )}
         placeholder="Select Rod Type"
       />
       <ChoiceField
-        defaultValue={row.grade ?? ""}
+        defaultValue={
+          isExistingComponent
+            ? (selectedProduct?.grade ?? row.grade ?? "")
+            : (row.grade ?? "")
+        }
         disabled={isExistingComponent}
         label="Grade"
         name="bom_grade"
-        options={optionsWithCurrent(designOptions.materialGrades, row.grade)}
+        options={optionsWithCurrent(
+          designOptions.materialGrades,
+          isExistingComponent ? selectedProduct?.grade : row.grade
+        )}
         placeholder="Select Material Grade"
       />
       <ChoiceField
@@ -490,7 +592,7 @@ function BomRow({
         disabled={!isIndividualList || isExistingComponent}
         label="Product Type"
         name="bom_production_type"
-        options={productTypeOptions}
+        options={optionsWithCurrent(productTypeOptions, effectiveProductType)}
         placeholder="Select Product Type"
       />
       <ChoiceField
@@ -499,18 +601,29 @@ function BomRow({
         key={`${index}-${effectiveProductionType}`}
         label="Production Type"
         name="bom_manufacturing_process"
-        options={productionTypeOptions}
+        options={optionsWithCurrent(
+          productionTypeOptions,
+          effectiveProductionType
+        )}
         placeholder="Select CNC, Conventional, or DP"
       />
       <TextField
-        defaultValue={row.casting ?? ""}
+        defaultValue={
+          isExistingComponent
+            ? (selectedProduct?.blankPieceWeight ?? row.casting ?? "")
+            : (row.casting ?? "")
+        }
         disabled={isExistingComponent}
         label="Blank Piece Weight ( gm )"
         name="bom_casting"
         type="number"
       />
       <TextField
-        defaultValue={row.pieceWeight ?? ""}
+        defaultValue={
+          isExistingComponent
+            ? (selectedProduct?.pieceWeight ?? row.pieceWeight ?? "")
+            : (row.pieceWeight ?? "")
+        }
         disabled={isExistingComponent}
         label="1 Piece Weight ( gm )"
         name="bom_piece_weight"
@@ -521,7 +634,7 @@ function BomRow({
         <input
           name="bom_process_required"
           type="hidden"
-          value={selectedProcesses.join(", ")}
+          value={effectiveSelectedProcesses.join(", ")}
         />
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           {costingProcessOptions.map(([value, label]) => {
@@ -533,7 +646,7 @@ function BomRow({
                 key={value}
               >
                 <Checkbox
-                  checked={selectedProcesses.includes(value)}
+                  checked={effectiveSelectedProcesses.includes(value)}
                   disabled={isExistingComponent}
                   id={checkboxId}
                   onCheckedChange={(checked) =>
@@ -554,7 +667,12 @@ function BomRow({
         </div>
       </Field>
       <TextField
-        defaultValue={row.notes ?? ""}
+        defaultValue={
+          isExistingComponent
+            ? (selectedProduct?.lineNotes ?? row.notes ?? "")
+            : (row.notes ?? "")
+        }
+        disabled={isExistingComponent}
         label="Line Notes"
         name="bom_notes"
       />
