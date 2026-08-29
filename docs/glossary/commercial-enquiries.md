@@ -68,6 +68,10 @@ Checked By, every conditional requirement cost, a completed valid BOM with the
 required new-component material, process, and piece-weight inputs, and current
 Internal Drawing and CAD files. Product Type and Production Type are required on
 each new List BOM line, not on a Package parent or Assembly BOM row.
+When a Package BOM line selects an Existing Product, its Product UID/name,
+Product Size, Category/Subcategory, material, Product Type, Production Type,
+weights, Pricing process columns, and notes come from that controlled Product
+and remain read-only; only BOM structure and quantity remain editable.
 Customer-marked drawing, Operation Notes, and Design Remarks remain optional.
 An incomplete completion attempt remains In Progress, stays in the active Design
 queue, opens Design Controls, and displays each missing field in a visible remark.
