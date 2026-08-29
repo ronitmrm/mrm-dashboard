@@ -292,7 +292,7 @@ export function designTaskCompletionMissingFields(
     ) {
       missing.push(`${prefix} New Component Name`)
     }
-    if (input.itemType === "Package" && line.componentItemType === "List") {
+    if (input.itemType === "Package") {
       if (!hasText(line.componentProductSize)) {
         missing.push(`${prefix} Product Size`)
       }
