@@ -39,15 +39,20 @@ Portfolio search occurs on the Current Portfolio page, not inside the task.
 
 **Current Product Portfolio**: The Design-readable, non-pricing catalog used to
 find an existing Product before opening the new-Product Design form. It exposes
-only Product UID, List / Package type, Size, Category, Subcategory, MRMPL
-Description, and Product Type. Membership includes every permanent internal
+only Product UID, List / Package type, Product Size, Rod Size, Category,
+Subcategory, MRMPL Description, and Product Type. Product Size, Category, and
+Subcategory reuse the canonical Product metadata shown by Pricing; Rod Size is
+the Product's separate raw-material section. Each Product UID appears once as
+its own Product, regardless of how many Package BOMs use it; Package membership
+never repeats a List Product under each parent. Membership includes every permanent internal
 Product UID (the ordered portfolio across all Customers), plus active Sent
 quoted Products that have not received an order for the current Design task's
 Customer. The page uses column filters rather than a separate search box. Design
 users access it through the `pricing.products.read` capability and do not use
 or receive access to the Pricing Register.
 _Avoid_: Sending Design users to Pricing, exposing prices and formula inputs,
-or showing another Customer's un-ordered quoted Products.
+showing another Customer's un-ordered quoted Products, displaying Rod Size as
+Product Size, package-context component duplicates.
 
 **Design Work Start**: The Design team's explicit choice to open the Design form
 for one released line. It changes Pending Design to In Progress and opens that

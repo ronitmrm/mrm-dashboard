@@ -30,12 +30,13 @@ import {
 } from "@workspace/ui/lib/table-filter-state"
 
 const pageSize = 200
-const filterStorageKey = "mrmpl:commercial:product-portfolio:filters:v1"
+const filterStorageKey = "mrmpl:commercial:product-portfolio:filters:v2"
 
 const columns = [
   { key: "uid", label: "Product UID" },
   { key: "itemType", label: "List / Package" },
-  { key: "size", label: "Size" },
+  { key: "productSize", label: "Product Size" },
+  { key: "rodSize", label: "Rod Size" },
   { key: "category", label: "Category" },
   { key: "subCategory", label: "Subcategory" },
   { key: "mrmplDescription", label: "MRMPL Description" },
@@ -180,7 +181,7 @@ export function ProductPortfolioTable({
 
       <div className="min-h-0 flex-1 overflow-auto rounded-xl border">
         <Table
-          className="min-w-[68rem] text-xs"
+          className="min-w-[76rem] text-xs"
           containerClassName="max-h-none overflow-visible"
           filterMode="external"
         >
@@ -226,7 +227,8 @@ export function ProductPortfolioTable({
                   <TableCell>
                     <Badge variant="secondary">{product.itemType}</Badge>
                   </TableCell>
-                  <TableCell>{product.size || "—"}</TableCell>
+                  <TableCell>{product.productSize || "—"}</TableCell>
+                  <TableCell>{product.rodSize || "—"}</TableCell>
                   <TableCell>{product.category || "—"}</TableCell>
                   <TableCell>{product.subCategory || "—"}</TableCell>
                   <TableCell className="max-w-96 break-words whitespace-normal">
