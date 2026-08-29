@@ -937,6 +937,20 @@ describe("PostgreSQL enquiry-to-design workflow", () => {
       design_status: "Changes Required",
       next_stage_status: "Changes Required",
     })
+
+    const revisedUid = `C${Date.now()}`
+    const revisedDesign = await repository.saveDesign({
+      ...dossier,
+      quotedPartUid: revisedUid,
+    })
+    expect(revisedDesign.quotedPartUid).toBe(revisedUid)
+
+    const reprepared = await repository.prepareCostingFromDesign(item.id)
+    expect(reprepared).toMatchObject({
+      nextStageStatus: "Product Costing",
+      productId: prepared.productId,
+      productUid: revisedUid,
+    })
   })
 
   test("preserves enquiry correction gates and drawing replacement history", async () => {

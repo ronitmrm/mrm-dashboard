@@ -1375,6 +1375,57 @@ async function nextDesignUid(
   return `${prefix}${sequence.rows[0]!.current_value}`
 }
 
+async function reconcileDesignControlledProductUid(
+  client: PoolClient,
+  input: {
+    organizationId: string
+    sourceId: string
+    sourceTable: "design_bom_lines" | "design_tasks"
+    uid: string
+  }
+) {
+  const sourceProduct = await client.query<{
+    id: string
+    organization_id: string
+    uid: string
+  }>(
+    `
+      SELECT id, organization_id, uid
+      FROM catalog.items
+      WHERE source_system = 'mrm-dashboard'
+        AND source_table = $1 AND source_id = $2
+      FOR UPDATE
+    `,
+    [input.sourceTable, input.sourceId]
+  )
+  const existing = sourceProduct.rows[0]
+  if (!existing || existing.uid.toLowerCase() === input.uid.toLowerCase()) {
+    return
+  }
+  if (existing.organization_id !== input.organizationId) {
+    throw new Error("Design Product source belongs to another organization.")
+  }
+
+  const uidOwner = await client.query<{ id: string }>(
+    `
+      SELECT id FROM catalog.items
+      WHERE organization_id = $1 AND lower(uid) = lower($2)
+      FOR UPDATE
+    `,
+    [input.organizationId, input.uid]
+  )
+  if (uidOwner.rows[0] && uidOwner.rows[0].id !== existing.id) {
+    throw new Error(
+      `Design Product UID ${input.uid} is already assigned to another Product.`
+    )
+  }
+
+  await client.query("UPDATE catalog.items SET uid = $1 WHERE id = $2", [
+    input.uid,
+    existing.id,
+  ])
+}
+
 async function addEnquiryItemWithClient(
   client: PoolClient,
   input: AddEnquiryItem
@@ -5010,6 +5061,12 @@ export function createCommercialWorkflowRepository(
             quantity: Number(bomLine.quantity),
           }))
         )
+        await reconcileDesignControlledProductUid(client, {
+          organizationId: row.organization_id,
+          sourceId: row.id,
+          sourceTable: "design_tasks",
+          uid,
+        })
         const product = await client.query<{ id: string; uid: string }>(
           `
             INSERT INTO catalog.items (
@@ -5112,6 +5169,12 @@ export function createCommercialWorkflowRepository(
               if (!componentUid) {
                 continue
               }
+              await reconcileDesignControlledProductUid(client, {
+                organizationId: row.organization_id,
+                sourceId: `${row.id}:${bomLine.line_number}`,
+                sourceTable: "design_bom_lines",
+                uid: componentUid,
+              })
               const component = await client.query<{ id: string }>(
                 `
                   INSERT INTO catalog.items (
