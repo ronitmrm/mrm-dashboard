@@ -80,9 +80,9 @@ type DesignOptions = {
 
 const designSections = [
   { id: "product", label: "Product Details" },
-  { id: "controls", label: "Design Controls" },
   { id: "bom", label: "BOM" },
   { id: "files", label: "Files" },
+  { id: "controls", label: "Design Controls" },
 ] as const
 
 type DesignSection = (typeof designSections)[number]["id"]
@@ -93,6 +93,7 @@ const fieldLabelClassName = "flex h-full w-full flex-col justify-between gap-2"
 
 function TextField({
   defaultValue,
+  disabled = false,
   label,
   name,
   placeholder,
@@ -100,6 +101,7 @@ function TextField({
   type = "text",
 }: {
   defaultValue: number | string
+  disabled?: boolean
   label: string
   name: string
   placeholder?: string
@@ -110,11 +112,15 @@ function TextField({
     <Field className="min-w-0">
       <FieldLabel className={fieldLabelClassName}>
         {label}
+        {disabled ? (
+          <input name={name} type="hidden" value={defaultValue} />
+        ) : null}
         <Input
           autoComplete="off"
           defaultValue={defaultValue}
+          disabled={disabled}
           min={type === "number" ? "0" : undefined}
-          name={name}
+          name={disabled ? undefined : name}
           placeholder={placeholder}
           readOnly={readOnly}
           step={type === "number" ? "0.000001" : undefined}
@@ -146,12 +152,15 @@ function ChoiceField({
     <Field className="min-w-0">
       <FieldLabel className={fieldLabelClassName}>
         {label}
+        {disabled ? (
+          <input name={name} type="hidden" value={defaultValue} />
+        ) : null}
         <NativeSelect
           autoComplete="off"
           className="w-full"
           defaultValue={defaultValue}
           disabled={disabled}
-          name={name}
+          name={disabled ? undefined : name}
           onChange={(event) => onChange?.(event.currentTarget.value)}
         >
           {placeholder ? (
@@ -171,16 +180,29 @@ function ChoiceField({
 function BomRow({
   canRemove,
   index,
+  itemType,
   onRemove,
   products,
   row,
 }: {
   canRemove: boolean
   index: number
+  itemType: string
   onRemove: () => void
   products: ProductOption[]
   row: BomLine
 }) {
+  const isListProduct = itemType === "List"
+  const [componentSource, setComponentSource] = useState(
+    row.componentSource || "New"
+  )
+  const [componentItemType, setComponentItemType] = useState(
+    row.componentItemType || "List"
+  )
+  const effectiveSource = isListProduct ? "New" : componentSource
+  const effectiveComponentType = isListProduct ? "List" : componentItemType
+  const isExistingComponent = effectiveSource === "Existing"
+
   return (
     <section
       className={`rounded-xl border bg-background p-5 shadow-sm ${equalFieldGridClassName}`}
@@ -188,41 +210,50 @@ function BomRow({
       <div className="flex items-center gap-2 md:col-span-2 xl:col-span-4">
         <h4 className="font-medium">BOM Line {index + 1}</h4>
         <span className="rounded-full border bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-          {row.componentSource || "New"} · {row.componentItemType || "List"}
+          {effectiveSource} · {effectiveComponentType}
         </span>
       </div>
       <TextField
         defaultValue={row.lineNumber || index + 1}
         label="Line Number"
         name="bom_line_number"
+        readOnly
         type="number"
       />
       <TextField
-        defaultValue={row.parentLineNumber ?? ""}
+        defaultValue={isListProduct ? "" : (row.parentLineNumber ?? "")}
+        disabled={isListProduct}
         label="Parent Line"
         name="bom_parent_line_number"
+        placeholder="Top-level component"
         type="number"
       />
       <ChoiceField
-        defaultValue={row.componentSource || "New"}
+        defaultValue={effectiveSource}
+        disabled={isListProduct}
         label="Source"
         name="bom_component_source"
+        onChange={setComponentSource}
         options={["New", "Existing"]}
       />
       <ChoiceField
-        defaultValue={row.componentItemType || "List"}
-        label="Type"
+        defaultValue={effectiveComponentType}
+        disabled={isListProduct}
+        key={`${itemType}-component-type`}
+        label="Component Type"
         name="bom_component_item_type"
+        onChange={setComponentItemType}
         options={["List", "Assembly"]}
       />
       <Field className="min-w-0">
         <FieldLabel className={fieldLabelClassName}>
-          Existing Ordered Product
+          Existing Product
           <NativeSelect
             autoComplete="off"
             className="w-full"
             defaultValue={row.existingProductId ?? ""}
-            name="bom_existing_product_id"
+            disabled={!isExistingComponent}
+            name={isExistingComponent ? "bom_existing_product_id" : undefined}
           >
             <NativeSelectOption value="">None</NativeSelectOption>
             {products.map((product) => (
@@ -231,71 +262,93 @@ function BomRow({
               </NativeSelectOption>
             ))}
           </NativeSelect>
+          {!isExistingComponent ? (
+            <input name="bom_existing_product_id" type="hidden" value="" />
+          ) : null}
         </FieldLabel>
       </Field>
-      <TextField
-        defaultValue={row.packagePartUid ?? ""}
-        label="Allocated Child UID"
+      <input
         name="bom_package_part_uid"
-        readOnly
+        type="hidden"
+        value={isListProduct ? "" : (row.packagePartUid ?? "")}
       />
       <TextField
         defaultValue={row.componentCode ?? ""}
-        label="Component Code"
+        label={
+          isListProduct ? "Part UID (automatic)" : "Component UID (automatic)"
+        }
         name="bom_component_code"
+        placeholder={
+          isListProduct
+            ? "Uses the main Q/C Number"
+            : isExistingComponent
+              ? "Uses the selected Product UID"
+              : "Allocated on save"
+        }
+        readOnly
       />
       <TextField
-        defaultValue={row.quantity ?? 1}
+        defaultValue={isListProduct ? 1 : (row.quantity ?? 1)}
+        disabled={isListProduct}
         label="Quantity"
         name="bom_quantity"
         type="number"
       />
       <TextField
-        defaultValue={row.packagePart ?? ""}
-        label="Package Part"
+        defaultValue={
+          isListProduct || isExistingComponent ? "" : (row.packagePart ?? "")
+        }
+        disabled={isListProduct || isExistingComponent}
+        label="New Component Name"
         name="bom_package_part"
+        placeholder="Describe the component being created"
       />
-      <TextField
-        defaultValue={row.bomItem ?? ""}
-        label="BOM Item"
-        name="bom_item"
-      />
+      <input name="bom_item" type="hidden" value={row.bomItem ?? ""} />
       <TextField
         defaultValue={row.rodSize ?? ""}
+        disabled={isExistingComponent}
         label="Rod Size"
         name="bom_rod_size"
       />
       <TextField
         defaultValue={row.rodType ?? ""}
+        disabled={isExistingComponent}
         label="Rod Type"
         name="bom_rod_type"
       />
       <TextField
         defaultValue={row.grade ?? ""}
+        disabled={isExistingComponent}
         label="Grade"
         name="bom_grade"
       />
       <TextField
         defaultValue={row.manufacturingProcess ?? ""}
-        label="Manufacturing Process"
+        disabled={isExistingComponent}
+        label="Component Manufacturing Process"
         name="bom_manufacturing_process"
+        placeholder="How this part is manufactured"
       />
       <TextField
         defaultValue={row.casting ?? ""}
+        disabled={isExistingComponent}
         label="Casting Weight"
         name="bom_casting"
         type="number"
       />
       <TextField
         defaultValue={row.pieceWeight ?? ""}
+        disabled={isExistingComponent}
         label="Piece Weight"
         name="bom_piece_weight"
         type="number"
       />
       <TextField
         defaultValue={row.processRequired ?? ""}
+        disabled={isExistingComponent}
         label="Process Required"
         name="bom_process_required"
+        placeholder="e.g. Cutting, machining, washing"
       />
       <TextField
         defaultValue={row.notes ?? ""}
@@ -708,34 +761,47 @@ export function DesignTaskEditor({
                 {itemType === "Package" ? "Package / Assembly BOM" : "List BOM"}
               </FieldLegend>
               <FieldDescription>
-                Nested children are valid only below Assembly rows. Existing
-                rows must select an ordered internal product.
+                {itemType === "List"
+                  ? "A List is one manufactured part. Enter its material, weight, and process details in this single row. The main Q/C Number becomes its Part UID."
+                  : "Add each Package component. Existing components select an ordered Product; new components receive a UID on save. Parent Line is used only for a child below an Assembly component."}
               </FieldDescription>
-              <div className="flex justify-end">
-                {itemType === "Package" ? (
-                  <Button
-                    onClick={() => {
-                      const key = nextKey.current++
-                      setRows((current) => [
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm text-muted-foreground">
+                  {itemType === "List"
+                    ? "Choose Package in Product Details to build a multi-component BOM."
+                    : "Use Add Component for every direct or nested part in the Package."}
+                </p>
+                <Button
+                  disabled={itemType === "List"}
+                  onClick={() => {
+                    const key = nextKey.current++
+                    setRows((current) => {
+                      const lineNumber =
+                        Math.max(
+                          ...current.map(({ row }) => row.lineNumber),
+                          0
+                        ) + 1
+                      return [
                         ...current,
                         {
                           key: `bom-${key}`,
-                          row: blankBomLine(current.length + 1),
+                          row: blankBomLine(lineNumber),
                         },
-                      ])
-                    }}
-                    type="button"
-                    variant="outline"
-                  >
-                    Add BOM Line
-                  </Button>
-                ) : null}
+                      ]
+                    })
+                  }}
+                  type="button"
+                  variant="outline"
+                >
+                  Add Component Line
+                </Button>
               </div>
               <div className="grid gap-4">
                 {visibleRows.map(({ key, row }, index) => (
                   <BomRow
                     canRemove={itemType === "Package" && visibleRows.length > 1}
                     index={index}
+                    itemType={itemType}
                     key={key}
                     onRemove={() =>
                       setRows((current) =>
@@ -785,8 +851,8 @@ export function DesignTaskEditor({
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-muted/20 p-4">
         <p className="text-sm text-muted-foreground">
-          Save draft progress at any time. Complete Design from Files after all
-          required fields are entered.
+          Save draft progress at any time. Complete Design from the final Design
+          Controls tab after all required fields are entered.
         </p>
         <div className="flex flex-wrap gap-2">
           <Button
@@ -797,7 +863,7 @@ export function DesignTaskEditor({
           >
             Save Draft
           </Button>
-          {activeSection === "files" ? (
+          {activeSection === "controls" ? (
             <Button name="design_save_intent" type="submit" value="complete">
               Complete Design Task
             </Button>

@@ -52,9 +52,10 @@ or showing another Customer's un-ordered quoted Products.
 **Design Work Start**: The Design team's explicit choice to open the Design form
 for one released line. It changes Pending Design to In Progress and opens that
 line's separate new-Product Design workspace. Every tab saves only draft progress;
-no tab-level Save action completes the task. Design Complete is an explicit final
-action after the Product Details, Design Controls, BOM, and Files requirements are
-all satisfied. Completion requires the Designer, target date, internal size,
+no tab-level Save action completes the task. The workspace order is Product
+Details, BOM, Files, then Design Controls. Design Complete is an explicit final
+action on Design Controls after every tab's requirements are satisfied. Completion
+requires the Designer, target date, internal size,
 Category, Subcategory, Manufacturing Process, Checked By, every conditional
 requirement cost, a completed valid BOM with the required new-component material,
 process, and piece-weight inputs, and current Internal Drawing and CAD files.
@@ -74,6 +75,12 @@ For a new quoted Package or Assembly, Design owns the recursive BOM definition
 before Product Parameter Costing starts. A matched existing Product reuses its
 current Product Master BOM. Costing consumes that BOM; it does not redefine its
 components or quantities.
+A new quoted List is one manufactured part and therefore has one material and
+process definition row: its source is New, component type is List, quantity is
+one, and its parent, package-component name, and child UID are not applicable.
+Its Part UID is the main Q/C Number allocated on save. A Package exposes Add and
+Remove Component actions; every component chooses New or Existing and List or
+Assembly, while only nested Package components use Parent Line.
 _Avoid_: Inline portfolio search, opening every Design editor inside the queue,
 automatic start on Technical Review completion, manual Costing handoff from
 the Design workspace.
