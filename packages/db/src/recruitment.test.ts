@@ -1267,7 +1267,89 @@ describe("job workspace", () => {
         "Updated comments",
       ])
     )
-    expect(updateCall?.[0]).not.toContain("status =")
+    expect(updateCall?.[1]).toContain("Approved")
+    expect(
+      query.mock.calls.some(([statement]) =>
+        statement.includes("UPDATE recruitment.applications")
+      )
+    ).toBe(false)
+  })
+
+  test("changes the latest approved round to rejected and closes the application", async () => {
+    const query = vi.fn(async (statement: string, _parameters?: unknown[]) => {
+      void _parameters
+      if (
+        statement.includes("SELECT *") &&
+        statement.includes("FROM recruitment.interviews")
+      ) {
+        return {
+          rows: [
+            {
+              application_id: "application-1",
+              id: "interview-2",
+              round_name: "Technical Round",
+              status: "Approved",
+            },
+          ],
+        }
+      }
+      if (statement.includes("FROM recruitment.applications")) {
+        return {
+          rows: [{ status: "Interview", willing_to_join: null }],
+        }
+      }
+      if (statement.includes("SELECT id, round_name")) return { rows: [] }
+      if (statement.includes("UPDATE recruitment.interviews")) {
+        return {
+          rows: [
+            {
+              application_id: "application-1",
+              id: "interview-2",
+              round_name: "Technical Round",
+              status: "Rejected",
+            },
+          ],
+        }
+      }
+      if (statement.includes("UPDATE recruitment.applications")) {
+        return { rows: [{ id: "application-1", status: "Rejected" }] }
+      }
+      return { rows: [] }
+    })
+    const client = { query, release: vi.fn() } as unknown as PoolClient
+    const repository = createRecruitmentRepository({
+      pool: { connect: vi.fn(async () => client) } as unknown as Pool,
+    })
+
+    await repository.updateInterviewRound({
+      comments: "Does not meet requirements",
+      interviewAt: "2026-08-08T10:30:00.000Z",
+      interviewId: "interview-2",
+      interviewerName: "HR Manager",
+      organizationId: "organization-1",
+      questionScores: {
+        independent_working: 2,
+        practical_problem_solving: 2,
+        process_equipment_knowledge: 2,
+        quality_safety_awareness: 2,
+        technical_knowledge: 2,
+      },
+      status: "Rejected",
+    })
+
+    const interviewUpdate = query.mock.calls.find(([statement]) =>
+      statement.includes("UPDATE recruitment.interviews")
+    )
+    expect(interviewUpdate?.[1]).toContain("Rejected")
+    const applicationUpdate = query.mock.calls.find(([statement]) =>
+      statement.includes("UPDATE recruitment.applications")
+    )
+    expect(applicationUpdate?.[1]).toEqual([
+      "Rejected",
+      null,
+      "application-1",
+      "organization-1",
+    ])
   })
 
   test("saves final HR approval before appointment details", async () => {

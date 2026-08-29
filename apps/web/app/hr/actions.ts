@@ -610,6 +610,11 @@ export async function recordInterviewAction(formData: FormData) {
 
 export async function updateInterviewRoundAction(formData: FormData) {
   const round = recruitmentInterviewRound(value(formData, "round_name"))
+  const selectedStatus = value(formData, "status")
+  const status =
+    selectedStatus === "Rejected" || selectedStatus === "Hold"
+      ? selectedStatus
+      : "Approved"
   const questionScores = Object.fromEntries(
     (round?.questions ?? []).map((question) => [
       question.id,
@@ -627,6 +632,7 @@ export async function updateInterviewRoundAction(formData: FormData) {
         interviewId: value(formData, "interview_id"),
         interviewerName: value(formData, "interviewer_name"),
         questionScores,
+        status,
       }),
     "Interview round updated."
   )

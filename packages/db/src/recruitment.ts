@@ -23,6 +23,7 @@ import {
 import {
   canonicalRecruitmentInterviewRound,
   nextRecruitmentInterviewRound,
+  recruitmentInterviewRounds,
   scoreRecruitmentInterview,
   type RecruitmentInterviewRoundName,
 } from "./recruitment-interview-workflow"
@@ -4095,12 +4096,14 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         interviewId: string
         interviewerName: string
         questionScores: Record<string, unknown>
+        status?: "Approved" | "Hold" | "Rejected"
       }
     ) {
       return transaction(pool, async (client) => {
         const interviewId = required(input.interviewId, "Interview round")
         const before = await client.query<
           Record<string, unknown> & {
+            application_id: string
             id: string
             round_name: string
             status: string
@@ -4125,6 +4128,68 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           interview.round_name,
           input.questionScores
         )
+        const nextStatus = input.status ?? interview.status
+        if (!["Approved", "Hold", "Rejected"].includes(nextStatus)) {
+          throw new Error("Interview decision is invalid.")
+        }
+        const decisionChanged = nextStatus !== interview.status
+        if (decisionChanged) {
+          const application = await client.query<{
+            willing_to_join: boolean | null
+          }>(
+            `
+              SELECT willing_to_join
+              FROM recruitment.applications
+              WHERE id = $1 AND organization_id = $2
+              FOR UPDATE
+            `,
+            [interview.application_id, input.organizationId]
+          )
+          const currentApplication = application.rows[0]
+          if (!currentApplication) {
+            throw new Error("Candidate application was not found.")
+          }
+          if (currentApplication.willing_to_join !== null) {
+            throw new Error(
+              "Interview decision cannot change after appointment details are completed."
+            )
+          }
+          const targetRound = canonicalRecruitmentInterviewRound(
+            interview.round_name
+          )
+          const targetRoundIndex = recruitmentInterviewRounds.findIndex(
+            (round) => round.name === targetRound
+          )
+          const otherRounds = await client.query<{
+            id: string
+            round_name: string
+          }>(
+            `
+              SELECT id, round_name
+              FROM recruitment.interviews
+              WHERE application_id = $1 AND organization_id = $2
+                AND id <> $3
+              FOR UPDATE
+            `,
+            [interview.application_id, input.organizationId, interviewId]
+          )
+          const hasLaterRound = otherRounds.rows.some((round) => {
+            const canonical = canonicalRecruitmentInterviewRound(
+              round.round_name
+            )
+            return (
+              targetRoundIndex >= 0 &&
+              recruitmentInterviewRounds.findIndex(
+                (definition) => definition.name === canonical
+              ) > targetRoundIndex
+            )
+          })
+          if (hasLaterRound) {
+            throw new Error(
+              "Only the latest interview round decision can be changed."
+            )
+          }
+        }
         const after = await client.query<
           Record<string, unknown> & { id: string }
         >(
@@ -4132,9 +4197,9 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             UPDATE recruitment.interviews
             SET scheduled_at = $1::timestamptz,
               interviewer_name = $2, scores = $3::jsonb, comments = $4,
-              updated_by_user_id = $5, updated_at = now(),
+              status = $5, updated_by_user_id = $6, updated_at = now(),
               row_version = row_version + 1
-            WHERE id = $6 AND organization_id = $7
+            WHERE id = $7 AND organization_id = $8
             RETURNING *
           `,
           [
@@ -4145,16 +4210,41 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
               questions: assessment.questionScores,
             }),
             optional(input.comments),
+            nextStatus,
             input.actorUserId ?? null,
             interviewId,
             input.organizationId,
           ]
         )
+        if (decisionChanged) {
+          const applicationStatus =
+            nextStatus === "Approved"
+              ? canonicalRecruitmentInterviewRound(interview.round_name) ===
+                "HR Round"
+                ? "Approved"
+                : "Interview"
+              : nextStatus
+          await client.query(
+            `
+              UPDATE recruitment.applications
+              SET status = $1, updated_by_user_id = $2,
+                updated_at = now(), row_version = row_version + 1
+              WHERE id = $3 AND organization_id = $4
+            `,
+            [
+              applicationStatus,
+              input.actorUserId ?? null,
+              interview.application_id,
+              input.organizationId,
+            ]
+          )
+        }
         await audit(client, {
           ...input,
           afterState: after.rows[0],
           beforeState: interview,
           eventType: "recruitment.interview.updated",
+          metadata: { decisionChanged },
           targetId: interviewId,
           targetTable: "interviews",
         })
