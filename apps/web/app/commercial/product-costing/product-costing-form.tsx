@@ -215,7 +215,9 @@ export function ProductCostingForm({
           </p>
         </div>
         <div>
-          <p className="text-xs text-muted-foreground">Rod Size / Casting</p>
+          <p className="text-xs text-muted-foreground">
+            Rod Size / Blank Piece Weight ( gm )
+          </p>
           <p className="text-sm font-medium">
             {product.rodSize || "—"} / {money(product.casting)}
           </p>

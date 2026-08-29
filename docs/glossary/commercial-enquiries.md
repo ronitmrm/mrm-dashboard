@@ -60,7 +60,9 @@ line's separate new-Product Design workspace. Every tab saves only draft progres
 no tab-level Save action completes the task, and a draft save returns to the tab
 from which it was submitted. The workspace order is Product
 Details, BOM, Files, then Design Controls. Design Complete is an explicit final
-action on Design Controls after every tab's requirements are satisfied. Completion
+action on Design Controls after every tab's requirements are satisfied. A
+completed read-only workspace keeps all four tabs navigable for review. Successful
+completion closes the editor and returns to the active Design queue. Completion
 requires the Designer, target date, internal size,
 Category, Subcategory, Product Type, Production Type, Checked By, every conditional
 requirement cost, a completed valid BOM with the required new-component material,
@@ -76,13 +78,14 @@ no separate Prepare Product Costing action. Internal Category and Internal
 Subcategory are selected from their company-wide masters. Product Type (for
 example Barstock) uses the Design Process master. Production Type uses the Product
 Machine Type master and is limited to CNC or Conventional; a Subcategory remains
-within its parent Category. Components Required is a Yes / No decision.
-Component identity, structure, and quantities belong in the BOM rather than
-that decision.
+within its parent Category. Package Process and Components Required are not
+separate Product Details inputs; component identity, structure, and quantities
+belong in the BOM.
 For a new quoted Package or Assembly, Design owns the recursive BOM definition
 before Product Parameter Costing starts. A matched existing Product reuses its
 current Product Master BOM. Costing consumes that BOM; it does not redefine its
-components or quantities.
+components or quantities. A Package requires at least two BOM lines before it
+can complete.
 A new quoted List is one manufactured part and therefore has one material and
 process definition row: its source is New, component type is List, quantity is
 one, and its parent, package-component name, and child UID are not applicable.
@@ -90,15 +93,18 @@ The Item Type explicitly selected by Design is authoritative on save; List BOM
 display values must never cause the task to be inferred as a Package.
 Its Part UID is the main Q/C Number allocated on save. A Package exposes Add and
 Remove Component actions; every component chooses New or Existing and List or
-Assembly, while only nested Package components use Parent Line.
+Assembly, while only nested Package components use Parent Line. Every new List
+component in a Package selects its own Product Size, Category, and Subcategory;
+its Product Name is generated in that order and the classification flows to the
+controlled component Product.
 For a new List, its Product Name is generated as Product Size + Category +
 Subcategory. New BOM material fields reuse Product master choices: Rod Size uses
 existing Product Rod Size values, while Rod Type and Grade use their active
 masters. Product Type (for example Barstock) is distinct from Production Type
 (CNC or Conventional); both reuse their Product masters and flow to the
 corresponding Product Parameter Costing and Pricing fields. BOM headings match
-Product Parameter Costing: Product Type, Production Type, Casting, and 1 Piece
-Weight ( gm ). Pricing Process Columns Required selects the exact
+Product Parameter Costing: Product Type, Production Type, Blank Piece Weight
+( gm ), and 1 Piece Weight ( gm ). Pricing Process Columns Required selects the exact
 optional Product Parameter Costing columns (Washing, Checking, Marking, Plating,
 Annealing, Deburring, Buffing, and Sealant); the saved selection controls which
 cost inputs are applicable in Product Parameter Costing.

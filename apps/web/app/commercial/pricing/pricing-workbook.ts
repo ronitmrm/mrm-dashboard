@@ -85,7 +85,7 @@ function isCustomerPackageSummary(row: PricingRegisterRow) {
 }
 
 const packageNotApplicableColumns = [
-  "Casting",
+  "Blank Piece Weight ( gm )",
   "Scrap Rate (INR/kg)",
   "Alloy Premium (INR/kg)",
   "Ext. Cost (INR/kg)",
@@ -264,7 +264,9 @@ export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
     "1 Piece Weight ( gm )": value(product, "weight100Pcs"),
     "No of Piece / KG": value(calculation, "piecesPerKg"),
 
-    Casting: isPackageSummary ? "-" : value(product, "casting"),
+    "Blank Piece Weight ( gm )": isPackageSummary
+      ? "-"
+      : value(product, "casting"),
     "Scrap Rate (INR/kg)": isPackageSummary
       ? "-"
       : customerValue(inputs, "scrapRate"),

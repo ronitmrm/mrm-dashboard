@@ -376,7 +376,7 @@ export default async function EngineeringChangeNotesPage({
                       />
                     </Field>
                     <Field>
-                      <FieldLabel>Casting</FieldLabel>
+                      <FieldLabel>Blank Piece Weight ( gm )</FieldLabel>
                       <Input min="0" name="casting" step="any" type="number" />
                     </Field>
                     <Field>

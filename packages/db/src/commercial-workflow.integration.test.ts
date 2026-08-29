@@ -742,16 +742,22 @@ describe("PostgreSQL enquiry-to-design workflow", () => {
       bomLines: [
         {
           componentCode: "",
+          componentCategory: "Valve",
           componentItemType: "List",
+          componentProductSize: "10mm",
           componentSource: "New",
+          componentSubcategory: "Stem",
           lineNumber: 1,
           parentLineNumber: null,
           quantity: 1,
         },
         {
           componentCode: "",
+          componentCategory: "Valve",
           componentItemType: "List",
+          componentProductSize: "5mm",
           componentSource: "New",
+          componentSubcategory: "Stem",
           lineNumber: 2,
           parentLineNumber: 1,
           quantity: 2,

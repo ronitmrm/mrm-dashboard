@@ -365,7 +365,7 @@ export default async function ProductBulkRevisionPage({
                           "Production",
                           "Current Price",
                           "Pcs/Kg",
-                          "Casting",
+                          "Blank Piece Weight ( gm )",
                           "Alloy",
                           "Extrusion",
                           "Forging",

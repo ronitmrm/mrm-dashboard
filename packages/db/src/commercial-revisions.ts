@@ -108,7 +108,11 @@ type QuoteGraph = {
 }
 
 export const bulkRevisionFields = {
-  casting: { label: "Casting", route: "product", valueType: "number" },
+  casting: {
+    label: "Blank Piece Weight ( gm )",
+    route: "product",
+    valueType: "number",
+  },
   scrap_rate: {
     label: "Scrap Rate (INR/kg)",
     route: "customer",
