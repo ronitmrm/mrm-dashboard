@@ -28,6 +28,9 @@ type BomLine = {
   componentCode: string
   componentItemType?: string
   componentSource: string
+  componentCategory?: string | null
+  componentProductSize?: string | null
+  componentSubcategory?: string | null
   existingProductId?: string | null
   grade?: string | null
   lineNumber: number
@@ -250,6 +253,28 @@ function BomRow({
   const effectiveSource = isListProduct ? "New" : componentSource
   const effectiveComponentType = isListProduct ? "List" : componentItemType
   const isExistingComponent = effectiveSource === "Existing"
+  const isNewPackageList =
+    !isListProduct && !isExistingComponent && effectiveComponentType === "List"
+  const initialComponentCategory = designOptions.categories.includes(
+    row.componentCategory ?? ""
+  )
+    ? row.componentCategory!
+    : ""
+  const [componentCategory, setComponentCategory] = useState(
+    initialComponentCategory
+  )
+  const [componentProductSize, setComponentProductSize] = useState(
+    row.componentProductSize ?? ""
+  )
+  const [componentSubcategory, setComponentSubcategory] = useState(() =>
+    designOptions.subcategories.some(
+      (option) =>
+        option.category === initialComponentCategory &&
+        option.name === row.componentSubcategory
+    )
+      ? row.componentSubcategory!
+      : ""
+  )
   const [selectedProcesses, setSelectedProcesses] = useState(() =>
     (row.processRequired ?? "")
       .split(/[,;\n]+/)
@@ -268,6 +293,19 @@ function BomRow({
   )
     ? requestedProductionType
     : ""
+  const componentSubcategoryOptions = designOptions.subcategories
+    .filter((option) => option.category === componentCategory)
+    .map((option) => option.name)
+  const generatedComponentName = designProductName({
+    category: componentCategory,
+    size: componentProductSize,
+    subcategory: componentSubcategory,
+  })
+  const automaticProductName = isListProduct
+    ? generatedProductName
+    : isNewPackageList
+      ? generatedComponentName
+      : null
 
   return (
     <section
@@ -362,21 +400,62 @@ function BomRow({
       />
       <TextField
         defaultValue={
-          isListProduct
-            ? generatedProductName
+          automaticProductName !== null
+            ? automaticProductName
             : isExistingComponent
               ? ""
               : (row.packagePart ?? "")
         }
-        disabled={isListProduct || isExistingComponent}
-        key={isListProduct ? generatedProductName : undefined}
+        disabled={automaticProductName !== null || isExistingComponent}
+        key={automaticProductName ?? undefined}
         label={
-          isListProduct ? "Product Name (automatic)" : "New Component Name"
+          automaticProductName !== null
+            ? "Product Name (automatic)"
+            : "New Component Name"
         }
         name="bom_package_part"
         placeholder="Describe the component being created"
         submittedValue={isListProduct ? "" : undefined}
       />
+      {isNewPackageList ? (
+        <>
+          <TextField
+            defaultValue={componentProductSize}
+            label="Product Size"
+            name="bom_component_product_size"
+            onChange={setComponentProductSize}
+          />
+          <ChoiceField
+            defaultValue={componentCategory}
+            label="Component Category"
+            name="bom_component_category"
+            onChange={(category) => {
+              setComponentCategory(category)
+              setComponentSubcategory("")
+            }}
+            options={designOptions.categories}
+            placeholder="Select category"
+          />
+          <ChoiceField
+            defaultValue={componentSubcategory}
+            disabled={!componentCategory}
+            key={componentCategory || "no-component-category"}
+            label="Component Subcategory"
+            name="bom_component_subcategory"
+            onChange={setComponentSubcategory}
+            options={componentSubcategoryOptions}
+            placeholder={
+              componentCategory ? "Select subcategory" : "Select category first"
+            }
+          />
+        </>
+      ) : (
+        <>
+          <input name="bom_component_product_size" type="hidden" value="" />
+          <input name="bom_component_category" type="hidden" value="" />
+          <input name="bom_component_subcategory" type="hidden" value="" />
+        </>
+      )}
       <input name="bom_item" type="hidden" value={row.bomItem ?? ""} />
       <ChoiceField
         defaultValue={row.rodSize ?? ""}
@@ -425,7 +504,7 @@ function BomRow({
       <TextField
         defaultValue={row.casting ?? ""}
         disabled={isExistingComponent}
-        label="Casting"
+        label="Blank Piece Weight ( gm )"
         name="bom_casting"
         type="number"
       />
@@ -574,7 +653,7 @@ export function DesignTaskEditor({
   })
 
   return (
-    <fieldset className="grid gap-8" disabled={!editable}>
+    <div className="grid gap-8">
       <input name="design_active_section" type="hidden" value={activeSection} />
       <input name="design_status" type="hidden" value="Pending Design" />
       <input name="revision_no" type="hidden" value="0" />
@@ -604,6 +683,8 @@ export function DesignTaskEditor({
         })}
       </div>
 
+      {/* prettier-ignore */}
+      <fieldset className="grid gap-8" disabled={!editable}>
       <div
         className="max-w-4xl"
         hidden={activeSection !== "product"}
@@ -690,9 +771,13 @@ export function DesignTaskEditor({
       {isNewDesign ? (
         <>
           <div
-            hidden={activeSection !== "product" && activeSection !== "controls"}
+            hidden={
+              activeSection !== "product" && activeSection !== "controls"
+            }
             id={
-              activeSection === "controls" ? "design-panel-controls" : undefined
+              activeSection === "controls"
+                ? "design-panel-controls"
+                : undefined
             }
             role="tabpanel"
           >
@@ -771,21 +856,6 @@ export function DesignTaskEditor({
                       onChange={setProductionType}
                       options={productionTypeOptions}
                       placeholder="Select Production Type"
-                    />
-                    {itemType === "Package" ? (
-                      <TextField
-                        defaultValue={initial.packageProcessRequired ?? ""}
-                        label="Package Process"
-                        name="package_process_required"
-                      />
-                    ) : null}
-                    <ChoiceField
-                      defaultValue={
-                        initial.componentsRequired === "Yes" ? "Yes" : "No"
-                      }
-                      label="Components Required?"
-                      name="components_required"
-                      options={["No", "Yes"]}
                     />
                   </div>
                 </section>
@@ -904,7 +974,9 @@ export function DesignTaskEditor({
           >
             <FieldSet className="rounded-xl border bg-muted/20 p-5">
               <FieldLegend>
-                {itemType === "Package" ? "Package / Assembly BOM" : "List BOM"}
+                {itemType === "Package"
+                  ? "Package / Assembly BOM"
+                  : "List BOM"}
               </FieldLegend>
               <FieldDescription>
                 {itemType === "List"
@@ -945,7 +1017,9 @@ export function DesignTaskEditor({
               <div className="grid gap-4">
                 {visibleRows.map(({ key, row }, index) => (
                   <BomRow
-                    canRemove={itemType === "Package" && visibleRows.length > 1}
+                    canRemove={
+                      itemType === "Package" && visibleRows.length > 1
+                    }
                     designOptions={designOptions}
                     generatedProductName={generatedProductName}
                     index={index}
@@ -1000,8 +1074,8 @@ export function DesignTaskEditor({
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-muted/20 p-4">
         <p className="text-sm text-muted-foreground">
-          Save draft progress at any time. Complete Design from the final Design
-          Controls tab after all required fields are entered.
+          Save draft progress at any time. Complete Design from the final
+          Design Controls tab after all required fields are entered.
         </p>
         <div className="flex flex-wrap gap-2">
           <Button
@@ -1019,6 +1093,7 @@ export function DesignTaskEditor({
           ) : null}
         </div>
       </div>
-    </fieldset>
+      </fieldset>
+    </div>
   )
 }

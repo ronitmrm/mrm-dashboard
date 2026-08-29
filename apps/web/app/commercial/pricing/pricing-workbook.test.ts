@@ -406,6 +406,8 @@ describe("Pricing spreadsheet workbook", () => {
     ).toBe(pricingHeaders.indexOf("BOM Component Cost (INR/pc)") + 1)
     expect(pricingHeaders).toContain("Product Type")
     expect(pricingHeaders).toContain("Production Type")
+    expect(pricingHeaders).toContain("Blank Piece Weight ( gm )")
+    expect(pricingHeaders).not.toContain("Casting")
     expect(pricingHeaders).not.toContain("Machine Type")
     expect(views[0]).toMatchObject({
       "Alloy Premium (INR/kg)": "-",
@@ -414,7 +416,7 @@ describe("Pricing spreadsheet workbook", () => {
       "BL %": "-",
       "BOM Component Cost (INR/pc)": "21.79",
       "Buffing (INR/kg)": "0.00",
-      Casting: "-",
+      "Blank Piece Weight ( gm )": "-",
       "Debbring (INR/kg)": "0.00",
       "Die Code": "-",
       "Ext. Cost (INR/kg)": "-",

@@ -5,6 +5,7 @@ import {
   designProductionTypeOptions,
   designPortfolioDecisions,
   designTaskSavedHref,
+  designTaskSaveResultHref,
   designStatuses,
   designTaskHref,
   designTaskShouldPrepareCosting,
@@ -86,6 +87,28 @@ describe("Pricing Design Task contract", () => {
     )
     expect(normalizeDesignAllocatedUid("Allocated on save")).toBeNull()
     expect(normalizeDesignAllocatedUid(" Q-100 ")).toBe("Q-100")
+  })
+
+  test("closes a successfully completed Design form and returns to the queue", () => {
+    expect(
+      designTaskSaveResultHref({
+        completionMissingFields: [],
+        completionRequested: true,
+        enquiryItemId: "line-1",
+        section: "controls",
+      })
+    ).toBe("/commercial/design")
+
+    expect(
+      designTaskSaveResultHref({
+        completionMissingFields: ["Package requires at least 2 BOM Lines"],
+        completionRequested: true,
+        enquiryItemId: "line-1",
+        section: "controls",
+      })
+    ).toBe(
+      "/commercial/design/line-1/new?incomplete=Package+requires+at+least+2+BOM+Lines&saved=1#design-completion-remark"
+    )
   })
 
   test("routes portfolio review before a separate new-design workspace", () => {
@@ -283,5 +306,83 @@ describe("Pricing Design Task contract", () => {
         toolingRequired: "No",
       })
     ).toEqual([])
+  })
+
+  test("requires at least two BOM lines for a Package", () => {
+    expect(
+      designTaskCompletionMissingFields({
+        attachmentPurposes: ["internal_drawing", "cad"],
+        bomLines: [
+          {
+            componentSource: "Existing",
+            existingProductId: "product-1",
+            lineNumber: 1,
+            quantity: 1,
+          },
+        ],
+        checkedBy: "Design checker",
+        designBomCompleted: "Yes",
+        designerName: "Design owner",
+        fixtureApproxCost: 0,
+        fixtureRequired: "No",
+        gaugesRequired: "No",
+        inspectionApproxCost: 0,
+        internalPartCategory: "Valve",
+        internalPartSize: "10mm",
+        internalPartSubCategory: "Stem",
+        itemType: "Package",
+        manufacturingProcess: "Conventional",
+        targetCompletionDate: "2026-08-29",
+        toolingApproxCost: 0,
+        toolingRequired: "No",
+      })
+    ).toEqual(["Package requires at least 2 BOM Lines"])
+  })
+
+  test("requires Product identity for every new List component in a Package", () => {
+    expect(
+      designTaskCompletionMissingFields({
+        attachmentPurposes: ["internal_drawing", "cad"],
+        bomLines: [
+          {
+            componentItemType: "List",
+            componentSource: "New",
+            grade: "C3604",
+            lineNumber: 1,
+            manufacturingProcess: "CNC",
+            packagePart: "Generated name",
+            pieceWeight: 10,
+            productionType: "Barstock",
+            processRequired: "Washing",
+            quantity: 1,
+          },
+          {
+            componentSource: "Existing",
+            existingProductId: "product-2",
+            lineNumber: 2,
+            quantity: 1,
+          },
+        ],
+        checkedBy: "Design checker",
+        designBomCompleted: "Yes",
+        designerName: "Design owner",
+        fixtureApproxCost: 0,
+        fixtureRequired: "No",
+        gaugesRequired: "No",
+        inspectionApproxCost: 0,
+        internalPartCategory: "Valve",
+        internalPartSize: "10mm",
+        internalPartSubCategory: "Stem",
+        itemType: "Package",
+        manufacturingProcess: "Conventional",
+        targetCompletionDate: "2026-08-29",
+        toolingApproxCost: 0,
+        toolingRequired: "No",
+      })
+    ).toEqual([
+      "BOM Line 1 Product Size",
+      "BOM Line 1 Component Category",
+      "BOM Line 1 Component Subcategory",
+    ])
   })
 })

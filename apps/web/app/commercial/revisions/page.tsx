@@ -555,7 +555,7 @@ export default async function CommercialRevisionsPage() {
                           />
                         </Field>
                         <Field>
-                          <FieldLabel>Casting</FieldLabel>
+                          <FieldLabel>Blank Piece Weight ( gm )</FieldLabel>
                           <Input
                             min="0"
                             name="casting"

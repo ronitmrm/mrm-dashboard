@@ -94,6 +94,24 @@ export function designTaskSavedHref(
   return `/commercial/design/${enquiryItemId}/new?${params}`
 }
 
+export function designTaskSaveResultHref(input: {
+  completionMissingFields: readonly string[]
+  completionRequested: boolean
+  enquiryItemId: string
+  section?: string | null
+}) {
+  if (!input.completionRequested) {
+    return designTaskSavedHref(input.enquiryItemId, input.section)
+  }
+  if (!input.completionMissingFields.length) return "/commercial/design"
+
+  const params = new URLSearchParams({
+    incomplete: input.completionMissingFields.join("|"),
+    saved: "1",
+  })
+  return `/commercial/design/${input.enquiryItemId}/new?${params}#design-completion-remark`
+}
+
 export function normalizeDesignAllocatedUid(value: string | null | undefined) {
   const normalized = value?.trim()
   return !normalized || normalized.toLowerCase() === "allocated on save"
@@ -139,7 +157,11 @@ export function designTaskShouldPrepareCosting(input: {
 }
 
 type DesignCompletionBomLine = {
+  componentCategory?: string | null
+  componentItemType?: string | null
+  componentProductSize?: string | null
   componentSource: string
+  componentSubcategory?: string | null
   existingProductId?: string | null
   grade?: string | null
   lineNumber: number
@@ -205,6 +227,9 @@ export function designTaskCompletionMissingFields(
   if (!input.bomLines.length) {
     missing.push("BOM Line")
   }
+  if (input.itemType === "Package" && input.bomLines.length < 2) {
+    missing.push("Package requires at least 2 BOM Lines")
+  }
   for (const line of input.bomLines) {
     const prefix = `BOM Line ${line.lineNumber}`
     if (line.quantity <= 0) missing.push(`${prefix} Quantity`)
@@ -214,8 +239,23 @@ export function designTaskCompletionMissingFields(
       }
       continue
     }
-    if (input.itemType === "Package" && !hasText(line.packagePart)) {
-      missing.push(`${prefix} Package Part`)
+    if (
+      input.itemType === "Package" &&
+      line.componentItemType !== "List" &&
+      !hasText(line.packagePart)
+    ) {
+      missing.push(`${prefix} New Component Name`)
+    }
+    if (input.itemType === "Package" && line.componentItemType === "List") {
+      if (!hasText(line.componentProductSize)) {
+        missing.push(`${prefix} Product Size`)
+      }
+      if (!hasText(line.componentCategory)) {
+        missing.push(`${prefix} Component Category`)
+      }
+      if (!hasText(line.componentSubcategory)) {
+        missing.push(`${prefix} Component Subcategory`)
+      }
     }
     if (!hasText(line.grade)) missing.push(`${prefix} Grade`)
     if (!hasText(line.productionType)) {

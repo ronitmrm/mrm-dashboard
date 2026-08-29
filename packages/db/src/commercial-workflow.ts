@@ -180,8 +180,11 @@ type DesignBomLine = {
   bomItem?: string | null
   casting?: number | null
   componentCode: string
+  componentCategory?: string | null
   componentItemType?: string
+  componentProductSize?: string | null
   componentSource: string
+  componentSubcategory?: string | null
   existingProductId?: string | null
   grade?: string | null
   lineNumber: number
@@ -351,8 +354,11 @@ async function designRowsWithRelations(
           bom_item: string | null
           casting: string | null
           component_code: string
+          component_category: string | null
           component_item_type: string
+          component_product_size: string | null
           component_source: string
+          component_subcategory: string | null
           design_notes: string | null
           design_task_id: string
           existing_product_id: string | null
@@ -371,7 +377,12 @@ async function designRowsWithRelations(
         }>(
           `
             SELECT bom.design_task_id, bom.component_code,
+              bom.source_payload ->> 'componentCategory' AS component_category,
               bom.component_item_type, bom.component_source,
+              bom.source_payload ->> 'componentProductSize'
+                AS component_product_size,
+              bom.source_payload ->> 'componentSubcategory'
+                AS component_subcategory,
               bom.existing_product_id, bom.line_number, bom.design_notes,
               bom.package_part, bom.package_part_uid,
               bom.parent_line_number, bom.quantity::text, bom.bom_item,
@@ -454,8 +465,11 @@ async function designRowsWithRelations(
       bomItem: row.bom_item,
       casting: row.casting === null ? null : Number(row.casting),
       componentCode: row.component_code,
+      componentCategory: row.component_category,
       componentItemType: row.component_item_type,
+      componentProductSize: row.component_product_size,
       componentSource: row.component_source,
+      componentSubcategory: row.component_subcategory,
       existingProductId: row.existing_product_id,
       grade: row.grade,
       lineNumber: row.line_number,
@@ -4540,6 +4554,15 @@ export function createCommercialWorkflowRepository(
             "A completed new design requires at least one BOM line."
           )
         }
+        if (
+          designStatus === "Design Complete" &&
+          itemType === "Package" &&
+          inputBomLines.length < 2
+        ) {
+          throw new Error(
+            "A completed Package design requires at least two BOM lines."
+          )
+        }
         const lineNumbers = new Set<number>()
         for (const bomLine of inputBomLines) {
           if (bomLine.lineNumber <= 0 || bomLine.quantity <= 0) {
@@ -4549,6 +4572,19 @@ export function createCommercialWorkflowRepository(
             throw new Error("Design BOM line numbers must be unique.")
           }
           lineNumbers.add(bomLine.lineNumber)
+          if (
+            designStatus === "Design Complete" &&
+            itemType === "Package" &&
+            bomLine.componentSource !== "Existing" &&
+            bomLine.componentItemType === "List" &&
+            (!bomLine.componentProductSize?.trim() ||
+              !bomLine.componentCategory?.trim() ||
+              !bomLine.componentSubcategory?.trim())
+          ) {
+            throw new Error(
+              "Every new Package List component requires Product Size, Category, and Subcategory."
+            )
+          }
         }
         for (const bomLine of inputBomLines) {
           if (!bomLine.parentLineNumber) continue
@@ -4896,8 +4932,11 @@ export function createCommercialWorkflowRepository(
         const bomLines = await client.query<{
           casting: string | null
           component_code: string
+          component_category: string | null
           component_item_type: string
+          component_product_size: string | null
           component_source: string
+          component_subcategory: string | null
           design_notes: string | null
           existing_product_id: string | null
           grade: string | null
@@ -4917,6 +4956,11 @@ export function createCommercialWorkflowRepository(
             SELECT component_code, quantity::text, line_number,
               parent_line_number, component_source, existing_product_id,
               component_item_type, package_part_uid, package_part, rod_size,
+              source_payload ->> 'componentCategory' AS component_category,
+              source_payload ->> 'componentProductSize'
+                AS component_product_size,
+              source_payload ->> 'componentSubcategory'
+                AS component_subcategory,
               rod_type, grade, production_type, manufacturing_process,
               casting::text,
               piece_weight::text, process_required, design_notes
@@ -5072,7 +5116,14 @@ export function createCommercialWorkflowRepository(
                   asNumber(bomLine.casting, 1),
                   bomLine.design_notes,
                   `${row.id}:${bomLine.line_number}`,
-                  bomLine,
+                  {
+                    bomLine,
+                    category: bomLine.component_category,
+                    designBomLineNumber: bomLine.line_number,
+                    designTaskId: row.id,
+                    productSize: bomLine.component_product_size,
+                    subcategory: bomLine.component_subcategory,
+                  },
                 ]
               )
               componentId = component.rows[0]!.id

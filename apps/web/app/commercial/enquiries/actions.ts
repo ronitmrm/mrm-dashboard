@@ -12,7 +12,7 @@ import {
 } from "@workspace/db"
 import {
   designTaskCompletionMissingFields,
-  designTaskSavedHref,
+  designTaskSaveResultHref,
   designTaskShouldPrepareCosting,
   normalizeDesignAllocatedUid,
 } from "@workspace/db/commercial-design-domain"
@@ -437,8 +437,11 @@ export async function saveDesignAction(formData: FormData) {
       .map((value) => (typeof value === "string" ? value.trim() : ""))
   const lineNumbers = values("bom_line_number")
   const componentCodes = values("bom_component_code")
+  const componentCategories = values("bom_component_category")
   const componentSources = values("bom_component_source")
   const componentItemTypes = values("bom_component_item_type")
+  const componentProductSizes = values("bom_component_product_size")
+  const componentSubcategories = values("bom_component_subcategory")
   const existingProductIds = values("bom_existing_product_id")
   const parentLineNumbers = values("bom_parent_line_number")
   const quantities = values("bom_quantity")
@@ -463,8 +466,11 @@ export async function saveDesignAction(formData: FormData) {
             casting: nullableNumber(castings[index]),
             componentCode:
               normalizeDesignAllocatedUid(componentCodes[index]) ?? "",
+            componentCategory: componentCategories[index] || null,
             componentItemType: componentItemTypes[index] || "List",
+            componentProductSize: componentProductSizes[index] || null,
             componentSource: componentSources[index] || "New",
+            componentSubcategory: componentSubcategories[index] || null,
             existingProductId: existingProductIds[index] || null,
             grade: grades[index] || null,
             lineNumber: Number(lineNumber || index + 1),
@@ -642,20 +648,13 @@ export async function saveDesignAction(formData: FormData) {
   revalidatePath(`${designPath}/${enquiryItemId}`)
   revalidatePath(`${designPath}/${enquiryItemId}/new`)
   revalidatePath("/commercial/product-costing")
-  if (completionRequested && completionMissingFields.length) {
-    const params = new URLSearchParams({
-      incomplete: completionMissingFields.join("|"),
-      saved: "1",
-    })
-    redirect(
-      `${designPath}/${enquiryItemId}/new?${params}#design-completion-remark`
-    )
-  }
   redirect(
-    designTaskSavedHref(
+    designTaskSaveResultHref({
+      completionMissingFields,
+      completionRequested,
       enquiryItemId,
-      optionalText(formData, "design_active_section")
-    )
+      section: optionalText(formData, "design_active_section"),
+    })
   )
 }
 
