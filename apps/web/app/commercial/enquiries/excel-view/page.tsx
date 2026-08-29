@@ -111,7 +111,14 @@ export default async function EnquiryExcelViewPage() {
                     <TableCell className="font-mono font-medium">
                       {row.enquiryNumber}
                     </TableCell>
-                    <TableCell>{row.lineNumber}</TableCell>
+                    <TableCell>
+                      <Link
+                        className="font-medium text-primary underline-offset-4 hover:underline"
+                        href={`/commercial/design/${row.enquiryItemId}`}
+                      >
+                        {row.lineNumber}
+                      </Link>
+                    </TableCell>
                     <TableCell className="font-mono">
                       {row.customerUid}
                     </TableCell>
@@ -156,7 +163,7 @@ export default async function EnquiryExcelViewPage() {
                     <TableCell className="font-mono">
                       <Link
                         className="font-medium text-primary underline-offset-4 hover:underline"
-                        href={`/commercial/design?item=${row.enquiryItemId}&from=excel#design-form`}
+                        href={`/commercial/design/${row.enquiryItemId}`}
                       >
                         {row.designPartNumber ?? "Open Design"}
                       </Link>
