@@ -186,71 +186,7 @@ export default async function CustomerBulkRevisionPage({
         />
       </section>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(22rem,0.55fr)]">
-        <Card>
-          <CardHeader>
-            <CardTitle>Customer Revision Queue</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="max-h-[34rem] overflow-auto rounded-md border">
-              <Table excelFilters>
-                <TableHeader className="sticky top-0 z-10 bg-background">
-                  <TableRow>
-                    <TableHead data-filterable="true">Request</TableHead>
-                    <TableHead data-filterable="true">Customer</TableHead>
-                    <TableHead data-filterable="true">Route</TableHead>
-                    <TableHead>Active Prices</TableHead>
-                    <TableHead>Staged</TableHead>
-                    <TableHead data-filterable="true">Status</TableHead>
-                    <TableHead>Action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {queue.rows.map((revision) => (
-                    <TableRow
-                      className="[contain-intrinsic-size:auto_48px] [content-visibility:auto]"
-                      key={revision.id}
-                    >
-                      <TableCell className="font-mono">
-                        {revision.revisionNumber}
-                      </TableCell>
-                      <TableCell>
-                        {revision.companyName ?? "All Customers"}
-                      </TableCell>
-                      <TableCell>{revision.revisionRoute}</TableCell>
-                      <TableCell className="tabular-nums">
-                        {revision.activePriceCount}
-                      </TableCell>
-                      <TableCell className="tabular-nums">
-                        {revision.changeCount}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary">{revision.status}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Button asChild size="sm" variant="outline">
-                          <Link
-                            href={`/commercial/customer-bulk-revision?revision=${encodeURIComponent(revision.id)}#customer-bulk-workbench`}
-                          >
-                            Open Revision
-                          </Link>
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {!queue.rows.length ? (
-                    <TableRow>
-                      <TableCell className="h-24 text-center" colSpan={7}>
-                        No Customer Parameter Bulk Revisions Are Pending.
-                      </TableCell>
-                    </TableRow>
-                  ) : null}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
-
+      <div className="grid gap-6">
         <Card>
           <CardHeader>
             <CardTitle>Start A Customer Revision</CardTitle>
@@ -341,6 +277,70 @@ export default async function CustomerBulkRevisionPage({
                 The Mrmpl Organization Must Be Loaded First.
               </p>
             )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Customer Revision Queue</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="max-h-[34rem] overflow-auto rounded-md border">
+              <Table excelFilters>
+                <TableHeader className="sticky top-0 z-10 bg-background">
+                  <TableRow>
+                    <TableHead data-filterable="true">Request</TableHead>
+                    <TableHead data-filterable="true">Customer</TableHead>
+                    <TableHead data-filterable="true">Route</TableHead>
+                    <TableHead>Active Prices</TableHead>
+                    <TableHead>Staged</TableHead>
+                    <TableHead data-filterable="true">Status</TableHead>
+                    <TableHead>Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {queue.rows.map((revision) => (
+                    <TableRow
+                      className="[contain-intrinsic-size:auto_48px] [content-visibility:auto]"
+                      key={revision.id}
+                    >
+                      <TableCell className="font-mono">
+                        {revision.revisionNumber}
+                      </TableCell>
+                      <TableCell>
+                        {revision.companyName ?? "All Customers"}
+                      </TableCell>
+                      <TableCell>{revision.revisionRoute}</TableCell>
+                      <TableCell className="tabular-nums">
+                        {revision.activePriceCount}
+                      </TableCell>
+                      <TableCell className="tabular-nums">
+                        {revision.changeCount}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary">{revision.status}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Button asChild size="sm" variant="outline">
+                          <Link
+                            href={`/commercial/customer-bulk-revision?revision=${encodeURIComponent(revision.id)}#customer-bulk-workbench`}
+                          >
+                            Open Revision
+                          </Link>
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {!queue.rows.length ? (
+                    <TableRow>
+                      <TableCell className="h-24 text-center" colSpan={7}>
+                        No Customer Parameter Bulk Revisions Are Pending.
+                      </TableCell>
+                    </TableRow>
+                  ) : null}
+                </TableBody>
+              </Table>
+            </div>
           </CardContent>
         </Card>
       </div>
