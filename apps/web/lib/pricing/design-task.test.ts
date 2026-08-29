@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest"
 
 import {
+  designAssemblyPieceWeight,
   designItemType,
   designProductPortfolioHref,
   designProductSelectionReturnHref,
@@ -66,6 +67,37 @@ describe("Pricing Design Task contract", () => {
         subcategory: "Male Flare X Male Nptf Adapter",
       })
     ).toBe("1/4 X 1/4 Flare Fitting Male Flare X Male Nptf Adapter")
+  })
+
+  test("derives an Assembly weight from child BOM quantities", () => {
+    expect(
+      designAssemblyPieceWeight(
+        [
+          {
+            componentItemType: "Assembly",
+            lineNumber: 1,
+            parentLineNumber: null,
+            pieceWeight: null,
+            quantity: 1,
+          },
+          {
+            componentItemType: "List",
+            lineNumber: 2,
+            parentLineNumber: 1,
+            pieceWeight: 3,
+            quantity: 2,
+          },
+          {
+            componentItemType: "List",
+            lineNumber: 3,
+            parentLineNumber: 1,
+            pieceWeight: 5,
+            quantity: 4,
+          },
+        ],
+        1
+      )
+    ).toBe(26)
   })
 
   test("hands a completed Design task to Product Costing on save", () => {
@@ -346,25 +378,38 @@ describe("Pricing Design Task contract", () => {
     ).toEqual([])
   })
 
-  test("does not require Product Type or Production Type on Package Assembly rows", () => {
+  test("treats an Assembly as a child BOM container instead of a List part", () => {
     expect(
       designTaskCompletionMissingFields({
         attachmentPurposes: ["internal_drawing", "cad"],
-        bomLines: [1, 2].map((lineNumber) => ({
-          componentCategory: "Fitting",
-          componentItemType: "Assembly",
-          componentProductSize: `Assembly Size ${lineNumber}`,
-          componentSource: "New",
-          componentSubcategory: "Adapter",
-          grade: "Brass",
-          lineNumber,
-          manufacturingProcess: null,
-          packagePart: `Assembly ${lineNumber}`,
-          pieceWeight: 12,
-          productionType: null,
-          processRequired: "Cutting",
-          quantity: 1,
-        })),
+        bomLines: [
+          {
+            componentCategory: "Fitting",
+            componentItemType: "Assembly",
+            componentProductSize: "Assembly Size",
+            componentSource: "New",
+            componentSubcategory: "Adapter",
+            lineNumber: 1,
+            packagePart: "Assembly",
+            quantity: 1,
+          },
+          {
+            componentCategory: "Fitting",
+            componentItemType: "List",
+            componentProductSize: "3/8",
+            componentSource: "New",
+            componentSubcategory: "Nut",
+            grade: "Brass",
+            lineNumber: 2,
+            manufacturingProcess: "CNC",
+            packagePart: "Child List Part",
+            parentLineNumber: 1,
+            pieceWeight: 12,
+            productionType: "Barstock",
+            processRequired: "Cutting",
+            quantity: 2,
+          },
+        ],
         checkedBy: "Design checker",
         designBomCompleted: "Yes",
         designerName: "Design owner",
@@ -382,6 +427,47 @@ describe("Pricing Design Task contract", () => {
         toolingRequired: "No",
       })
     ).toEqual([])
+  })
+
+  test("requires every new Assembly to contain a child BOM line", () => {
+    expect(
+      designTaskCompletionMissingFields({
+        attachmentPurposes: ["internal_drawing", "cad"],
+        bomLines: [
+          {
+            componentCategory: "Fitting",
+            componentItemType: "Assembly",
+            componentProductSize: "Assembly Size",
+            componentSource: "New",
+            componentSubcategory: "Adapter",
+            lineNumber: 1,
+            packagePart: "Assembly",
+            quantity: 1,
+          },
+          {
+            componentSource: "Existing",
+            existingProductId: "product-2",
+            lineNumber: 2,
+            quantity: 1,
+          },
+        ],
+        checkedBy: "Design checker",
+        designBomCompleted: "Yes",
+        designerName: "Design owner",
+        fixtureApproxCost: 0,
+        fixtureRequired: "No",
+        gaugesRequired: "No",
+        inspectionApproxCost: 0,
+        internalPartCategory: "Valve",
+        internalPartSize: "10mm",
+        internalPartSubCategory: "Stem",
+        itemType: "Package",
+        manufacturingProcess: null,
+        targetCompletionDate: "2026-08-29",
+        toolingApproxCost: 0,
+        toolingRequired: "No",
+      })
+    ).toEqual(["BOM Line 1 Assembly requires at least 1 child BOM Line"])
   })
 
   test("requires Product identity for every new Assembly component in a Package", () => {
@@ -403,6 +489,7 @@ describe("Pricing Design Task contract", () => {
             componentSource: "Existing",
             existingProductId: "product-2",
             lineNumber: 2,
+            parentLineNumber: 1,
             quantity: 1,
           },
         ],
