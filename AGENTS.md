@@ -9,6 +9,8 @@
 - reach for the `neon`, `upstash` and `gh` cli's when needed.
 - For Neon work, always use the installed Neon Postgres plugin instead of the Neon CLI.
 - When starting local server/s, opt for the managed config by default, unless specified otherwise by the user.
+- **WORK MACHINE HARD RULE: Virtualization is prohibited. Never install, enable, start, or use Docker Desktop, Docker Engine, WSL, Hyper-V, Virtual Machine Platform, Windows Hypervisor Platform, Windows Sandbox, a VM, or anything that accesses a Windows hypervisor layer. Never change Windows optional features or firmware virtualization settings.**
+- On this machine, never run `pnpm services:up`, `pnpm local:up`, or any equivalent container/VM provisioning command. Use the managed application configuration and configured Neon PostgreSQL. If a test expects local PostgreSQL on port `5434`, report it as unavailable; do not provision it through Docker, WSL, Hyper-V, or another virtualization layer.
 
 ## Code Architecture Best Practices
 
