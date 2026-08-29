@@ -51,8 +51,15 @@ or showing another Customer's un-ordered quoted Products.
 
 **Design Work Start**: The Design team's explicit choice to open the Design form
 for one released line. It changes Pending Design to In Progress and opens that
-line's separate new-Product Design workspace. Saving incomplete work remains In
-Progress; completing its required BOM changes it to Design Complete.
+line's separate new-Product Design workspace. Every tab saves only draft progress;
+no tab-level Save action completes the task. Design Complete is an explicit final
+action after the Product Details, Design Controls, BOM, and Files requirements are
+all satisfied. Completion requires the Designer, target date, internal size,
+Category, Subcategory, Manufacturing Process, Checked By, every conditional
+requirement cost, a completed valid BOM with the required new-component material,
+process, and piece-weight inputs, and current Internal Drawing and CAD files.
+Customer-marked drawing, Operation Notes, and Design Remarks remain optional.
+Incomplete saves remain In Progress and stay in the active Design queue.
 The Designer is selected from active staff whose account or Approved Post has
 the Design Team Profile. Checked By uses that same active Design Team staff
 list. Completing and saving Design automatically creates or updates the

@@ -14,6 +14,7 @@ import {
   deriveDesignTaskState,
   designTaskIsEditable,
   designTaskStatusAfterStart,
+  normalizeDesignAllocatedUid,
 } from "./commercial-design-domain"
 import {
   repositoryPool,
@@ -4339,6 +4340,7 @@ export function createCommercialWorkflowRepository(
       assemblyRequired?: string
       bomLines?: DesignBomLine[]
       checkedBy?: string | null
+      completionRequested?: boolean
       componentsRequired?: string | null
       designBomCompleted?: string
       designBomRequired?: string
@@ -4454,6 +4456,7 @@ export function createCommercialWorkflowRepository(
           ? "New Quoted Part"
           : input.portfolioMatchStatus
         const state = deriveDesignTaskState({
+          completionRequested: input.completionRequested,
           designBomCompleted: input.designBomCompleted ?? "No",
           existingNextStageStatus,
           itemType,
@@ -4461,8 +4464,8 @@ export function createCommercialWorkflowRepository(
         })
         const { designBomCompleted, designStatus, nextStageStatus } = state
         const quotedPartUid = isNewQuotedPart
-          ? input.quotedPartUid?.trim() ||
-            enquiryLine.existing_quoted_part_uid ||
+          ? normalizeDesignAllocatedUid(input.quotedPartUid) ||
+            normalizeDesignAllocatedUid(enquiryLine.existing_quoted_part_uid) ||
             (await nextDesignUid(
               client,
               enquiryLine.organization_id,

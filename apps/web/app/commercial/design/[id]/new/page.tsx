@@ -35,11 +35,17 @@ export default async function NewDesignWorkspacePage({
   searchParams,
 }: {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ product?: string; saved?: string }>
+  searchParams: Promise<{
+    incomplete?: string
+    product?: string
+    saved?: string
+  }>
 }) {
   const { id } = await params
   await requireCapability("pricing.design.read", `/commercial/design/${id}/new`)
   const resolvedSearchParams = await searchParams
+  const incompleteFields =
+    resolvedSearchParams.incomplete?.split("|").filter(Boolean) ?? []
   const productSearch = resolvedSearchParams.product?.trim() ?? ""
   const workflow = createCommercialWorkflowRepository({
     connectionString: readAuthEnvironment().connectionString,
@@ -153,7 +159,9 @@ export default async function NewDesignWorkspacePage({
           {resolvedSearchParams.saved === "1" ? (
             <Alert>
               <AlertDescription>
-                Design task saved successfully.
+                {incompleteFields.length
+                  ? `Draft saved. Complete the required fields: ${incompleteFields.join(", ")}.`
+                  : "Design task saved successfully."}
               </AlertDescription>
             </Alert>
           ) : null}
