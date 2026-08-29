@@ -2,8 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { FilterX } from "lucide-react"
+import Link from "next/link"
 
 import type { ProductPortfolioRow } from "@workspace/db"
+import { designProductSelectionReturnHref } from "@workspace/db/commercial-design-domain"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
@@ -53,8 +55,10 @@ function valueForColumn(row: ProductPortfolioRow, columnIndex: number) {
 
 export function ProductPortfolioTable({
   rows,
+  selection,
 }: {
   rows: ProductPortfolioRow[]
+  selection?: { lineIndex: number; returnTo: string }
 }) {
   const [filters, setFilters] = useState<TableColumnFilters>({})
   const [filtersHydrated, setFiltersHydrated] = useState(false)
@@ -187,6 +191,7 @@ export function ProductPortfolioTable({
         >
           <TableHeader className="sticky top-0 z-10 bg-background">
             <TableRow>
+              {selection ? <TableHead>Select</TableHead> : null}
               {facetedColumns.map((column) => (
                 <TableHead data-filterable="true" key={column.label}>
                   <span className="block">{column.label}</span>
@@ -221,6 +226,21 @@ export function ProductPortfolioTable({
             {visibleRows.length ? (
               visibleRows.map((product) => (
                 <TableRow key={product.uid}>
+                  {selection ? (
+                    <TableCell>
+                      <Button asChild size="sm">
+                        <Link
+                          href={designProductSelectionReturnHref({
+                            lineIndex: selection.lineIndex,
+                            productUid: product.uid,
+                            returnTo: selection.returnTo,
+                          })}
+                        >
+                          Select Product
+                        </Link>
+                      </Button>
+                    </TableCell>
+                  ) : null}
                   <TableCell className="font-mono font-medium" translate="no">
                     {product.uid}
                   </TableCell>
@@ -241,7 +261,7 @@ export function ProductPortfolioTable({
               <TableRow>
                 <TableCell
                   className="h-32 text-center text-muted-foreground"
-                  colSpan={columns.length}
+                  colSpan={columns.length + (selection ? 1 : 0)}
                 >
                   No Products Match These Filters.
                 </TableCell>

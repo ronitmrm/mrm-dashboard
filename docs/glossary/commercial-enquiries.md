@@ -99,8 +99,12 @@ one, and its parent, package-component name, and child UID are not applicable.
 The Item Type explicitly selected by Design is authoritative on save; List BOM
 display values must never cause the task to be inferred as a Package.
 Its Part UID is the main Q/C Number allocated on save. A Package exposes Add and
-Remove Component actions; every component chooses New or Existing and List or
-Assembly, while only nested Package components use Parent Line. Every new List
+Remove Component actions. Each component line opens Current Product Portfolio
+through its own Select Product action; the draft is saved first, and choosing a
+Product returns to that same line as Existing. A line without a selected Product
+is New. Every component chooses List or Assembly, while only a component nested
+below an earlier Assembly selects that Assembly as its parent; other lines are
+automatically top-level and require no Parent entry. Every new List
 component in a Package selects its own Product Size, Category, and Subcategory;
 its Product Name is generated in that order and the classification flows to the
 controlled component Product.

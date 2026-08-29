@@ -155,4 +155,50 @@ describe("DesignTaskEditor", () => {
     expect(markup).toContain('type="hidden" name="bom_rod_size"')
     expect(markup).toContain('type="hidden" name="bom_process_required"')
   })
+
+  test("selects a BOM line from Product Portfolio without an inline product dropdown", () => {
+    const markup = renderToStaticMarkup(
+      <DesignTaskEditor
+        designOptions={designOptions}
+        editable
+        initial={initial}
+        portfolioSelection={{ lineIndex: 0, productUid: "M25" }}
+        products={[
+          {
+            blankPieceWeight: 50.5,
+            category: "Compression Fitting",
+            description: "Existing Male Adapter",
+            grade: "C3604",
+            id: "product-25",
+            itemType: "List",
+            lineNotes: "Use approved route",
+            pieceWeight: 23.52,
+            processRequired: "Washing, Plating",
+            productSize: "1/4 X 3/8",
+            productType: "Barstock",
+            productionType: "CNC",
+            rodSize: "16 Round",
+            rodType: "Solid",
+            subcategory: "Male Compression Adapter",
+            uid: "M25",
+          },
+        ]}
+      />
+    )
+
+    expect(markup).toContain("Selected Product")
+    expect(markup).toContain("Change Product from Portfolio")
+    expect(markup).toContain('value="portfolio:0"')
+    expect(markup).toContain(
+      'type="hidden" name="bom_component_source" value="Existing"'
+    )
+    expect(markup).toContain(
+      'type="hidden" name="bom_existing_product_id" value="product-25"'
+    )
+    expect(markup).not.toContain(
+      'class="w-full" name="bom_existing_product_id"'
+    )
+    expect(markup).toContain("Parent Assembly (optional)")
+    expect(markup).toContain("Top-level component — no parent required")
+  })
 })

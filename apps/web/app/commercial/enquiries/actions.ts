@@ -11,6 +11,7 @@ import {
   type CommercialAttachmentAuthorization,
 } from "@workspace/db"
 import {
+  designProductPortfolioHref,
   designTaskCompletionMissingFields,
   designTaskSaveResultHref,
   designTaskShouldPrepareCosting,
@@ -427,6 +428,11 @@ export async function saveDesignAction(formData: FormData) {
   const enquiryId = requiredText(formData, "enquiry_id")
   const enquiryItemId = requiredText(formData, "enquiry_item_id")
   const organizationId = requiredText(formData, "organization_id")
+  const saveIntent = optionalText(formData, "design_save_intent") ?? "draft"
+  const portfolioLineMatch = /^portfolio:(\d+)$/.exec(saveIntent)
+  const portfolioLineIndex = portfolioLineMatch
+    ? Number(portfolioLineMatch[1])
+    : null
   const portfolioMatchStatus = requiredText(formData, "portfolio_match_status")
   const quotedPartUid = normalizeDesignAllocatedUid(
     optionalText(formData, "quoted_part_uid")
@@ -495,6 +501,7 @@ export async function saveDesignAction(formData: FormData) {
               line.packagePart ||
               line.bomItem ||
               line.notes ||
+              portfolioLineIndex !== null ||
               (lineNumbers.length === 1 && line.lineNumber === 1)
           )
   const bomLines =
@@ -545,8 +552,7 @@ export async function saveDesignAction(formData: FormData) {
     (optionalText(formData, "design_status") === "Design Complete"
       ? "Yes"
       : "No")
-  const completionRequested =
-    optionalText(formData, "design_save_intent") === "complete"
+  const completionRequested = saveIntent === "complete"
   let completionMissingFields: string[] = []
   await withWorkflow(
     commercialTaskCapabilities.saveDesign,
@@ -648,6 +654,18 @@ export async function saveDesignAction(formData: FormData) {
   revalidatePath(`${designPath}/${enquiryItemId}`)
   revalidatePath(`${designPath}/${enquiryItemId}/new`)
   revalidatePath("/commercial/product-costing")
+  if (portfolioLineIndex !== null) {
+    if (portfolioLineIndex >= lineNumbers.length) {
+      throw new Error("The selected BOM line no longer exists.")
+    }
+    redirect(
+      designProductPortfolioHref({
+        customerUid: requiredText(formData, "customer_uid"),
+        enquiryItemId,
+        lineIndex: portfolioLineIndex,
+      })
+    )
+  }
   redirect(
     designTaskSaveResultHref({
       completionMissingFields,
