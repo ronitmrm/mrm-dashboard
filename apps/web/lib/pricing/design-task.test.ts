@@ -2,6 +2,8 @@ import { describe, expect, test } from "vitest"
 
 import {
   designItemType,
+  designProductPortfolioHref,
+  designProductSelectionReturnHref,
   designProductTypeOptions,
   designProductionTypeOptions,
   designPortfolioDecisions,
@@ -103,6 +105,27 @@ describe("Pricing Design Task contract", () => {
     )
     expect(normalizeDesignAllocatedUid("Allocated on save")).toBeNull()
     expect(normalizeDesignAllocatedUid(" Q-100 ")).toBe("Q-100")
+  })
+
+  test("round-trips one BOM line through Product Portfolio selection", () => {
+    expect(
+      designProductPortfolioHref({
+        customerUid: "CUST 1",
+        enquiryItemId: "line-1",
+        lineIndex: 2,
+      })
+    ).toBe(
+      "/commercial/products?customer=CUST+1&returnTo=%2Fcommercial%2Fdesign%2Fline-1%2Fnew&selectLine=2"
+    )
+    expect(
+      designProductSelectionReturnHref({
+        lineIndex: 2,
+        productUid: "M25",
+        returnTo: "/commercial/design/line-1/new",
+      })
+    ).toBe(
+      "/commercial/design/line-1/new?product=M25&selectedLine=2&section=bom"
+    )
   })
 
   test("closes a successfully completed Design form and returns to the queue", () => {

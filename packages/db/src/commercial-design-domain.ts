@@ -112,6 +112,35 @@ export function designTaskSavedHref(
   return `/commercial/design/${enquiryItemId}/new?${params}`
 }
 
+export function designProductPortfolioHref(input: {
+  customerUid: string
+  enquiryItemId: string
+  lineIndex: number
+}) {
+  const params = new URLSearchParams({
+    customer: input.customerUid.trim(),
+    returnTo: `/commercial/design/${input.enquiryItemId}/new`,
+    selectLine: String(input.lineIndex),
+  })
+  return `/commercial/products?${params}`
+}
+
+export function designProductSelectionReturnHref(input: {
+  lineIndex: number
+  productUid: string
+  returnTo: string
+}) {
+  if (!/^\/commercial\/design\/[^/?#]+\/new$/.test(input.returnTo)) {
+    throw new Error("Invalid Design Product Portfolio return path.")
+  }
+  const params = new URLSearchParams({
+    product: input.productUid.trim(),
+    selectedLine: String(input.lineIndex),
+    section: "bom",
+  })
+  return `${input.returnTo}?${params}`
+}
+
 export function designTaskSaveResultHref(input: {
   completionMissingFields: readonly string[]
   completionRequested: boolean

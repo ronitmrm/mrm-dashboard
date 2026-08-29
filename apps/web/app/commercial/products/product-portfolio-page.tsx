@@ -17,11 +17,23 @@ const portfolioPath = "/commercial/products"
 export async function ProductPortfolioPage({
   searchParams,
 }: {
-  searchParams: Promise<{ customer?: string }>
+  searchParams: Promise<{
+    customer?: string
+    returnTo?: string
+    selectLine?: string
+  }>
 }) {
   await requireCapability("pricing.products.read", portfolioPath)
-  const { customer } = await searchParams
+  const { customer, returnTo, selectLine } = await searchParams
   const customerUid = customer?.trim() ?? ""
+  const lineIndex = Number(selectLine)
+  const selection =
+    returnTo &&
+    /^\/commercial\/design\/[^/?#]+\/new$/.test(returnTo) &&
+    Number.isInteger(lineIndex) &&
+    lineIndex >= 0
+      ? { lineIndex, returnTo }
+      : undefined
   const repository = createProductPortfolioRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
@@ -45,11 +57,13 @@ export async function ProductPortfolioPage({
         <CardHeader>
           <CardTitle>Current Product Portfolio</CardTitle>
           <CardDescription>
-            Read-Only Product Identity And Classification For Design Work.
+            {selection
+              ? "Choose one Product to return it to the selected Design BOM line."
+              : "Read-Only Product Identity And Classification For Design Work."}
           </CardDescription>
         </CardHeader>
         <CardContent className="flex min-h-0 flex-1 flex-col">
-          <ProductPortfolioTable rows={rows} />
+          <ProductPortfolioTable rows={rows} selection={selection} />
         </CardContent>
       </Card>
     </div>

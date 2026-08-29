@@ -1,4 +1,4 @@
-import { ChevronDown, Search } from "lucide-react"
+import { ChevronDown } from "lucide-react"
 import Link from "next/link"
 import { notFound, redirect } from "next/navigation"
 
@@ -16,11 +16,9 @@ import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import { Card, CardContent } from "@workspace/ui/components/card"
 import { Field, FieldGroup, FieldLabel } from "@workspace/ui/components/field"
-import { Input } from "@workspace/ui/components/input"
 import { Separator } from "@workspace/ui/components/separator"
 import { Textarea } from "@workspace/ui/components/textarea"
 
-import { BoundedResultNotice } from "@/components/bounded-result-notice"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { technicalReviewChecklist } from "@/lib/pricing/technical-review"
@@ -46,6 +44,7 @@ export default async function NewDesignWorkspacePage({
     incomplete?: string
     product?: string
     saved?: string
+    selectedLine?: string
     section?: string
   }>
 }) {
@@ -56,6 +55,11 @@ export default async function NewDesignWorkspacePage({
     resolvedSearchParams.incomplete?.split("|").filter(Boolean) ?? []
   const savedSection = designWorkspaceSection(resolvedSearchParams.section)
   const productSearch = resolvedSearchParams.product?.trim() ?? ""
+  const selectedLine = Number(resolvedSearchParams.selectedLine)
+  const portfolioSelection =
+    productSearch && Number.isInteger(selectedLine) && selectedLine >= 0
+      ? { lineIndex: selectedLine, productUid: productSearch }
+      : undefined
   const workflow = createCommercialWorkflowRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
@@ -108,53 +112,6 @@ export default async function NewDesignWorkspacePage({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {editable ? (
-            <details className="group relative" open={Boolean(productSearch)}>
-              <Button asChild size="sm" variant="outline">
-                <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
-                  <Search aria-hidden="true" className="size-4" />
-                  <span className="group-open:hidden">Find BOM Component</span>
-                  <span className="hidden group-open:inline">Close Lookup</span>
-                </summary>
-              </Button>
-              <section className="absolute top-full right-0 z-50 mt-2 w-[min(44rem,calc(100vw-2rem))] rounded-xl border bg-background p-4 shadow-xl">
-                <p className="mb-4 text-xs text-muted-foreground">
-                  Search ordered products before selecting one in a BOM line.
-                </p>
-                <form
-                  className="flex flex-col gap-2 sm:flex-row sm:items-end"
-                  id="design-product-search"
-                  role="search"
-                >
-                  <Field className="min-w-0 flex-1">
-                    <FieldLabel htmlFor="design-product-query">
-                      Product UID Or Description
-                    </FieldLabel>
-                    <Input
-                      autoComplete="off"
-                      defaultValue={productSearch}
-                      id="design-product-query"
-                      name="product"
-                      placeholder="Search by Product UID or description…"
-                    />
-                  </Field>
-                  <Button type="submit" variant="outline">
-                    <Search aria-hidden="true" className="size-4" />
-                    Search Products
-                  </Button>
-                </form>
-                <div className="mt-3">
-                  <BoundedResultNotice
-                    actionHref="#design-product-query"
-                    actionLabel="Refine Product Search"
-                    coverage={productOptions.coverage}
-                    searchQuery={productSearch}
-                    section="BOM Component Options"
-                  />
-                </div>
-              </section>
-            </details>
-          ) : null}
           <Button asChild size="sm" variant="outline">
             <Link href={`/commercial/enquiries/${selectedItem.enquiryId}`}>
               Open Enquiry
@@ -306,6 +263,11 @@ export default async function NewDesignWorkspacePage({
 
           <form action={saveDesignAction}>
             <input
+              name="customer_uid"
+              type="hidden"
+              value={selectedItem.customerUid}
+            />
+            <input
               name="design_id"
               type="hidden"
               value={selectedItem.designId ?? ""}
@@ -332,6 +294,7 @@ export default async function NewDesignWorkspacePage({
                 incompleteFields.length ? "controls" : savedSection
               }
               portfolioDecisionLocked
+              portfolioSelection={portfolioSelection}
               initial={{
                 bomLines: selectedItem.bomLines,
                 checkedBy: selectedItem.checkedBy,

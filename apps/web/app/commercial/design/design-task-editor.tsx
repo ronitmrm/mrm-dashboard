@@ -242,8 +242,10 @@ function BomRow({
   index,
   itemType,
   onRemove,
+  parentAssemblyLines,
   products,
   row,
+  selectedProductUid,
 }: {
   canRemove: boolean
   designOptions: DesignOptions
@@ -251,19 +253,22 @@ function BomRow({
   index: number
   itemType: string
   onRemove: () => void
+  parentAssemblyLines: number[]
   products: ProductOption[]
   row: BomLine
+  selectedProductUid?: string
 }) {
   const isListProduct = itemType === "List"
-  const [componentSource, setComponentSource] = useState(
-    row.componentSource || "New"
-  )
+  const portfolioProduct = selectedProductUid
+    ? products.find(({ uid }) => uid === selectedProductUid)
+    : undefined
+  const componentSource = portfolioProduct
+    ? "Existing"
+    : row.componentSource || "New"
   const [componentItemType, setComponentItemType] = useState(
     row.componentItemType || "List"
   )
-  const [selectedProductId, setSelectedProductId] = useState(
-    row.existingProductId ?? ""
-  )
+  const selectedProductId = portfolioProduct?.id ?? row.existingProductId ?? ""
   const effectiveSource = isListProduct ? "New" : componentSource
   const isExistingComponent = effectiveSource === "Existing"
   const fallbackProduct: ProductOption | null =
@@ -383,11 +388,26 @@ function BomRow({
       className={`rounded-xl border bg-background p-5 shadow-sm ${equalFieldGridClassName}`}
       key={isExistingComponent ? selectedProductId : "new-component"}
     >
-      <div className="flex items-center gap-2 md:col-span-2 xl:col-span-4">
-        <h4 className="font-medium">BOM Line {index + 1}</h4>
-        <span className="rounded-full border bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-          {effectiveSource} · {effectiveComponentType}
-        </span>
+      <div className="flex flex-wrap items-center justify-between gap-3 md:col-span-2 xl:col-span-4">
+        <div className="flex items-center gap-2">
+          <h4 className="font-medium">BOM Line {index + 1}</h4>
+          <span className="rounded-full border bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+            {effectiveSource} · {effectiveComponentType}
+          </span>
+        </div>
+        {!isListProduct ? (
+          <Button
+            name="design_save_intent"
+            size="sm"
+            type="submit"
+            value={`portfolio:${index}`}
+            variant="outline"
+          >
+            {selectedProduct
+              ? "Change Product from Portfolio"
+              : "Select Product from Portfolio"}
+          </Button>
+        ) : null}
       </div>
       <TextField
         defaultValue={row.lineNumber || index + 1}
@@ -396,21 +416,47 @@ function BomRow({
         readOnly
         type="number"
       />
+      <Field className="min-w-0">
+        <FieldLabel className={fieldLabelClassName}>
+          Parent Assembly (optional)
+          {isListProduct || parentAssemblyLines.length === 0 ? (
+            <input
+              name="bom_parent_line_number"
+              type="hidden"
+              value={row.parentLineNumber ?? ""}
+            />
+          ) : null}
+          <NativeSelect
+            autoComplete="off"
+            className="w-full"
+            defaultValue={String(row.parentLineNumber ?? "")}
+            disabled={isListProduct || parentAssemblyLines.length === 0}
+            name={
+              isListProduct || parentAssemblyLines.length === 0
+                ? undefined
+                : "bom_parent_line_number"
+            }
+          >
+            <NativeSelectOption value="">
+              Top-level component — no parent required
+            </NativeSelectOption>
+            {parentAssemblyLines.map((lineNumber) => (
+              <NativeSelectOption key={lineNumber} value={String(lineNumber)}>
+                Child of Assembly line {lineNumber}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </FieldLabel>
+        <FieldDescription>
+          Select a parent only when this component sits inside an earlier
+          Assembly line.
+        </FieldDescription>
+      </Field>
       <TextField
-        defaultValue={isListProduct ? "" : (row.parentLineNumber ?? "")}
-        disabled={isListProduct}
-        label="Parent Line"
-        name="bom_parent_line_number"
-        placeholder="Top-level component"
-        type="number"
-      />
-      <ChoiceField
         defaultValue={effectiveSource}
-        disabled={isListProduct}
+        disabled
         label="Source"
         name="bom_component_source"
-        onChange={setComponentSource}
-        options={["New", "Existing"]}
       />
       <ChoiceField
         defaultValue={effectiveComponentType}
@@ -421,29 +467,17 @@ function BomRow({
         onChange={setComponentItemType}
         options={["List", "Assembly"]}
       />
-      <Field className="min-w-0">
-        <FieldLabel className={fieldLabelClassName}>
-          Existing Product
-          <NativeSelect
-            autoComplete="off"
-            className="w-full"
-            defaultValue={selectedProductId}
-            disabled={!isExistingComponent}
-            name={isExistingComponent ? "bom_existing_product_id" : undefined}
-            onChange={(event) => setSelectedProductId(event.currentTarget.value)}
-          >
-            <NativeSelectOption value="">None</NativeSelectOption>
-            {availableProducts.map((product) => (
-              <NativeSelectOption key={product.id} value={product.id}>
-                {product.uid} · {product.description}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
-          {!isExistingComponent ? (
-            <input name="bom_existing_product_id" type="hidden" value="" />
-          ) : null}
-        </FieldLabel>
-      </Field>
+      <TextField
+        defaultValue={
+          selectedProduct
+            ? `${selectedProduct.uid} · ${selectedProduct.description}`
+            : "Not selected — this line creates a new Product"
+        }
+        disabled
+        label="Selected Product"
+        name="bom_existing_product_id"
+        submittedValue={selectedProduct?.id ?? ""}
+      />
       <input
         name="bom_package_part_uid"
         type="hidden"
@@ -705,6 +739,7 @@ export function DesignTaskEditor({
   editable,
   initial,
   initialSection = "product",
+  portfolioSelection,
   products,
   portfolioDecisionLocked = false,
 }: {
@@ -712,6 +747,7 @@ export function DesignTaskEditor({
   editable: boolean
   initial: EditorInitial
   initialSection?: DesignSection
+  portfolioSelection?: { lineIndex: number; productUid: string }
   products: ProductOption[]
   portfolioDecisionLocked?: boolean
 }) {
@@ -1134,8 +1170,25 @@ export function DesignTaskEditor({
                         current.filter((entry) => entry.key !== key)
                       )
                     }
+                    parentAssemblyLines={visibleRows
+                      .slice(0, index)
+                      .filter(
+                        ({ row: candidate }, candidateIndex) =>
+                          (portfolioSelection?.lineIndex === candidateIndex
+                            ? products.find(
+                                ({ uid }) =>
+                                  uid === portfolioSelection.productUid
+                              )?.itemType
+                            : candidate.componentItemType) === "Assembly"
+                      )
+                      .map(({ row: candidate }) => candidate.lineNumber)}
                     products={products}
                     row={row}
+                    selectedProductUid={
+                      portfolioSelection?.lineIndex === index
+                        ? portfolioSelection.productUid
+                        : undefined
+                    }
                   />
                 ))}
               </div>
