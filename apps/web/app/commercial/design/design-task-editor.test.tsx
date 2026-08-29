@@ -201,4 +201,44 @@ describe("DesignTaskEditor", () => {
     expect(markup).toContain("Parent Assembly (optional)")
     expect(markup).toContain("Top-level component — no parent required")
   })
+
+  test("gives Assembly components Product identity and enables them as parents for following rows", () => {
+    const markup = renderToStaticMarkup(
+      <DesignTaskEditor
+        designOptions={designOptions}
+        editable
+        initial={{
+          ...initial,
+          bomLines: [
+            {
+              componentCategory: "Fitting",
+              componentCode: "",
+              componentItemType: "Assembly",
+              componentProductSize: "3/8",
+              componentSource: "New",
+              componentSubcategory: "Adapter",
+              lineNumber: 1,
+              quantity: 1,
+            },
+            {
+              componentCode: "",
+              componentItemType: "List",
+              componentSource: "New",
+              lineNumber: 2,
+              quantity: 1,
+            },
+          ],
+        }}
+        products={[]}
+      />
+    )
+
+    expect(markup).toContain('name="bom_component_product_size" value="3/8"')
+    expect(markup).toContain("Product Name (automatic)")
+    expect(markup).toContain('value="3/8 Fitting Adapter"')
+    expect(markup).toContain("Child of Assembly line 1")
+    expect(markup).not.toContain(
+      "Select a parent only when this component sits inside an earlier Assembly line."
+    )
+  })
 })

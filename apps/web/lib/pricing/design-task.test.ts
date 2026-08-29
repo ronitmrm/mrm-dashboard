@@ -351,8 +351,11 @@ describe("Pricing Design Task contract", () => {
       designTaskCompletionMissingFields({
         attachmentPurposes: ["internal_drawing", "cad"],
         bomLines: [1, 2].map((lineNumber) => ({
+          componentCategory: "Fitting",
           componentItemType: "Assembly",
+          componentProductSize: `Assembly Size ${lineNumber}`,
           componentSource: "New",
+          componentSubcategory: "Adapter",
           grade: "Brass",
           lineNumber,
           manufacturingProcess: null,
@@ -379,6 +382,51 @@ describe("Pricing Design Task contract", () => {
         toolingRequired: "No",
       })
     ).toEqual([])
+  })
+
+  test("requires Product identity for every new Assembly component in a Package", () => {
+    expect(
+      designTaskCompletionMissingFields({
+        attachmentPurposes: ["internal_drawing", "cad"],
+        bomLines: [
+          {
+            componentItemType: "Assembly",
+            componentSource: "New",
+            grade: "C3604",
+            lineNumber: 1,
+            packagePart: "Generated assembly name",
+            pieceWeight: 10,
+            processRequired: "Washing",
+            quantity: 1,
+          },
+          {
+            componentSource: "Existing",
+            existingProductId: "product-2",
+            lineNumber: 2,
+            quantity: 1,
+          },
+        ],
+        checkedBy: "Design checker",
+        designBomCompleted: "Yes",
+        designerName: "Design owner",
+        fixtureApproxCost: 0,
+        fixtureRequired: "No",
+        gaugesRequired: "No",
+        inspectionApproxCost: 0,
+        internalPartCategory: "Valve",
+        internalPartSize: "10mm",
+        internalPartSubCategory: "Stem",
+        itemType: "Package",
+        manufacturingProcess: "Conventional",
+        targetCompletionDate: "2026-08-29",
+        toolingApproxCost: 0,
+        toolingRequired: "No",
+      })
+    ).toEqual([
+      "BOM Line 1 Product Size",
+      "BOM Line 1 Component Category",
+      "BOM Line 1 Component Subcategory",
+    ])
   })
 
   test("requires at least two BOM lines for a Package", () => {

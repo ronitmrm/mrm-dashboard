@@ -104,10 +104,11 @@ through its own Select Product action; the draft is saved first, and choosing a
 Product returns to that same line as Existing. A line without a selected Product
 is New. Every component chooses List or Assembly, while only a component nested
 below an earlier Assembly selects that Assembly as its parent; other lines are
-automatically top-level and require no Parent entry. Every new List
+automatically top-level and require no Parent entry. Every new List or Assembly
 component in a Package selects its own Product Size, Category, and Subcategory;
 its Product Name is generated in that order and the classification flows to the
-controlled component Product.
+controlled component Product. Changing an earlier line to Assembly makes it
+available immediately as a parent for later lines.
 For a new List, its Product Name is generated as Product Size + Category +
 Subcategory. New BOM material fields reuse Product master choices: Rod Size uses
 existing Product Rod Size values, while Rod Type and Grade use their active

@@ -241,6 +241,7 @@ function BomRow({
   generatedProductName,
   index,
   itemType,
+  onComponentItemTypeChange,
   onRemove,
   parentAssemblyLines,
   products,
@@ -252,6 +253,7 @@ function BomRow({
   generatedProductName: string
   index: number
   itemType: string
+  onComponentItemTypeChange: (componentItemType: string) => void
   onRemove: () => void
   parentAssemblyLines: number[]
   products: ProductOption[]
@@ -304,8 +306,7 @@ function BomRow({
       ? (selectedProduct?.itemType ?? componentItemType)
       : componentItemType
   const isIndividualList = effectiveComponentType === "List"
-  const isNewPackageList =
-    !isListProduct && !isExistingComponent && effectiveComponentType === "List"
+  const isNewPackageComponent = !isListProduct && !isExistingComponent
   const initialComponentCategory = designOptions.categories.includes(
     row.componentCategory ?? ""
   )
@@ -379,7 +380,7 @@ function BomRow({
   })
   const automaticProductName = isListProduct
     ? generatedProductName
-    : isNewPackageList
+    : isNewPackageComponent
       ? generatedComponentName
       : null
 
@@ -447,10 +448,6 @@ function BomRow({
             ))}
           </NativeSelect>
         </FieldLabel>
-        <FieldDescription>
-          Select a parent only when this component sits inside an earlier
-          Assembly line.
-        </FieldDescription>
       </Field>
       <TextField
         defaultValue={effectiveSource}
@@ -464,7 +461,10 @@ function BomRow({
         key={`${itemType}-component-type`}
         label="Component Type"
         name="bom_component_item_type"
-        onChange={setComponentItemType}
+        onChange={(value) => {
+          setComponentItemType(value)
+          onComponentItemTypeChange(value)
+        }}
         options={["List", "Assembly"]}
       />
       <TextField
@@ -528,7 +528,7 @@ function BomRow({
         placeholder="Describe the component being created"
         submittedValue={isListProduct ? "" : undefined}
       />
-      {isNewPackageList || isExistingComponent ? (
+      {isNewPackageComponent || isExistingComponent ? (
         <>
           <TextField
             defaultValue={effectiveProductSize}
@@ -1165,6 +1165,18 @@ export function DesignTaskEditor({
                     index={index}
                     itemType={itemType}
                     key={key}
+                    onComponentItemTypeChange={(componentItemType) =>
+                      setRows((current) =>
+                        current.map((entry) =>
+                          entry.key === key
+                            ? {
+                                ...entry,
+                                row: { ...entry.row, componentItemType },
+                              }
+                            : entry
+                        )
+                      )
+                    }
                     onRemove={() =>
                       setRows((current) =>
                         current.filter((entry) => entry.key !== key)
