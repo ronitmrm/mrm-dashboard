@@ -63,7 +63,12 @@ Details, BOM, Files, then Design Controls. Design Complete is an explicit final
 action on Design Controls after every tab's requirements are satisfied. A
 completed read-only workspace keeps all four tabs navigable for review. Successful
 completion closes the editor and returns to the active Design queue. Completion
-requires the Designer, target date, internal size, Category, Subcategory,
+is counted in the Design Complete view only after the controlled Product handoff
+to Product Parameter Costing succeeds. A failed handoff or a Product Costing
+request for Design changes remains Active Design work, even if a prior save had
+already stored Design Complete; it does not appear as Product Costing-ready until
+Design completes the required correction and handoff.
+Completion requires the Designer, target date, internal size, Category, Subcategory,
 Checked By, every conditional requirement cost, a completed valid BOM with the
 required new-component material, process, and piece-weight inputs, and current
 Internal Drawing and CAD files. Product Type and Production Type are required on

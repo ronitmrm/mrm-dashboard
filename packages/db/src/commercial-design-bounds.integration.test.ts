@@ -419,6 +419,32 @@ describe("bounded Design repositories", () => {
     ).resolves.toBeNull()
   })
 
+  test("returns downstream changes to Active Design until costing handoff succeeds", async () => {
+    await pool.query(
+      `
+        UPDATE sales.design_tasks
+        SET design_status = 'Design Complete',
+          next_stage_status = 'Changes Required'
+        WHERE enquiry_item_id = $1
+      `,
+      [historyEnquiryItemId]
+    )
+
+    const [active, completed] = await Promise.all([
+      repository.listDesignQueueBounded(historyOrganizationCode, 200, "active"),
+      repository.listDesignQueueBounded(
+        historyOrganizationCode,
+        200,
+        "completed"
+      ),
+    ])
+
+    expect({
+      active: active.rows.map((row) => row.enquiryItemId),
+      completed: completed.rows.map((row) => row.enquiryItemId),
+    }).toEqual({ active: [historyEnquiryItemId], completed: [] })
+  })
+
   test("reports exact active Design queue metrics", async () => {
     await expect(
       repository.getDesignQueueSummary(exactOrganizationCode)
