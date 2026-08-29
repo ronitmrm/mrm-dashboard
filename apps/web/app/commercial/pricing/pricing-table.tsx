@@ -47,6 +47,7 @@ const mediumPricingColumns = new Set([
   "Change Date",
   "Customer Part Code",
   "Customer",
+  "Product Type",
   "Production Type",
   "Shipping",
   "Packaging",

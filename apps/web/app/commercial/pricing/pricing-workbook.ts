@@ -112,8 +112,8 @@ const packageDashWhenEmptyColumns = [
   "Size",
   "MRMPL Product Description",
   "Pricing",
+  "Product Type",
   "Production Type",
-  "Machine Type",
   "Grade",
   "Rod Type",
   "Rod Size",
@@ -168,16 +168,9 @@ export function isPricingFormulaHeader(header: string) {
   return pricingFormulaHeaderSet.has(header)
 }
 
-const derivedWeightRowTypes = new Set([
-  "Package Total",
-  "Package",
-  "Assembly",
-])
+const derivedWeightRowTypes = new Set(["Package Total", "Package", "Assembly"])
 
-export function isPricingFormulaCell(
-  header: string,
-  row: PricingViewRow
-) {
+export function isPricingFormulaCell(header: string, row: PricingViewRow) {
   const cell = normalizedText(row[header])
   if (!cell || cell === "-") return false
   return (
@@ -262,8 +255,8 @@ export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
     "Enquiry Description": isCustomerPrice
       ? dashIfEmpty(row.enquiryDescription)
       : "-",
-    "Production Type": value(product, "productionType"),
-    "Machine Type": value(context, "machineType"),
+    "Product Type": value(product, "productionType"),
+    "Production Type": value(context, "machineType"),
     Grade: value(context, "grade"),
     "Rod Type": value(context, "rodType"),
     "Rod Size": value(context, "rodSize"),

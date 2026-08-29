@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { useState } from "react"
 
+import { designProductionTypeOptions } from "@workspace/db/commercial-design-domain"
 import { isForgingCostApplicable } from "@workspace/db/pricing-calculation"
 import { Button } from "@workspace/ui/components/button"
 import { Field, FieldGroup, FieldLabel } from "@workspace/ui/components/field"
@@ -161,6 +162,14 @@ export function ProductCostingForm({
   const [assemblyOperationCost, setAssemblyOperationCost] = useState(
     product.assemblyOperationCost
   )
+  const productionTypeNames = new Set(
+    designProductionTypeOptions(
+      machineTypes.map((machineType) => machineType.name)
+    )
+  )
+  const productionTypes = machineTypes.filter((machineType) =>
+    productionTypeNames.has(machineType.name)
+  )
   const isRoot = product.id === rootItemId
   const isBomParent = ["Package", "Assembly"].includes(product.itemType)
   const isDirectPurchase = pricingMethod === "Direct Purchase"
@@ -196,7 +205,7 @@ export function ProductCostingForm({
           <p className="text-sm text-muted-foreground">{product.description}</p>
         </div>
         <div>
-          <p className="text-xs text-muted-foreground">Production Type</p>
+          <p className="text-xs text-muted-foreground">Product Type</p>
           <p className="text-sm font-medium">{product.productionType || "—"}</p>
         </div>
         <div>
@@ -370,7 +379,7 @@ export function ProductCostingForm({
               <p className="font-medium tabular-nums">{money(piecesPerKg)}</p>
             </div>
             <Field>
-              <FieldLabel>Machine Type</FieldLabel>
+              <FieldLabel>Production Type</FieldLabel>
               <NativeSelect
                 defaultValue={
                   isDirectPurchase ? "" : (product.machineTypeId ?? "")
@@ -379,7 +388,7 @@ export function ProductCostingForm({
                 name="machine_type_id"
               >
                 <NativeSelectOption value="">Not Selected</NativeSelectOption>
-                {machineTypes.map((machineType) => (
+                {productionTypes.map((machineType) => (
                   <NativeSelectOption
                     key={machineType.id}
                     value={machineType.id}

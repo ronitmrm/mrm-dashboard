@@ -4971,13 +4971,13 @@ export function createCommercialWorkflowRepository(
             uid,
             row.description,
             row.item_type,
-            row.manufacturing_process,
+            row.item_type === "List"
+              ? (firstLine?.production_type ?? null)
+              : null,
             row.item_type === "List" ? (firstLine?.grade ?? null) : null,
             row.item_type === "List" ? (firstLine?.rod_type ?? null) : null,
             row.item_type === "List" ? (firstLine?.rod_size ?? null) : null,
-            row.item_type === "List"
-              ? (firstLine?.manufacturing_process ?? null)
-              : null,
+            row.manufacturing_process,
             row.item_type === "List" ? asNumber(firstLine?.piece_weight) : 0,
             row.item_type === "List" ? asNumber(firstLine?.casting, 1) : 1,
             row.package_process_required ?? row.design_remarks,

@@ -7,8 +7,8 @@ const migrationUrl = new URL(
   import.meta.url
 )
 
-describe("Design BOM Production Type and Machine Type migration", () => {
-  it("stores Production Type separately and backfills it from existing Design data", async () => {
+describe("Design BOM Product Type and Production Type migration", () => {
+  it("stores Product Type separately and backfills it from existing Design data", async () => {
     const migration = await readFile(migrationUrl, "utf8")
 
     expect(migration).toMatch(/ADD COLUMN IF NOT EXISTS production_type text/i)
