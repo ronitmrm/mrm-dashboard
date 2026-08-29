@@ -4,13 +4,20 @@ import type { NextConfig } from "next"
 
 import { browserSecurityHeaders } from "./lib/security-headers.ts"
 import { maxDashboardProxyRequestBytes } from "./lib/dashboard-route-policy.ts"
+import { commercialAttachmentRequestLimitBytes } from "./lib/commercial-attachment.ts"
 
 const appDir = path.dirname(fileURLToPath(import.meta.url))
 const workspaceRoot = path.join(appDir, "../..")
 
 const nextConfig: NextConfig = {
   experimental: {
-    proxyClientMaxBodySize: maxDashboardProxyRequestBytes,
+    proxyClientMaxBodySize: Math.max(
+      maxDashboardProxyRequestBytes,
+      commercialAttachmentRequestLimitBytes
+    ),
+    serverActions: {
+      bodySizeLimit: commercialAttachmentRequestLimitBytes,
+    },
   },
   async headers() {
     return [{ headers: [...browserSecurityHeaders], source: "/(.*)" }]

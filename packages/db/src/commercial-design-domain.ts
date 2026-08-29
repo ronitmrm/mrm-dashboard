@@ -13,6 +13,19 @@ export const designPortfolioDecisions = [
   "Matches Existing Portfolio",
 ] as const
 
+export const designWorkspaceSections = [
+  "product",
+  "bom",
+  "files",
+  "controls",
+] as const
+
+export type DesignWorkspaceSection = (typeof designWorkspaceSections)[number]
+
+export function designWorkspaceSection(value: string | null | undefined) {
+  return designWorkspaceSections.find((section) => section === value)
+}
+
 export function designProductName(input: {
   category?: string | null
   size?: string | null
@@ -22,6 +35,31 @@ export function designProductName(input: {
     .map((value) => value?.trim())
     .filter((value): value is string => Boolean(value))
     .join(" ")
+}
+
+type DesignItemTypeBomLine = {
+  componentItemType?: string | null
+  packagePart?: string | null
+  packagePartUid?: string | null
+  parentLineNumber?: number | null
+}
+
+export function designItemType(input: {
+  bomLines: readonly DesignItemTypeBomLine[]
+  requestedItemType?: string | null
+}) {
+  if (input.requestedItemType === "List") return "List"
+  if (input.requestedItemType === "Package") return "Package"
+  return input.bomLines.length > 1 ||
+    input.bomLines.some(
+      (line) =>
+        line.componentItemType === "Assembly" ||
+        (line.parentLineNumber !== null &&
+          line.parentLineNumber !== undefined) ||
+        Boolean(line.packagePart || line.packagePartUid)
+    )
+    ? "Package"
+    : "List"
 }
 
 export function designTaskHref(input: {
@@ -34,8 +72,14 @@ export function designTaskHref(input: {
     : reviewHref
 }
 
-export function designTaskSavedHref(enquiryItemId: string) {
-  return `/commercial/design/${enquiryItemId}/new?saved=1`
+export function designTaskSavedHref(
+  enquiryItemId: string,
+  section?: string | null
+) {
+  const params = new URLSearchParams({ saved: "1" })
+  const validSection = designWorkspaceSection(section)
+  if (validSection) params.set("section", validSection)
+  return `/commercial/design/${enquiryItemId}/new?${params}`
 }
 
 export function normalizeDesignAllocatedUid(value: string | null | undefined) {
@@ -90,6 +134,7 @@ type DesignCompletionBomLine = {
   manufacturingProcess?: string | null
   packagePart?: string | null
   pieceWeight?: number | null
+  productionType?: string | null
   processRequired?: string | null
   quantity: number
 }
@@ -161,8 +206,11 @@ export function designTaskCompletionMissingFields(
       missing.push(`${prefix} Package Part`)
     }
     if (!hasText(line.grade)) missing.push(`${prefix} Grade`)
-    if (!hasText(line.manufacturingProcess)) {
+    if (!hasText(line.productionType)) {
       missing.push(`${prefix} Production Type`)
+    }
+    if (!hasText(line.manufacturingProcess)) {
+      missing.push(`${prefix} Machine Type`)
     }
     if (!line.pieceWeight || line.pieceWeight <= 0) {
       missing.push(`${prefix} 1 Piece Weight ( gm )`)

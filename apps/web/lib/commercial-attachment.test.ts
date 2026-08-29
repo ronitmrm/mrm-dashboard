@@ -2,10 +2,19 @@ import { describe, expect, it } from "vitest"
 
 import {
   commercialArtifactPurposes,
+  commercialAttachmentLimitBytes,
+  commercialAttachmentRequestLimitBytes,
   validateCommercialAttachment,
 } from "./commercial-attachment"
 
 describe("Commercial attachment validation", () => {
+  it("allows multipart request overhead above the 25 MB file limit", () => {
+    expect(commercialAttachmentLimitBytes).toBe(25 * 1024 * 1024)
+    expect(commercialAttachmentRequestLimitBytes).toBeGreaterThan(
+      commercialAttachmentLimitBytes
+    )
+  })
+
   it("preserves each business purpose while reusing drawing validation", () => {
     expect(
       commercialArtifactPurposes.map((purpose) =>

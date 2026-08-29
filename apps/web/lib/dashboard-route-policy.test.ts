@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import nextConfig from "../next.config"
+import { commercialAttachmentRequestLimitBytes } from "./commercial-attachment"
 import {
   dashboardErrorResponse,
   dashboardMutationCapabilities,
@@ -17,7 +18,13 @@ describe("dashboard route policy", () => {
       maxDashboardRequestBytes
     )
     expect(nextConfig.experimental?.proxyClientMaxBodySize).toBe(
-      maxDashboardProxyRequestBytes
+      Math.max(
+        maxDashboardProxyRequestBytes,
+        commercialAttachmentRequestLimitBytes
+      )
+    )
+    expect(nextConfig.experimental?.serverActions?.bodySizeLimit).toBe(
+      commercialAttachmentRequestLimitBytes
     )
   })
 

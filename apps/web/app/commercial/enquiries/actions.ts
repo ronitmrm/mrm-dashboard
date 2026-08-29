@@ -24,6 +24,7 @@ import { requireCapability } from "@/lib/auth/require-capability"
 import { commercialTaskCapabilities } from "@/lib/auth/task-capabilities"
 import {
   type CommercialArtifactPurpose,
+  commercialAttachmentLimitBytes,
   validateCommercialAttachment,
 } from "@/lib/commercial-attachment"
 import { optionalText, requiredText } from "@/lib/form-data"
@@ -94,7 +95,7 @@ async function persistAttachment(
     targetTable?: "design_tasks" | "enquiry_items"
   }
 ) {
-  if (file.size > 25 * 1024 * 1024) {
+  if (file.size > commercialAttachmentLimitBytes) {
     throw new Error("Drawing files must not exceed 25 MB.")
   }
   const session = await requireCapability(
@@ -448,6 +449,7 @@ export async function saveDesignAction(formData: FormData) {
   const rodTypes = values("bom_rod_type")
   const grades = values("bom_grade")
   const manufacturingProcesses = values("bom_manufacturing_process")
+  const productionTypes = values("bom_production_type")
   const castings = values("bom_casting")
   const pieceWeights = values("bom_piece_weight")
   const processesRequired = values("bom_process_required")
@@ -474,6 +476,7 @@ export async function saveDesignAction(formData: FormData) {
               ? Number(parentLineNumbers[index])
               : null,
             pieceWeight: nullableNumber(pieceWeights[index]),
+            productionType: productionTypes[index] || null,
             processRequired: processesRequired[index] || null,
             quantity: Number(quantities[index] || 1),
             rodSize: rodSizes[index] || null,
@@ -500,6 +503,7 @@ export async function saveDesignAction(formData: FormData) {
             grade: optionalText(formData, "grade"),
             lineNumber: 1,
             pieceWeight: numeric(formData, "piece_weight"),
+            productionType: optionalText(formData, "manufacturing_process"),
             quantity: 1,
             rodSize: optionalText(formData, "rod_size"),
             rodType: optionalText(formData, "rod_type"),
@@ -647,7 +651,12 @@ export async function saveDesignAction(formData: FormData) {
       `${designPath}/${enquiryItemId}/new?${params}#design-completion-remark`
     )
   }
-  redirect(designTaskSavedHref(enquiryItemId))
+  redirect(
+    designTaskSavedHref(
+      enquiryItemId,
+      optionalText(formData, "design_active_section")
+    )
+  )
 }
 
 export async function requestDesignClarificationAction(formData: FormData) {

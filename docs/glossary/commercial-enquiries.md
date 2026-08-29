@@ -57,7 +57,8 @@ Product Size, package-context component duplicates.
 **Design Work Start**: The Design team's explicit choice to open the Design form
 for one released line. It changes Pending Design to In Progress and opens that
 line's separate new-Product Design workspace. Every tab saves only draft progress;
-no tab-level Save action completes the task. The workspace order is Product
+no tab-level Save action completes the task, and a draft save returns to the tab
+from which it was submitted. The workspace order is Product
 Details, BOM, Files, then Design Controls. Design Complete is an explicit final
 action on Design Controls after every tab's requirements are satisfied. Completion
 requires the Designer, target date, internal size,
@@ -84,14 +85,19 @@ components or quantities.
 A new quoted List is one manufactured part and therefore has one material and
 process definition row: its source is New, component type is List, quantity is
 one, and its parent, package-component name, and child UID are not applicable.
+The Item Type explicitly selected by Design is authoritative on save; List BOM
+display values must never cause the task to be inferred as a Package.
 Its Part UID is the main Q/C Number allocated on save. A Package exposes Add and
 Remove Component actions; every component chooses New or Existing and List or
 Assembly, while only nested Package components use Parent Line.
 For a new List, its Product Name is generated as Product Size + Category +
 Subcategory. New BOM material fields reuse Product master choices: Rod Size uses
 existing Product Rod Size values, while Rod Type and Grade use their active
-masters. BOM headings match Product Parameter Costing: Production Type, Casting,
-and 1 Piece Weight ( gm ). Pricing Process Columns Required selects the exact
+masters. Product Details Production Type (for example Barstock) is distinct from
+the BOM Machine Type (for example Conventional or CNC); both reuse their Product
+masters and flow to the corresponding Product Parameter Costing and Pricing
+fields. BOM headings match Product Parameter Costing: Production Type, Machine
+Type, Casting, and 1 Piece Weight ( gm ). Pricing Process Columns Required selects the exact
 optional Product Parameter Costing columns (Washing, Checking, Marking, Plating,
 Annealing, Deburring, Buffing, and Sealant); the saved selection controls which
 cost inputs are applicable in Product Parameter Costing.
@@ -105,6 +111,8 @@ Design internal drawings, customer-marked drawings, and CAD files keep separate
 business purposes and filenames. Replacing one purpose creates a new current
 version and supersedes the former version without overwriting its bytes; exact
 bytes may share one Organization-scoped physical object.
+Each uploaded Commercial Attachment may be up to 25 MB; the request envelope
+allows the multipart overhead needed to carry that validated file size.
 _Avoid_: Mutable file paths, overwriting stored bytes, merging logical purposes.
 
 **Product Base Price**: The Product-owned INR-per-piece cost before any

@@ -12,6 +12,7 @@ import {
 } from "./commercial-bounds"
 import {
   deriveDesignTaskState,
+  designItemType,
   designProductName,
   designTaskIsEditable,
   designTaskStatusAfterStart,
@@ -190,6 +191,7 @@ type DesignBomLine = {
   packagePartUid?: string | null
   parentLineNumber?: number | null
   pieceWeight?: number | null
+  productionType?: string | null
   processRequired?: string | null
   quantity: number
   rodSize?: string | null
@@ -361,6 +363,7 @@ async function designRowsWithRelations(
           package_part_uid: string | null
           parent_line_number: number | null
           piece_weight: string | null
+          production_type: string | null
           process_required: string | null
           quantity: string
           rod_size: string | null
@@ -373,7 +376,7 @@ async function designRowsWithRelations(
               bom.package_part, bom.package_part_uid,
               bom.parent_line_number, bom.quantity::text, bom.bom_item,
               bom.rod_size, bom.rod_type, bom.grade,
-              bom.manufacturing_process, bom.casting::text,
+              bom.production_type, bom.manufacturing_process, bom.casting::text,
               bom.piece_weight::text, bom.process_required
             FROM sales.design_bom_lines bom
             WHERE bom.design_task_id = ANY($1::uuid[])
@@ -462,6 +465,7 @@ async function designRowsWithRelations(
       packagePartUid: row.package_part_uid,
       parentLineNumber: row.parent_line_number,
       pieceWeight: row.piece_weight === null ? null : Number(row.piece_weight),
+      productionType: row.production_type,
       processRequired: row.process_required,
       quantity: Number(row.quantity),
       rodSize: row.rod_size,
@@ -3518,6 +3522,7 @@ export function createCommercialWorkflowRepository(
         categories,
         subcategories,
         processes,
+        machineTypes,
         materialGrades,
         rodTypes,
         rodSizes,
@@ -3602,6 +3607,17 @@ export function createCommercialWorkflowRepository(
         ),
         pool.query<{ name: string }>(
           `
+              SELECT machine_type.name
+              FROM catalog.machine_types machine_type
+              JOIN core.organizations organization
+                ON organization.id = machine_type.organization_id
+              WHERE lower(organization.code) = lower($1)
+              ORDER BY lower(machine_type.name)
+            `,
+          [organizationCode.trim()]
+        ),
+        pool.query<{ name: string }>(
+          `
               SELECT grade.name
               FROM catalog.material_grades grade
               JOIN core.organizations organization
@@ -3640,6 +3656,7 @@ export function createCommercialWorkflowRepository(
       return {
         categories: categories.rows.map((row) => row.name),
         designers: designers.rows.map((row) => row.name),
+        machineTypes: machineTypes.rows.map((row) => row.name),
         materialGrades: materialGrades.rows.map((row) => row.name),
         processes: processes.rows.map((row) => row.name),
         rodSizes: rodSizes.rows.map((row) => row.name),
@@ -3707,6 +3724,7 @@ export function createCommercialWorkflowRepository(
                   'packagePartUid', bom.package_part_uid,
                   'parentLineNumber', bom.parent_line_number,
                   'pieceWeight', bom.piece_weight,
+                  'productionType', bom.production_type,
                   'processRequired', bom.process_required,
                   'quantity', bom.quantity,
                   'rodSize', bom.rod_size,
@@ -4486,18 +4504,10 @@ export function createCommercialWorkflowRepository(
           input.portfolioMatchStatus === "New Quoted Part" ||
           input.portfolioMatchStatus === "New Design Required"
         const candidateBomLines = isNewQuotedPart ? (input.bomLines ?? []) : []
-        const itemType =
-          input.itemType === "Package" ||
-          candidateBomLines.length > 1 ||
-          candidateBomLines.some(
-            (line) =>
-              line.componentItemType === "Assembly" ||
-              (line.parentLineNumber !== null &&
-                line.parentLineNumber !== undefined) ||
-              Boolean(line.packagePart || line.packagePartUid)
-          )
-            ? "Package"
-            : "List"
+        const itemType = designItemType({
+          bomLines: candidateBomLines,
+          requestedItemType: input.itemType,
+        })
         const portfolioMatchStatus = isNewQuotedPart
           ? "New Quoted Part"
           : input.portfolioMatchStatus
@@ -4732,12 +4742,12 @@ export function createCommercialWorkflowRepository(
                 component_source, existing_product_id, component_item_type,
                 package_part_uid, package_part, bom_item, rod_size, rod_type,
                 grade, manufacturing_process, casting, piece_weight,
-                process_required, design_notes, source_system, source_table,
-                source_id, source_payload
+                production_type, process_required, design_notes,
+                source_system, source_table, source_id, source_payload
               ) VALUES (
                 $1, $2, $3, $4, $5, $6, $6, $7, $8, $9, $10, $11,
                 $12, $13, $14, $15, $16, $17, $18, $19, $20, $21,
-                'mrm-dashboard', 'design_bom_lines', $22, $23
+                $22, 'mrm-dashboard', 'design_bom_lines', $23, $24
               )
             `,
             [
@@ -4760,6 +4770,7 @@ export function createCommercialWorkflowRepository(
               bomLine.manufacturingProcess ?? null,
               bomLine.casting ?? null,
               bomLine.pieceWeight ?? null,
+              bomLine.productionType ?? null,
               bomLine.processRequired ?? null,
               bomLine.notes ?? null,
               randomUUID(),
@@ -4896,6 +4907,7 @@ export function createCommercialWorkflowRepository(
           package_part_uid: string | null
           parent_line_number: number | null
           piece_weight: string | null
+          production_type: string | null
           process_required: string | null
           quantity: string
           rod_size: string | null
@@ -4905,7 +4917,8 @@ export function createCommercialWorkflowRepository(
             SELECT component_code, quantity::text, line_number,
               parent_line_number, component_source, existing_product_id,
               component_item_type, package_part_uid, package_part, rod_size,
-              rod_type, grade, manufacturing_process, casting::text,
+              rod_type, grade, production_type, manufacturing_process,
+              casting::text,
               piece_weight::text, process_required, design_notes
             FROM sales.design_bom_lines
             WHERE design_task_id = $1
@@ -4918,7 +4931,8 @@ export function createCommercialWorkflowRepository(
           `
             INSERT INTO catalog.items (
               organization_id, uid, description, item_type, production_type,
-              material_grade_id, rod_type_id, rod_size, weight_100_pcs,
+              material_grade_id, rod_type_id, rod_size, machine_type_id,
+              weight_100_pcs,
               casting, remarks, source_system, source_table, source_id,
               source_payload
             )
@@ -4930,7 +4944,11 @@ export function createCommercialWorkflowRepository(
               (SELECT id FROM catalog.rod_types
                WHERE organization_id = $1 AND lower(name) = lower($7)
                LIMIT 1),
-              $8, $9, $10, $11, 'mrm-dashboard', 'design_tasks', $12, $13
+              $8,
+              (SELECT id FROM catalog.machine_types
+               WHERE organization_id = $1 AND lower(name) = lower($9)
+               LIMIT 1),
+              $10, $11, $12, 'mrm-dashboard', 'design_tasks', $13, $14
             )
             ON CONFLICT (organization_id, lower(uid)) DO UPDATE SET
               description = EXCLUDED.description,
@@ -4939,6 +4957,7 @@ export function createCommercialWorkflowRepository(
               material_grade_id = EXCLUDED.material_grade_id,
               rod_type_id = EXCLUDED.rod_type_id,
               rod_size = EXCLUDED.rod_size,
+              machine_type_id = EXCLUDED.machine_type_id,
               weight_100_pcs = EXCLUDED.weight_100_pcs,
               casting = EXCLUDED.casting,
               remarks = EXCLUDED.remarks,
@@ -4956,6 +4975,9 @@ export function createCommercialWorkflowRepository(
             row.item_type === "List" ? (firstLine?.grade ?? null) : null,
             row.item_type === "List" ? (firstLine?.rod_type ?? null) : null,
             row.item_type === "List" ? (firstLine?.rod_size ?? null) : null,
+            row.item_type === "List"
+              ? (firstLine?.manufacturing_process ?? null)
+              : null,
             row.item_type === "List" ? asNumber(firstLine?.piece_weight) : 0,
             row.item_type === "List" ? asNumber(firstLine?.casting, 1) : 1,
             row.package_process_required ?? row.design_remarks,
@@ -5001,7 +5023,7 @@ export function createCommercialWorkflowRepository(
                   INSERT INTO catalog.items (
                     organization_id, uid, description, item_type,
                     production_type, material_grade_id, rod_type_id, rod_size,
-                    weight_100_pcs, casting, remarks, source_system,
+                    machine_type_id, weight_100_pcs, casting, remarks, source_system,
                     source_table, source_id, source_payload
                   )
                   VALUES (
@@ -5012,8 +5034,12 @@ export function createCommercialWorkflowRepository(
                     (SELECT id FROM catalog.rod_types
                      WHERE organization_id = $1 AND lower(name) = lower($7)
                      LIMIT 1),
-                    $8, $9, $10, $11, 'mrm-dashboard', 'design_bom_lines',
-                    $12, $13
+                    $8,
+                    (SELECT id FROM catalog.machine_types
+                     WHERE organization_id = $1 AND lower(name) = lower($9)
+                     LIMIT 1),
+                    $10, $11, $12, 'mrm-dashboard', 'design_bom_lines',
+                    $13, $14
                   )
                   ON CONFLICT (organization_id, lower(uid)) DO UPDATE SET
                     description = EXCLUDED.description,
@@ -5022,6 +5048,7 @@ export function createCommercialWorkflowRepository(
                     material_grade_id = EXCLUDED.material_grade_id,
                     rod_type_id = EXCLUDED.rod_type_id,
                     rod_size = EXCLUDED.rod_size,
+                    machine_type_id = EXCLUDED.machine_type_id,
                     weight_100_pcs = EXCLUDED.weight_100_pcs,
                     casting = EXCLUDED.casting,
                     remarks = EXCLUDED.remarks,
@@ -5036,10 +5063,11 @@ export function createCommercialWorkflowRepository(
                   bomLine.package_part ||
                     `${row.description} component ${bomLine.line_number}`,
                   bomLine.component_item_type,
-                  bomLine.manufacturing_process,
+                  bomLine.production_type,
                   bomLine.grade,
                   bomLine.rod_type,
                   bomLine.rod_size,
+                  bomLine.manufacturing_process,
                   asNumber(bomLine.piece_weight),
                   asNumber(bomLine.casting, 1),
                   bomLine.design_notes,

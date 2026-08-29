@@ -34,6 +34,7 @@ type BomLine = {
   packagePartUid?: string | null
   parentLineNumber?: number | null
   pieceWeight?: number | null
+  productionType?: string | null
   processRequired?: string | null
   quantity: number
   rodSize?: string | null
@@ -76,6 +77,7 @@ type ProductOption = {
 type DesignOptions = {
   categories: string[]
   designers: string[]
+  machineTypes: string[]
   materialGrades: string[]
   processes: string[]
   rodSizes: string[]
@@ -127,6 +129,7 @@ function TextField({
   onChange,
   placeholder,
   readOnly = false,
+  submittedValue,
   type = "text",
 }: {
   defaultValue: number | string
@@ -136,6 +139,7 @@ function TextField({
   onChange?: (value: string) => void
   placeholder?: string
   readOnly?: boolean
+  submittedValue?: number | string
   type?: string
 }) {
   return (
@@ -143,7 +147,11 @@ function TextField({
       <FieldLabel className={fieldLabelClassName}>
         {label}
         {disabled ? (
-          <input name={name} type="hidden" value={defaultValue} />
+          <input
+            name={name}
+            type="hidden"
+            value={submittedValue ?? defaultValue}
+          />
         ) : null}
         <Input
           autoComplete="off"
@@ -247,7 +255,11 @@ function BomRow({
   )
   const effectiveProductionType = isListProduct
     ? productionType
-    : (row.manufacturingProcess ?? "")
+    : (row.productionType ?? "")
+  const effectiveMachineType =
+    row.manufacturingProcess === effectiveProductionType
+      ? ""
+      : (row.manufacturingProcess ?? "")
 
   return (
     <section
@@ -355,6 +367,7 @@ function BomRow({
         }
         name="bom_package_part"
         placeholder="Describe the component being created"
+        submittedValue={isListProduct ? "" : undefined}
       />
       <input name="bom_item" type="hidden" value={row.bomItem ?? ""} />
       <ChoiceField
@@ -386,12 +399,23 @@ function BomRow({
         disabled={isListProduct || isExistingComponent}
         key={`${index}-${effectiveProductionType}`}
         label="Production Type"
-        name="bom_manufacturing_process"
+        name="bom_production_type"
         options={optionsWithCurrent(
           designOptions.processes,
           effectiveProductionType
         )}
         placeholder="Select Production Type"
+      />
+      <ChoiceField
+        defaultValue={effectiveMachineType}
+        disabled={isExistingComponent}
+        label="Machine Type"
+        name="bom_manufacturing_process"
+        options={optionsWithCurrent(
+          designOptions.machineTypes,
+          effectiveMachineType
+        )}
+        placeholder="Select Conventional or CNC"
       />
       <TextField
         defaultValue={row.casting ?? ""}
@@ -542,6 +566,7 @@ export function DesignTaskEditor({
 
   return (
     <fieldset className="grid gap-8" disabled={!editable}>
+      <input name="design_active_section" type="hidden" value={activeSection} />
       <input name="design_status" type="hidden" value="Pending Design" />
       <input name="revision_no" type="hidden" value="0" />
       <input name="approval_status" type="hidden" value="Pending" />
