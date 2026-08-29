@@ -14,6 +14,7 @@ import {
   deriveDesignTaskState,
   designItemType,
   designProductName,
+  designProductionMachineType,
   designTaskIsEditable,
   designTaskStatusAfterStart,
   normalizeDesignAllocatedUid,
@@ -4743,9 +4744,12 @@ export function createCommercialWorkflowRepository(
             )
           }
           if (bomLine.existingProductId) {
-            const existing = await client.query<{ uid: string }>(
+            const existing = await client.query<{
+              item_type: string
+              uid: string
+            }>(
               `
-                SELECT uid FROM catalog.items
+                SELECT uid, item_type FROM catalog.items
                 WHERE id = $1 AND organization_id = $2
                   AND lifecycle_status = 'P' AND uid_kind = 'INTERNAL'
               `,
@@ -4756,6 +4760,13 @@ export function createCommercialWorkflowRepository(
               throw new Error(
                 "Package existing part must be an ordered internal product."
               )
+            }
+            if (
+              bomLine.parentLineNumber !== null &&
+              bomLine.parentLineNumber !== undefined &&
+              existing.rows[0]!.item_type !== "List"
+            ) {
+              throw new Error("An Assembly child must select a List Product.")
             }
           }
           const packagePartUid =
@@ -5130,9 +5141,10 @@ export function createCommercialWorkflowRepository(
                   bomLine.grade,
                   bomLine.rod_type,
                   bomLine.rod_size,
-                  bomLine.component_item_type === "List"
-                    ? bomLine.manufacturing_process
-                    : null,
+                  designProductionMachineType(
+                    bomLine.component_item_type,
+                    bomLine.manufacturing_process
+                  ),
                   asNumber(bomLine.piece_weight),
                   asNumber(bomLine.casting, 1),
                   bomLine.design_notes,
@@ -5379,12 +5391,7 @@ export function createCommercialWorkflowRepository(
 
     async listAttachments(input: {
       organizationId: string
-      purpose?:
-        | "cad"
-        | "customer_marked"
-        | "drawing"
-        | "internal_drawing"
-        | "sales_clarification"
+      purpose?: string
       targetId: string
       targetTable: "design_tasks" | "enquiry_items"
     }) {
@@ -5447,12 +5454,7 @@ export function createCommercialWorkflowRepository(
 
     async listAttachmentsForTargets(input: {
       organizationId: string
-      purpose?:
-        | "cad"
-        | "customer_marked"
-        | "drawing"
-        | "internal_drawing"
-        | "sales_clarification"
+      purpose?: string
       targetIds: string[]
       targetTable: "design_tasks" | "enquiry_items"
     }) {

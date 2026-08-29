@@ -4,10 +4,33 @@ import {
   commercialArtifactPurposes,
   commercialAttachmentLimitBytes,
   commercialAttachmentRequestLimitBytes,
+  designBomAttachmentFieldName,
+  designBomAttachmentPurpose,
+  parseDesignBomAttachmentPurpose,
   validateCommercialAttachment,
 } from "./commercial-attachment"
 
 describe("Commercial attachment validation", () => {
+  it("keeps each Design BOM line attachment in its own business purpose", () => {
+    const purpose = designBomAttachmentPurpose({
+      kind: "internal_drawing",
+      lineNumber: 3,
+    })
+
+    expect(purpose).toBe("bom_line_3_internal_drawing")
+    expect(
+      designBomAttachmentFieldName({
+        kind: "internal_drawing",
+        lineNumber: 3,
+      })
+    ).toBe("bom_line_3_internal_drawing_file")
+    expect(parseDesignBomAttachmentPurpose(purpose)).toEqual({
+      kind: "internal_drawing",
+      lineNumber: 3,
+    })
+    expect(parseDesignBomAttachmentPurpose("internal_drawing")).toBeNull()
+  })
+
   it("allows multipart request overhead above the 25 MB file limit", () => {
     expect(commercialAttachmentLimitBytes).toBe(25 * 1024 * 1024)
     expect(commercialAttachmentRequestLimitBytes).toBeGreaterThan(

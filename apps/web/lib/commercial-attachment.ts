@@ -13,6 +13,41 @@ export const commercialArtifactPurposes = [
 export type CommercialArtifactPurpose =
   (typeof commercialArtifactPurposes)[number]
 
+export type DesignAttachmentKind = Extract<
+  CommercialArtifactPurpose,
+  "cad" | "customer_marked" | "internal_drawing"
+>
+
+export function designBomAttachmentPurpose({
+  kind,
+  lineNumber,
+}: {
+  kind: DesignAttachmentKind
+  lineNumber: number
+}) {
+  if (!Number.isInteger(lineNumber) || lineNumber <= 0) {
+    throw new Error("Design BOM attachment line number must be positive.")
+  }
+  return `bom_line_${lineNumber}_${kind}`
+}
+
+export function designBomAttachmentFieldName(input: {
+  kind: DesignAttachmentKind
+  lineNumber: number
+}) {
+  return `${designBomAttachmentPurpose(input)}_file`
+}
+
+export function parseDesignBomAttachmentPurpose(purpose: string) {
+  const match =
+    /^bom_line_([1-9]\d*)_(cad|customer_marked|internal_drawing)$/.exec(purpose)
+  if (!match) return null
+  return {
+    kind: match[2] as DesignAttachmentKind,
+    lineNumber: Number(match[1]),
+  }
+}
+
 export const commercialAttachmentLimitBytes = 25 * 1024 * 1024
 export const commercialAttachmentRequestLimitBytes = 26 * 1024 * 1024
 

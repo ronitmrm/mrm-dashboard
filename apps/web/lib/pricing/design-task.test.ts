@@ -18,17 +18,30 @@ import {
   designTaskIsOpen,
   designTaskCompletionMissingFields,
   designProductName,
+  designProductionMachineType,
   deriveDesignTaskState,
   normalizeDesignAllocatedUid,
 } from "@workspace/db/commercial-design-domain"
 
 describe("Pricing Design Task contract", () => {
-  test("limits Production Type to CNC, Conventional, and DP master values", () => {
-    expect(designProductionTypeOptions(["Conventional", "DP", "CNC"])).toEqual([
-      "CNC",
-      "Conventional",
-      "DP",
-    ])
+  test("keeps Production Type on List and Assembly Products only", () => {
+    expect(designProductionMachineType("List", "CNC")).toBe("CNC")
+    expect(designProductionMachineType("Assembly", "M/C Assembly")).toBe(
+      "M/C Assembly"
+    )
+    expect(designProductionMachineType("Package", "Assembly")).toBeNull()
+  })
+
+  test("limits Production Type to the five approved master values", () => {
+    expect(
+      designProductionTypeOptions([
+        "Assembly",
+        "Conventional",
+        "DP",
+        "M/C Assembly",
+        "CNC",
+      ])
+    ).toEqual(["CNC", "Conventional", "DP", "M/C Assembly", "Assembly"])
   })
 
   test("limits Product Type to the four approved master values", () => {
@@ -468,6 +481,67 @@ describe("Pricing Design Task contract", () => {
         toolingRequired: "No",
       })
     ).toEqual(["BOM Line 1 Assembly requires at least 1 child BOM Line"])
+  })
+
+  test("rejects an Assembly nested below another Assembly", () => {
+    expect(
+      designTaskCompletionMissingFields({
+        attachmentPurposes: ["internal_drawing", "cad"],
+        bomLines: [
+          {
+            componentCategory: "Fitting",
+            componentItemType: "Assembly",
+            componentProductSize: "Parent",
+            componentSource: "New",
+            componentSubcategory: "Adapter",
+            lineNumber: 1,
+            packagePart: "Parent Assembly",
+            quantity: 1,
+          },
+          {
+            componentCategory: "Fitting",
+            componentItemType: "Assembly",
+            componentProductSize: "Child",
+            componentSource: "New",
+            componentSubcategory: "Adapter",
+            lineNumber: 2,
+            packagePart: "Nested Assembly",
+            parentLineNumber: 1,
+            quantity: 1,
+          },
+          {
+            componentCategory: "Fitting",
+            componentItemType: "List",
+            componentProductSize: "3/8",
+            componentSource: "New",
+            componentSubcategory: "Nut",
+            grade: "Brass",
+            lineNumber: 3,
+            manufacturingProcess: "CNC",
+            packagePart: "Child List Part",
+            parentLineNumber: 2,
+            pieceWeight: 12,
+            productionType: "Barstock",
+            processRequired: "Cutting",
+            quantity: 1,
+          },
+        ],
+        checkedBy: "Design checker",
+        designBomCompleted: "Yes",
+        designerName: "Design owner",
+        fixtureApproxCost: 0,
+        fixtureRequired: "No",
+        gaugesRequired: "No",
+        inspectionApproxCost: 0,
+        internalPartCategory: "Valve",
+        internalPartSize: "10mm",
+        internalPartSubCategory: "Stem",
+        itemType: "Package",
+        targetCompletionDate: "2026-08-29",
+        toolingApproxCost: 0,
+        toolingRequired: "No",
+      })
+    ).toEqual(["BOM Line 2 Child must be a List"])
   })
 
   test("requires Product identity for every new Assembly component in a Package", () => {

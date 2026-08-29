@@ -29,7 +29,13 @@ export const designProductTypes = [
   "Punching",
 ] as const
 
-export const designProductionTypes = ["CNC", "Conventional", "DP"] as const
+export const designProductionTypes = [
+  "CNC",
+  "Conventional",
+  "DP",
+  "M/C Assembly",
+  "Assembly",
+] as const
 
 function canonicalMasterOptions(
   canonicalValues: readonly string[],
@@ -50,6 +56,15 @@ export function designProductTypeOptions(masterValues: readonly string[]) {
 
 export function designProductionTypeOptions(masterValues: readonly string[]) {
   return canonicalMasterOptions(designProductionTypes, masterValues)
+}
+
+export function designProductionMachineType(
+  itemType: string,
+  manufacturingProcess: string | null | undefined
+) {
+  return itemType === "List" || itemType === "Assembly"
+    ? (manufacturingProcess ?? null)
+    : null
 }
 
 export function designWorkspaceSection(value: string | null | undefined) {
@@ -312,6 +327,13 @@ export function designTaskCompletionMissingFields(
   for (const line of input.bomLines) {
     const prefix = `BOM Line ${line.lineNumber}`
     if (line.quantity <= 0) missing.push(`${prefix} Quantity`)
+    if (
+      line.parentLineNumber !== null &&
+      line.parentLineNumber !== undefined &&
+      line.componentItemType === "Assembly"
+    ) {
+      missing.push(`${prefix} Child must be a List`)
+    }
     if (
       line.componentSource !== "Existing" &&
       line.componentItemType === "Assembly" &&
