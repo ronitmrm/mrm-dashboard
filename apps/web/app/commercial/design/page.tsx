@@ -30,7 +30,13 @@ function display(value: number | string | null | undefined) {
   return value === null || value === undefined || value === "" ? "—" : value
 }
 
-export default async function DesignPage() {
+export default async function DesignPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ view?: string }>
+}) {
+  const view =
+    (await searchParams).view === "completed" ? "completed" : "active"
   await requireCapability("pricing.design.read", "/commercial/design")
   const workflow = createCommercialWorkflowRepository({
     connectionString: readAuthEnvironment().connectionString,
@@ -38,7 +44,7 @@ export default async function DesignPage() {
   const { designResult, summary } = await (async () => {
     try {
       const [designResult, summary] = await Promise.all([
-        workflow.listDesignQueueBounded("MRMPL"),
+        workflow.listDesignQueueBounded("MRMPL", 200, view),
         workflow.getDesignQueueSummary("MRMPL"),
       ])
       return { designResult, summary }
@@ -59,16 +65,51 @@ export default async function DesignPage() {
         <MetricCard label="Open Design Tasks" value={summary.openTasks} />
       </section>
 
+      <nav aria-label="Design task views" className="flex flex-wrap gap-2">
+        <Button
+          asChild
+          size="sm"
+          variant={view === "active" ? "default" : "outline"}
+        >
+          <Link
+            aria-current={view === "active" ? "page" : undefined}
+            href="/commercial/design"
+          >
+            Active
+          </Link>
+        </Button>
+        <Button
+          asChild
+          size="sm"
+          variant={view === "completed" ? "default" : "outline"}
+        >
+          <Link
+            aria-current={view === "completed" ? "page" : undefined}
+            href="/commercial/design?view=completed"
+          >
+            Design Complete
+          </Link>
+        </Button>
+      </nav>
+
       <BoundedResultNotice
         actionHref="/commercial/enquiries/excel-view"
         actionLabel="Review the enquiry Excel view"
         coverage={designResult.coverage}
-        section="Active Design queue"
+        section={
+          view === "completed"
+            ? "Completed Design tasks"
+            : "Active Design queue"
+        }
       />
 
       <Card>
         <CardHeader>
-          <CardTitle>Approved Line Items</CardTitle>
+          <CardTitle>
+            {view === "completed"
+              ? "Completed Line Items"
+              : "Approved Line Items"}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto rounded-md border">
@@ -124,9 +165,11 @@ export default async function DesignPage() {
                           }
                         >
                           <Link href={designTaskHref(item)}>
-                            {item.portfolioMatchStatus === "New Quoted Part"
-                              ? "Open Design Form"
-                              : "Start Task"}
+                            {view === "completed"
+                              ? "Review Design"
+                              : item.portfolioMatchStatus === "New Quoted Part"
+                                ? "Open Design Form"
+                                : "Start Task"}
                           </Link>
                         </Button>
                       </TableCell>
@@ -138,7 +181,9 @@ export default async function DesignPage() {
                       className="py-10 text-center text-muted-foreground"
                       colSpan={10}
                     >
-                      No active Design tasks.
+                      {view === "completed"
+                        ? "No completed Design tasks."
+                        : "No active Design tasks."}
                     </TableCell>
                   </TableRow>
                 )}

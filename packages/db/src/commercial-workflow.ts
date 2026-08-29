@@ -6550,7 +6550,8 @@ export function createCommercialWorkflowRepository(
 
     async listDesignQueueBounded(
       organizationCode: string,
-      requestedLimit = 200
+      requestedLimit = 200,
+      view: "active" | "completed" = "active"
     ) {
       const limit = operationalRootLimit(requestedLimit)
       const roots = await pool.query<DesignQueueDatabaseRow>(
@@ -6601,10 +6602,18 @@ export function createCommercialWorkflowRepository(
             AND enquiry_item.technical_review_status IN (
               'Feasible', 'Duplicate / Existing Product'
             )
-            AND COALESCE(design.design_status, 'Pending Design') NOT IN (
-              'Design Complete', 'Not Required'
+            AND (
+              ($3::text = 'completed'
+                AND design.design_status = 'Design Complete')
+              OR ($3::text = 'active'
+                AND COALESCE(design.design_status, 'Pending Design') NOT IN (
+                  'Design Complete', 'Not Required'
+                ))
             )
-          ORDER BY CASE COALESCE(design.design_status, 'Pending Design')
+          ORDER BY
+            CASE WHEN $3::text = 'completed' THEN design.updated_at END DESC
+              NULLS LAST,
+            CASE COALESCE(design.design_status, 'Pending Design')
               WHEN 'Changes Required' THEN 0
               WHEN 'Pending Design' THEN 1
               WHEN 'In Progress' THEN 2
@@ -6615,7 +6624,7 @@ export function createCommercialWorkflowRepository(
             enquiry_item.id
           LIMIT $2
         `,
-        [organizationCode.trim(), limit + 1]
+        [organizationCode.trim(), limit + 1, view]
       )
       const returnedRoots = roots.rows.slice(0, limit)
       const rows = await designRowsWithRelations(pool, returnedRoots)
