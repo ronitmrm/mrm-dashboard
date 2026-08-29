@@ -3833,8 +3833,16 @@ export function createCommercialWorkflowRepository(
             AND enquiry_item.technical_review_status IN (
               'Feasible', 'Duplicate / Existing Product'
             )
-            AND COALESCE(design.design_status, 'Pending Design') NOT IN (
-              'Design Complete', 'Not Required'
+            AND (
+              COALESCE(design.design_status, 'Pending Design') NOT IN (
+                'Design Complete', 'Not Required'
+              )
+              OR (
+                design.design_status = 'Design Complete'
+                AND COALESCE(design.next_stage_status, 'Not Started') IN (
+                  'Not Started', 'Changes Required'
+                )
+              )
             )
           ORDER BY CASE COALESCE(design.design_status, 'Pending Design')
               WHEN 'Changes Required' THEN 0
@@ -6840,10 +6848,21 @@ export function createCommercialWorkflowRepository(
             )
             AND (
               ($3::text = 'completed'
-                AND design.design_status = 'Design Complete')
+                AND design.design_status = 'Design Complete'
+                AND COALESCE(design.next_stage_status, 'Not Started') NOT IN (
+                  'Not Started', 'Changes Required'
+                ))
               OR ($3::text = 'active'
-                AND COALESCE(design.design_status, 'Pending Design') NOT IN (
-                  'Design Complete', 'Not Required'
+                AND (
+                  COALESCE(design.design_status, 'Pending Design') NOT IN (
+                    'Design Complete', 'Not Required'
+                  )
+                  OR (
+                    design.design_status = 'Design Complete'
+                    AND COALESCE(
+                      design.next_stage_status, 'Not Started'
+                    ) IN ('Not Started', 'Changes Required')
+                  )
                 ))
             )
           ORDER BY
@@ -6950,8 +6969,16 @@ export function createCommercialWorkflowRepository(
             AND enquiry_item.technical_review_status IN (
               'Feasible', 'Duplicate / Existing Product'
             )
-            AND COALESCE(design.design_status, 'Pending Design') NOT IN (
-              'Design Complete', 'Not Required'
+            AND (
+              COALESCE(design.design_status, 'Pending Design') NOT IN (
+                'Design Complete', 'Not Required'
+              )
+              OR (
+                design.design_status = 'Design Complete'
+                AND COALESCE(design.next_stage_status, 'Not Started') IN (
+                  'Not Started', 'Changes Required'
+                )
+              )
             )
         `,
         [organizationCode.trim()]
