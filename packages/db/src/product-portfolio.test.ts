@@ -8,7 +8,8 @@ const orderedProduct = {
   item_type: "List",
   mrmpl_description: "Ordered hose fitting",
   product_type: "Barstock",
-  size: "1/4 inch",
+  product_size: "1/4 inch",
+  rod_size: "12.7 Hex",
   sub_category: "Hose Barb",
   uid: "M100",
 }
@@ -18,18 +19,19 @@ const quotedProduct = {
   item_type: "List",
   mrmpl_description: "Customer quoted fitting",
   product_type: "Forging",
-  size: "3/8 inch",
+  product_size: "3/8 inch",
+  rod_size: "16 Round",
   sub_category: "Hose Barb",
   uid: "Q200",
 }
 
 describe("Product Portfolio repository", () => {
-  it("adds the selected customer's quoted products to the global ordered portfolio", async () => {
+  it("returns each Product UID once with separate Product and Rod sizes", async () => {
     const query = vi.fn(
       async (_statement: string, values: readonly unknown[]) => ({
         rows:
           values[1] === "CUST-001"
-            ? [orderedProduct, quotedProduct]
+            ? [orderedProduct, { ...orderedProduct }, quotedProduct]
             : [orderedProduct],
       })
     )
@@ -47,7 +49,8 @@ describe("Product Portfolio repository", () => {
         itemType: "List",
         mrmplDescription: "Ordered hose fitting",
         productType: "Barstock",
-        size: "1/4 inch",
+        productSize: "1/4 inch",
+        rodSize: "12.7 Hex",
         subCategory: "Hose Barb",
         uid: "M100",
       },
@@ -56,7 +59,8 @@ describe("Product Portfolio repository", () => {
         itemType: "List",
         mrmplDescription: "Customer quoted fitting",
         productType: "Forging",
-        size: "3/8 inch",
+        productSize: "3/8 inch",
+        rodSize: "16 Round",
         subCategory: "Hose Barb",
         uid: "Q200",
       },

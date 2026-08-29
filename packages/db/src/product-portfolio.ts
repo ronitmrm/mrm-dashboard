@@ -5,7 +5,8 @@ export type ProductPortfolioRow = {
   itemType: string
   mrmplDescription: string
   productType: string | null
-  size: string | null
+  productSize: string | null
+  rodSize: string | null
   subCategory: string | null
   uid: string
 }
@@ -14,8 +15,9 @@ type ProductPortfolioDatabaseRow = {
   category: string | null
   item_type: string
   mrmpl_description: string
+  product_size: string | null
   product_type: string | null
-  size: string | null
+  rod_size: string | null
   sub_category: string | null
   uid: string
 }
@@ -36,8 +38,22 @@ export function createProductPortfolioRepository(
       const result = await pool.query<ProductPortfolioDatabaseRow>(
         `
           SELECT item.uid, item.item_type,
-            COALESCE(profile.size, item.rod_size) AS size,
-            profile.category, profile.sub_category,
+            COALESCE(
+              NULLIF(btrim(profile.size), ''),
+              NULLIF(btrim(item.source_payload ->> 'productSize'), ''),
+              NULLIF(btrim(design.internal_part_size), '')
+            ) AS product_size,
+            NULLIF(btrim(item.rod_size), '') AS rod_size,
+            COALESCE(
+              NULLIF(btrim(profile.category), ''),
+              NULLIF(btrim(item.source_payload ->> 'category'), ''),
+              NULLIF(btrim(design.internal_part_category), '')
+            ) AS category,
+            COALESCE(
+              NULLIF(btrim(profile.sub_category), ''),
+              NULLIF(btrim(item.source_payload ->> 'subcategory'), ''),
+              NULLIF(btrim(design.internal_part_sub_category), '')
+            ) AS sub_category,
             COALESCE(
               NULLIF(btrim(profile.product_description), ''),
               item.description
@@ -48,6 +64,8 @@ export function createProductPortfolioRepository(
             ON organization.id = item.organization_id
           LEFT JOIN catalog.website_product_profiles profile
             ON profile.item_id = item.id
+          LEFT JOIN sales.design_tasks design
+            ON design.id::text = item.source_payload ->> 'designTaskId'
           WHERE lower(organization.code) = lower($1)
             AND (
               (
@@ -81,15 +99,21 @@ export function createProductPortfolioRepository(
         [organizationCode.trim(), customerUid]
       )
 
-      return result.rows.map((row) => ({
+      const products = result.rows.map((row) => ({
         category: row.category,
         itemType: row.item_type,
         mrmplDescription: row.mrmpl_description,
+        productSize: row.product_size,
         productType: row.product_type,
-        size: row.size,
+        rodSize: row.rod_size,
         subCategory: row.sub_category,
         uid: row.uid,
       }))
+      return [
+        ...new Map(
+          products.map((product) => [product.uid.toLowerCase(), product])
+        ).values(),
+      ]
     },
   }
 }
