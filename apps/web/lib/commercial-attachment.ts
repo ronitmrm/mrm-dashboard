@@ -13,7 +13,8 @@ export const commercialArtifactPurposes = [
 export type CommercialArtifactPurpose =
   (typeof commercialArtifactPurposes)[number]
 
-const commercialAttachmentLimit = 25 * 1024 * 1024
+export const commercialAttachmentLimitBytes = 25 * 1024 * 1024
+export const commercialAttachmentRequestLimitBytes = 26 * 1024 * 1024
 
 const declaredMediaTypes: Record<string, ReadonlySet<string>> = {
   ".dwg": new Set([
@@ -58,7 +59,7 @@ export function validateCommercialAttachment({
   fileName: string
   purpose: CommercialArtifactPurpose
 }) {
-  if (bytes.byteLength > commercialAttachmentLimit) {
+  if (bytes.byteLength > commercialAttachmentLimitBytes) {
     throw new Error("Drawing files must not exceed 25 MB.")
   }
   const validated = validateUserAttachment({

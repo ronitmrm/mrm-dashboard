@@ -3,7 +3,10 @@ import Link from "next/link"
 import { notFound, redirect } from "next/navigation"
 
 import { createCommercialWorkflowRepository } from "@workspace/db"
-import { designTaskIsEditable } from "@workspace/db/commercial-design-domain"
+import {
+  designTaskIsEditable,
+  designWorkspaceSection,
+} from "@workspace/db/commercial-design-domain"
 import {
   Alert,
   AlertDescription,
@@ -43,6 +46,7 @@ export default async function NewDesignWorkspacePage({
     incomplete?: string
     product?: string
     saved?: string
+    section?: string
   }>
 }) {
   const { id } = await params
@@ -50,6 +54,7 @@ export default async function NewDesignWorkspacePage({
   const resolvedSearchParams = await searchParams
   const incompleteFields =
     resolvedSearchParams.incomplete?.split("|").filter(Boolean) ?? []
+  const savedSection = designWorkspaceSection(resolvedSearchParams.section)
   const productSearch = resolvedSearchParams.product?.trim() ?? ""
   const workflow = createCommercialWorkflowRepository({
     connectionString: readAuthEnvironment().connectionString,
@@ -323,7 +328,9 @@ export default async function NewDesignWorkspacePage({
             <DesignTaskEditor
               designOptions={designOptions}
               editable={editable}
-              initialSection={incompleteFields.length ? "controls" : undefined}
+              initialSection={
+                incompleteFields.length ? "controls" : savedSection
+              }
               portfolioDecisionLocked
               initial={{
                 bomLines: selectedItem.bomLines,

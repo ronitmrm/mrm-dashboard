@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest"
 
 import {
+  designItemType,
   designPortfolioDecisions,
   designTaskSavedHref,
   designStatuses,
@@ -16,6 +17,20 @@ import {
 } from "@workspace/db/commercial-design-domain"
 
 describe("Pricing Design Task contract", () => {
+  test("keeps an explicitly selected List as a List on draft save", () => {
+    expect(
+      designItemType({
+        bomLines: [
+          {
+            componentItemType: "List",
+            packagePart: "generated display name",
+          },
+        ],
+        requestedItemType: "List",
+      })
+    ).toBe("List")
+  })
+
   test("builds the Product Name in Pricing order", () => {
     expect(
       designProductName({
@@ -57,6 +72,9 @@ describe("Pricing Design Task contract", () => {
   test("returns to the workspace with visible save confirmation state", () => {
     expect(designTaskSavedHref("line-1")).toBe(
       "/commercial/design/line-1/new?saved=1"
+    )
+    expect(designTaskSavedHref("line-1", "files")).toBe(
+      "/commercial/design/line-1/new?saved=1&section=files"
     )
     expect(normalizeDesignAllocatedUid("Allocated on save")).toBeNull()
     expect(normalizeDesignAllocatedUid(" Q-100 ")).toBe("Q-100")
@@ -186,6 +204,7 @@ describe("Pricing Design Task contract", () => {
             manufacturingProcess: null,
             packagePart: null,
             pieceWeight: null,
+            productionType: null,
             processRequired: null,
             quantity: 1,
           },
@@ -216,6 +235,7 @@ describe("Pricing Design Task contract", () => {
       "Checked By",
       "BOM Line 1 Grade",
       "BOM Line 1 Production Type",
+      "BOM Line 1 Machine Type",
       "BOM Line 1 1 Piece Weight ( gm )",
       "BOM Line 1 Pricing Process Columns Required",
       "Internal Drawing",
@@ -230,9 +250,10 @@ describe("Pricing Design Task contract", () => {
             componentSource: "New",
             grade: "Brass",
             lineNumber: 1,
-            manufacturingProcess: "Barstock",
+            manufacturingProcess: "Conventional",
             packagePart: null,
             pieceWeight: 12,
+            productionType: "Barstock",
             processRequired: "Cutting",
             quantity: 1,
           },
