@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest"
 
 import {
   designAssemblyPieceWeight,
+  designPackagePieceWeight,
   designItemType,
   designProductPortfolioHref,
   designProductSelectionReturnHref,
@@ -24,12 +25,12 @@ import {
 } from "@workspace/db/commercial-design-domain"
 
 describe("Pricing Design Task contract", () => {
-  test("keeps Production Type on List and Assembly Products only", () => {
+  test("keeps Production Type on List, Assembly, and Package Products", () => {
     expect(designProductionMachineType("List", "CNC")).toBe("CNC")
     expect(designProductionMachineType("Assembly", "M/C Assembly")).toBe(
       "M/C Assembly"
     )
-    expect(designProductionMachineType("Package", "Assembly")).toBeNull()
+    expect(designProductionMachineType("Package", "Assembly")).toBe("Assembly")
   })
 
   test("limits Production Type to the five approved master values", () => {
@@ -111,6 +112,34 @@ describe("Pricing Design Task contract", () => {
         1
       )
     ).toBe(26)
+  })
+
+  test("derives Package weight from every top-level component quantity", () => {
+    expect(
+      designPackagePieceWeight([
+        {
+          componentItemType: "List",
+          lineNumber: 1,
+          parentLineNumber: null,
+          pieceWeight: 10,
+          quantity: 2,
+        },
+        {
+          componentItemType: "Assembly",
+          lineNumber: 2,
+          parentLineNumber: null,
+          pieceWeight: null,
+          quantity: 2,
+        },
+        {
+          componentItemType: "List",
+          lineNumber: 3,
+          parentLineNumber: 2,
+          pieceWeight: 5,
+          quantity: 3,
+        },
+      ])
+    ).toBe(50)
   })
 
   test("hands a completed Design task to Product Costing on save", () => {

@@ -57,18 +57,61 @@ const designOptions = {
 }
 
 describe("DesignTaskEditor", () => {
-  test("starts a Package BOM with its visible Package parent", () => {
+  test("shows a Package parent with identity, derived weight, and post-package processes", () => {
     const markup = renderToStaticMarkup(
       <DesignTaskEditor
         designOptions={designOptions}
         editable
-        initial={initial}
+        initial={{
+          ...initial,
+          bomLines: [
+            {
+              componentCode: "",
+              componentItemType: "List",
+              componentSource: "New",
+              lineNumber: 1,
+              parentLineNumber: null,
+              pieceWeight: 10,
+              quantity: 2,
+            },
+            {
+              componentCode: "",
+              componentItemType: "Assembly",
+              componentSource: "New",
+              lineNumber: 2,
+              parentLineNumber: null,
+              quantity: 2,
+            },
+            {
+              componentCode: "",
+              componentItemType: "List",
+              componentSource: "New",
+              lineNumber: 3,
+              parentLineNumber: 2,
+              pieceWeight: 5,
+              quantity: 3,
+            },
+          ],
+          manufacturingProcess: "Assembly",
+          packageProcessRequired: "Washing, Marking",
+        }}
         products={[]}
       />
     )
 
     expect(markup).toContain("Package Parent")
     expect(markup).toContain("Add Component Line")
+    expect(markup).toContain("Package Product Size")
+    expect(markup).toContain("Package Category")
+    expect(markup).toContain("Package Subcategory")
+    expect(markup).toContain("Package Product Name (automatic)")
+    expect(markup).toContain("Package Weight (derived)")
+    expect(markup).toContain('value="50"')
+    expect(markup).toContain('name="manufacturing_process"')
+    expect(markup).toContain('value="Assembly" selected=""')
+    expect(markup).toContain(
+      'type="hidden" name="package_process_required" value="Washing, Marking"'
+    )
     expect(markup.indexOf("Package Parent")).toBeLessThan(
       markup.indexOf("BOM Line 1")
     )
@@ -124,7 +167,7 @@ describe("DesignTaskEditor", () => {
     expect(markup).toContain("Component Subcategory")
     expect(markup).toContain("Product Name (automatic)")
     expect(markup).toContain("Blank Piece Weight ( gm )")
-    expect(markup).not.toContain('name="manufacturing_process"')
+    expect(markup).toContain('name="manufacturing_process"')
     expect(markup).toContain('name="bom_manufacturing_process"')
     expect(markup).toContain('value="DP">DP</option>')
     expect(markup).toContain('value="Forged">Forged</option>')

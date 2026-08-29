@@ -62,7 +62,7 @@ export function designProductionMachineType(
   itemType: string,
   manufacturingProcess: string | null | undefined
 ) {
-  return itemType === "List" || itemType === "Assembly"
+  return ["List", "Assembly", "Package"].includes(itemType)
     ? (manufacturingProcess ?? null)
     : null
 }
@@ -90,28 +90,47 @@ type DesignAssemblyWeightLine = {
   quantity: number
 }
 
-export function designAssemblyPieceWeight(
+function designContainerPieceWeight(
   lines: readonly DesignAssemblyWeightLine[],
-  assemblyLineNumber: number,
+  parentLineNumber: number | null,
   ancestors = new Set<number>()
 ): number {
-  if (ancestors.has(assemblyLineNumber)) return 0
-
-  const nextAncestors = new Set(ancestors)
-  nextAncestors.add(assemblyLineNumber)
-
   return lines
-    .filter((line) => line.parentLineNumber === assemblyLineNumber)
+    .filter((line) => (line.parentLineNumber ?? null) === parentLineNumber)
     .reduce((total, line) => {
       const quantity = Number.isFinite(line.quantity) ? line.quantity : 0
-      const unitWeight =
-        line.componentItemType === "Assembly"
-          ? designAssemblyPieceWeight(lines, line.lineNumber, nextAncestors)
-          : Number.isFinite(line.pieceWeight)
-            ? (line.pieceWeight ?? 0)
-            : 0
+      if (line.componentItemType === "Assembly") {
+        if (ancestors.has(line.lineNumber)) return total
+        const nextAncestors = new Set(ancestors)
+        nextAncestors.add(line.lineNumber)
+        return (
+          total +
+          quantity *
+            designContainerPieceWeight(lines, line.lineNumber, nextAncestors)
+        )
+      }
+      const unitWeight = Number.isFinite(line.pieceWeight)
+        ? (line.pieceWeight ?? 0)
+        : 0
       return total + quantity * unitWeight
     }, 0)
+}
+
+export function designAssemblyPieceWeight(
+  lines: readonly DesignAssemblyWeightLine[],
+  assemblyLineNumber: number
+) {
+  return designContainerPieceWeight(
+    lines,
+    assemblyLineNumber,
+    new Set([assemblyLineNumber])
+  )
+}
+
+export function designPackagePieceWeight(
+  lines: readonly DesignAssemblyWeightLine[]
+) {
+  return designContainerPieceWeight(lines, null)
 }
 
 type DesignItemTypeBomLine = {

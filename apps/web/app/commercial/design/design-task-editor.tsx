@@ -5,6 +5,7 @@ import Link from "next/link"
 
 import {
   designAssemblyPieceWeight,
+  designPackagePieceWeight,
   designProductName,
   designProductTypeOptions,
   designProductionTypeOptions,
@@ -928,6 +929,15 @@ export function DesignTaskEditor({
   const [activeSection, setActiveSection] =
     useState<DesignSection>(initialSection)
   const [activeFileGroup, setActiveFileGroup] = useState("root")
+  const [packageProcesses, setPackageProcesses] = useState(() => {
+    const allowed = new Set<string>(
+      costingProcessOptions.map(([value]) => value)
+    )
+    return (initial.packageProcessRequired ?? "")
+      .split(/[,;\n]+/)
+      .map((process) => process.trim())
+      .filter((process) => allowed.has(process))
+  })
   const nextKey = useRef(initial.bomLines.length)
   const [rows, setRows] = useState(() =>
     (initial.bomLines.length ? initial.bomLines : [blankBomLine(1)]).map(
@@ -955,6 +965,10 @@ export function DesignTaskEditor({
       pieceWeight: selectedProduct?.pieceWeight ?? row.pieceWeight,
     }
   })
+  const packageWeight = designPackagePieceWeight(weightRows)
+  const packageProductionTypeOptions = designProductionTypeOptions(
+    designOptions.machineTypes
+  )
   const addBomLine = (parentLineNumber: number | null = null) => {
     const key = nextKey.current++
     setRows((current) => {
@@ -1319,12 +1333,91 @@ export function DesignTaskEditor({
                     submittedValue=""
                   />
                   <TextField
+                    defaultValue={internalPartSize}
+                    disabled
+                    label="Package Product Size"
+                    name="package_parent_product_size"
+                    submittedValue=""
+                  />
+                  <TextField
+                    defaultValue={internalPartCategory}
+                    disabled
+                    label="Package Category"
+                    name="package_parent_category"
+                    submittedValue=""
+                  />
+                  <TextField
+                    defaultValue={internalPartSubCategory}
+                    disabled
+                    label="Package Subcategory"
+                    name="package_parent_subcategory"
+                    submittedValue=""
+                  />
+                  <TextField
                     defaultValue={generatedProductName}
                     disabled
-                    label="Package Name (automatic)"
+                    label="Package Product Name (automatic)"
                     name="package_parent_name"
                     submittedValue=""
                   />
+                  <TextField
+                    defaultValue={packageWeight}
+                    disabled
+                    label="Package Weight (derived)"
+                    name="package_parent_piece_weight"
+                    submittedValue=""
+                    type="number"
+                  />
+                  <ChoiceField
+                    defaultValue={initial.manufacturingProcess ?? ""}
+                    label="Production Type"
+                    name="manufacturing_process"
+                    options={optionsWithCurrent(
+                      packageProductionTypeOptions,
+                      initial.manufacturingProcess
+                    )}
+                    placeholder="Select Production Type"
+                  />
+                  <Field className="min-w-0 md:col-span-2 xl:col-span-4">
+                    <FieldLabel>Pricing Process Columns Required</FieldLabel>
+                    <input
+                      name="package_process_required"
+                      type="hidden"
+                      value={packageProcesses.join(", ")}
+                    />
+                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                      {costingProcessOptions.map(([value, label]) => {
+                        const checkboxId = `package-process-${value.toLowerCase()}`
+                        return (
+                          <label
+                            className="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border bg-background px-3 py-2 text-sm font-medium has-data-checked:border-primary/50 has-data-checked:bg-[var(--color-brand-tint)]"
+                            htmlFor={checkboxId}
+                            key={value}
+                          >
+                            <Checkbox
+                              checked={packageProcesses.includes(value)}
+                              id={checkboxId}
+                              onCheckedChange={(checked) =>
+                                setPackageProcesses((current) =>
+                                  checked
+                                    ? [
+                                        ...current.filter(
+                                          (process) => process !== value
+                                        ),
+                                        value,
+                                      ]
+                                    : current.filter(
+                                        (process) => process !== value
+                                      )
+                                )
+                              }
+                            />
+                            <span>{label}</span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  </Field>
                 </section>
               ) : (
                 <p className="text-sm text-muted-foreground">

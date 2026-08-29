@@ -760,6 +760,7 @@ describe("PostgreSQL enquiry-to-design workflow", () => {
           componentSubcategory: "Stem",
           lineNumber: 2,
           parentLineNumber: 1,
+          pieceWeight: 5,
           quantity: 2,
         },
       ],
@@ -779,9 +780,9 @@ describe("PostgreSQL enquiry-to-design workflow", () => {
       internalPartSize: "10mm",
       internalPartSubCategory: "Stem",
       itemType: "Package",
-      manufacturingProcess: "Machining",
+      manufacturingProcess: "Assembly",
       operationNotes: "Machine, assemble, inspect.",
-      packageProcessRequired: "Assembly",
+      packageProcessRequired: "Washing, Marking",
       portfolioMatchStatus: "New Quoted Part",
       quotedPartUid: null,
       revisionNo: "2",
@@ -895,6 +896,27 @@ describe("PostgreSQL enquiry-to-design workflow", () => {
       [prepared.productId]
     )
     expect(nestedBom.rows[0]!.count).toBe("1")
+    const packageProduct = await pool.query<{
+      machine_type: string | null
+      process_required: string | null
+      weight_100_pcs: string
+    }>(
+      `
+        SELECT machine_type.name AS machine_type,
+          item.source_payload ->> 'process_required' AS process_required,
+          item.weight_100_pcs::text AS weight_100_pcs
+        FROM catalog.items item
+        LEFT JOIN catalog.machine_types machine_type
+          ON machine_type.id = item.machine_type_id
+        WHERE item.id = $1
+      `,
+      [prepared.productId]
+    )
+    expect(packageProduct.rows[0]).toEqual({
+      machine_type: "Assembly",
+      process_required: "Washing, Marking",
+      weight_100_pcs: "10.000000",
+    })
     await repository.requestDesignClarification({
       direction: "Product Costing to Design",
       enquiryItemId: item.id,
