@@ -63,10 +63,11 @@ Details, BOM, Files, then Design Controls. Design Complete is an explicit final
 action on Design Controls after every tab's requirements are satisfied. A
 completed read-only workspace keeps all four tabs navigable for review. Successful
 completion closes the editor and returns to the active Design queue. Completion
-requires the Designer, target date, internal size,
-Category, Subcategory, Product Type, Production Type, Checked By, every conditional
-requirement cost, a completed valid BOM with the required new-component material,
-process, and piece-weight inputs, and current Internal Drawing and CAD files.
+requires the Designer, target date, internal size, Category, Subcategory,
+Checked By, every conditional requirement cost, a completed valid BOM with the
+required new-component material, process, and piece-weight inputs, and current
+Internal Drawing and CAD files. Product Type and Production Type are required on
+each new List BOM line, not on a Package parent or Assembly BOM row.
 Customer-marked drawing, Operation Notes, and Design Remarks remain optional.
 An incomplete completion attempt remains In Progress, stays in the active Design
 queue, opens Design Controls, and displays each missing field in a visible remark.
@@ -75,10 +76,12 @@ the Design Team Profile. Checked By uses that same active Design Team staff
 list. Completing and saving Design automatically creates or updates the
 controlled Product and hands the line to Product Parameter Costing; Design has
 no separate Prepare Product Costing action. Internal Category and Internal
-Subcategory are selected from their company-wide masters. Product Type (for
-example Barstock) uses the Design Process master. Production Type uses the Product
-Machine Type master and is limited to CNC or Conventional; a Subcategory remains
-within its parent Category. Package Process and Components Required are not
+Subcategory are selected from their company-wide masters. Product Type uses the
+Design Process master and is limited to Barstock, Forged, Moulded, or Punching;
+Forging, Conventional, and CNC are not Product Types. Production Type uses the
+Product Machine Type master and is limited to CNC, Conventional, or DP (Direct
+Purchase). A Subcategory remains within its parent Category. Package Process
+and Components Required are not
 separate Product Details inputs; component identity, structure, and quantities
 belong in the BOM.
 For a new quoted Package or Assembly, Design owns the recursive BOM definition
@@ -100,9 +103,11 @@ controlled component Product.
 For a new List, its Product Name is generated as Product Size + Category +
 Subcategory. New BOM material fields reuse Product master choices: Rod Size uses
 existing Product Rod Size values, while Rod Type and Grade use their active
-masters. Product Type (for example Barstock) is distinct from Production Type
-(CNC or Conventional); both reuse their Product masters and flow to the
-corresponding Product Parameter Costing and Pricing fields. BOM headings match
+masters. Product Type (Barstock, Forged, Moulded, or Punching) is distinct from
+Production Type (CNC, Conventional, or DP); both reuse their Product masters and
+flow from each List BOM line to the corresponding Product Parameter Costing and
+Pricing fields. Package parents and Assembly BOM rows have neither value. BOM
+headings match
 Product Parameter Costing: Product Type, Production Type, Blank Piece Weight
 ( gm ), and 1 Piece Weight ( gm ). Pricing Process Columns Required selects the exact
 optional Product Parameter Costing columns (Washing, Checking, Marking, Plating,

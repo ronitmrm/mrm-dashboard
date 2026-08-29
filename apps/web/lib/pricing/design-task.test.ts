@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest"
 
 import {
   designItemType,
+  designProductTypeOptions,
   designProductionTypeOptions,
   designPortfolioDecisions,
   designTaskSavedHref,
@@ -19,11 +20,26 @@ import {
 } from "@workspace/db/commercial-design-domain"
 
 describe("Pricing Design Task contract", () => {
-  test("limits Production Type to CNC and Conventional master values", () => {
+  test("limits Production Type to CNC, Conventional, and DP master values", () => {
     expect(designProductionTypeOptions(["Conventional", "DP", "CNC"])).toEqual([
       "CNC",
       "Conventional",
+      "DP",
     ])
+  })
+
+  test("limits Product Type to the four approved master values", () => {
+    expect(
+      designProductTypeOptions([
+        "CNC",
+        "Punching",
+        "Barstock",
+        "Forging",
+        "Moulded",
+        "Conventional",
+        "Forged",
+      ])
+    ).toEqual(["Barstock", "Forged", "Moulded", "Punching"])
   })
 
   test("keeps an explicitly selected List as a List on draft save", () => {
@@ -262,7 +278,6 @@ describe("Pricing Design Task contract", () => {
       "Internal Part Size",
       "Internal Category",
       "Internal Subcategory",
-      "Production Type",
       "Checked By",
       "BOM Line 1 Grade",
       "BOM Line 1 Product Type",
@@ -300,7 +315,42 @@ describe("Pricing Design Task contract", () => {
         internalPartSize: "10mm",
         internalPartSubCategory: "Stem",
         itemType: "List",
-        manufacturingProcess: "Conventional",
+        manufacturingProcess: null,
+        targetCompletionDate: "2026-08-29",
+        toolingApproxCost: 0,
+        toolingRequired: "No",
+      })
+    ).toEqual([])
+  })
+
+  test("does not require Product Type or Production Type on Package Assembly rows", () => {
+    expect(
+      designTaskCompletionMissingFields({
+        attachmentPurposes: ["internal_drawing", "cad"],
+        bomLines: [1, 2].map((lineNumber) => ({
+          componentItemType: "Assembly",
+          componentSource: "New",
+          grade: "Brass",
+          lineNumber,
+          manufacturingProcess: null,
+          packagePart: `Assembly ${lineNumber}`,
+          pieceWeight: 12,
+          productionType: null,
+          processRequired: "Cutting",
+          quantity: 1,
+        })),
+        checkedBy: "Design checker",
+        designBomCompleted: "Yes",
+        designerName: "Design owner",
+        fixtureApproxCost: 0,
+        fixtureRequired: "No",
+        gaugesRequired: "No",
+        inspectionApproxCost: 0,
+        internalPartCategory: "Valve",
+        internalPartSize: "10mm",
+        internalPartSubCategory: "Stem",
+        itemType: "Package",
+        manufacturingProcess: null,
         targetCompletionDate: "2026-08-29",
         toolingApproxCost: 0,
         toolingRequired: "No",

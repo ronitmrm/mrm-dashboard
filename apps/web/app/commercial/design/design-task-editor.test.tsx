@@ -40,9 +40,17 @@ const initial = {
 const designOptions = {
   categories: ["Fitting"],
   designers: ["Designer"],
-  machineTypes: ["CNC", "Conventional"],
+  machineTypes: ["CNC", "Conventional", "DP"],
   materialGrades: ["C3604"],
-  processes: ["Barstock"],
+  processes: [
+    "Barstock",
+    "Forged",
+    "Moulded",
+    "Punching",
+    "Forging",
+    "CNC",
+    "Conventional",
+  ],
   rodSizes: ["14.29 Hex SC"],
   rodTypes: ["Solid"],
   subcategories: [{ category: "Fitting", name: "Adapter" }],
@@ -69,5 +77,12 @@ describe("DesignTaskEditor", () => {
     expect(markup).toContain("Component Subcategory")
     expect(markup).toContain("Product Name (automatic)")
     expect(markup).toContain("Blank Piece Weight ( gm )")
+    expect(markup).not.toContain('name="manufacturing_process"')
+    expect(markup).toContain('name="bom_manufacturing_process"')
+    expect(markup).toContain('value="DP">DP</option>')
+    expect(markup).toContain('value="Forged">Forged</option>')
+    expect(markup).toContain('value="Moulded">Moulded</option>')
+    expect(markup).toContain('value="Punching">Punching</option>')
+    expect(markup).not.toContain('value="Forging">Forging</option>')
   })
 })

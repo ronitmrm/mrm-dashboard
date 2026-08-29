@@ -5021,7 +5021,9 @@ export function createCommercialWorkflowRepository(
             row.item_type === "List" ? (firstLine?.grade ?? null) : null,
             row.item_type === "List" ? (firstLine?.rod_type ?? null) : null,
             row.item_type === "List" ? (firstLine?.rod_size ?? null) : null,
-            row.manufacturing_process,
+            row.item_type === "List"
+              ? (firstLine?.manufacturing_process ?? null)
+              : null,
             row.item_type === "List" ? asNumber(firstLine?.piece_weight) : 0,
             row.item_type === "List" ? asNumber(firstLine?.casting, 1) : 1,
             row.package_process_required ?? row.design_remarks,
@@ -5107,11 +5109,15 @@ export function createCommercialWorkflowRepository(
                   bomLine.package_part ||
                     `${row.description} component ${bomLine.line_number}`,
                   bomLine.component_item_type,
-                  bomLine.production_type,
+                  bomLine.component_item_type === "List"
+                    ? bomLine.production_type
+                    : null,
                   bomLine.grade,
                   bomLine.rod_type,
                   bomLine.rod_size,
-                  bomLine.manufacturing_process,
+                  bomLine.component_item_type === "List"
+                    ? bomLine.manufacturing_process
+                    : null,
                   asNumber(bomLine.piece_weight),
                   asNumber(bomLine.casting, 1),
                   bomLine.design_notes,

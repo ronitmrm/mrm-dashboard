@@ -22,16 +22,34 @@ export const designWorkspaceSections = [
 
 export type DesignWorkspaceSection = (typeof designWorkspaceSections)[number]
 
-export const designProductionTypes = ["CNC", "Conventional"] as const
+export const designProductTypes = [
+  "Barstock",
+  "Forged",
+  "Moulded",
+  "Punching",
+] as const
 
-export function designProductionTypeOptions(masterValues: readonly string[]) {
+export const designProductionTypes = ["CNC", "Conventional", "DP"] as const
+
+function canonicalMasterOptions(
+  canonicalValues: readonly string[],
+  masterValues: readonly string[]
+) {
   const valuesByName = new Map(
     masterValues.map((value) => [value.trim().toLowerCase(), value.trim()])
   )
-  return designProductionTypes.flatMap((productionType) => {
-    const masterValue = valuesByName.get(productionType.toLowerCase())
+  return canonicalValues.flatMap((canonicalValue) => {
+    const masterValue = valuesByName.get(canonicalValue.toLowerCase())
     return masterValue ? [masterValue] : []
   })
+}
+
+export function designProductTypeOptions(masterValues: readonly string[]) {
+  return canonicalMasterOptions(designProductTypes, masterValues)
+}
+
+export function designProductionTypeOptions(masterValues: readonly string[]) {
+  return canonicalMasterOptions(designProductionTypes, masterValues)
 }
 
 export function designWorkspaceSection(value: string | null | undefined) {
@@ -207,7 +225,6 @@ export function designTaskCompletionMissingFields(
     ["Internal Part Size", input.internalPartSize],
     ["Internal Category", input.internalPartCategory],
     ["Internal Subcategory", input.internalPartSubCategory],
-    ["Production Type", input.manufacturingProcess],
     ["Checked By", input.checkedBy],
   ] as const
 
@@ -258,11 +275,13 @@ export function designTaskCompletionMissingFields(
       }
     }
     if (!hasText(line.grade)) missing.push(`${prefix} Grade`)
-    if (!hasText(line.productionType)) {
-      missing.push(`${prefix} Product Type`)
-    }
-    if (!hasText(line.manufacturingProcess)) {
-      missing.push(`${prefix} Production Type`)
+    if (line.componentItemType === "List" || input.itemType === "List") {
+      if (!hasText(line.productionType)) {
+        missing.push(`${prefix} Product Type`)
+      }
+      if (!hasText(line.manufacturingProcess)) {
+        missing.push(`${prefix} Production Type`)
+      }
     }
     if (!line.pieceWeight || line.pieceWeight <= 0) {
       missing.push(`${prefix} 1 Piece Weight ( gm )`)

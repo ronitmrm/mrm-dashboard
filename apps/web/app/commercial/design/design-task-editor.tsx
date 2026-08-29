@@ -4,6 +4,7 @@ import { useRef, useState } from "react"
 
 import {
   designProductName,
+  designProductTypeOptions,
   designProductionTypeOptions,
 } from "@workspace/db/commercial-design-domain"
 import { Button } from "@workspace/ui/components/button"
@@ -229,7 +230,6 @@ function BomRow({
   index,
   itemType,
   onRemove,
-  productionType,
   products,
   row,
 }: {
@@ -239,7 +239,6 @@ function BomRow({
   index: number
   itemType: string
   onRemove: () => void
-  productionType: string
   products: ProductOption[]
   row: BomLine
 }) {
@@ -253,6 +252,7 @@ function BomRow({
   const effectiveSource = isListProduct ? "New" : componentSource
   const effectiveComponentType = isListProduct ? "List" : componentItemType
   const isExistingComponent = effectiveSource === "Existing"
+  const isIndividualList = effectiveComponentType === "List"
   const isNewPackageList =
     !isListProduct && !isExistingComponent && effectiveComponentType === "List"
   const initialComponentCategory = designOptions.categories.includes(
@@ -284,10 +284,14 @@ function BomRow({
   const productionTypeOptions = designProductionTypeOptions(
     designOptions.machineTypes
   )
-  const effectiveProductType = row.productionType ?? ""
-  const requestedProductionType = isListProduct
-    ? productionType
-    : (row.manufacturingProcess ?? "")
+  const productTypeOptions = designProductTypeOptions(designOptions.processes)
+  const requestedProductType = isIndividualList ? row.productionType ?? "" : ""
+  const effectiveProductType = productTypeOptions.includes(requestedProductType)
+    ? requestedProductType
+    : ""
+  const requestedProductionType = isIndividualList
+    ? (row.manufacturingProcess ?? "")
+    : ""
   const effectiveProductionType = productionTypeOptions.includes(
     requestedProductionType
   )
@@ -459,7 +463,7 @@ function BomRow({
       <input name="bom_item" type="hidden" value={row.bomItem ?? ""} />
       <ChoiceField
         defaultValue={row.rodSize ?? ""}
-        disabled={isExistingComponent}
+        disabled={!isIndividualList || isExistingComponent}
         label="Rod Size"
         name="bom_rod_size"
         options={optionsWithCurrent(designOptions.rodSizes, row.rodSize)}
@@ -483,23 +487,20 @@ function BomRow({
       />
       <ChoiceField
         defaultValue={effectiveProductType}
-        disabled={isExistingComponent}
+        disabled={!isIndividualList || isExistingComponent}
         label="Product Type"
         name="bom_production_type"
-        options={optionsWithCurrent(
-          designOptions.processes,
-          effectiveProductType
-        )}
+        options={productTypeOptions}
         placeholder="Select Product Type"
       />
       <ChoiceField
         defaultValue={effectiveProductionType}
-        disabled={isListProduct || isExistingComponent}
+        disabled={!isIndividualList || isExistingComponent}
         key={`${index}-${effectiveProductionType}`}
         label="Production Type"
         name="bom_manufacturing_process"
         options={productionTypeOptions}
-        placeholder="Select Conventional or CNC"
+        placeholder="Select CNC, Conventional, or DP"
       />
       <TextField
         defaultValue={row.casting ?? ""}
@@ -596,9 +597,6 @@ export function DesignTaskEditor({
   products: ProductOption[]
   portfolioDecisionLocked?: boolean
 }) {
-  const productionTypeOptions = designProductionTypeOptions(
-    designOptions.machineTypes
-  )
   const [portfolioDecision, setPortfolioDecision] = useState(
     portfolioDecisionLocked ? "New Quoted Part" : initial.portfolioMatchStatus
   )
@@ -629,10 +627,6 @@ export function DesignTaskEditor({
       ? initial.internalPartSubCategory!
       : ""
   )
-  const [productionType, setProductionType] = useState(() => {
-    const current = initial.manufacturingProcess ?? ""
-    return productionTypeOptions.includes(current) ? current : ""
-  })
   const [activeSection, setActiveSection] =
     useState<DesignSection>(initialSection)
   const nextKey = useRef(initial.bomLines.length)
@@ -849,14 +843,6 @@ export function DesignTaskEditor({
                           : "Select category first"
                       }
                     />
-                    <ChoiceField
-                      defaultValue={productionType}
-                      label="Production Type"
-                      name="manufacturing_process"
-                      onChange={setProductionType}
-                      options={productionTypeOptions}
-                      placeholder="Select Production Type"
-                    />
                   </div>
                 </section>
 
@@ -1030,7 +1016,6 @@ export function DesignTaskEditor({
                         current.filter((entry) => entry.key !== key)
                       )
                     }
-                    productionType={productionType}
                     products={products}
                     row={row}
                   />
