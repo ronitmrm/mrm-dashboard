@@ -339,6 +339,9 @@ whose designation is HOD, Manager, or Management, regardless of
 department.
 Occupied employees are eligible; an Appointed record is also eligible when it
 already has an Employee ID, preserving imported current-employee assignments.
+The latest completed round may correct its decision before Candidate
+Appointment terms are confirmed; the Candidate Application status follows the
+corrected decision. Earlier decisions stay locked while a later round exists.
 _Avoid_: Overall score without question-level marks.
 
 **Recruitment Assignment Command**:

@@ -63,8 +63,8 @@ export function InterviewRoundEditDialog({
         <DialogHeader>
           <DialogTitle>Edit Interview Round</DialogTitle>
           <DialogDescription>
-            Update The Schedule And Assessment. The Saved Decision Stays Locked
-            To Preserve Later Interview Rounds.
+            Update The Schedule, Assessment, And Decision. Only The Latest Round
+            Decision Can Change Before Appointment Details Are Completed.
           </DialogDescription>
         </DialogHeader>
         <form action={updateInterviewRoundAction} className="grid gap-5">
@@ -143,11 +143,21 @@ export function InterviewRoundEditDialog({
           <div className="grid gap-4 sm:grid-cols-2">
             <Field>
               <FieldLabel htmlFor={`${fieldId}-decision`}>Decision</FieldLabel>
-              <Input
+              <NativeSelect
+                className="w-full"
+                defaultValue={interview.status}
                 id={`${fieldId}-decision`}
-                readOnly
-                value={interview.status}
-              />
+                name="status"
+                required
+              >
+                <NativeSelectOption value="Approved">
+                  Approved
+                </NativeSelectOption>
+                <NativeSelectOption value="Rejected">
+                  Rejected
+                </NativeSelectOption>
+                <NativeSelectOption value="Hold">Hold</NativeSelectOption>
+              </NativeSelect>
             </Field>
             <Field>
               <FieldLabel htmlFor={`${fieldId}-interviewer`}>
