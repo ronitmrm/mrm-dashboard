@@ -67,6 +67,38 @@ export function designProductName(input: {
     .join(" ")
 }
 
+type DesignAssemblyWeightLine = {
+  componentItemType?: string | null
+  lineNumber: number
+  parentLineNumber?: number | null
+  pieceWeight?: number | null
+  quantity: number
+}
+
+export function designAssemblyPieceWeight(
+  lines: readonly DesignAssemblyWeightLine[],
+  assemblyLineNumber: number,
+  ancestors = new Set<number>()
+): number {
+  if (ancestors.has(assemblyLineNumber)) return 0
+
+  const nextAncestors = new Set(ancestors)
+  nextAncestors.add(assemblyLineNumber)
+
+  return lines
+    .filter((line) => line.parentLineNumber === assemblyLineNumber)
+    .reduce((total, line) => {
+      const quantity = Number.isFinite(line.quantity) ? line.quantity : 0
+      const unitWeight =
+        line.componentItemType === "Assembly"
+          ? designAssemblyPieceWeight(lines, line.lineNumber, nextAncestors)
+          : Number.isFinite(line.pieceWeight)
+            ? (line.pieceWeight ?? 0)
+            : 0
+      return total + quantity * unitWeight
+    }, 0)
+}
+
 type DesignItemTypeBomLine = {
   componentItemType?: string | null
   packagePart?: string | null
@@ -214,6 +246,7 @@ type DesignCompletionBomLine = {
   lineNumber: number
   manufacturingProcess?: string | null
   packagePart?: string | null
+  parentLineNumber?: number | null
   pieceWeight?: number | null
   productionType?: string | null
   processRequired?: string | null
@@ -279,6 +312,15 @@ export function designTaskCompletionMissingFields(
   for (const line of input.bomLines) {
     const prefix = `BOM Line ${line.lineNumber}`
     if (line.quantity <= 0) missing.push(`${prefix} Quantity`)
+    if (
+      line.componentSource !== "Existing" &&
+      line.componentItemType === "Assembly" &&
+      !input.bomLines.some(
+        (candidate) => candidate.parentLineNumber === line.lineNumber
+      )
+    ) {
+      missing.push(`${prefix} Assembly requires at least 1 child BOM Line`)
+    }
     if (line.componentSource === "Existing") {
       if (!hasText(line.existingProductId)) {
         missing.push(`${prefix} Existing Product`)
@@ -303,20 +345,20 @@ export function designTaskCompletionMissingFields(
         missing.push(`${prefix} Component Subcategory`)
       }
     }
-    if (!hasText(line.grade)) missing.push(`${prefix} Grade`)
     if (line.componentItemType === "List" || input.itemType === "List") {
+      if (!hasText(line.grade)) missing.push(`${prefix} Grade`)
       if (!hasText(line.productionType)) {
         missing.push(`${prefix} Product Type`)
       }
       if (!hasText(line.manufacturingProcess)) {
         missing.push(`${prefix} Production Type`)
       }
-    }
-    if (!line.pieceWeight || line.pieceWeight <= 0) {
-      missing.push(`${prefix} 1 Piece Weight ( gm )`)
-    }
-    if (!hasText(line.processRequired)) {
-      missing.push(`${prefix} Pricing Process Columns Required`)
+      if (!line.pieceWeight || line.pieceWeight <= 0) {
+        missing.push(`${prefix} 1 Piece Weight ( gm )`)
+      }
+      if (!hasText(line.processRequired)) {
+        missing.push(`${prefix} Pricing Process Columns Required`)
+      }
     }
   }
 

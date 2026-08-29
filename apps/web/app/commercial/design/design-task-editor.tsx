@@ -3,6 +3,7 @@
 import { useRef, useState } from "react"
 
 import {
+  designAssemblyPieceWeight,
   designProductName,
   designProductTypeOptions,
   designProductionTypeOptions,
@@ -236,24 +237,34 @@ function ChoiceField({
 }
 
 function BomRow({
+  assemblyWeight,
   canRemove,
   designOptions,
   generatedProductName,
   index,
   itemType,
+  onAddAssemblyChild,
   onComponentItemTypeChange,
+  onParentLineNumberChange,
+  onPieceWeightChange,
+  onQuantityChange,
   onRemove,
   parentAssemblyLines,
   products,
   row,
   selectedProductUid,
 }: {
+  assemblyWeight: number
   canRemove: boolean
   designOptions: DesignOptions
   generatedProductName: string
   index: number
   itemType: string
+  onAddAssemblyChild: () => void
   onComponentItemTypeChange: (componentItemType: string) => void
+  onParentLineNumberChange: (parentLineNumber: number | null) => void
+  onPieceWeightChange: (pieceWeight: number | null) => void
+  onQuantityChange: (quantity: number) => void
   onRemove: () => void
   parentAssemblyLines: number[]
   products: ProductOption[]
@@ -352,7 +363,8 @@ function BomRow({
       : (row.manufacturingProcess ?? "")
     : ""
   const effectiveProductionType =
-    isExistingComponent || productionTypeOptions.includes(requestedProductionType)
+    isExistingComponent ||
+    productionTypeOptions.includes(requestedProductionType)
       ? requestedProductionType
       : ""
   const effectiveSelectedProcesses = isExistingComponent
@@ -383,6 +395,12 @@ function BomRow({
     : isNewPackageComponent
       ? generatedComponentName
       : null
+  const displayedAssemblyWeight =
+    assemblyWeight > 0
+      ? assemblyWeight
+      : isExistingComponent
+        ? (selectedProduct?.pieceWeight ?? 0)
+        : 0
 
   return (
     <section
@@ -397,17 +415,29 @@ function BomRow({
           </span>
         </div>
         {!isListProduct ? (
-          <Button
-            name="design_save_intent"
-            size="sm"
-            type="submit"
-            value={`portfolio:${index}`}
-            variant="outline"
-          >
-            {selectedProduct
-              ? "Change Product from Portfolio"
-              : "Select Product from Portfolio"}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            {effectiveComponentType === "Assembly" && !isExistingComponent ? (
+              <Button
+                onClick={onAddAssemblyChild}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                Add List Part
+              </Button>
+            ) : null}
+            <Button
+              name="design_save_intent"
+              size="sm"
+              type="submit"
+              value={`portfolio:${index}`}
+              variant="outline"
+            >
+              {selectedProduct
+                ? "Change Product from Portfolio"
+                : "Select Product from Portfolio"}
+            </Button>
+          </div>
         ) : null}
       </div>
       <TextField
@@ -436,6 +466,13 @@ function BomRow({
               isListProduct || parentAssemblyLines.length === 0
                 ? undefined
                 : "bom_parent_line_number"
+            }
+            onChange={(event) =>
+              onParentLineNumberChange(
+                event.currentTarget.value
+                  ? Number(event.currentTarget.value)
+                  : null
+              )
             }
           >
             <NativeSelectOption value="">
@@ -507,6 +544,7 @@ function BomRow({
         disabled={isListProduct}
         label="Quantity"
         name="bom_quantity"
+        onChange={(value) => onQuantityChange(Number(value) || 0)}
         type="number"
       />
       <TextField
@@ -514,8 +552,8 @@ function BomRow({
           isExistingComponent
             ? (selectedProduct?.description ?? row.packagePart ?? "")
             : automaticProductName !== null
-            ? automaticProductName
-            : (row.packagePart ?? "")
+              ? automaticProductName
+              : (row.packagePart ?? "")
         }
         disabled={automaticProductName !== null || isExistingComponent}
         key={automaticProductName ?? undefined}
@@ -576,130 +614,169 @@ function BomRow({
         </>
       )}
       <input name="bom_item" type="hidden" value={row.bomItem ?? ""} />
-      <ChoiceField
-        defaultValue={
-          isExistingComponent
-            ? (selectedProduct?.rodSize ?? row.rodSize ?? "")
-            : (row.rodSize ?? "")
-        }
-        disabled={!isIndividualList || isExistingComponent}
-        label="Rod Size"
-        name="bom_rod_size"
-        options={optionsWithCurrent(
-          designOptions.rodSizes,
-          isExistingComponent ? selectedProduct?.rodSize : row.rodSize
-        )}
-        placeholder="Select Product Rod Size"
-      />
-      <ChoiceField
-        defaultValue={
-          isExistingComponent
-            ? (selectedProduct?.rodType ?? row.rodType ?? "")
-            : (row.rodType ?? "")
-        }
-        disabled={isExistingComponent}
-        label="Rod Type"
-        name="bom_rod_type"
-        options={optionsWithCurrent(
-          designOptions.rodTypes,
-          isExistingComponent ? selectedProduct?.rodType : row.rodType
-        )}
-        placeholder="Select Rod Type"
-      />
-      <ChoiceField
-        defaultValue={
-          isExistingComponent
-            ? (selectedProduct?.grade ?? row.grade ?? "")
-            : (row.grade ?? "")
-        }
-        disabled={isExistingComponent}
-        label="Grade"
-        name="bom_grade"
-        options={optionsWithCurrent(
-          designOptions.materialGrades,
-          isExistingComponent ? selectedProduct?.grade : row.grade
-        )}
-        placeholder="Select Material Grade"
-      />
-      <ChoiceField
-        defaultValue={effectiveProductType}
-        disabled={!isIndividualList || isExistingComponent}
-        label="Product Type"
-        name="bom_production_type"
-        options={optionsWithCurrent(productTypeOptions, effectiveProductType)}
-        placeholder="Select Product Type"
-      />
-      <ChoiceField
-        defaultValue={effectiveProductionType}
-        disabled={!isIndividualList || isExistingComponent}
-        key={`${index}-${effectiveProductionType}`}
-        label="Production Type"
-        name="bom_manufacturing_process"
-        options={optionsWithCurrent(
-          productionTypeOptions,
-          effectiveProductionType
-        )}
-        placeholder="Select CNC, Conventional, or DP"
-      />
-      <TextField
-        defaultValue={
-          isExistingComponent
-            ? (selectedProduct?.blankPieceWeight ?? row.casting ?? "")
-            : (row.casting ?? "")
-        }
-        disabled={isExistingComponent}
-        label="Blank Piece Weight ( gm )"
-        name="bom_casting"
-        type="number"
-      />
-      <TextField
-        defaultValue={
-          isExistingComponent
-            ? (selectedProduct?.pieceWeight ?? row.pieceWeight ?? "")
-            : (row.pieceWeight ?? "")
-        }
-        disabled={isExistingComponent}
-        label="1 Piece Weight ( gm )"
-        name="bom_piece_weight"
-        type="number"
-      />
-      <Field className="min-w-0 md:col-span-2 xl:col-span-4">
-        <FieldLabel>Pricing Process Columns Required</FieldLabel>
-        <input
-          name="bom_process_required"
-          type="hidden"
-          value={effectiveSelectedProcesses.join(", ")}
-        />
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          {costingProcessOptions.map(([value, label]) => {
-            const checkboxId = `bom-${index}-process-${value.toLowerCase()}`
-            return (
-              <label
-                className="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border bg-background px-3 py-2 text-sm font-medium has-data-checked:border-primary/50 has-data-checked:bg-[var(--color-brand-tint)]"
-                htmlFor={checkboxId}
-                key={value}
-              >
-                <Checkbox
-                  checked={effectiveSelectedProcesses.includes(value)}
-                  disabled={isExistingComponent}
-                  id={checkboxId}
-                  onCheckedChange={(checked) =>
-                    setSelectedProcesses((current) =>
-                      checked
-                        ? [
-                            ...current.filter((process) => process !== value),
-                            value,
-                          ]
-                        : current.filter((process) => process !== value)
-                    )
-                  }
-                />
-                <span>{label}</span>
-              </label>
-            )
-          })}
-        </div>
-      </Field>
+      {isIndividualList ? (
+        <>
+          <ChoiceField
+            defaultValue={
+              isExistingComponent
+                ? (selectedProduct?.rodSize ?? row.rodSize ?? "")
+                : (row.rodSize ?? "")
+            }
+            disabled={!isIndividualList || isExistingComponent}
+            label="Rod Size"
+            name="bom_rod_size"
+            options={optionsWithCurrent(
+              designOptions.rodSizes,
+              isExistingComponent ? selectedProduct?.rodSize : row.rodSize
+            )}
+            placeholder="Select Product Rod Size"
+          />
+          <ChoiceField
+            defaultValue={
+              isExistingComponent
+                ? (selectedProduct?.rodType ?? row.rodType ?? "")
+                : (row.rodType ?? "")
+            }
+            disabled={isExistingComponent}
+            label="Rod Type"
+            name="bom_rod_type"
+            options={optionsWithCurrent(
+              designOptions.rodTypes,
+              isExistingComponent ? selectedProduct?.rodType : row.rodType
+            )}
+            placeholder="Select Rod Type"
+          />
+          <ChoiceField
+            defaultValue={
+              isExistingComponent
+                ? (selectedProduct?.grade ?? row.grade ?? "")
+                : (row.grade ?? "")
+            }
+            disabled={isExistingComponent}
+            label="Grade"
+            name="bom_grade"
+            options={optionsWithCurrent(
+              designOptions.materialGrades,
+              isExistingComponent ? selectedProduct?.grade : row.grade
+            )}
+            placeholder="Select Material Grade"
+          />
+          <ChoiceField
+            defaultValue={effectiveProductType}
+            disabled={!isIndividualList || isExistingComponent}
+            label="Product Type"
+            name="bom_production_type"
+            options={optionsWithCurrent(
+              productTypeOptions,
+              effectiveProductType
+            )}
+            placeholder="Select Product Type"
+          />
+          <ChoiceField
+            defaultValue={effectiveProductionType}
+            disabled={!isIndividualList || isExistingComponent}
+            key={`${index}-${effectiveProductionType}`}
+            label="Production Type"
+            name="bom_manufacturing_process"
+            options={optionsWithCurrent(
+              productionTypeOptions,
+              effectiveProductionType
+            )}
+            placeholder="Select CNC, Conventional, or DP"
+          />
+          <TextField
+            defaultValue={
+              isExistingComponent
+                ? (selectedProduct?.blankPieceWeight ?? row.casting ?? "")
+                : (row.casting ?? "")
+            }
+            disabled={isExistingComponent}
+            label="Blank Piece Weight ( gm )"
+            name="bom_casting"
+            type="number"
+          />
+          <TextField
+            defaultValue={
+              isExistingComponent
+                ? (selectedProduct?.pieceWeight ?? row.pieceWeight ?? "")
+                : (row.pieceWeight ?? "")
+            }
+            disabled={isExistingComponent}
+            label="1 Piece Weight ( gm )"
+            name="bom_piece_weight"
+            onChange={(value) =>
+              onPieceWeightChange(value ? Number(value) : null)
+            }
+            type="number"
+          />
+          <Field className="min-w-0 md:col-span-2 xl:col-span-4">
+            <FieldLabel>Pricing Process Columns Required</FieldLabel>
+            <input
+              name="bom_process_required"
+              type="hidden"
+              value={effectiveSelectedProcesses.join(", ")}
+            />
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              {costingProcessOptions.map(([value, label]) => {
+                const checkboxId = `bom-${index}-process-${value.toLowerCase()}`
+                return (
+                  <label
+                    className="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border bg-background px-3 py-2 text-sm font-medium has-data-checked:border-primary/50 has-data-checked:bg-[var(--color-brand-tint)]"
+                    htmlFor={checkboxId}
+                    key={value}
+                  >
+                    <Checkbox
+                      checked={effectiveSelectedProcesses.includes(value)}
+                      disabled={isExistingComponent}
+                      id={checkboxId}
+                      onCheckedChange={(checked) =>
+                        setSelectedProcesses((current) =>
+                          checked
+                            ? [
+                                ...current.filter(
+                                  (process) => process !== value
+                                ),
+                                value,
+                              ]
+                            : current.filter((process) => process !== value)
+                        )
+                      }
+                    />
+                    <span>{label}</span>
+                  </label>
+                )
+              })}
+            </div>
+          </Field>
+        </>
+      ) : (
+        <>
+          <input name="bom_rod_size" type="hidden" value="" />
+          <input name="bom_rod_type" type="hidden" value="" />
+          <input name="bom_grade" type="hidden" value="" />
+          <input name="bom_production_type" type="hidden" value="" />
+          <input name="bom_manufacturing_process" type="hidden" value="" />
+          <input name="bom_casting" type="hidden" value="" />
+          <input name="bom_process_required" type="hidden" value="" />
+          <TextField
+            defaultValue={displayedAssemblyWeight}
+            disabled
+            key={`assembly-weight-${displayedAssemblyWeight}`}
+            label="Assembly Weight (derived)"
+            name="bom_piece_weight"
+            submittedValue=""
+            type="number"
+          />
+          <Field className="min-w-0 md:col-span-1 xl:col-span-3">
+            <FieldLabel>Assembly BOM</FieldLabel>
+            <FieldDescription>
+              Add List Part, then select a Product or create a new List part.
+              Weight is calculated from each child&apos;s 1 Piece Weight × BOM
+              Quantity.
+            </FieldDescription>
+          </Field>
+        </>
+      )}
       <TextField
         defaultValue={
           isExistingComponent
@@ -726,11 +803,15 @@ function BomRow({
   )
 }
 
-const blankBomLine = (lineNumber: number): BomLine => ({
+const blankBomLine = (
+  lineNumber: number,
+  parentLineNumber: number | null = null
+): BomLine => ({
   componentCode: "",
   componentItemType: "List",
   componentSource: "New",
   lineNumber,
+  parentLineNumber,
   quantity: 1,
 })
 
@@ -799,6 +880,31 @@ export function DesignTaskEditor({
     size: internalPartSize,
     subcategory: internalPartSubCategory,
   })
+  const weightRows = visibleRows.map(({ row }, index) => {
+    const selectedProduct =
+      portfolioSelection?.lineIndex === index
+        ? products.find(({ uid }) => uid === portfolioSelection.productUid)
+        : undefined
+    return {
+      ...row,
+      componentItemType: selectedProduct?.itemType ?? row.componentItemType,
+      pieceWeight: selectedProduct?.pieceWeight ?? row.pieceWeight,
+    }
+  })
+  const addBomLine = (parentLineNumber: number | null = null) => {
+    const key = nextKey.current++
+    setRows((current) => {
+      const lineNumber =
+        Math.max(...current.map(({ row }) => row.lineNumber), 0) + 1
+      return [
+        ...current,
+        {
+          key: `bom-${key}`,
+          row: blankBomLine(lineNumber, parentLineNumber),
+        },
+      ]
+    })
+  }
 
   return (
     <div className="grid gap-8">
@@ -1131,23 +1237,7 @@ export function DesignTaskEditor({
                 </p>
                 <Button
                   disabled={itemType === "List"}
-                  onClick={() => {
-                    const key = nextKey.current++
-                    setRows((current) => {
-                      const lineNumber =
-                        Math.max(
-                          ...current.map(({ row }) => row.lineNumber),
-                          0
-                        ) + 1
-                      return [
-                        ...current,
-                        {
-                          key: `bom-${key}`,
-                          row: blankBomLine(lineNumber),
-                        },
-                      ]
-                    })
-                  }}
+                  onClick={() => addBomLine()}
                   type="button"
                   variant="outline"
                 >
@@ -1157,6 +1247,10 @@ export function DesignTaskEditor({
               <div className="grid gap-4">
                 {visibleRows.map(({ key, row }, index) => (
                   <BomRow
+                    assemblyWeight={designAssemblyPieceWeight(
+                      weightRows,
+                      row.lineNumber
+                    )}
                     canRemove={
                       itemType === "Package" && visibleRows.length > 1
                     }
@@ -1165,6 +1259,7 @@ export function DesignTaskEditor({
                     index={index}
                     itemType={itemType}
                     key={key}
+                    onAddAssemblyChild={() => addBomLine(row.lineNumber)}
                     onComponentItemTypeChange={(componentItemType) =>
                       setRows((current) =>
                         current.map((entry) =>
@@ -1173,13 +1268,70 @@ export function DesignTaskEditor({
                                 ...entry,
                                 row: { ...entry.row, componentItemType },
                               }
+                            : componentItemType !== "Assembly" &&
+                                entry.row.parentLineNumber === row.lineNumber
+                              ? {
+                                  ...entry,
+                                  row: {
+                                    ...entry.row,
+                                    parentLineNumber: null,
+                                  },
+                                }
+                            : entry
+                        )
+                      )
+                    }
+                    onParentLineNumberChange={(parentLineNumber) =>
+                      setRows((current) =>
+                        current.map((entry) =>
+                          entry.key === key
+                            ? {
+                                ...entry,
+                                row: { ...entry.row, parentLineNumber },
+                              }
                             : entry
                         )
                       )
                     }
                     onRemove={() =>
                       setRows((current) =>
-                        current.filter((entry) => entry.key !== key)
+                        current
+                          .filter((entry) => entry.key !== key)
+                          .map((entry) =>
+                            entry.row.parentLineNumber === row.lineNumber
+                              ? {
+                                  ...entry,
+                                  row: {
+                                    ...entry.row,
+                                    parentLineNumber: null,
+                                  },
+                                }
+                              : entry
+                          )
+                      )
+                    }
+                    onPieceWeightChange={(pieceWeight) =>
+                      setRows((current) =>
+                        current.map((entry) =>
+                          entry.key === key
+                            ? {
+                                ...entry,
+                                row: { ...entry.row, pieceWeight },
+                              }
+                            : entry
+                        )
+                      )
+                    }
+                    onQuantityChange={(quantity) =>
+                      setRows((current) =>
+                        current.map((entry) =>
+                          entry.key === key
+                            ? {
+                                ...entry,
+                                row: { ...entry.row, quantity },
+                              }
+                            : entry
+                        )
                       )
                     }
                     parentAssemblyLines={visibleRows

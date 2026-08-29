@@ -218,6 +218,7 @@ describe("DesignTaskEditor", () => {
               componentSource: "New",
               componentSubcategory: "Adapter",
               lineNumber: 1,
+              pieceWeight: 999,
               quantity: 1,
             },
             {
@@ -225,7 +226,18 @@ describe("DesignTaskEditor", () => {
               componentItemType: "List",
               componentSource: "New",
               lineNumber: 2,
-              quantity: 1,
+              parentLineNumber: 1,
+              pieceWeight: 3,
+              quantity: 2,
+            },
+            {
+              componentCode: "",
+              componentItemType: "List",
+              componentSource: "New",
+              lineNumber: 3,
+              parentLineNumber: 1,
+              pieceWeight: 5,
+              quantity: 4,
             },
           ],
         }}
@@ -237,6 +249,10 @@ describe("DesignTaskEditor", () => {
     expect(markup).toContain("Product Name (automatic)")
     expect(markup).toContain('value="3/8 Fitting Adapter"')
     expect(markup).toContain("Child of Assembly line 1")
+    expect(markup).toContain("Add List Part")
+    expect(markup).toContain("Assembly Weight (derived)")
+    expect(markup).toContain('value="26"')
+    expect(markup).not.toContain('value="999"')
     expect(markup).not.toContain(
       "Select a parent only when this component sits inside an earlier Assembly line."
     )

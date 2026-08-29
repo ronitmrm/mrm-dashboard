@@ -108,7 +108,12 @@ automatically top-level and require no Parent entry. Every new List or Assembly
 component in a Package selects its own Product Size, Category, and Subcategory;
 its Product Name is generated in that order and the classification flows to the
 controlled component Product. Changing an earlier line to Assembly makes it
-available immediately as a parent for later lines.
+available immediately as a parent for later lines. A new Assembly is a BOM
+container, not a manufactured List part: it requires at least one child BOM
+line, exposes Add List Part to create a child already assigned to that Assembly,
+and has no Rod, Grade, Product Type, Production Type, manual weight, or Pricing
+Process inputs. Its One-Piece Weight is displayed as the recursive sum of each
+child's One-Piece Weight multiplied by that child's BOM quantity.
 For a new List, its Product Name is generated as Product Size + Category +
 Subcategory. New BOM material fields reuse Product master choices: Rod Size uses
 existing Product Rod Size values, while Rod Type and Grade use their active

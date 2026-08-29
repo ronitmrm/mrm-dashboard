@@ -4576,14 +4576,29 @@ export function createCommercialWorkflowRepository(
             designStatus === "Design Complete" &&
             itemType === "Package" &&
             bomLine.componentSource !== "Existing" &&
-            bomLine.componentItemType === "List" &&
             (!bomLine.componentProductSize?.trim() ||
               !bomLine.componentCategory?.trim() ||
               !bomLine.componentSubcategory?.trim())
           ) {
             throw new Error(
-              "Every new Package List component requires Product Size, Category, and Subcategory."
+              "Every new Package component requires Product Size, Category, and Subcategory."
             )
+          }
+        }
+        if (designStatus === "Design Complete" && itemType === "Package") {
+          for (const assembly of inputBomLines) {
+            if (
+              assembly.componentSource !== "Existing" &&
+              assembly.componentItemType === "Assembly" &&
+              !inputBomLines.some(
+                (candidate) =>
+                  candidate.parentLineNumber === assembly.lineNumber
+              )
+            ) {
+              throw new Error(
+                "Every new Assembly requires at least one child BOM line."
+              )
+            }
           }
         }
         for (const bomLine of inputBomLines) {
