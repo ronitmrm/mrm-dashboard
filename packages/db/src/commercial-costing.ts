@@ -508,9 +508,9 @@ function costingProcesses(sourcePayload: Record<string, unknown>) {
       ? (firstMaterialLine as Record<string, unknown>)
       : null
   const processText =
+    sourcePayload.process_required ??
     firstMaterialRecord?.process_required ??
     firstMaterialRecord?.manufacturing_process ??
-    sourcePayload.process_required ??
     sourcePayload.manufacturing_process
   return typeof processText === "string"
     ? processText

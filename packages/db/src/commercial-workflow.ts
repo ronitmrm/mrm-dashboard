@@ -12,6 +12,7 @@ import {
 } from "./commercial-bounds"
 import {
   deriveDesignTaskState,
+  designPackagePieceWeight,
   designItemType,
   designProductName,
   designProductionMachineType,
@@ -4997,6 +4998,18 @@ export function createCommercialWorkflowRepository(
           [row.id]
         )
         const firstLine = bomLines.rows[0]
+        const derivedContainerWeight = designPackagePieceWeight(
+          bomLines.rows.map((bomLine) => ({
+            componentItemType: bomLine.component_item_type,
+            lineNumber: bomLine.line_number,
+            parentLineNumber: bomLine.parent_line_number,
+            pieceWeight:
+              bomLine.piece_weight === null
+                ? null
+                : Number(bomLine.piece_weight),
+            quantity: Number(bomLine.quantity),
+          }))
+        )
         const product = await client.query<{ id: string; uid: string }>(
           `
             INSERT INTO catalog.items (
@@ -5047,16 +5060,25 @@ export function createCommercialWorkflowRepository(
             row.item_type === "List" ? (firstLine?.grade ?? null) : null,
             row.item_type === "List" ? (firstLine?.rod_type ?? null) : null,
             row.item_type === "List" ? (firstLine?.rod_size ?? null) : null,
+            designProductionMachineType(
+              row.item_type,
+              row.item_type === "List"
+                ? firstLine?.manufacturing_process
+                : row.manufacturing_process
+            ),
             row.item_type === "List"
-              ? (firstLine?.manufacturing_process ?? null)
-              : null,
-            row.item_type === "List" ? asNumber(firstLine?.piece_weight) : 0,
+              ? asNumber(firstLine?.piece_weight)
+              : derivedContainerWeight,
             row.item_type === "List" ? asNumber(firstLine?.casting, 1) : 1,
-            row.package_process_required ?? row.design_remarks,
+            row.design_remarks,
             row.id,
             {
+              derivedPieceWeight:
+                row.item_type === "List" ? null : derivedContainerWeight,
               designTaskId: row.id,
               firstMaterialLine: firstLine ?? null,
+              manufacturing_process: row.manufacturing_process,
+              process_required: row.package_process_required,
             },
           ]
         )
@@ -6925,6 +6947,7 @@ export function createCommercialWorkflowRepository(
             machine_type.name AS production_type,
             item.casting::text AS blank_piece_weight,
             COALESCE(
+              NULLIF(btrim(item.source_payload ->> 'derivedPieceWeight'), ''),
               NULLIF(btrim(item.source_payload #>> '{firstMaterialLine,piece_weight}'), ''),
               NULLIF(btrim(item.source_payload #>> '{firstMaterialLine,pieceWeight}'), ''),
               NULLIF(btrim(item.source_payload #>> '{bomLine,piece_weight}'), ''),
@@ -6932,6 +6955,7 @@ export function createCommercialWorkflowRepository(
               item.weight_100_pcs::text
             ) AS piece_weight,
             COALESCE(
+              NULLIF(btrim(item.source_payload ->> 'process_required'), ''),
               NULLIF(btrim(item.source_payload #>> '{firstMaterialLine,process_required}'), ''),
               NULLIF(btrim(item.source_payload #>> '{firstMaterialLine,processRequired}'), ''),
               NULLIF(btrim(item.source_payload #>> '{bomLine,process_required}'), ''),
