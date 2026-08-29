@@ -238,7 +238,10 @@ export function MasterMaintenanceForm({
                 ))}
               </NativeSelect>
             </Field>
-            <NumberInput label="Alloy Premium (Inr/Kg)" name="alloy_premium" />
+            <NumberInput
+              label="Alloy Premium (Inr/Kg, blank = market based)"
+              name="alloy_premium"
+            />
             <NumberInput label="Extrusion Cost (Inr/Kg)" name="ext_cost" />
           </>
         ) : null}

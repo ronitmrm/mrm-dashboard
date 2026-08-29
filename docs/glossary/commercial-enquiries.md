@@ -195,6 +195,16 @@ Product Base Price. A Product's stored values are used only as a compatibility
 fallback when no active master combination exists; Costing never manually
 overrides an active master rate.
 
+**Supplier Material Price List**: The MRMPL supplier list effective 05 May 2026
+through 31 March 2027 initializes editable Material Rates by Grade + RM/Rod Type.
+Its yellow Grade row supplies Alloy Premium and its orange matrix supplies
+Extrusion Cost. `C36000`, `CW510L`, and `CuZn37` map to the existing canonical
+Grades `CDA-360`, `LF-CW510L`, and `LF-CuZn37`. A blank Alloy Premium explicitly
+means the document requires Copper/Zinc-market pricing and publishes no fixed
+premium; blank must never be converted to zero.
+_Avoid_: Hard-coded Product rates, duplicating aliased Grades, or inventing a
+fixed premium for a market-based Grade.
+
 **Package/Assembly Price Composition**: A Package or Assembly Customer Price
 is the BOM-quantity sum of its component Customer Prices plus its own adjusted
 process amount. Each component retains its own rejection and profit. The parent

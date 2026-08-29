@@ -77,6 +77,13 @@ function numeric(formData: FormData, key: string) {
   return Number.isFinite(value) ? value : 0
 }
 
+function optionalNumeric(formData: FormData, key: string) {
+  const rawValue = formData.get(key)?.toString().trim()
+  if (!rawValue) return null
+  const value = Number(rawValue)
+  return Number.isFinite(value) ? value : null
+}
+
 function active(formData: FormData) {
   return formData.get("active")?.toString() !== "false"
 }
@@ -172,7 +179,7 @@ export async function upsertMasterAction(formData: FormData) {
           return repository.upsertMaterialRate({
             ...context,
             active: active(formData),
-            alloyPremium: numeric(formData, "alloy_premium"),
+            alloyPremium: optionalNumeric(formData, "alloy_premium"),
             extrusionCost: numeric(formData, "ext_cost"),
             grade: required(formData, "grade"),
             rodType: required(formData, "rod_type"),
