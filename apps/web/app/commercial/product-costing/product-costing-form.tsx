@@ -192,11 +192,12 @@ export function ProductCostingForm({
     (part) => part.lifecycleStatus !== "P" && part.productCostInr <= 0
   )
   const productHref = (itemId: string) =>
-    `/commercial/product-costing?task=${encodeURIComponent(taskId)}&item=${encodeURIComponent(itemId)}#product-cost-form`
+    `/commercial/product-costing/${encodeURIComponent(taskId)}?item=${encodeURIComponent(itemId)}`
 
   return (
     <form action={updateProductCostingAction} className="grid gap-6">
       <input name="item_id" type="hidden" value={product.id} />
+      <input name="task_id" type="hidden" value={taskId} />
 
       <div className="grid gap-4 rounded-2xl border p-4 sm:grid-cols-2 xl:grid-cols-4">
         <div>
@@ -460,16 +461,20 @@ export function ProductCostingForm({
               />
               <input name="assembly_operation_cost" type="hidden" value="0" />
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                <NumberField
-                  defaultValue={product.alloyPremium}
-                  label="Alloy Premium (INR/kg)"
-                  name="alloy_premium"
-                />
-                <NumberField
-                  defaultValue={product.extrusionCost}
-                  label="Extrusion Cost (INR/kg)"
-                  name="extrusion_cost"
-                />
+                <Field>
+                  <FieldLabel>Alloy Premium (INR/kg)</FieldLabel>
+                  <Input readOnly value={product.alloyPremium} />
+                  <p className="text-xs text-muted-foreground">
+                    Grade + Rod Type master; stored fallback if not configured.
+                  </p>
+                </Field>
+                <Field>
+                  <FieldLabel>Extrusion Cost (INR/kg)</FieldLabel>
+                  <Input readOnly value={product.extrusionCost} />
+                  <p className="text-xs text-muted-foreground">
+                    Grade + Rod Type master; stored fallback if not configured.
+                  </p>
+                </Field>
                 <Field>
                   <FieldLabel>Forging Cost (INR/kg)</FieldLabel>
                   <Input

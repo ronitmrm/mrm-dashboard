@@ -532,9 +532,9 @@ function productCostingProduct(
 ) {
   return {
     alloyPremium:
-      asNumber(row.alloy_premium) === 0
-        ? asNumber(row.material_alloy_premium)
-        : asNumber(row.alloy_premium),
+      row.material_alloy_premium === null
+        ? asNumber(row.alloy_premium)
+        : asNumber(row.material_alloy_premium),
     annealing: asNumber(row.annealing),
     assemblyOperationCost: asNumber(row.assembly_operation_cost),
     buffing: asNumber(row.buffing),
@@ -546,9 +546,9 @@ function productCostingProduct(
     directPurchasePricePerKg: asNumber(row.direct_purchase_price_per_kg),
     directPurchasePricePerPiece: asNumber(row.direct_purchase_price_per_piece),
     extrusionCost:
-      asNumber(row.extrusion_cost) === 0
-        ? asNumber(row.material_extrusion_cost)
-        : asNumber(row.extrusion_cost),
+      row.material_extrusion_cost === null
+        ? asNumber(row.extrusion_cost)
+        : asNumber(row.material_extrusion_cost),
     forgingCost: asNumber(row.forging_cost),
     id: row.id,
     itemType: row.item_type,
@@ -1371,13 +1371,14 @@ async function persistQuote(
       { inputs: input.inputs, product: snapshot },
     ]
   )
-  await client.query(
-    "DELETE FROM sales.quote_package_components WHERE quote_product_snapshot_id = $1",
-    [quoteSnapshot.rows[0]!.id]
-  )
-  for (const [sequence, component] of input.components.entries()) {
+  if (isBomParent(input.item.item_type)) {
     await client.query(
-      `
+      "DELETE FROM sales.quote_package_components WHERE quote_product_snapshot_id = $1",
+      [quoteSnapshot.rows[0]!.id]
+    )
+    for (const [sequence, component] of input.components.entries()) {
+      await client.query(
+        `
         INSERT INTO sales.quote_package_components (
           organization_id, quote_product_snapshot_id, child_quote_item_id,
           component_item_id, component_uid, description, quantity,
@@ -1389,22 +1390,23 @@ async function persistQuote(
           'mrm-dashboard', 'quote_package_components', $12, $13
         )
       `,
-      [
-        input.organizationId,
-        quoteSnapshot.rows[0]!.id,
-        component.childQuoteItemId,
-        component.componentItemId,
-        component.componentUid,
-        component.description,
-        component.quantity,
-        component.unitCost,
-        component.extendedCost,
-        sequence,
-        input.actorUserId ?? null,
-        `${quoteItemId}:${sequence}`,
-        component,
-      ]
-    )
+        [
+          input.organizationId,
+          quoteSnapshot.rows[0]!.id,
+          component.childQuoteItemId,
+          component.componentItemId,
+          component.componentUid,
+          component.description,
+          component.quantity,
+          component.unitCost,
+          component.extendedCost,
+          sequence,
+          input.actorUserId ?? null,
+          `${quoteItemId}:${sequence}`,
+          component,
+        ]
+      )
+    }
   }
   return quoteItemId
 }
@@ -2280,8 +2282,9 @@ export function createCommercialCostingRepository(
         const isPackage = isBomParent(product.item_type)
         const productWeight100Pcs =
           input.weight100Pcs ?? asNumber(product.weight_100_pcs)
-        const weight100Pcs =
-          isPackage ? await bomPieceWeight(client, product) : productWeight100Pcs
+        const weight100Pcs = isPackage
+          ? await bomPieceWeight(client, product)
+          : productWeight100Pcs
         const piecesPerKg =
           !isPackage && input.piecesPerKg && input.piecesPerKg > 0
             ? input.piecesPerKg
@@ -2372,18 +2375,16 @@ export function createCommercialCostingRepository(
             : productProcessCostPerPiece
         const alloyPremium = isDirectPurchase
           ? 0
-          : (input.alloyPremium ??
-            asNumber(
+          : asNumber(
               materialRate?.rows[0]?.alloy_premium,
               asNumber(product.alloy_premium)
-            ))
+            )
         const extrusionCost = isDirectPurchase
           ? 0
-          : (input.extrusionCost ??
-            asNumber(
+          : asNumber(
               materialRate?.rows[0]?.extrusion_cost,
               asNumber(product.extrusion_cost)
-            ))
+            )
         const forgingCost =
           isDirectPurchase || !isForgingCostApplicable(product.production_type)
             ? 0

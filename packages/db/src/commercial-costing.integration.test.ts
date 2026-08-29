@@ -148,15 +148,16 @@ beforeAll(async () => {
       INSERT INTO catalog.items (
         organization_id, uid, uid_kind, lifecycle_status, description,
         item_type, production_type, material_grade_id, rod_type_id,
-        weight_100_pcs, casting, machining_cost, washing, checking,
+        weight_100_pcs, casting, alloy_premium, extrusion_cost,
+        machining_cost, washing, checking,
         marking, plating, annealing, deburring, buffing, sealant,
         overhead_cost, rejection_percent, burning_loss_percent,
         source_system, source_table, source_id, source_payload
       )
       VALUES (
         $1, $2, 'QUOTE', 'Q', 'Derived precision item', 'List',
-        'Barstock', $3, $4, 500, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 'test', 'products', $2,
+        'Barstock', $3, $4, 500, 2, 99, 98, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 'test', 'products', $2,
         '{"firstMaterialLine":{"manufacturing_process":"Washing, Plating"}}'::jsonb
       )
       RETURNING id
@@ -177,7 +178,7 @@ afterAll(async () => {
 })
 
 describe("PostgreSQL product-costing and quote workflow", () => {
-  test("loads active material rates and Design-selected processes", async () => {
+  test("uses active material-master rates ahead of stored product rates", async () => {
     await expect(
       repository.getProductCostingProduct(organizationCode, itemId)
     ).resolves.toMatchObject({
@@ -821,8 +822,8 @@ describe("PostgreSQL product-costing and quote workflow", () => {
     ])
 
     const register = await repository.listPricingRegister(organizationCode)
-    const packageRows = register.filter(
-      (row) => row.rowKey.startsWith(`${quote.id}:`)
+    const packageRows = register.filter((row) =>
+      row.rowKey.startsWith(`${quote.id}:`)
     )
     const rootRow = packageRows.find((row) => row.uid === `PK-${suffix}`)!
     const assemblyRow = packageRows.find((row) => row.uid === `A-${suffix}`)!

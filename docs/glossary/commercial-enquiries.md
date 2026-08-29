@@ -184,7 +184,16 @@ Overhead is an INR/kg Product Parameter input and cannot be entered or overridde
 at the customer level. For a Package or Assembly, Product Overhead joins only the
 parent's own assembly process amount, not the combined component value.
 Only one selected Enquiry and its recursive BOM are opened for editing at a
-time.
+time. Product Parameter Costing and Customer Parameter Costing queues are
+worklists only; each selected task opens on its own task URL so growing queues
+do not share a page with the active form.
+
+**Grade and Rod Material Rate**: The active Grade + Rod Type combination in the
+Material Rates master owns Alloy Premium and Extrusion Cost. Product Parameter
+Costing displays those values read-only and persists them when calculating the
+Product Base Price. A Product's stored values are used only as a compatibility
+fallback when no active master combination exists; Costing never manually
+overrides an active master rate.
 
 **Package/Assembly Price Composition**: A Package or Assembly Customer Price
 is the BOM-quantity sum of its component Customer Prices plus its own adjusted
