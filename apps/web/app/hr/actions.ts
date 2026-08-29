@@ -607,3 +607,27 @@ export async function recordInterviewAction(formData: FormData) {
       : undefined
   )
 }
+
+export async function updateInterviewRoundAction(formData: FormData) {
+  const round = recruitmentInterviewRound(value(formData, "round_name"))
+  const questionScores = Object.fromEntries(
+    (round?.questions ?? []).map((question) => [
+      question.id,
+      value(formData, `question_${question.id}`),
+    ])
+  )
+  await mutate(
+    formData,
+    hrTaskCapabilities.recordInterview,
+    (repository, context) =>
+      repository.updateInterviewRound({
+        ...context,
+        comments: value(formData, "comments"),
+        interviewAt: interviewAtValue(formData),
+        interviewId: value(formData, "interview_id"),
+        interviewerName: value(formData, "interviewer_name"),
+        questionScores,
+      }),
+    "Interview round updated."
+  )
+}

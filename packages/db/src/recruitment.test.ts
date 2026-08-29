@@ -1207,6 +1207,69 @@ describe("job workspace", () => {
     )
   })
 
+  test("updates a completed interview round without changing its decision", async () => {
+    const query = vi.fn(async (statement: string, _parameters?: unknown[]) => {
+      void _parameters
+      if (
+        statement.includes("SELECT *") &&
+        statement.includes("FROM recruitment.interviews")
+      ) {
+        return {
+          rows: [
+            {
+              id: "interview-1",
+              round_name: "Screening Round",
+              status: "Approved",
+            },
+          ],
+        }
+      }
+      if (statement.includes("UPDATE recruitment.interviews")) {
+        return {
+          rows: [
+            {
+              id: "interview-1",
+              round_name: "Screening Round",
+              status: "Approved",
+            },
+          ],
+        }
+      }
+      return { rows: [] }
+    })
+    const client = { query, release: vi.fn() } as unknown as PoolClient
+    const repository = createRecruitmentRepository({
+      pool: { connect: vi.fn(async () => client) } as unknown as Pool,
+    })
+
+    await repository.updateInterviewRound({
+      comments: "Updated comments",
+      interviewAt: "2026-08-08T10:30:00.000Z",
+      interviewId: "interview-1",
+      interviewerName: "HR Manager",
+      organizationId: "organization-1",
+      questionScores: {
+        availability_suitability: 4,
+        communication_clarity: 4,
+        relevant_experience: 5,
+        role_understanding: 4,
+        screening_recommendation: 5,
+      },
+    })
+
+    const updateCall = query.mock.calls.find(([statement]) =>
+      statement.includes("UPDATE recruitment.interviews")
+    )
+    expect(updateCall?.[1]).toEqual(
+      expect.arrayContaining([
+        "interview-1",
+        "organization-1",
+        "Updated comments",
+      ])
+    )
+    expect(updateCall?.[0]).not.toContain("status =")
+  })
+
   test("saves final HR approval before appointment details", async () => {
     const query = vi.fn(
       async (statement: string, parameters?: readonly unknown[]) => {

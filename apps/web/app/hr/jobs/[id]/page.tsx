@@ -28,6 +28,7 @@ import {
 import { ArrowLeft, BriefcaseBusiness, UserPlus } from "lucide-react"
 
 import { InterviewOutcomeForm } from "@/components/hr/interview-outcome-form"
+import { InterviewRoundEditDialog } from "@/components/hr/interview-round-edit-dialog"
 import { JobInterviewScheduleForm } from "@/components/hr/interview-schedule-form"
 import { CandidateApplicationActions } from "@/components/hr/candidate-application-actions"
 import { JobLifecycleActions } from "@/components/hr/job-lifecycle-actions"
@@ -59,7 +60,7 @@ function formatInterviewScore(score: number | null) {
 
 function formatSalary(value: number | null) {
   return value === null
-    ? "â€”"
+    ? "—"
     : `₹ ${new Intl.NumberFormat("en-IN", {
         maximumFractionDigits: 2,
       }).format(value)}`
@@ -295,19 +296,19 @@ export default async function JobWorkspacePage({
                       </TableCell>
                       <TableCell>
                         {application.willingToJoin === null
-                          ? "â€”"
+                          ? "—"
                           : application.willingToJoin
                             ? "Yes"
                             : "No"}
                       </TableCell>
-                      <TableCell>{application.joiningDate ?? "â€”"}</TableCell>
+                      <TableCell>{application.joiningDate ?? "—"}</TableCell>
                       <TableCell>
                         {formatSalary(application.salaryBeforeProbation)}
                       </TableCell>
                       <TableCell>
                         {application.salaryAfterProbationMinimum === null ||
                         application.salaryAfterProbationMaximum === null
-                          ? "â€”"
+                          ? "—"
                           : `${formatSalary(application.salaryAfterProbationMinimum)} to ${formatSalary(application.salaryAfterProbationMaximum)}`}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
@@ -367,6 +368,9 @@ export default async function JobWorkspacePage({
                   <TableHead>Assessment</TableHead>
                   <TableHead>Comments</TableHead>
                   <TableHead>Joining</TableHead>
+                  {canWrite ? (
+                    <TableHead className="text-right">Actions</TableHead>
+                  ) : null}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -397,13 +401,22 @@ export default async function JobWorkspacePage({
                         {interview.comments ?? "—"}
                       </TableCell>
                       <TableCell>{interview.joiningDate ?? "—"}</TableCell>
+                      {canWrite ? (
+                        <TableCell className="text-right">
+                          <InterviewRoundEditDialog
+                            interview={interview}
+                            interviewerOptions={interviewerOptions}
+                            returnJobId={job.id}
+                          />
+                        </TableCell>
+                      ) : null}
                     </TableRow>
                   ))
                 ) : (
                   <TableRow>
                     <TableCell
                       className="py-10 text-center text-muted-foreground"
-                      colSpan={9}
+                      colSpan={canWrite ? 10 : 9}
                     >
                       No Interviews Have Been Scheduled For This Job.
                     </TableCell>

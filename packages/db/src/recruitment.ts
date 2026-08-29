@@ -4087,5 +4087,79 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         return recordedInterview
       })
     },
+
+    async updateInterviewRound(
+      input: MutationContext & {
+        comments?: string | null
+        interviewAt: string
+        interviewId: string
+        interviewerName: string
+        questionScores: Record<string, unknown>
+      }
+    ) {
+      return transaction(pool, async (client) => {
+        const interviewId = required(input.interviewId, "Interview round")
+        const before = await client.query<
+          Record<string, unknown> & {
+            id: string
+            round_name: string
+            status: string
+          }
+        >(
+          `
+            SELECT *
+            FROM recruitment.interviews
+            WHERE id = $1 AND organization_id = $2
+            FOR UPDATE
+          `,
+          [interviewId, input.organizationId]
+        )
+        const interview = before.rows[0]
+        if (!interview) throw new Error("Interview round was not found.")
+        if (interview.status === "Scheduled") {
+          throw new Error(
+            "Record the interview outcome before editing its assessment."
+          )
+        }
+        const assessment = scoreRecruitmentInterview(
+          interview.round_name,
+          input.questionScores
+        )
+        const after = await client.query<
+          Record<string, unknown> & { id: string }
+        >(
+          `
+            UPDATE recruitment.interviews
+            SET scheduled_at = $1::timestamptz,
+              interviewer_name = $2, scores = $3::jsonb, comments = $4,
+              updated_by_user_id = $5, updated_at = now(),
+              row_version = row_version + 1
+            WHERE id = $6 AND organization_id = $7
+            RETURNING *
+          `,
+          [
+            required(input.interviewAt, "Interview date and time"),
+            requiredProperCase(input.interviewerName, "Interviewer"),
+            JSON.stringify({
+              overall: assessment.overall,
+              questions: assessment.questionScores,
+            }),
+            optional(input.comments),
+            input.actorUserId ?? null,
+            interviewId,
+            input.organizationId,
+          ]
+        )
+        await audit(client, {
+          ...input,
+          afterState: after.rows[0],
+          beforeState: interview,
+          eventType: "recruitment.interview.updated",
+          targetId: interviewId,
+          targetTable: "interviews",
+        })
+        return after.rows[0]!
+      })
+    },
   }
 }
