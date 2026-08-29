@@ -11,8 +11,10 @@ import {
   type CommercialAttachmentAuthorization,
 } from "@workspace/db"
 import {
+  designTaskCompletionMissingFields,
   designTaskSavedHref,
   designTaskShouldPrepareCosting,
+  normalizeDesignAllocatedUid,
 } from "@workspace/db/commercial-design-domain"
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
@@ -425,7 +427,9 @@ export async function saveDesignAction(formData: FormData) {
   const enquiryItemId = requiredText(formData, "enquiry_item_id")
   const organizationId = requiredText(formData, "organization_id")
   const portfolioMatchStatus = requiredText(formData, "portfolio_match_status")
-  const quotedPartUid = optionalText(formData, "quoted_part_uid")
+  const quotedPartUid = normalizeDesignAllocatedUid(
+    optionalText(formData, "quoted_part_uid")
+  )
   const values = (name: string) =>
     formData
       .getAll(name)
@@ -455,7 +459,8 @@ export async function saveDesignAction(formData: FormData) {
           .map((lineNumber, index) => ({
             bomItem: bomItems[index] || null,
             casting: nullableNumber(castings[index]),
-            componentCode: componentCodes[index] ?? "",
+            componentCode:
+              normalizeDesignAllocatedUid(componentCodes[index]) ?? "",
             componentItemType: componentItemTypes[index] || "List",
             componentSource: componentSources[index] || "New",
             existingProductId: existingProductIds[index] || null,
@@ -464,7 +469,7 @@ export async function saveDesignAction(formData: FormData) {
             manufacturingProcess: manufacturingProcesses[index] || null,
             notes: notes[index] || null,
             packagePart: packageParts[index] || null,
-            packagePartUid: packagePartUids[index] || null,
+            packagePartUid: normalizeDesignAllocatedUid(packagePartUids[index]),
             parentLineNumber: parentLineNumbers[index]
               ? Number(parentLineNumbers[index])
               : null,
@@ -530,16 +535,59 @@ export async function saveDesignAction(formData: FormData) {
     (optionalText(formData, "design_status") === "Design Complete"
       ? "Yes"
       : "No")
+  const completionRequested =
+    optionalText(formData, "design_save_intent") === "complete"
+  let completionMissingFields: string[] = []
   await withWorkflow(
     commercialTaskCapabilities.saveDesign,
     `${enquiriesPath}/${enquiryId}`,
     async (workflow, actorUserId) => {
+      const currentTask = completionRequested
+        ? await workflow.getDesignTask("MRMPL", enquiryItemId)
+        : null
+      completionMissingFields = completionRequested
+        ? designTaskCompletionMissingFields({
+            attachmentPurposes:
+              currentTask?.attachments.map(({ purpose }) => purpose) ?? [],
+            bomLines,
+            checkedBy: optionalText(formData, "checked_by"),
+            designBomCompleted,
+            designerName: optionalText(formData, "designer_name"),
+            fixtureApproxCost: numeric(formData, "fixture_approx_cost"),
+            fixtureRequired: optionalText(formData, "fixture_required") ?? "No",
+            gaugesRequired: optionalText(formData, "gauges_required") ?? "No",
+            inspectionApproxCost: numeric(formData, "inspection_approx_cost"),
+            internalPartCategory: optionalText(
+              formData,
+              "internal_part_category"
+            ),
+            internalPartSize: optionalText(formData, "internal_part_size"),
+            internalPartSubCategory: optionalText(
+              formData,
+              "internal_part_sub_category"
+            ),
+            itemType: optionalText(formData, "item_type") ?? "List",
+            manufacturingProcess: optionalText(
+              formData,
+              "manufacturing_process"
+            ),
+            targetCompletionDate: optionalText(
+              formData,
+              "target_completion_date"
+            ),
+            toolingApproxCost: numeric(formData, "tooling_approx_cost"),
+            toolingRequired: optionalText(formData, "tooling_required") ?? "No",
+          })
+        : []
+      const completionReady =
+        completionRequested && completionMissingFields.length === 0
       const savedDesign = await workflow.saveDesign({
         approvalStatus: optionalText(formData, "approval_status") ?? "Pending",
         actorUserId,
         assemblyRequired: optionalText(formData, "assembly_required") ?? "No",
         bomLines,
         checkedBy: optionalText(formData, "checked_by"),
+        completionRequested: completionReady,
         componentsRequired: optionalText(formData, "components_required"),
         designBomCompleted,
         designBomRequired:
@@ -576,6 +624,7 @@ export async function saveDesignAction(formData: FormData) {
       })
       if (
         designTaskShouldPrepareCosting({
+          completionRequested: completionReady,
           designBomCompleted,
           nextStageStatus: savedDesign.nextStageStatus,
         })
@@ -589,6 +638,13 @@ export async function saveDesignAction(formData: FormData) {
   revalidatePath(`${designPath}/${enquiryItemId}`)
   revalidatePath(`${designPath}/${enquiryItemId}/new`)
   revalidatePath("/commercial/product-costing")
+  if (completionRequested && completionMissingFields.length) {
+    const params = new URLSearchParams({
+      incomplete: completionMissingFields.join("|"),
+      saved: "1",
+    })
+    redirect(`${designPath}/${enquiryItemId}/new?${params}`)
+  }
   redirect(designTaskSavedHref(enquiryItemId))
 }
 

@@ -95,12 +95,14 @@ function TextField({
   defaultValue,
   label,
   name,
+  placeholder,
   readOnly = false,
   type = "text",
 }: {
   defaultValue: number | string
   label: string
   name: string
+  placeholder?: string
   readOnly?: boolean
   type?: string
 }) {
@@ -113,6 +115,7 @@ function TextField({
           defaultValue={defaultValue}
           min={type === "number" ? "0" : undefined}
           name={name}
+          placeholder={placeholder}
           readOnly={readOnly}
           step={type === "number" ? "0.000001" : undefined}
           type={type}
@@ -473,9 +476,10 @@ export function DesignTaskEditor({
                   options={["List", "Package"]}
                 />
                 <TextField
-                  defaultValue={initial.quotedPartUid ?? "Allocated on save"}
+                  defaultValue={initial.quotedPartUid ?? ""}
                   label="Q / C Number"
                   name="quoted_part_uid"
+                  placeholder="Allocated on save"
                   readOnly
                 />
               </>
@@ -646,7 +650,9 @@ export function DesignTaskEditor({
                     ) : null}
                     <ChoiceField
                       defaultValue={
-                        designOptions.designers.includes(initial.checkedBy ?? "")
+                        designOptions.designers.includes(
+                          initial.checkedBy ?? ""
+                        )
                           ? initial.checkedBy!
                           : ""
                       }
@@ -779,9 +785,24 @@ export function DesignTaskEditor({
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-muted/20 p-4">
         <p className="text-sm text-muted-foreground">
-          Save incomplete work at any time. Mark BOM Complete only when ready.
+          Save draft progress at any time. Complete Design from Files after all
+          required fields are entered.
         </p>
-        <Button type="submit">Save Design Task</Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            name="design_save_intent"
+            type="submit"
+            value="draft"
+            variant="outline"
+          >
+            Save Draft
+          </Button>
+          {activeSection === "files" ? (
+            <Button name="design_save_intent" type="submit" value="complete">
+              Complete Design Task
+            </Button>
+          ) : null}
+        </div>
       </div>
     </fieldset>
   )

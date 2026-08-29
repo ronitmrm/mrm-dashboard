@@ -27,6 +27,13 @@ export function designTaskSavedHref(enquiryItemId: string) {
   return `/commercial/design/${enquiryItemId}/new?saved=1`
 }
 
+export function normalizeDesignAllocatedUid(value: string | null | undefined) {
+  const normalized = value?.trim()
+  return !normalized || normalized.toLowerCase() === "allocated on save"
+    ? null
+    : normalized
+}
+
 export function designTaskStatusAfterStart(status: string) {
   if (status === "Pending Design") return "In Progress"
   if (status === "In Progress" || status === "Changes Required") {
@@ -53,16 +60,117 @@ export function designTaskIsEditable(input: {
 }
 
 export function designTaskShouldPrepareCosting(input: {
+  completionRequested?: boolean
   designBomCompleted: string
   nextStageStatus: string
 }) {
   return (
+    (input.completionRequested ?? true) &&
     input.designBomCompleted === "Yes" &&
     ["Not Started", "Changes Required"].includes(input.nextStageStatus)
   )
 }
 
+type DesignCompletionBomLine = {
+  componentSource: string
+  existingProductId?: string | null
+  grade?: string | null
+  lineNumber: number
+  manufacturingProcess?: string | null
+  packagePart?: string | null
+  pieceWeight?: number | null
+  processRequired?: string | null
+  quantity: number
+}
+
+type DesignTaskCompletionInput = {
+  attachmentPurposes: readonly string[]
+  bomLines: readonly DesignCompletionBomLine[]
+  checkedBy?: string | null
+  designBomCompleted: string
+  designerName?: string | null
+  fixtureApproxCost: number
+  fixtureRequired: string
+  gaugesRequired: string
+  inspectionApproxCost: number
+  internalPartCategory?: string | null
+  internalPartSize?: string | null
+  internalPartSubCategory?: string | null
+  itemType: string
+  manufacturingProcess?: string | null
+  targetCompletionDate?: string | null
+  toolingApproxCost: number
+  toolingRequired: string
+}
+
+function hasText(value: string | null | undefined) {
+  return Boolean(value?.trim())
+}
+
+export function designTaskCompletionMissingFields(
+  input: DesignTaskCompletionInput
+) {
+  const missing: string[] = []
+  const requiredTextFields = [
+    ["Designer", input.designerName],
+    ["Target Completion", input.targetCompletionDate],
+    ["Internal Part Size", input.internalPartSize],
+    ["Internal Category", input.internalPartCategory],
+    ["Internal Subcategory", input.internalPartSubCategory],
+    ["Manufacturing Process", input.manufacturingProcess],
+    ["Checked By", input.checkedBy],
+  ] as const
+
+  for (const [label, value] of requiredTextFields) {
+    if (!hasText(value)) missing.push(label)
+  }
+  if (input.designBomCompleted !== "Yes") missing.push("BOM Complete")
+  if (input.toolingRequired === "Yes" && input.toolingApproxCost <= 0) {
+    missing.push("Tooling Approximate Cost")
+  }
+  if (input.fixtureRequired === "Yes" && input.fixtureApproxCost <= 0) {
+    missing.push("Fixture Approximate Cost")
+  }
+  if (input.gaugesRequired === "Yes" && input.inspectionApproxCost <= 0) {
+    missing.push("Inspection Approximate Cost")
+  }
+  if (!input.bomLines.length) {
+    missing.push("BOM Line")
+  }
+  for (const line of input.bomLines) {
+    const prefix = `BOM Line ${line.lineNumber}`
+    if (line.quantity <= 0) missing.push(`${prefix} Quantity`)
+    if (line.componentSource === "Existing") {
+      if (!hasText(line.existingProductId)) {
+        missing.push(`${prefix} Existing Product`)
+      }
+      continue
+    }
+    if (input.itemType === "Package" && !hasText(line.packagePart)) {
+      missing.push(`${prefix} Package Part`)
+    }
+    if (!hasText(line.grade)) missing.push(`${prefix} Grade`)
+    if (!hasText(line.manufacturingProcess)) {
+      missing.push(`${prefix} Manufacturing Process`)
+    }
+    if (!line.pieceWeight || line.pieceWeight <= 0) {
+      missing.push(`${prefix} Piece Weight`)
+    }
+    if (!hasText(line.processRequired)) {
+      missing.push(`${prefix} Process Required`)
+    }
+  }
+
+  const attachmentPurposes = new Set(input.attachmentPurposes)
+  if (!attachmentPurposes.has("internal_drawing")) {
+    missing.push("Internal Drawing")
+  }
+  if (!attachmentPurposes.has("cad")) missing.push("CAD File")
+  return missing
+}
+
 export function deriveDesignTaskState(input: {
+  completionRequested?: boolean
   designBomCompleted: string
   existingNextStageStatus: string
   itemType: string
@@ -75,6 +183,7 @@ export function deriveDesignTaskState(input: {
     : input.designBomCompleted === "Yes"
       ? "Yes"
       : "No"
+  const completionRequested = input.completionRequested ?? true
 
   return {
     approvalStatus: "Pending",
@@ -84,7 +193,7 @@ export function deriveDesignTaskState(input: {
     designBomRequired: isPortfolioMatch ? "No" : "Yes",
     designStatus: isPortfolioMatch
       ? "Not Required"
-      : designBomCompleted === "Yes"
+      : designBomCompleted === "Yes" && completionRequested
         ? "Design Complete"
         : input.portfolioMatchStatus === "New Quoted Part"
           ? "In Progress"
