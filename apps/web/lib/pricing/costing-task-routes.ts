@@ -14,7 +14,7 @@ type CustomerCostingTaskRoute = {
 
 export function productCostingTaskHref(task: ProductCostingTaskRoute) {
   if (task.taskType === "Product Parameter Bulk Revision") {
-    return `/commercial/product-bulk-revision?revision=${encodeURIComponent(task.taskId)}#product-bulk-workbench`
+    return `/commercial/product-costing/revisions/${encodeURIComponent(task.taskId)}`
   }
   if (task.taskType === "ECN Product Parameter Costing") {
     return `/commercial/ecns?ecn=${encodeURIComponent(task.taskId)}#ecn-workbench`

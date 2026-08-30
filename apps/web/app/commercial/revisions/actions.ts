@@ -13,6 +13,7 @@ const revisionsPath = "/commercial/revisions"
 const ecnsPath = "/commercial/ecns"
 const customerBulkRevisionPath = "/commercial/customer-bulk-revision"
 const productBulkRevisionPath = "/commercial/product-bulk-revision"
+const productCostingPath = "/commercial/product-costing"
 
 function numberValue(formData: FormData, name: string) {
   const value = Number(requiredText(formData, name))
@@ -127,6 +128,10 @@ export async function createBulkPriceRevisionAction(formData: FormData) {
   revalidatePath(revisionsPath)
   revalidatePath(customerBulkRevisionPath)
   revalidatePath(productBulkRevisionPath)
+  revalidatePath(productCostingPath)
+  if (revisionRoute === "Product Parameter Bulk Revision") {
+    redirect(productCostingPath)
+  }
 }
 
 export async function stageBulkPriceRevisionAction(formData: FormData) {
@@ -142,6 +147,7 @@ export async function stageBulkPriceRevisionAction(formData: FormData) {
         fieldName,
         newValue,
         notes: optionalText(formData, "notes"),
+        selectedProductIds: selectedValues(formData, "selected_product_ids"),
         selectedQuoteItemIds: selectedValues(
           formData,
           "selected_quote_item_ids"
@@ -152,6 +158,7 @@ export async function stageBulkPriceRevisionAction(formData: FormData) {
   revalidatePath(revisionsPath)
   revalidatePath(customerBulkRevisionPath)
   revalidatePath(productBulkRevisionPath)
+  revalidatePath(productCostingPath)
 }
 
 export async function deleteBulkPriceRevisionStageAction(formData: FormData) {
@@ -167,6 +174,7 @@ export async function deleteBulkPriceRevisionStageAction(formData: FormData) {
   revalidatePath(revisionsPath)
   revalidatePath(customerBulkRevisionPath)
   revalidatePath(productBulkRevisionPath)
+  revalidatePath(productCostingPath)
 }
 
 export async function completeBulkPriceRevisionAction(formData: FormData) {
@@ -182,6 +190,8 @@ export async function completeBulkPriceRevisionAction(formData: FormData) {
   revalidatePath(revisionsPath)
   revalidatePath(customerBulkRevisionPath)
   revalidatePath(productBulkRevisionPath)
+  revalidatePath(productCostingPath)
+  revalidatePath(`${productCostingPath}/revisions/${bulkPriceRevisionId}`)
   revalidatePath("/commercial/quotes")
   if (
     optionalText(formData, "handoff_to_customer") === "true" &&

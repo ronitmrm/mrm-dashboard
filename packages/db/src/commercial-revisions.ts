@@ -10,6 +10,8 @@ import {
 } from "./postgres-runtime"
 import {
   calculateCosting,
+  calculateProductBaseCost,
+  calculateProductProcessCost,
   isForgingCostApplicable,
 } from "./pricing-calculation"
 
@@ -87,6 +89,7 @@ type ProductRow = {
   rejection_percent: string
   remarks: string | null
   sealant: string
+  source_payload: Record<string, unknown>
   uid: string
   washing: string
   weight_100_pcs: string
@@ -274,6 +277,20 @@ const lockedBulkProcessFields = new Set<BulkRevisionFieldName>([
   "assembly_operation_cost",
 ])
 
+const productProcessCostFields = new Set<BulkRevisionFieldName>([
+  "machining_cost",
+  "washing",
+  "checking",
+  "marking",
+  "plating",
+  "annealing",
+  "deburring",
+  "buffing",
+  "sealant",
+  "assembly_operation_cost",
+  "overhead_cost",
+])
+
 const bulkProcessFieldAliases: Partial<
   Record<BulkRevisionFieldName, string[]>
 > = {
@@ -440,30 +457,6 @@ async function topLevelAffectedQuoteIds(
   return ids.filter((id) => !nestedIds.has(id))
 }
 
-async function expandProductBulkRevisionQuoteIds(
-  client: PoolClient,
-  organizationId: string,
-  selectedQuoteIds: string[]
-) {
-  if (!selectedQuoteIds.length) return []
-  const result = await client.query<{ id: string }>(
-    `
-      WITH selected_items AS (
-        SELECT DISTINCT item_id
-        FROM sales.quote_items
-        WHERE organization_id = $1 AND id = ANY($2::uuid[])
-      )
-      SELECT DISTINCT quote.id
-      FROM sales.quote_items quote
-      JOIN selected_items ON selected_items.item_id = quote.item_id
-      WHERE quote.organization_id = $1
-        AND quote.is_active AND quote.status IN ('Sent', 'Accepted')
-    `,
-    [organizationId, selectedQuoteIds]
-  )
-  return result.rows.map((row) => row.id)
-}
-
 async function getProduct(client: PoolClient, itemId: string, lock = false) {
   const result = await client.query<ProductRow>(
     `SELECT * FROM catalog.items WHERE id = $1 ${lock ? "FOR UPDATE" : ""}`,
@@ -590,6 +583,38 @@ async function quoteAllowsBulkProcessField(
   })
 }
 
+function productAllowsBulkProcessField(
+  product: ProductRow,
+  fieldName: BulkRevisionFieldName
+) {
+  const column = productColumnByField[fieldName]
+  if (!column) return false
+  if (
+    fieldName === "assembly_operation_cost" &&
+    !["Package", "Assembly"].includes(product.item_type)
+  ) {
+    return false
+  }
+  const firstMaterialLine = product.source_payload.firstMaterialLine
+  const firstMaterialRecord =
+    firstMaterialLine && typeof firstMaterialLine === "object"
+      ? (firstMaterialLine as Record<string, unknown>)
+      : null
+  const processText = [
+    product.remarks,
+    product.source_payload.process_required,
+    product.source_payload.manufacturing_process,
+    firstMaterialRecord?.process_required,
+    firstMaterialRecord?.manufacturing_process,
+  ]
+    .filter((value): value is string => typeof value === "string")
+    .join(", ")
+  return (
+    asNumber((product as unknown as Record<string, unknown>)[column]) > 0 ||
+    processTextAllowsField(processText, fieldName)
+  )
+}
+
 function revisedCalculation(
   quote: QuoteRow,
   productInput: ProductRow,
@@ -622,22 +647,17 @@ function revisedCalculation(
         : asNumber(component.unit_cost)
       return total + asNumber(component.quantity, 1) * unitCost
     }, 0)
-    const piecesPerKg =
-      asNumber(product.weight_100_pcs) > 0
-        ? 1000 / asNumber(product.weight_100_pcs)
-        : asNumber(product.pieces_per_kg)
     const storedProcessBase = asNumber(
       quote.calculation_json.packageProcessCostPerPiece,
       asNumber(quote.calculation_json.totalA)
     )
-    const processBase =
-      (override?.has("assembly_operation_cost") ||
-        override?.has("overhead_cost")) &&
-      piecesPerKg > 0
-        ? (asNumber(product.assembly_operation_cost) +
-            asNumber(product.overhead_cost)) /
-          piecesPerKg
-        : storedProcessBase
+    const hasProductProcessOverride = [...productProcessCostFields].some(
+      (fieldName) => override?.has(fieldName)
+    )
+    const processBase = hasProductProcessOverride
+      ? calculateProductProcessCost(productProcessInput(product))
+          .processCostPerPiece
+      : storedProcessBase
     const rejectionPercent = asNumber(product.rejection_percent)
     const rejectionCost = processBase * rejectionPercent
     const totalA = processBase + rejectionCost
@@ -1351,6 +1371,148 @@ async function activeAffectedQuoteIds(
   return result.rows.map((row) => row.quote_item_id)
 }
 
+async function activeAffectedQuotePathIds(
+  client: PoolClient,
+  itemIds: string[],
+  organizationId: string
+) {
+  if (!itemIds.length) return []
+  const result = await client.query<{ quote_item_id: string }>(
+    `
+      WITH RECURSIVE quote_tree AS (
+        SELECT root.id AS root_quote_item_id, root.id AS quote_item_id,
+          root.item_id, ARRAY[root.id]::uuid[] AS quote_path, 0 AS depth
+        FROM sales.quote_items root
+        WHERE root.organization_id = $2 AND root.is_active
+          AND root.status IN ('Sent', 'Accepted')
+          AND NULLIF(btrim(root.customer_part_code), '') IS NOT NULL
+        UNION ALL
+        SELECT quote_tree.root_quote_item_id,
+          component.child_quote_item_id, component.component_item_id,
+          quote_tree.quote_path || component.child_quote_item_id,
+          quote_tree.depth + 1
+        FROM quote_tree
+        JOIN sales.quote_product_snapshots snapshot
+          ON snapshot.quote_item_id = quote_tree.quote_item_id
+        JOIN sales.quote_package_components component
+          ON component.quote_product_snapshot_id = snapshot.id
+        WHERE component.child_quote_item_id IS NOT NULL
+          AND quote_tree.depth < 20
+          AND NOT component.child_quote_item_id = ANY(quote_tree.quote_path)
+      ), affected_paths AS (
+        SELECT DISTINCT unnest(quote_path) AS quote_item_id
+        FROM quote_tree
+        WHERE item_id = ANY($1::uuid[])
+      )
+      SELECT quote_item_id
+      FROM affected_paths
+      ORDER BY quote_item_id
+    `,
+    [itemIds, organizationId]
+  )
+  return result.rows.map((row) => row.quote_item_id)
+}
+
+function productProcessInput(product: ProductRow) {
+  return {
+    annealing: asNumber(product.annealing),
+    assemblyOperationCost: asNumber(product.assembly_operation_cost),
+    buffing: asNumber(product.buffing),
+    checking: asNumber(product.checking),
+    deburring: asNumber(product.deburring),
+    machiningCost: asNumber(product.machining_cost),
+    marking: asNumber(product.marking),
+    overheadCost: asNumber(product.overhead_cost),
+    plating: asNumber(product.plating),
+    sealant: asNumber(product.sealant),
+    washing: asNumber(product.washing),
+    weight100Pcs: asNumber(product.weight_100_pcs),
+  }
+}
+
+async function productComponentCostPerPiece(
+  client: PoolClient,
+  productId: string
+) {
+  const result = await client.query<{ component_cost: string }>(
+    `
+      SELECT COALESCE(sum(
+        line.quantity * CASE
+          WHEN child.pricing_method = 'Direct Purchase'
+            THEN child.direct_purchase_price_per_piece
+          ELSE child.product_cost_inr
+        END
+      ), 0)::text AS component_cost
+      FROM catalog.bom_lines line
+      JOIN catalog.items child ON child.id = line.component_item_id
+      WHERE line.parent_item_id = $1
+    `,
+    [productId]
+  )
+  return asNumber(result.rows[0]?.component_cost)
+}
+
+async function calculatedProductBase(client: PoolClient, product: ProductRow) {
+  return calculateProductBaseCost({
+    ...productProcessInput(product),
+    componentCostPerPiece: await productComponentCostPerPiece(
+      client,
+      product.id
+    ),
+    directPurchasePricePerPiece: asNumber(
+      product.direct_purchase_price_per_piece
+    ),
+    isBomParent: ["Package", "Assembly"].includes(product.item_type),
+    pricingMethod: product.pricing_method,
+  })
+}
+
+async function recalculateProductBaseAndAncestors(
+  client: PoolClient,
+  itemIds: string[],
+  actorUserId?: string | null
+) {
+  const affected = await client.query<{ depth: number; item_id: string }>(
+    `
+      WITH RECURSIVE affected(item_id, depth, path) AS (
+        SELECT selected.item_id, 0, ARRAY[selected.item_id]::uuid[]
+        FROM unnest($1::uuid[]) selected(item_id)
+        UNION ALL
+        SELECT line.parent_item_id, affected.depth + 1,
+          affected.path || line.parent_item_id
+        FROM affected
+        JOIN catalog.bom_lines line ON line.component_item_id = affected.item_id
+        WHERE affected.depth < 20
+          AND NOT line.parent_item_id = ANY(affected.path)
+      )
+      SELECT item_id, max(depth)::integer AS depth
+      FROM affected
+      GROUP BY item_id
+      ORDER BY max(depth), item_id
+    `,
+    [itemIds]
+  )
+  for (const affectedProduct of affected.rows) {
+    const product = await getProduct(client, affectedProduct.item_id, true)
+    const productCostInr = await calculatedProductBase(client, product)
+    const piecesPerKg =
+      asNumber(product.weight_100_pcs) > 0
+        ? 1000 / asNumber(product.weight_100_pcs)
+        : asNumber(product.pieces_per_kg)
+    await client.query(
+      `
+        UPDATE catalog.items
+        SET product_cost_inr = $1, pieces_per_kg = $2,
+          updated_by_user_id = $3, updated_at = now(),
+          row_version = row_version + 1
+        WHERE id = $4
+      `,
+      [productCostInr, piecesPerKg, actorUserId ?? null, product.id]
+    )
+  }
+  return affected.rows.map((row) => row.item_id)
+}
+
 async function loadQuoteGraph(
   client: PoolClient,
   rootQuoteItemIds: string[],
@@ -2003,7 +2165,7 @@ export function createCommercialRevisionsRepository(
       organizationCode: string,
       options: { limit?: number; query?: string } = {}
     ) {
-      const limit = Math.min(Math.max(Math.trunc(options.limit ?? 50), 1), 50)
+      const limit = Math.min(Math.max(Math.trunc(options.limit ?? 200), 1), 200)
       const search = selectorSearchTerm(options.query ?? "")
       const organization = await pool.query<{ id: string }>(
         "SELECT id FROM core.organizations WHERE lower(code) = lower($1)",
@@ -2029,6 +2191,14 @@ export function createCommercialRevisionsRepository(
           FROM sales.customers customer
           WHERE customer.organization_id = $1
             AND customer.status = 'Active'
+            AND EXISTS (
+              SELECT 1
+              FROM sales.quote_items quote
+              WHERE quote.customer_id = customer.id
+                AND quote.organization_id = customer.organization_id
+                AND quote.is_active
+                AND quote.status IN ('Sent', 'Accepted')
+            )
             AND (
               $2 = ''
               OR lower(btrim(customer.customer_uid)) = $2
@@ -2170,15 +2340,13 @@ export function createCommercialRevisionsRepository(
       const limit = Math.min(Math.max(Math.trunc(options.limit ?? 200), 1), 200)
       const search = selectorSearchTerm(options.query ?? "")
       const result = await pool.query<{
+        affected_price_count: string
         alloy_premium: string
         annealing: string
-        approved_price_usd: string
         assembly_operation_cost: string
         buffing: string
         casting: string
         checking: string
-        company_name: string
-        customer_part_code: string | null
         deburring: string
         description: string
         ext_cost: string
@@ -2190,62 +2358,77 @@ export function createCommercialRevisionsRepository(
         overhead_cost: string
         pieces_per_kg: string
         plating: string
+        product_cost_inr: string
         production_type: string | null
-        quote_number: string
         sealant: string
         total_count: string
         uid: string
         washing: string
+        weight_100_pcs: string
       }>(
         `
-          WITH revision AS (
+          WITH RECURSIVE revision AS (
             SELECT organization_id
             FROM sales.bulk_price_revisions
             WHERE id = $1
               AND revision_route = 'Product Parameter Bulk Revision'
               AND status NOT IN ('Completed', 'Pending Customer Costing')
-          )
-          SELECT quote.id, quote.quote_number, quote.customer_part_code,
-            quote.approved_price_usd, customer.company_name, item.uid,
-            item.description, item.item_type, item.production_type,
-            item.pieces_per_kg, item.casting, item.alloy_premium,
-            item.extrusion_cost AS ext_cost, item.forging_cost,
-            item.machining_cost, item.washing, item.checking, item.marking,
-            item.plating, item.annealing, item.deburring, item.buffing,
-            item.sealant, item.assembly_operation_cost, item.overhead_cost,
-            count(*) OVER()::text AS total_count
-          FROM sales.quote_items quote
-          JOIN revision ON revision.organization_id = quote.organization_id
-          JOIN sales.customers customer ON customer.id = quote.customer_id
-          JOIN catalog.items item ON item.id = quote.item_id
-          WHERE quote.is_active AND quote.status IN ('Sent', 'Accepted')
-            AND (
+          ), quote_tree AS (
+            SELECT quote.id AS root_quote_item_id, quote.id AS quote_item_id,
+              quote.item_id, ARRAY[quote.id]::uuid[] AS quote_path, 0 AS depth
+            FROM sales.quote_items quote
+            JOIN revision ON revision.organization_id = quote.organization_id
+            WHERE quote.is_active AND quote.status IN ('Sent', 'Accepted')
+              AND NULLIF(btrim(quote.customer_part_code), '') IS NOT NULL
+            UNION ALL
+            SELECT quote_tree.root_quote_item_id,
+              component.child_quote_item_id, component.component_item_id,
+              quote_tree.quote_path || component.child_quote_item_id,
+              quote_tree.depth + 1
+            FROM quote_tree
+            JOIN sales.quote_product_snapshots snapshot
+              ON snapshot.quote_item_id = quote_tree.quote_item_id
+            JOIN sales.quote_package_components component
+              ON component.quote_product_snapshot_id = snapshot.id
+            WHERE component.child_quote_item_id IS NOT NULL
+              AND quote_tree.depth < 20
+              AND NOT component.child_quote_item_id = ANY(quote_tree.quote_path)
+          ), products AS (
+            SELECT item_id,
+              count(DISTINCT root_quote_item_id)::text AS affected_price_count
+            FROM quote_tree
+            GROUP BY item_id
+          ), filtered AS (
+            SELECT item.id, item.uid, item.description, item.item_type,
+              item.production_type, item.pieces_per_kg, item.weight_100_pcs,
+              item.product_cost_inr, item.casting, item.alloy_premium,
+              item.extrusion_cost AS ext_cost, item.forging_cost,
+              item.machining_cost, item.washing, item.checking, item.marking,
+              item.plating, item.annealing, item.deburring, item.buffing,
+              item.sealant, item.assembly_operation_cost, item.overhead_cost,
+              products.affected_price_count
+            FROM products
+            JOIN catalog.items item ON item.id = products.item_id
+            WHERE (
               $2 = ''
-              OR lower(btrim(coalesce(quote.customer_part_code, ''))) = $2
-              OR lower(btrim(quote.quote_number)) = $2
               OR lower(btrim(item.uid)) = $2
-              OR lower(btrim(customer.company_name)) = $2
               OR (
                 $3::text IS NOT NULL
-                AND lower(
-                  customer.company_name || ' ' ||
-                  coalesce(quote.customer_part_code, '') || ' ' ||
-                  quote.quote_number || ' ' || item.uid || ' ' ||
-                  item.description
-                ) LIKE $3 ESCAPE '\\'
+                AND lower(item.uid || ' ' || item.description || ' ' ||
+                  item.item_type || ' ' || coalesce(item.production_type, ''))
+                  LIKE $3 ESCAPE '\\'
               )
             )
+          )
+          SELECT filtered.*,
+            count(*) OVER()::text AS total_count
+          FROM filtered
           ORDER BY
             CASE
-              WHEN lower(btrim(coalesce(quote.customer_part_code, ''))) = $2
-                THEN 0
-              WHEN lower(btrim(quote.quote_number)) = $2 THEN 1
-              WHEN lower(btrim(item.uid)) = $2 THEN 2
-              WHEN lower(btrim(customer.company_name)) = $2 THEN 3
-              ELSE 4
+              WHEN lower(btrim(filtered.uid)) = $2 THEN 0
+              ELSE 1
             END,
-            item.uid, customer.company_name,
-            quote.sent_at DESC NULLS LAST, quote.updated_at DESC, quote.id DESC
+            filtered.uid, filtered.id
           LIMIT $4
         `,
         [bulkPriceRevisionId, search.query, search.containsPattern, limit]
@@ -2261,13 +2444,11 @@ export function createCommercialRevisionsRepository(
         rows: result.rows.map((row) => ({
           alloyPremium: asNumber(row.alloy_premium),
           annealing: asNumber(row.annealing),
-          approvedPriceUsd: asNumber(row.approved_price_usd),
+          affectedPriceCount: Number(row.affected_price_count),
           assemblyOperationCost: asNumber(row.assembly_operation_cost),
           buffing: asNumber(row.buffing),
           casting: asNumber(row.casting),
           checking: asNumber(row.checking),
-          companyName: row.company_name,
-          customerPartCode: row.customer_part_code,
           deburring: asNumber(row.deburring),
           description: row.description,
           extCost: asNumber(row.ext_cost),
@@ -2279,11 +2460,12 @@ export function createCommercialRevisionsRepository(
           overheadCost: asNumber(row.overhead_cost),
           piecesPerKg: asNumber(row.pieces_per_kg),
           plating: asNumber(row.plating),
+          productCostInr: asNumber(row.product_cost_inr),
           productionType: row.production_type,
-          quoteNumber: row.quote_number,
           sealant: asNumber(row.sealant),
           uid: row.uid,
           washing: asNumber(row.washing),
+          weight100Pcs: asNumber(row.weight_100_pcs),
         })),
       }
     },
@@ -2848,7 +3030,8 @@ export function createCommercialRevisionsRepository(
       fieldName: string
       newValue: number
       notes?: string | null
-      selectedQuoteItemIds: string[]
+      selectedProductIds?: string[]
+      selectedQuoteItemIds?: string[]
     }) {
       return transaction(pool, async (client) => {
         const revision = await client.query<{
@@ -2881,37 +3064,99 @@ export function createCommercialRevisionsRepository(
             "Customer revisions can only stage customer-level parameters."
           )
         }
-        if (!input.selectedQuoteItemIds.length) {
-          throw new Error("Select at least one active price row.")
+        const selectedQuoteItemIds = input.selectedQuoteItemIds ?? []
+        const selectedProductIds = input.selectedProductIds ?? []
+        const valid: Array<{ id: string; itemId: string; price: string }> = []
+        if (isProductStage) {
+          let productIds = [...new Set(selectedProductIds)]
+          if (!productIds.length && selectedQuoteItemIds.length) {
+            const legacySelection = await client.query<{ item_id: string }>(
+              `
+                SELECT DISTINCT item_id
+                FROM sales.quote_items
+                WHERE id = ANY($1::uuid[]) AND organization_id = $2
+              `,
+              [selectedQuoteItemIds, row.organization_id]
+            )
+            productIds = legacySelection.rows.map((product) => product.item_id)
+          }
+          if (!productIds.length) {
+            throw new Error("Select at least one product.")
+          }
+          const products = await client.query<ProductRow>(
+            `
+              SELECT *
+              FROM catalog.items
+              WHERE id = ANY($1::uuid[]) AND organization_id = $2
+              FOR UPDATE
+            `,
+            [productIds, row.organization_id]
+          )
+          if (products.rows.length !== productIds.length) {
+            throw new Error(
+              "One or more selected products are no longer available."
+            )
+          }
+          for (const product of products.rows) {
+            const affectedQuoteIds = await activeAffectedQuoteIds(
+              client,
+              product.id,
+              row.organization_id
+            )
+            if (!affectedQuoteIds.length) continue
+            valid.push({
+              id: affectedQuoteIds[0]!,
+              itemId: product.id,
+              price: product.product_cost_inr,
+            })
+          }
+        } else {
+          if (!selectedQuoteItemIds.length) {
+            throw new Error("Select at least one active price row.")
+          }
+          const prices = await client.query<{
+            id: string
+            item_id: string
+            price: string
+          }>(
+            `
+              SELECT id, item_id, approved_price_usd AS price
+              FROM sales.quote_items
+              WHERE id = ANY($1::uuid[]) AND organization_id = $2
+                AND is_active AND status IN ('Sent', 'Accepted')
+                AND ($3::uuid IS NULL OR customer_id = $3)
+              FOR UPDATE
+            `,
+            [selectedQuoteItemIds, row.organization_id, row.customer_id]
+          )
+          if (prices.rows.length !== new Set(selectedQuoteItemIds).size) {
+            throw new Error("One or more selected prices are no longer active.")
+          }
+          valid.push(
+            ...prices.rows.map((price) => ({
+              id: price.id,
+              itemId: price.item_id,
+              price: price.price,
+            }))
+          )
         }
-        const valid = await client.query<{ id: string; price: string }>(
-          `
-            SELECT id, approved_price_usd AS price
-            FROM sales.quote_items
-            WHERE id = ANY($1::uuid[]) AND organization_id = $2
-              AND is_active AND status IN ('Sent', 'Accepted')
-              AND ($3::uuid IS NULL OR customer_id = $3)
-            FOR UPDATE
-          `,
-          [input.selectedQuoteItemIds, row.organization_id, row.customer_id]
-        )
-        if (valid.rows.length !== new Set(input.selectedQuoteItemIds).size) {
-          throw new Error("One or more selected prices are no longer active.")
-        }
-        const eligible = []
-        for (const quote of valid.rows) {
+        const eligible: typeof valid = []
+        for (const candidate of valid) {
+          const product = await getProduct(client, candidate.itemId)
           if (
             !lockedBulkProcessFields.has(input.fieldName) ||
-            (await quoteAllowsBulkProcessField(
-              client,
-              quote.id,
-              input.fieldName
-            ))
+            (isProductStage
+              ? productAllowsBulkProcessField(product, input.fieldName)
+              : await quoteAllowsBulkProcessField(
+                  client,
+                  candidate.id,
+                  input.fieldName
+                ))
           ) {
-            eligible.push(quote)
+            eligible.push(candidate)
           }
         }
-        const skippedCount = valid.rows.length - eligible.length
+        const skippedCount = valid.length - eligible.length
         if (!eligible.length) {
           throw new Error(
             `${field.label} is not active in any selected product.`
@@ -2929,22 +3174,28 @@ export function createCommercialRevisionsRepository(
             : (input.notes ?? null)
         const createdIds: string[] = []
         for (const quote of eligible) {
-          const source = await getQuote(client, quote.id)
-          const product = await getProduct(client, source.item_id)
-          const components = await getComponents(client, quote.id)
+          const product = await getProduct(client, quote.itemId)
           const override = new Map<string, number>([
             [input.fieldName, input.newValue],
           ])
-          const preview = revisedCalculation(
-            source,
-            product,
-            components,
-            new Map(),
-            override
-          )
+          const preview = isProductStage
+            ? {
+                totalRateUsd: await calculatedProductBase(
+                  client,
+                  productWithOverrides(product, override)
+                ),
+              }
+            : revisedCalculation(
+                await getQuote(client, quote.id),
+                product,
+                await getComponents(client, quote.id),
+                new Map(),
+                override
+              )
           const previewJson = {
             newPrice: preview.totalRateUsd,
             oldPrice: asNumber(quote.price),
+            productItemId: quote.itemId,
             quoteItemId: quote.id,
           }
           const created = await client.query<{ id: string }>(
@@ -2972,7 +3223,7 @@ export function createCommercialRevisionsRepository(
               input.fieldName,
               field.label,
               input.newValue,
-              JSON.stringify(eligible.map((row) => row.id)),
+              JSON.stringify(eligible.map((row) => row.itemId)),
               eligible.length,
               skippedCount,
               stageGroupId,
@@ -2980,7 +3231,12 @@ export function createCommercialRevisionsRepository(
               notes,
               input.actorUserId ?? null,
               randomUUID(),
-              { ...input, eligibleQuoteItemIds: eligible.map((row) => row.id) },
+              {
+                ...input,
+                eligibleProductIds: eligible.map((row) => row.itemId),
+                eligibleQuoteItemIds: eligible.map((row) => row.id),
+                productItemId: quote.itemId,
+              },
             ]
           )
           createdIds.push(created.rows[0]!.id)
@@ -3063,11 +3319,14 @@ export function createCommercialRevisionsRepository(
           new_value: string
           old_price: string
           prior_quote_item_id: string
+          final_quote_item_ids_json: unknown
+          source_payload: Record<string, unknown>
           stage_group_id: string
         }>(
           `
             SELECT id, prior_quote_item_id, old_price, field_name, new_value,
-              stage_group_id, applied_at
+              stage_group_id, applied_at, final_quote_item_ids_json,
+              source_payload
             FROM sales.bulk_price_revision_changes
             WHERE bulk_price_revision_id = $1
               AND replacement_quote_item_id IS NULL
@@ -3122,16 +3381,18 @@ export function createCommercialRevisionsRepository(
                 `Bulk stage ${stageGroupId} is not an unapplied product parameter.`
               )
             }
-            const selectedQuoteIds = await requireActivePrices(
-              group.map((change) => change.prior_quote_item_id)
-            )
-            const expandedQuoteIds = await requireActivePrices(
-              await expandProductBulkRevisionQuoteIds(
-                client,
-                lockedRevision.organization_id,
-                selectedQuoteIds
+            const selectedProductIds = [
+              ...new Set(
+                group
+                  .map((change) => asText(change.source_payload.productItemId))
+                  .filter(Boolean)
+              ),
+            ]
+            if (!selectedProductIds.length) {
+              throw new Error(
+                "Staged product selection is missing its product."
               )
-            )
+            }
             const productColumn = productColumnByField[fieldName]
             if (!productColumn) {
               throw new Error("Unsupported staged product parameter.")
@@ -3141,17 +3402,25 @@ export function createCommercialRevisionsRepository(
                 UPDATE catalog.items item
                 SET ${productColumn} = $1, updated_by_user_id = $2,
                   updated_at = now(), row_version = row_version + 1
-                WHERE item.id IN (
-                  SELECT DISTINCT quote.item_id
-                  FROM sales.quote_items quote
-                  WHERE quote.id = ANY($3::uuid[])
-                )
+                WHERE item.id = ANY($3::uuid[])
               `,
               [
                 asNumber(group[0]!.new_value),
                 input.actorUserId ?? null,
-                selectedQuoteIds,
+                selectedProductIds,
               ]
+            )
+            await recalculateProductBaseAndAncestors(
+              client,
+              selectedProductIds,
+              input.actorUserId
+            )
+            const affectedQuoteIds = await requireActivePrices(
+              await activeAffectedQuotePathIds(
+                client,
+                selectedProductIds,
+                lockedRevision.organization_id
+              )
             )
             await client.query(
               `
@@ -3161,7 +3430,7 @@ export function createCommercialRevisionsRepository(
                   AND replacement_quote_item_id IS NULL
               `,
               [
-                JSON.stringify(expandedQuoteIds),
+                JSON.stringify(affectedQuoteIds),
                 input.bulkPriceRevisionId,
                 stageGroupId,
               ]
@@ -3220,19 +3489,44 @@ export function createCommercialRevisionsRepository(
           )
           const quoteIds = isAppliedProductStage
             ? await requireActivePrices(
-                await expandProductBulkRevisionQuoteIds(
-                  client,
-                  lockedRevision.organization_id,
-                  stagedQuoteIds
+                group.flatMap((change) =>
+                  Array.isArray(change.final_quote_item_ids_json)
+                    ? change.final_quote_item_ids_json.filter(
+                        (value): value is string => typeof value === "string"
+                      )
+                    : []
                 )
               )
             : stagedQuoteIds
+          const productStageQuoteIds = new Set<string>()
+          if (isAppliedProductStage) {
+            const selectedProductIds = [
+              ...new Set(
+                group
+                  .map((change) => asText(change.source_payload.productItemId))
+                  .filter(Boolean)
+              ),
+            ]
+            const matchingQuotes = await client.query<{ id: string }>(
+              `
+                SELECT id
+                FROM sales.quote_items
+                WHERE id = ANY($1::uuid[]) AND item_id = ANY($2::uuid[])
+              `,
+              [quoteIds, selectedProductIds]
+            )
+            for (const quote of matchingQuotes.rows) {
+              productStageQuoteIds.add(quote.id)
+            }
+          }
           for (const quoteId of quoteIds) {
             selectedIds.add(quoteId)
-            const quoteOverrides =
-              overrides.get(quoteId) ?? new Map<string, number>()
-            quoteOverrides.set(fieldName, asNumber(group[0]!.new_value))
-            overrides.set(quoteId, quoteOverrides)
+            if (!isAppliedProductStage || productStageQuoteIds.has(quoteId)) {
+              const quoteOverrides =
+                overrides.get(quoteId) ?? new Map<string, number>()
+              quoteOverrides.set(fieldName, asNumber(group[0]!.new_value))
+              overrides.set(quoteId, quoteOverrides)
+            }
           }
         }
         const affected = await collectQuoteAncestors(client, [...selectedIds])

@@ -45,6 +45,13 @@ export type ProductProcessCostInput = Pick<
   | "weight100Pcs"
 >
 
+export type ProductBaseCostInput = ProductProcessCostInput & {
+  componentCostPerPiece: number
+  directPurchasePricePerPiece?: number
+  isBomParent: boolean
+  pricingMethod: string
+}
+
 export type PackageQuoteCostingInput = Pick<
   QuoteCostingInput,
   "conversionRate" | "packingCost" | "profitPercent" | "shippingCost"
@@ -118,6 +125,16 @@ export function calculateProductProcessCost(product: ProductProcessCostInput) {
     processCostPerKg: safeNumber(processCostPerKg),
     processCostPerPiece: safeNumber(processCostPerPiece),
   }
+}
+
+export function calculateProductBaseCost(product: ProductBaseCostInput) {
+  if (product.pricingMethod.trim().toLowerCase() === "direct purchase") {
+    return safeNumber(product.directPurchasePricePerPiece ?? 0)
+  }
+  const processCost = calculateProductProcessCost(product).processCostPerPiece
+  return safeNumber(
+    processCost + (product.isBomParent ? product.componentCostPerPiece : 0)
+  )
 }
 
 export function calculatePackageCosting(
