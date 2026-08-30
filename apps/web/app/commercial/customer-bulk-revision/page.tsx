@@ -215,7 +215,7 @@ export default async function CustomerBulkRevisionPage({
             {reference.organizationId ? (
               <form
                 action={createBulkPriceRevisionAction}
-                className="grid gap-4"
+                className="grid gap-4 md:grid-cols-2"
               >
                 <input
                   name="organization_id"
@@ -258,7 +258,7 @@ export default async function CustomerBulkRevisionPage({
                     type="date"
                   />
                 </Field>
-                <Field>
+                <Field className="md:col-span-2">
                   <FieldLabel htmlFor="customer-revision-reason">
                     Reason
                   </FieldLabel>
@@ -268,7 +268,7 @@ export default async function CustomerBulkRevisionPage({
                     required
                   />
                 </Field>
-                <Button className="w-fit" type="submit">
+                <Button className="w-fit md:col-span-2" type="submit">
                   Send Customer Revision To Costing
                 </Button>
               </form>
@@ -345,7 +345,7 @@ export default async function CustomerBulkRevisionPage({
         </Card>
       </div>
 
-      <Card id="customer-bulk-workbench">
+      <Card hidden={!selectedRevisionId} id="customer-bulk-workbench">
         <CardHeader>
           <CardTitle>Customer Revision Workbench</CardTitle>
           <CardDescription>
