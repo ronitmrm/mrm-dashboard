@@ -168,7 +168,7 @@ export default async function CustomerBulkRevisionPage({
         />
       </section>
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-3 sm:grid-cols-3">
         <MetricCard
           label="Customer Revision Requests"
           value={summary.openRevisionCount}
@@ -176,10 +176,6 @@ export default async function CustomerBulkRevisionPage({
         <MetricCard
           label="Commercial-Only Revision"
           value={summary.commercialOnlyRevision}
-        />
-        <MetricCard
-          label="After Product Revision"
-          value={summary.afterProductRevision}
         />
         <MetricCard
           label="Customer Prices In Scope"
@@ -536,8 +532,8 @@ export default async function CustomerBulkRevisionPage({
                     <p className="font-medium">Revision Changes</p>
                     <p className="text-xs text-muted-foreground">
                       Product Stage Previews Are Product Base INR Per Piece.
-                      Customer Stage Previews Use Quote Currency. Product
-                      Master Publishes Only When The Revision Is Completed.
+                      Customer Stage Previews Use Quote Currency. Product Master
+                      Publishes Only When The Revision Is Completed.
                     </p>
                   </div>
                   {!isCompleted ? (

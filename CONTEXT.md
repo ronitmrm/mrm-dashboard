@@ -13,8 +13,8 @@ A staged, customer-scoped request that applies one or more commercial parameter 
 _Avoid_: Editing active Quote rows in place, product parameter revision, customer default update.
 
 **Product Bulk Revision**:
-A two-stage, cross-customer request that applies staged Product Parameter changes to Product Master for selected active Sent or Accepted prices, expands the affected Product identity across every active customer price, then waits in Customer Bulk Revision for optional customer parameter changes before creating immutable replacement Quote revisions through every affected Package or Assembly ancestor.
-_Avoid_: Creating Quote revisions during the product stage, editing active Quote rows in place, customer-only revision.
+A two-stage, cross-customer request that previews staged Product Parameter changes without publishing them, then moves from Product Parameter Costing to Customer Parameter Costing with only the affected active root prices. Each affected price receives one decision: revise it from the new Product cost, or keep it unchanged by deriving the balancing Customer profit. Final completion publishes the Product inputs and immutable replacement Quote revisions atomically.
+_Avoid_: Customer Bulk Revision, showing every active price, publishing Product inputs before final completion, editing active Quote rows in place.
 
 **Package/Assembly Price Composition**:
 A Package or Assembly Customer Price is the BOM-quantity sum of its component Customer Prices plus its own adjusted process amount. Each component retains its own rejection and profit. The parent applies its rejection and profit only to its own assembly/package process amount, never to the combined component value. Product Parameter Costing separately rolls up component base costs plus the unadjusted parent process cost per piece.

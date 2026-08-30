@@ -75,6 +75,9 @@ function NumberField({
 }
 
 function actionLabel(taskType: string) {
+  if (taskType === "Product Parameter Bulk Revision") {
+    return "Review Affected Prices"
+  }
   if (taskType === "Bulk Price Revision") return "Open Bulk Revision"
   if (taskType === "ECN Price Review") return "Open ECN Review"
   if (taskType === "PO Price Match") return "Match PO Price"

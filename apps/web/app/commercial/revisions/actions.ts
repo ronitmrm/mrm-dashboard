@@ -12,6 +12,7 @@ import { optionalText, requiredText } from "@/lib/form-data"
 const revisionsPath = "/commercial/revisions"
 const ecnsPath = "/commercial/ecns"
 const customerBulkRevisionPath = "/commercial/customer-bulk-revision"
+const customerCostingPath = "/commercial/customer-costing"
 const productBulkRevisionPath = "/commercial/product-bulk-revision"
 const productCostingPath = "/commercial/product-costing"
 
@@ -127,6 +128,7 @@ export async function createBulkPriceRevisionAction(formData: FormData) {
   )
   revalidatePath(revisionsPath)
   revalidatePath(customerBulkRevisionPath)
+  revalidatePath(customerCostingPath)
   revalidatePath(productBulkRevisionPath)
   revalidatePath(productCostingPath)
   if (revisionRoute === "Product Parameter Bulk Revision") {
@@ -162,11 +164,12 @@ export async function stageBulkPriceRevisionAction(formData: FormData) {
 }
 
 export async function deleteBulkPriceRevisionStageAction(formData: FormData) {
+  const bulkPriceRevisionId = requiredText(formData, "bulk_price_revision_id")
   await withRevisions(
     (repository, actorUserId) =>
       repository.deleteBulkPriceRevisionStage({
         actorUserId,
-        bulkPriceRevisionId: requiredText(formData, "bulk_price_revision_id"),
+        bulkPriceRevisionId,
         stageGroupId: requiredText(formData, "stage_group_id"),
       }),
     commercialTaskCapabilities.deleteBulkPriceRevisionStage
@@ -175,6 +178,9 @@ export async function deleteBulkPriceRevisionStageAction(formData: FormData) {
   revalidatePath(customerBulkRevisionPath)
   revalidatePath(productBulkRevisionPath)
   revalidatePath(productCostingPath)
+  revalidatePath(`${productCostingPath}/revisions/${bulkPriceRevisionId}`)
+  revalidatePath(customerCostingPath)
+  revalidatePath(`${customerCostingPath}/revisions/${bulkPriceRevisionId}`)
 }
 
 export async function completeBulkPriceRevisionAction(formData: FormData) {
@@ -192,15 +198,46 @@ export async function completeBulkPriceRevisionAction(formData: FormData) {
   revalidatePath(productBulkRevisionPath)
   revalidatePath(productCostingPath)
   revalidatePath(`${productCostingPath}/revisions/${bulkPriceRevisionId}`)
+  revalidatePath(customerCostingPath)
+  revalidatePath(`${customerCostingPath}/revisions/${bulkPriceRevisionId}`)
   revalidatePath("/commercial/quotes")
   if (
     optionalText(formData, "handoff_to_customer") === "true" &&
     completed.status === "Pending Customer Costing"
   ) {
     redirect(
-      `${customerBulkRevisionPath}?revision=${encodeURIComponent(bulkPriceRevisionId)}#customer-bulk-workbench`
+      `${customerCostingPath}/revisions/${encodeURIComponent(bulkPriceRevisionId)}`
     )
   }
+  if (
+    optionalText(formData, "return_to_customer_costing") === "true" &&
+    completed.status === "Completed"
+  ) {
+    redirect(customerCostingPath)
+  }
+}
+
+export async function applyProductBulkRevisionPriceDecisionAction(
+  formData: FormData
+) {
+  const bulkPriceRevisionId = requiredText(formData, "bulk_price_revision_id")
+  const decision = requiredText(formData, "decision") as
+    | "Keep Price Same"
+    | "Revise Price"
+  await withRevisions(
+    (repository, actorUserId) =>
+      repository.applyProductBulkRevisionPriceDecision({
+        actorUserId,
+        bulkPriceRevisionId,
+        decision,
+        notes: optionalText(formData, "notes"),
+        sourceQuoteItemId: requiredText(formData, "source_quote_item_id"),
+      }),
+    commercialTaskCapabilities.stageBulkPriceRevision,
+    customerCostingPath
+  )
+  revalidatePath(customerCostingPath)
+  revalidatePath(`${customerCostingPath}/revisions/${bulkPriceRevisionId}`)
 }
 
 export async function createEngineeringChangeNoteAction(formData: FormData) {
