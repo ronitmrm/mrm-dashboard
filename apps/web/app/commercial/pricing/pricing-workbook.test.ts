@@ -120,6 +120,10 @@ describe("Pricing spreadsheet workbook", () => {
     expect(view["MRMPL Product Description"]).toBe("Purchased valve")
     expect(pricingWorkbookFilename).toBe("pricing-view.xlsx")
     expect(pricingHeaders.at(-1)).toBe("Remarks")
+    expect(pricingHeaders).toContain("Q/P")
+    expect(pricingHeaders).not.toContain("Customer Line Status")
+    expect(pricingHeaders).not.toContain("Pricing Completeness")
+    expect(pricingHeaders).not.toContain("Missing Pricing Values")
 
     const workbook = buildPricingWorkbook([row])
     expect(workbook.SheetNames).toEqual(["Pricing View"])
@@ -189,7 +193,7 @@ describe("Pricing spreadsheet workbook", () => {
       expect(forgingFor(productionType)).toBe("-")
     }
   })
-  test("identifies incomplete prices and defaults their USD terms", () => {
+  test("defaults incomplete prices to their available USD terms", () => {
     const incompleteRow: PricingRegisterRow = {
       ...row,
       currency: "",
@@ -201,8 +205,6 @@ describe("Pricing spreadsheet workbook", () => {
     expect(toPricingViewRow(incompleteRow)).toMatchObject({
       Currency: "USD",
       "Conversion Cost": "-",
-      "Missing Pricing Values": "Customer Part Code; Product Type; Rod Size",
-      "Pricing Completeness": "Missing Values",
     })
   })
 
@@ -225,7 +227,6 @@ describe("Pricing spreadsheet workbook", () => {
     }
 
     expect(toPricingViewRow(productBaseRow)).toMatchObject({
-      "Customer Line Status": "-",
       "Customer Part Code": "-",
       "Customer UID": "-",
       ENQ: "-",
@@ -262,12 +263,9 @@ describe("Pricing spreadsheet workbook", () => {
     }
 
     expect(toPricingViewRow(childRow)).toMatchObject({
-      "Customer Line Status": "Q",
       "Enquiry Description": "Package enquiry",
       Line: 7,
-      "Missing Pricing Values": "-",
       Packaging: "-",
-      "Pricing Completeness": "Complete",
       "Q/P": "Q",
       "Quote Status": "-",
       Shipping: "-",
@@ -496,8 +494,6 @@ describe("Pricing spreadsheet workbook", () => {
       Grade: "-",
       "M/c Cost (INR/kg)": "-",
       "M/c Cost (INR/pc)": "-",
-      "Missing Pricing Values": "-",
-      "Pricing Completeness": "Complete",
       "Rate / PCS In Currency": "0.7240",
       "Rod Size": "-",
       "Rod Type": "-",
