@@ -2,6 +2,7 @@
 
 import type {
   RecruitmentCombinedRoleRow,
+  RecruitmentEmploymentLetterRow,
   RecruitmentJobRow,
   RecruitmentPostRow,
   RecruitmentTemplateRow,
@@ -42,6 +43,7 @@ import { ExcelColumnFilter } from "@workspace/ui/components/excel-column-filter"
 import { useExcelTable } from "@workspace/ui/hooks/use-excel-table"
 import {
   BriefcaseBusiness,
+  Download,
   FilterX,
   Pencil,
   Trash2,
@@ -57,6 +59,7 @@ import {
 } from "@/app/hr/actions"
 import { APPROVED_POST_FILTER_COLUMNS } from "@/components/hr/approved-post-filter-columns"
 import { SingleEmployeeAssignmentFields } from "@/components/hr/single-employee-assignment-fields"
+import { EmployeeLetterDialog } from "@/components/hr/employee-letter-dialog"
 
 type TemplateOption = Pick<
   RecruitmentTemplateRow,
@@ -79,6 +82,7 @@ export function ApprovedPostsTable({
   canWrite = false,
   combinedRoles = [],
   employeeManagement = false,
+  employmentLetters = [],
   jobs = [],
   masterView,
   posts,
@@ -87,6 +91,7 @@ export function ApprovedPostsTable({
   canWrite?: boolean
   combinedRoles?: RecruitmentCombinedRoleRow[]
   employeeManagement?: boolean
+  employmentLetters?: RecruitmentEmploymentLetterRow[]
   jobs?: RecruitmentJobRow[]
   masterView?: "dataEntry" | "masterTables"
   posts: RecruitmentPostRow[]
@@ -125,6 +130,20 @@ export function ApprovedPostsTable({
   })
   const hasFilters = table.hasFilters
   const filteredPosts = table.visibleRows
+  const selectedEmployeeLetters = selectedEmployeePost
+    ? employmentLetters.filter(
+        (letter) =>
+          letter.postId === selectedEmployeePost.id ||
+          (letter.employeeCode &&
+            letter.employeeCode === selectedEmployeePost.employeeCode)
+      )
+    : []
+  const hasAppointmentLetter = selectedEmployeeLetters.some(
+    (letter) => letter.letterType === "appointment" && letter.fileAvailable
+  )
+  const hasExperienceLetter = selectedEmployeeLetters.some(
+    (letter) => letter.letterType === "experience" && letter.fileAvailable
+  )
 
   return (
     <>
@@ -365,6 +384,82 @@ export function ApprovedPostsTable({
           </CardContent>
         </Card>
 
+        {employeeManagement ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Employee Letter Register</CardTitle>
+              <CardDescription>
+                Offer, Appointment, And Experience Letters Stay With The
+                Employee Even After The Approved Post Is Filled Again.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto rounded-lg border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Employee ID</TableHead>
+                      <TableHead>Employee / Candidate</TableHead>
+                      <TableHead>Letter</TableHead>
+                      <TableHead>Reference</TableHead>
+                      <TableHead>Issued</TableHead>
+                      <TableHead>Post</TableHead>
+                      <TableHead className="text-right">File</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {employmentLetters.length ? (
+                      employmentLetters.map((letter) => (
+                        <TableRow key={letter.id}>
+                          <TableCell className="font-mono">
+                            {letter.employeeCode ?? "Pending Joining"}
+                          </TableCell>
+                          <TableCell>{letter.employeeName}</TableCell>
+                          <TableCell className="capitalize">
+                            {letter.letterType}
+                          </TableCell>
+                          <TableCell className="font-mono">
+                            {letter.referenceNumber}
+                          </TableCell>
+                          <TableCell>{letter.issuedOn}</TableCell>
+                          <TableCell className="font-mono">
+                            {letter.postCode ?? "—"}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {letter.fileAvailable ? (
+                              <Button asChild size="sm" variant="outline">
+                                <a
+                                  href={`/hr/employment-letters/${letter.id}/download`}
+                                >
+                                  <Download data-icon="inline-start" />
+                                  Download
+                                </a>
+                              </Button>
+                            ) : (
+                              <Badge variant="destructive">
+                                Generation Incomplete
+                              </Badge>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell
+                          className="py-10 text-center text-muted-foreground"
+                          colSpan={7}
+                        >
+                          No Employment Letters Have Been Generated.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
+
         {editingPost ? (
           <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
             <form
@@ -450,9 +545,16 @@ export function ApprovedPostsTable({
       >
         {selectedEmployeePost ? (
           <SheetContent className="!w-full overflow-y-auto sm:!w-[30rem] sm:!max-w-[30rem]">
+            <SheetHeader>
+              <SheetTitle>Edit Employee</SheetTitle>
+              <SheetDescription>
+                {selectedEmployeePost.postCode} ·{" "}
+                {selectedEmployeePost.designation}
+              </SheetDescription>
+            </SheetHeader>
             <form
               action={assignEmployeeAction}
-              className="flex min-h-full flex-col"
+              className="grid gap-5 px-6 pb-2"
             >
               <input name="panel" type="hidden" value="employeeMasterPanel" />
               {employeeManagement && masterView ? (
@@ -465,14 +567,7 @@ export function ApprovedPostsTable({
                   />
                 </>
               ) : null}
-              <SheetHeader>
-                <SheetTitle>Edit Employee</SheetTitle>
-                <SheetDescription>
-                  {selectedEmployeePost.postCode} ·{" "}
-                  {selectedEmployeePost.designation}
-                </SheetDescription>
-              </SheetHeader>
-              <div className="flex flex-1 flex-col gap-5 px-6 pb-2">
+              <div className="grid gap-5">
                 <SingleEmployeeAssignmentFields
                   allowIdentityCorrection
                   combinedRoles={combinedRoles}
@@ -482,10 +577,49 @@ export function ApprovedPostsTable({
                   showTargetSelector={false}
                 />
               </div>
-              <SheetFooter>
+              <SheetFooter className="px-0">
                 <Button type="submit">Save Employee</Button>
               </SheetFooter>
             </form>
+            <div className="grid gap-3 border-t px-6 py-5">
+              <div>
+                <p className="font-medium">Employment Letters</p>
+                <p className="text-sm text-muted-foreground">
+                  Generated PDFs Use The Employee Master Identity And Stay In
+                  The Letter Register.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {selectedEmployeeLetters
+                  .filter((letter) => letter.fileAvailable)
+                  .map((letter) => (
+                    <Button asChild key={letter.id} size="sm" variant="outline">
+                      <a href={`/hr/employment-letters/${letter.id}/download`}>
+                        <Download data-icon="inline-start" />
+                        {letter.letterType === "offer"
+                          ? "Offer"
+                          : letter.letterType === "appointment"
+                            ? "Appointment"
+                            : "Experience"}
+                      </a>
+                    </Button>
+                  ))}
+                {selectedEmployeePost.status === "Occupied" &&
+                !hasAppointmentLetter ? (
+                  <EmployeeLetterDialog
+                    post={selectedEmployeePost}
+                    type="appointment"
+                  />
+                ) : null}
+                {selectedEmployeePost.status === "Resigned" &&
+                !hasExperienceLetter ? (
+                  <EmployeeLetterDialog
+                    post={selectedEmployeePost}
+                    type="experience"
+                  />
+                ) : null}
+              </div>
+            </div>
           </SheetContent>
         ) : null}
       </Sheet>

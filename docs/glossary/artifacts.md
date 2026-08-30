@@ -22,7 +22,8 @@ write targets.
 **Issued Artifact**: The exact sent Quote PDF, sent PI PDF/XLSX set, or issued
 Store Purchase Order PDF. Issuance is fail-closed and idempotent; a draft
 preview is transient, and later business-data changes never regenerate or
-replace an issued Artifact.
+replace an issued Artifact. Sensitive Employment Letters remain in authenticated
+Recruitment storage and are not placed in the public-read Artifact provider.
 
 **Transient File**: A report, template, export, draft preview, or unretained
 import generated or parsed on demand without an Artifact record. This includes

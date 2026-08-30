@@ -114,6 +114,23 @@ export {
   type RecruitmentTemplateRow,
 } from "./recruitment"
 export {
+  employmentLetterTypes,
+  prepareEmploymentLetter,
+  type AppointmentLetterDetails,
+  type EmploymentLetterIdentity,
+  type EmploymentLetterRequest,
+  type EmploymentLetterType,
+  type ExperienceLetterDetails,
+  type OfferLetterDetails,
+  type PreparedEmploymentLetter,
+} from "./recruitment-employment-letters"
+export {
+  createRecruitmentEmploymentLetterRepository,
+  type IssueEmploymentLetterInput,
+  type PreparedEmploymentLetterRecord,
+  type RecruitmentEmploymentLetterRow,
+} from "./recruitment-employment-letter-repository"
+export {
   deriveRecruitmentEmployeeAssignment,
   deriveRecruitmentPostStatus,
   isActiveRecruitmentApplicationStatus,

@@ -1,4 +1,5 @@
 import {
+  createRecruitmentEmploymentLetterRepository,
   createRecruitmentRepository,
   type RecruitmentCandidateEventRow,
   type RecruitmentCandidateRow,
@@ -7,6 +8,7 @@ import {
   type RecruitmentInterviewRecordRow,
   type RecruitmentJobRow,
   type RecruitmentMasterSnapshot,
+  type RecruitmentEmploymentLetterRow,
   type RecruitmentPostRow,
   type RecruitmentTemplateRow,
 } from "@workspace/db"
@@ -68,9 +70,13 @@ export default async function HrRecruitmentPage({
   const repository = createRecruitmentRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
+  const letterRepository = createRecruitmentEmploymentLetterRepository({
+    connectionString: readAuthEnvironment().connectionString,
+  })
   let candidates: RecruitmentCandidateRow[] = []
   let candidateEvents: RecruitmentCandidateEventRow[] = []
   let combinedRoles: RecruitmentCombinedRoleRow[] = []
+  let employmentLetters: RecruitmentEmploymentLetterRow[] = []
   let interviews: RecruitmentInterviewRow[] = []
   let interviewRecords: RecruitmentInterviewRecordRow[] = []
   let jobs: RecruitmentJobRow[] = []
@@ -132,6 +138,7 @@ export default async function HrRecruitmentPage({
       loadedInterviews,
       loadedInterviewRecords,
       loadedCandidateEvents,
+      loadedEmploymentLetters,
     ] = await Promise.all([
       repository.count(organizationId),
       needsMasters
@@ -159,6 +166,9 @@ export default async function HrRecruitmentPage({
       panelId === "conversationLogsPanel"
         ? repository.listCandidateEvents(organizationId)
         : Promise.resolve(candidateEvents),
+      panelId === "employeeMasterPanel"
+        ? letterRepository.list(organizationId)
+        : Promise.resolve(employmentLetters),
     ])
     stats = loadedStats
     masters = loadedMasters
@@ -170,8 +180,9 @@ export default async function HrRecruitmentPage({
     interviews = loadedInterviews
     interviewRecords = loadedInterviewRecords
     candidateEvents = loadedCandidateEvents
+    employmentLetters = loadedEmploymentLetters
   } finally {
-    await repository.close()
+    await Promise.all([repository.close(), letterRepository.close()])
   }
 
   return (
@@ -224,6 +235,7 @@ export default async function HrRecruitmentPage({
         candidates={candidates}
         candidateEvents={candidateEvents}
         combinedRoles={combinedRoles}
+        employmentLetters={employmentLetters}
         interviews={interviews}
         interviewRecords={interviewRecords}
         jobs={jobs}
