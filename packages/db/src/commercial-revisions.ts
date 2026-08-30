@@ -3381,13 +3381,46 @@ export function createCommercialRevisionsRepository(
                 `Bulk stage ${stageGroupId} is not an unapplied product parameter.`
               )
             }
-            const selectedProductIds = [
-              ...new Set(
-                group
-                  .map((change) => asText(change.source_payload.productItemId))
-                  .filter(Boolean)
-              ),
-            ]
+            const selectedProductIdSet = new Set(
+              group
+                .map((change) => asText(change.source_payload.productItemId))
+                .filter(Boolean)
+            )
+            const legacyChanges = group.filter(
+              (change) => !asText(change.source_payload.productItemId)
+            )
+            if (legacyChanges.length) {
+              await requireActivePrices(
+                legacyChanges.map((change) => change.prior_quote_item_id)
+              )
+              const normalized = await client.query<{ item_id: string }>(
+                `
+                  UPDATE sales.bulk_price_revision_changes change
+                  SET source_payload = coalesce(change.source_payload, '{}'::jsonb)
+                    || jsonb_build_object(
+                      'productItemId', quote.item_id::text
+                    )
+                  FROM sales.quote_items quote
+                  WHERE change.id = ANY($1::uuid[])
+                    AND quote.id = change.prior_quote_item_id
+                    AND quote.organization_id = $2
+                  RETURNING quote.item_id
+                `,
+                [
+                  legacyChanges.map((change) => change.id),
+                  lockedRevision.organization_id,
+                ]
+              )
+              if (normalized.rows.length !== legacyChanges.length) {
+                throw new Error(
+                  "Staged product selection is missing its product."
+                )
+              }
+              for (const product of normalized.rows) {
+                selectedProductIdSet.add(product.item_id)
+              }
+            }
+            const selectedProductIds = [...selectedProductIdSet]
             if (!selectedProductIds.length) {
               throw new Error(
                 "Staged product selection is missing its product."

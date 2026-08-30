@@ -381,14 +381,25 @@ describe("commercial revisions and corrections", () => {
       }),
     ])
 
-    await expect(
-      repository.stageBulkPriceRevisionChange({
+    const stagedProductChange =
+      await repository.stageBulkPriceRevisionChange({
         bulkPriceRevisionId: revision.id,
         fieldName: "overhead_cost",
         newValue: 4,
         selectedProductIds: [sharedItemId],
       })
-    ).resolves.toMatchObject({ selectedCount: 1, skippedCount: 0 })
+    expect(stagedProductChange).toMatchObject({
+      selectedCount: 1,
+      skippedCount: 0,
+    })
+    await pool.query(
+      `
+        UPDATE sales.bulk_price_revision_changes
+        SET source_payload = source_payload - 'productItemId'
+        WHERE stage_group_id = $1
+      `,
+      [stagedProductChange.stageGroupId]
+    )
     await expect(
       repository.completeBulkPriceRevision({
         bulkPriceRevisionId: revision.id,
