@@ -5,6 +5,7 @@ import {
   type RecruitmentCandidateEventRow,
   type RecruitmentCandidateRow,
   type RecruitmentCombinedRoleRow,
+  type RecruitmentEmploymentLetterRow,
   type RecruitmentInterviewRow,
   type RecruitmentInterviewRecordRow,
   type RecruitmentJobRow,
@@ -92,6 +93,7 @@ type RecruitmentPanelProps = {
   candidateEvents: RecruitmentCandidateEventRow[]
   candidates: RecruitmentCandidateRow[]
   combinedRoles: RecruitmentCombinedRoleRow[]
+  employmentLetters: RecruitmentEmploymentLetterRow[]
   interviews: RecruitmentInterviewRow[]
   interviewRecords: RecruitmentInterviewRecordRow[]
   jobs: RecruitmentJobRow[]
@@ -561,6 +563,7 @@ function EmployeePanel({
   canManageEmployees,
   canWrite,
   combinedRoles,
+  employmentLetters,
   jobs,
   masterView,
   posts,
@@ -570,6 +573,7 @@ function EmployeePanel({
   | "canManageEmployees"
   | "canWrite"
   | "combinedRoles"
+  | "employmentLetters"
   | "jobs"
   | "masterView"
   | "posts"
@@ -627,6 +631,7 @@ function EmployeePanel({
           canWrite={canWrite}
           combinedRoles={combinedRoles}
           employeeManagement={canManageEmployees}
+          employmentLetters={employmentLetters}
           jobs={jobs}
           masterView={masterView}
           posts={posts}
@@ -962,6 +967,7 @@ export function RecruitmentPanel(props: RecruitmentPanelProps) {
           canManageEmployees={props.canManageEmployees}
           canWrite={props.canWrite}
           combinedRoles={props.combinedRoles}
+          employmentLetters={props.employmentLetters}
           jobs={props.jobs}
           masterView={props.masterView}
           posts={props.posts}

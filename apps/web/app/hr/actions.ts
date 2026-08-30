@@ -6,8 +6,10 @@ import {
   authorizeRecruitmentCandidateArtifactTarget,
   createArtifactService,
   createMasterDataLifecycleRepository,
+  createRecruitmentEmploymentLetterRepository,
   createRecruitmentRepository,
   type MasterDataKind,
+  type PreparedEmploymentLetterRecord,
   recruitmentInterviewRound,
 } from "@workspace/db"
 import { revalidatePath } from "next/cache"
@@ -19,10 +21,27 @@ import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { hrTaskCapabilities } from "@/lib/auth/task-capabilities"
 import { hrReturnPath } from "@/lib/hr-return-path"
+import { buildEmploymentLetterPdf } from "@/lib/hr/employment-letter-pdf"
 import { istDateTimeInputToIso } from "@/lib/date-time"
 import { createUploadThingArtifactProvider } from "@/lib/uploadthing-artifact-provider"
 
 const hrPath = "/hr"
+
+async function storeEmploymentLetter(
+  repository: ReturnType<typeof createRecruitmentEmploymentLetterRepository>,
+  record: PreparedEmploymentLetterRecord,
+  input: { actorUserId: string; organizationId: string }
+) {
+  const bytes = Buffer.from(await buildEmploymentLetterPdf(record.letter))
+  const sha256 = createHash("sha256").update(bytes).digest("hex")
+  await repository.storePdf({
+    ...input,
+    bytes,
+    fileName: `${record.letter.reference}-${record.letter.type}-letter.pdf`,
+    letterId: record.id,
+    sha256,
+  })
+}
 
 function value(formData: FormData, key: string) {
   return formData.get(key)?.toString().trim() ?? ""
@@ -478,27 +497,172 @@ export async function assignCandidateAction(formData: FormData) {
 }
 
 export async function completeCandidateAppointmentAction(formData: FormData) {
-  await mutate(
-    formData,
+  const path = hrReturnPath(formData)
+  const applicationId = value(formData, "application_id")
+  const session = await requireCapability(
     hrTaskCapabilities.completeCandidateAppointment,
-    (repository, context) =>
-      repository.completeCandidateAppointment({
-        ...context,
-        applicationId: value(formData, "application_id"),
-        joiningDate: value(formData, "joining_date"),
-        salaryAfterProbationMaximum: value(
-          formData,
-          "salary_after_probation_maximum"
-        ),
-        salaryAfterProbationMinimum: value(
-          formData,
-          "salary_after_probation_minimum"
-        ),
-        salaryBeforeProbation: value(formData, "salary_before_probation"),
-        willingToJoin: value(formData, "willing_to_join"),
-      }),
-    "Appointment details completed."
+    path
   )
+  const connectionString = readAuthEnvironment().connectionString
+  const recruitment = createRecruitmentRepository({ connectionString })
+  const letters = createRecruitmentEmploymentLetterRepository({
+    connectionString,
+  })
+  let outcome: { error?: string; success?: string }
+  try {
+    const organizationId = await recruitment.organizationIdForCode("MRMPL")
+    const context = { actorUserId: session.user.id, organizationId }
+    const willingToJoin = value(formData, "willing_to_join")
+    await recruitment.completeCandidateAppointment({
+      ...context,
+      applicationId,
+      joiningDate: value(formData, "joining_date"),
+      salaryAfterProbationMaximum: value(
+        formData,
+        "salary_after_probation_maximum"
+      ),
+      salaryAfterProbationMinimum: value(
+        formData,
+        "salary_after_probation_minimum"
+      ),
+      salaryBeforeProbation: value(formData, "salary_before_probation"),
+      willingToJoin,
+    })
+    if (willingToJoin === "yes") {
+      const record = await letters.issue({
+        ...context,
+        applicationId,
+        details: {
+          payPeriod:
+            value(formData, "offer_pay_period") === "day" ? "day" : "month",
+          postalAddress: value(formData, "offer_postal_address"),
+          probationLength: Number(value(formData, "offer_probation_length")),
+          probationUnit:
+            value(formData, "offer_probation_unit") === "days"
+              ? "days"
+              : "months",
+          signatoryDesignation: value(formData, "offer_signatory_designation"),
+          signatoryName: value(formData, "offer_signatory_name"),
+        },
+        issuedOn: value(formData, "offer_issued_on"),
+        type: "offer",
+      })
+      await storeEmploymentLetter(letters, record, context)
+      outcome = { success: "Appointment confirmed and Offer Letter generated." }
+    } else {
+      outcome = {
+        success: "Candidate decision recorded without an Offer Letter.",
+      }
+    }
+  } catch (error) {
+    outcome = {
+      error:
+        error instanceof Error
+          ? error.message
+          : "The appointment and Offer Letter were not completed.",
+    }
+  } finally {
+    await Promise.all([recruitment.close(), letters.close()])
+  }
+  revalidatePath(hrPath)
+  if (path !== hrPath) revalidatePath(path)
+  const feedback = new URLSearchParams(outcome)
+  if (outcome.error) feedback.set("appointment", applicationId)
+  redirect(`${path}${path.includes("?") ? "&" : "?"}${feedback}`)
+}
+
+export async function generateEmploymentLetterAction(formData: FormData) {
+  const path = hrReturnPath(formData)
+  const session = await requireCapability(
+    hrTaskCapabilities.assignEmployee,
+    path
+  )
+  const connectionString = readAuthEnvironment().connectionString
+  const repository = createRecruitmentEmploymentLetterRepository({
+    connectionString,
+  })
+  const recruitment = createRecruitmentRepository({
+    connectionString,
+  })
+  let outcome: { error?: string; success?: string }
+  try {
+    const organizationId = await recruitment.organizationIdForCode("MRMPL")
+    const context = { actorUserId: session.user.id, organizationId }
+    const type =
+      value(formData, "letter_type") === "experience"
+        ? "experience"
+        : "appointment"
+    const issuedOn = value(formData, "letter_issued_on")
+    const postId = value(formData, "post_id")
+    const record =
+      type === "appointment"
+        ? await repository.issue({
+            ...context,
+            details: {
+              confirmationEffectiveDate: value(
+                formData,
+                "confirmation_effective_date"
+              ),
+              grossMonthlySalary: Number(
+                value(formData, "gross_monthly_salary")
+              ),
+              probationCompletedOn: value(formData, "probation_completed_on"),
+              reportsTo: value(formData, "reports_to"),
+              signatoryDesignation: value(
+                formData,
+                "letter_signatory_designation"
+              ),
+              signatoryName: value(formData, "letter_signatory_name"),
+              workLocation: value(formData, "work_location"),
+            },
+            issuedOn,
+            postId,
+            type,
+          })
+        : await repository.issue({
+            ...context,
+            details: {
+              keyResponsibilities: value(formData, "key_responsibilities"),
+              pronouns:
+                value(formData, "pronouns") === "he-him"
+                  ? "he-him"
+                  : value(formData, "pronouns") === "they-them"
+                    ? "they-them"
+                    : "she-her",
+              signatoryDesignation: value(
+                formData,
+                "letter_signatory_designation"
+              ),
+              signatoryName: value(formData, "letter_signatory_name"),
+              title:
+                value(formData, "title") === "Mr."
+                  ? "Mr."
+                  : value(formData, "title") === "Mx."
+                    ? "Mx."
+                    : "Ms.",
+              workLocation: value(formData, "work_location"),
+            },
+            issuedOn,
+            postId,
+            type,
+          })
+    await storeEmploymentLetter(repository, record, context)
+    outcome = {
+      success: `${type === "appointment" ? "Appointment" : "Experience"} Letter generated.`,
+    }
+  } catch (error) {
+    outcome = {
+      error:
+        error instanceof Error
+          ? error.message
+          : "The Employment Letter was not generated.",
+    }
+  } finally {
+    await Promise.all([recruitment.close(), repository.close()])
+  }
+  revalidatePath(hrPath)
+  const feedback = new URLSearchParams(outcome)
+  redirect(`${path}${path.includes("?") ? "&" : "?"}${feedback}`)
 }
 
 export async function withdrawCandidateApplicationAction(formData: FormData) {

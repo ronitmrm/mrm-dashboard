@@ -801,6 +801,13 @@ async function completeCandidateAppointmentInTransaction(
   const application = applicationResult.rows[0]
   if (!application) throw new Error("Candidate application was not found.")
   if (
+    application.willing_to_join === true &&
+    input.terms.willingToJoin &&
+    application.status === "Approved"
+  ) {
+    return { id: application.id }
+  }
+  if (
     application.status !== "Approved" &&
     !isActiveRecruitmentApplicationStatus(application.status)
   ) {

@@ -39,10 +39,10 @@ export function CandidateAppointmentDialog({
       {trigger ? <DialogTrigger asChild>{trigger}</DialogTrigger> : null}
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Complete Appointment Details</DialogTitle>
+          <DialogTitle>Confirm Candidate And Generate Offer Letter</DialogTitle>
           <DialogDescription>
             {candidateName}&apos;s HR Round Is Approved. Confirm Willingness And
-            Joining Terms To Complete The Appointment.
+            Joining Terms And The Missing Offer Letter Details.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -60,7 +60,7 @@ export function CandidateAppointmentDialog({
             defaultJoiningDate={defaultJoiningDate ?? ""}
           />
           <DialogFooter>
-            <Button type="submit">Save Appointment Details</Button>
+            <Button type="submit">Confirm And Generate Offer Letter</Button>
           </DialogFooter>
         </form>
       </DialogContent>
