@@ -3364,6 +3364,53 @@ export function createCommercialRevisionsRepository(
           return uniqueIds
         }
 
+        async function productIdsForStage(group: typeof changes.rows) {
+          const selectedProductIdSet = new Set(
+            group
+              .map((change) => asText(change.source_payload.productItemId))
+              .filter(Boolean)
+          )
+          const legacyChanges = group.filter(
+            (change) => !asText(change.source_payload.productItemId)
+          )
+          if (legacyChanges.length) {
+            await requireActivePrices(
+              legacyChanges.map((change) => change.prior_quote_item_id)
+            )
+            const normalized = await client.query<{ item_id: string }>(
+              `
+                UPDATE sales.bulk_price_revision_changes change
+                SET source_payload = coalesce(change.source_payload, '{}'::jsonb)
+                  || jsonb_build_object(
+                    'productItemId', quote.item_id::text
+                  )
+                FROM sales.quote_items quote
+                WHERE change.id = ANY($1::uuid[])
+                  AND quote.id = change.prior_quote_item_id
+                  AND quote.organization_id = $2
+                RETURNING quote.item_id
+              `,
+              [
+                legacyChanges.map((change) => change.id),
+                lockedRevision.organization_id,
+              ]
+            )
+            if (normalized.rows.length !== legacyChanges.length) {
+              throw new Error(
+                "Staged product selection is missing its product."
+              )
+            }
+            for (const product of normalized.rows) {
+              selectedProductIdSet.add(product.item_id)
+            }
+          }
+          const selectedProductIds = [...selectedProductIdSet]
+          if (!selectedProductIds.length) {
+            throw new Error("Staged product selection is missing its product.")
+          }
+          return selectedProductIds
+        }
+
         const isProductRoute =
           lockedRevision.revision_route === "Product Parameter Bulk Revision"
         const isProductStage =
@@ -3381,73 +3428,10 @@ export function createCommercialRevisionsRepository(
                 `Bulk stage ${stageGroupId} is not an unapplied product parameter.`
               )
             }
-            const selectedProductIdSet = new Set(
-              group
-                .map((change) => asText(change.source_payload.productItemId))
-                .filter(Boolean)
-            )
-            const legacyChanges = group.filter(
-              (change) => !asText(change.source_payload.productItemId)
-            )
-            if (legacyChanges.length) {
-              await requireActivePrices(
-                legacyChanges.map((change) => change.prior_quote_item_id)
-              )
-              const normalized = await client.query<{ item_id: string }>(
-                `
-                  UPDATE sales.bulk_price_revision_changes change
-                  SET source_payload = coalesce(change.source_payload, '{}'::jsonb)
-                    || jsonb_build_object(
-                      'productItemId', quote.item_id::text
-                    )
-                  FROM sales.quote_items quote
-                  WHERE change.id = ANY($1::uuid[])
-                    AND quote.id = change.prior_quote_item_id
-                    AND quote.organization_id = $2
-                  RETURNING quote.item_id
-                `,
-                [
-                  legacyChanges.map((change) => change.id),
-                  lockedRevision.organization_id,
-                ]
-              )
-              if (normalized.rows.length !== legacyChanges.length) {
-                throw new Error(
-                  "Staged product selection is missing its product."
-                )
-              }
-              for (const product of normalized.rows) {
-                selectedProductIdSet.add(product.item_id)
-              }
-            }
-            const selectedProductIds = [...selectedProductIdSet]
-            if (!selectedProductIds.length) {
-              throw new Error(
-                "Staged product selection is missing its product."
-              )
-            }
-            const productColumn = productColumnByField[fieldName]
-            if (!productColumn) {
+            const selectedProductIds = await productIdsForStage(group)
+            if (!productColumnByField[fieldName]) {
               throw new Error("Unsupported staged product parameter.")
             }
-            await client.query(
-              `
-                UPDATE catalog.items item
-                SET ${productColumn} = $1, updated_by_user_id = $2,
-                  updated_at = now(), row_version = row_version + 1
-                WHERE item.id = ANY($3::uuid[])
-              `,
-              [
-                asNumber(group[0]!.new_value),
-                input.actorUserId ?? null,
-                selectedProductIds,
-              ]
-            )
-            await recalculateProductBaseAndAncestors(
-              client,
-              selectedProductIds,
-              input.actorUserId
-            )
             const affectedQuoteIds = await requireActivePrices(
               await activeAffectedQuotePathIds(
                 client,
@@ -3481,7 +3465,7 @@ export function createCommercialRevisionsRepository(
           )
           await writeAuditEvent(client, {
             actorUserId: input.actorUserId,
-            eventType: "bulk_price_revision.product_parameters_applied",
+            eventType: "bulk_price_revision.product_parameters_prepared",
             metadata: { stagedGroupCount: stageGroups.size },
             organizationId: lockedRevision.organization_id,
             targetId: input.bulkPriceRevisionId,
@@ -3495,12 +3479,17 @@ export function createCommercialRevisionsRepository(
 
         const selectedIds = new Set<string>()
         const overrides = new Map<string, QuoteOverride>()
+        const productStagesToPublish: Array<{
+          fieldName: BulkRevisionFieldName
+          newValue: number
+          selectedProductIds: string[]
+        }> = []
         for (const [stageGroupId, group] of stageGroups) {
           const fieldName = group[0]!.field_name
           if (!isBulkRevisionField(fieldName)) {
             throw new Error("Unsupported staged bulk revision field.")
           }
-          const isAppliedProductStage =
+          const isPreparedProductStage =
             isProductRoute &&
             productFields.has(fieldName) &&
             group.every((change) => change.applied_at)
@@ -3509,7 +3498,7 @@ export function createCommercialRevisionsRepository(
             group.every((change) => !change.applied_at)
           if (
             (isProductRoute &&
-              !isAppliedProductStage &&
+              !isPreparedProductStage &&
               !isUnappliedCustomerStage) ||
             (!isProductRoute && !isUnappliedCustomerStage)
           ) {
@@ -3520,7 +3509,7 @@ export function createCommercialRevisionsRepository(
           const stagedQuoteIds = await requireActivePrices(
             group.map((change) => change.prior_quote_item_id)
           )
-          const quoteIds = isAppliedProductStage
+          const quoteIds = isPreparedProductStage
             ? await requireActivePrices(
                 group.flatMap((change) =>
                   Array.isArray(change.final_quote_item_ids_json)
@@ -3532,14 +3521,13 @@ export function createCommercialRevisionsRepository(
               )
             : stagedQuoteIds
           const productStageQuoteIds = new Set<string>()
-          if (isAppliedProductStage) {
-            const selectedProductIds = [
-              ...new Set(
-                group
-                  .map((change) => asText(change.source_payload.productItemId))
-                  .filter(Boolean)
-              ),
-            ]
+          if (isPreparedProductStage) {
+            const selectedProductIds = await productIdsForStage(group)
+            productStagesToPublish.push({
+              fieldName,
+              newValue: asNumber(group[0]!.new_value),
+              selectedProductIds,
+            })
             const matchingQuotes = await client.query<{ id: string }>(
               `
                 SELECT id
@@ -3554,13 +3542,37 @@ export function createCommercialRevisionsRepository(
           }
           for (const quoteId of quoteIds) {
             selectedIds.add(quoteId)
-            if (!isAppliedProductStage || productStageQuoteIds.has(quoteId)) {
+            if (!isPreparedProductStage || productStageQuoteIds.has(quoteId)) {
               const quoteOverrides =
                 overrides.get(quoteId) ?? new Map<string, number>()
               quoteOverrides.set(fieldName, asNumber(group[0]!.new_value))
               overrides.set(quoteId, quoteOverrides)
             }
           }
+        }
+        for (const productStage of productStagesToPublish) {
+          const productColumn = productColumnByField[productStage.fieldName]
+          if (!productColumn) {
+            throw new Error("Unsupported staged product parameter.")
+          }
+          await client.query(
+            `
+              UPDATE catalog.items item
+              SET ${productColumn} = $1, updated_by_user_id = $2,
+                updated_at = now(), row_version = row_version + 1
+              WHERE item.id = ANY($3::uuid[])
+            `,
+            [
+              productStage.newValue,
+              input.actorUserId ?? null,
+              productStage.selectedProductIds,
+            ]
+          )
+          await recalculateProductBaseAndAncestors(
+            client,
+            productStage.selectedProductIds,
+            input.actorUserId
+          )
         }
         const affected = await collectQuoteAncestors(client, [...selectedIds])
         const cache = new Map<string, RevisedQuote>()

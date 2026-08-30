@@ -180,11 +180,14 @@ not be copied from a customer workbook formula result.
 **Product Parameter Bulk Revision**: Product-owned costing work created from
 Product Bulk Revision and completed from Product Parameter Costing on a dedicated
 revision page. The candidate list contains each Product UID once, irrespective of
-how many Customers or active Quotes use it. Applying a Product process change
-re-derives that Product's Product Base Price, then re-derives every canonical
-Package or Assembly ancestor in child-before-parent order. Every active Quote path
-containing the changed Product is handed to Customer Parameter Costing; Product
-selection never depends on Customer identity.
+how many Customers or active Quotes use it. A staged Product process change shows
+an INR-per-piece Product Base preview from Product-owned inputs only; it does not
+change Product Master or the Pricing Register. Every active Quote path containing
+the changed Product is handed to Customer Parameter Costing, where the staged
+Product values remain unpublished. Final revision completion atomically publishes
+the Product inputs, re-derives that Product and every canonical Package or Assembly
+ancestor in child-before-parent order, and creates the immutable replacement Quote
+revisions. Product selection never depends on Customer identity.
 
 **Customer Parameter Bulk Revision**: Customer-specific commercial recalculation.
 Its Customer selector contains only Customers with an active Sent or Accepted

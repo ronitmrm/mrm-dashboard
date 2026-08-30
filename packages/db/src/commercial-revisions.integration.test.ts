@@ -392,6 +392,13 @@ describe("commercial revisions and corrections", () => {
       selectedCount: 1,
       skippedCount: 0,
     })
+    expect(await repository.listBulkPriceRevisionStages(revision.id)).toEqual([
+      expect.objectContaining({
+        previewRows: [
+          expect.objectContaining({ newPrice: 0.4, oldPrice: 0.1 }),
+        ],
+      }),
+    ])
     await pool.query(
       `
         UPDATE sales.bulk_price_revision_changes
@@ -414,7 +421,7 @@ describe("commercial revisions and corrections", () => {
         [sharedItemId]
       )
     ).resolves.toMatchObject({
-      rows: [{ overhead_cost: "4", product_cost_inr: "0.4" }],
+      rows: [{ overhead_cost: "1", product_cost_inr: "0.1" }],
     })
 
     const handedOff = await repository.listBulkPriceRevisions(organizationCode)
@@ -452,6 +459,14 @@ describe("commercial revisions and corrections", () => {
         bulkPriceRevisionId: revision.id,
       })
     ).resolves.toEqual({ revisedQuoteCount: 2, status: "Completed" })
+    await expect(
+      pool.query<{ overhead_cost: string; product_cost_inr: string }>(
+        "SELECT overhead_cost::text, product_cost_inr::text FROM catalog.items WHERE id = $1",
+        [sharedItemId]
+      )
+    ).resolves.toMatchObject({
+      rows: [{ overhead_cost: "4", product_cost_inr: "0.4" }],
+    })
 
     const activeAfter =
       await repository.listBulkPriceRevisionActivePricesBounded(revision.id)
@@ -546,7 +561,10 @@ describe("commercial revisions and corrections", () => {
       bulkPriceRevisionId: revision.id,
     })
 
-    const costs = await pool.query<{ id: string; product_cost_inr: string }>(
+    const draftCosts = await pool.query<{
+      id: string
+      product_cost_inr: string
+    }>(
       `
         SELECT id, product_cost_inr::text
         FROM catalog.items
@@ -556,7 +574,40 @@ describe("commercial revisions and corrections", () => {
       [[listItemId, firstPackageId, secondPackageId]]
     )
     expect(
-      new Map(costs.rows.map((row) => [row.id, Number(row.product_cost_inr)]))
+      new Map(
+        draftCosts.rows.map((row) => [row.id, Number(row.product_cost_inr)])
+      )
+    ).toEqual(
+      new Map([
+        [listItemId, 0],
+        [firstPackageId, 0],
+        [secondPackageId, 0],
+      ])
+    )
+
+    await repository.completeBulkPriceRevision({
+      bulkPriceRevisionId: revision.id,
+    })
+
+    const completedCosts = await pool.query<{
+      id: string
+      product_cost_inr: string
+    }>(
+      `
+        SELECT id, product_cost_inr::text
+        FROM catalog.items
+        WHERE id = ANY($1::uuid[])
+        ORDER BY id
+      `,
+      [[listItemId, firstPackageId, secondPackageId]]
+    )
+    expect(
+      new Map(
+        completedCosts.rows.map((row) => [
+          row.id,
+          Number(row.product_cost_inr),
+        ])
+      )
     ).toEqual(
       new Map([
         [listItemId, 1],

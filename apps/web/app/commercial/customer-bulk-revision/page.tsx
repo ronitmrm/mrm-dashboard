@@ -47,6 +47,11 @@ export const dynamic = "force-dynamic"
 const customerFields = Object.entries(bulkRevisionFields).filter(
   ([, field]) => field.route === "customer"
 )
+const productFieldNames = new Set(
+  Object.entries(bulkRevisionFields)
+    .filter(([, field]) => field.route === "product")
+    .map(([fieldName]) => fieldName)
+)
 
 const activePriceHeadings = [
   "Select",
@@ -528,10 +533,11 @@ export default async function CustomerBulkRevisionPage({
               <div className="grid gap-3 border-t pt-6">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <p className="font-medium">Staged Customer Changes</p>
+                    <p className="font-medium">Revision Changes</p>
                     <p className="text-xs text-muted-foreground">
-                      Each Group Retains Its Selected Price Set And Stored
-                      Preview.
+                      Product Stage Previews Are Product Base INR Per Piece.
+                      Customer Stage Previews Use Quote Currency. Product
+                      Master Publishes Only When The Revision Is Completed.
                     </p>
                   </div>
                   {!isCompleted ? (
@@ -587,7 +593,11 @@ export default async function CustomerBulkRevisionPage({
                           </Button>
                         </form>
                       ) : stage.isApplied ? (
-                        <Badge variant="outline">Applied Stage</Badge>
+                        <Badge variant="outline">
+                          {productFieldNames.has(stage.fieldName)
+                            ? "Product Stage Ready"
+                            : "Applied Stage"}
+                        </Badge>
                       ) : null}
                     </div>
                     <div className="flex flex-wrap gap-2 text-xs">
@@ -596,8 +606,17 @@ export default async function CustomerBulkRevisionPage({
                           className="rounded-full border bg-background px-2 py-1 tabular-nums"
                           key={preview.quoteItemId}
                         >
-                          $ {money(preview.oldPrice)} → ${" "}
-                          {money(preview.newPrice)}
+                          {productFieldNames.has(stage.fieldName) ? (
+                            <>
+                              Product Base ₹ {money(preview.oldPrice)} → ₹{" "}
+                              {money(preview.newPrice)}
+                            </>
+                          ) : (
+                            <>
+                              $ {money(preview.oldPrice)} → ${" "}
+                              {money(preview.newPrice)}
+                            </>
+                          )}
                         </span>
                       ))}
                     </div>
