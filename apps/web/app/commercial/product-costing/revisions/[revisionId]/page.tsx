@@ -151,9 +151,9 @@ export default async function ProductRevisionCostingPage({
         <CardHeader>
           <CardTitle>Products In Scope</CardTitle>
           <CardDescription>
-            Each product UID appears once. A change updates Product Master,
-            recalculates every Package/Assembly using it, and carries all active
-            affected prices to customer costing.
+            Each product UID appears once. This table shows the current
+            published Product Master. Staged Product Base values remain
+            separate until the complete revision is published.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-6">
@@ -191,7 +191,7 @@ export default async function ProductRevisionCostingPage({
                     <TableHead>Type</TableHead>
                     <TableHead>Production</TableHead>
                     <TableHead>Affected Prices</TableHead>
-                    <TableHead>Product Base (₹/pc)</TableHead>
+                    <TableHead>Current Product Base (₹/pc)</TableHead>
                     <TableHead>Pcs/Kg</TableHead>
                     <TableHead>Weight (g)</TableHead>
                     <TableHead>Alloy</TableHead>
@@ -325,7 +325,7 @@ export default async function ProductRevisionCostingPage({
                 />
                 <input name="handoff_to_customer" type="hidden" value="true" />
                 <Button disabled={!stages.length} type="submit">
-                  Save Product Changes &amp; Send To Customer Costing
+                  Send Staged Changes To Customer Costing
                 </Button>
               </form>
             </div>
@@ -371,7 +371,8 @@ export default async function ProductRevisionCostingPage({
                       className="rounded-full border px-2 py-1 tabular-nums"
                       key={preview.quoteItemId}
                     >
-                      ₹ {money(preview.oldPrice)} → ₹ {money(preview.newPrice)}
+                      Product Base ₹ {money(preview.oldPrice)} → ₹{" "}
+                      {money(preview.newPrice)}
                     </span>
                   ))}
                 </div>
