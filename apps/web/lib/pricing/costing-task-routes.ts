@@ -26,6 +26,9 @@ export function productCostingTaskHref(task: ProductCostingTaskRoute) {
 }
 
 export function customerCostingTaskHref(task: CustomerCostingTaskRoute) {
+  if (task.taskType === "Product Parameter Bulk Revision") {
+    return `/commercial/customer-costing/revisions/${encodeURIComponent(task.taskId)}`
+  }
   if (task.taskType === "Bulk Price Revision") {
     return `/commercial/customer-bulk-revision?revision=${encodeURIComponent(task.taskId)}#customer-bulk-workbench`
   }

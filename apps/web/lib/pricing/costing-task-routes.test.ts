@@ -49,4 +49,15 @@ describe("costing task routes", () => {
       })
     ).toBe("/commercial/customer-costing/task%20id?poRevision=revision%2Fid")
   })
+
+  it("opens Product bulk revisions on a dedicated Customer Costing page", () => {
+    expect(
+      customerCostingTaskHref({
+        enquiryItemId: null,
+        quoteRevisionRequestId: null,
+        taskId: "bulk id",
+        taskType: "Product Parameter Bulk Revision",
+      })
+    ).toBe("/commercial/customer-costing/revisions/bulk%20id")
+  })
 })

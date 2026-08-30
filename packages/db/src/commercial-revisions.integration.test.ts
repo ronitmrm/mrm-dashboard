@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto"
 import { Pool } from "pg"
 import { afterAll, beforeAll, describe, expect, test } from "vitest"
 
+import { createCommercialCostingRepository } from "./commercial-costing"
 import {
   bulkRevisionFields,
   createCommercialRevisionsRepository,
@@ -14,6 +15,9 @@ const connectionString =
   "postgresql://mrmpl:mrmpl@127.0.0.1:5434/mrmpl_test"
 
 const pool = new Pool({ connectionString })
+const costingRepository = createCommercialCostingRepository({
+  connectionString,
+})
 const repository = createCommercialRevisionsRepository({ connectionString })
 let organizationId: string
 let organizationCode: string
@@ -181,6 +185,7 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
+  await costingRepository.close()
   await repository.close()
   await pool.end()
 })
@@ -290,13 +295,9 @@ describe("commercial revisions and corrections", () => {
     )
     const customerStageQueue =
       await repository.listCustomerBulkPriceRevisionsBounded(organizationCode)
-    expect(customerStageQueue.coverage.total).toBe(3)
-    expect(customerStageQueue.rows).toContainEqual(
-      expect.objectContaining({
-        id: productRevision.id,
-        revisionRoute: "Product Parameter Bulk Revision",
-        status: "Pending Customer Costing",
-      })
+    expect(customerStageQueue.coverage.total).toBe(2)
+    expect(customerStageQueue.rows).not.toContainEqual(
+      expect.objectContaining({ id: productRevision.id })
     )
     const customerStage = await repository.stageBulkPriceRevisionChange({
       bulkPriceRevisionId: productRevision.id,
@@ -381,24 +382,32 @@ describe("commercial revisions and corrections", () => {
       }),
     ])
 
-    const stagedProductChange =
+    const stagedProductChange = await repository.stageBulkPriceRevisionChange({
+      bulkPriceRevisionId: revision.id,
+      fieldName: "overhead_cost",
+      newValue: 4,
+      selectedProductIds: [sharedItemId],
+    })
+    const removableProductChange =
       await repository.stageBulkPriceRevisionChange({
         bulkPriceRevisionId: revision.id,
         fieldName: "overhead_cost",
-        newValue: 4,
+        newValue: 5,
         selectedProductIds: [sharedItemId],
       })
     expect(stagedProductChange).toMatchObject({
       selectedCount: 1,
       skippedCount: 0,
     })
-    expect(await repository.listBulkPriceRevisionStages(revision.id)).toEqual([
-      expect.objectContaining({
-        previewRows: [
-          expect.objectContaining({ newPrice: 0.4, oldPrice: 0.1 }),
-        ],
-      }),
-    ])
+    expect(await repository.listBulkPriceRevisionStages(revision.id)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          previewRows: [
+            expect.objectContaining({ newPrice: 0.4, oldPrice: 0.1 }),
+          ],
+        }),
+      ])
+    )
     await pool.query(
       `
         UPDATE sales.bulk_price_revision_changes
@@ -439,20 +448,62 @@ describe("commercial revisions and corrections", () => {
     expect(
       (await repository.listCustomerBulkPriceRevisionsBounded(organizationCode))
         .rows
-    ).toContainEqual(expect.objectContaining({ id: revision.id }))
-    expect(await repository.listBulkPriceRevisionStages(revision.id)).toEqual([
+    ).not.toContainEqual(expect.objectContaining({ id: revision.id }))
+    expect(
+      (
+        await costingRepository.listCustomerCostingTasksBounded(
+          organizationCode
+        )
+      ).rows
+    ).toContainEqual(
       expect.objectContaining({
-        fieldName: "overhead_cost",
-        isApplied: true,
-        selectedCount: 1,
-      }),
+        taskId: revision.id,
+        taskType: "Product Parameter Bulk Revision",
+      })
+    )
+    expect(await repository.listBulkPriceRevisionStages(revision.id)).toEqual([
+      expect.objectContaining({ fieldName: "overhead_cost", isApplied: true }),
+      expect.objectContaining({ fieldName: "overhead_cost", isApplied: true }),
     ])
+    await expect(
+      repository.deleteBulkPriceRevisionStage({
+        bulkPriceRevisionId: revision.id,
+        stageGroupId: removableProductChange.stageGroupId,
+      })
+    ).resolves.toEqual({ deletedCount: 1 })
 
-    await repository.stageBulkPriceRevisionChange({
+    const work = await repository.getProductBulkRevisionCustomerCosting(
+      revision.id
+    )
+    expect(work).not.toBeNull()
+    if (!work)
+      throw new Error("Product revision Customer Costing was not found")
+    expect(work.coverage).toMatchObject({ returned: 2, total: 2 })
+    expect(work.rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          approvedPriceUsd: 12,
+          decision: null,
+          quoteItemId: firstQuoteId,
+          revisePriceUsd: 0.48,
+        }),
+        expect.objectContaining({
+          approvedPriceUsd: 12,
+          decision: null,
+          quoteItemId: secondQuoteId,
+          revisePriceUsd: 0.48,
+        }),
+      ])
+    )
+    await repository.applyProductBulkRevisionPriceDecision({
       bulkPriceRevisionId: revision.id,
-      fieldName: "profit_percent",
-      newValue: 0.25,
-      selectedQuoteItemIds: [firstQuoteId],
+      decision: "Keep Price Same",
+      sourceQuoteItemId: firstQuoteId,
+    })
+    await repository.applyProductBulkRevisionPriceDecision({
+      bulkPriceRevisionId: revision.id,
+      decision: "Revise Price",
+      sourceQuoteItemId: secondQuoteId,
     })
     await expect(
       repository.completeBulkPriceRevision({
@@ -603,10 +654,7 @@ describe("commercial revisions and corrections", () => {
     )
     expect(
       new Map(
-        completedCosts.rows.map((row) => [
-          row.id,
-          Number(row.product_cost_inr),
-        ])
+        completedCosts.rows.map((row) => [row.id, Number(row.product_cost_inr)])
       )
     ).toEqual(
       new Map([

@@ -1865,7 +1865,11 @@ export function createCommercialCostingRepository(
 
             UNION ALL
 
-            SELECT revision.id, 'Bulk Price Revision',
+            SELECT revision.id, CASE
+                WHEN revision.revision_route = 'Product Parameter Bulk Revision'
+                  THEN 'Product Parameter Bulk Revision'
+                ELSE 'Bulk Price Revision'
+              END,
               revision.revision_number, customer.company_name,
               'Multiple Products', revision.reason, revision.status,
               revision.revision_route, NULL, NULL, NULL, NULL,
