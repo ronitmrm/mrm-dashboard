@@ -166,6 +166,21 @@ evidence attached to that exact Product or BOM line, so different component
 drawings are not merged into one undifferentiated Design file set.
 _Avoid_: Mutable file paths, overwriting stored bytes, merging logical purposes.
 
+**Canonical Product BOM**: The current Product-owned structure for a Package or
+Assembly. A List Product is a leaf and has no BOM lines. Selecting an Existing
+Product from Portfolio reuses that Product and its current BOM; adding it below
+another Product creates only a reference in the parent BOM. Each Customer Quote
+keeps an immutable BOM snapshot, so later Product changes never rewrite history.
+_Avoid_: Self-BOM for a List, copying an Existing Product, rebuilding historical
+Quote snapshots from the current BOM.
+
+**Product Commercial Usage**: A derived description of how a Product is used
+today: Directly Sold, Component Only, Both, or Unused. It follows active root
+Customer Prices and current canonical BOM membership and may change without
+changing the Product UID or Item Type.
+_Avoid_: Permanent usage classification, creating another Product when a
+component is later sold directly.
+
 **Product Base Price**: The Product-owned INR-per-piece cost before any
 Customer-specific scrap/purchase choice, rejection adjustment, profit,
 packaging, shipping, or FX. For a Derived Product, it is every applicable
@@ -318,6 +333,8 @@ BOM component rows inherit the package context and may omit it. A component sold
 separately is a root line with its own Customer Part Code. BOM hierarchy depth
 remains internal structural metadata and is not displayed as a Pricing column.
 Product Base rows never invent customer or Quote values.
+Pricing presents Q/P once and does not expose migration-diagnostic completeness
+or missing-value columns.
 
 **Quote Follow-Up Task**: The pending Sales task created atomically when a
 Quote is sent. Sales must choose its Follow-Up Date during Quote send; the task

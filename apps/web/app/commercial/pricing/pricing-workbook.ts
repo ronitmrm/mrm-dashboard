@@ -134,11 +134,6 @@ const packageDashWhenZeroColumns = [
   "Assembly Cost (INR/kg)",
 ] as const
 
-const packageDerivedWeightFields = new Set([
-  "one-piece weight (g)*",
-  "pieces per kg",
-])
-
 export const pricingFormulaHeaders = [
   "No of Piece / KG",
   "Direct (INR/pc)",
@@ -201,29 +196,6 @@ export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
     Number.isFinite(totalPackagePriceInr)
       ? totalPackagePriceInr / conversionRate
       : calculation.rateUsd
-  const missingPricingValues = new Set<string>()
-  if (
-    isCustomerPrice &&
-    row.componentDepth === 0 &&
-    !row.customerPartCode?.trim()
-  ) {
-    missingPricingValues.add("Customer Part Code")
-  }
-  for (const field of row.pricingMissingFields) {
-    if (
-      isPackageOrAssemblyRow &&
-      packageDerivedWeightFields.has(field.trim().toLowerCase())
-    ) {
-      continue
-    }
-    if (
-      row.componentDepth > 0 &&
-      field.trim().toLowerCase() === "customer part code"
-    ) {
-      continue
-    }
-    missingPricingValues.add(field)
-  }
   const customerValue = (
     record: Record<string, unknown>,
     key: string,
@@ -232,7 +204,6 @@ export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
   const view: PricingViewRow = {
     "Row Type": isPackageSummary ? "Package Total" : row.itemType,
     "Pricing Scope": isCustomerPrice ? "Customer Price" : "Product Base",
-    "Customer Line Status": isCustomerPrice ? quoteStatus : "-",
     "Customer UID": isCustomerPrice ? dashIfEmpty(row.customerUid) : "-",
     "Change Date": row.changeDate.toISOString(),
     "Customer Part Code": isCustomerPrice
@@ -344,15 +315,6 @@ export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
       "rateInCurrency",
       4
     ),
-    "Pricing Completeness":
-      row.lifecycleStatus === "D"
-        ? "Dead"
-        : missingPricingValues.size
-          ? "Missing Values"
-          : "Complete",
-    "Missing Pricing Values": missingPricingValues.size
-      ? [...missingPricingValues].join("; ")
-      : "-",
     "Quote Status": isCustomerPrice
       ? row.componentDepth > 0
         ? "-"

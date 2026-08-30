@@ -39,7 +39,6 @@ const widePricingColumns = new Set([
   "Description",
   "MRMPL Product Description",
   "Enquiry Description",
-  "Missing Pricing Values",
   "Remarks",
 ])
 
@@ -56,7 +55,6 @@ const mediumPricingColumns = new Set([
 const compactPricingColumns = new Set([
   "Row Type",
   "Pricing Scope",
-  "Customer Line Status",
   "Price Rev",
   "Under",
   "BOM Qty",

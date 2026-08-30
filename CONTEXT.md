@@ -16,6 +16,14 @@ _Avoid_: Editing active Quote rows in place, product parameter revision, custome
 A two-stage, cross-customer request that previews staged Product Parameter changes without publishing them, then moves from Product Parameter Costing to Customer Parameter Costing with only the affected active root prices. Each affected price receives one decision: revise it from the new Product cost, or keep it unchanged by deriving the balancing Customer profit. Final completion publishes the Product inputs and immutable replacement Quote revisions atomically.
 _Avoid_: Customer Bulk Revision, showing every active price, publishing Product inputs before final completion, editing active Quote rows in place.
 
+**Canonical Product BOM**:
+The current Product-owned structure for a Package or Assembly. A List Product is a leaf with no BOM lines. Selecting an Existing Product reuses its identity and current BOM; a Customer Quote retains an immutable BOM snapshot.
+_Avoid_: List self-BOM, copied Existing Product, rewriting historical Quote structure.
+
+**Product Commercial Usage**:
+The derived current use of one Product: Directly Sold, Component Only, Both, or Unused. It changes with active root Customer Prices and canonical BOM membership without changing Product UID or Item Type.
+_Avoid_: Permanent usage type, duplicate Product when a component becomes directly sold.
+
 **Package/Assembly Price Composition**:
 A Package or Assembly Customer Price is the BOM-quantity sum of its component Customer Prices plus its own adjusted process amount. Each component retains its own rejection and profit. The parent applies its rejection and profit only to its own assembly/package process amount, never to the combined component value. Product Parameter Costing separately rolls up component base costs plus the unadjusted parent process cost per piece.
 _Avoid_: Applying parent rejection or profit to component prices, flattening all rejection/profit into one package-wide percentage.
