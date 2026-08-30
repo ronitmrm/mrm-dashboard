@@ -278,7 +278,7 @@ export default async function ProductBulkRevisionPage({
         </Card>
       </div>
 
-      <Card id="product-bulk-workbench">
+      <Card hidden={!selectedRevisionId} id="product-bulk-workbench">
         <CardHeader>
           <CardTitle>Product Revision Workbench</CardTitle>
           <CardDescription>
