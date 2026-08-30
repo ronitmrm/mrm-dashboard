@@ -321,7 +321,10 @@ describe("commercial revisions and corrections", () => {
     const suffix = randomUUID()
     const sharedItemId = await createItem(`M-PBR-${suffix}`, "List")
     await pool.query(
-      "UPDATE catalog.items SET overhead_cost = 1 WHERE id = $1",
+      `UPDATE catalog.items
+       SET overhead_cost = 1, weight_100_pcs = 100,
+         pieces_per_kg = 10, product_cost_inr = 0.1
+       WHERE id = $1`,
       [sharedItemId]
     )
     const secondCustomer = await pool.query<{ id: string }>(
@@ -371,16 +374,19 @@ describe("commercial revisions and corrections", () => {
     )
     const productPrices =
       await repository.listProductBulkRevisionActivePricesBounded(revision.id)
-    expect(new Set(productPrices.rows.map((price) => price.id))).toEqual(
-      new Set([firstQuoteId, secondQuoteId])
-    )
+    expect(productPrices.rows).toEqual([
+      expect.objectContaining({
+        affectedPriceCount: 2,
+        id: sharedItemId,
+      }),
+    ])
 
     await expect(
       repository.stageBulkPriceRevisionChange({
         bulkPriceRevisionId: revision.id,
         fieldName: "overhead_cost",
         newValue: 4,
-        selectedQuoteItemIds: [firstQuoteId],
+        selectedProductIds: [sharedItemId],
       })
     ).resolves.toMatchObject({ selectedCount: 1, skippedCount: 0 })
     await expect(
@@ -392,11 +398,13 @@ describe("commercial revisions and corrections", () => {
       status: "Pending Customer Costing",
     })
     await expect(
-      pool.query<{ overhead_cost: string }>(
-        "SELECT overhead_cost::text FROM catalog.items WHERE id = $1",
+      pool.query<{ overhead_cost: string; product_cost_inr: string }>(
+        "SELECT overhead_cost::text, product_cost_inr::text FROM catalog.items WHERE id = $1",
         [sharedItemId]
       )
-    ).resolves.toMatchObject({ rows: [{ overhead_cost: "4" }] })
+    ).resolves.toMatchObject({
+      rows: [{ overhead_cost: "4", product_cost_inr: "0.4" }],
+    })
 
     const handedOff = await repository.listBulkPriceRevisions(organizationCode)
     expect(handedOff).toContainEqual(
@@ -442,6 +450,108 @@ describe("commercial revisions and corrections", () => {
     )
     expect(activeAfter.rows.map((price) => price.id)).not.toContain(
       secondQuoteId
+    )
+  })
+
+  test("recalculates every Package Product Base that uses a revised List product", async () => {
+    const suffix = randomUUID()
+    const listItemId = await createItem(`R-PBR-${suffix}`, "List")
+    const firstPackageId = await createItem(`P-PBR-A-${suffix}`, "Package")
+    const secondPackageId = await createItem(`P-PBR-B-${suffix}`, "Package")
+    await pool.query(
+      `
+        UPDATE catalog.items
+        SET weight_100_pcs = 100, pieces_per_kg = 10,
+          product_cost_inr = 0, remarks = 'Washing required'
+        WHERE id = $1
+      `,
+      [listItemId]
+    )
+    await pool.query(
+      `
+        INSERT INTO catalog.bom_lines (
+          organization_id, parent_item_id, component_item_id, quantity,
+          source_system, source_table, source_id
+        ) VALUES
+          ($1, $2, $3, 2, 'test', 'bom_lines', $5),
+          ($1, $4, $3, 3, 'test', 'bom_lines', $6)
+      `,
+      [
+        organizationId,
+        firstPackageId,
+        listItemId,
+        secondPackageId,
+        randomUUID(),
+        randomUUID(),
+      ]
+    )
+    const listQuoteId = await createQuote({
+      customerPartCode: `R-PBR-${suffix}`,
+      itemId: listItemId,
+      itemType: "List",
+      processBase: 0,
+      profitPercent: 0,
+      total: 0,
+    })
+    await createQuote({
+      child: { itemId: listItemId, quoteItemId: listQuoteId, total: 0 },
+      customerPartCode: `P-PBR-A-${suffix}`,
+      itemId: firstPackageId,
+      itemType: "Package",
+      processBase: 0,
+      profitPercent: 0,
+      total: 0,
+    })
+    await createQuote({
+      child: { itemId: listItemId, quoteItemId: listQuoteId, total: 0 },
+      customerPartCode: `P-PBR-B-${suffix}`,
+      itemId: secondPackageId,
+      itemType: "Package",
+      processBase: 0,
+      profitPercent: 0,
+      total: 0,
+    })
+    const revision = await repository.createBulkPriceRevision({
+      effectiveOn: "2026-08-30",
+      organizationId,
+      reason: "Revise shared list washing",
+      revisionRoute: "Product Parameter Bulk Revision",
+    })
+
+    const products =
+      await repository.listProductBulkRevisionActivePricesBounded(revision.id, {
+        query: `R-PBR-${suffix}`,
+      })
+    expect(products.rows).toEqual([
+      expect.objectContaining({ affectedPriceCount: 3, id: listItemId }),
+    ])
+    await repository.stageBulkPriceRevisionChange({
+      bulkPriceRevisionId: revision.id,
+      fieldName: "washing",
+      newValue: 10,
+      selectedProductIds: [listItemId],
+    })
+    await repository.completeBulkPriceRevision({
+      bulkPriceRevisionId: revision.id,
+    })
+
+    const costs = await pool.query<{ id: string; product_cost_inr: string }>(
+      `
+        SELECT id, product_cost_inr::text
+        FROM catalog.items
+        WHERE id = ANY($1::uuid[])
+        ORDER BY id
+      `,
+      [[listItemId, firstPackageId, secondPackageId]]
+    )
+    expect(
+      new Map(costs.rows.map((row) => [row.id, Number(row.product_cost_inr)]))
+    ).toEqual(
+      new Map([
+        [listItemId, 1],
+        [firstPackageId, 2],
+        [secondPackageId, 3],
+      ])
     )
   })
 
@@ -607,7 +717,7 @@ describe("commercial revisions and corrections", () => {
       profitPercent: 0.2,
       total: 12,
     })
-    const plainQuoteId = await createQuote({
+    await createQuote({
       itemId: plainItemId,
       itemType: "List",
       processBase: 10,
@@ -626,14 +736,14 @@ describe("commercial revisions and corrections", () => {
         bulkPriceRevisionId: revision.id,
         fieldName: "profit_percent",
         newValue: 0.3,
-        selectedQuoteItemIds: [inspectionQuoteId],
+        selectedProductIds: [inspectionItemId],
       })
     ).rejects.toThrow("product-level")
     const staged = await repository.stageBulkPriceRevisionChange({
       bulkPriceRevisionId: revision.id,
       fieldName: "checking",
       newValue: 7,
-      selectedQuoteItemIds: [inspectionQuoteId, plainQuoteId],
+      selectedProductIds: [inspectionItemId, plainItemId],
     })
     expect(staged).toMatchObject({ selectedCount: 1, skippedCount: 1 })
     expect(staged.stageGroupId).toBeTruthy()
@@ -645,7 +755,7 @@ describe("commercial revisions and corrections", () => {
         fieldLabel: "Checking (INR/kg)",
         previewRows: [
           expect.objectContaining({
-            oldPrice: 12,
+            oldPrice: 0,
             quoteItemId: inspectionQuoteId,
           }),
         ],

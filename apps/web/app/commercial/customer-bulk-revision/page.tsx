@@ -89,7 +89,6 @@ export default async function CustomerBulkRevisionPage({
   searchParams,
 }: {
   searchParams: Promise<{
-    customerSearch?: string
     priceSearch?: string
     revision?: string
   }>
@@ -102,7 +101,6 @@ export default async function CustomerBulkRevisionPage({
   const selectedRevisionId = validUuid(params.revision?.trim() ?? "")
     ? params.revision!.trim()
     : ""
-  const customerSearch = params.customerSearch?.trim() ?? ""
   const priceSearch = params.priceSearch?.trim() ?? ""
   const repository = createCommercialRevisionsRepository({
     connectionString: readAuthEnvironment().connectionString,
@@ -113,9 +111,7 @@ export default async function CustomerBulkRevisionPage({
         await Promise.all([
           repository.listCustomerBulkPriceRevisionsBounded("MRMPL"),
           repository.getCustomerBulkRevisionSummary("MRMPL"),
-          repository.listCustomerBulkRevisionReferenceData("MRMPL", {
-            query: customerSearch,
-          }),
+          repository.listCustomerBulkRevisionReferenceData("MRMPL"),
           selectedRevisionId
             ? repository.getCustomerBulkPriceRevision(
                 "MRMPL",
@@ -191,31 +187,14 @@ export default async function CustomerBulkRevisionPage({
           <CardHeader>
             <CardTitle>Start A Customer Revision</CardTitle>
             <CardDescription>
-              Sales Selects One Customer And Records Why Its Active Prices Need
-              Commercial Recalculation.
+              Select one customer that has an active quote or price.
             </CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-4">
-            <form className="flex gap-2" method="get">
-              <Input
-                aria-label="Search customers"
-                defaultValue={customerSearch}
-                name="customerSearch"
-                placeholder="Search customer code or name"
-              />
-              <Button type="submit" variant="outline">
-                Find
-              </Button>
-            </form>
-            <BoundedResultNotice
-              coverage={reference.coverage}
-              searchQuery={customerSearch}
-              section="Customer selector"
-            />
+          <CardContent>
             {reference.organizationId ? (
               <form
                 action={createBulkPriceRevisionAction}
-                className="grid gap-4 md:grid-cols-2"
+                className="grid gap-4 md:grid-cols-[minmax(16rem,1.3fr)_14rem_minmax(18rem,2fr)_auto] md:items-end"
               >
                 <input
                   name="organization_id"
@@ -237,7 +216,7 @@ export default async function CustomerBulkRevisionPage({
                     required
                   >
                     <NativeSelectOption value="">
-                      Select Customer
+                      Select Customer With Active Price
                     </NativeSelectOption>
                     {reference.rows.map((customer) => (
                       <NativeSelectOption key={customer.id} value={customer.id}>
@@ -258,19 +237,19 @@ export default async function CustomerBulkRevisionPage({
                     type="date"
                   />
                 </Field>
-                <Field className="md:col-span-2">
+                <Field>
                   <FieldLabel htmlFor="customer-revision-reason">
                     Reason
                   </FieldLabel>
                   <Textarea
+                    className="min-h-10"
                     id="customer-revision-reason"
                     name="reason"
                     required
+                    rows={1}
                   />
                 </Field>
-                <Button className="w-fit md:col-span-2" type="submit">
-                  Send Customer Revision To Costing
-                </Button>
+                <Button type="submit">Send To Costing</Button>
               </form>
             ) : (
               <p className="text-sm text-muted-foreground">

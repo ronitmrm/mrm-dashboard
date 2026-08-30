@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest"
 import {
   calculateBomPieceWeight,
   calculatePackageCosting,
+  calculateProductBaseCost,
   calculateProductProcessCost,
   isForgingCostApplicable,
 } from "./pricing-calculation"
@@ -66,6 +67,36 @@ describe("approved Pricing formulas", () => {
         weight100Pcs: 9.7,
       }).processCostPerPiece
     ).toBeCloseTo(1.5035, 10)
+  })
+
+  test("re-derives Product Base when a bulk process rate changes and rolls it into a parent", () => {
+    const revisedList = calculateProductBaseCost({
+      ...noOptionalProcess,
+      assemblyOperationCost: 0,
+      checking: 5,
+      componentCostPerPiece: 0,
+      isBomParent: false,
+      machiningCost: 0,
+      overheadCost: 0,
+      pricingMethod: "Derived",
+      washing: 5,
+      weight100Pcs: 4.1,
+    })
+    expect(revisedList).toBeCloseTo(0.041, 10)
+
+    const revisedPackage = calculateProductBaseCost({
+      ...noOptionalProcess,
+      assemblyOperationCost: 5,
+      checking: 0,
+      componentCostPerPiece: revisedList * 2,
+      isBomParent: true,
+      machiningCost: 0,
+      overheadCost: 10,
+      pricingMethod: "Derived",
+      washing: 0,
+      weight100Pcs: 15.1,
+    })
+    expect(revisedPackage).toBeCloseTo(0.3085, 10)
   })
 
   test("prices the M2 package process separately before adding components and converting once", () => {

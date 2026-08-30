@@ -249,9 +249,9 @@ The target must provide source-equivalent destinations within `/commercial`; exa
 | `/enquiries`, `/enquiries/[id]`, `/enquiries/spreadsheet`                       | Register/detail/edit/delete, line CRUD/drawing, import review, spreadsheet filters and export.      |
 | Enquiry CSV/XLS/XLSX templates and exports                                      | Preserve source headers, ordering, calculated-column omissions and filenames.                       |
 | `/technical-review`, `/design-tasks`, Design file routes                        | Dedicated queues, complete Design editor/BOM, internal/customer/CAD downloads.                      |
-| `/product-costing`, `/assemblies`, `/quotes`                               | Product costing queue, Assembly register, full customer-costing workbench.                          |
+| `/product-costing`, `/assemblies`, `/quotes`                                    | Product costing queue, Assembly register, full customer-costing workbench.                          |
 | `/quotes/enquiry/[id]/pdf`                                                      | Historical quote PDF with terms and external-rate fallbacks.                                        |
-| `/pricing`, `/pricing/revisions`                                             | Complete customer-and-product pricing, revision history, and XLSX export.                            |
+| `/pricing`, `/pricing/revisions`                                                | Complete customer-and-product pricing, revision history, and XLSX export.                           |
 | `/po-pi`, `/po-pi/[id]`                                                         | PO register/detail/file, match/decision/revision/PI lifecycle.                                      |
 | PO template, detail XLSX, PI PDF/XLSX, PO master and approved-PI master exports | Exact sheets, fields, percent display, filenames and source row selection.                          |
 | `/bulk-revisions/product`, `/bulk-revisions/customer`, detail screens           | Separate route semantics, selection/preview/staging/completion.                                     |
@@ -918,20 +918,26 @@ index without changing canonical revision state.
 
 ## 30. Product Bulk Revision workflow surface — 2026-08-21
 
-The Product Parameter Bulk Revision source module is available at
-`/commercial/product-bulk-revision`. It retains the 15-field product allowlist,
-process-eligibility guards, active Sent/Accepted cross-customer price scope,
-grouped previews, and the source workflow's two-stage completion contract.
+The Product Parameter Bulk Revision starter is available at
+`/commercial/product-bulk-revision`. The resulting Product task belongs to the
+Product Parameter Costing queue and opens on its own
+`/commercial/product-costing/revisions/[revisionId]` page. The workbench retains
+the 15-field product allowlist, process-eligibility guards, grouped previews, and
+the source workflow's two-stage completion contract without displaying Customer
+rows.
 
-Product completion updates Product Master, freezes the product stages, expands
-the selected Product identities across every active customer price, and moves
-the request to `Pending Customer Costing` without creating Quote revisions.
+The candidate list groups by Product identity, so one UID appears once even when
+used by multiple Customers or Package trees. Product completion updates Product
+Master, re-derives the selected Product Base, recursively re-derives every
+canonical Package / Assembly ancestor, freezes the product stages, expands every
+active affected Quote path, and moves the request to `Pending Customer Costing`
+without creating Quote revisions.
 Customer Bulk Revision then permits the six customer fields and creates the
 recursive immutable Quote replacements only on its own completion.
 
-The MRM surface uses a 200-row queue and 200-result server-backed price search.
-Candidate and queue tables stay server rendered with content visibility for
-offscreen rows. Product identity expansion and Package / Assembly ancestor
+The MRM surface uses the shared Product Parameter Costing queue and a 200-result
+server-backed unique-Product search. Candidate tables stay server rendered with
+content visibility for offscreen rows. Product identity expansion and Package / Assembly ancestor
 discovery use set-based PostgreSQL queries; migration `0083` adds the partial
 active-price Product scope index.
 

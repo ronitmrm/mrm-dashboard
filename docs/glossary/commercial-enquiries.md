@@ -176,6 +176,21 @@ INR/kg divided by Pieces per kg. For a Package or Assembly, it is the
 BOM-quantity sum of component Product Base Prices plus the parent Product's own
 unadjusted full process cost per piece. Product Base Price is derived and must
 not be copied from a customer workbook formula result.
+
+**Product Parameter Bulk Revision**: Product-owned costing work created from
+Product Bulk Revision and completed from Product Parameter Costing on a dedicated
+revision page. The candidate list contains each Product UID once, irrespective of
+how many Customers or active Quotes use it. Applying a Product process change
+re-derives that Product's Product Base Price, then re-derives every canonical
+Package or Assembly ancestor in child-before-parent order. Every active Quote path
+containing the changed Product is handed to Customer Parameter Costing; Product
+selection never depends on Customer identity.
+
+**Customer Parameter Bulk Revision**: Customer-specific commercial recalculation.
+Its Customer selector contains only Customers with an active Sent or Accepted
+Quote. Product-owned changes arrive from Product Parameter Bulk Revision; Customer
+inputs are staged against the applicable active Customer prices and produce
+immutable Quote replacements on completion.
 A Package or Assembly One-Piece Weight is also derived recursively as the sum of
 each direct component's One-Piece Weight multiplied by its BOM quantity. A nested
 Package or Assembly contributes its recursively derived weight. Pieces per Kg is

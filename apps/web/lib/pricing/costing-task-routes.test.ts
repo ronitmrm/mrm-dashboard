@@ -17,7 +17,7 @@ describe("costing task routes", () => {
     ).toBe("/commercial/product-costing/task%20id?item=item%2Fid")
   })
 
-  it("keeps Product bulk and ECN work on their existing workbenches", () => {
+  it("opens Product bulk revisions on a dedicated Product Costing page", () => {
     expect(
       productCostingTaskHref({
         enquiryItemId: null,
@@ -25,9 +25,10 @@ describe("costing task routes", () => {
         taskId: "bulk id",
         taskType: "Product Parameter Bulk Revision",
       })
-    ).toBe(
-      "/commercial/product-bulk-revision?revision=bulk%20id#product-bulk-workbench"
-    )
+    ).toBe("/commercial/product-costing/revisions/bulk%20id")
+  })
+
+  it("keeps ECN work on its existing workbench", () => {
     expect(
       productCostingTaskHref({
         enquiryItemId: null,
