@@ -30,10 +30,19 @@ import {
   tableFilterSecondarySelector,
   tableSecondaryTextSelector,
 } from "@workspace/ui/lib/table-filter-display"
+import {
+  filteredTableSelectionState,
+  selectAllFilteredTableRows,
+  type FilteredTableSelectionRow,
+} from "@workspace/ui/lib/table-filtered-selection"
 
 type TableProps = React.ComponentProps<"table"> & {
   containerClassName?: string
   excelFilters?: boolean
+  filteredSelection?: {
+    checkboxName: string
+    label?: string
+  }
   filterMode?: "dom" | "external"
   filterStorageKey?: string
   onFilteredRowCountChange?: (visible: number, total: number) => void
@@ -156,6 +165,7 @@ function Table({
   className,
   containerClassName,
   excelFilters = true,
+  filteredSelection,
   filterMode = "dom",
   filterStorageKey,
   onFilteredRowCountChange,
@@ -167,12 +177,32 @@ function Table({
   const skipNextFilterPersistRef = React.useRef(false)
   const rowOrderRef = React.useRef(new WeakMap<HTMLTableRowElement, number>())
   const nextRowOrderRef = React.useRef(0)
+  const filteredSelectionRowsRef = React.useRef<
+    FilteredTableSelectionRow<HTMLInputElement>[]
+  >([])
   const [columns, setColumns] = React.useState<TableFilterColumn[]>([])
   const [filterHosts, setFilterHosts] = React.useState<
     Record<number, HTMLElement>
   >({})
   const [filters, setFilters] = React.useState<TableColumnFilters>({})
   const [sort, setSort] = React.useState<TableSort | null>(null)
+  const [selectionState, setSelectionState] = React.useState({
+    selectableCount: 0,
+    selectedCount: 0,
+  })
+  const filteredSelectionCheckboxName = filteredSelection?.checkboxName
+
+  const syncFilteredSelectionState = React.useCallback(() => {
+    const nextState = filteredTableSelectionState(
+      filteredSelectionRowsRef.current
+    )
+    setSelectionState((current) =>
+      current.selectableCount === nextState.selectableCount &&
+      current.selectedCount === nextState.selectedCount
+        ? current
+        : nextState
+    )
+  }, [])
 
   const refreshTable = React.useCallback(() => {
     const table = tableRef.current
@@ -281,6 +311,15 @@ function Table({
         nextRowOrderRef.current += 1
       }
     }
+    filteredSelectionRowsRef.current = filteredSelectionCheckboxName
+      ? snapshot.rows.map((row) => ({
+          checkbox: Array.from(
+            row.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')
+          ).find((input) => input.name === filteredSelectionCheckboxName),
+          hidden: row.hidden,
+        }))
+      : []
+    syncFilteredSelectionState()
 
     const rowsInOriginalOrder = [...snapshot.rows].sort(
       (left, right) =>
@@ -309,8 +348,10 @@ function Table({
     filterMode,
     filterStorageKey,
     filters,
+    filteredSelectionCheckboxName,
     onFilteredRowCountChange,
     sort,
+    syncFilteredSelectionState,
   ])
 
   React.useLayoutEffect(() => {
@@ -338,6 +379,13 @@ function Table({
       for (const row of Array.from(body.rows)) row.hidden = false
     }
   }, [excelFilters, filterMode])
+
+  React.useEffect(() => {
+    const table = tableRef.current
+    if (!table || !filteredSelectionCheckboxName) return
+    table.addEventListener("change", syncFilteredSelectionState)
+    return () => table.removeEventListener("change", syncFilteredSelectionState)
+  }, [filteredSelectionCheckboxName, syncFilteredSelectionState])
 
   React.useEffect(() => {
     if (
@@ -397,7 +445,31 @@ function Table({
           : null
       })}
       {columns.length ? (
-        <div className="flex justify-end pb-2">
+        <div className="flex justify-end gap-2 pb-2">
+          {filteredSelection ? (
+            <Button
+              aria-label={filteredSelection.label ?? "Select all filtered rows"}
+              disabled={
+                selectionState.selectableCount === 0 ||
+                selectionState.selectedCount === selectionState.selectableCount
+              }
+              onClick={() => {
+                const changed = selectAllFilteredTableRows(
+                  filteredSelectionRowsRef.current
+                )
+                for (const checkbox of changed) {
+                  checkbox.dispatchEvent(new Event("change", { bubbles: true }))
+                }
+                syncFilteredSelectionState()
+              }}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              {filteredSelection.label ?? "Select All Filtered"} (
+              {selectionState.selectableCount})
+            </Button>
+          ) : null}
           <Button
             aria-label="Clear all table filters"
             disabled={!Object.values(filters).some(Array.isArray)}
@@ -414,7 +486,7 @@ function Table({
       <div
         data-slot="table-container"
         className={cn(
-          "relative w-full max-h-[calc(100svh-var(--header-height)-8rem)] overflow-auto",
+          "relative max-h-[calc(100svh-var(--header-height)-8rem)] w-full overflow-auto",
           containerClassName
         )}
       >

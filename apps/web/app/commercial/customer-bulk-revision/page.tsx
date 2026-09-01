@@ -376,88 +376,90 @@ export default async function CustomerBulkRevisionPage({
                     type="hidden"
                     value={selectedRevision.id}
                   />
-                  <div className="max-h-[36rem] overflow-auto rounded-md border">
-                    <Table excelFilters className="w-full caption-bottom text-sm">
-                      <TableHeader className="sticky top-0 z-10 bg-background [&_tr]:border-b">
-                        <TableRow>
-                          {activePriceHeadings.map((heading) => (
-                            <TableHead
-                              className="h-12 px-3 text-left align-middle font-medium whitespace-nowrap text-foreground"
-                              key={heading}
-                            >
-                              {heading}
-                            </TableHead>
-                          ))}
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody className="[&_tr:last-child]:border-0">
-                        {prices.rows.map((price) => (
-                          <TableRow
-                            className="border-b transition-colors [contain-intrinsic-size:auto_48px] [content-visibility:auto] hover:bg-muted/50"
-                            key={price.id}
+                  <Table
+                    className="w-full caption-bottom text-sm"
+                    containerClassName="h-[calc(100svh-24rem)] min-h-[34rem] rounded-md border"
+                    excelFilters
+                    filteredSelection={{
+                      checkboxName: "selected_quote_item_ids",
+                    }}
+                  >
+                    <TableHeader className="sticky top-0 z-10 bg-background [&_tr]:border-b">
+                      <TableRow>
+                        {activePriceHeadings.map((heading) => (
+                          <TableHead
+                            className="h-12 px-3 text-left align-middle font-medium whitespace-nowrap text-foreground"
+                            key={heading}
                           >
-                            <TableCell className="p-3 align-middle whitespace-nowrap">
-                              <input
-                                aria-label={`Select ${price.customerPartCode ?? price.uid}`}
-                                name="selected_quote_item_ids"
-                                type="checkbox"
-                                value={price.id}
-                              />
-                            </TableCell>
-                            <TableCell className="p-3 align-middle whitespace-nowrap">
-                              {price.companyName}
-                            </TableCell>
-                            <TableCell className="p-3 align-middle font-mono whitespace-nowrap">
-                              {price.customerPartCode ?? "—"}
-                            </TableCell>
-                            <TableCell className="p-3 align-middle font-mono whitespace-nowrap">
-                              {price.uid}
-                            </TableCell>
-                            <TableCell className="max-w-64 p-3 align-middle">
-                              {price.description}
-                            </TableCell>
-                            <TableCell className="p-3 align-middle whitespace-nowrap">
-                              {price.category ?? "—"}
-                            </TableCell>
-                            <TableCell className="p-3 align-middle whitespace-nowrap">
-                              {price.subcategory ?? "—"}
-                            </TableCell>
-                            <TableCell className="p-3 align-middle whitespace-nowrap tabular-nums">
-                              $ {money(price.approvedPriceUsd)}
-                            </TableCell>
-                            <TableCell className="p-3 align-middle whitespace-nowrap">
-                              {money(price.scrapRate)}
-                            </TableCell>
-                            <TableCell className="p-3 align-middle whitespace-nowrap">
-                              {money(price.packingCost)}
-                            </TableCell>
-                            <TableCell className="p-3 align-middle whitespace-nowrap">
-                              {money(price.shippingCost)}
-                            </TableCell>
-                            <TableCell className="p-3 align-middle whitespace-nowrap">
-                              {money(price.purchaseTimes)}
-                            </TableCell>
-                            <TableCell className="p-3 align-middle whitespace-nowrap">
-                              {percent(price.profitPercent)}
-                            </TableCell>
-                            <TableCell className="p-3 align-middle whitespace-nowrap">
-                              {money(price.conversionRate)}
-                            </TableCell>
-                          </TableRow>
+                            {heading}
+                          </TableHead>
                         ))}
-                        {!prices.rows.length ? (
-                          <TableRow>
-                            <TableCell
-                              className="h-24 text-center"
-                              colSpan={14}
-                            >
-                              No Active Prices Are In Scope.
-                            </TableCell>
-                          </TableRow>
-                        ) : null}
-                      </TableBody>
-                    </Table>
-                  </div>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody className="[&_tr:last-child]:border-0">
+                      {prices.rows.map((price) => (
+                        <TableRow
+                          className="border-b transition-colors [contain-intrinsic-size:auto_48px] [content-visibility:auto] hover:bg-muted/50"
+                          key={price.id}
+                        >
+                          <TableCell className="p-3 align-middle whitespace-nowrap">
+                            <input
+                              aria-label={`Select ${price.customerPartCode ?? price.uid}`}
+                              name="selected_quote_item_ids"
+                              type="checkbox"
+                              value={price.id}
+                            />
+                          </TableCell>
+                          <TableCell className="p-3 align-middle whitespace-nowrap">
+                            {price.companyName}
+                          </TableCell>
+                          <TableCell className="p-3 align-middle font-mono whitespace-nowrap">
+                            {price.customerPartCode ?? "—"}
+                          </TableCell>
+                          <TableCell className="p-3 align-middle font-mono whitespace-nowrap">
+                            {price.uid}
+                          </TableCell>
+                          <TableCell className="max-w-64 p-3 align-middle">
+                            {price.description}
+                          </TableCell>
+                          <TableCell className="p-3 align-middle whitespace-nowrap">
+                            {price.category ?? "—"}
+                          </TableCell>
+                          <TableCell className="p-3 align-middle whitespace-nowrap">
+                            {price.subcategory ?? "—"}
+                          </TableCell>
+                          <TableCell className="p-3 align-middle whitespace-nowrap tabular-nums">
+                            $ {money(price.approvedPriceUsd)}
+                          </TableCell>
+                          <TableCell className="p-3 align-middle whitespace-nowrap">
+                            {money(price.scrapRate)}
+                          </TableCell>
+                          <TableCell className="p-3 align-middle whitespace-nowrap">
+                            {money(price.packingCost)}
+                          </TableCell>
+                          <TableCell className="p-3 align-middle whitespace-nowrap">
+                            {money(price.shippingCost)}
+                          </TableCell>
+                          <TableCell className="p-3 align-middle whitespace-nowrap">
+                            {money(price.purchaseTimes)}
+                          </TableCell>
+                          <TableCell className="p-3 align-middle whitespace-nowrap">
+                            {percent(price.profitPercent)}
+                          </TableCell>
+                          <TableCell className="p-3 align-middle whitespace-nowrap">
+                            {money(price.conversionRate)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      {!prices.rows.length ? (
+                        <TableRow>
+                          <TableCell className="h-24 text-center" colSpan={14}>
+                            No Active Prices Are In Scope.
+                          </TableCell>
+                        </TableRow>
+                      ) : null}
+                    </TableBody>
+                  </Table>
 
                   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                     <Field>
