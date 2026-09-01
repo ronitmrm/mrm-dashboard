@@ -3139,8 +3139,10 @@ export function createCommercialRevisionsRepository(
         category: string | null
         checked_by: string | null
         description: string
+        design_bom_completed: string | null
         design_remarks: string | null
         design_task_id: string | null
+        designer_name: string | null
         die_code: string | null
         ecn_number: string
         fixture_approx_cost: string | null
@@ -3152,12 +3154,14 @@ export function createCommercialRevisionsRepository(
         item_source_payload: Record<string, unknown> | null
         item_type: string
         item_uid: string
+        material_grade_id: string | null
         operation_notes: string | null
         production_type: string | null
         product_size: string | null
         reason: string
         remarks: string | null
         rod_size: string | null
+        rod_type_id: string | null
         source_payload: Record<string, unknown>
         status: string
         subcategory: string | null
@@ -3171,6 +3175,7 @@ export function createCommercialRevisionsRepository(
             ecn.source_payload, item.source_payload AS item_source_payload,
             item.id AS item_id, item.uid AS item_uid,
             item.description, item.item_type, item.production_type,
+            item.material_grade_id, item.rod_type_id,
             item.weight_100_pcs::text, item.casting::text, item.rod_size,
             item.die_code, item.remarks,
             COALESCE(
@@ -3188,7 +3193,8 @@ export function createCommercialRevisionsRepository(
               NULLIF(btrim(profile.sub_category), ''),
               NULLIF(btrim(design.internal_part_sub_category), '')
             ) AS subcategory,
-            design.target_completion_date::text, design.tooling_required,
+            design.target_completion_date::text, design.designer_name,
+            design.design_bom_completed, design.tooling_required,
             design.tooling_approx_cost::text, design.fixture_required,
             design.fixture_approx_cost::text, design.gauges_required,
             design.inspection_approx_cost::text, design.checked_by,
@@ -3353,8 +3359,11 @@ export function createCommercialRevisionsRepository(
         category: asText(value("category", row.category)) || null,
         checkedBy: asText(value("checkedBy", row.checked_by)) || null,
         description: asText(value("description", row.description)),
+        designBomCompleted:
+          asText(value("designBomCompleted", row.design_bom_completed)) || "No",
         designRemarks:
           asText(value("designRemarks", row.design_remarks)) || null,
+        designerName: asText(value("designerName", row.designer_name)) || null,
         dieCode: asText(value("dieCode", row.die_code)) || null,
         ecnNumber: row.ecn_number,
         fixtureApproxCost: asNumber(
@@ -3371,6 +3380,8 @@ export function createCommercialRevisionsRepository(
         itemId: row.item_id,
         itemType: asText(value("itemType", row.item_type)),
         itemUid: row.item_uid,
+        materialGradeId:
+          asText(value("materialGradeId", row.material_grade_id)) || null,
         operationNotes:
           asText(value("operationNotes", row.operation_notes)) || null,
         productionType:
@@ -3379,6 +3390,7 @@ export function createCommercialRevisionsRepository(
         reason: row.reason,
         remarks: asText(value("remarks", row.remarks)) || null,
         rodSize: asText(value("rodSize", row.rod_size)) || null,
+        rodTypeId: asText(value("rodTypeId", row.rod_type_id)) || null,
         status: row.status,
         subcategory: asText(value("subcategory", row.subcategory)) || null,
         targetCompletionDate:
@@ -3437,16 +3449,24 @@ export function createCommercialRevisionsRepository(
         [organizationCode]
       )
       const organizationId = organization.rows[0]?.id
-      if (!organizationId) return { items: [], organizationId: null }
-      const items = await pool.query<{
-        category: string | null
-        description: string
-        id: string
-        item_type: string
-        subcategory: string | null
-        uid: string
-      }>(
-        `
+      if (!organizationId) {
+        return {
+          items: [],
+          materialGrades: [],
+          organizationId: null,
+          rodTypes: [],
+        }
+      }
+      const [items, materialGrades, rodTypes] = await Promise.all([
+        pool.query<{
+          category: string | null
+          description: string
+          id: string
+          item_type: string
+          subcategory: string | null
+          uid: string
+        }>(
+          `
           SELECT item.id, item.uid, item.description, item.item_type,
             COALESCE(
               NULLIF(btrim(item.source_payload ->> 'category'), ''),
@@ -3467,8 +3487,19 @@ export function createCommercialRevisionsRepository(
             AND item.uid_kind = 'INTERNAL' AND item.lifecycle_status = 'P'
           ORDER BY item.uid, item.id
         `,
-        [organizationId]
-      )
+          [organizationId]
+        ),
+        pool.query<{ id: string; name: string }>(
+          `SELECT id, name FROM catalog.material_grades
+           WHERE organization_id = $1 ORDER BY name, id`,
+          [organizationId]
+        ),
+        pool.query<{ id: string; name: string }>(
+          `SELECT id, name FROM catalog.rod_types
+           WHERE organization_id = $1 ORDER BY name, id`,
+          [organizationId]
+        ),
+      ])
       return {
         items: items.rows.map((row) => ({
           category: row.category,
@@ -3478,7 +3509,9 @@ export function createCommercialRevisionsRepository(
           subcategory: row.subcategory,
           uid: row.uid,
         })),
+        materialGrades: materialGrades.rows,
         organizationId,
+        rodTypes: rodTypes.rows,
       }
     },
 
