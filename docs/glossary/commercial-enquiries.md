@@ -224,6 +224,14 @@ packaging, shipping, and FX without changing the Product master cost. Product
 Overhead is an INR/kg Product Parameter input and cannot be entered or overridden
 at the customer level. For a Package or Assembly, Product Overhead joins only the
 parent's own assembly process amount, not the combined component value.
+For a Derived List, raw-material and scrap-return quantities use
+`Blank Piece Weight / One-Piece Weight`; Blank Piece Weight remains grams per
+finished piece and is never treated directly as a multiplier. For a Direct
+Purchase root, Product Base Price and rejection stay per piece, while root
+packaging and shipping INR/kg are divided by Pieces per kg before Product profit
+and FX. Forging Cost applicability follows the List Product's Product Type
+(`Forged`, with legacy `Forging`/`Casting` compatibility), not Production Type
+such as CNC or Conventional.
 Only one selected Enquiry and its recursive BOM are opened for editing at a
 time. Product Parameter Costing and Customer Parameter Costing queues are
 worklists only; each selected task opens on its own task URL so growing queues

@@ -48,6 +48,7 @@ type CostingProduct = {
   plating: number
   pricingMethod: string
   processesRequired: string[]
+  productType: string | null
   productionType: string | null
   rejectionPercent: number
   remarks: string | null
@@ -173,7 +174,7 @@ export function ProductCostingForm({
   const isRoot = product.id === rootItemId
   const isBomParent = ["Package", "Assembly"].includes(product.itemType)
   const isDirectPurchase = pricingMethod === "Direct Purchase"
-  const hasForgingCost = isForgingCostApplicable(product.productionType)
+  const hasForgingCost = isForgingCostApplicable(product.productType)
   const piecesPerKg =
     product.weight100Pcs > 0 ? 1000 / product.weight100Pcs : product.piecesPerKg
   const directPricePerPiece =

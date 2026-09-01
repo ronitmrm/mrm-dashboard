@@ -68,10 +68,10 @@ function machiningValue(record: Record<string, unknown>, key: string) {
 }
 
 function forgingValue(record: Record<string, unknown>) {
-  const productionType = String(record.productionType ?? "")
+  const productType = String(record.productType ?? record.productionType ?? "")
     .trim()
     .toLowerCase()
-  return isForgingCostApplicable(productionType)
+  return isForgingCostApplicable(productType)
     ? value(record, "forgingCost")
     : "-"
 }

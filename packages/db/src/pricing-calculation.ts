@@ -98,9 +98,13 @@ export function calculateBomPieceWeight(
   )
 }
 
-export function isForgingCostApplicable(productionType?: string | null) {
-  const normalized = productionType?.trim().toLowerCase()
-  return normalized === "casting" || normalized === "forging"
+export function isForgingCostApplicable(productType?: string | null) {
+  const normalized = productType?.trim().toLowerCase()
+  return (
+    normalized === "casting" ||
+    normalized === "forging" ||
+    normalized === "forged"
+  )
 }
 
 export function calculateProductProcessCost(product: ProductProcessCostInput) {
@@ -135,6 +139,48 @@ export function calculateProductBaseCost(product: ProductBaseCostInput) {
   return safeNumber(
     processCost + (product.isBomParent ? product.componentCostPerPiece : 0)
   )
+}
+
+export type StoredProductCostingInput = {
+  baseCostPerPiece: number
+  conversionRate: number
+  packingCostPerKg: number
+  piecesPerKg: number
+  profitPercent: number
+  rejectionPercent: number
+  shippingCostPerKg: number
+}
+
+export function calculateStoredProductCosting(
+  input: StoredProductCostingInput
+) {
+  const packingCostPerPiece =
+    input.piecesPerKg > 0 ? input.packingCostPerKg / input.piecesPerKg : 0
+  const shippingCostPerPiece =
+    input.piecesPerKg > 0 ? input.shippingCostPerKg / input.piecesPerKg : 0
+  const rejectionCost = input.baseCostPerPiece * input.rejectionPercent
+  const totalA =
+    input.baseCostPerPiece +
+    rejectionCost +
+    packingCostPerPiece +
+    shippingCostPerPiece
+  const profitB = totalA * input.profitPercent
+  const totalAPlusB = totalA + profitB
+  const rateUsd =
+    input.conversionRate > 0 ? totalAPlusB / input.conversionRate : 0
+
+  return {
+    baseCostPerPiece: safeNumber(input.baseCostPerPiece),
+    packingCostPerPiece: safeNumber(packingCostPerPiece),
+    piecesPerKg: safeNumber(input.piecesPerKg),
+    profitB: safeNumber(profitB),
+    rateInr: safeNumber(totalAPlusB),
+    rateUsd: safeNumber(rateUsd),
+    rejectionCost: safeNumber(rejectionCost),
+    shippingCostPerPiece: safeNumber(shippingCostPerPiece),
+    totalA: safeNumber(totalA),
+    totalAPlusB: safeNumber(totalAPlusB),
+  }
 }
 
 export function calculatePackageCosting(
@@ -182,6 +228,8 @@ export function calculateCosting(
   quote: QuoteCostingInput
 ): CostingResult {
   const piecesPerKg = product.weight100Pcs > 0 ? 1000 / product.weight100Pcs : 0
+  const blankToFinishedWeightRatio =
+    product.weight100Pcs > 0 ? product.casting / product.weight100Pcs : 0
   const netRateWithoutAlloy =
     quote.scrapRate + quote.extCost + quote.forgingCost
   const netRateWithAlloy =
@@ -189,8 +237,8 @@ export function calculateCosting(
   const scrapRatePerGm = netRateWithoutAlloy / 1000
   const rawMaterialCost =
     quote.purchaseTimes * netRateWithAlloy +
-    (product.casting - quote.purchaseTimes) * netRateWithoutAlloy
-  const scrapReturn = product.casting - 1
+    (blankToFinishedWeightRatio - quote.purchaseTimes) * netRateWithoutAlloy
+  const scrapReturn = blankToFinishedWeightRatio - 1
   const scrapReturnPriceIncludingBurningLoss =
     quote.scrapRate * (1 - product.burningLossPercent)
   const scrapReturnPrice = scrapReturn * scrapReturnPriceIncludingBurningLoss

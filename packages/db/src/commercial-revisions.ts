@@ -780,7 +780,11 @@ function revisedCalculation(
             assembledPartInr,
             conversionRate,
             extCost: asNumber(product.extrusion_cost),
-            forgingCost: !isForgingCostApplicable(product.production_type)
+            forgingCost: !isForgingCostApplicable(
+              typeof product.source_payload.productType === "string"
+                ? product.source_payload.productType
+                : product.production_type
+            )
               ? 0
               : asNumber(product.forging_cost),
             packingCost: overrideNumber(

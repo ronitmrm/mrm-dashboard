@@ -4,7 +4,7 @@ import { calculateCosting } from "./costing"
 
 const product = {
   weight100Pcs: 500,
-  casting: 2,
+  casting: 1000,
   machiningCost: 10,
   washing: 2,
   checking: 3,

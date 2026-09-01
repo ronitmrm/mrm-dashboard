@@ -2,9 +2,11 @@ import { describe, expect, test } from "vitest"
 
 import {
   calculateBomPieceWeight,
+  calculateCosting,
   calculatePackageCosting,
   calculateProductBaseCost,
   calculateProductProcessCost,
+  calculateStoredProductCosting,
   isForgingCostApplicable,
 } from "./pricing-calculation"
 
@@ -18,10 +20,63 @@ const noOptionalProcess = {
 }
 
 describe("approved Pricing formulas", () => {
+  test("uses blank-to-finished piece weight ratio for rod and scrap costing", () => {
+    const result = calculateCosting(
+      {
+        ...noOptionalProcess,
+        assemblyOperationCost: 0,
+        burningLossPercent: 0,
+        casting: 250,
+        checking: 0,
+        machiningCost: 0,
+        overheadCost: 0,
+        rejectionPercent: 0,
+        washing: 0,
+        weight100Pcs: 100,
+      },
+      {
+        alloyPremium: 10,
+        assembledPartInr: 0,
+        conversionRate: 1,
+        extCost: 20,
+        forgingCost: 0,
+        packingCost: 0,
+        profitPercent: 0,
+        purchaseTimes: 1,
+        scrapRate: 100,
+        shippingCost: 0,
+      }
+    )
+
+    expect(result.rawMaterialCost).toBe(310)
+    expect(result.scrapReturn).toBe(1.5)
+    expect(result.totalRodsCost).toBe(160)
+    expect(result.rateInr).toBe(16)
+  })
+
+  test("adds root packing and shipping to a direct-purchase customer price", () => {
+    const result = calculateStoredProductCosting({
+      baseCostPerPiece: 10,
+      conversionRate: 1,
+      packingCostPerKg: 60,
+      piecesPerKg: 100,
+      profitPercent: 0.1,
+      rejectionPercent: 0.1,
+      shippingCostPerKg: 6,
+    })
+
+    expect(result.packingCostPerPiece).toBeCloseTo(0.6, 10)
+    expect(result.shippingCostPerPiece).toBeCloseTo(0.06, 10)
+    expect(result.rejectionCost).toBeCloseTo(1, 10)
+    expect(result.totalA).toBeCloseTo(11.66, 10)
+    expect(result.rateInr).toBeCloseTo(12.826, 10)
+  })
+
   test("allows forging cost only for Casting and Forging production", () => {
     expect(isForgingCostApplicable("Casting")).toBe(true)
     expect(isForgingCostApplicable(" forging ")).toBe(true)
-    for (const type of ["Barstock", "Moulded", "Package", null, undefined]) {
+    expect(isForgingCostApplicable("Forged")).toBe(true)
+    for (const type of ["Barstock", "Moulded", "CNC", null, undefined]) {
       expect(isForgingCostApplicable(type)).toBe(false)
     }
   })
