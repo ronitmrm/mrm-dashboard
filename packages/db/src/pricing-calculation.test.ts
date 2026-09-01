@@ -4,8 +4,10 @@ import {
   calculateBomPieceWeight,
   calculateCosting,
   calculatePackageCosting,
+  calculatePackageRevisionCostingFromBase,
   calculateProductBaseCost,
   calculateProductProcessCost,
+  calculateStoredProductRevisionCosting,
   calculateStoredProductCosting,
   isForgingCostApplicable,
 } from "./pricing-calculation"
@@ -70,6 +72,22 @@ describe("approved Pricing formulas", () => {
     expect(result.rejectionCost).toBeCloseTo(1, 10)
     expect(result.totalA).toBeCloseTo(11.66, 10)
     expect(result.rateInr).toBeCloseTo(12.826, 10)
+  })
+
+  test("recalculates a Direct Purchase bulk revision with every root cost", () => {
+    const result = calculateStoredProductRevisionCosting({
+      baseCostPerPiece: 10,
+      conversionRate: 1,
+      packingCostPerKg: 60,
+      piecesPerKg: 100,
+      profitPercent: 0.2,
+      rejectionPercent: 0.1,
+      shippingCostPerKg: 6,
+    })
+
+    expect(result.profitPercent).toBe(0.2)
+    expect(result.totalA).toBeCloseTo(11.66, 10)
+    expect(result.rateInr).toBeCloseTo(13.992, 10)
   })
 
   test("allows forging cost only for Casting and Forging production", () => {
@@ -181,5 +199,24 @@ describe("approved Pricing formulas", () => {
     expect(result.rejectionCost).toBeCloseTo(0.00604, 10)
     expect(result.totalRateInr).toBeCloseTo(19.8270919312, 10)
     expect(result.rateUsd).toBeCloseTo(0.20981049662645504, 10)
+  })
+
+  test("recalculates a Package bulk revision with root packing and shipping", () => {
+    const result = calculatePackageRevisionCostingFromBase({
+      childQuoteTotal: 12,
+      conversionRate: 1,
+      packingCostPerKg: 20,
+      piecesPerKg: 10,
+      processCostPerPiece: 1,
+      profitPercent: 0.2,
+      rejectionPercent: 0.1,
+      shippingCostPerKg: 10,
+    })
+
+    expect(result.parentPackingCostPerPiece).toBe(2)
+    expect(result.parentShippingCostPerPiece).toBe(1)
+    expect(result.totalA).toBeCloseTo(4.1, 10)
+    expect(result.profitB).toBeCloseTo(0.82, 10)
+    expect(result.totalRateInr).toBeCloseTo(16.92, 10)
   })
 })

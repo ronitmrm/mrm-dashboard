@@ -1620,7 +1620,11 @@ describe("commercial revisions and corrections", () => {
     const leafId = await createItem(`M-REV-COMPONENT-${suffix}`, "List")
     const packageId = await createItem(`P-REV-PACKAGE-${suffix}`, "Package")
     await pool.query(
-      "UPDATE catalog.items SET rejection_percent = 0.10 WHERE id = $1",
+      `
+        UPDATE catalog.items
+        SET pieces_per_kg = 10, rejection_percent = 0.10
+        WHERE id = $1
+      `,
       [packageId]
     )
     const leafQuoteId = await createQuote({
@@ -1637,8 +1641,16 @@ describe("commercial revisions and corrections", () => {
       itemType: "Package",
       processBase: 1,
       profitPercent: 0.2,
-      total: 13.32,
+      total: 16.92,
     })
+    await pool.query(
+      `
+        UPDATE sales.quote_items
+        SET packing_cost = 20, shipping_cost = 10
+        WHERE id = $1
+      `,
+      [packageQuoteId]
+    )
     const revision = await repository.createBulkPriceRevision({
       customerId,
       effectiveOn: "2026-08-25",
@@ -1679,8 +1691,82 @@ describe("commercial revisions and corrections", () => {
     expect(prices).toEqual(
       new Map([
         [leafQuoteId, 13],
-        [packageQuoteId, 14.32],
+        [packageQuoteId, 17.92],
       ])
     )
+  })
+
+  test("revises a Direct Purchase with rejection, packing, and shipping", async () => {
+    const suffix = randomUUID()
+    const itemId = await createItem(`R-REV-DIRECT-${suffix}`, "List")
+    await pool.query(
+      `
+        UPDATE catalog.items
+        SET direct_purchase_price_per_piece = 10,
+          pieces_per_kg = 100,
+          pricing_method = 'Direct Purchase',
+          rejection_percent = 0.10
+        WHERE id = $1
+      `,
+      [itemId]
+    )
+    const quoteItemId = await createQuote({
+      customerPartCode: `REV-DIRECT-${suffix}`,
+      itemId,
+      itemType: "List",
+      processBase: 10,
+      profitPercent: 0.1,
+      total: 12.826,
+    })
+    await pool.query(
+      `
+        UPDATE sales.quote_items
+        SET packing_cost = 60, shipping_cost = 6
+        WHERE id = $1
+      `,
+      [quoteItemId]
+    )
+    const revision = await repository.createBulkPriceRevision({
+      customerId,
+      effectiveOn: "2026-09-01",
+      organizationId,
+      reason: "Recalculate a Direct Purchase price",
+      revisionRoute: "Customer Parameter Bulk Revision",
+    })
+    await repository.stageBulkPriceRevisionChange({
+      bulkPriceRevisionId: revision.id,
+      fieldName: "profit_percent",
+      newValue: 0.2,
+      selectedQuoteItemIds: [quoteItemId],
+    })
+
+    await repository.completeBulkPriceRevision({
+      bulkPriceRevisionId: revision.id,
+    })
+
+    const replacement = await pool.query<{
+      approved_price_usd: string
+      calculation_json: Record<string, unknown>
+    }>(
+      `
+        SELECT quote.approved_price_usd, quote.calculation_json
+        FROM sales.bulk_price_revision_changes change
+        JOIN sales.quote_items quote
+          ON quote.id = change.replacement_quote_item_id
+        WHERE change.bulk_price_revision_id = $1
+          AND change.prior_quote_item_id = $2
+      `,
+      [revision.id, quoteItemId]
+    )
+    expect(Number(replacement.rows[0]!.approved_price_usd)).toBeCloseTo(
+      13.992,
+      10
+    )
+    expect(replacement.rows[0]!.calculation_json).toMatchObject({
+      packingCostPerPiece: 0.6,
+      rejectionCost: 1,
+      shippingCostPerPiece: 0.06,
+      totalA: 11.66,
+    })
   })
 })
