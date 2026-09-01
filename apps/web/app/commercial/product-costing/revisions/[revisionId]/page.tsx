@@ -194,6 +194,7 @@ export default async function ProductRevisionCostingPage({
                     <TableHead>Current Product Base (₹/pc)</TableHead>
                     <TableHead>Pcs/Kg</TableHead>
                     <TableHead>Weight (g)</TableHead>
+                    <TableHead>Rejection</TableHead>
                     <TableHead>Alloy</TableHead>
                     <TableHead>Extrusion</TableHead>
                     <TableHead>Forging</TableHead>
@@ -234,6 +235,7 @@ export default async function ProductRevisionCostingPage({
                         money(product.productCostInr),
                         money(product.piecesPerKg),
                         money(product.weight100Pcs),
+                        `${money(product.rejectionPercent * 100)}%`,
                         money(product.alloyPremium),
                         money(product.extCost),
                         money(product.forgingCost),

@@ -1,6 +1,9 @@
 "use server"
 
-import { createCommercialRevisionsRepository } from "@workspace/db"
+import {
+  bulkRevisionFields,
+  createCommercialRevisionsRepository,
+} from "@workspace/db"
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 
@@ -139,8 +142,12 @@ export async function createBulkPriceRevisionAction(formData: FormData) {
 export async function stageBulkPriceRevisionAction(formData: FormData) {
   const fieldName = requiredText(formData, "field_name")
   const enteredValue = numberValue(formData, "new_value")
+  const field =
+    fieldName in bulkRevisionFields
+      ? bulkRevisionFields[fieldName as keyof typeof bulkRevisionFields]
+      : null
   const newValue =
-    fieldName === "profit_percent" ? enteredValue / 100 : enteredValue
+    field?.valueType === "percent" ? enteredValue / 100 : enteredValue
   await withRevisions(
     (repository, actorUserId) =>
       repository.stageBulkPriceRevisionChange({
