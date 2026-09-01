@@ -116,6 +116,12 @@ const requestedUids = [...expectedByUid.keys()].sort()
 const connectionString =
   process.env.WEB_DATABASE_URL ?? process.env.DATABASE_URL
 const apply = process.argv.includes("--apply")
+const repairRecalculation = process.argv.includes("--repair-recalculation")
+const originalRevisionReason =
+  "Correct Product Parameters after 2026-09-01 migration review"
+const revisionReason = repairRecalculation
+  ? "Repair stale customer calculations from BPR-0002"
+  : originalRevisionReason
 
 if (!connectionString) {
   throw new Error("WEB_DATABASE_URL or DATABASE_URL is required.")
@@ -173,7 +179,7 @@ try {
         : [{ current, fieldName: group.fieldName, newValue: group.newValue, uid }]
     })
   )
-  if (!mismatches.length) {
+  if (!mismatches.length && !repairRecalculation) {
     const verification = await pool.query<{
       active_root_prices: number
       applied_product_revision_rows: number
@@ -254,7 +260,7 @@ try {
       `,
       [
         organizationId,
-        "Correct Product Parameters after 2026-09-01 migration review",
+        originalRevisionReason,
       ]
     )
     const result = verification.rows[0]
@@ -281,7 +287,7 @@ try {
         2
       )
     )
-  } else if (mismatches.length !== 47) {
+  } else if (!repairRecalculation && mismatches.length !== 47) {
     throw new Error(
       `Expected 47 changed Product fields, found ${mismatches.length}. Refusing a partial rerun.`
     )
@@ -367,7 +373,11 @@ try {
     )
 
     if (!apply) {
-      console.log("Dry run complete. Re-run with --apply to publish corrections.")
+      console.log(
+        repairRecalculation
+          ? "Repair dry run complete. Re-run with --repair-recalculation --apply to publish recalculated prices."
+          : "Dry run complete. Re-run with --apply to publish corrections."
+      )
     } else {
       const existing = await pool.query<{
         id: string
@@ -384,7 +394,7 @@ try {
         `,
         [
           organizationId,
-          "Correct Product Parameters after 2026-09-01 migration review",
+          revisionReason,
         ]
       )
       const rootQuoteIds = impactRow.affected_root_ids
@@ -485,8 +495,7 @@ try {
         : await repository.createBulkPriceRevision({
             effectiveOn: "2026-09-01",
             organizationId,
-            reason:
-              "Correct Product Parameters after 2026-09-01 migration review",
+            reason: revisionReason,
             revisionRoute: "Product Parameter Bulk Revision",
           })
       console.log(
@@ -610,6 +619,8 @@ try {
         active_root_prices: number
         component_subtotal_profit_matches: number
         disabled_sent_triggers: number
+        list_rejection_mismatches: number
+        list_total_a_mismatches: number
         profit_scope_mismatches: number
         revision_status: string
         total_mismatches: number
@@ -633,6 +644,17 @@ try {
                   ON component.quote_product_snapshot_id = snapshot.id
                 WHERE snapshot.quote_item_id = quote.id
               )
+          ), revised_lists AS (
+            SELECT quote.calculation_json,
+              snapshot.product_snapshot
+            FROM sales.quote_items quote
+            JOIN sales.quote_product_snapshots snapshot
+              ON snapshot.quote_item_id = quote.id
+            WHERE quote.is_active
+              AND snapshot.item_type = 'List'
+              AND quote.source_payload ->> 'sourceRecordId' = $1::text
+              AND quote.calculation_json ? 'totalRodsCost'
+              AND quote.calculation_json ? 'rejectionCost'
           )
           SELECT
             (SELECT count(*) FROM sales.quote_items
@@ -649,6 +671,24 @@ try {
               WHERE child_total > 0 AND profit_percent <> 0
                 AND abs(profit_b - (child_total + own_total_a) * profit_percent)
                   <= 0.000001)::int AS component_subtotal_profit_matches,
+            (SELECT count(*) FROM revised_lists
+              WHERE abs(
+                (calculation_json ->> 'rejectionCost')::numeric -
+                (calculation_json ->> 'totalRodsCost')::numeric *
+                COALESCE(
+                  (product_snapshot ->> 'rejectionPercent')::numeric,
+                  0
+                )
+              ) > 0.000001)::int AS list_rejection_mismatches,
+            (SELECT count(*) FROM revised_lists
+              WHERE abs(
+                (calculation_json ->> 'totalA')::numeric -
+                (
+                  (calculation_json ->> 'processCost')::numeric +
+                  (calculation_json ->> 'totalRodsCost')::numeric +
+                  (calculation_json ->> 'rejectionCost')::numeric
+                )
+              ) > 0.000001)::int AS list_total_a_mismatches,
             (SELECT count(*) FROM pg_trigger
               WHERE NOT tgisinternal AND tgenabled <> 'O'
                 AND tgname LIKE '%sent%immut%')::int AS disabled_sent_triggers,
@@ -665,6 +705,8 @@ try {
         result.profit_scope_mismatches !== 0 ||
         result.total_mismatches !== 0 ||
         result.component_subtotal_profit_matches !== 0 ||
+        result.list_rejection_mismatches !== 0 ||
+        result.list_total_a_mismatches !== 0 ||
         result.disabled_sent_triggers !== 0 ||
         result.revision_status !== "Completed"
       ) {

@@ -751,18 +751,21 @@ function revisedCalculation(
     }
   }
 
-  const storedCost =
-    product.pricing_method === "Direct Purchase"
-      ? asNumber(product.direct_purchase_price_per_piece)
-      : asNumber(product.product_cost_inr)
+  const directPurchaseCost = asNumber(
+    product.direct_purchase_price_per_piece
+  )
+  const isDirectPurchase =
+    product.pricing_method === "Direct Purchase" && directPurchaseCost > 0
   const assembledPartInr = asNumber(quote.assembled_part_inr)
   const base =
-    storedCost > 0
+    isDirectPurchase
       ? {
-          profitB: storedCost * profit,
-          totalA: storedCost,
-          totalAPlusB: storedCost * (1 + profit),
-          totalRateInr: storedCost * (1 + profit) + assembledPartInr,
+          piecesPerKg: 0,
+          profitB: directPurchaseCost * profit,
+          totalA: directPurchaseCost,
+          totalAPlusB: directPurchaseCost * (1 + profit),
+          totalRateInr:
+            directPurchaseCost * (1 + profit) + assembledPartInr,
         }
       : calculateCosting(
           {
@@ -814,21 +817,33 @@ function revisedCalculation(
           }
         )
   let revisedProfit = profit
-  if (targetPriceUsd !== undefined && asNumber(base.totalA) > 0) {
+  const piecesPerKg = asNumber(base.piecesPerKg)
+  const profitBasisPerPiece = isDirectPurchase
+    ? asNumber(base.totalA)
+    : piecesPerKg > 0
+      ? asNumber(base.totalA) / piecesPerKg
+      : 0
+  if (targetPriceUsd !== undefined && profitBasisPerPiece > 0) {
     revisedProfit =
       (targetPriceUsd * conversionRate -
         assembledPartInr -
-        asNumber(base.totalA)) /
-      asNumber(base.totalA)
+        profitBasisPerPiece) /
+      profitBasisPerPiece
   }
   const profitB = asNumber(base.totalA) * revisedProfit
   const totalAPlusB = asNumber(base.totalA) + profitB
-  const totalRateInr = totalAPlusB + assembledPartInr
+  const rateInr = isDirectPurchase
+    ? totalAPlusB
+    : piecesPerKg > 0
+      ? totalAPlusB / piecesPerKg
+      : 0
+  const totalRateInr = rateInr + assembledPartInr
   return {
     calculation: {
       ...calculation,
       ...base,
       profitB,
+      rateInr,
       totalAPlusB,
       totalRateInr,
     },
