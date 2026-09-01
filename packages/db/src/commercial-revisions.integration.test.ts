@@ -388,6 +388,12 @@ describe("commercial revisions and corrections", () => {
       newValue: 4,
       selectedProductIds: [sharedItemId],
     })
+    await repository.stageBulkPriceRevisionChange({
+      bulkPriceRevisionId: revision.id,
+      fieldName: "rejection_percent",
+      newValue: 0.05,
+      selectedProductIds: [sharedItemId],
+    })
     const removableProductChange =
       await repository.stageBulkPriceRevisionChange({
         bulkPriceRevisionId: revision.id,
@@ -425,12 +431,22 @@ describe("commercial revisions and corrections", () => {
       status: "Pending Customer Costing",
     })
     await expect(
-      pool.query<{ overhead_cost: string; product_cost_inr: string }>(
-        "SELECT overhead_cost::text, product_cost_inr::text FROM catalog.items WHERE id = $1",
+      pool.query<{
+        overhead_cost: string
+        product_cost_inr: string
+        rejection_percent: string
+      }>(
+        "SELECT overhead_cost::text, product_cost_inr::text, rejection_percent::text FROM catalog.items WHERE id = $1",
         [sharedItemId]
       )
     ).resolves.toMatchObject({
-      rows: [{ overhead_cost: "1", product_cost_inr: "0.1" }],
+      rows: [
+        {
+          overhead_cost: "1",
+          product_cost_inr: "0.1",
+          rejection_percent: "0",
+        },
+      ],
     })
 
     const handedOff = await repository.listBulkPriceRevisions(organizationCode)
@@ -485,13 +501,13 @@ describe("commercial revisions and corrections", () => {
           approvedPriceUsd: 12,
           decision: null,
           quoteItemId: firstQuoteId,
-          revisePriceUsd: 0.48,
+          revisePriceUsd: 0.504,
         }),
         expect.objectContaining({
           approvedPriceUsd: 12,
           decision: null,
           quoteItemId: secondQuoteId,
-          revisePriceUsd: 0.48,
+          revisePriceUsd: 0.504,
         }),
       ])
     )
@@ -511,12 +527,22 @@ describe("commercial revisions and corrections", () => {
       })
     ).resolves.toEqual({ revisedQuoteCount: 2, status: "Completed" })
     await expect(
-      pool.query<{ overhead_cost: string; product_cost_inr: string }>(
-        "SELECT overhead_cost::text, product_cost_inr::text FROM catalog.items WHERE id = $1",
+      pool.query<{
+        overhead_cost: string
+        product_cost_inr: string
+        rejection_percent: string
+      }>(
+        "SELECT overhead_cost::text, product_cost_inr::text, rejection_percent::text FROM catalog.items WHERE id = $1",
         [sharedItemId]
       )
     ).resolves.toMatchObject({
-      rows: [{ overhead_cost: "4", product_cost_inr: "0.4" }],
+      rows: [
+        {
+          overhead_cost: "4",
+          product_cost_inr: "0.4",
+          rejection_percent: "0.05",
+        },
+      ],
     })
 
     const activeAfter =
@@ -588,6 +614,10 @@ describe("commercial revisions and corrections", () => {
       profitPercent: 0,
       total: 0,
     })
+    await pool.query(
+      "UPDATE sales.quote_items SET is_active = false WHERE id = $1",
+      [listQuoteId]
+    )
     const revision = await repository.createBulkPriceRevision({
       effectiveOn: "2026-08-30",
       organizationId,
@@ -600,7 +630,7 @@ describe("commercial revisions and corrections", () => {
         query: `R-PBR-${suffix}`,
       })
     expect(products.rows).toEqual([
-      expect.objectContaining({ affectedPriceCount: 3, id: listItemId }),
+      expect.objectContaining({ affectedPriceCount: 2, id: listItemId }),
     ])
     await repository.stageBulkPriceRevisionChange({
       bulkPriceRevisionId: revision.id,
@@ -608,8 +638,13 @@ describe("commercial revisions and corrections", () => {
       newValue: 10,
       selectedProductIds: [listItemId],
     })
-    await repository.completeBulkPriceRevision({
-      bulkPriceRevisionId: revision.id,
+    await expect(
+      repository.completeBulkPriceRevision({
+        bulkPriceRevisionId: revision.id,
+      })
+    ).resolves.toEqual({
+      revisedQuoteCount: 0,
+      status: "Pending Customer Costing",
     })
 
     const draftCosts = await pool.query<{
@@ -636,9 +671,23 @@ describe("commercial revisions and corrections", () => {
       ])
     )
 
-    await repository.completeBulkPriceRevision({
-      bulkPriceRevisionId: revision.id,
-    })
+    const work = await repository.getProductBulkRevisionCustomerCosting(
+      revision.id
+    )
+    expect(work?.coverage.total).toBe(2)
+    for (const price of work?.rows ?? []) {
+      await repository.applyProductBulkRevisionPriceDecision({
+        bulkPriceRevisionId: revision.id,
+        decision: "Revise Price",
+        sourceQuoteItemId: price.quoteItemId,
+      })
+    }
+
+    await expect(
+      repository.completeBulkPriceRevision({
+        bulkPriceRevisionId: revision.id,
+      })
+    ).resolves.toEqual({ revisedQuoteCount: 2, status: "Completed" })
 
     const completedCosts = await pool.query<{
       id: string

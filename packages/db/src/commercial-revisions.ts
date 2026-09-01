@@ -118,6 +118,11 @@ export const bulkRevisionFields = {
     route: "product",
     valueType: "number",
   },
+  rejection_percent: {
+    label: "Rejection %",
+    route: "product",
+    valueType: "percent",
+  },
   scrap_rate: {
     label: "Scrap Rate (INR/kg)",
     route: "customer",
@@ -224,6 +229,7 @@ type BulkRevisionFieldName = keyof typeof bulkRevisionFields
 
 const productFields = new Set<BulkRevisionFieldName>([
   "casting",
+  "rejection_percent",
   "alloy_premium",
   "ext_cost",
   "forging_cost",
@@ -263,6 +269,7 @@ const productColumnByField: Partial<Record<BulkRevisionFieldName, string>> = {
   marking: "marking",
   overhead_cost: "overhead_cost",
   plating: "plating",
+  rejection_percent: "rejection_percent",
   sealant: "sealant",
   washing: "washing",
 }
@@ -2742,6 +2749,7 @@ export function createCommercialRevisionsRepository(
         plating: string
         product_cost_inr: string
         production_type: string | null
+        rejection_percent: string
         sealant: string
         total_count: string
         uid: string
@@ -2784,6 +2792,7 @@ export function createCommercialRevisionsRepository(
             SELECT item.id, item.uid, item.description, item.item_type,
               item.production_type, item.pieces_per_kg, item.weight_100_pcs,
               item.product_cost_inr, item.casting, item.alloy_premium,
+              item.rejection_percent,
               item.extrusion_cost AS ext_cost, item.forging_cost,
               item.machining_cost, item.washing, item.checking, item.marking,
               item.plating, item.annealing, item.deburring, item.buffing,
@@ -2844,6 +2853,7 @@ export function createCommercialRevisionsRepository(
           plating: asNumber(row.plating),
           productCostInr: asNumber(row.product_cost_inr),
           productionType: row.production_type,
+          rejectionPercent: asNumber(row.rejection_percent),
           sealant: asNumber(row.sealant),
           uid: row.uid,
           washing: asNumber(row.washing),
@@ -3820,6 +3830,16 @@ export function createCommercialRevisionsRepository(
           return uniqueIds
         }
 
+        async function requireActiveAffectedPaths(quoteIds: string[]) {
+          const uniqueIds = [...new Set(quoteIds)]
+          const rootQuoteIds = await topLevelAffectedQuoteIds(
+            client,
+            new Set(uniqueIds)
+          )
+          await requireActivePrices(rootQuoteIds)
+          return uniqueIds
+        }
+
         async function productIdsForStage(group: typeof changes.rows) {
           const selectedProductIdSet = new Set(
             group
@@ -3888,7 +3908,7 @@ export function createCommercialRevisionsRepository(
             if (!productColumnByField[fieldName]) {
               throw new Error("Unsupported staged product parameter.")
             }
-            const affectedQuoteIds = await requireActivePrices(
+            const affectedQuoteIds = await requireActiveAffectedPaths(
               await activeAffectedQuotePathIds(
                 client,
                 selectedProductIds,
@@ -4018,7 +4038,7 @@ export function createCommercialRevisionsRepository(
             group.map((change) => change.prior_quote_item_id)
           )
           const quoteIds = isPreparedProductStage
-            ? await requireActivePrices(
+            ? await requireActiveAffectedPaths(
                 group.flatMap((change) =>
                   Array.isArray(change.final_quote_item_ids_json)
                     ? change.final_quote_item_ids_json.filter(
