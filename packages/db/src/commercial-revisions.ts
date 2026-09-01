@@ -79,6 +79,7 @@ type ProductRow = {
   id: string
   item_type: string
   machining_cost: string
+  machining_price_per_piece: string
   marking: string
   overhead_cost: string
   pieces_per_kg: string
@@ -495,6 +496,7 @@ function productSnapshot(product: ProductRow) {
     forgingCost: asNumber(product.forging_cost),
     itemType: product.item_type,
     machiningCost: asNumber(product.machining_cost),
+    machiningPricePerPiece: asNumber(product.machining_price_per_piece),
     marking: asNumber(product.marking),
     overheadCost: asNumber(product.overhead_cost),
     piecesPerKg: asNumber(product.pieces_per_kg),
