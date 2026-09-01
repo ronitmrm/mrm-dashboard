@@ -57,7 +57,10 @@ const activePriceHeadings = [
   "Select",
   "Customer",
   "Customer Part",
-  "Product",
+  "UID",
+  "Description",
+  "Category",
+  "Subcategory",
   "Current Price",
   "Scrap",
   "Packing",
@@ -66,6 +69,7 @@ const activePriceHeadings = [
   "Profit",
   "FX",
 ] as const
+const bulkRevisionTableLimit = 10_000
 
 const numberFormatter = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 4,
@@ -94,7 +98,6 @@ export default async function CustomerBulkRevisionPage({
   searchParams,
 }: {
   searchParams: Promise<{
-    priceSearch?: string
     revision?: string
   }>
 }) {
@@ -106,7 +109,6 @@ export default async function CustomerBulkRevisionPage({
   const selectedRevisionId = validUuid(params.revision?.trim() ?? "")
     ? params.revision!.trim()
     : ""
-  const priceSearch = params.priceSearch?.trim() ?? ""
   const repository = createCommercialRevisionsRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
@@ -129,11 +131,11 @@ export default async function CustomerBulkRevisionPage({
           selectedRevisionId
             ? repository.listBulkPriceRevisionActivePricesBounded(
                 selectedRevisionId,
-                { query: priceSearch }
+                { limit: bulkRevisionTableLimit }
               )
             : Promise.resolve({
                 coverage: {
-                  limit: 200,
+                  limit: bulkRevisionTableLimit,
                   returned: 0,
                   total: 0,
                   truncated: false,
@@ -328,10 +330,6 @@ export default async function CustomerBulkRevisionPage({
       <Card hidden={!selectedRevisionId} id="customer-bulk-workbench">
         <CardHeader>
           <CardTitle>Customer Revision Workbench</CardTitle>
-          <CardDescription>
-            Only The Selected Revision And A Bounded, Server-Searchable Price
-            Set Are Loaded. Profit Accepts A Whole Percentage Such As 9 For 9%.
-          </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-6">
           {selectedRevision ? (
@@ -364,34 +362,9 @@ export default async function CustomerBulkRevisionPage({
                 </Button>
               </div>
 
-              <div className="grid gap-3">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                  <form className="flex flex-1 gap-2" method="get">
-                    <input
-                      name="revision"
-                      type="hidden"
-                      value={selectedRevision.id}
-                    />
-                    <Input
-                      aria-label="Search active customer prices"
-                      defaultValue={priceSearch}
-                      name="priceSearch"
-                      placeholder="Search customer part, quote, UID, or description"
-                    />
-                    <Button type="submit" variant="outline">
-                      Search Prices
-                    </Button>
-                  </form>
-                  <p className="text-xs text-muted-foreground tabular-nums">
-                    {selectedRevision.activePriceCount} Active Prices In Scope
-                  </p>
-                </div>
-                <BoundedResultNotice
-                  coverage={prices.coverage}
-                  searchQuery={priceSearch}
-                  section="Active customer prices"
-                />
-              </div>
+              <p className="text-right text-xs text-muted-foreground tabular-nums">
+                {selectedRevision.activePriceCount} Active Prices In Scope
+              </p>
 
               {!isCompleted ? (
                 <form
@@ -404,7 +377,7 @@ export default async function CustomerBulkRevisionPage({
                     value={selectedRevision.id}
                   />
                   <div className="max-h-[36rem] overflow-auto rounded-md border">
-                    <Table className="w-full caption-bottom text-sm">
+                    <Table excelFilters className="w-full caption-bottom text-sm">
                       <TableHeader className="sticky top-0 z-10 bg-background [&_tr]:border-b">
                         <TableRow>
                           {activePriceHeadings.map((heading) => (
@@ -437,11 +410,17 @@ export default async function CustomerBulkRevisionPage({
                             <TableCell className="p-3 align-middle font-mono whitespace-nowrap">
                               {price.customerPartCode ?? "—"}
                             </TableCell>
+                            <TableCell className="p-3 align-middle font-mono whitespace-nowrap">
+                              {price.uid}
+                            </TableCell>
+                            <TableCell className="max-w-64 p-3 align-middle">
+                              {price.description}
+                            </TableCell>
                             <TableCell className="p-3 align-middle whitespace-nowrap">
-                              <span className="font-mono">{price.uid}</span>
-                              <span className="block max-w-64 text-xs text-muted-foreground">
-                                {price.description}
-                              </span>
+                              {price.category ?? "—"}
+                            </TableCell>
+                            <TableCell className="p-3 align-middle whitespace-nowrap">
+                              {price.subcategory ?? "—"}
                             </TableCell>
                             <TableCell className="p-3 align-middle whitespace-nowrap tabular-nums">
                               $ {money(price.approvedPriceUsd)}
@@ -470,9 +449,9 @@ export default async function CustomerBulkRevisionPage({
                           <TableRow>
                             <TableCell
                               className="h-24 text-center"
-                              colSpan={11}
+                              colSpan={14}
                             >
-                              No Active Prices Match This Search.
+                              No Active Prices Are In Scope.
                             </TableCell>
                           </TableRow>
                         ) : null}

@@ -28,7 +28,6 @@ import {
   TableRow,
 } from "@workspace/ui/components/table"
 
-import { BoundedResultNotice } from "@/components/bounded-result-notice"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
@@ -44,6 +43,7 @@ export const dynamic = "force-dynamic"
 const productFields = Object.entries(bulkRevisionFields).filter(
   ([, field]) => field.route === "product"
 )
+const bulkRevisionTableLimit = 10_000
 
 const numberFormatter = new Intl.NumberFormat("en-IN", {
   maximumFractionDigits: 4,
@@ -59,10 +59,8 @@ function validUuid(value: string) {
 
 export default async function ProductRevisionCostingPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ revisionId: string }>
-  searchParams: Promise<{ productSearch?: string }>
 }) {
   await requireCapability(
     commercialCapabilities.revisions.read,
@@ -70,7 +68,6 @@ export default async function ProductRevisionCostingPage({
   )
   const { revisionId: rawRevisionId } = await params
   const revisionId = validUuid(rawRevisionId) ? rawRevisionId : ""
-  const productSearch = (await searchParams).productSearch?.trim() ?? ""
   const repository = createCommercialRevisionsRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
@@ -85,11 +82,11 @@ export default async function ProductRevisionCostingPage({
           : Promise.resolve([]),
         revisionId
           ? repository.listProductBulkRevisionActivePricesBounded(revisionId, {
-              query: productSearch,
+              limit: bulkRevisionTableLimit,
             })
           : Promise.resolve({
               coverage: {
-                limit: 200,
+                limit: bulkRevisionTableLimit,
                 returned: 0,
                 total: 0,
                 truncated: false,
@@ -150,32 +147,8 @@ export default async function ProductRevisionCostingPage({
       <Card>
         <CardHeader>
           <CardTitle>Products In Scope</CardTitle>
-          <CardDescription>
-            Each product UID appears once. This table shows the current
-            published Product Master. Staged Product Base values remain
-            separate until the complete revision is published.
-          </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-6">
-          <div className="grid gap-2">
-            <form className="flex max-w-3xl gap-2" method="get">
-              <Input
-                aria-label="Search products"
-                defaultValue={productSearch}
-                name="productSearch"
-                placeholder="Search product UID, description, type, or production"
-              />
-              <Button type="submit" variant="outline">
-                Search Products
-              </Button>
-            </form>
-            <BoundedResultNotice
-              coverage={products.coverage}
-              searchQuery={productSearch}
-              section="Unique products"
-            />
-          </div>
-
           <form action={stageBulkPriceRevisionAction} className="grid gap-4">
             <input
               name="bulk_price_revision_id"
@@ -183,11 +156,14 @@ export default async function ProductRevisionCostingPage({
               value={revision.id}
             />
             <div className="max-h-[34rem] overflow-auto rounded-md border">
-              <Table className="tabular-nums">
+              <Table excelFilters className="tabular-nums">
                 <TableHeader className="sticky top-0 z-10 bg-background">
                   <TableRow>
                     <TableHead>Select</TableHead>
-                    <TableHead>Product</TableHead>
+                    <TableHead>UID</TableHead>
+                    <TableHead>Description</TableHead>
+                    <TableHead>Category</TableHead>
+                    <TableHead>Subcategory</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead>Production</TableHead>
                     <TableHead>Affected Prices</TableHead>
@@ -222,11 +198,17 @@ export default async function ProductRevisionCostingPage({
                           value={product.id}
                         />
                       </TableCell>
+                      <TableCell className="font-mono whitespace-nowrap">
+                        {product.uid}
+                      </TableCell>
                       <TableCell className="min-w-64">
-                        <span className="font-mono">{product.uid}</span>
-                        <span className="block text-xs text-muted-foreground">
-                          {product.description}
-                        </span>
+                        {product.description}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        {product.category ?? "—"}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        {product.subcategory ?? "—"}
                       </TableCell>
                       {[
                         product.itemType,
@@ -262,8 +244,8 @@ export default async function ProductRevisionCostingPage({
                   ))}
                   {!products.rows.length ? (
                     <TableRow>
-                      <TableCell className="h-24 text-center" colSpan={22}>
-                        No Products Match This Search.
+                      <TableCell className="h-24 text-center" colSpan={26}>
+                        No Products Are In Scope.
                       </TableCell>
                     </TableRow>
                   ) : null}
