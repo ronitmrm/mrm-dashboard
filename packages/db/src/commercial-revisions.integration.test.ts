@@ -46,6 +46,8 @@ async function createQuote(input: {
   itemType: string
   processBase: number
   profitPercent: number
+  purchaseTimes?: number
+  scrapRate?: number
   total: number
 }) {
   const sourceId = randomUUID()
@@ -55,13 +57,15 @@ async function createQuote(input: {
         organization_id, quote_number, revision, customer_id, item_id,
         lineage_item_id, customer_part_code, quantity, unit_price,
         currency_code, status, is_active, sent_at, profit_percent,
-        conversion_rate, rate_inr, total_rate_inr, rate_usd,
+        purchase_times, scrap_rate, conversion_rate, rate_inr,
+        total_rate_inr, rate_usd,
         approved_price_usd, calculation_json, price_lineage_key,
         source_system, source_table, source_id
       )
       VALUES (
         $1, $2, 1, $3, $4, $4, $5, 1, $6, 'USD', 'Draft', true, NULL,
-        $7, 1, $6, $6, $6, $6, $8, $9, 'test', 'quote_items', $10
+        $7, $8, $9, 1, $6, $6, $6, $6, $10, $11, 'test',
+        'quote_items', $12
       )
       RETURNING id
     `,
@@ -73,6 +77,8 @@ async function createQuote(input: {
       input.customerPartCode ?? null,
       input.total,
       input.profitPercent,
+      input.purchaseTimes ?? 0,
+      input.scrapRate ?? 0,
       {
         childQuoteTotal: input.child?.total ?? 0,
         packageProcessCostPerPiece: input.processBase,
@@ -194,6 +200,7 @@ describe("commercial revisions and corrections", () => {
   test("publishes the exact source customer and product bulk field matrix", () => {
     expect(Object.keys(bulkRevisionFields)).toEqual([
       "casting",
+      "rejection_percent",
       "scrap_rate",
       "alloy_premium",
       "ext_cost",
@@ -323,7 +330,7 @@ describe("commercial revisions and corrections", () => {
     const sharedItemId = await createItem(`M-PBR-${suffix}`, "List")
     await pool.query(
       `UPDATE catalog.items
-       SET overhead_cost = 1, weight_100_pcs = 100,
+       SET overhead_cost = 1, casting = 100, weight_100_pcs = 100,
          pieces_per_kg = 10, product_cost_inr = 0.1
        WHERE id = $1`,
       [sharedItemId]
@@ -346,7 +353,9 @@ describe("commercial revisions and corrections", () => {
       itemType: "List",
       processBase: 10,
       profitPercent: 0.2,
-      total: 12,
+      purchaseTimes: 1,
+      scrapRate: 100,
+      total: 12.12,
     })
     const secondQuoteId = await createQuote({
       customerId: secondCustomer.rows[0]!.id,
@@ -355,7 +364,9 @@ describe("commercial revisions and corrections", () => {
       itemType: "List",
       processBase: 10,
       profitPercent: 0.2,
-      total: 12,
+      purchaseTimes: 1,
+      scrapRate: 100,
+      total: 12.12,
     })
     const revision = await repository.createBulkPriceRevision({
       effectiveOn: "2026-08-21",
@@ -498,16 +509,16 @@ describe("commercial revisions and corrections", () => {
     expect(work.rows).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          approvedPriceUsd: 12,
+          approvedPriceUsd: 12.12,
           decision: null,
           quoteItemId: firstQuoteId,
-          revisePriceUsd: 0.504,
+          revisePriceUsd: 13.08,
         }),
         expect.objectContaining({
-          approvedPriceUsd: 12,
+          approvedPriceUsd: 12.12,
           decision: null,
           quoteItemId: secondQuoteId,
-          revisePriceUsd: 0.504,
+          revisePriceUsd: 13.08,
         }),
       ])
     )
@@ -554,6 +565,36 @@ describe("commercial revisions and corrections", () => {
     expect(activeAfter.rows.map((price) => price.id)).not.toContain(
       secondQuoteId
     )
+    const recalculated = await pool.query<{
+      customer_part_code: string
+      price: string
+      rejection_cost: string
+      total_a: string
+    }>(
+      `
+        SELECT customer_part_code, approved_price_usd::text AS price,
+          calculation_json ->> 'rejectionCost' AS rejection_cost,
+          calculation_json ->> 'totalA' AS total_a
+        FROM sales.quote_items
+        WHERE item_id = $1 AND is_active
+        ORDER BY customer_part_code
+      `,
+      [sharedItemId]
+    )
+    expect(recalculated.rows).toEqual([
+      {
+        customer_part_code: `PBR-A-${suffix}`,
+        price: "12.12000000",
+        rejection_cost: "5",
+        total_a: "109",
+      },
+      {
+        customer_part_code: `PBR-B-${suffix}`,
+        price: "13.08000000",
+        rejection_cost: "5",
+        total_a: "109",
+      },
+    ])
   })
 
   test("recalculates every Package Product Base that uses a revised List product", async () => {
