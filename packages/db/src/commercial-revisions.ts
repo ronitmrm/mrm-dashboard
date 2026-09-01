@@ -1169,6 +1169,7 @@ type EngineeringChangeBomLine = {
 type EngineeringChangeDesignPatch = {
   bomLines?: EngineeringChangeBomLine[]
   casting?: number
+  designDetails?: Record<string, unknown>
   description?: string
   dieCode?: string | null
   itemType?: string
@@ -1177,6 +1178,7 @@ type EngineeringChangeDesignPatch = {
   remarks?: string | null
   rodSize?: string | null
   rodTypeId?: string | null
+  sourcePayloadPatch?: Record<string, unknown>
   weight100Pcs?: number
 }
 
@@ -1205,7 +1207,10 @@ type EngineeringChangeProductCostingPatch = {
 }
 
 const designPatchColumns: Record<
-  Exclude<keyof EngineeringChangeDesignPatch, "bomLines">,
+  Exclude<
+    keyof EngineeringChangeDesignPatch,
+    "bomLines" | "designDetails" | "sourcePayloadPatch"
+  >,
   string
 > = {
   casting: "casting",
@@ -3125,6 +3130,269 @@ export function createCommercialRevisionsRepository(
         : null
     },
 
+    async getEngineeringChangeDesignWorkspace(
+      organizationCode: string,
+      engineeringChangeNoteId: string
+    ) {
+      const root = await pool.query<{
+        casting: string
+        category: string | null
+        checked_by: string | null
+        description: string
+        design_remarks: string | null
+        design_task_id: string | null
+        die_code: string | null
+        ecn_number: string
+        fixture_approx_cost: string | null
+        fixture_required: string | null
+        gauges_required: string | null
+        id: string
+        inspection_approx_cost: string | null
+        item_id: string
+        item_source_payload: Record<string, unknown> | null
+        item_type: string
+        item_uid: string
+        operation_notes: string | null
+        production_type: string | null
+        product_size: string | null
+        reason: string
+        remarks: string | null
+        rod_size: string | null
+        source_payload: Record<string, unknown>
+        status: string
+        subcategory: string | null
+        target_completion_date: string | null
+        tooling_approx_cost: string | null
+        tooling_required: string | null
+        weight_100_pcs: string
+      }>(
+        `
+          SELECT ecn.id, ecn.ecn_number, ecn.reason, ecn.status,
+            ecn.source_payload, item.source_payload AS item_source_payload,
+            item.id AS item_id, item.uid AS item_uid,
+            item.description, item.item_type, item.production_type,
+            item.weight_100_pcs::text, item.casting::text, item.rod_size,
+            item.die_code, item.remarks,
+            COALESCE(
+              NULLIF(btrim(item.source_payload ->> 'productSize'), ''),
+              NULLIF(btrim(profile.size), ''),
+              NULLIF(btrim(design.internal_part_size), '')
+            ) AS product_size,
+            COALESCE(
+              NULLIF(btrim(item.source_payload ->> 'category'), ''),
+              NULLIF(btrim(profile.category), ''),
+              NULLIF(btrim(design.internal_part_category), '')
+            ) AS category,
+            COALESCE(
+              NULLIF(btrim(item.source_payload ->> 'subcategory'), ''),
+              NULLIF(btrim(profile.sub_category), ''),
+              NULLIF(btrim(design.internal_part_sub_category), '')
+            ) AS subcategory,
+            design.target_completion_date::text, design.tooling_required,
+            design.tooling_approx_cost::text, design.fixture_required,
+            design.fixture_approx_cost::text, design.gauges_required,
+            design.inspection_approx_cost::text, design.checked_by,
+            design.operation_notes, design.design_remarks,
+            design.id AS design_task_id
+          FROM sales.engineering_change_notes ecn
+          JOIN core.organizations organization
+            ON organization.id = ecn.organization_id
+          JOIN catalog.items item ON item.id = ecn.item_id
+          LEFT JOIN catalog.website_product_profiles profile
+            ON profile.item_id = item.id
+          LEFT JOIN sales.design_tasks design
+            ON design.id::text = item.source_payload ->> 'designTaskId'
+          WHERE lower(organization.code) = lower($1) AND ecn.id = $2
+          LIMIT 1
+        `,
+        [organizationCode, engineeringChangeNoteId]
+      )
+      const row = root.rows[0]
+      if (!row) return null
+      const bom = await pool.query<{
+        category: string | null
+        component_item_id: string
+        description: string
+        item_type: string
+        notes: string | null
+        quantity: string
+        subcategory: string | null
+        uid: string
+      }>(
+        `
+          SELECT line.component_item_id, component.uid,
+            component.description, component.item_type, line.quantity::text,
+            line.notes,
+            COALESCE(
+              NULLIF(btrim(profile.category), ''),
+              NULLIF(btrim(component.source_payload ->> 'category'), ''),
+              NULLIF(btrim(design.internal_part_category), '')
+            ) AS category,
+            COALESCE(
+              NULLIF(btrim(profile.sub_category), ''),
+              NULLIF(btrim(component.source_payload ->> 'subcategory'), ''),
+              NULLIF(btrim(design.internal_part_sub_category), '')
+            ) AS subcategory
+          FROM catalog.bom_lines line
+          JOIN catalog.items component ON component.id = line.component_item_id
+          LEFT JOIN catalog.website_product_profiles profile
+            ON profile.item_id = component.id
+          LEFT JOIN sales.design_tasks design
+            ON design.id::text = component.source_payload ->> 'designTaskId'
+          WHERE line.parent_item_id = $1
+          ORDER BY line.sequence, line.created_at, line.id
+        `,
+        [row.item_id]
+      )
+      const storedDraft =
+        row.source_payload &&
+        typeof row.source_payload.designDraft === "object" &&
+        row.source_payload.designDraft !== null &&
+        !Array.isArray(row.source_payload.designDraft)
+          ? (row.source_payload.designDraft as Record<string, unknown>)
+          : {}
+      const approvedDossier =
+        row.item_source_payload &&
+        typeof row.item_source_payload.productDesignDossier === "object" &&
+        row.item_source_payload.productDesignDossier !== null &&
+        !Array.isArray(row.item_source_payload.productDesignDossier)
+          ? (row.item_source_payload.productDesignDossier as Record<
+              string,
+              unknown
+            >)
+          : {}
+      const value = (key: string, fallback: unknown) =>
+        storedDraft[key] === undefined
+          ? approvedDossier[key] === undefined
+            ? fallback
+            : approvedDossier[key]
+          : storedDraft[key]
+      const storedBomLines = Array.isArray(storedDraft.bomLines)
+        ? storedDraft.bomLines
+            .filter(
+              (line): line is Record<string, unknown> =>
+                typeof line === "object" &&
+                line !== null &&
+                !Array.isArray(line)
+            )
+            .map((line) => ({
+              componentItemId: asText(line.componentItemId),
+              notes: asText(line.notes) || null,
+              quantity: asNumber(line.quantity, 1),
+            }))
+            .filter((line) => line.componentItemId && line.quantity > 0)
+        : null
+      let bomLines = bom.rows.map((line) => ({
+        category: line.category,
+        componentItemId: line.component_item_id,
+        description: line.description,
+        itemType: line.item_type,
+        notes: line.notes,
+        quantity: asNumber(line.quantity, 1),
+        subcategory: line.subcategory,
+        uid: line.uid,
+      }))
+      if (storedBomLines) {
+        const componentIds = storedBomLines.map((line) => line.componentItemId)
+        const components = componentIds.length
+          ? await pool.query<{
+              description: string
+              id: string
+              item_type: string
+              uid: string
+            }>(
+              `SELECT id, uid, description, item_type
+               FROM catalog.items WHERE id = ANY($1::uuid[])`,
+              [componentIds]
+            )
+          : { rows: [] }
+        const componentById = new Map(
+          components.rows.map((component) => [component.id, component] as const)
+        )
+        bomLines = storedBomLines.flatMap((line) => {
+          const component = componentById.get(line.componentItemId)
+          return component
+            ? [
+                {
+                  category: null,
+                  componentItemId: component.id,
+                  description: component.description,
+                  itemType: component.item_type,
+                  notes: line.notes,
+                  quantity: line.quantity,
+                  subcategory: null,
+                  uid: component.uid,
+                },
+              ]
+            : []
+        })
+      }
+      const attachments = row.design_task_id
+        ? await pool.query<{ file_name: string; purpose: string }>(
+            `
+              SELECT file.file_name, link.purpose
+              FROM core.file_links link
+              JOIN core.files file ON file.id = link.file_id
+              WHERE link.target_schema = 'sales'
+                AND link.target_table = 'design_tasks'
+                AND link.target_id = $1
+                AND link.is_current
+              ORDER BY file.created_at DESC, file.id DESC
+            `,
+            [row.design_task_id]
+          )
+        : { rows: [] }
+      return {
+        attachments: attachments.rows.map((attachment) => ({
+          fileName: attachment.file_name,
+          href: `/commercial/design/${row.design_task_id}/file/${encodeURIComponent(attachment.purpose)}`,
+          purpose: attachment.purpose,
+        })),
+        bomLines,
+        casting: asNumber(value("casting", row.casting)),
+        category: asText(value("category", row.category)) || null,
+        checkedBy: asText(value("checkedBy", row.checked_by)) || null,
+        description: asText(value("description", row.description)),
+        designRemarks:
+          asText(value("designRemarks", row.design_remarks)) || null,
+        dieCode: asText(value("dieCode", row.die_code)) || null,
+        ecnNumber: row.ecn_number,
+        fixtureApproxCost: asNumber(
+          value("fixtureApproxCost", row.fixture_approx_cost)
+        ),
+        fixtureRequired:
+          asText(value("fixtureRequired", row.fixture_required)) || "No",
+        gaugesRequired:
+          asText(value("gaugesRequired", row.gauges_required)) || "No",
+        id: row.id,
+        inspectionApproxCost: asNumber(
+          value("inspectionApproxCost", row.inspection_approx_cost)
+        ),
+        itemId: row.item_id,
+        itemType: asText(value("itemType", row.item_type)),
+        itemUid: row.item_uid,
+        operationNotes:
+          asText(value("operationNotes", row.operation_notes)) || null,
+        productionType:
+          asText(value("productionType", row.production_type)) || null,
+        productSize: asText(value("productSize", row.product_size)) || null,
+        reason: row.reason,
+        remarks: asText(value("remarks", row.remarks)) || null,
+        rodSize: asText(value("rodSize", row.rod_size)) || null,
+        status: row.status,
+        subcategory: asText(value("subcategory", row.subcategory)) || null,
+        targetCompletionDate:
+          asText(value("targetCompletionDate", row.target_completion_date)) ||
+          null,
+        toolingApproxCost: asNumber(
+          value("toolingApproxCost", row.tooling_approx_cost)
+        ),
+        toolingRequired:
+          asText(value("toolingRequired", row.tooling_required)) || "No",
+        weight100Pcs: asNumber(value("weight100Pcs", row.weight_100_pcs)),
+      }
+    },
+
     async getEngineeringChangeMetrics(organizationCode: string) {
       const result = await pool.query<{
         completed_count: string
@@ -3171,25 +3439,43 @@ export function createCommercialRevisionsRepository(
       const organizationId = organization.rows[0]?.id
       if (!organizationId) return { items: [], organizationId: null }
       const items = await pool.query<{
+        category: string | null
         description: string
         id: string
         item_type: string
+        subcategory: string | null
         uid: string
       }>(
         `
-          SELECT id, uid, description, item_type
-          FROM catalog.items
-          WHERE organization_id = $1
-            AND uid_kind = 'INTERNAL' AND lifecycle_status = 'P'
-          ORDER BY uid, id
+          SELECT item.id, item.uid, item.description, item.item_type,
+            COALESCE(
+              NULLIF(btrim(item.source_payload ->> 'category'), ''),
+              NULLIF(btrim(profile.category), ''),
+              NULLIF(btrim(design.internal_part_category), '')
+            ) AS category,
+            COALESCE(
+              NULLIF(btrim(item.source_payload ->> 'subcategory'), ''),
+              NULLIF(btrim(profile.sub_category), ''),
+              NULLIF(btrim(design.internal_part_sub_category), '')
+            ) AS subcategory
+          FROM catalog.items item
+          LEFT JOIN catalog.website_product_profiles profile
+            ON profile.item_id = item.id
+          LEFT JOIN sales.design_tasks design
+            ON design.id::text = item.source_payload ->> 'designTaskId'
+          WHERE item.organization_id = $1
+            AND item.uid_kind = 'INTERNAL' AND item.lifecycle_status = 'P'
+          ORDER BY item.uid, item.id
         `,
         [organizationId]
       )
       return {
         items: items.rows.map((row) => ({
+          category: row.category,
           description: row.description,
           id: row.id,
           itemType: row.item_type,
+          subcategory: row.subcategory,
           uid: row.uid,
         })),
         organizationId,
@@ -4396,7 +4682,8 @@ export function createCommercialRevisionsRepository(
         }
         await getProduct(client, row.item_id, true)
         const before = await itemAndBomEvidence(client, row.item_id)
-        const { bomLines, ...itemPatch } = input.itemPatch
+        const { bomLines, designDetails, sourcePayloadPatch, ...itemPatch } =
+          input.itemPatch
         await applyAllowlistedItemPatch(
           client,
           row.item_id,
@@ -4412,19 +4699,32 @@ export function createCommercialRevisionsRepository(
             organizationId: row.organization_id,
           })
         }
+        if (sourcePayloadPatch) {
+          await client.query(
+            `UPDATE catalog.items
+             SET source_payload = COALESCE(source_payload, '{}'::jsonb) || $1::jsonb,
+               updated_by_user_id = $2, updated_at = now(),
+               row_version = row_version + 1
+             WHERE id = $3`,
+            [sourcePayloadPatch, input.actorUserId ?? null, row.item_id]
+          )
+        }
         const after = await itemAndBomEvidence(client, row.item_id)
         await client.query(
           `
             UPDATE sales.engineering_change_notes
             SET status = 'Pending Product Costing', design_before = $1,
               design_after = $2, design_completed_at = now(),
-              updated_by_user_id = $3, updated_at = now(),
+              source_payload = (COALESCE(source_payload, '{}'::jsonb) - 'designDraft')
+                || jsonb_build_object('designRevision', $3::jsonb),
+              updated_by_user_id = $4, updated_at = now(),
               row_version = row_version + 1
-            WHERE id = $4
+            WHERE id = $5
           `,
           [
             before,
-            after,
+            { ...after, designDetails: designDetails ?? {} },
+            designDetails ?? {},
             input.actorUserId ?? null,
             input.engineeringChangeNoteId,
           ]
@@ -4440,6 +4740,51 @@ export function createCommercialRevisionsRepository(
           id: input.engineeringChangeNoteId,
           status: "Pending Product Costing",
         }
+      })
+    },
+
+    async saveEngineeringChangeDesignDraft(input: {
+      actorUserId?: string | null
+      designDetails: Record<string, unknown>
+      engineeringChangeNoteId: string
+    }) {
+      return transaction(pool, async (client) => {
+        const ecn = await client.query<{
+          organization_id: string
+          status: string
+        }>(
+          "SELECT organization_id, status FROM sales.engineering_change_notes WHERE id = $1 FOR UPDATE",
+          [input.engineeringChangeNoteId]
+        )
+        const row = ecn.rows[0]
+        if (!row || row.status !== "Pending Design") {
+          throw new Error("Pending-design ECN was not found.")
+        }
+        await client.query(
+          `
+            UPDATE sales.engineering_change_notes
+            SET source_payload = jsonb_set(
+                COALESCE(source_payload, '{}'::jsonb),
+                '{designDraft}', $1::jsonb, true
+              ),
+              updated_by_user_id = $2, updated_at = now(),
+              row_version = row_version + 1
+            WHERE id = $3
+          `,
+          [
+            input.designDetails,
+            input.actorUserId ?? null,
+            input.engineeringChangeNoteId,
+          ]
+        )
+        await writeAuditEvent(client, {
+          actorUserId: input.actorUserId,
+          eventType: "engineering_change.design_draft_saved",
+          organizationId: row.organization_id,
+          targetId: input.engineeringChangeNoteId,
+          targetTable: "engineering_change_notes",
+        })
+        return { id: input.engineeringChangeNoteId, status: row.status }
       })
     },
 

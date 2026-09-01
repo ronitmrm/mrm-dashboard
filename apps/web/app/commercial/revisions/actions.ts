@@ -10,6 +10,7 @@ import { redirect } from "next/navigation"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { commercialTaskCapabilities } from "@/lib/auth/task-capabilities"
+import { ecnDesignHref, ecnHref } from "@/lib/pricing/ecn-routes"
 import { optionalText, requiredText } from "@/lib/form-data"
 
 const revisionsPath = "/commercial/revisions"
@@ -262,39 +263,84 @@ export async function createEngineeringChangeNoteAction(formData: FormData) {
   )
   revalidatePath(revisionsPath)
   revalidatePath(ecnsPath)
-  redirect(`${ecnsPath}?ecn=${encodeURIComponent(created.id)}#ecn-workbench`)
+  redirect(ecnDesignHref(created.id))
 }
 
 export async function completeEngineeringChangeDesignAction(
   formData: FormData
 ) {
+  const engineeringChangeNoteId = requiredText(
+    formData,
+    "engineering_change_note_id"
+  )
+  const bomLines = optionalBomLines(formData)
+  const designDetails = {
+    bomLines,
+    casting: optionalNumber(formData, "casting"),
+    category: optionalText(formData, "category"),
+    checkedBy: optionalText(formData, "checked_by"),
+    description: optionalText(formData, "description"),
+    designRemarks: optionalText(formData, "design_remarks"),
+    dieCode: optionalText(formData, "die_code"),
+    fixtureApproxCost: optionalNumber(formData, "fixture_approx_cost"),
+    fixtureRequired: optionalText(formData, "fixture_required"),
+    gaugesRequired: optionalText(formData, "gauges_required"),
+    inspectionApproxCost: optionalNumber(formData, "inspection_approx_cost"),
+    itemType: optionalText(formData, "item_type"),
+    operationNotes: optionalText(formData, "operation_notes"),
+    productionType: optionalText(formData, "production_type"),
+    productSize: optionalText(formData, "product_size"),
+    remarks: optionalText(formData, "remarks"),
+    rodSize: optionalText(formData, "rod_size"),
+    subcategory: optionalText(formData, "subcategory"),
+    targetCompletionDate: optionalText(formData, "target_completion_date"),
+    toolingApproxCost: optionalNumber(formData, "tooling_approx_cost"),
+    toolingRequired: optionalText(formData, "tooling_required"),
+    weight100Pcs: optionalNumber(formData, "weight_100_pcs"),
+  }
+  const saveDraft = optionalText(formData, "design_save_intent") === "draft"
   await withRevisions(
     (repository, actorUserId) =>
-      repository.completeEngineeringChangeDesign({
-        actorUserId,
-        engineeringChangeNoteId: requiredText(
-          formData,
-          "engineering_change_note_id"
-        ),
-        itemPatch: {
-          bomLines: optionalBomLines(formData),
-          casting: optionalNumber(formData, "casting"),
-          description: optionalText(formData, "description"),
-          dieCode: optionalText(formData, "die_code"),
-          itemType: optionalText(formData, "item_type"),
-          materialGradeId: optionalText(formData, "material_grade_id"),
-          productionType: optionalText(formData, "production_type"),
-          remarks: optionalText(formData, "remarks"),
-          rodSize: optionalText(formData, "rod_size"),
-          rodTypeId: optionalText(formData, "rod_type_id"),
-          weight100Pcs: optionalNumber(formData, "weight_100_pcs"),
-        },
-      }),
+      saveDraft
+        ? repository.saveEngineeringChangeDesignDraft({
+            actorUserId,
+            designDetails,
+            engineeringChangeNoteId,
+          })
+        : repository.completeEngineeringChangeDesign({
+            actorUserId,
+            engineeringChangeNoteId,
+            itemPatch: {
+              bomLines,
+              casting: designDetails.casting,
+              designDetails,
+              description: designDetails.description,
+              dieCode: designDetails.dieCode,
+              itemType: designDetails.itemType,
+              productionType: designDetails.productionType,
+              remarks: designDetails.remarks,
+              rodSize: designDetails.rodSize,
+              sourcePayloadPatch: {
+                category: designDetails.category,
+                productDesignDossier: designDetails,
+                productSize: designDetails.productSize,
+                subcategory: designDetails.subcategory,
+              },
+              weight100Pcs: designDetails.weight100Pcs,
+            },
+          }),
     commercialTaskCapabilities.completeEngineeringChangeDesign,
     ecnsPath
   )
   revalidatePath(revisionsPath)
   revalidatePath(ecnsPath)
+  revalidatePath(ecnDesignHref(engineeringChangeNoteId))
+  revalidatePath(ecnHref(engineeringChangeNoteId))
+  redirect(
+    saveDraft
+      ? ecnDesignHref(engineeringChangeNoteId)
+      : ecnHref(engineeringChangeNoteId)
+  )
 }
 
 export async function completeEngineeringChangeProductCostingAction(

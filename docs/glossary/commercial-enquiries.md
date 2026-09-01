@@ -37,6 +37,22 @@ Enquiry line. It shows the complete Technical Review in a structured form and
 offers separate actions to search the Current Portfolio or open the Design form.
 Portfolio search occurs on the Current Portfolio page, not inside the task.
 
+**Product Design Dossier**: The current approved design definition owned by one
+controlled Product. It combines Product classification and material/process
+details, the canonical Product BOM, retained drawings, and Design controls
+without copying Customer pricing. The dossier is seeded by the Product's
+completed Design Task and advances only through a completed ECN Design Revision.
+_Avoid_: Editing the original Design Task, a second Product Master, storing
+design fields in Customer pricing.
+
+**ECN Design Revision**: The editable Design-stage draft for one Engineering
+Change Note, seeded from the Product Design Dossier. It uses the complete Design
+workspace on a dedicated ECN page. Completion locks before/after design evidence,
+publishes the revised Product Design Dossier, and sends the ECN to Product
+Parameter Costing; earlier Design Tasks and ECN stages remain immutable.
+_Avoid_: Inline ECN form on the register, editing the historical Design Task,
+changing Product pricing during Design.
+
 **Current Product Portfolio**: The Design-readable, non-pricing catalog used to
 find an existing Product before opening the new-Product Design form. It exposes
 only Product UID, List / Package type, Product Size, Rod Size, Category,

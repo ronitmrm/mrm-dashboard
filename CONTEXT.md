@@ -20,6 +20,14 @@ _Avoid_: Customer Bulk Revision, showing every active price, publishing Product 
 The current Product-owned structure for a Package or Assembly. A List Product is a leaf with no BOM lines. Selecting an Existing Product reuses its identity and current BOM; a Customer Quote retains an immutable BOM snapshot.
 _Avoid_: List self-BOM, copied Existing Product, rewriting historical Quote structure.
 
+**Product Design Dossier**:
+The current approved design definition owned by one controlled Product: its classification, material and process details, canonical BOM, retained drawings, and Design controls. It is seeded from the completed Design Task and revised only through a completed ECN Design Revision.
+_Avoid_: Editing the historical Design Task, Customer pricing as design storage, duplicate Product Master.
+
+**ECN Design Revision**:
+The editable Design-stage draft for one Engineering Change Note, seeded from the Product Design Dossier and opened on its own page in the complete Design workspace. Completion locks before/after evidence, publishes the revised dossier, and hands the ECN to Product Parameter Costing.
+_Avoid_: Inline register workbench, partial Design form, overwriting earlier Design or ECN evidence.
+
 **Product Commercial Usage**:
 The derived current use of one Product: Directly Sold, Component Only, Both, or Unused. It changes with active root Customer Prices and canonical BOM membership without changing Product UID or Item Type.
 _Avoid_: Permanent usage type, duplicate Product when a component becomes directly sold.

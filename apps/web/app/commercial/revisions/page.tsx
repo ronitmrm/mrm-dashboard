@@ -30,6 +30,7 @@ import { Textarea } from "@workspace/ui/components/textarea"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
+import { ecnHref } from "@/lib/pricing/ecn-routes"
 
 import {
   completeBulkPriceRevisionAction,
@@ -666,9 +667,7 @@ export default async function CommercialRevisionsPage() {
                   {ecn.status === "Pending Costing" ? (
                     <div className="border-t pt-4">
                       <Button asChild variant="outline">
-                        <Link
-                          href={`/commercial/ecns?ecn=${encodeURIComponent(ecn.id)}#ecn-workbench`}
-                        >
+                        <Link href={ecnHref(ecn.id)}>
                           Open Customer Costing
                         </Link>
                       </Button>
