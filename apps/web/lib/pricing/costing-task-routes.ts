@@ -1,3 +1,5 @@
+import { ecnHref } from "./ecn-routes"
+
 type ProductCostingTaskRoute = {
   enquiryItemId: string | null
   itemId: string | null
@@ -17,7 +19,7 @@ export function productCostingTaskHref(task: ProductCostingTaskRoute) {
     return `/commercial/product-costing/revisions/${encodeURIComponent(task.taskId)}`
   }
   if (task.taskType === "ECN Product Parameter Costing") {
-    return `/commercial/ecns?ecn=${encodeURIComponent(task.taskId)}#ecn-workbench`
+    return ecnHref(task.taskId)
   }
   if (task.enquiryItemId && task.itemId) {
     return `/commercial/product-costing/${encodeURIComponent(task.enquiryItemId)}?item=${encodeURIComponent(task.itemId)}`
@@ -33,7 +35,7 @@ export function customerCostingTaskHref(task: CustomerCostingTaskRoute) {
     return `/commercial/customer-bulk-revision?revision=${encodeURIComponent(task.taskId)}#customer-bulk-workbench`
   }
   if (task.taskType === "ECN Price Review") {
-    return `/commercial/ecns?ecn=${encodeURIComponent(task.taskId)}#ecn-workbench`
+    return ecnHref(task.taskId)
   }
   if (task.enquiryItemId) {
     const base = `/commercial/customer-costing/${encodeURIComponent(task.enquiryItemId)}`
