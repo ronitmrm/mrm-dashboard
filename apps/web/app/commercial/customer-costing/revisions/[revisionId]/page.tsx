@@ -98,26 +98,14 @@ export default async function ProductRevisionCustomerCostingPage({
   const allPricesDecided = work.decidedPriceCount === work.affectedPriceCount
 
   return (
-    <div className="grid gap-6">
-      <section className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <div className="mb-2 flex flex-wrap gap-2">
-            <Badge variant="secondary">{work.revision.status}</Badge>
-            <Badge variant="outline">Product Parameter Bulk Revision</Badge>
-          </div>
-          <h1 className="font-mono text-2xl font-semibold">
-            {work.revision.revisionNumber}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Effective {work.revision.effectiveOn} · {work.revision.reason}
-          </p>
-        </div>
+    <div className="grid gap-4">
+      <div className="flex justify-end">
         <Button asChild variant="outline">
           <Link href="/commercial/customer-costing">
             Back To Customer Costing
           </Link>
         </Button>
-      </section>
+      </div>
 
       <Card>
         <CardHeader>
@@ -131,9 +119,9 @@ export default async function ProductRevisionCustomerCostingPage({
           </div>
         </CardHeader>
         <CardContent className="grid gap-6">
-          <div className="overflow-auto rounded-md border">
+          <div className="h-[calc(100svh-18rem)] min-h-[34rem] overflow-auto rounded-md border">
             <Table excelFilters>
-              <TableHeader>
+              <TableHeader className="sticky top-0 z-10 bg-background">
                 <TableRow>
                   <TableHead>Customer</TableHead>
                   <TableHead>Customer Part</TableHead>

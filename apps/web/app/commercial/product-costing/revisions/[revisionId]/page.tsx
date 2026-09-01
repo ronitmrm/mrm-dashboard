@@ -4,7 +4,6 @@ import {
   bulkRevisionFields,
   createCommercialRevisionsRepository,
 } from "@workspace/db"
-import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
   Card,
@@ -123,26 +122,14 @@ export default async function ProductRevisionCostingPage({
   }
 
   return (
-    <div className="grid gap-6">
-      <section className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <div className="mb-2 flex flex-wrap gap-2">
-            <Badge variant="secondary">{revision.status}</Badge>
-            <Badge variant="outline">Product Parameter Bulk Revision</Badge>
-          </div>
-          <h1 className="font-mono text-2xl font-semibold">
-            {revision.revisionNumber}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Effective {revision.effectiveOn} · {revision.reason}
-          </p>
-        </div>
+    <div className="grid gap-4">
+      <div className="flex justify-end">
         <Button asChild variant="outline">
           <Link href="/commercial/product-costing">
             Back To Product Costing
           </Link>
         </Button>
-      </section>
+      </div>
 
       <Card>
         <CardHeader>
@@ -155,7 +142,7 @@ export default async function ProductRevisionCostingPage({
               type="hidden"
               value={revision.id}
             />
-            <div className="max-h-[34rem] overflow-auto rounded-md border">
+            <div className="h-[calc(100svh-24rem)] min-h-[34rem] overflow-auto rounded-md border">
               <Table excelFilters className="tabular-nums">
                 <TableHeader className="sticky top-0 z-10 bg-background">
                   <TableRow>
