@@ -95,6 +95,22 @@ const correctionGroups = [
   { fieldName: "alloy_premium", newValue: 26, uids: ["M1862"] },
 ] as const satisfies readonly CorrectionGroup[]
 
+const repairRecalculation = process.argv.includes("--repair-recalculation")
+const selectedCorrectionGroups: readonly CorrectionGroup[] =
+  repairRecalculation
+    ? correctionGroups
+        .map((group) => ({
+          ...group,
+          uids: group.uids.filter((uid) => uid !== "M1143"),
+        }))
+        .filter((group) => group.uids.length > 0)
+    : correctionGroups
+const expectedAffectedRootPrices = repairRecalculation ? 154 : 155
+const expectedProductAssignments = selectedCorrectionGroups.reduce(
+  (total, group) => total + group.uids.length,
+  0
+)
+
 const columnByField = {
   alloy_premium: "alloy_premium",
   casting: "casting",
@@ -103,8 +119,16 @@ const columnByField = {
   rejection_percent: "rejection_percent",
 } as const satisfies Record<CorrectionField, keyof ProductRow>
 
+const snapshotKeyByField = {
+  alloy_premium: "alloyPremium",
+  casting: "casting",
+  checking: "checking",
+  ext_cost: "extrusionCost",
+  rejection_percent: "rejectionPercent",
+} as const satisfies Record<CorrectionField, string>
+
 const expectedByUid = new Map<string, Map<CorrectionField, number>>()
-for (const group of correctionGroups) {
+for (const group of selectedCorrectionGroups) {
   for (const uid of group.uids) {
     const expected = expectedByUid.get(uid) ?? new Map<CorrectionField, number>()
     expected.set(group.fieldName, group.newValue)
@@ -116,7 +140,6 @@ const requestedUids = [...expectedByUid.keys()].sort()
 const connectionString =
   process.env.WEB_DATABASE_URL ?? process.env.DATABASE_URL
 const apply = process.argv.includes("--apply")
-const repairRecalculation = process.argv.includes("--repair-recalculation")
 const originalRevisionReason =
   "Correct Product Parameters after 2026-09-01 migration review"
 const revisionReason = repairRecalculation
@@ -171,7 +194,7 @@ try {
   }
   const organizationId = [...organizationIds][0]!
   const productByUid = new Map(products.rows.map((row) => [row.uid, row]))
-  const mismatches = correctionGroups.flatMap((group) =>
+  const mismatches = selectedCorrectionGroups.flatMap((group) =>
     group.uids.flatMap((uid) => {
       const current = numericValue(productByUid.get(uid)!, group.fieldName)
       return sameNumber(current, group.newValue)
@@ -287,9 +310,12 @@ try {
         2
       )
     )
-  } else if (!repairRecalculation && mismatches.length !== 47) {
+  } else if (
+    !repairRecalculation &&
+    mismatches.length !== expectedProductAssignments
+  ) {
     throw new Error(
-      `Expected 47 changed Product fields, found ${mismatches.length}. Refusing a partial rerun.`
+      `Expected ${expectedProductAssignments} changed Product fields, found ${mismatches.length}. Refusing a partial rerun.`
     )
   } else {
     const impact = await pool.query<{
@@ -334,9 +360,9 @@ try {
       [requestedUids, organizationId]
     )
     const impactRow = impact.rows[0]!
-    if (impactRow.affected_roots !== 155) {
+    if (impactRow.affected_roots !== expectedAffectedRootPrices) {
       throw new Error(
-        `Expected 155 affected active root prices, found ${impactRow.affected_roots}.`
+        `Expected ${expectedAffectedRootPrices} affected active root prices, found ${impactRow.affected_roots}.`
       )
     }
 
@@ -363,7 +389,7 @@ try {
           affectedActiveRootPrices: impactRow.affected_roots,
           affectedQuoteGraphNodes: impactRow.graph_nodes,
           changedProductFields: mismatches.length,
-          correctionGroups: correctionGroups.length,
+          correctionGroups: selectedCorrectionGroups.length,
           productAncestorsIncluded: productClosure.rows.length,
           requestedProducts: requestedUids.length,
         },
@@ -514,19 +540,23 @@ try {
               count(*) FILTER (WHERE applied_at IS NOT NULL)::int AS applied
             FROM sales.bulk_price_revision_changes
             WHERE bulk_price_revision_id = $1
+              AND field_name <> 'customer_price_decision'
           `,
           [revision.id]
         )
         if (
-          staged.rows[0]?.changes !== 47 ||
-          staged.rows[0]?.groups !== 14 ||
+          staged.rows[0]?.groups !== selectedCorrectionGroups.length ||
           (revision.status === "Pending Costing" &&
-            staged.rows[0]?.applied !== 0)
+            (staged.rows[0]?.changes !== expectedProductAssignments ||
+              staged.rows[0]?.applied !== 0)) ||
+          (revision.status === "Pending Customer Costing" &&
+            (staged.rows[0]?.changes < expectedProductAssignments ||
+              staged.rows[0]?.applied !== staged.rows[0]?.changes))
         ) {
           throw new Error("Existing correction revision is not safely resumable.")
         }
       } else {
-        for (const group of correctionGroups) {
+        for (const group of selectedCorrectionGroups) {
           const selectedProductIds = group.uids.map(
             (uid) => productByUid.get(uid)!.id
           )
@@ -563,8 +593,14 @@ try {
         revision.id,
         { limit: 200 }
       )
-      if (!work || work.coverage.total !== 155 || work.coverage.truncated) {
-        throw new Error("Customer Costing did not return all 155 affected prices.")
+      if (
+        !work ||
+        work.coverage.total !== expectedAffectedRootPrices ||
+        work.coverage.truncated
+      ) {
+        throw new Error(
+          `Customer Costing did not return all ${expectedAffectedRootPrices} affected prices.`
+        )
       }
       for (const [index, price] of work.rows.entries()) {
         if (price.decision && price.decision !== "Revise Price") {
@@ -587,7 +623,10 @@ try {
       const completed = await repository.completeBulkPriceRevision({
         bulkPriceRevisionId: revision.id,
       })
-      if (completed.status !== "Completed" || completed.revisedQuoteCount < 155) {
+      if (
+        completed.status !== "Completed" ||
+        completed.revisedQuoteCount < expectedAffectedRootPrices
+      ) {
         throw new Error(
           `Unexpected completion: ${JSON.stringify(completed)}`
         )
@@ -615,10 +654,43 @@ try {
         }
       }
 
+      const revisedSnapshots = await pool.query<{
+        product_snapshot: Record<string, unknown>
+        uid: string
+      }>(
+        `
+          SELECT DISTINCT ON (item.uid) item.uid, snapshot.product_snapshot
+          FROM sales.quote_items quote
+          JOIN sales.quote_product_snapshots snapshot
+            ON snapshot.quote_item_id = quote.id
+          JOIN catalog.items item ON item.id = quote.item_id
+          WHERE quote.source_payload ->> 'sourceRecordId' = $1::text
+            AND item.uid = ANY($2::text[])
+          ORDER BY item.uid, quote.created_at DESC, quote.id DESC
+        `,
+        [revision.id, requestedUids]
+      )
+      if (revisedSnapshots.rows.length !== requestedUids.length) {
+        throw new Error(
+          `Expected revised snapshots for ${requestedUids.length} Products, found ${revisedSnapshots.rows.length}.`
+        )
+      }
+      for (const row of revisedSnapshots.rows) {
+        for (const [fieldName, expected] of expectedByUid.get(row.uid)!) {
+          const actual = Number(row.product_snapshot[snapshotKeyByField[fieldName]])
+          if (!sameNumber(actual, expected)) {
+            throw new Error(
+              `${row.uid} revised snapshot ${fieldName}: expected ${expected}, found ${actual}.`
+            )
+          }
+        }
+      }
+
       const reconciliation = await pool.query<{
         active_root_prices: number
         component_subtotal_profit_matches: number
         disabled_sent_triggers: number
+        list_rate_mismatches: number
         list_rejection_mismatches: number
         list_total_a_mismatches: number
         profit_scope_mismatches: number
@@ -645,14 +717,21 @@ try {
                 WHERE snapshot.quote_item_id = quote.id
               )
           ), revised_lists AS (
-            SELECT quote.calculation_json,
+            SELECT quote.assembled_part_inr::numeric AS assembled_part_inr,
+              quote.calculation_json,
+              quote.profit_percent::numeric AS profit_percent,
+              quote.total_rate_inr::numeric AS total_rate_inr,
               snapshot.product_snapshot
             FROM sales.quote_items quote
             JOIN sales.quote_product_snapshots snapshot
               ON snapshot.quote_item_id = quote.id
-            WHERE quote.is_active
-              AND snapshot.item_type = 'List'
+            WHERE snapshot.item_type = 'List'
               AND quote.source_payload ->> 'sourceRecordId' = $1::text
+              AND COALESCE(snapshot.product_snapshot ->> 'pricingMethod', '')
+                <> 'Direct Purchase'
+              AND quote.calculation_json ? 'piecesPerKg'
+              AND (quote.calculation_json ->> 'piecesPerKg')::numeric > 0
+              AND quote.calculation_json ? 'processCost'
               AND quote.calculation_json ? 'totalRodsCost'
               AND quote.calculation_json ? 'rejectionCost'
           )
@@ -689,10 +768,20 @@ try {
                   (calculation_json ->> 'rejectionCost')::numeric
                 )
               ) > 0.000001)::int AS list_total_a_mismatches,
+            (SELECT count(*) FROM revised_lists
+              WHERE abs(
+                total_rate_inr -
+                (
+                  (calculation_json ->> 'totalA')::numeric *
+                  (1 + profit_percent) /
+                  (calculation_json ->> 'piecesPerKg')::numeric +
+                  assembled_part_inr
+                )
+              ) > 0.000001)::int AS list_rate_mismatches,
             (SELECT count(*) FROM pg_trigger
               WHERE NOT tgisinternal AND tgenabled <> 'O'
                 AND tgname LIKE '%sent%immut%')::int AS disabled_sent_triggers,
-            (SELECT status FROM sales.bulk_price_revisions WHERE id = $1)
+            (SELECT status FROM sales.bulk_price_revisions WHERE id = $1::uuid)
               AS revision_status
         `,
         [revision.id]
@@ -707,6 +796,7 @@ try {
         result.component_subtotal_profit_matches !== 0 ||
         result.list_rejection_mismatches !== 0 ||
         result.list_total_a_mismatches !== 0 ||
+        result.list_rate_mismatches !== 0 ||
         result.disabled_sent_triggers !== 0 ||
         result.revision_status !== "Completed"
       ) {
@@ -718,8 +808,8 @@ try {
           {
             backupPath,
             backupSha256,
-            correctedProductFields: 47,
-            correctedProducts: 40,
+            correctedProductFields: expectedProductAssignments,
+            correctedProducts: requestedUids.length,
             affectedRootPrices: work.coverage.total,
             revisedQuoteRows: completed.revisedQuoteCount,
             revisionId: revision.id,
