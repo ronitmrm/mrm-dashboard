@@ -99,6 +99,7 @@ type ProductRow = {
 type QuoteOverride = Map<string, number>
 
 const productBulkPriceDecisionField = "customer_price_decision"
+const bulkRevisionTableLimit = 10_000
 
 type RevisedQuote = {
   newPrice: number
@@ -2361,10 +2362,14 @@ export function createCommercialRevisionsRepository(
       bulkPriceRevisionId: string,
       options: { limit?: number; query?: string } = {}
     ) {
-      const limit = Math.min(Math.max(Math.trunc(options.limit ?? 200), 1), 200)
+      const limit = Math.min(
+        Math.max(Math.trunc(options.limit ?? 200), 1),
+        bulkRevisionTableLimit
+      )
       const search = selectorSearchTerm(options.query ?? "")
       const result = await pool.query<{
         approved_price_usd: string
+        category: string | null
         company_name: string
         conversion_rate: string
         customer_part_code: string | null
@@ -2376,6 +2381,7 @@ export function createCommercialRevisionsRepository(
         quote_number: string
         scrap_rate: string
         shipping_cost: string
+        subcategory: string | null
         total_count: string
         uid: string
       }>(
@@ -2389,11 +2395,26 @@ export function createCommercialRevisionsRepository(
             quote.approved_price_usd, quote.scrap_rate, quote.packing_cost,
             quote.shipping_cost, quote.purchase_times, quote.profit_percent,
             quote.conversion_rate, customer.company_name, item.uid,
-            item.description, count(*) OVER()::text AS total_count
+            item.description,
+            COALESCE(
+              NULLIF(btrim(profile.category), ''),
+              NULLIF(btrim(item.source_payload ->> 'category'), ''),
+              NULLIF(btrim(design.internal_part_category), '')
+            ) AS category,
+            COALESCE(
+              NULLIF(btrim(profile.sub_category), ''),
+              NULLIF(btrim(item.source_payload ->> 'subcategory'), ''),
+              NULLIF(btrim(design.internal_part_sub_category), '')
+            ) AS subcategory,
+            count(*) OVER()::text AS total_count
           FROM sales.quote_items quote
           JOIN revision ON revision.organization_id = quote.organization_id
           JOIN sales.customers customer ON customer.id = quote.customer_id
           JOIN catalog.items item ON item.id = quote.item_id
+          LEFT JOIN catalog.website_product_profiles profile
+            ON profile.item_id = item.id
+          LEFT JOIN sales.design_tasks design
+            ON design.id::text = item.source_payload ->> 'designTaskId'
           WHERE quote.is_active AND quote.status IN ('Sent', 'Accepted')
             AND (
               revision.customer_id IS NULL
@@ -2438,6 +2459,7 @@ export function createCommercialRevisionsRepository(
         rows: result.rows.map((row) => ({
           approvedPriceUsd: asNumber(row.approved_price_usd),
           companyName: row.company_name,
+          category: row.category,
           conversionRate: asNumber(row.conversion_rate),
           customerPartCode: row.customer_part_code,
           description: row.description,
@@ -2449,6 +2471,7 @@ export function createCommercialRevisionsRepository(
           scrapRate: asNumber(row.scrap_rate),
           shippingCost: asNumber(row.shipping_cost),
           uid: row.uid,
+          subcategory: row.subcategory,
         })),
       }
     },
@@ -2457,7 +2480,10 @@ export function createCommercialRevisionsRepository(
       bulkPriceRevisionId: string,
       options: { limit?: number; query?: string } = {}
     ) {
-      const limit = Math.min(Math.max(Math.trunc(options.limit ?? 200), 1), 200)
+      const limit = Math.min(
+        Math.max(Math.trunc(options.limit ?? 200), 1),
+        bulkRevisionTableLimit
+      )
       const search = selectorSearchTerm(options.query ?? "")
       const client = await pool.connect()
       try {
@@ -2499,12 +2525,14 @@ export function createCommercialRevisionsRepository(
         )
         const prices = await client.query<{
           approved_price_usd: string
+          category: string | null
           company_name: string
           customer_part_code: string | null
           decision: string | null
           description: string
           profit_percent: string
           quote_item_id: string
+          subcategory: string | null
           total_count: string
           uid: string
         }>(
@@ -2515,12 +2543,26 @@ export function createCommercialRevisionsRepository(
             SELECT quote.id AS quote_item_id, quote.customer_part_code,
               quote.approved_price_usd, quote.profit_percent,
               customer.company_name, item.uid, item.description,
+              COALESCE(
+                NULLIF(btrim(profile.category), ''),
+                NULLIF(btrim(item.source_payload ->> 'category'), ''),
+                NULLIF(btrim(design.internal_part_category), '')
+              ) AS category,
+              COALESCE(
+                NULLIF(btrim(profile.sub_category), ''),
+                NULLIF(btrim(item.source_payload ->> 'subcategory'), ''),
+                NULLIF(btrim(design.internal_part_sub_category), '')
+              ) AS subcategory,
               decision.source_payload->>'customerDecision' AS decision,
               count(*) OVER()::text AS total_count
             FROM roots
             JOIN sales.quote_items quote ON quote.id = roots.quote_item_id
             JOIN sales.customers customer ON customer.id = quote.customer_id
             JOIN catalog.items item ON item.id = quote.item_id
+            LEFT JOIN catalog.website_product_profiles profile
+              ON profile.item_id = item.id
+            LEFT JOIN sales.design_tasks design
+              ON design.id::text = item.source_payload ->> 'designTaskId'
             LEFT JOIN LATERAL (
               SELECT change.source_payload
               FROM sales.bulk_price_revision_changes change
@@ -2574,6 +2616,7 @@ export function createCommercialRevisionsRepository(
           )
           return {
             approvedPriceUsd,
+            category: price.category,
             companyName: price.company_name,
             currentProfitPercent: asNumber(price.profit_percent),
             customerPartCode: price.customer_part_code,
@@ -2584,6 +2627,7 @@ export function createCommercialRevisionsRepository(
             quoteItemId: price.quote_item_id,
             revisePriceUsd: revise.newPrice,
             reviseProfitPercent: revise.newProfitPercent,
+            subcategory: price.subcategory,
             uid: price.uid,
           }
         })
@@ -2743,7 +2787,10 @@ export function createCommercialRevisionsRepository(
       bulkPriceRevisionId: string,
       options: { limit?: number; query?: string } = {}
     ) {
-      const limit = Math.min(Math.max(Math.trunc(options.limit ?? 200), 1), 200)
+      const limit = Math.min(
+        Math.max(Math.trunc(options.limit ?? 200), 1),
+        bulkRevisionTableLimit
+      )
       const search = selectorSearchTerm(options.query ?? "")
       const result = await pool.query<{
         affected_price_count: string
@@ -2752,6 +2799,7 @@ export function createCommercialRevisionsRepository(
         assembly_operation_cost: string
         buffing: string
         casting: string
+        category: string | null
         checking: string
         deburring: string
         description: string
@@ -2768,6 +2816,7 @@ export function createCommercialRevisionsRepository(
         production_type: string | null
         rejection_percent: string
         sealant: string
+        subcategory: string | null
         total_count: string
         uid: string
         washing: string
@@ -2807,6 +2856,16 @@ export function createCommercialRevisionsRepository(
             GROUP BY item_id
           ), filtered AS (
             SELECT item.id, item.uid, item.description, item.item_type,
+              COALESCE(
+                NULLIF(btrim(profile.category), ''),
+                NULLIF(btrim(item.source_payload ->> 'category'), ''),
+                NULLIF(btrim(design.internal_part_category), '')
+              ) AS category,
+              COALESCE(
+                NULLIF(btrim(profile.sub_category), ''),
+                NULLIF(btrim(item.source_payload ->> 'subcategory'), ''),
+                NULLIF(btrim(design.internal_part_sub_category), '')
+              ) AS subcategory,
               item.production_type, item.pieces_per_kg, item.weight_100_pcs,
               item.product_cost_inr, item.casting, item.alloy_premium,
               item.rejection_percent,
@@ -2817,6 +2876,10 @@ export function createCommercialRevisionsRepository(
               products.affected_price_count
             FROM products
             JOIN catalog.items item ON item.id = products.item_id
+            LEFT JOIN catalog.website_product_profiles profile
+              ON profile.item_id = item.id
+            LEFT JOIN sales.design_tasks design
+              ON design.id::text = item.source_payload ->> 'designTaskId'
             WHERE (
               $2 = ''
               OR lower(btrim(item.uid)) = $2
@@ -2856,6 +2919,7 @@ export function createCommercialRevisionsRepository(
           assemblyOperationCost: asNumber(row.assembly_operation_cost),
           buffing: asNumber(row.buffing),
           casting: asNumber(row.casting),
+          category: row.category,
           checking: asNumber(row.checking),
           deburring: asNumber(row.deburring),
           description: row.description,
@@ -2872,6 +2936,7 @@ export function createCommercialRevisionsRepository(
           productionType: row.production_type,
           rejectionPercent: asNumber(row.rejection_percent),
           sealant: asNumber(row.sealant),
+          subcategory: row.subcategory,
           uid: row.uid,
           washing: asNumber(row.washing),
           weight100Pcs: asNumber(row.weight_100_pcs),

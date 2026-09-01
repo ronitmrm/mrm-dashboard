@@ -24,7 +24,6 @@ import {
   TableRow,
 } from "@workspace/ui/components/table"
 
-import { BoundedResultNotice } from "@/components/bounded-result-notice"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
@@ -42,6 +41,7 @@ const numberFormatter = new Intl.NumberFormat("en-US", {
 })
 const money = (value: number) => numberFormatter.format(value)
 const percent = (value: number) => `${money(value * 100)}%`
+const bulkRevisionTableLimit = 10_000
 
 function validUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
@@ -51,21 +51,15 @@ function validUuid(value: string) {
 
 export default async function ProductRevisionCustomerCostingPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ revisionId: string }>
-  searchParams: Promise<{ priceSearch?: string }>
 }) {
   await requireCapability(
     commercialCapabilities.costing.read,
     "/commercial/customer-costing"
   )
-  const [{ revisionId: rawRevisionId }, query] = await Promise.all([
-    params,
-    searchParams,
-  ])
+  const { revisionId: rawRevisionId } = await params
   const revisionId = validUuid(rawRevisionId) ? rawRevisionId : ""
-  const priceSearch = query.priceSearch?.trim() ?? ""
   const repository = createCommercialRevisionsRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
@@ -73,7 +67,7 @@ export default async function ProductRevisionCustomerCostingPage({
     try {
       return revisionId
         ? await repository.getProductBulkRevisionCustomerCosting(revisionId, {
-            query: priceSearch,
+            limit: bulkRevisionTableLimit,
           })
         : null
     } finally {
@@ -130,11 +124,6 @@ export default async function ProductRevisionCustomerCostingPage({
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <CardTitle>Affected Customer Prices</CardTitle>
-              <CardDescription>
-                Only active root prices containing a changed Product are shown.
-                Revise uses the recalculated Product cost. Keep Price Same
-                derives the balancing Customer profit.
-              </CardDescription>
             </div>
             <Badge variant="outline">
               {work.decidedPriceCount} / {work.affectedPriceCount} Decided
@@ -142,32 +131,16 @@ export default async function ProductRevisionCustomerCostingPage({
           </div>
         </CardHeader>
         <CardContent className="grid gap-6">
-          <div className="grid gap-2">
-            <form className="flex max-w-3xl gap-2" method="get">
-              <Input
-                aria-label="Search affected prices"
-                defaultValue={priceSearch}
-                name="priceSearch"
-                placeholder="Search customer, part, product UID, or description"
-              />
-              <Button type="submit" variant="outline">
-                Search Prices
-              </Button>
-            </form>
-            <BoundedResultNotice
-              coverage={work.coverage}
-              searchQuery={priceSearch}
-              section="Affected customer prices"
-            />
-          </div>
-
           <div className="overflow-auto rounded-md border">
-            <Table>
+            <Table excelFilters>
               <TableHeader>
                 <TableRow>
                   <TableHead>Customer</TableHead>
                   <TableHead>Customer Part</TableHead>
-                  <TableHead>Product</TableHead>
+                  <TableHead>UID</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead>Category</TableHead>
+                  <TableHead>Subcategory</TableHead>
                   <TableHead>Current</TableHead>
                   <TableHead>Revise Price</TableHead>
                   <TableHead>Keep Price Same</TableHead>
@@ -181,11 +154,17 @@ export default async function ProductRevisionCustomerCostingPage({
                     <TableCell className="font-mono">
                       {price.customerPartCode ?? "—"}
                     </TableCell>
+                    <TableCell className="font-mono whitespace-nowrap">
+                      {price.uid}
+                    </TableCell>
                     <TableCell className="min-w-64">
-                      <span className="font-mono">{price.uid}</span>
-                      <span className="block text-xs text-muted-foreground">
-                        {price.description}
-                      </span>
+                      {price.description}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      {price.category ?? "—"}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      {price.subcategory ?? "—"}
                     </TableCell>
                     <TableCell className="whitespace-nowrap tabular-nums">
                       <span>$ {money(price.approvedPriceUsd)}</span>
@@ -240,8 +219,8 @@ export default async function ProductRevisionCustomerCostingPage({
                 ))}
                 {!work.rows.length ? (
                   <TableRow>
-                    <TableCell className="h-24 text-center" colSpan={7}>
-                      No Affected Prices Match This Search.
+                    <TableCell className="h-24 text-center" colSpan={10}>
+                      No Affected Prices Are In Scope.
                     </TableCell>
                   </TableRow>
                 ) : null}
