@@ -29,7 +29,8 @@ describe("TableHeader", () => {
 
     expect(markup).toContain("sticky top-0 z-10")
     expect(markup).toContain(
-      "max-h-[calc(100svh-var(--header-height)-8rem)] overflow-auto"
+      "max-h-[calc(100svh-var(--header-height)-8rem)]"
     )
+    expect(markup).toContain("overflow-auto")
   })
 })

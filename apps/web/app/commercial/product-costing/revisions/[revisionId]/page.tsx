@@ -142,103 +142,106 @@ export default async function ProductRevisionCostingPage({
               type="hidden"
               value={revision.id}
             />
-            <div className="h-[calc(100svh-24rem)] min-h-[34rem] overflow-auto rounded-md border">
-              <Table excelFilters className="tabular-nums">
-                <TableHeader className="sticky top-0 z-10 bg-background">
-                  <TableRow>
-                    <TableHead>Select</TableHead>
-                    <TableHead>UID</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Subcategory</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Production</TableHead>
-                    <TableHead>Affected Prices</TableHead>
-                    <TableHead>Current Product Base (₹/pc)</TableHead>
-                    <TableHead>Pcs/Kg</TableHead>
-                    <TableHead>Weight (g)</TableHead>
-                    <TableHead>Rejection</TableHead>
-                    <TableHead>Alloy</TableHead>
-                    <TableHead>Extrusion</TableHead>
-                    <TableHead>Forging</TableHead>
-                    <TableHead>M/C</TableHead>
-                    <TableHead>Washing</TableHead>
-                    <TableHead>Checking</TableHead>
-                    <TableHead>Marking</TableHead>
-                    <TableHead>Plating</TableHead>
-                    <TableHead>Annealing</TableHead>
-                    <TableHead>Deburring</TableHead>
-                    <TableHead>Buffing</TableHead>
-                    <TableHead>Sealant</TableHead>
-                    <TableHead>Assembly</TableHead>
-                    <TableHead>Overhead</TableHead>
+            <Table
+              className="tabular-nums"
+              containerClassName="h-[calc(100svh-24rem)] min-h-[34rem] rounded-md border"
+              excelFilters
+              filteredSelection={{ checkboxName: "selected_product_ids" }}
+            >
+              <TableHeader className="sticky top-0 z-10 bg-background">
+                <TableRow>
+                  <TableHead>Select</TableHead>
+                  <TableHead>UID</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead>Category</TableHead>
+                  <TableHead>Subcategory</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Production</TableHead>
+                  <TableHead>Affected Prices</TableHead>
+                  <TableHead>Current Product Base (₹/pc)</TableHead>
+                  <TableHead>Pcs/Kg</TableHead>
+                  <TableHead>Weight (g)</TableHead>
+                  <TableHead>Rejection</TableHead>
+                  <TableHead>Alloy</TableHead>
+                  <TableHead>Extrusion</TableHead>
+                  <TableHead>Forging</TableHead>
+                  <TableHead>M/C</TableHead>
+                  <TableHead>Washing</TableHead>
+                  <TableHead>Checking</TableHead>
+                  <TableHead>Marking</TableHead>
+                  <TableHead>Plating</TableHead>
+                  <TableHead>Annealing</TableHead>
+                  <TableHead>Deburring</TableHead>
+                  <TableHead>Buffing</TableHead>
+                  <TableHead>Sealant</TableHead>
+                  <TableHead>Assembly</TableHead>
+                  <TableHead>Overhead</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {products.rows.map((product) => (
+                  <TableRow key={product.id}>
+                    <TableCell>
+                      <input
+                        aria-label={`Select ${product.uid}`}
+                        name="selected_product_ids"
+                        type="checkbox"
+                        value={product.id}
+                      />
+                    </TableCell>
+                    <TableCell className="font-mono whitespace-nowrap">
+                      {product.uid}
+                    </TableCell>
+                    <TableCell className="min-w-64">
+                      {product.description}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      {product.category ?? "—"}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      {product.subcategory ?? "—"}
+                    </TableCell>
+                    {[
+                      product.itemType,
+                      product.productionType ?? "—",
+                      product.affectedPriceCount,
+                      money(product.productCostInr),
+                      money(product.piecesPerKg),
+                      money(product.weight100Pcs),
+                      `${money(product.rejectionPercent * 100)}%`,
+                      money(product.alloyPremium),
+                      money(product.extCost),
+                      money(product.forgingCost),
+                      money(product.machiningCost),
+                      money(product.washing),
+                      money(product.checking),
+                      money(product.marking),
+                      money(product.plating),
+                      money(product.annealing),
+                      money(product.deburring),
+                      money(product.buffing),
+                      money(product.sealant),
+                      money(product.assemblyOperationCost),
+                      money(product.overheadCost),
+                    ].map((value, index) => (
+                      <TableCell
+                        className="whitespace-nowrap"
+                        key={`${product.id}-${index}`}
+                      >
+                        {value}
+                      </TableCell>
+                    ))}
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {products.rows.map((product) => (
-                    <TableRow key={product.id}>
-                      <TableCell>
-                        <input
-                          aria-label={`Select ${product.uid}`}
-                          name="selected_product_ids"
-                          type="checkbox"
-                          value={product.id}
-                        />
-                      </TableCell>
-                      <TableCell className="font-mono whitespace-nowrap">
-                        {product.uid}
-                      </TableCell>
-                      <TableCell className="min-w-64">
-                        {product.description}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        {product.category ?? "—"}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        {product.subcategory ?? "—"}
-                      </TableCell>
-                      {[
-                        product.itemType,
-                        product.productionType ?? "—",
-                        product.affectedPriceCount,
-                        money(product.productCostInr),
-                        money(product.piecesPerKg),
-                        money(product.weight100Pcs),
-                        `${money(product.rejectionPercent * 100)}%`,
-                        money(product.alloyPremium),
-                        money(product.extCost),
-                        money(product.forgingCost),
-                        money(product.machiningCost),
-                        money(product.washing),
-                        money(product.checking),
-                        money(product.marking),
-                        money(product.plating),
-                        money(product.annealing),
-                        money(product.deburring),
-                        money(product.buffing),
-                        money(product.sealant),
-                        money(product.assemblyOperationCost),
-                        money(product.overheadCost),
-                      ].map((value, index) => (
-                        <TableCell
-                          className="whitespace-nowrap"
-                          key={`${product.id}-${index}`}
-                        >
-                          {value}
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  ))}
-                  {!products.rows.length ? (
-                    <TableRow>
-                      <TableCell className="h-24 text-center" colSpan={26}>
-                        No Products Are In Scope.
-                      </TableCell>
-                    </TableRow>
-                  ) : null}
-                </TableBody>
-              </Table>
-            </div>
+                ))}
+                {!products.rows.length ? (
+                  <TableRow>
+                    <TableCell className="h-24 text-center" colSpan={26}>
+                      No Products Are In Scope.
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+              </TableBody>
+            </Table>
 
             <div className="grid gap-3 md:grid-cols-[1fr_1fr_2fr_auto] md:items-end">
               <Field>
