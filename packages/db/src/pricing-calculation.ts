@@ -183,6 +183,84 @@ export function calculateStoredProductCosting(
   }
 }
 
+export function calculateStoredProductRevisionCosting(
+  input: StoredProductCostingInput & { targetPriceUsd?: number }
+) {
+  const current = calculateStoredProductCosting(input)
+  const profitPercent =
+    input.targetPriceUsd !== undefined && current.totalA > 0
+      ? (input.targetPriceUsd * input.conversionRate - current.totalA) /
+        current.totalA
+      : input.profitPercent
+  const revised = calculateStoredProductCosting({
+    ...input,
+    profitPercent,
+  })
+
+  return {
+    ...revised,
+    profitPercent: safeNumber(profitPercent),
+  }
+}
+
+export type PackageRevisionCostingFromBaseInput = {
+  childQuoteTotal: number
+  conversionRate: number
+  packingCostPerKg: number
+  piecesPerKg: number
+  processCostPerPiece: number
+  profitPercent: number
+  rejectionPercent: number
+  shippingCostPerKg: number
+  targetPriceUsd?: number
+}
+
+export function calculatePackageRevisionCostingFromBase(
+  input: PackageRevisionCostingFromBaseInput
+) {
+  const parentPackingCostPerPiece =
+    input.piecesPerKg > 0 ? input.packingCostPerKg / input.piecesPerKg : 0
+  const parentShippingCostPerPiece =
+    input.piecesPerKg > 0 ? input.shippingCostPerKg / input.piecesPerKg : 0
+  const rejectionCost = input.processCostPerPiece * input.rejectionPercent
+  const totalA =
+    input.processCostPerPiece +
+    rejectionCost +
+    parentPackingCostPerPiece +
+    parentShippingCostPerPiece
+  const profitPercent =
+    input.targetPriceUsd !== undefined && totalA > 0
+      ? (input.targetPriceUsd * input.conversionRate -
+          input.childQuoteTotal -
+          totalA) /
+        totalA
+      : input.profitPercent
+  const profitB = totalA * profitPercent
+  const totalAPlusB = totalA + profitB
+  const totalRateInr = input.childQuoteTotal + totalAPlusB
+  const rateUsd =
+    input.conversionRate > 0 ? totalRateInr / input.conversionRate : 0
+
+  return {
+    childQuoteTotal: safeNumber(input.childQuoteTotal),
+    packageProcessCostPerPiece: safeNumber(input.processCostPerPiece),
+    parentPackingCostPerPiece: safeNumber(parentPackingCostPerPiece),
+    parentShippingCostPerPiece: safeNumber(parentShippingCostPerPiece),
+    piecesPerKg: safeNumber(input.piecesPerKg),
+    processCostPerKg: safeNumber(
+      input.processCostPerPiece * input.piecesPerKg
+    ),
+    profitB: safeNumber(profitB),
+    profitPercent: safeNumber(profitPercent),
+    rateInr: safeNumber(totalAPlusB),
+    rateUsd: safeNumber(rateUsd),
+    rejectionCost: safeNumber(rejectionCost),
+    totalA: safeNumber(totalA),
+    totalAPlusB: safeNumber(totalAPlusB),
+    totalRateInr: safeNumber(totalRateInr),
+  }
+}
+
 export function calculatePackageCosting(
   product: ProductProcessCostInput &
     Pick<ProductCostingInput, "rejectionPercent">,
@@ -190,36 +268,20 @@ export function calculatePackageCosting(
   childQuoteTotal: number
 ) {
   const process = calculateProductProcessCost(product)
-  const parentPackingCostPerPiece =
-    process.piecesPerKg > 0 ? quote.packingCost / process.piecesPerKg : 0
-  const parentShippingCostPerPiece =
-    process.piecesPerKg > 0 ? quote.shippingCost / process.piecesPerKg : 0
-  const rejectionCost = process.processCostPerPiece * product.rejectionPercent
-  const totalA =
-    process.processCostPerPiece +
-    rejectionCost +
-    parentPackingCostPerPiece +
-    parentShippingCostPerPiece
-  const profitB = totalA * quote.profitPercent
-  const totalAPlusB = totalA + profitB
-  const totalRateInr = childQuoteTotal + totalAPlusB
-  const rateUsd =
-    quote.conversionRate > 0 ? totalRateInr / quote.conversionRate : 0
+  const calculated = calculatePackageRevisionCostingFromBase({
+    childQuoteTotal,
+    conversionRate: quote.conversionRate,
+    packingCostPerKg: quote.packingCost,
+    piecesPerKg: process.piecesPerKg,
+    processCostPerPiece: process.processCostPerPiece,
+    profitPercent: quote.profitPercent,
+    rejectionPercent: product.rejectionPercent,
+    shippingCostPerKg: quote.shippingCost,
+  })
 
   return {
-    childQuoteTotal: safeNumber(childQuoteTotal),
-    packageProcessCostPerPiece: process.processCostPerPiece,
-    parentPackingCostPerPiece: safeNumber(parentPackingCostPerPiece),
-    parentShippingCostPerPiece: safeNumber(parentShippingCostPerPiece),
-    piecesPerKg: process.piecesPerKg,
+    ...calculated,
     processCostPerKg: process.processCostPerKg,
-    profitB: safeNumber(profitB),
-    rateInr: safeNumber(totalAPlusB),
-    rateUsd: safeNumber(rateUsd),
-    rejectionCost: safeNumber(rejectionCost),
-    totalA: safeNumber(totalA),
-    totalAPlusB: safeNumber(totalAPlusB),
-    totalRateInr: safeNumber(totalRateInr),
   }
 }
 

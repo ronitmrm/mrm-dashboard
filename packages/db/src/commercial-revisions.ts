@@ -10,8 +10,10 @@ import {
 } from "./postgres-runtime"
 import {
   calculateCosting,
+  calculatePackageRevisionCostingFromBase,
   calculateProductBaseCost,
   calculateProductProcessCost,
+  calculateStoredProductRevisionCosting,
   isForgingCostApplicable,
 } from "./pricing-calculation"
 
@@ -670,39 +672,48 @@ function revisedCalculation(
     const hasProductProcessOverride = [...productProcessCostFields].some(
       (fieldName) => override?.has(fieldName)
     )
+    const process = calculateProductProcessCost(productProcessInput(product))
     const processBase = hasProductProcessOverride
-      ? calculateProductProcessCost(productProcessInput(product))
-          .processCostPerPiece
+      ? process.processCostPerPiece
       : storedProcessBase
+    const storedPiecesPerKg = asNumber(
+      quote.snapshot_product_json.piecesPerKg,
+      asNumber(product.pieces_per_kg, process.piecesPerKg)
+    )
+    const piecesPerKg = hasProductProcessOverride
+      ? process.piecesPerKg
+      : storedPiecesPerKg
     const rejectionPercent = asNumber(product.rejection_percent)
-    const rejectionCost = processBase * rejectionPercent
-    const totalA = processBase + rejectionCost
-    let revisedProfit = profit
-    if (targetPriceUsd !== undefined && totalA > 0) {
-      revisedProfit =
-        (targetPriceUsd * conversionRate - childQuoteTotal - totalA) / totalA
-    }
-    const profitB = totalA * revisedProfit
-    const totalAPlusB = totalA + profitB
+    const packageCosting = calculatePackageRevisionCostingFromBase({
+      childQuoteTotal,
+      conversionRate,
+      packingCostPerKg: overrideNumber(
+        override,
+        "packing_cost",
+        quote.packing_cost
+      ),
+      piecesPerKg,
+      processCostPerPiece: processBase,
+      profitPercent: profit,
+      rejectionPercent,
+      shippingCostPerKg: overrideNumber(
+        override,
+        "shipping_cost",
+        quote.shipping_cost
+      ),
+      targetPriceUsd,
+    })
     const packageBeforeRejection = childQuoteTotal + processBase
-    const totalRateInr = childQuoteTotal + totalAPlusB
     return {
       calculation: {
         ...calculation,
-        childQuoteTotal,
+        ...packageCosting,
         packageBeforeRejection,
-        profitB,
-        rejectionCost,
-        totalA,
-        totalAPlusB,
-        totalRateInr,
         totalRodsCost: childQuoteTotal,
       },
-      profit: revisedProfit,
-      totalRateInr,
-      totalRateUsd:
-        targetPriceUsd ??
-        (conversionRate > 0 ? totalRateInr / conversionRate : 0),
+      profit: packageCosting.profitPercent,
+      totalRateInr: packageCosting.totalRateInr,
+      totalRateUsd: packageCosting.rateUsd,
     }
   }
 
@@ -760,72 +771,89 @@ function revisedCalculation(
   const isDirectPurchase =
     product.pricing_method === "Direct Purchase" && directPurchaseCost > 0
   const assembledPartInr = asNumber(quote.assembled_part_inr)
-  const base =
-    isDirectPurchase
-      ? {
-          piecesPerKg: 0,
-          profitB: directPurchaseCost * profit,
-          totalA: directPurchaseCost,
-          totalAPlusB: directPurchaseCost * (1 + profit),
-          totalRateInr:
-            directPurchaseCost * (1 + profit) + assembledPartInr,
-        }
-      : calculateCosting(
-          {
-            annealing: asNumber(product.annealing),
-            assemblyOperationCost: 0,
-            buffing: asNumber(product.buffing),
-            burningLossPercent: asNumber(product.burning_loss_percent),
-            casting: asNumber(product.casting, 1),
-            checking: asNumber(product.checking),
-            deburring: asNumber(product.deburring),
-            machiningCost: asNumber(product.machining_cost),
-            marking: asNumber(product.marking),
-            overheadCost: asNumber(product.overhead_cost),
-            plating: asNumber(product.plating),
-            rejectionPercent: asNumber(product.rejection_percent),
-            sealant: asNumber(product.sealant),
-            washing: asNumber(product.washing),
-            weight100Pcs: asNumber(product.weight_100_pcs),
-          },
-          {
-            alloyPremium: asNumber(product.alloy_premium),
-            assembledPartInr,
-            conversionRate,
-            extCost: asNumber(product.extrusion_cost),
-            forgingCost: !isForgingCostApplicable(
-              typeof product.source_payload.productType === "string"
-                ? product.source_payload.productType
-                : product.production_type
-            )
-              ? 0
-              : asNumber(product.forging_cost),
-            packingCost: overrideNumber(
-              override,
-              "packing_cost",
-              quote.packing_cost
-            ),
-            profitPercent: profit,
-            purchaseTimes: overrideNumber(
-              override,
-              "purchase_times",
-              quote.purchase_times
-            ),
-            scrapRate: overrideNumber(override, "scrap_rate", quote.scrap_rate),
-            shippingCost: overrideNumber(
-              override,
-              "shipping_cost",
-              quote.shipping_cost
-            ),
-          }
-        )
+  if (isDirectPurchase) {
+    const direct = calculateStoredProductRevisionCosting({
+      baseCostPerPiece: directPurchaseCost,
+      conversionRate,
+      packingCostPerKg: overrideNumber(
+        override,
+        "packing_cost",
+        quote.packing_cost
+      ),
+      piecesPerKg: asNumber(product.pieces_per_kg),
+      profitPercent: profit,
+      rejectionPercent: asNumber(product.rejection_percent),
+      shippingCostPerKg: overrideNumber(
+        override,
+        "shipping_cost",
+        quote.shipping_cost
+      ),
+      targetPriceUsd,
+    })
+    return {
+      calculation: {
+        ...calculation,
+        ...direct,
+        totalRateInr: direct.rateInr,
+      },
+      profit: direct.profitPercent,
+      totalRateInr: direct.rateInr,
+      totalRateUsd: direct.rateUsd,
+    }
+  }
+  const base = calculateCosting(
+    {
+      annealing: asNumber(product.annealing),
+      assemblyOperationCost: 0,
+      buffing: asNumber(product.buffing),
+      burningLossPercent: asNumber(product.burning_loss_percent),
+      casting: asNumber(product.casting, 1),
+      checking: asNumber(product.checking),
+      deburring: asNumber(product.deburring),
+      machiningCost: asNumber(product.machining_cost),
+      marking: asNumber(product.marking),
+      overheadCost: asNumber(product.overhead_cost),
+      plating: asNumber(product.plating),
+      rejectionPercent: asNumber(product.rejection_percent),
+      sealant: asNumber(product.sealant),
+      washing: asNumber(product.washing),
+      weight100Pcs: asNumber(product.weight_100_pcs),
+    },
+    {
+      alloyPremium: asNumber(product.alloy_premium),
+      assembledPartInr,
+      conversionRate,
+      extCost: asNumber(product.extrusion_cost),
+      forgingCost: !isForgingCostApplicable(
+        typeof product.source_payload.productType === "string"
+          ? product.source_payload.productType
+          : product.production_type
+      )
+        ? 0
+        : asNumber(product.forging_cost),
+      packingCost: overrideNumber(
+        override,
+        "packing_cost",
+        quote.packing_cost
+      ),
+      profitPercent: profit,
+      purchaseTimes: overrideNumber(
+        override,
+        "purchase_times",
+        quote.purchase_times
+      ),
+      scrapRate: overrideNumber(override, "scrap_rate", quote.scrap_rate),
+      shippingCost: overrideNumber(
+        override,
+        "shipping_cost",
+        quote.shipping_cost
+      ),
+    }
+  )
   let revisedProfit = profit
   const piecesPerKg = asNumber(base.piecesPerKg)
-  const profitBasisPerPiece = isDirectPurchase
-    ? asNumber(base.totalA)
-    : piecesPerKg > 0
-      ? asNumber(base.totalA) / piecesPerKg
-      : 0
+  const profitBasisPerPiece =
+    piecesPerKg > 0 ? asNumber(base.totalA) / piecesPerKg : 0
   if (targetPriceUsd !== undefined && profitBasisPerPiece > 0) {
     revisedProfit =
       (targetPriceUsd * conversionRate -
@@ -835,11 +863,7 @@ function revisedCalculation(
   }
   const profitB = asNumber(base.totalA) * revisedProfit
   const totalAPlusB = asNumber(base.totalA) + profitB
-  const rateInr = isDirectPurchase
-    ? totalAPlusB
-    : piecesPerKg > 0
-      ? totalAPlusB / piecesPerKg
-      : 0
+  const rateInr = piecesPerKg > 0 ? totalAPlusB / piecesPerKg : 0
   const totalRateInr = rateInr + assembledPartInr
   return {
     calculation: {
