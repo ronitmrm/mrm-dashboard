@@ -502,4 +502,28 @@ describe("Pricing spreadsheet workbook", () => {
       "Total Rate / PCS In INR": "14.01",
     })
   })
+
+  test("derives machining cost per piece when a revision snapshot omits it", () => {
+    const revisedRow: PricingRegisterRow = {
+      ...row,
+      calculation: { ...row.calculation, piecesPerKg: 50 },
+      product: {
+        ...row.product,
+        machiningCost: 400,
+        machiningPricePerPiece: undefined,
+        pricingMethod: "Derived",
+      },
+    }
+
+    expect(toPricingViewRow(revisedRow)["M/c Cost (INR/pc)"]).toBe("8.00")
+
+    const workbook = buildPricingWorkbook([revisedRow])
+    const values = XLSX.utils.sheet_to_json<unknown[]>(
+      workbook.Sheets["Pricing View"]!,
+      { header: 1 }
+    )
+    expect(values[1]?.[pricingHeaders.indexOf("M/c Cost (INR/pc)")]).toBe(
+      "8.00"
+    )
+  })
 })

@@ -67,6 +67,21 @@ function machiningValue(record: Record<string, unknown>, key: string) {
   return isDirectPricing(record) ? "-" : value(record, key)
 }
 
+function machiningPricePerPieceValue(
+  product: Record<string, unknown>,
+  calculation: Record<string, unknown>
+) {
+  if (isDirectPricing(product)) return "-"
+  const piecesPerKg = Number(calculation.piecesPerKg ?? product.piecesPerKg)
+  const machiningCost = Number(product.machiningCost)
+  const stored = product.machiningPricePerPiece
+  const result =
+    piecesPerKg > 0 && Number.isFinite(machiningCost)
+      ? machiningCost / piecesPerKg
+      : stored
+  return value({ result }, "result")
+}
+
 function forgingValue(record: Record<string, unknown>) {
   const productType = String(record.productType ?? record.productionType ?? "")
     .trim()
@@ -261,7 +276,7 @@ export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
       "machiningPricePerPiece"
     ),
     "M/c Cost (INR/kg)": machiningValue(product, "machiningCost"),
-    "M/c Cost (INR/pc)": machiningValue(product, "machiningPricePerPiece"),
+    "M/c Cost (INR/pc)": machiningPricePerPieceValue(product, calculation),
     "Washing (INR/kg)": value(product, "washing"),
     "Checking (INR/kg)": value(product, "checking"),
     "Marking (INR/kg)": value(product, "marking"),
