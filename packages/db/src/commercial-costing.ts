@@ -13,6 +13,7 @@ import {
   calculateCosting,
   calculatePackageCosting,
   calculateProductProcessCost,
+  calculateStoredProductCosting,
   isForgingCostApplicable,
   type CostingResult,
 } from "./pricing-calculation"
@@ -491,6 +492,7 @@ function productSnapshot(product: ProductRow) {
     piecesPerKg: asNumber(product.pieces_per_kg),
     plating: asNumber(product.plating),
     pricingMethod: product.pricing_method,
+    productType: costingProductType(product),
     productCostInr: asNumber(product.product_cost_inr),
     productionType: product.production_type,
     rejectionPercent: asNumber(product.rejection_percent),
@@ -519,6 +521,15 @@ function costingProcesses(sourcePayload: Record<string, unknown>) {
         .map((process) => process.trim())
         .filter(Boolean)
     : []
+}
+
+function costingProductType(
+  product: Pick<ProductRow, "production_type" | "source_payload">
+) {
+  const productType = product.source_payload?.productType
+  return typeof productType === "string"
+    ? productType
+    : product.production_type
 }
 
 function productCostingProduct(
@@ -563,6 +574,7 @@ function productCostingProduct(
     piecesPerKg: asNumber(row.pieces_per_kg),
     plating: asNumber(row.plating),
     pricingMethod: row.pricing_method,
+    productType: costingProductType(row),
     processesRequired: costingProcesses(row.source_payload ?? {}),
     productCostInr: asNumber(row.product_cost_inr),
     productionType: row.production_type,
@@ -582,15 +594,20 @@ function calculateProductQuote(product: ProductRow, inputs: QuoteInputs) {
   const storedCost = storedProductCost(product)
   const alloyPremium = asNumber(product.alloy_premium)
   const extrusionCost = asNumber(product.extrusion_cost)
-  const forgingCost = !isForgingCostApplicable(product.production_type)
+  const forgingCost = !isForgingCostApplicable(costingProductType(product))
     ? 0
     : asNumber(product.forging_cost)
 
   if (storedCost > 0) {
-    const rejectionCost = storedCost * asNumber(product.rejection_percent)
-    const totalA = storedCost + rejectionCost
-    const profitB = totalA * inputs.profitPercent
-    const totalAPlusB = totalA + profitB
+    const storedCalculation = calculateStoredProductCosting({
+      baseCostPerPiece: storedCost,
+      conversionRate: inputs.conversionRate,
+      packingCostPerKg: inputs.packingCost,
+      piecesPerKg: asNumber(product.pieces_per_kg),
+      profitPercent: inputs.profitPercent,
+      rejectionPercent: asNumber(product.rejection_percent),
+      shippingCostPerKg: inputs.shippingCost,
+    })
     return {
       alloyPremium,
       extrusionCost,
@@ -598,21 +615,20 @@ function calculateProductQuote(product: ProductRow, inputs: QuoteInputs) {
       result: {
         netRateWithAlloy: 0,
         netRateWithoutAlloy: 0,
-        piecesPerKg: asNumber(product.pieces_per_kg),
+        piecesPerKg: storedCalculation.piecesPerKg,
         processCost: storedCost,
-        profitB,
-        rateInr: totalAPlusB,
-        rateUsd:
-          inputs.conversionRate > 0 ? totalAPlusB / inputs.conversionRate : 0,
+        profitB: storedCalculation.profitB,
+        rateInr: storedCalculation.rateInr,
+        rateUsd: storedCalculation.rateUsd,
         rawMaterialCost: 0,
-        rejectionCost,
+        rejectionCost: storedCalculation.rejectionCost,
         scrapRatePerGm: 0,
         scrapReturn: 0,
         scrapReturnPrice: 0,
         scrapReturnPriceIncludingBurningLoss: 0,
-        totalA,
-        totalAPlusB,
-        totalRateInr: totalAPlusB,
+        totalA: storedCalculation.totalA,
+        totalAPlusB: storedCalculation.totalAPlusB,
+        totalRateInr: storedCalculation.rateInr,
         totalRodsCost: storedCost,
       } satisfies CostingResult,
     }
@@ -2390,7 +2406,7 @@ export function createCommercialCostingRepository(
               asNumber(product.extrusion_cost)
             )
         const forgingCost =
-          isDirectPurchase || !isForgingCostApplicable(product.production_type)
+          isDirectPurchase || !isForgingCostApplicable(costingProductType(product))
             ? 0
             : (input.forgingCost ?? asNumber(product.forging_cost))
         const updated = await client.query<ProductRow>(

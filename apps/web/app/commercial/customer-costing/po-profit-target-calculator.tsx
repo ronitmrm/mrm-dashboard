@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 
+import { calculateStoredProductCosting } from "@workspace/db/pricing-calculation"
 import { Button } from "@workspace/ui/components/button"
 import { MetricCard } from "@workspace/ui/components/card"
 
@@ -57,13 +58,30 @@ function baseCost(product: ProductInputs, values: FormValues) {
         ? product.directPurchasePricePerPiece
         : 0
   if (storedCost > 0) {
+    const piecesPerKg =
+      product.weight100Pcs > 0
+        ? 1000 / product.weight100Pcs
+        : product.directPurchasePricePerPiece > 0
+          ? 1
+          : 0
+    if (product.pricingMethod === "Direct Purchase") {
+      const calculation = calculateStoredProductCosting({
+        baseCostPerPiece: storedCost,
+        conversionRate: values.conversionRate,
+        packingCostPerKg: values.packingCost,
+        piecesPerKg,
+        profitPercent: 0,
+        rejectionPercent: product.rejectionPercent,
+        shippingCostPerKg: values.shippingCost,
+      })
+      return {
+        piecesPerKg,
+        rateInrWithoutProfit: calculation.totalA,
+        totalA: calculation.totalA * piecesPerKg,
+      }
+    }
     return {
-      piecesPerKg:
-        product.weight100Pcs > 0
-          ? 1000 / product.weight100Pcs
-          : product.directPurchasePricePerPiece > 0
-            ? 1
-            : 0,
+      piecesPerKg,
       rateInrWithoutProfit: storedCost,
       totalA: storedCost,
     }
@@ -71,14 +89,16 @@ function baseCost(product: ProductInputs, values: FormValues) {
 
   const piecesPerKg =
     product.weight100Pcs > 0 ? 1000 / product.weight100Pcs : 0
+  const blankToFinishedWeightRatio =
+    product.weight100Pcs > 0 ? product.casting / product.weight100Pcs : 0
   const netRateWithoutAlloy =
     values.scrapRate + product.extrusionCost + product.forgingCost
   const netRateWithAlloy = netRateWithoutAlloy + product.alloyPremium
   const rawMaterialCost =
     values.purchaseTimes * netRateWithAlloy +
-    (product.casting - values.purchaseTimes) * netRateWithoutAlloy
+    (blankToFinishedWeightRatio - values.purchaseTimes) * netRateWithoutAlloy
   const scrapReturnPrice =
-    (product.casting - 1) *
+    (blankToFinishedWeightRatio - 1) *
     values.scrapRate *
     (1 - product.burningLossPercent)
   const totalRodsCost = rawMaterialCost - scrapReturnPrice

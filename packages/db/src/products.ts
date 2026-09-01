@@ -88,7 +88,12 @@ export function createProductRepository(options: RepositoryPoolOptions) {
       const machiningPricePerPiece =
         piecesPerKg > 0 ? machiningCost / piecesPerKg : 0
       const isPackage = input.itemType === "Package"
-      const hasForgingCost = isForgingCostApplicable(input.productionType)
+      const sourceProductType = input.source.payload?.productType
+      const hasForgingCost = isForgingCostApplicable(
+        typeof sourceProductType === "string"
+          ? sourceProductType
+          : input.productionType
+      )
 
       const [created] = await database
         .insert(items)
