@@ -29,7 +29,9 @@ type Dossier = {
   category: string | null
   checkedBy: string | null
   description: string
+  designBomCompleted: string
   designRemarks: string | null
+  designerName: string | null
   dieCode: string | null
   ecnNumber: string
   fixtureApproxCost: number
@@ -40,12 +42,14 @@ type Dossier = {
   itemId: string
   itemType: string
   itemUid: string
+  materialGradeId: string | null
   operationNotes: string | null
   productionType: string | null
   productSize: string | null
   reason: string
   remarks: string | null
   rodSize: string | null
+  rodTypeId: string | null
   status: string
   subcategory: string | null
   targetCompletionDate: string | null
@@ -61,6 +65,8 @@ type ProductOption = {
   subcategory?: string | null
   uid: string
 }
+
+type NamedOption = { id: string; name: string }
 
 const sections = [
   ["product", "Product Details"],
@@ -93,10 +99,14 @@ function YesNoField({
 
 export function EcnDesignWorkspace({
   dossier,
+  materialGrades = [],
   products,
+  rodTypes = [],
 }: {
   dossier: Dossier
+  materialGrades?: NamedOption[]
   products: ProductOption[]
+  rodTypes?: NamedOption[]
 }) {
   const [activeSection, setActiveSection] = useState<Section>("product")
 
@@ -126,6 +136,13 @@ export function EcnDesignWorkspace({
           <Field>
             <FieldLabel>Product UID</FieldLabel>
             <Input readOnly value={dossier.itemUid} />
+          </Field>
+          <Field>
+            <FieldLabel>Designer</FieldLabel>
+            <Input
+              defaultValue={dossier.designerName ?? ""}
+              name="designer_name"
+            />
           </Field>
           <Field className="md:col-span-2">
             <FieldLabel>Product Name</FieldLabel>
@@ -167,6 +184,34 @@ export function EcnDesignWorkspace({
               defaultValue={dossier.productionType ?? ""}
               name="production_type"
             />
+          </Field>
+          <Field>
+            <FieldLabel>Material Grade</FieldLabel>
+            <NativeSelect
+              defaultValue={dossier.materialGradeId ?? ""}
+              name="material_grade_id"
+            >
+              <NativeSelectOption value="">Not Set</NativeSelectOption>
+              {materialGrades.map((option) => (
+                <NativeSelectOption key={option.id} value={option.id}>
+                  {option.name}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </Field>
+          <Field>
+            <FieldLabel>Rod Type</FieldLabel>
+            <NativeSelect
+              defaultValue={dossier.rodTypeId ?? ""}
+              name="rod_type_id"
+            >
+              <NativeSelectOption value="">Not Set</NativeSelectOption>
+              {rodTypes.map((option) => (
+                <NativeSelectOption key={option.id} value={option.id}>
+                  {option.name}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
           </Field>
           <Field>
             <FieldLabel>Piece Weight (g)</FieldLabel>
@@ -243,6 +288,11 @@ export function EcnDesignWorkspace({
 
       <section hidden={activeSection !== "controls"} role="tabpanel">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <YesNoField
+            defaultValue={dossier.designBomCompleted}
+            label="BOM Complete"
+            name="design_bom_completed"
+          />
           <Field>
             <FieldLabel>Target Completion Date</FieldLabel>
             <Input

@@ -93,7 +93,9 @@ export default async function EngineeringChangeDesignPage({
             />
             <EcnDesignWorkspace
               dossier={data.dossier}
+              materialGrades={data.reference.materialGrades}
               products={data.reference.items}
+              rodTypes={data.reference.rodTypes}
             />
           </form>
         </CardContent>
