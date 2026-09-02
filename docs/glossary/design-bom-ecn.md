@@ -52,6 +52,10 @@ Product Parameter Costing and every affected Customer Product Parameter Costing
 decision finish. A non-cost classification is recorded explicitly.
 
 **Product Portfolio Dossier View**: The canonical read-only Product view. It
-shows the released Product Design revision, current drawing, drawing history,
-pricing summary, hierarchy, latest ECN, and status. Released values cannot be
-edited from Portfolio.
+is a design-only summary showing Product classification, sizes, weights, die,
+material/rod details, process applicability, current drawing, the complete
+recursive BOM, and Product Design Revision history. It never shows pricing or
+costing. The Current revision opens the complete tabbed Design Task read-only;
+an earlier revision opens only the immutable Product/BOM summary captured at
+that release. Historical fields that were not captured are shown as unavailable
+and are never filled from the current Product.
