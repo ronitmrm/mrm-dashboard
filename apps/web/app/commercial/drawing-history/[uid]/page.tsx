@@ -51,7 +51,8 @@ export default async function DrawingRevisionHistoryPage({
             Drawing Revision History
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Immutable released revisions with approval and ECN provenance.
+            Immutable released revisions plus provisional legacy metadata
+            awaiting files.
           </p>
         </div>
         <Button asChild variant="outline">
@@ -62,7 +63,7 @@ export default async function DrawingRevisionHistoryPage({
       <Card>
         <CardHeader>
           <CardTitle>{rows[0]!.itemDescription}</CardTitle>
-          <CardDescription>{rows.length} controlled revisions.</CardDescription>
+          <CardDescription>{rows.length} drawing records.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto rounded-2xl border">
@@ -91,7 +92,8 @@ export default async function DrawingRevisionHistoryPage({
                       {row.drawingNumber}
                     </TableCell>
                     <TableCell>
-                      {row.status} · {row.requirement}
+                      {row.pendingUpload ? "Pending Drawing Upload" : row.status}
+                      {` · ${row.requirement}`}
                     </TableCell>
                     <TableCell>{row.effectiveOn || "—"}</TableCell>
                     <TableCell>
@@ -116,6 +118,8 @@ export default async function DrawingRevisionHistoryPage({
                         >
                           View
                         </AttachmentViewerLink>
+                      ) : row.pendingUpload ? (
+                        "Pending upload"
                       ) : (
                         "Not Required"
                       )}

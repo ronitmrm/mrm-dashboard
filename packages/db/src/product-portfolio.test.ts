@@ -249,6 +249,52 @@ describe("Product Portfolio repository", () => {
     ])
   })
 
+  it("identifies a staged legacy drawing that is pending its file", async () => {
+    const query = vi.fn(async () => ({
+      rows: [
+        {
+          approved_at: null,
+          approved_by: null,
+          change_reason: "Legacy Drawing Register Baseline",
+          created_at: new Date("2026-09-02T00:00:00Z"),
+          drawing_id: "drawing-r160",
+          drawing_number: "R160",
+          effective_on: "2026-03-10",
+          ecn_number: null,
+          file_id: null,
+          file_name: null,
+          is_current: false,
+          item_description: "Legacy part",
+          item_id: "item-r160",
+          media_type: null,
+          raised_by: null,
+          requirement_status: "Required",
+          revision_label: "03",
+          source_payload: { filePending: true, legacyBaseline: true },
+          source_system: "legacy-drawing-baseline",
+          status: "Draft",
+          uid: "R160",
+          uploaded_by: null,
+        },
+      ],
+    }))
+    const repository = createProductPortfolioRepository({
+      pool: { query } as unknown as Pool,
+    })
+
+    await expect(
+      repository.listDrawingRevisionsForOrganization("MRMPL", { uid: "R160" })
+    ).resolves.toEqual([
+      expect.objectContaining({
+        current: false,
+        pendingUpload: true,
+        revision: "03",
+        status: "Draft",
+        uid: "R160",
+      }),
+    ])
+  })
+
   it("reads an old BOM summary only from its immutable revision snapshot", async () => {
     let issuedStatement = ""
     const query = vi.fn(async (statement: string) => {

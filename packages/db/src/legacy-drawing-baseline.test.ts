@@ -3,6 +3,43 @@ import { describe, expect, test } from "vitest"
 import { buildLegacyDrawingBaselinePlan } from "./legacy-drawing-baseline"
 
 describe("Legacy drawing baseline migration", () => {
+  test("stages register metadata even when drawing files are not available yet", () => {
+    const plan = buildLegacyDrawingBaselinePlan({
+      fileNames: [],
+      registerRows: [
+        {
+          drawingNumber: "R160",
+          revision: 3,
+          revisionDate: new Date(2026, 2, 10),
+          uid: "R160",
+        },
+      ],
+      releasedProducts: [
+        { itemId: "item-r160", organizationId: "org", uid: "R160" },
+        { itemId: "item-missing", organizationId: "org", uid: "MISSING" },
+      ],
+    })
+
+    expect(plan.baselines).toEqual([
+      expect.objectContaining({
+        drawingNumber: "R160",
+        effectiveOn: "2026-03-10",
+        fileName: null,
+        revisionLabel: "03",
+        uid: "R160",
+      }),
+      expect.objectContaining({
+        drawingNumber: "MISSING",
+        effectiveOn: "2026-09-02",
+        fileName: null,
+        revisionLabel: "00",
+        uid: "MISSING",
+      }),
+    ])
+    expect(plan.ready).toEqual([])
+    expect(plan.missingFileUids).toEqual(["R160", "MISSING"])
+  })
+
   test("retains current revisions, applies agreed defaults, and ignores dead Products", () => {
     const plan = buildLegacyDrawingBaselinePlan({
       fileNames: ["M1.pdf", "M986.pdf", "MISSING.dwg", "DEAD.pdf"],
