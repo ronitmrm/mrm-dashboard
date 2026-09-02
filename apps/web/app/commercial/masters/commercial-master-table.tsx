@@ -20,7 +20,7 @@ import {
   NativeSelectOption,
 } from "@workspace/ui/components/native-select"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -103,7 +103,7 @@ export function CommercialMasterTable({
         </NativeSelect>
       </Field> : null}
       <div className="overflow-x-auto rounded-md border">
-        <Table>
+ <OperationalTable>
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
@@ -153,7 +153,7 @@ export function CommercialMasterTable({
               </TableRow>
             ) : null}
           </TableBody>
-        </Table>
+ </OperationalTable>
       </div>
 
       <Dialog

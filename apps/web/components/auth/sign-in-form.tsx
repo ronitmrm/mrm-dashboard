@@ -6,7 +6,7 @@ import { ArrowRight, LoaderCircle } from "lucide-react"
 
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardFooter,
@@ -56,7 +56,7 @@ export function SignInForm({ returnPath }: { returnPath: string }) {
   }
 
   return (
-    <Card className="w-full max-w-md">
+ <SectionCard className="w-full max-w-md">
       <CardHeader>
         <CardTitle className="text-xl">Sign In To Mrmpl</CardTitle>
         <CardDescription>
@@ -113,6 +113,6 @@ export function SignInForm({ returnPath }: { returnPath: string }) {
           </CardFooter>
         </fieldset>
       </form>
-    </Card>
+ </SectionCard>
   )
 }

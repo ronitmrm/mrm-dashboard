@@ -3,7 +3,7 @@ import Link from "next/link"
 import { createCommercialRevisionsRepository } from "@workspace/db"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -78,7 +78,7 @@ export default async function ProductBulkRevisionPage() {
         />
       </section>
 
-      <Card>
+ <SectionCard>
         <CardHeader>
           <CardTitle>Start A Product Revision</CardTitle>
           <CardDescription>
@@ -134,7 +134,7 @@ export default async function ProductBulkRevisionPage() {
             </p>
           )}
         </CardContent>
-      </Card>
+ </SectionCard>
     </div>
   )
 }

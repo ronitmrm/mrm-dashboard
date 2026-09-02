@@ -2,7 +2,7 @@ import { createStoreRepository } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -15,7 +15,7 @@ import {
   NativeSelectOption,
 } from "@workspace/ui/components/native-select"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -74,7 +74,7 @@ export default async function NewItemRequestsPage() {
       </div>
 
       {canSubmitRequests ? (
-        <Card>
+ <SectionCard>
           <CardHeader>
             <CardTitle>Request a New Item</CardTitle>
             <CardDescription>
@@ -139,15 +139,15 @@ export default async function NewItemRequestsPage() {
               </Button>
             </form>
           </CardContent>
-        </Card>
+ </SectionCard>
       ) : null}
 
-      <Card>
+ <SectionCard>
         <CardHeader>
           <CardTitle>New Item Request Register</CardTitle>
         </CardHeader>
         <CardContent className="overflow-x-auto">
-          <Table>
+ <OperationalTable>
             <TableHeader>
               <TableRow>
                 <TableHead>Request</TableHead>
@@ -235,9 +235,9 @@ export default async function NewItemRequestsPage() {
                 </TableRow>
               ) : null}
             </TableBody>
-          </Table>
+ </OperationalTable>
         </CardContent>
-      </Card>
+ </SectionCard>
     </div>
   )
 }

@@ -4,7 +4,7 @@ import { createCommercialRevisionsRepository } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -20,7 +20,7 @@ import {
 } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -108,7 +108,7 @@ export default async function EngineeringChangeNotesPage() {
         />
       </section>
 
-      <Card>
+ <SectionCard>
         <CardHeader>
           <CardTitle>Open An Engineering Change Note</CardTitle>
           <CardDescription>
@@ -154,15 +154,15 @@ export default async function EngineeringChangeNotesPage() {
             </p>
           )}
         </CardContent>
-      </Card>
+ </SectionCard>
 
-      <Card>
+ <SectionCard>
         <CardHeader>
           <CardTitle>ECN Register</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="max-h-[65vh] overflow-auto rounded-md border">
-            <Table
+ <OperationalTable
               containerClassName="max-h-none overflow-visible"
               excelFilters
             >
@@ -228,10 +228,10 @@ export default async function EngineeringChangeNotesPage() {
                   </TableRow>
                 ) : null}
               </TableBody>
-            </Table>
+ </OperationalTable>
           </div>
         </CardContent>
-      </Card>
+ </SectionCard>
     </div>
   )
 }

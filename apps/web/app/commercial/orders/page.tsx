@@ -7,7 +7,7 @@ import {
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -26,7 +26,7 @@ import {
   NativeSelectOption,
 } from "@workspace/ui/components/native-select"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -126,7 +126,7 @@ export default async function PurchaseOrdersPage({
         masterTablesHref="/commercial/orders?operationalView=masterTables"
       />
       {operationalView === "dataEntry" ? (
-        <Card>
+ <SectionCard>
           <CardHeader>
             <CardTitle>Import Purchase Order</CardTitle>
             <CardDescription>
@@ -239,17 +239,17 @@ export default async function PurchaseOrdersPage({
               </p>
             )}
           </CardContent>
-        </Card>
+ </SectionCard>
       ) : null}
 
       {operationalView === "masterTables" ? (
-        <Card>
+ <SectionCard>
           <CardHeader>
             <CardTitle>Purchase-Order Register</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="overflow-hidden rounded-3xl border">
-              <Table>
+ <OperationalTable>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Po</TableHead>
@@ -305,10 +305,10 @@ export default async function PurchaseOrdersPage({
                     </TableRow>
                   )}
                 </TableBody>
-              </Table>
+ </OperationalTable>
             </div>
           </CardContent>
-        </Card>
+ </SectionCard>
       ) : null}
     </div>
   )

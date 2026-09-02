@@ -3,7 +3,7 @@
 import { nextRecruitmentCombinedRoleIdentity } from "@workspace/db/recruitment-codes"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -46,7 +46,7 @@ export function CombinedRoleForm({
     selectedPostIds.size >= 2 && selectedPostIds.has(primaryPostId)
 
   return (
-    <Card>
+ <SectionCard>
       <CardHeader>
         <CardTitle>Combine Approved Posts</CardTitle>
         <CardDescription>
@@ -106,6 +106,6 @@ export function CombinedRoleForm({
           </Button>
         </form>
       </CardContent>
-    </Card>
+ </SectionCard>
   )
 }

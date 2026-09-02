@@ -7,7 +7,7 @@ import {
 } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
-import { Card, CardContent } from "@workspace/ui/components/card"
+import { SectionCard, CardContent } from "@workspace/ui/components/card"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
@@ -179,7 +179,7 @@ export default async function CurrentProductDesignTaskPage({
         </div>
       </section>
 
-      <Card>
+ <SectionCard>
         <CardContent className="p-4 lg:p-6">
           <DesignTaskEditor
             attachments={attachments}
@@ -220,7 +220,7 @@ export default async function CurrentProductDesignTaskPage({
             products={canonicalProducts}
           />
         </CardContent>
-      </Card>
+ </SectionCard>
     </div>
   )
 }

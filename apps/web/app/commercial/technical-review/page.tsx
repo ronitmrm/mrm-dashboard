@@ -4,14 +4,14 @@ import { createCommercialWorkflowRepository } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardHeader,
   CardTitle,
   MetricCard,
 } from "@workspace/ui/components/card"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -65,13 +65,13 @@ export default async function TechnicalReviewPage() {
         <MetricCard label="Open Review Tasks" value={summary.openReviewTasks} />
       </section>
 
-      <Card>
+ <SectionCard>
         <CardHeader>
           <CardTitle>Technical Review Queue</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="max-h-[70vh] overflow-auto rounded-md border">
-            <Table containerClassName="max-h-none overflow-visible" excelFilters>
+ <OperationalTable containerClassName="max-h-none overflow-visible" excelFilters>
               <TableHeader className="sticky top-0 z-10 bg-background">
                 <TableRow>
                   <TableHead data-filterable="true">Enquiry</TableHead>
@@ -139,10 +139,10 @@ export default async function TechnicalReviewPage() {
                   </TableRow>
                 ) : null}
               </TableBody>
-            </Table>
+ </OperationalTable>
           </div>
         </CardContent>
-      </Card>
+ </SectionCard>
     </div>
   )
 }

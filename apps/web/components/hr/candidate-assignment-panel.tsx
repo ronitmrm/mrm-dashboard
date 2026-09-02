@@ -7,7 +7,7 @@ import type { RecruitmentCandidateRow, RecruitmentJobRow } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -27,7 +27,7 @@ import {
   SheetTitle,
 } from "@workspace/ui/components/sheet"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -123,7 +123,7 @@ export function CandidatesTable({
       }}
       open={loggingCandidate !== null}
     >
-      <Card>
+ <SectionCard>
         <CardHeader>
           <CardTitle>Candidates</CardTitle>
           <CardDescription>
@@ -143,7 +143,7 @@ export function CandidatesTable({
               Clear All Filters
             </Button>
           </div>
-          <Table>
+ <OperationalTable>
             <TableHeader>
               <TableRow>
                 {columns.map(({ key, label }) => (
@@ -229,9 +229,9 @@ export function CandidatesTable({
                 </TableRow>
               ) : null}
             </TableBody>
-          </Table>
+ </OperationalTable>
         </CardContent>
-      </Card>
+ </SectionCard>
       {loggingCandidate ? (
         <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
           <form
@@ -333,7 +333,7 @@ export function CandidateAssignmentPanel({
   if (!canWrite) return <CandidatesTable candidates={candidates} />
 
   return (
-    <Card>
+ <SectionCard>
       <CardHeader>
         <CardTitle>Search Candidates For A Job</CardTitle>
       </CardHeader>
@@ -363,6 +363,6 @@ export function CandidateAssignmentPanel({
           returnJobId={returnJobId}
         />
       </CardContent>
-    </Card>
+ </SectionCard>
   )
 }

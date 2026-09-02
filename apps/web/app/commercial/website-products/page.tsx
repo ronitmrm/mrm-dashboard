@@ -11,7 +11,7 @@ import Link from "next/link"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -21,7 +21,7 @@ import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
 import { SearchableSelect } from "@workspace/ui/components/searchable-select"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -332,7 +332,7 @@ export default async function WebsiteProductsPage({
       />
 
       {showMasterTables ? (
-        <Card>
+ <SectionCard>
           <CardHeader>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -400,11 +400,11 @@ export default async function WebsiteProductsPage({
               </Button>
             </form>
           </CardContent>
-        </Card>
+ </SectionCard>
       ) : null}
 
       {showDataEntry && !editing ? (
-        <Card>
+ <SectionCard>
           <CardHeader>
             <CardTitle>Select Website Product</CardTitle>
           </CardHeader>
@@ -435,11 +435,11 @@ export default async function WebsiteProductsPage({
               <Button type="submit">Open For Editing</Button>
             </form>
           </CardContent>
-        </Card>
+ </SectionCard>
       ) : null}
 
       {showDataEntry && editing ? (
-        <Card>
+ <SectionCard>
           <CardHeader>
             <CardTitle>Edit {editing.uid}</CardTitle>
             <CardDescription>
@@ -655,11 +655,11 @@ export default async function WebsiteProductsPage({
               </div>
             </form>
           </CardContent>
-        </Card>
+ </SectionCard>
       ) : null}
 
       {showMasterTables ? (
-        <Card>
+ <SectionCard>
           <CardHeader>
             <CardTitle>Website Product Excel View</CardTitle>
             <CardDescription>
@@ -668,7 +668,7 @@ export default async function WebsiteProductsPage({
           </CardHeader>
           <CardContent>
             <div className="max-h-[70vh] overflow-auto rounded-2xl border">
-              <Table containerClassName="max-h-none overflow-visible" className="min-w-max text-xs">
+ <OperationalTable containerClassName="max-h-none overflow-visible" className="min-w-max text-xs">
                 <TableHeader className="sticky top-0 z-10 bg-background">
                   <TableRow>
                     <TableHead className="sticky left-0 z-20 bg-background">
@@ -717,10 +717,10 @@ export default async function WebsiteProductsPage({
                     </TableRow>
                   )}
                 </TableBody>
-              </Table>
+ </OperationalTable>
             </div>
           </CardContent>
-        </Card>
+ </SectionCard>
       ) : null}
     </div>
   )

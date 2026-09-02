@@ -7,7 +7,7 @@ import {
 import { Alert, AlertDescription } from "@workspace/ui/components/alert"
 import { Badge } from "@workspace/ui/components/badge"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -161,7 +161,7 @@ export default async function MastersPage({
       {showDataEntry ? (
         <>
           {canUpdate && snapshot ? (
-            <Card>
+ <SectionCard>
               <CardHeader>
                 <CardTitle>Add Or Update A Master</CardTitle>
                 <CardDescription>
@@ -179,13 +179,13 @@ export default async function MastersPage({
                   selectionLocked={selectionLocked}
                 />
               </CardContent>
-            </Card>
+ </SectionCard>
           ) : null}
         </>
       ) : null}
 
       {showMasterTables ? (
-        <Card>
+ <SectionCard>
           <CardHeader>
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -203,7 +203,7 @@ export default async function MastersPage({
               selectionLocked={true}
             />
           </CardContent>
-        </Card>
+ </SectionCard>
       ) : null}
     </div>
   )

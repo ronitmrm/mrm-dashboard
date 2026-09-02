@@ -23,7 +23,7 @@ import { Alert, AlertDescription } from "@workspace/ui/components/alert"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardFooter,
@@ -46,7 +46,7 @@ import {
 import {
   DashboardEmptyState,
   DashboardGrid,
-  DashboardPageHeader,
+ PageHeader,
   DashboardSection,
 } from "@/components/dashboard/dashboard-components"
 import type {
@@ -67,13 +67,13 @@ const moduleIcons = {
 } as const
 
 const moduleTones: Record<PersonalDashboardWidget["module"], MetricCardTone> = {
-  Administration: "info",
+ Administration: "information",
   Costing: "accent",
-  "HR & Recruitment": "info",
+ "HR & Recruitment": "information",
   "Master Data": "neutral",
   Maintenance: "brand",
   "Operational Entry": "brand",
-  Production: "success",
+ Production: "positive",
   Store: "warning",
 }
 
@@ -126,7 +126,7 @@ export function PersonalDashboard({
 
   return (
     <div className="grid gap-6">
-      <DashboardPageHeader
+ <PageHeader
         actions={
           <Dialog>
             <DialogTrigger asChild>
@@ -261,7 +261,7 @@ function DashboardCard({
   const Icon = moduleIcons[widget.module]
   const tone = moduleTones[widget.module]
   return (
-    <Card className="h-full">
+ <SectionCard className="h-full">
       <CardHeader className="border-b border-border/70 pb-4">
         <div className="flex items-start justify-between gap-3">
           <span className="flex size-9 items-center justify-center rounded-lg bg-[var(--color-brand-tint)] text-primary">
@@ -292,7 +292,7 @@ function DashboardCard({
           </Link>
         </Button>
       </CardFooter>
-    </Card>
+ </SectionCard>
   )
 }
 

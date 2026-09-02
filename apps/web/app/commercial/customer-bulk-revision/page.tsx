@@ -7,7 +7,7 @@ import {
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -21,7 +21,7 @@ import {
   NativeSelectOption,
 } from "@workspace/ui/components/native-select"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -186,7 +186,7 @@ export default async function CustomerBulkRevisionPage({
       </section>
 
       <div className="grid gap-6">
-        <Card>
+ <SectionCard>
           <CardHeader>
             <CardTitle>Start A Customer Revision</CardTitle>
             <CardDescription>
@@ -260,15 +260,15 @@ export default async function CustomerBulkRevisionPage({
               </p>
             )}
           </CardContent>
-        </Card>
+ </SectionCard>
 
-        <Card>
+ <SectionCard>
           <CardHeader>
             <CardTitle>Customer Revision Queue</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="max-h-[34rem] overflow-auto rounded-md border">
-              <Table excelFilters>
+ <OperationalTable excelFilters>
                 <TableHeader className="sticky top-0 z-10 bg-background">
                   <TableRow>
                     <TableHead data-filterable="true">Request</TableHead>
@@ -321,13 +321,13 @@ export default async function CustomerBulkRevisionPage({
                     </TableRow>
                   ) : null}
                 </TableBody>
-              </Table>
+ </OperationalTable>
             </div>
           </CardContent>
-        </Card>
+ </SectionCard>
       </div>
 
-      <Card hidden={!selectedRevisionId} id="customer-bulk-workbench">
+ <SectionCard hidden={!selectedRevisionId} id="customer-bulk-workbench">
         <CardHeader>
           <CardTitle>Customer Revision Workbench</CardTitle>
         </CardHeader>
@@ -376,7 +376,7 @@ export default async function CustomerBulkRevisionPage({
                     type="hidden"
                     value={selectedRevision.id}
                   />
-                  <Table
+ <OperationalTable
                     className="w-full caption-bottom text-sm"
                     containerClassName="h-[calc(100svh-24rem)] min-h-[34rem] rounded-md border"
                     excelFilters
@@ -459,7 +459,7 @@ export default async function CustomerBulkRevisionPage({
                         </TableRow>
                       ) : null}
                     </TableBody>
-                  </Table>
+ </OperationalTable>
 
                   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                     <Field>
@@ -623,7 +623,7 @@ export default async function CustomerBulkRevisionPage({
             </p>
           )}
         </CardContent>
-      </Card>
+ </SectionCard>
     </div>
   )
 }

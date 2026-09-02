@@ -6,7 +6,7 @@ import { redirect } from "next/navigation"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -19,7 +19,7 @@ import {
   NativeSelectOption,
 } from "@workspace/ui/components/native-select"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -197,7 +197,7 @@ export default async function CustomersPage({
       />
 
       {canCreateCustomers && showDataEntry ? (
-        <Card>
+ <SectionCard>
           <CardHeader>
             <CardTitle>Add Customer</CardTitle>
             <CardDescription>
@@ -277,11 +277,11 @@ export default async function CustomersPage({
               </Button>
             </form>
           </CardContent>
-        </Card>
+ </SectionCard>
       ) : null}
 
       {showMasterTables ? (
-        <Card>
+ <SectionCard>
           <CardHeader>
             <CardTitle>Customers</CardTitle>
           </CardHeader>
@@ -333,7 +333,7 @@ export default async function CustomersPage({
               </div>
             </div>
             <div className="overflow-x-auto rounded-3xl border">
-              <Table>
+ <OperationalTable>
                 <TableHeader>
                   <TableRow>
                     <TableHead data-filterable="true">Customer Id</TableHead>
@@ -612,10 +612,10 @@ export default async function CustomersPage({
                     </TableRow>
                   )}
                 </TableBody>
-              </Table>
+ </OperationalTable>
             </div>
           </CardContent>
-        </Card>
+ </SectionCard>
       ) : null}
     </div>
   )

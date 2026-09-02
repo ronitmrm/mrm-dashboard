@@ -6,7 +6,7 @@ import Link from "next/link"
 import type { RecruitmentCandidateEventRow } from "@workspace/db"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -26,7 +26,7 @@ import {
   SheetTitle,
 } from "@workspace/ui/components/sheet"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -138,7 +138,7 @@ export function ConversationLogsTable({
       }}
       open={editingEvent !== null}
     >
-      <Card>
+ <SectionCard>
         <CardHeader>
           <CardTitle>{title}</CardTitle>
           <CardDescription>
@@ -157,7 +157,7 @@ export function ConversationLogsTable({
               Clear All Filters
             </Button>
           </div>
-          <Table>
+ <OperationalTable>
             <TableHeader>
               <TableRow>
                 {columns.map(([key, label]) => (
@@ -272,9 +272,9 @@ export function ConversationLogsTable({
                 </TableRow>
               ) : null}
             </TableBody>
-          </Table>
+ </OperationalTable>
         </CardContent>
-      </Card>
+ </SectionCard>
 
       {editingEvent ? (
         <SheetContent className="w-full overflow-y-auto sm:max-w-lg">

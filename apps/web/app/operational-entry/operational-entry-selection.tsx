@@ -6,7 +6,7 @@ import { ArrowRight, ListChecks } from "lucide-react"
 
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardHeader,
   CardTitle,
@@ -112,7 +112,7 @@ export function OperationalEntrySelection({
   }
 
   return (
-    <Card className="w-full">
+ <SectionCard className="w-full">
       <CardHeader>
         <div className="flex items-center gap-3">
           <div className="rounded-lg border bg-muted p-2">
@@ -217,6 +217,6 @@ export function OperationalEntrySelection({
           </Button>
         </div>
       </CardContent>
-    </Card>
+ </SectionCard>
   )
 }

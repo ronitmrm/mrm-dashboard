@@ -3,7 +3,7 @@ import { ShieldCheck } from "lucide-react"
 import { createMaintenanceRequestRepository } from "@workspace/db"
 
 import {
-  DashboardPageHeader,
+ PageHeader,
   DashboardSection,
 } from "@/components/dashboard/dashboard-components"
 import { MaintenanceRequestTable } from "@/components/maintenance/maintenance-request-table"
@@ -30,7 +30,7 @@ export default async function MaintenanceApprovalPage() {
 
   return (
     <div className="grid gap-6">
-      <DashboardPageHeader
+ <PageHeader
         description="Confirm trade and priority, then approve, return, or reject each request."
         icon={ShieldCheck}
         title="Manager Approval"

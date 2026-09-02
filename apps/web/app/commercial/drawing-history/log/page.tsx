@@ -9,13 +9,13 @@ import Link from "next/link"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -64,7 +64,7 @@ export default async function DrawingChangeLogPage() {
   }
 
   return (
-    <Card>
+ <SectionCard>
       <CardHeader>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -79,7 +79,7 @@ export default async function DrawingChangeLogPage() {
       </CardHeader>
       <CardContent>
         <div className="max-h-[75vh] overflow-auto rounded-2xl border">
-          <Table excelFilters>
+ <OperationalTable excelFilters>
             <TableHeader className="sticky top-0 z-10 bg-background">
               <TableRow>
                 <TableHead data-filterable="true">Changed At</TableHead>
@@ -140,9 +140,9 @@ export default async function DrawingChangeLogPage() {
                 </TableRow>
               ) : null}
             </TableBody>
-          </Table>
+ </OperationalTable>
         </div>
       </CardContent>
-    </Card>
+ </SectionCard>
   )
 }

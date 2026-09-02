@@ -6,7 +6,7 @@ import { notFound } from "next/navigation"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -19,7 +19,7 @@ import {
   NativeSelectOption,
 } from "@workspace/ui/components/native-select"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -202,7 +202,7 @@ export default async function StoreAssetWorkspacePage({
           <>
             <StoreAssetWorkspacePane tab="movement">
               {canMove ? (
-                <Card>
+ <SectionCard>
             <CardHeader>
               <CardTitle>Move / Assign Asset</CardTitle>
               <CardDescription>
@@ -269,13 +269,13 @@ export default async function StoreAssetWorkspacePage({
                 </Button>
               </form>
             </CardContent>
-                </Card>
+ </SectionCard>
               ) : null}
             </StoreAssetWorkspacePane>
 
             <StoreAssetWorkspacePane tab="repairs">
               {canRepair ? (
-                <Card>
+ <SectionCard>
             <CardHeader>
               <CardTitle>Create Repair PO</CardTitle>
               <CardDescription>
@@ -350,7 +350,7 @@ export default async function StoreAssetWorkspacePage({
                 </Button>
               </form>
             </CardContent>
-                </Card>
+ </SectionCard>
               ) : null}
             </StoreAssetWorkspacePane>
 
@@ -359,7 +359,7 @@ export default async function StoreAssetWorkspacePage({
               tab="maintenance"
             >
               {canMaintain ? (
-                <Card>
+ <SectionCard>
             <CardHeader>
               <CardTitle>Add Timetable</CardTitle>
               <CardDescription>
@@ -411,11 +411,11 @@ export default async function StoreAssetWorkspacePage({
                 </Button>
               </form>
             </CardContent>
-                </Card>
+ </SectionCard>
               ) : null}
 
               {canMaintain ? (
-                <Card>
+ <SectionCard>
             <CardHeader>
               <CardTitle>Complete Maintenance</CardTitle>
               <CardDescription>
@@ -505,7 +505,7 @@ export default async function StoreAssetWorkspacePage({
                 </Button>
               </form>
             </CardContent>
-                </Card>
+ </SectionCard>
               ) : null}
             </StoreAssetWorkspacePane>
           </>
@@ -513,7 +513,7 @@ export default async function StoreAssetWorkspacePage({
 
         {canManageLifecycle ? (
           <StoreAssetWorkspacePane tab="lifecycle">
-        <Card>
+ <SectionCard>
           <CardHeader>
             <CardTitle>Asset Lifecycle</CardTitle>
             <CardDescription>
@@ -553,17 +553,17 @@ export default async function StoreAssetWorkspacePage({
               </div>
             </form>
           </CardContent>
-        </Card>
+ </SectionCard>
           </StoreAssetWorkspacePane>
         ) : null}
 
         <StoreAssetWorkspacePane tab="repairs">
-      <Card>
+ <SectionCard>
         <CardHeader>
           <CardTitle>Repair Purchase Orders</CardTitle>
         </CardHeader>
         <CardContent className="overflow-x-auto">
-          <Table>
+ <OperationalTable>
             <TableHeader>
               <TableRow>
                 <TableHead>Order</TableHead>
@@ -632,18 +632,18 @@ export default async function StoreAssetWorkspacePage({
                 </TableRow>
               ) : null}
             </TableBody>
-          </Table>
+ </OperationalTable>
         </CardContent>
-      </Card>
+ </SectionCard>
         </StoreAssetWorkspacePane>
 
         <StoreAssetWorkspacePane tab="maintenance">
-      <Card>
+ <SectionCard>
         <CardHeader>
           <CardTitle>Maintenance & Calibration Timetable</CardTitle>
         </CardHeader>
         <CardContent className="overflow-x-auto">
-          <Table>
+ <OperationalTable>
             <TableHeader>
               <TableRow>
                 <TableHead>Code</TableHead>
@@ -691,18 +691,18 @@ export default async function StoreAssetWorkspacePage({
                 </TableRow>
               ) : null}
             </TableBody>
-          </Table>
+ </OperationalTable>
         </CardContent>
-      </Card>
+ </SectionCard>
         </StoreAssetWorkspacePane>
 
         <StoreAssetWorkspacePane tab="movement">
-      <Card>
+ <SectionCard>
         <CardHeader>
           <CardTitle>Movement Record</CardTitle>
         </CardHeader>
         <CardContent className="overflow-x-auto">
-          <Table>
+ <OperationalTable>
             <TableHeader>
               <TableRow>
                 <TableHead>Date & Time</TableHead>
@@ -741,18 +741,18 @@ export default async function StoreAssetWorkspacePage({
                 </TableRow>
               ) : null}
             </TableBody>
-          </Table>
+ </OperationalTable>
         </CardContent>
-      </Card>
+ </SectionCard>
         </StoreAssetWorkspacePane>
 
         <StoreAssetWorkspacePane tab="maintenance">
-      <Card>
+ <SectionCard>
         <CardHeader>
           <CardTitle>Maintenance History</CardTitle>
         </CardHeader>
         <CardContent className="overflow-x-auto">
-          <Table>
+ <OperationalTable>
             <TableHeader>
               <TableRow>
                 <TableHead>Date</TableHead>
@@ -791,18 +791,18 @@ export default async function StoreAssetWorkspacePage({
                 </TableRow>
               ) : null}
             </TableBody>
-          </Table>
+ </OperationalTable>
         </CardContent>
-      </Card>
+ </SectionCard>
         </StoreAssetWorkspacePane>
 
         <StoreAssetWorkspacePane tab="suppliers">
-      <Card>
+ <SectionCard>
         <CardHeader>
           <CardTitle>Supplier Price History</CardTitle>
         </CardHeader>
         <CardContent className="overflow-x-auto">
-          <Table>
+ <OperationalTable>
             <TableHeader>
               <TableRow>
                 <TableHead>Date</TableHead>
@@ -839,13 +839,13 @@ export default async function StoreAssetWorkspacePage({
                 </TableRow>
               ) : null}
             </TableBody>
-          </Table>
+ </OperationalTable>
         </CardContent>
-      </Card>
+ </SectionCard>
         </StoreAssetWorkspacePane>
 
         <StoreAssetWorkspacePane tab="documents">
-      <Card>
+ <SectionCard>
         <CardHeader>
           <CardTitle>Bills & Guarantee Cards</CardTitle>
         </CardHeader>
@@ -882,7 +882,7 @@ export default async function StoreAssetWorkspacePage({
             </p>
           ) : null}
         </CardContent>
-      </Card>
+ </SectionCard>
         </StoreAssetWorkspacePane>
       </StoreAssetWorkspaceTabs>
     </div>
@@ -946,12 +946,12 @@ function StoreItemWorkspace({
         />
       </div>
 
-      <Card>
+ <SectionCard>
         <CardHeader>
           <CardTitle>Physical Units</CardTitle>
         </CardHeader>
         <CardContent className="overflow-x-auto">
-          <Table>
+ <OperationalTable>
             <TableHeader>
               <TableRow>
                 <TableHead>Unit ID</TableHead>
@@ -1009,13 +1009,13 @@ function StoreItemWorkspace({
                 </TableRow>
               ) : null}
             </TableBody>
-          </Table>
+ </OperationalTable>
         </CardContent>
-      </Card>
+ </SectionCard>
         </StoreItemWorkspacePane>
 
         <StoreItemWorkspacePane tab="drawings">
-      <Card>
+ <SectionCard>
         <CardHeader>
               <CardTitle>Asset Drawing</CardTitle>
               <CardDescription>
@@ -1060,11 +1060,11 @@ function StoreItemWorkspace({
                 </form>
               ) : null}
             </CardContent>
-          </Card>
+ </SectionCard>
         </StoreItemWorkspacePane>
 
         <StoreItemWorkspacePane tab="supplier-quotes">
-          <Card>
+ <SectionCard>
             <CardHeader>
               <CardTitle>Supplier Quotes & Price History</CardTitle>
               <CardDescription>
@@ -1073,7 +1073,7 @@ function StoreItemWorkspace({
               </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
-          <Table>
+ <OperationalTable>
             <TableHeader>
               <TableRow>
                 <TableHead>Date</TableHead>
@@ -1161,9 +1161,9 @@ function StoreItemWorkspace({
                 </TableRow>
               ) : null}
             </TableBody>
-          </Table>
+ </OperationalTable>
         </CardContent>
-      </Card>
+ </SectionCard>
         </StoreItemWorkspacePane>
       </StoreItemWorkspaceTabs>
     </div>
@@ -1171,14 +1171,14 @@ function StoreItemWorkspace({
 }
 function Info({ label, value }: { label: string; value: string }) {
   return (
-    <Card>
+ <SectionCard>
       <CardContent className="pt-5">
         <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
           {label}
         </p>
         <p className="mt-2 font-semibold">{value}</p>
       </CardContent>
-    </Card>
+ </SectionCard>
   )
 }
 function TextField({

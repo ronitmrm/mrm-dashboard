@@ -78,6 +78,11 @@ Periodically perform a quick audit for stale memory files and clean them up.
 
 **Note: `./docs/` contains tracked project documentation, not agent working memory. Start with `./docs/README.md`: implementation-specific material belongs in `./docs/codebase/`, while stable business terms, lifecycle semantics, formulas, and metrics belong in `./docs/glossary/`. If business logic changes, update the canonical glossary definition first and then its codebase consumers. Be strict with CRUD in docs because they are lifecycle sources of truth.**
 
+## Golden UI Patterns
+
+- Read and follow `./docs/codebase/ui-golden-patterns.md` for every dashboard UI change.
+- Extend canonical primitives instead of introducing feature-local tables, cards, headers, statuses, or state presentations.
+
 ## Verification
 
 Before handing off code changes, run:

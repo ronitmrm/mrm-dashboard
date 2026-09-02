@@ -4,14 +4,14 @@ import type { ProductPortfolioDossier } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -37,7 +37,7 @@ export function ProductDesignSummary({
   return (
     <div className="grid gap-6">
       <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
+ <SectionCard className="lg:col-span-2">
           <CardHeader>
             <CardTitle>Product Definition</CardTitle>
             <CardDescription>{dossier.description}</CardDescription>
@@ -94,8 +94,8 @@ export function ProductDesignSummary({
               </div>
             </dl>
           </CardContent>
-        </Card>
-        <Card>
+ </SectionCard>
+ <SectionCard>
           <CardHeader>
             <CardTitle>Released Control</CardTitle>
           </CardHeader>
@@ -128,10 +128,10 @@ export function ProductDesignSummary({
               </div>
             ) : null}
           </CardContent>
-        </Card>
+ </SectionCard>
       </div>
 
-      <Card>
+ <SectionCard>
         <CardHeader>
           <CardTitle>
             {historical ? "Historical BOM Summary" : "Current BOM Summary"}
@@ -143,7 +143,7 @@ export function ProductDesignSummary({
           </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
-          <Table>
+ <OperationalTable>
             <TableHeader>
               <TableRow>
                 <TableHead>Level</TableHead>
@@ -207,17 +207,17 @@ export function ProductDesignSummary({
                 </TableRow>
               )}
             </TableBody>
-          </Table>
+ </OperationalTable>
         </CardContent>
-      </Card>
+ </SectionCard>
 
       {!historical ? (
-        <Card>
+ <SectionCard>
           <CardHeader>
             <CardTitle>Design Revision History</CardTitle>
           </CardHeader>
           <CardContent className="overflow-x-auto">
-            <Table>
+ <OperationalTable>
               <TableHeader>
                 <TableRow>
                   <TableHead>Revision</TableHead>
@@ -264,9 +264,9 @@ export function ProductDesignSummary({
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+ </OperationalTable>
           </CardContent>
-        </Card>
+ </SectionCard>
       ) : null}
     </div>
   )

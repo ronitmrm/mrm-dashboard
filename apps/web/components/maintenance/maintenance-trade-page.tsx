@@ -4,7 +4,7 @@ import { createMaintenanceRequestRepository } from "@workspace/db"
 import type { MaintenanceCategory } from "@workspace/db/maintenance-request-domain"
 
 import {
-  DashboardPageHeader,
+ PageHeader,
   DashboardSection,
 } from "@/components/dashboard/dashboard-components"
 import { MaintenanceRequestTable } from "@/components/maintenance/maintenance-request-table"
@@ -32,7 +32,7 @@ export async function MaintenanceTradePage({
 
   return (
     <div className="grid gap-6">
-      <DashboardPageHeader
+ <PageHeader
         description={`Approved ${trade} work. Urgent requests are listed first.`}
         icon={Wrench}
         title={trade}

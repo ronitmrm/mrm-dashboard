@@ -14,7 +14,7 @@ import {
 } from "@workspace/ui/components/alert"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
-import { Card, CardContent } from "@workspace/ui/components/card"
+import { SectionCard, CardContent } from "@workspace/ui/components/card"
 import { Field, FieldGroup, FieldLabel } from "@workspace/ui/components/field"
 import { Separator } from "@workspace/ui/components/separator"
 import { Textarea } from "@workspace/ui/components/textarea"
@@ -120,7 +120,7 @@ export default async function NewDesignWorkspacePage({
         </div>
       </section>
 
-      <Card className="flex-1 overflow-hidden">
+ <SectionCard className="flex-1 overflow-hidden">
         <CardContent className="flex h-full flex-col gap-6 p-4 lg:p-6">
           {incompleteFields.length ? (
             <Alert id="design-completion-remark" variant="destructive">
@@ -362,7 +362,7 @@ export default async function NewDesignWorkspacePage({
             </form>
           </div>
         </CardContent>
-      </Card>
+ </SectionCard>
     </div>
   )
 }

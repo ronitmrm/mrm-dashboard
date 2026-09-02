@@ -10,12 +10,14 @@ import {
   uniqueFilterOptions,
 } from "@workspace/ui/components/excel-column-filter"
 import { cn } from "@workspace/ui/lib/utils"
+import { StandardState } from "@workspace/ui/components/standard-state"
 import {
   filterOptionsForTableColumn,
   filterRowsByTableColumns,
   filtersForTableColumns,
   parsePersistedTableFilters,
   serializeTableFilters,
+  tableFilterStorageKey,
   sortRowsByTableColumn,
   type TableColumnFilters,
   type TableFilterColumn,
@@ -36,7 +38,7 @@ import {
   type FilteredTableSelectionRow,
 } from "@workspace/ui/lib/table-filtered-selection"
 
-type TableProps = React.ComponentProps<"table"> & {
+type OperationalTableProps = React.ComponentProps<"table"> & {
   containerClassName?: string
   excelFilters?: boolean
   filteredSelection?: {
@@ -46,6 +48,10 @@ type TableProps = React.ComponentProps<"table"> & {
   filterMode?: "dom" | "external"
   filterStorageKey?: string
   onFilteredRowCountChange?: (visible: number, total: number) => void
+  state?: "ready" | "empty" | "loading" | "error"
+  stateAction?: React.ReactNode
+  stateDescription?: React.ReactNode
+  stateTitle?: React.ReactNode
 }
 
 function headerLabel(cell: HTMLTableCellElement) {
@@ -161,7 +167,7 @@ function sameColumns(left: TableFilterColumn[], right: TableFilterColumn[]) {
   return JSON.stringify(left) === JSON.stringify(right)
 }
 
-function Table({
+function OperationalTable({
   className,
   containerClassName,
   excelFilters = true,
@@ -169,9 +175,14 @@ function Table({
   filterMode = "dom",
   filterStorageKey,
   onFilteredRowCountChange,
+  state = "ready",
+  stateAction,
+  stateDescription,
+  stateTitle,
   ...props
-}: TableProps) {
+}: OperationalTableProps) {
   const tableRef = React.useRef<HTMLTableElement>(null)
+  const automaticFilterStorageId = React.useId()
   const previousColumnsRef = React.useRef<TableFilterColumn[]>([])
   const hydratedFilterSchemaRef = React.useRef<string | null>(null)
   const skipNextFilterPersistRef = React.useRef(false)
@@ -243,14 +254,19 @@ function Table({
     const schemaChanged = applicableFilters !== filters
     let applicableSort = schemaChanged ? null : sort
 
-    if (filterStorageKey && snapshot.columns.length) {
-      const schemaKey = `${filterStorageKey}:${JSON.stringify(
+    const persistenceKey = tableFilterStorageKey(
+      filterStorageKey,
+      window.location.pathname,
+      automaticFilterStorageId
+    )
+    if (snapshot.columns.length) {
+      const schemaKey = `${persistenceKey}:${JSON.stringify(
         snapshot.columns.map(({ index, label }) => ({ index, label }))
       )}`
       if (hydratedFilterSchemaRef.current !== schemaKey) {
         try {
           applicableFilters = parsePersistedTableFilters(
-            window.localStorage.getItem(filterStorageKey),
+            window.localStorage.getItem(persistenceKey),
             snapshot.columns
           )
         } catch {
@@ -346,6 +362,7 @@ function Table({
   }, [
     excelFilters,
     filterMode,
+    automaticFilterStorageId,
     filterStorageKey,
     filters,
     filteredSelectionCheckboxName,
@@ -388,14 +405,13 @@ function Table({
   }, [filteredSelectionCheckboxName, syncFilteredSelectionState])
 
   React.useEffect(() => {
-    if (
-      !excelFilters ||
-      filterMode === "external" ||
-      !filterStorageKey ||
-      !columns.length
+    if (!excelFilters || filterMode === "external" || !columns.length) return
+    const persistenceKey = tableFilterStorageKey(
+      filterStorageKey,
+      window.location.pathname,
+      automaticFilterStorageId
     )
-      return
-    const schemaKey = `${filterStorageKey}:${JSON.stringify(
+    const schemaKey = `${persistenceKey}:${JSON.stringify(
       columns.map(({ index, label }) => ({ index, label }))
     )}`
     if (hydratedFilterSchemaRef.current !== schemaKey) return
@@ -405,16 +421,60 @@ function Table({
     }
     try {
       window.localStorage.setItem(
-        filterStorageKey,
+        persistenceKey,
         serializeTableFilters(columns, filters)
       )
     } catch {
       // Storage can be unavailable in private or policy-restricted browsers.
     }
-  }, [columns, excelFilters, filterMode, filterStorageKey, filters])
+  }, [
+    automaticFilterStorageId,
+    columns,
+    excelFilters,
+    filterMode,
+    filterStorageKey,
+    filters,
+  ])
+
+  if (state !== "ready") {
+    const defaultCopy = {
+      empty: {
+        description: "Records will appear here when they are available.",
+        title: "No records",
+      },
+      error: {
+        description: "The table could not be loaded.",
+        title: "Table unavailable",
+      },
+      loading: {
+        description: "Fetching the latest operational records.",
+        title: "Loading records",
+      },
+    }[state]
+
+    return (
+      <div
+        className="w-full"
+        data-filter-storage-key={filterStorageKey ?? "automatic"}
+        data-slot="operational-table"
+        data-state={state}
+      >
+        <StandardState
+          action={stateAction}
+          description={stateDescription ?? defaultCopy.description}
+          title={stateTitle ?? defaultCopy.title}
+          variant={state}
+        />
+      </div>
+    )
+  }
 
   return (
-    <div className="w-full" data-slot="table-shell">
+    <div
+      className="w-full"
+      data-filter-storage-key={filterStorageKey ?? "automatic"}
+      data-slot="operational-table"
+    >
       {columns.map((column) => {
         const host = filterHosts[column.index]
         return host
@@ -539,7 +599,7 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
     <tr
       data-slot="table-row"
       className={cn(
-        "h-11 border-b border-[var(--color-table-border)] transition-colors duration-[var(--dur-fast)] focus-within:bg-[var(--color-accent-tint)] focus-within:shadow-[inset_3px_0_0_var(--mrm-tennis)] hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-accent/10 data-[state=selected]:shadow-[inset_2px_0_0_var(--color-accent)]",
+        "h-11 border-b border-[var(--color-table-border)] transition-colors duration-[var(--dur-fast)] focus-within:bg-[var(--color-accent-tint)] focus-within:shadow-[inset_3px_0_0_var(--mrm-tennis)] hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-[var(--color-selected-bg)] data-[state=selected]:shadow-[inset_2px_0_0_var(--color-selected)]",
         className
       )}
       {...props}
@@ -587,7 +647,7 @@ function TableCaption({
 }
 
 export {
-  Table,
+  OperationalTable,
   TableHeader,
   TableBody,
   TableFooter,
@@ -595,4 +655,5 @@ export {
   TableRow,
   TableCell,
   TableCaption,
+  type OperationalTableProps,
 }

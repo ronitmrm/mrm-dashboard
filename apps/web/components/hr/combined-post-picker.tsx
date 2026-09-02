@@ -1,7 +1,7 @@
 "use client"
 
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -27,7 +27,7 @@ export function CombinedPostPicker({
   selectedPostIds: Set<string>
 }) {
   return (
-    <Table containerClassName="max-h-80 rounded-md border">
+ <OperationalTable containerClassName="max-h-80 rounded-md border">
       <TableHeader className="sticky top-0 z-10 bg-muted/95">
         <TableRow>
           <TableHead className="w-14">Select</TableHead>
@@ -86,6 +86,6 @@ export function CombinedPostPicker({
           </TableRow>
         ) : null}
       </TableBody>
-    </Table>
+ </OperationalTable>
   )
 }

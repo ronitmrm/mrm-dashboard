@@ -4,7 +4,7 @@ import { createCommercialCostingRepository } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -20,7 +20,7 @@ import {
 } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -183,13 +183,13 @@ export async function CustomerParameterCostingView({
             />
           </section>
 
-          <Card>
+ <SectionCard>
             <CardHeader>
               <CardTitle>Customer Costing Queue</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="max-h-[60vh] overflow-auto rounded-md border">
-                <Table
+ <OperationalTable
                   containerClassName="max-h-none overflow-visible"
                   excelFilters
                 >
@@ -243,15 +243,15 @@ export async function CustomerParameterCostingView({
                       </TableRow>
                     ) : null}
                   </TableBody>
-                </Table>
+ </OperationalTable>
               </div>
             </CardContent>
-          </Card>
+ </SectionCard>
         </>
       ) : null}
 
       {standalone ? (
-        <Card id="customer-cost-form">
+ <SectionCard id="customer-cost-form">
           <CardHeader>
             <CardTitle>Customer Quote Parameters</CardTitle>
             <CardDescription>
@@ -598,7 +598,7 @@ export async function CustomerParameterCostingView({
               </form>
             ) : null}
           </CardContent>
-        </Card>
+ </SectionCard>
       ) : null}
     </div>
   )

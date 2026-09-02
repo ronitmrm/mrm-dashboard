@@ -4,13 +4,13 @@ import { createCommercialWorkflowRepository } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -60,13 +60,13 @@ export default async function EnquiryExcelViewPage() {
         />
       </section>
 
-      <Card>
+ <SectionCard>
         <CardHeader>
           <CardTitle>Workflow Line Register</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="max-h-[72vh] overflow-auto rounded-md border">
-            <Table
+ <OperationalTable
               containerClassName="max-h-none overflow-visible"
               excelFilters
               filterStorageKey="mrmpl:commercial:enquiry-excel-view:filters:v1"
@@ -196,10 +196,10 @@ export default async function EnquiryExcelViewPage() {
                   </TableRow>
                 ) : null}
               </TableBody>
-            </Table>
+ </OperationalTable>
           </div>
         </CardContent>
-      </Card>
+ </SectionCard>
     </div>
   )
 }

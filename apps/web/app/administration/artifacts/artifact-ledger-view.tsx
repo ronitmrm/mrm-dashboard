@@ -2,7 +2,7 @@ import type { ArtifactLedgerFilters } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -12,7 +12,7 @@ import {
 import { Input } from "@workspace/ui/components/input"
 import { SearchableSelect } from "@workspace/ui/components/searchable-select"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -133,7 +133,7 @@ export function ArtifactLedgerView({
         />
       </section>
 
-      <Card>
+ <SectionCard>
         <CardHeader>
           <CardTitle>Search and filters</CardTitle>
           <CardDescription>
@@ -219,9 +219,9 @@ export function ArtifactLedgerView({
             </div>
           </form>
         </CardContent>
-      </Card>
+ </SectionCard>
 
-      <Card>
+ <SectionCard>
         <CardHeader>
           <CardTitle>Artifact ledger</CardTitle>
           <CardDescription>
@@ -230,7 +230,7 @@ export function ArtifactLedgerView({
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 px-0">
-          <Table className="min-w-[1120px]">
+ <OperationalTable className="min-w-[1120px]">
             <TableHeader>
               <TableRow>
                 <TableHead>Artifact</TableHead>
@@ -376,7 +376,7 @@ export function ArtifactLedgerView({
                 </TableRow>
               ) : null}
             </TableBody>
-          </Table>
+ </OperationalTable>
           <div className="flex items-center justify-between gap-3 px-6">
             <p className="text-xs text-muted-foreground">
               Page {ledger.page} of {ledger.totalPages} ·{" "}
@@ -405,7 +405,7 @@ export function ArtifactLedgerView({
             </div>
           </div>
         </CardContent>
-      </Card>
+ </SectionCard>
     </div>
   )
 }

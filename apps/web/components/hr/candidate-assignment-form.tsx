@@ -12,7 +12,7 @@ import {
   NativeSelectOption,
 } from "@workspace/ui/components/native-select"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -231,7 +231,7 @@ export function CandidateAssignmentForm({
         </div>
 
         <div className="max-h-[32rem] overflow-auto rounded-xl border">
-          <Table>
+ <OperationalTable>
             <TableHeader className="sticky top-0 z-10 bg-background">
               <TableRow>
                 <TableHead className="w-12">Select</TableHead>
@@ -304,7 +304,7 @@ export function CandidateAssignmentForm({
                 </TableRow>
               )}
             </TableBody>
-          </Table>
+ </OperationalTable>
         </div>
 
         <AssignmentSubmitButton

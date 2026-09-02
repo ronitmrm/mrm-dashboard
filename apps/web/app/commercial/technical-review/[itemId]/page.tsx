@@ -5,7 +5,7 @@ import { createCommercialWorkflowRepository } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -61,7 +61,7 @@ export default async function TechnicalReviewItemPage({
         </div>
       </section>
 
-      <Card>
+ <SectionCard>
         <CardHeader>
           <CardTitle>Focused Technical Review</CardTitle>
           <CardDescription>
@@ -73,7 +73,7 @@ export default async function TechnicalReviewItemPage({
         <CardContent>
           <TechnicalReviewForm item={item} />
         </CardContent>
-      </Card>
+ </SectionCard>
     </div>
   )
 }

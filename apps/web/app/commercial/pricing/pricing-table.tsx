@@ -6,7 +6,7 @@ import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import { ExcelColumnFilter } from "@workspace/ui/components/excel-column-filter"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -149,7 +149,7 @@ export function PricingTable({
         <div className="flex items-center gap-2">
           <span
             aria-hidden="true"
-            className="size-3 rounded-sm border border-sky-300 bg-sky-100 dark:border-sky-700 dark:bg-sky-950/60"
+ className="size-3 rounded-sm border border-[var(--color-info)]/30 bg-[var(--color-info-bg)] "
           />
           Formula-derived cells
         </div>
@@ -194,7 +194,7 @@ export function PricingTable({
         </div>
       </div>
       <div className="min-h-0 flex-1 overflow-auto rounded-xl border">
-        <Table
+ <OperationalTable
           containerClassName="max-h-none overflow-visible"
           className="min-w-max text-xs"
           filterMode="external"
@@ -205,7 +205,7 @@ export function PricingTable({
                 <TableHead
                   className={`${pricingColumnWidth(column.label)} overflow-hidden whitespace-nowrap ${
                     isPricingFormulaHeader(column.label)
-                      ? "bg-sky-100/80 dark:bg-sky-950/40"
+ ? "bg-[var(--color-info-bg)] "
                       : ""
                   }`}
                   data-filterable="true"
@@ -255,7 +255,7 @@ export function PricingTable({
                     return (
                       <TableCell
                         className={`${pricingColumnWidth(header)} overflow-hidden text-ellipsis whitespace-nowrap ${
-                          formulaCell ? "!bg-sky-100 dark:!bg-sky-950/60" : ""
+ formulaCell ? "!bg-[var(--color-info-bg)] " : ""
                         }`}
                         key={header}
                         title={cell === "" ? undefined : String(cell)}
@@ -298,7 +298,7 @@ export function PricingTable({
               </TableRow>
             )}
           </TableBody>
-        </Table>
+ </OperationalTable>
       </div>
     </div>
   )

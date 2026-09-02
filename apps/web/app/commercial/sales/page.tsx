@@ -4,7 +4,7 @@ import { createCommercialWorkflowRepository } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -17,7 +17,7 @@ import {
   NativeSelectOption,
 } from "@workspace/ui/components/native-select"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -136,13 +136,13 @@ export default async function SalesPage({
         <SalesWorkspaceTabs activeView={activeView} />
 
         {activeView === "tasks" ? (
-          <Card>
+ <SectionCard>
             <CardHeader>
               <CardTitle>Sales Task List</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="max-h-[70vh] overflow-auto rounded-md border">
-                <Table excelFilters>
+ <OperationalTable excelFilters>
                   <TableHeader className="sticky top-0 z-10 bg-background">
                     <TableRow>
                       <TableHead data-filterable="true">Date / Due</TableHead>
@@ -235,14 +235,14 @@ export default async function SalesPage({
                       </TableRow>
                     ) : null}
                   </TableBody>
-                </Table>
+ </OperationalTable>
               </div>
             </CardContent>
-          </Card>
+ </SectionCard>
         ) : null}
 
         {activeView === "tasks" && selectedClarification ? (
-          <Card>
+ <SectionCard>
             <CardHeader>
               <CardTitle>Sales Clarification</CardTitle>
               <CardDescription>
@@ -512,11 +512,11 @@ export default async function SalesPage({
                 </p>
               )}
             </CardContent>
-          </Card>
+ </SectionCard>
         ) : null}
 
         {activeView === "tasks" && selectedFollowup?.status === "Pending" ? (
-          <Card>
+ <SectionCard>
             <CardHeader>
               <CardTitle>Complete Follow-Up</CardTitle>
               <CardDescription>
@@ -585,17 +585,17 @@ export default async function SalesPage({
                 </FieldGroup>
               </form>
             </CardContent>
-          </Card>
+ </SectionCard>
         ) : null}
 
         {activeView === "followup-history" ? (
-          <Card>
+ <SectionCard>
             <CardHeader>
               <CardTitle>Follow-Up History</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="max-h-[70vh] overflow-auto rounded-md border">
-                <Table excelFilters>
+ <OperationalTable excelFilters>
                   <TableHeader className="sticky top-0 z-10 bg-background">
                     <TableRow>
                       <TableHead data-filterable="true">Due</TableHead>
@@ -636,20 +636,20 @@ export default async function SalesPage({
                       </TableRow>
                     ) : null}
                   </TableBody>
-                </Table>
+ </OperationalTable>
               </div>
             </CardContent>
-          </Card>
+ </SectionCard>
         ) : null}
 
         {activeView === "sent-quotes" ? (
-          <Card>
+ <SectionCard>
             <CardHeader>
               <CardTitle>Sent Quotes</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="max-h-[70vh] overflow-auto rounded-md border">
-                <Table excelFilters>
+ <OperationalTable excelFilters>
                   <TableHeader className="sticky top-0 z-10 bg-background">
                     <TableRow>
                       <TableHead data-filterable="true">Sent At</TableHead>
@@ -704,10 +704,10 @@ export default async function SalesPage({
                       </TableRow>
                     ) : null}
                   </TableBody>
-                </Table>
+ </OperationalTable>
               </div>
             </CardContent>
-          </Card>
+ </SectionCard>
         ) : null}
       </div>
     )

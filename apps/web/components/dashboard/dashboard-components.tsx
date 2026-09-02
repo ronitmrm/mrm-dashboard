@@ -11,98 +11,39 @@ import {
   Info,
 } from "lucide-react"
 
-import { Badge } from "@workspace/ui/components/badge"
+import { StatusBadge } from "@workspace/ui/components/badge"
 import {
-  Card,
+  SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
   MetricCard,
+  type SemanticTone,
 } from "@workspace/ui/components/card"
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@workspace/ui/components/empty"
 import { Skeleton } from "@workspace/ui/components/skeleton"
+import { StandardState } from "@workspace/ui/components/standard-state"
 import { cn } from "@workspace/ui/lib/utils"
+import { PageHeader } from "@/components/ui/golden-patterns"
 
-type DashboardTone =
-  | "neutral"
-  | "brand"
-  | "accent"
-  | "success"
-  | "warning"
-  | "error"
-  | "info"
+type DashboardTone = SemanticTone
 
 type DashboardIcon = ComponentType<{ className?: string }>
 
 const toneStyles: Record<DashboardTone, string> = {
   accent:
-    "border-[var(--mrm-tennis)]/35 bg-[color-mix(in_srgb,var(--mrm-tennis)_10%,var(--color-surface))] text-[var(--color-on-accent)]",
-  brand:
-    "border-primary/20 bg-[color-mix(in_srgb,var(--mrm-green)_7%,var(--color-surface))] text-primary",
-  error:
-    "border-[var(--color-error)]/20 bg-[var(--color-error-bg)] text-[var(--color-error-text)]",
-  info: "border-[var(--color-info)]/20 bg-[var(--color-info-bg)] text-[var(--color-info-text)]",
+    "border-[var(--mrm-tennis)]/35 bg-[var(--color-accent-tint)] text-[var(--color-on-accent)]",
+  brand: "border-primary/20 bg-[var(--color-brand-tint)] text-primary",
+  danger:
+    "border-[var(--color-danger)]/20 bg-[var(--color-danger-bg)] text-[var(--color-danger-text)]",
+  inactive: "border-border bg-muted text-muted-foreground",
+  information:
+    "border-[var(--color-info)]/20 bg-[var(--color-info-bg)] text-[var(--color-info-text)]",
   neutral: "border-border bg-muted/45 text-foreground",
-  success:
-    "border-[var(--color-success)]/20 bg-[var(--color-success-bg)] text-[var(--color-success-text)]",
+  positive:
+    "border-[var(--color-positive)]/20 bg-[var(--color-positive-bg)] text-[var(--color-positive-text)]",
   warning:
     "border-[var(--color-warning)]/30 bg-[var(--color-warning-bg)] text-[var(--color-warning-text)]",
-}
-
-function DashboardPageHeader({
-  actions,
-  badge,
-  className,
-  description,
-  icon: Icon,
-  title,
-}: {
-  actions?: ReactNode
-  badge?: ReactNode
-  className?: string
-  description: ReactNode
-  icon?: DashboardIcon
-  title: ReactNode
-}) {
-  return (
-    <section
-      className={cn(
-        "flex min-w-0 flex-wrap items-start justify-between gap-4 rounded-xl border border-[var(--color-panel-border)] bg-[color-mix(in_srgb,var(--mrm-green)_5%,var(--color-surface))] p-4 shadow-[var(--shadow-sm)] sm:p-5",
-        className
-      )}
-      data-slot="dashboard-page-header"
-    >
-      <div className="flex min-w-0 items-start gap-3">
-        {Icon ? (
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-[var(--shadow-sm)]">
-            <Icon aria-hidden="true" className="size-5" />
-          </span>
-        ) : null}
-        <div className="grid min-w-0 gap-1">
-          {badge ? <div className="mb-1 w-fit">{badge}</div> : null}
-          <h2 className="font-heading text-2xl font-semibold tracking-tight text-pretty">
-            {title}
-          </h2>
-          <p className="max-w-3xl text-sm text-pretty text-muted-foreground">
-            {description}
-          </p>
-        </div>
-      </div>
-      {actions ? (
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
-          {actions}
-        </div>
-      ) : null}
-    </section>
-  )
 }
 
 function DashboardSection({
@@ -218,7 +159,7 @@ function ChartCard({
   title: ReactNode
 }) {
   return (
-    <Card className={cn("h-full", className)} data-slot="chart-card">
+    <SectionCard className={cn("h-full", className)} data-slot="chart-card">
       <CardHeader className="border-b border-border/70 pb-4">
         <div className="flex min-w-0 items-start justify-between gap-3">
           <div className="flex min-w-0 items-start gap-3">
@@ -255,7 +196,7 @@ function ChartCard({
           </div>
         ) : null}
       </CardContent>
-    </Card>
+    </SectionCard>
   )
 }
 
@@ -318,7 +259,7 @@ function ProgressCard({
     Math.max(0, (value / Math.max(1, maximum)) * 100)
   )
   return (
-    <Card className="h-full" data-slot="progress-card">
+    <SectionCard className="h-full" data-slot="progress-card">
       <CardContent className="grid gap-3">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -343,7 +284,7 @@ function ProgressCard({
           />
         </div>
       </CardContent>
-    </Card>
+    </SectionCard>
   )
 }
 
@@ -369,12 +310,9 @@ function StatusSummary({
           <>
             <span className="min-w-0 font-medium">{item.label}</span>
             <span className="flex shrink-0 items-center gap-2">
-              <Badge
-                className={toneStyles[item.tone ?? "neutral"]}
-                variant="outline"
-              >
+              <StatusBadge tone={item.tone ?? "neutral"}>
                 {item.value}
-              </Badge>
+              </StatusBadge>
               {item.href ? (
                 <ArrowRight aria-hidden="true" className="size-4" />
               ) : null}
@@ -480,7 +418,10 @@ function DataTableCard({
   title: ReactNode
 }) {
   return (
-    <Card className={cn("min-w-0", className)} data-slot="data-table-card">
+    <SectionCard
+      className={cn("min-w-0", className)}
+      data-slot="data-table-card"
+    >
       <CardHeader className="border-b border-border/70 pb-4">
         <div className="flex min-w-0 items-start justify-between gap-3">
           <div className="flex min-w-0 items-start gap-3">
@@ -506,7 +447,7 @@ function DataTableCard({
           children
         )}
       </CardContent>
-    </Card>
+    </SectionCard>
   )
 }
 
@@ -551,7 +492,7 @@ function DateRangeSelector({
 function DashboardEmptyState({
   action,
   description,
-  icon: Icon = Info,
+  icon = Info,
   title,
 }: {
   action?: ReactNode
@@ -560,19 +501,13 @@ function DashboardEmptyState({
   title: ReactNode
 }) {
   return (
-    <Empty
-      className="min-h-48 bg-muted/20 p-8"
-      data-slot="dashboard-empty-state"
-    >
-      <EmptyHeader>
-        <EmptyMedia variant="icon">
-          <Icon aria-hidden="true" />
-        </EmptyMedia>
-        <EmptyTitle>{title}</EmptyTitle>
-        <EmptyDescription>{description}</EmptyDescription>
-      </EmptyHeader>
-      {action ? <EmptyContent>{action}</EmptyContent> : null}
-    </Empty>
+    <StandardState
+      action={action}
+      className="min-h-48"
+      description={description}
+      icon={icon}
+      title={title}
+    />
   )
 }
 
@@ -629,24 +564,13 @@ function DashboardErrorState({
   title: ReactNode
 }) {
   return (
-    <div
-      className="grid min-h-40 place-items-center rounded-lg border border-[var(--color-error)]/20 bg-[var(--color-error-bg)] p-6 text-center"
-      data-slot="dashboard-error-state"
-      role="alert"
-    >
-      <div className="grid max-w-md justify-items-center gap-2">
-        <span className="flex size-10 items-center justify-center rounded-full bg-[var(--color-error)]/10 text-[var(--color-error-text)]">
-          <AlertTriangle aria-hidden="true" className="size-5" />
-        </span>
-        <p className="font-heading text-base font-semibold text-[var(--color-error-text)]">
-          {title}
-        </p>
-        <p className="text-sm text-[var(--color-error-text)]/85">
-          {description}
-        </p>
-        {action ? <div className="mt-2">{action}</div> : null}
-      </div>
-    </div>
+    <StandardState
+      action={action}
+      className="min-h-40"
+      description={description}
+      title={title}
+      variant="error"
+    />
   )
 }
 
@@ -664,7 +588,11 @@ function TrendIndicator({
         ? ArrowDownRight
         : CircleMinus
   const tone =
-    direction === "up" ? "success" : direction === "down" ? "error" : "neutral"
+    direction === "up"
+      ? "positive"
+      : direction === "down"
+        ? "danger"
+        : "neutral"
   return (
     <span
       className={cn(
@@ -680,9 +608,9 @@ function TrendIndicator({
 
 function StatusIcon({ tone }: { tone: DashboardTone }) {
   const Icon =
-    tone === "success"
+    tone === "positive"
       ? CircleCheckBig
-      : tone === "warning" || tone === "error"
+      : tone === "warning" || tone === "danger"
         ? AlertTriangle
         : Info
   return <Icon aria-hidden="true" className="size-4" />
@@ -697,7 +625,7 @@ export {
   DashboardErrorState,
   DashboardGrid,
   DashboardLoadingSkeleton,
-  DashboardPageHeader,
+  PageHeader,
   DashboardSection,
   DataTableCard,
   DateRangeSelector,

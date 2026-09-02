@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation"
 import { Pencil, Trash2 } from "lucide-react"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -32,7 +32,7 @@ import {
   NativeSelectOption,
 } from "@workspace/ui/components/native-select"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -201,7 +201,7 @@ export function StoreMasterWorkspace({
   return (
     <div className="grid gap-6">
       {!selectionLocked ? (
-        <Card>
+ <SectionCard>
           <CardHeader>
             <CardTitle>Select Store Master</CardTitle>
           </CardHeader>
@@ -223,27 +223,27 @@ export function StoreMasterWorkspace({
               </NativeSelect>
             </Field>
           </CardContent>
-        </Card>
+ </SectionCard>
       ) : null}
 
       {canManage && mode !== "table" ? (
-        <Card>
+ <SectionCard>
           <CardHeader>
             <CardTitle>{selectedLabel} Data Entry</CardTitle>
           </CardHeader>
           <CardContent>{masterForm(selectedMaster, data)}</CardContent>
-        </Card>
+ </SectionCard>
       ) : null}
 
       {mode !== "entry" ? (
-        <Card>
+ <SectionCard>
           <CardHeader>
             <CardTitle>Saved {selectedLabel} Records</CardTitle>
             <CardDescription>{rows.length} active records</CardDescription>
           </CardHeader>
           <CardContent className="overflow-x-auto">
             {selectedMaster === "ITEM_TYPE" ? (
-              <Table>
+ <OperationalTable>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Asset Code</TableHead>
@@ -328,9 +328,9 @@ export function StoreMasterWorkspace({
                     )
                   })}
                 </TableBody>
-              </Table>
+ </OperationalTable>
             ) : (
-              <Table>
+ <OperationalTable>
                 <TableHeader>
                   <TableRow>
                     {showsCode ? <TableHead>Code</TableHead> : null}
@@ -388,10 +388,10 @@ export function StoreMasterWorkspace({
                     </TableRow>
                   ) : null}
                 </TableBody>
-              </Table>
+ </OperationalTable>
             )}
           </CardContent>
-        </Card>
+ </SectionCard>
       ) : null}
       <Dialog
         open={Boolean(editRow)}
@@ -1071,7 +1071,7 @@ function StoreItemTypeForm({
         </Field>
       </FieldGroup>
       {!editing && existingItem ? (
-        <div className="mt-5 rounded-md border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-950 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-100">
+ <div className="mt-5 rounded-md border border-[var(--color-positive)]/30 bg-[var(--color-positive-bg)] p-4 text-sm text-[var(--color-positive-text)] ">
           <div className="font-semibold">
             Existing Asset Code: {existingItem.typeCode}
           </div>

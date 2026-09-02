@@ -4,14 +4,14 @@ import { createCommercialCostingRepository } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
 import { Input } from "@workspace/ui/components/input"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -49,7 +49,7 @@ export default async function QuotesPage() {
   const today = istDateValue()
 
   return (
-    <Card>
+ <SectionCard>
       <CardHeader className="gap-3">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -62,7 +62,7 @@ export default async function QuotesPage() {
       </CardHeader>
       <CardContent>
         <div className="overflow-hidden rounded-3xl border">
-          <Table>
+ <OperationalTable>
             <TableHeader>
               <TableRow>
                 <TableHead data-filterable="true">Quote</TableHead>
@@ -176,9 +176,9 @@ export default async function QuotesPage() {
                 </TableRow>
               )}
             </TableBody>
-          </Table>
+ </OperationalTable>
         </div>
       </CardContent>
-    </Card>
+ </SectionCard>
   )
 }

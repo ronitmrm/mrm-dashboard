@@ -16,7 +16,7 @@ import {
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardHeader,
   CardTitle,
@@ -108,7 +108,7 @@ export function PlannerDecisionWorkspace({
     : null
 
   return (
-    <Card className="overflow-hidden">
+ <SectionCard className="overflow-hidden">
       <CardHeader className="gap-3 border-b bg-muted/15">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -246,7 +246,7 @@ export function PlannerDecisionWorkspace({
           </div>
         ) : null}
       </CardContent>
-    </Card>
+ </SectionCard>
   )
 }
 

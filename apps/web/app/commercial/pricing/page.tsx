@@ -1,6 +1,6 @@
 import { createCommercialCostingRepository } from "@workspace/db"
 import {
-  Card,
+ SectionCard,
   CardAction,
   CardContent,
   CardHeader,
@@ -34,7 +34,7 @@ export default async function PricingPage() {
 
   return (
     <FullPageWorkspace className="h-[calc(100svh-var(--header-height))] grid-rows-[minmax(0,1fr)] content-stretch overflow-hidden">
-      <Card className="min-h-0">
+ <SectionCard className="min-h-0">
         <CardHeader className="shrink-0">
           <CardTitle>Pricing</CardTitle>
           <CardAction>
@@ -47,7 +47,7 @@ export default async function PricingPage() {
             rows={tableRows}
           />
         </CardContent>
-      </Card>
+ </SectionCard>
     </FullPageWorkspace>
   )
 }

@@ -1,7 +1,7 @@
 import { createCommercialCostingRepository } from "@workspace/db"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardHeader,
   CardTitle,
@@ -55,7 +55,7 @@ export default async function PricingRevisionsPage({
   }))
 
   return (
-    <Card>
+ <SectionCard>
       <CardHeader className="gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <CardTitle>
@@ -78,6 +78,6 @@ export default async function PricingRevisionsPage({
           rows={tableRows}
         />
       </CardContent>
-    </Card>
+ </SectionCard>
   )
 }

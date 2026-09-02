@@ -11,7 +11,7 @@ import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import { Checkbox } from "@workspace/ui/components/checkbox"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -32,7 +32,7 @@ import {
   SheetTitle,
 } from "@workspace/ui/components/sheet"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -153,7 +153,7 @@ export function ApprovedPostsTable({
         }}
         open={editingPost !== null}
       >
-        <Card>
+ <SectionCard>
           <CardHeader>
             <div className="space-y-1.5">
               <CardTitle>
@@ -193,7 +193,7 @@ export function ApprovedPostsTable({
               </div>
             </div>
             <div className="overflow-x-auto rounded-lg border">
-              <Table>
+ <OperationalTable>
                 <TableHeader>
                   <TableRow>
                     {employeeManagement ? <TableHead>Select</TableHead> : null}
@@ -379,13 +379,13 @@ export function ApprovedPostsTable({
                     </TableRow>
                   )}
                 </TableBody>
-              </Table>
+ </OperationalTable>
             </div>
           </CardContent>
-        </Card>
+ </SectionCard>
 
         {employeeManagement ? (
-          <Card>
+ <SectionCard>
             <CardHeader>
               <CardTitle>Employee Letter Register</CardTitle>
               <CardDescription>
@@ -395,7 +395,7 @@ export function ApprovedPostsTable({
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto rounded-lg border">
-                <Table>
+ <OperationalTable>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Employee ID</TableHead>
@@ -454,10 +454,10 @@ export function ApprovedPostsTable({
                       </TableRow>
                     )}
                   </TableBody>
-                </Table>
+ </OperationalTable>
               </div>
             </CardContent>
-          </Card>
+ </SectionCard>
         ) : null}
 
         {editingPost ? (

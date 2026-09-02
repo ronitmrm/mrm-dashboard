@@ -9,7 +9,7 @@ import type {
 } from "@workspace/db"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -38,7 +38,7 @@ import {
   SheetTitle,
 } from "@workspace/ui/components/sheet"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -238,7 +238,7 @@ export function JobTemplatesTable({
       }}
       open={editingTemplate !== null}
     >
-      <Card>
+ <SectionCard>
         <CardHeader>
           <CardTitle>Job Templates</CardTitle>
           <CardDescription>
@@ -258,7 +258,7 @@ export function JobTemplatesTable({
               Clear All Filters
             </Button>
           </div>
-          <Table>
+ <OperationalTable>
             <TableHeader>
               <TableRow>
                 {filterKeys.map(({ key, label }) => (
@@ -331,9 +331,9 @@ export function JobTemplatesTable({
                 </TableRow>
               ) : null}
             </TableBody>
-          </Table>
+ </OperationalTable>
         </CardContent>
-      </Card>
+ </SectionCard>
       {editingTemplate ? (
         <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
           <JobTemplateEditor

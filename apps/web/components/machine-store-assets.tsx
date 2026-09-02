@@ -4,13 +4,13 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import { Badge } from "@workspace/ui/components/badge"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -76,13 +76,13 @@ export function MachineStoreAssets({
   }, [machineNumber])
 
   return (
-    <Card>
+ <SectionCard>
       <CardHeader>
         <CardTitle>Assigned Store Assets</CardTitle>
       </CardHeader>
       <CardContent className="grid gap-5">
         <div className="overflow-auto rounded-lg border">
-          <Table>
+ <OperationalTable>
             <TableHeader>
               <TableRow>
                 <TableHead>Unit ID / Serial ID</TableHead>
@@ -134,7 +134,7 @@ export function MachineStoreAssets({
                 </TableRow>
               ) : null}
             </TableBody>
-          </Table>
+ </OperationalTable>
         </div>
         {data.history.length ? (
           <details>
@@ -142,7 +142,7 @@ export function MachineStoreAssets({
               Previous assignment history ({data.history.length})
             </summary>
             <div className="mt-3 overflow-auto rounded-lg border">
-              <Table>
+ <OperationalTable>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Date</TableHead>
@@ -173,11 +173,11 @@ export function MachineStoreAssets({
                     </TableRow>
                   ))}
                 </TableBody>
-              </Table>
+ </OperationalTable>
             </div>
           </details>
         ) : null}
       </CardContent>
-    </Card>
+ </SectionCard>
   )
 }

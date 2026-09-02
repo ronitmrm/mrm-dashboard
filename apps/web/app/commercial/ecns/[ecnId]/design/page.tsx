@@ -5,7 +5,7 @@ import { createCommercialRevisionsRepository } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -75,7 +75,7 @@ export default async function EngineeringChangeDesignPage({
         </div>
       </section>
 
-      <Card>
+ <SectionCard>
         <CardHeader>
           <CardTitle>Product Design Dossier</CardTitle>
           <CardDescription>
@@ -104,7 +104,7 @@ export default async function EngineeringChangeDesignPage({
             />
           </form>
         </CardContent>
-      </Card>
+ </SectionCard>
     </div>
   )
 }

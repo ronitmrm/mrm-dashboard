@@ -8,7 +8,7 @@ import type {
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -29,7 +29,7 @@ import {
   SheetTitle,
 } from "@workspace/ui/components/sheet"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -183,7 +183,7 @@ export function CombinedRolesTable({
       }}
       open={editingRole !== null}
     >
-      <Card>
+ <SectionCard>
         <CardHeader>
           <CardTitle>Combined Roles</CardTitle>
           <CardDescription>
@@ -203,7 +203,7 @@ export function CombinedRolesTable({
               Clear All Filters
             </Button>
           </div>
-          <Table>
+ <OperationalTable>
             <TableHeader>
               <TableRow>
                 <TableHead>Combined Code</TableHead>
@@ -294,9 +294,9 @@ export function CombinedRolesTable({
                 </TableRow>
               )}
             </TableBody>
-          </Table>
+ </OperationalTable>
         </CardContent>
-      </Card>
+ </SectionCard>
 
       {editingRole ? (
         <SheetContent className="!w-full overflow-y-auto sm:!w-[40rem] sm:!max-w-[40rem]">

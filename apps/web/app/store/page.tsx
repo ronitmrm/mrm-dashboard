@@ -14,14 +14,14 @@ import {
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardHeader,
   CardTitle,
   MetricCard,
 } from "@workspace/ui/components/card"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -31,7 +31,7 @@ import {
 
 import {
   DashboardGrid,
-  DashboardPageHeader,
+ PageHeader,
   DashboardSection,
   DataTableCard,
   StatusSummary,
@@ -73,7 +73,7 @@ export default async function StoreOverviewPage() {
 
   return (
     <div className="grid gap-6">
-      <DashboardPageHeader
+ <PageHeader
         actions={
           <>
             <Button asChild variant="outline">
@@ -119,14 +119,14 @@ export default async function StoreOverviewPage() {
             description="Pending or partially issued"
             icon={<ClipboardList aria-hidden="true" />}
             label="Open Requests"
-            tone={openRequests.length ? "warning" : "success"}
+ tone={openRequests.length ? "warning" : "positive"}
             value={openRequests.length}
           />
           <MetricCard
             description="Maintenance or calibration due"
             icon={<Wrench aria-hidden="true" />}
             label="Due Maintenance"
-            tone={dueAssets.length ? "error" : "success"}
+ tone={dueAssets.length ? "danger" : "positive"}
             value={dueAssets.length}
           />
         </DashboardGrid>
@@ -143,7 +143,7 @@ export default async function StoreOverviewPage() {
             title="Open Department Requests"
           >
             <div className="overflow-x-auto rounded-lg border">
-              <Table>
+ <OperationalTable>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Request</TableHead>
@@ -180,11 +180,11 @@ export default async function StoreOverviewPage() {
                     </TableRow>
                   ) : null}
                 </TableBody>
-              </Table>
+ </OperationalTable>
             </div>
           </DataTableCard>
 
-          <Card className="h-full">
+ <SectionCard className="h-full">
             <CardHeader className="border-b border-border/70 pb-4">
               <div className="flex items-start gap-3">
                 <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[var(--color-warning-bg)] text-[var(--color-warning-text)]">
@@ -201,25 +201,25 @@ export default async function StoreOverviewPage() {
                   {
                     href: "/store/stock",
                     label: "Low Stock Items",
-                    tone: lowStock.length ? "error" : "success",
+ tone: lowStock.length ? "danger" : "positive",
                     value: lowStock.length,
                   },
                   {
                     href: "/store/new-item-requests",
                     label: "Pending Code Requests",
-                    tone: pendingCodeRequests ? "warning" : "success",
+ tone: pendingCodeRequests ? "warning" : "positive",
                     value: pendingCodeRequests,
                   },
                   {
                     href: "/store/stock",
                     label: "Maintenance / Calibration Due",
-                    tone: dueAssets.length ? "error" : "success",
+ tone: dueAssets.length ? "danger" : "positive",
                     value: dueAssets.length,
                   },
                 ]}
               />
             </CardContent>
-          </Card>
+ </SectionCard>
         </DashboardGrid>
       </DashboardSection>
     </div>

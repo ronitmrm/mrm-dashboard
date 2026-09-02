@@ -5,10 +5,10 @@ import type {
   RecruitmentInterviewRow,
 } from "@workspace/db"
 import { recruitmentInterviewRound } from "@workspace/db/recruitment-interview-workflow"
-import { Badge } from "@workspace/ui/components/badge"
+import { Badge, StatusBadge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardHeader,
   CardTitle,
@@ -24,7 +24,7 @@ import {
   SheetTitle,
 } from "@workspace/ui/components/sheet"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -48,14 +48,6 @@ import {
   formatIstTime,
   istDateValue,
 } from "@/lib/date-time"
-
-function StatusBadge({ status }: { status: string }) {
-  return (
-    <Badge variant={status === "Approved" ? "default" : "outline"}>
-      {status}
-    </Badge>
-  )
-}
 
 function dateKey(value: string | null) {
   return value ? istDateValue(value) : ""
@@ -165,7 +157,7 @@ export function InterviewScheduleBoard({
         ]}
       />
 
-      <Card>
+ <SectionCard>
         <CardHeader className="gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <CardTitle>Interview Schedule</CardTitle>
@@ -181,7 +173,7 @@ export function InterviewScheduleBoard({
           </Field>
         </CardHeader>
         <CardContent className="overflow-x-auto">
-          <Table>
+ <OperationalTable>
             <TableHeader>
               <TableRow>
                 <TableHead>Candidate</TableHead>
@@ -245,9 +237,9 @@ export function InterviewScheduleBoard({
                 </TableRow>
               )}
             </TableBody>
-          </Table>
+ </OperationalTable>
         </CardContent>
-      </Card>
+ </SectionCard>
 
       {selectedInterview ? (
         <SheetContent className="w-full overflow-y-auto sm:max-w-3xl">
@@ -326,12 +318,12 @@ export function InterviewResultsWorkspace({
           { icon: ListTodo, label: "Rejected", value: rejected.length },
         ]}
       />
-      <Card>
+ <SectionCard>
         <CardHeader>
           <CardTitle>Interview Workspace</CardTitle>
         </CardHeader>
         <CardContent className="overflow-x-auto">
-          <Table>
+ <OperationalTable>
             <TableHeader>
               <TableRow>
                 <TableHead>Candidate</TableHead>
@@ -356,7 +348,7 @@ export function InterviewResultsWorkspace({
                     <TableCell>{formatDate(row.scheduledAt)}</TableCell>
                     <TableCell>{formatTime(row.scheduledAt)}</TableCell>
                     <TableCell>
-                      <StatusBadge status={row.status} />
+                      <StatusBadge value={row.status} />
                     </TableCell>
                     <TableCell>{row.score ?? "—"}</TableCell>
                     <TableCell className="text-right">
@@ -382,9 +374,9 @@ export function InterviewResultsWorkspace({
                 </TableRow>
               )}
             </TableBody>
-          </Table>
+ </OperationalTable>
         </CardContent>
-      </Card>
+ </SectionCard>
 
       {selectedRecord ? (
         <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">

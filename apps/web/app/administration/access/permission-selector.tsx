@@ -16,7 +16,7 @@ import {
   NativeSelectOption,
 } from "@workspace/ui/components/native-select"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -104,7 +104,7 @@ export function PermissionSelector({
       </div>
 
       <div className="max-h-[36rem] overflow-y-auto rounded-lg border">
-        <Table>
+ <OperationalTable>
           <TableHeader className="sticky top-0 z-10 bg-background">
             <TableRow>
               <TableHead className="w-48">Main Module</TableHead>
@@ -177,7 +177,7 @@ export function PermissionSelector({
               </TableRow>
             )}
           </TableBody>
-        </Table>
+ </OperationalTable>
       </div>
     </FieldSet>
   )

@@ -3,7 +3,7 @@ import { createStoreRepository } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardHeader,
   CardTitle,
@@ -14,7 +14,7 @@ import {
   NativeSelectOption,
 } from "@workspace/ui/components/native-select"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -61,12 +61,12 @@ export default async function StoreRequestsPage() {
         </p>
       </div>
 
-      <Card>
+ <SectionCard>
         <CardHeader>
           <CardTitle>Request Allocation Queue</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 overflow-x-auto">
-          <Table>
+ <OperationalTable>
             <TableHeader>
               <TableRow>
                 <TableHead>Request No.</TableHead>
@@ -234,9 +234,9 @@ export default async function StoreRequestsPage() {
                 </TableRow>
               ) : null}
             </TableBody>
-          </Table>
+ </OperationalTable>
         </CardContent>
-      </Card>
+ </SectionCard>
     </div>
   )
 }

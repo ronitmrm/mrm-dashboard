@@ -2,7 +2,7 @@ import { Camera, Send } from "lucide-react"
 
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardHeader,
   CardTitle,
@@ -29,7 +29,7 @@ export function MaintenanceRequestForm({
   requesterName: string
 }) {
   return (
-    <Card>
+ <SectionCard>
       <CardHeader className="border-b border-border/70 pb-4">
         <CardTitle>New Maintenance Request</CardTitle>
       </CardHeader>
@@ -130,6 +130,6 @@ export function MaintenanceRequestForm({
           </Button>
         </form>
       </CardContent>
-    </Card>
+ </SectionCard>
   )
 }

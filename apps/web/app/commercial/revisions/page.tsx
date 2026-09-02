@@ -7,7 +7,7 @@ import {
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -120,7 +120,7 @@ export default async function CommercialRevisionsPage() {
   return (
     <div className="grid gap-6">
       <div className="grid gap-6 xl:grid-cols-2">
-        <Card>
+ <SectionCard>
           <CardHeader>
             <CardTitle>Start A Bulk Price Revision</CardTitle>
             <CardDescription>
@@ -202,9 +202,9 @@ export default async function CommercialRevisionsPage() {
               </p>
             )}
           </CardContent>
-        </Card>
+ </SectionCard>
 
-        <Card>
+ <SectionCard>
           <CardHeader>
             <CardTitle>Open An Engineering Change Note</CardTitle>
             <CardDescription>
@@ -258,10 +258,10 @@ export default async function CommercialRevisionsPage() {
               </form>
             ) : null}
           </CardContent>
-        </Card>
+ </SectionCard>
       </div>
 
-      <Card>
+ <SectionCard>
         <CardHeader>
           <CardTitle>Bulk Revision Workbench</CardTitle>
           <CardDescription>
@@ -476,9 +476,9 @@ export default async function CommercialRevisionsPage() {
             </p>
           )}
         </CardContent>
-      </Card>
+ </SectionCard>
 
-      <Card>
+ <SectionCard>
         <CardHeader>
           <CardTitle>Engineering Change Workbench</CardTitle>
           <CardDescription>
@@ -687,7 +687,7 @@ export default async function CommercialRevisionsPage() {
             </p>
           )}
         </CardContent>
-      </Card>
+ </SectionCard>
     </div>
   )
 }

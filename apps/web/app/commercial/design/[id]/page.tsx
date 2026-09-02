@@ -7,7 +7,7 @@ import { createCommercialWorkflowRepository } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -97,7 +97,7 @@ export default async function DesignTaskDetailPage({
         </Button>
       </section>
 
-      <Card>
+ <SectionCard>
         <CardHeader>
           <CardTitle>Technical Review Details</CardTitle>
           <CardDescription>
@@ -215,9 +215,9 @@ export default async function DesignTaskDetailPage({
             </Button>
           ) : null}
         </CardContent>
-      </Card>
+ </SectionCard>
 
-      <Card>
+ <SectionCard>
         <CardHeader>
           <CardTitle>Choose Next Step</CardTitle>
           <CardDescription>
@@ -245,7 +245,7 @@ export default async function DesignTaskDetailPage({
             <Button type="submit">Open Design Form</Button>
           </form>
         </CardContent>
-      </Card>
+ </SectionCard>
     </div>
   )
 }

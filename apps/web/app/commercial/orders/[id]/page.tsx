@@ -4,7 +4,7 @@ import { createCommercialOrdersRepository } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -23,7 +23,7 @@ import {
   NativeSelectOption,
 } from "@workspace/ui/components/native-select"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -100,7 +100,7 @@ export default async function PurchaseOrderPage({
 
   return (
     <div className="grid gap-6">
-      <Card>
+ <SectionCard>
         <CardHeader className="gap-3">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
@@ -140,11 +140,11 @@ export default async function PurchaseOrderPage({
             </div>
           </CardContent>
         ) : null}
-      </Card>
+ </SectionCard>
 
       {!closed ? (
         <div className="grid gap-6 xl:grid-cols-3">
-          <Card>
+ <SectionCard>
             <CardHeader>
               <CardTitle>Add Po Line</CardTitle>
               <CardDescription>
@@ -243,9 +243,9 @@ export default async function PurchaseOrderPage({
                 </FieldSet>
               </form>
             </CardContent>
-          </Card>
+ </SectionCard>
 
-          <Card>
+ <SectionCard>
             <CardHeader>
               <CardTitle>Excel Line Import</CardTitle>
               <CardDescription>
@@ -283,9 +283,9 @@ export default async function PurchaseOrderPage({
                 </FieldGroup>
               </form>
             </CardContent>
-          </Card>
+ </SectionCard>
 
-          <Card>
+ <SectionCard>
             <CardHeader>
               <CardTitle>Original Po File</CardTitle>
               <CardDescription>
@@ -319,11 +319,11 @@ export default async function PurchaseOrderPage({
                 </FieldGroup>
               </form>
             </CardContent>
-          </Card>
+ </SectionCard>
         </div>
       ) : null}
 
-      <Card>
+ <SectionCard>
         <CardHeader>
           <CardTitle>Po Lines And Quote Decisions</CardTitle>
           <CardDescription>
@@ -334,7 +334,7 @@ export default async function PurchaseOrderPage({
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto rounded-3xl border">
-            <Table>
+ <OperationalTable>
               <TableHeader>
                 <TableRow>
                   <TableHead>Line</TableHead>
@@ -465,13 +465,13 @@ export default async function PurchaseOrderPage({
                   </TableRow>
                 )}
               </TableBody>
-            </Table>
+ </OperationalTable>
           </div>
         </CardContent>
-      </Card>
+ </SectionCard>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <Card>
+ <SectionCard>
           <CardHeader>
             <CardTitle>Proforma Invoice</CardTitle>
             <CardDescription>
@@ -560,9 +560,9 @@ export default async function PurchaseOrderPage({
               </form>
             )}
           </CardContent>
-        </Card>
+ </SectionCard>
 
-        <Card>
+ <SectionCard>
           <CardHeader>
             <CardTitle>Cancellation</CardTitle>
             <CardDescription>
@@ -596,7 +596,7 @@ export default async function PurchaseOrderPage({
               </FieldGroup>
             </form>
           </CardContent>
-        </Card>
+ </SectionCard>
       </div>
     </div>
   )

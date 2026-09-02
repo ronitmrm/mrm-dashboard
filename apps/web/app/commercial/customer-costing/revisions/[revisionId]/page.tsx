@@ -4,7 +4,7 @@ import { createCommercialRevisionsRepository } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -16,7 +16,7 @@ import {
   NativeSelectOption,
 } from "@workspace/ui/components/native-select"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -77,7 +77,7 @@ export default async function ProductRevisionCustomerCostingPage({
 
   if (!work) {
     return (
-      <Card>
+ <SectionCard>
         <CardHeader>
           <CardTitle>Product Revision Customer Costing Not Available</CardTitle>
           <CardDescription>
@@ -91,7 +91,7 @@ export default async function ProductRevisionCustomerCostingPage({
             </Link>
           </Button>
         </CardContent>
-      </Card>
+ </SectionCard>
     )
   }
 
@@ -107,7 +107,7 @@ export default async function ProductRevisionCustomerCostingPage({
         </Button>
       </div>
 
-      <Card>
+ <SectionCard>
         <CardHeader>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
@@ -120,7 +120,7 @@ export default async function ProductRevisionCustomerCostingPage({
         </CardHeader>
         <CardContent className="grid gap-6">
           <div className="h-[calc(100svh-18rem)] min-h-[34rem] overflow-auto rounded-md border">
-            <Table excelFilters>
+ <OperationalTable excelFilters>
               <TableHeader className="sticky top-0 z-10 bg-background">
                 <TableRow>
                   <TableHead>Customer</TableHead>
@@ -213,7 +213,7 @@ export default async function ProductRevisionCustomerCostingPage({
                   </TableRow>
                 ) : null}
               </TableBody>
-            </Table>
+ </OperationalTable>
           </div>
 
           <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
@@ -238,7 +238,7 @@ export default async function ProductRevisionCustomerCostingPage({
             </form>
           </div>
         </CardContent>
-      </Card>
+ </SectionCard>
     </div>
   )
 }
