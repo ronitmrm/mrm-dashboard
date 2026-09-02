@@ -31,9 +31,15 @@ export type PermissionOption = {
   name: string
 }
 
-export type PermissionAccessLevel = "full" | "none" | "read"
+export type PermissionAccessLevel = "custom" | "full" | "none" | "view"
+
+export type PermissionAccessAction = {
+  label: string
+  permissionKeys: string[]
+}
 
 export type PermissionAccessRow = {
+  actions: PermissionAccessAction[]
   fullPermissionKeys: string[]
   href: string | null
   id: string
@@ -81,10 +87,19 @@ export function permissionAccessRows(
       ...(hasWrite && page.writePermissionKey ? [page.writePermissionKey] : []),
     ]
     const supportedLevels: PermissionAccessLevel[] = ["none"]
-    if (hasRead) supportedLevels.push("read")
+    if (hasRead) supportedLevels.push("view")
     if (hasWrite) supportedLevels.push("full")
+    supportedLevels.push("custom")
     return [
       {
+        actions: [
+          ...(hasRead
+            ? [{ label: "View", permissionKeys: [page.readPermissionKey] }]
+            : []),
+          ...(hasWrite && page.writePermissionKey
+            ? [{ label: "Edit", permissionKeys: [page.writePermissionKey] }]
+            : []),
+        ],
         fullPermissionKeys,
         href: page.href,
         id: `page:${page.id}`,
@@ -125,6 +140,15 @@ export function permissionAccessRows(
       }
       return [
         {
+          actions: [
+            {
+              label: definition.label,
+              permissionKeys: [
+                scopedPermissionKey,
+                definition.legacyCapability,
+              ].sort(),
+            },
+          ],
           fullPermissionKeys: [
             scopedPermissionKey,
             definition.legacyCapability,
@@ -139,6 +163,7 @@ export function permissionAccessRows(
           supportedLevels: [
             "none",
             "full",
+            "custom",
           ] as PermissionAccessLevel[],
         },
       ]
@@ -177,9 +202,20 @@ export function permissionAccessRows(
     const labelSource = group.full[0] ?? group.read[0]
     if (!labelSource) throw new Error(`Permission group ${id} is empty`)
     const supportedLevels: PermissionAccessLevel[] = ["none"]
-    if (hasRead) supportedLevels.push("read")
+    if (hasRead) supportedLevels.push("view")
     if (hasWrite) supportedLevels.push("full")
+    supportedLevels.push("custom")
     return {
+      actions: [
+        ...group.read.map(({ key }) => ({
+          label: "View",
+          permissionKeys: [key],
+        })),
+        ...group.full.map((permission) => ({
+          label: taskLabel(permission),
+          permissionKeys: [permission.key],
+        })),
+      ],
       fullPermissionKeys: [...readPermissionKeys, ...writePermissionKeys],
       href: null,
       id,
@@ -210,28 +246,33 @@ export function permissionKeysForSelections(
     const keys =
       level === "full"
         ? row.fullPermissionKeys
-        : level === "read"
+        : level === "view"
           ? row.readPermissionKeys
           : []
     for (const key of keys) permissionKeys.add(key)
   }
+  return normalizePermissionKeys([...permissionKeys])
+}
+
+export function normalizePermissionKeys(permissionKeys: readonly string[]) {
+  const normalized = new Set(permissionKeys)
   const productionKeys = [
     ...Object.values(productionPageCapabilities),
     ...Object.values(productionFloorPageCapabilities).flatMap(Object.values),
   ]
-  if (productionKeys.some((key) => permissionKeys.has(key))) {
-    permissionKeys.add("operations.dashboard.read")
+  if (productionKeys.some((key) => normalized.has(key))) {
+    normalized.add("operations.dashboard.read")
   }
   if (
     [...hrMasterNavigation, ...hrNavigation].some(
       ({ requiredCapability }) =>
         requiredCapability !== "hr.employees.read" &&
-        permissionKeys.has(requiredCapability)
+        normalized.has(requiredCapability)
     )
   ) {
-    permissionKeys.add("hr.recruitment.read")
+    normalized.add("hr.recruitment.read")
   }
-  return [...permissionKeys].sort()
+  return [...normalized].sort()
 }
 
 export function permissionSelectionsForKeys(
@@ -247,7 +288,78 @@ export function permissionSelectionsForKeys(
       const hasRead =
         row.readPermissionKeys.length > 0 &&
         row.readPermissionKeys.every((key) => granted.has(key))
-      return [row.id, hasFull ? "full" : hasRead ? "read" : "none"]
+      const hasAny = row.fullPermissionKeys.some((key) => granted.has(key))
+      return [
+        row.id,
+        hasFull ? "full" : hasRead ? "view" : hasAny ? "custom" : "none",
+      ]
     })
   ) as Record<string, PermissionAccessLevel>
+}
+
+export function permissionAccessLevelForKeys(
+  row: PermissionAccessRow,
+  permissionKeys: readonly string[]
+): PermissionAccessLevel {
+  const granted = new Set(permissionKeys)
+  const selectedKeys = row.fullPermissionKeys.filter((key) => granted.has(key))
+  if (selectedKeys.length === 0) return "none"
+  if (
+    row.readPermissionKeys.length > 0 &&
+    row.readPermissionKeys.every((key) => granted.has(key)) &&
+    selectedKeys.every((key) => row.readPermissionKeys.includes(key))
+  ) {
+    return "view"
+  }
+  if (selectedKeys.length === row.fullPermissionKeys.length) return "full"
+  return "custom"
+}
+
+export function permissionAccessSummary(
+  row: PermissionAccessRow,
+  permissionKeys: readonly string[]
+) {
+  const level = permissionAccessLevelForKeys(row, permissionKeys)
+  if (level === "none") return "No Access"
+  if (level === "view") return "View Only"
+  if (level === "full") return "Full Access"
+  const granted = new Set(permissionKeys)
+  const actionLabels = row.actions
+    .filter(({ permissionKeys: keys }) => keys.every((key) => granted.has(key)))
+    .map(({ label }) => label)
+  return actionLabels.length ? `Custom · ${actionLabels.join(", ")}` : "Custom"
+}
+
+export function permissionKeysForPreset(
+  row: PermissionAccessRow,
+  permissionKeys: readonly string[],
+  level: PermissionAccessLevel
+) {
+  const next = new Set(permissionKeys)
+  if (level === "custom") return [...next].sort()
+  for (const key of row.fullPermissionKeys) next.delete(key)
+  const granted =
+    level === "full" ? row.fullPermissionKeys : row.readPermissionKeys
+  for (const key of granted) next.add(key)
+  return [...next].sort()
+}
+
+export function permissionKeysForActionToggle(
+  row: PermissionAccessRow,
+  permissionKeys: readonly string[],
+  action: PermissionAccessAction
+) {
+  const next = new Set(permissionKeys)
+  const selected = action.permissionKeys.every((key) => next.has(key))
+  const isView = action.permissionKeys.every((key) =>
+    row.readPermissionKeys.includes(key)
+  )
+  if (selected) {
+    const removedKeys = isView ? row.fullPermissionKeys : action.permissionKeys
+    for (const key of removedKeys) next.delete(key)
+  } else {
+    for (const key of row.readPermissionKeys) next.add(key)
+    for (const key of action.permissionKeys) next.add(key)
+  }
+  return [...next].sort()
 }

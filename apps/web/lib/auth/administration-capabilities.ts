@@ -11,4 +11,13 @@ export const administrationPageAccess = [
     navigation: true,
     readPermissionKey: administrationTaskCapabilities.accessPage,
   },
+  {
+    href: "/administration/artifacts",
+    id: "administration.artifacts",
+    label: "Artifacts",
+    module: sidebarModuleLabels.accessAdministration,
+    navigation: true,
+    readPermissionKey: "artifacts.read",
+    submodule: "Artifacts",
+  },
 ] satisfies readonly PageAccessDefinition[]

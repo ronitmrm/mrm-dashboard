@@ -7,15 +7,10 @@ import {
   UsersRound,
 } from "lucide-react"
 
-import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
-} from "@workspace/ui/components/alert"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
- SectionCard,
+  SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -40,7 +35,7 @@ import {
   NativeSelectOption,
 } from "@workspace/ui/components/native-select"
 import {
- OperationalTable,
+  OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -55,6 +50,7 @@ import {
   requireCapability,
 } from "@/lib/auth/require-capability"
 import { administrationTaskCapabilities } from "@/lib/auth/task-capabilities"
+import { PageHeader } from "@/components/ui/golden-patterns"
 
 import {
   createRoleAction,
@@ -68,13 +64,11 @@ export const dynamic = "force-dynamic"
 
 const accessSections = [
   {
-    description: "Create roles and review permission capabilities.",
     icon: BriefcaseBusiness,
     id: "roles",
     label: "Roles",
   },
   {
-    description: "Create staff accounts and assign post access profiles.",
     icon: UsersRound,
     id: "staff",
     label: "Staff Accounts",
@@ -134,27 +128,15 @@ export default async function AccessAdministrationPage({
 
   return (
     <>
-      <section className="grid gap-2">
-        <div className="flex items-center gap-2">
-          <ShieldCheck className="size-5 text-primary" />
-          <h2 className="text-2xl font-semibold tracking-tight">
-            Access Administration
-          </h2>
-        </div>
-      </section>
-
-      <Alert>
-        <ShieldCheck />
-        <AlertTitle>Fresh Identity Boundary</AlertTitle>
-        <AlertDescription>
-          Legacy Convex And Sqlite Users Are Intentionally Excluded. Every
-          Account Shown Here Was Created In The Unified Application.
-        </AlertDescription>
-      </Alert>
+      <PageHeader
+        description="Manage application roles and staff access. Legacy Convex and SQLite users remain outside this identity boundary."
+        icon={ShieldCheck}
+        title="Access Administration"
+      />
 
       <nav
         aria-label="Access administration sections"
-        className="grid gap-2 rounded-xl border bg-muted/20 p-2 lg:grid-cols-2"
+        className="flex w-fit gap-1 rounded-lg border bg-muted/30 p-1"
       >
         {accessSections.map((section) => {
           const Icon = section.icon
@@ -162,7 +144,7 @@ export default async function AccessAdministrationPage({
           return (
             <Button
               asChild
-              className="h-auto justify-start px-4 py-3 text-left"
+              className="h-8 justify-start rounded-md px-3 text-xs"
               key={section.id}
               variant={selected ? "default" : "ghost"}
             >
@@ -171,28 +153,17 @@ export default async function AccessAdministrationPage({
                 href={`/administration/access?section=${section.id}`}
               >
                 <Icon className="size-5 shrink-0" />
-                <span className="grid gap-0.5">
-                  <span>{section.label}</span>
-                  <span
-                    className={
-                      selected
-                        ? "text-xs font-normal text-primary-foreground/80"
-                        : "text-xs font-normal text-muted-foreground"
-                    }
-                  >
-                    {section.description}
-                  </span>
-                </span>
+                <span>{section.label}</span>
               </Link>
             </Button>
           )
         })}
       </nav>
 
-      <section className="grid gap-6 xl:grid-cols-2">
+      <section className="grid gap-4 xl:grid-cols-2">
         {activeSection === "staff" && canProvisionStaff ? (
- <SectionCard>
-            <CardHeader>
+          <SectionCard size="sm">
+            <CardHeader className="border-b">
               <CardTitle>Provision Staff Account</CardTitle>
               <CardDescription>
                 Create A Sign-In-Ready Better Auth Account. Application Roles
@@ -201,7 +172,7 @@ export default async function AccessAdministrationPage({
             </CardHeader>
             <CardContent>
               <form action={provisionStaffAction}>
-                <FieldGroup>
+                <FieldGroup className="gap-4">
                   <Field>
                     <FieldLabel htmlFor="staff-employee">Employee</FieldLabel>
                     <NativeSelect
@@ -265,12 +236,12 @@ export default async function AccessAdministrationPage({
                 </FieldGroup>
               </form>
             </CardContent>
- </SectionCard>
+          </SectionCard>
         ) : null}
 
         {activeSection === "roles" && canCreateRole ? (
- <SectionCard className="xl:col-span-2">
-            <CardHeader>
+          <SectionCard className="xl:col-span-2" size="sm">
+            <CardHeader className="border-b">
               <CardTitle>Create Application Role</CardTitle>
               <CardDescription>
                 Bundle Granular Capabilities Without Changing Better Auth&apos;s
@@ -279,7 +250,7 @@ export default async function AccessAdministrationPage({
             </CardHeader>
             <CardContent>
               <form action={createRoleAction}>
-                <FieldGroup>
+                <FieldGroup className="gap-4">
                   <div className="grid gap-4 md:grid-cols-2">
                     <Field>
                       <FieldLabel htmlFor="role-name">Role Name</FieldLabel>
@@ -294,7 +265,8 @@ export default async function AccessAdministrationPage({
                         required
                       />
                       <FieldDescription>
-                        Spaces And Symbols Are Converted To Hyphens Automatically.
+                        Spaces And Symbols Are Converted To Hyphens
+                        Automatically.
                       </FieldDescription>
                     </Field>
                   </div>
@@ -309,14 +281,14 @@ export default async function AccessAdministrationPage({
                 </FieldGroup>
               </form>
             </CardContent>
- </SectionCard>
+          </SectionCard>
         ) : null}
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-2">
+      <section className="grid gap-4 xl:grid-cols-2">
         {activeSection === "staff" && canAssignPostAccess ? (
- <SectionCard className="xl:col-span-2">
-            <CardHeader>
+          <SectionCard className="xl:col-span-2" size="sm">
+            <CardHeader className="border-b">
               <CardTitle>Post Access Profile</CardTitle>
               <CardDescription>
                 Roles Assigned Here Apply Automatically To The Employee
@@ -325,7 +297,7 @@ export default async function AccessAdministrationPage({
             </CardHeader>
             <CardContent className="grid gap-5">
               <form action={setPostRoleAction}>
-                <FieldGroup>
+                <FieldGroup className="gap-4 md:grid-cols-[2fr_1fr_1fr_auto] md:items-end">
                   <Field>
                     <FieldLabel htmlFor="profile-post">
                       Approved Post
@@ -404,13 +376,13 @@ export default async function AccessAdministrationPage({
                 </div>
               </details>
             </CardContent>
- </SectionCard>
+          </SectionCard>
         ) : null}
       </section>
 
       {activeSection === "staff" ? (
- <SectionCard>
-          <CardHeader>
+        <SectionCard size="sm">
+          <CardHeader className="border-b">
             <CardTitle>Staff Access</CardTitle>
           </CardHeader>
           <CardContent>
@@ -428,7 +400,7 @@ export default async function AccessAdministrationPage({
                 </EmptyHeader>
               </Empty>
             ) : (
- <OperationalTable>
+              <OperationalTable>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Staff Member</TableHead>
@@ -518,15 +490,15 @@ export default async function AccessAdministrationPage({
                     </TableRow>
                   ))}
                 </TableBody>
- </OperationalTable>
+              </OperationalTable>
             )}
           </CardContent>
- </SectionCard>
+        </SectionCard>
       ) : null}
 
       {activeSection === "roles" ? (
- <SectionCard>
-          <CardHeader>
+        <SectionCard size="sm">
+          <CardHeader className="border-b">
             <CardTitle>Application Roles</CardTitle>
             <CardDescription>
               The System Administrator Role Is Seeded And Immutable By
@@ -535,8 +507,8 @@ export default async function AccessAdministrationPage({
           </CardHeader>
           <CardContent className="grid gap-3">
             {snapshot.roles.map((role) => (
-              <details className="rounded-2xl border" key={role.id}>
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4">
+              <details className="rounded-lg border" key={role.id}>
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-3">
                   <span>
                     <span className="block font-medium">{role.name}</span>
                     <span className="block text-sm text-muted-foreground">
@@ -561,7 +533,7 @@ export default async function AccessAdministrationPage({
                 ) : (
                   <form
                     action={updateRolePermissionsAction}
-                    className="grid gap-4 border-t p-4"
+                    className="grid gap-3 border-t p-3"
                   >
                     <input name="roleKey" type="hidden" value={role.key} />
                     <PermissionSelector
@@ -576,7 +548,7 @@ export default async function AccessAdministrationPage({
               </details>
             ))}
           </CardContent>
- </SectionCard>
+        </SectionCard>
       ) : null}
     </>
   )

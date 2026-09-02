@@ -1,12 +1,26 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  permissionAccessLevelForKeys,
   permissionAccessRows,
+  permissionAccessSummary,
+  permissionKeysForActionToggle,
+  permissionKeysForPreset,
   permissionKeysForSelections,
   permissionSelectionsForKeys,
 } from "./permission-access"
 
 const permissions = [
+  {
+    key: "artifacts.read",
+    module: "artifacts",
+    name: "View artifact ledger",
+  },
+  {
+    key: "artifacts.delete",
+    module: "artifacts",
+    name: "Delete artifacts",
+  },
   {
     key: "pricing.customers.read",
     module: "pricing",
@@ -194,6 +208,7 @@ describe("permission access table", () => {
     const rows = permissionAccessRows(permissions)
 
     expect(rows).toContainEqual({
+      actions: [{ label: "View", permissionKeys: ["pricing.customers.read"] }],
       fullPermissionKeys: ["pricing.customers.read"],
       href: "/commercial/customers",
       id: "page:commercial.customers",
@@ -202,9 +217,10 @@ describe("permission access table", () => {
       module: "Master Data",
       readPermissionKeys: ["pricing.customers.read"],
       submodule: "Master Selection",
-      supportedLevels: ["none", "read"],
+      supportedLevels: ["none", "view", "custom"],
     })
     expect(rows).toContainEqual({
+      actions: [{ label: "View", permissionKeys: ["pricing.assemblies.read"] }],
       fullPermissionKeys: ["pricing.assemblies.read"],
       href: "/commercial/assemblies",
       id: "page:commercial.assemblies",
@@ -213,7 +229,26 @@ describe("permission access table", () => {
       module: "Costing",
       readPermissionKeys: ["pricing.assemblies.read"],
       submodule: "Product Parameter Costing",
-      supportedLevels: ["none", "read"],
+      supportedLevels: ["none", "view", "custom"],
+    })
+  })
+
+  it("places the artifact ledger page and delete task under Access Administration", () => {
+    const rows = permissionAccessRows(permissions)
+
+    expect(
+      rows.find(({ id }) => id === "page:administration.artifacts")
+    ).toMatchObject({
+      href: "/administration/artifacts",
+      kind: "page",
+      label: "Artifacts",
+      module: "Access Administration",
+      submodule: "Artifacts",
+    })
+    expect(rows.find(({ id }) => id === "artifacts.delete")).toMatchObject({
+      kind: "task",
+      module: "Access Administration",
+      submodule: "Artifacts",
     })
   })
 
@@ -472,6 +507,12 @@ describe("permission access table", () => {
 
   it("lists independently assignable business commands as Task rows", () => {
     expect(permissionAccessRows(permissions)).toContainEqual({
+      actions: [
+        {
+          label: "Add Customer",
+          permissionKeys: ["pricing.customers.create"],
+        },
+      ],
       fullPermissionKeys: ["pricing.customers.create"],
       href: null,
       id: "pricing.customers.create",
@@ -480,12 +521,19 @@ describe("permission access table", () => {
       module: "Master Data",
       readPermissionKeys: [],
       submodule: "Master Selection",
-      supportedLevels: ["none", "full"],
+      supportedLevels: ["none", "full", "custom"],
     })
   })
 
   it("combines matching non-page capabilities into one task row", () => {
     expect(permissionAccessRows(permissions)).toContainEqual({
+      actions: [
+        { label: "View", permissionKeys: ["quality.inspections.read"] },
+        {
+          label: "Manage inspections",
+          permissionKeys: ["quality.inspections.write"],
+        },
+      ],
       fullPermissionKeys: [
         "quality.inspections.read",
         "quality.inspections.write",
@@ -497,7 +545,7 @@ describe("permission access table", () => {
       module: "Production Dashboard",
       readPermissionKeys: ["quality.inspections.read"],
       submodule: "Production Dashboard",
-      supportedLevels: ["none", "read", "full"],
+      supportedLevels: ["none", "view", "full", "custom"],
     })
   })
 
@@ -506,20 +554,20 @@ describe("permission access table", () => {
 
     expect(
       rows.find(({ id }) => id === "page:commercial.overview")?.supportedLevels
-    ).toEqual(["none", "read"])
+    ).toEqual(["none", "view", "custom"])
     expect(
       rows.find(
         ({ id }) => id === "task:production.conventional.planner_priority"
       )?.supportedLevels
-    ).toEqual(["none", "full"])
+    ).toEqual(["none", "full", "custom"])
   })
 
   it("submits read alone or read and write from the selected level", () => {
     expect(
       permissionKeysForSelections(permissionAccessRows(permissions), {
         "task:production.conventional.planner_priority": "full",
-        "page:commercial.overview": "read",
-        "page:commercial.customers": "read",
+        "page:commercial.overview": "view",
+        "page:commercial.customers": "view",
         "pricing.customers.create": "full",
       })
     ).toEqual([
@@ -541,15 +589,87 @@ describe("permission access table", () => {
         "store.stock.read",
       ])
     ).toMatchObject({
-      "page:commercial.customers": "read",
-      "page:store.stock": "read",
+      "page:commercial.customers": "view",
+      "page:store.stock": "view",
     })
+  })
+
+  it("exposes exact row actions and derives the four access presets", () => {
+    const row = permissionAccessRows(permissions).find(
+      ({ id }) => id === "quality.inspections"
+    )
+    expect(row?.actions).toEqual([
+      {
+        label: "View",
+        permissionKeys: ["quality.inspections.read"],
+      },
+      {
+        label: "Manage inspections",
+        permissionKeys: ["quality.inspections.write"],
+      },
+    ])
+    expect(permissionAccessLevelForKeys(row!, [])).toBe("none")
+    expect(
+      permissionAccessLevelForKeys(row!, ["quality.inspections.read"])
+    ).toBe("view")
+    expect(
+      permissionAccessLevelForKeys(row!, [
+        "quality.inspections.read",
+        "quality.inspections.write",
+      ])
+    ).toBe("full")
+    expect(
+      permissionAccessLevelForKeys(row!, ["quality.inspections.write"])
+    ).toBe("custom")
+    expect(permissionAccessSummary(row!, ["quality.inspections.write"])).toBe(
+      "Custom · Manage inspections"
+    )
+  })
+
+  it("reports View Only for rows whose only applicable action is View", () => {
+    const row = permissionAccessRows(permissions).find(
+      ({ id }) => id === "page:commercial.customers"
+    )!
+
+    expect(permissionAccessLevelForKeys(row, ["pricing.customers.read"])).toBe(
+      "view"
+    )
+    expect(permissionAccessSummary(row, ["pricing.customers.read"])).toBe(
+      "View Only"
+    )
+  })
+
+  it("keeps View as the dependency for modifying Custom actions", () => {
+    const row = permissionAccessRows(permissions).find(
+      ({ id }) => id === "quality.inspections"
+    )!
+    const manage = row.actions[1]!
+    const view = row.actions[0]!
+
+    expect(permissionKeysForActionToggle(row, [], manage)).toEqual([
+      "quality.inspections.read",
+      "quality.inspections.write",
+    ])
+    expect(
+      permissionKeysForActionToggle(
+        row,
+        ["quality.inspections.read", "quality.inspections.write"],
+        view
+      )
+    ).toEqual([])
+    expect(
+      permissionKeysForPreset(row, ["quality.inspections.write"], "view")
+    ).toEqual(["quality.inspections.read"])
+    expect(permissionKeysForPreset(row, [], "full")).toEqual([
+      "quality.inspections.read",
+      "quality.inspections.write",
+    ])
   })
 
   it("keeps the legacy dashboard read gate behind any Production page", () => {
     expect(
       permissionKeysForSelections(permissionAccessRows(permissions), {
-        "page:production.conventional.productionControlTab": "read",
+        "page:production.conventional.productionControlTab": "view",
       })
     ).toEqual([
       "operations.dashboard.read",
@@ -560,7 +680,7 @@ describe("permission access table", () => {
   it("keeps the legacy recruitment read gate behind any HR recruitment page", () => {
     expect(
       permissionKeysForSelections(permissionAccessRows(permissions), {
-        "page:hr.interviewsPanel": "read",
+        "page:hr.interviewsPanel": "view",
       })
     ).toEqual(["hr.interview_schedule.read", "hr.recruitment.read"])
   })

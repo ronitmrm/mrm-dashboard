@@ -16,8 +16,11 @@ Defaults. It can also open the Sales workspace and complete its own follow-ups.
 It does not receive master deletion, renaming, or workbook import.
 
 **Page Access**: Permission to open one named software page or workspace. No
-Access hides and blocks it; Read Only opens it without its changing actions;
-Full Access includes its applicable changing actions.
+Access hides and blocks it; View Only opens it without changing actions; Full
+Access includes every applicable action for that row; Custom allows the
+applicable actions to be selected individually. A modifying action requires
+View when that row has a View action. Removing View removes its dependent
+actions.
 
 **Access Module Name**: The module shown in Access Administration uses the same
 business-facing name as the left sidebar. Internal permission namespaces such
@@ -42,6 +45,10 @@ whether the workspace can be opened, while each Task Access grant controls its
 button or function. The interface hides an unavailable command and the server
 rejects it. Search, filter, navigation, download, and cancel controls do not need
 Task Access unless they change business data.
+
+**Access Preset**: A UI convenience that derives permission keys for one Page
+or Task row. No Access, View Only, Full Access, and Custom are not stored as
+permissions and never grant access to sibling rows.
 
 **Design Team Profile**: The Application Role for staff who review commercial
 context and maintain design work and drawing history without costing,
