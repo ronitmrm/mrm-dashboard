@@ -1304,9 +1304,29 @@ describe("commercial revisions and corrections", () => {
     )
   }, 30_000)
 
-  test("releases an ECN drawing as the next immutable revision after HOD approval", async () => {
+  test("aligns an ECN drawing with the released Product Design revision", async () => {
     const suffix = randomUUID()
     const itemId = await createItem(`M-ECN-DRAWING-${suffix}`, "List")
+    const currentDesign = await pool.query<{ id: string }>(
+      `SELECT id FROM catalog.product_design_revisions
+       WHERE item_id = $1 AND is_current`,
+      [itemId]
+    )
+    await pool.query(
+      `UPDATE catalog.product_design_revisions
+       SET status = 'Superseded', is_current = false WHERE id = $1`,
+      [currentDesign.rows[0]!.id]
+    )
+    await pool.query(
+      `INSERT INTO catalog.product_design_revisions (
+         organization_id, item_id, revision_number, revision_label, status,
+         is_current, change_reason, design_snapshot, source_system,
+         source_table, source_id
+       ) VALUES ($1, $2, 2, '02', 'Released', true,
+         'Test legacy baseline', '{}'::jsonb, 'test',
+         'product_design_revisions', $3)`,
+      [organizationId, itemId, randomUUID()]
+    )
     const ecn = await repository.createEngineeringChangeNote({
       itemId,
       organizationId,
@@ -1355,8 +1375,8 @@ describe("commercial revisions and corrections", () => {
       engineeringChangeNoteId: ecn.id,
     })
     expect(approved).toMatchObject({
-      drawingRevisionLabel: "01",
-      revisionLabel: "01",
+      drawingRevisionLabel: "03",
+      revisionLabel: "03",
     })
 
     const history = await pool.query<{
@@ -1379,7 +1399,7 @@ describe("commercial revisions and corrections", () => {
       expect.objectContaining({
         file_id: drawing.id,
         is_current: true,
-        revision_label: "01",
+        revision_label: "03",
         status: "Released",
       }),
     ])

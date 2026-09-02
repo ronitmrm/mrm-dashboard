@@ -43,6 +43,22 @@ or part. Initial release is `00`; later releases are `01`, `02`, and so on.
 Draft and rejected files stay in the ECN audit trail. Exactly one released
 revision is Current; superseded originals remain viewable and downloadable.
 
+**Legacy Drawing Baseline**: The one-time, idempotent release created from the
+approved legacy drawing register and its matched drawing file. Its recorded
+revision number becomes both the current Drawing Revision and the current
+Product Design/BOM Revision; missing intermediate revisions are not invented.
+Valid register revisions and dates are retained. Released Products absent from
+the register start at revision `00` dated `2026-09-02`; `M986` starts at `00`
+dated `2026-06-07`. Register rows without a released Product are ignored. A
+baseline is released only after its file is matched, so immutable evidence is
+never created with a temporary or false file status.
+
+**Aligned Drawing Release Revision**: An approved ECN always creates the next
+Product Design/BOM Revision. When that ECN includes a drawing change, the new
+Drawing Revision uses the same revision number and label as that released
+Product Design/BOM Revision. A BOM-only ECN leaves the current Drawing Revision
+unchanged, so the drawing may legitimately trail the Product Design revision.
+
 **Drawing Register**: The centralized current-only drawing list with exactly one
 row per part. It shows the current released drawing, release/effective date,
 current BOM revision, latest ECN, approver, and a read-only view action.

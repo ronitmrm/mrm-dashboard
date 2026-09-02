@@ -103,6 +103,13 @@ export function drawingRevisionLabel(revision: number) {
   return String(revision).padStart(2, "0")
 }
 
+export function drawingRevisionForReleasedDesign(revisionNumber: number) {
+  return {
+    revisionLabel: drawingRevisionLabel(revisionNumber),
+    revisionNumber,
+  }
+}
+
 const costDriverKeys = [
   "bom",
   "processesRequired",

@@ -7,6 +7,7 @@ import {
   assertApplicableProcessPrices,
   classifyDesignCostImpact,
   designProcessSelection,
+  drawingRevisionForReleasedDesign,
   engineeringChangeStatusAfterApproval,
   processFieldIsApplicable,
   processesRequiredFromPayload,
@@ -5283,18 +5284,16 @@ export function createCommercialRevisionsRepository(
               throw new Error("The submitted drawing file is not linked to this ECN.")
             }
           }
-          const currentDrawing = await client.query<{
-            id: string
-            revision_number: number
-          }>(
-            `SELECT id, revision_number FROM catalog.drawing_revisions
+          const currentDrawing = await client.query<{ id: string }>(
+            `SELECT id FROM catalog.drawing_revisions
              WHERE item_id = $1 AND is_current FOR UPDATE`,
             [row.item_id]
           )
           const currentDrawingRow = currentDrawing.rows[0]
-          const drawingRevisionNumber =
-            (currentDrawingRow?.revision_number ?? -1) + 1
-          drawingRevisionLabel = String(drawingRevisionNumber).padStart(2, "0")
+          const drawingRevision =
+            drawingRevisionForReleasedDesign(revisionNumber)
+          const drawingRevisionNumber = drawingRevision.revisionNumber
+          drawingRevisionLabel = drawingRevision.revisionLabel
           if (currentDrawingRow) {
             await client.query(
               `UPDATE catalog.drawing_revisions
