@@ -467,6 +467,7 @@ export async function saveDesignAction(formData: FormData) {
   const castings = values("bom_casting")
   const pieceWeights = values("bom_piece_weight")
   const processesRequired = values("bom_process_required")
+  const drawingRequirements = values("bom_drawing_requirement")
   const notes = values("bom_notes")
   const parsedBomLines =
     portfolioMatchStatus === "Matches Existing Portfolio"
@@ -482,6 +483,7 @@ export async function saveDesignAction(formData: FormData) {
             componentProductSize: componentProductSizes[index] || null,
             componentSource: componentSources[index] || "New",
             componentSubcategory: componentSubcategories[index] || null,
+            drawingRequirement: drawingRequirements[index] || "Required",
             existingProductId: existingProductIds[index] || null,
             grade: grades[index] || null,
             lineNumber: Number(lineNumber || index + 1),
@@ -518,6 +520,7 @@ export async function saveDesignAction(formData: FormData) {
             componentCode: quotedPartUid,
             componentItemType: "List",
             componentSource: "New",
+            drawingRequirement: "Required",
             grade: optionalText(formData, "grade"),
             lineNumber: 1,
             pieceWeight: numeric(formData, "piece_weight"),
@@ -625,6 +628,8 @@ export async function saveDesignAction(formData: FormData) {
               formData,
               "manufacturing_process"
             ),
+            rootDrawingRequirement:
+              optionalText(formData, "drawing_requirement") ?? "Required",
             targetCompletionDate: optionalText(
               formData,
               "target_completion_date"
@@ -647,6 +652,8 @@ export async function saveDesignAction(formData: FormData) {
         designBomRequired:
           optionalText(formData, "design_bom_required") ?? "Yes",
         designRemarks: optionalText(formData, "design_remarks"),
+        drawingRequirement:
+          optionalText(formData, "drawing_requirement") ?? "Required",
         designStatus:
           optionalText(formData, "design_status") ?? "Pending Design",
         designerName: optionalText(formData, "designer_name"),

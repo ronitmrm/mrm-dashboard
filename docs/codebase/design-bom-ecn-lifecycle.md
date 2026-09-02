@@ -1,0 +1,62 @@
+# Design BOM, Drawing, and ECN lifecycle contract
+
+## Public seams
+
+Repository commands are authoritative; UI state is advisory.
+
+- Initial Design: save structured draft -> complete structured BOM -> complete
+  required drawings -> release revision `00`.
+- Released dossier: read-only Product Portfolio detail.
+- Later Design: ECN draft -> Design HOD decision -> release or return to Design.
+- Cost impact: released Design -> Product Parameter Costing -> Customer Product
+  Parameter Costing -> close ECN.
+- Files: authenticated viewer -> inline preview -> explicit original download.
+
+## Statuses
+
+Initial Design uses `In Progress`, `Drawings Pending`, and `Design Complete`.
+ECN uses `Pending Design`, `Pending Design Approval`, `Pending Product Costing`,
+`Pending Customer Costing`, and `Completed`. A rejected decision is retained as
+evidence and returns the active ECN to `Pending Design`.
+
+Product Design and Drawing revisions use `Draft`, `Released`, `Superseded`, or
+`Rejected`. Only a `Released` row can be current.
+
+## Database invariants
+
+- A Product has at most one current released Product Design revision.
+- A Product/part has at most one current released Drawing revision.
+- Revision numbers are monotonically increasing per Product. Drawing display
+  revisions are two digits (`00`, `01`, ...).
+- Released/Superseded revision evidence is immutable.
+- Pricing writes never change the dossier's selected processes.
+- A process price can change only when that process is selected in the current
+  released dossier.
+- A Design HOD decision is required before an ECN draft is published.
+- A cost-impacting ECN cannot close until Product and all affected Customer
+  costing work is complete.
+
+## Authorization
+
+- Design users may create/save drafts and submit them for review.
+- Engineering approval/rejection requires the narrow ECN approval capability
+  and a linked occupied Approved Post in the Design department with HOD
+  designation. Server-side employee/post validation is authoritative.
+- Rejection requires remarks.
+- Portfolio, Drawing History, attachment preview, and download remain
+  authenticated reads.
+
+## Migration and backfill
+
+- Seed revision `00` from each existing controlled Product and current canonical
+  BOM without rewriting either source.
+- Seed selected processes once from existing Design dossier fields. Only legacy
+  rows without a canonical selection may use positive process prices for this
+  one-time backfill.
+- Seed one current Drawing revision `00` from the latest existing drawing/file
+  evidence per Product where an unambiguous Product link exists. Keep unmatched
+  legacy evidence available and report it; do not invent links.
+- Existing open ECNs remain in their current stage. An ECN still in
+  `Pending Design` adopts HOD review on its next submission. Already published
+  ECN evidence is not rewritten.
+- Backfills are idempotent and never delete or overwrite historical files.

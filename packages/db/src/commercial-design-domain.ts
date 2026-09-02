@@ -1,6 +1,7 @@
 export const designStatuses = [
   "Pending Design",
   "In Progress",
+  "Drawings Pending",
   "Need Clarification",
   "Changes Required",
   "Design Complete",
@@ -234,7 +235,11 @@ export function normalizeDesignAllocatedUid(value: string | null | undefined) {
 
 export function designTaskStatusAfterStart(status: string) {
   if (status === "Pending Design") return "In Progress"
-  if (status === "In Progress" || status === "Changes Required") {
+  if (
+    status === "In Progress" ||
+    status === "Drawings Pending" ||
+    status === "Changes Required"
+  ) {
     return status
   }
 
@@ -275,6 +280,7 @@ type DesignCompletionBomLine = {
   componentProductSize?: string | null
   componentSource: string
   componentSubcategory?: string | null
+  drawingRequirement?: string | null
   existingProductId?: string | null
   grade?: string | null
   lineNumber: number
@@ -302,6 +308,7 @@ type DesignTaskCompletionInput = {
   internalPartSubCategory?: string | null
   itemType: string
   manufacturingProcess?: string | null
+  rootDrawingRequirement?: string | null
   targetCompletionDate?: string | null
   toolingApproxCost: number
   toolingRequired: string
@@ -404,10 +411,32 @@ export function designTaskCompletionMissingFields(
   }
 
   const attachmentPurposes = new Set(input.attachmentPurposes)
-  if (!attachmentPurposes.has("internal_drawing")) {
+  if (
+    input.rootDrawingRequirement !== "Not Required" &&
+    !attachmentPurposes.has("internal_drawing")
+  ) {
     missing.push("Internal Drawing")
   }
-  if (!attachmentPurposes.has("cad")) missing.push("CAD File")
+  if (
+    input.rootDrawingRequirement !== "Not Required" &&
+    !attachmentPurposes.has("cad")
+  ) {
+    missing.push("CAD File")
+  }
+  if (
+    input.rootDrawingRequirement !== undefined ||
+    input.bomLines.some(({ drawingRequirement }) => drawingRequirement !== undefined)
+  ) {
+    for (const drawing of designDrawingStatuses({
+      attachmentPurposes: input.attachmentPurposes,
+      bomLines: input.bomLines,
+      rootRequirement: input.rootDrawingRequirement,
+    })) {
+      if (drawing.key !== "root" && drawing.status === "Missing") {
+        missing.push(`${drawing.label} Internal Drawing`)
+      }
+    }
+  }
   return missing
 }
 
@@ -438,11 +467,75 @@ export function deriveDesignTaskState(input: {
       : designBomCompleted === "Yes" && completionRequested
         ? "Design Complete"
         : input.portfolioMatchStatus === "New Quoted Part"
-          ? "In Progress"
+          ? designBomCompleted === "Yes"
+            ? "Drawings Pending"
+            : "In Progress"
           : "Pending Design",
     isPortfolioMatch,
     nextStageStatus: isPortfolioMatch
       ? "Product Costing Complete"
       : input.existingNextStageStatus,
   }
+}
+
+export type DesignDrawingStatus = {
+  key: string
+  label: string
+  status: "Missing" | "Not Required" | "Uploaded"
+}
+
+export function designDrawingStatuses(input: {
+  attachmentPurposes: readonly string[]
+  bomLines: ReadonlyArray<{
+    componentSource: string
+    drawingRequirement?: string | null
+    lineNumber: number
+  }>
+  rootRequirement?: string | null
+}): DesignDrawingStatus[] {
+  const purposes = new Set(input.attachmentPurposes)
+  const status = (
+    key: string,
+    label: string,
+    requirement: string | null | undefined,
+    purpose: string
+  ): DesignDrawingStatus => ({
+    key,
+    label,
+    status:
+      requirement === "Not Required"
+        ? "Not Required"
+        : purposes.has(purpose)
+          ? "Uploaded"
+          : "Missing",
+  })
+
+  return [
+    status(
+      "root",
+      "Root Product",
+      input.rootRequirement,
+      "internal_drawing"
+    ),
+    ...input.bomLines.map((line) =>
+      status(
+        `bom-line-${line.lineNumber}`,
+        `BOM Line ${line.lineNumber}`,
+        line.componentSource === "Existing"
+          ? "Not Required"
+          : line.drawingRequirement,
+        `bom_line_${line.lineNumber}_internal_drawing`
+      )
+    ),
+  ]
+}
+
+export function initialDesignWorkflowStep(input: {
+  drawings: readonly DesignDrawingStatus[]
+  structuredComplete: boolean
+}) {
+  if (!input.structuredComplete) return "structured" as const
+  return input.drawings.some(({ status }) => status === "Missing")
+    ? ("drawings" as const)
+    : ("complete" as const)
 }
