@@ -12,6 +12,7 @@ const orderedProduct = {
   rod_size: "12.7 Hex",
   sub_category: "Hose Barb",
   uid: "M100",
+  design_revision: "00",
 }
 
 const quotedProduct = {
@@ -23,6 +24,7 @@ const quotedProduct = {
   rod_size: "16 Round",
   sub_category: "Hose Barb",
   uid: "Q200",
+  design_revision: null,
 }
 
 describe("Product Portfolio repository", () => {
@@ -53,6 +55,7 @@ describe("Product Portfolio repository", () => {
         rodSize: "12.7 Hex",
         subCategory: "Hose Barb",
         uid: "M100",
+        designRevision: "00",
       },
       {
         category: "Hydraulics",
@@ -63,10 +66,80 @@ describe("Product Portfolio repository", () => {
         rodSize: "16 Round",
         subCategory: "Hose Barb",
         uid: "Q200",
+        designRevision: null,
       },
     ])
     await expect(repository.listForOrganization("MRMPL")).resolves.toEqual([
       expect.objectContaining({ uid: "M100" }),
     ])
+  })
+
+  it("returns the released Product dossier with BOM, pricing, drawing, and ECN evidence", async () => {
+    const query = vi.fn(async (statement: string) => {
+      if (statement.includes("WITH RECURSIVE hierarchy")) {
+        return {
+          rows: [
+            {
+              depth: 1,
+              parent_uid: "M100",
+              component_uid: "M101",
+              description: "Nut",
+              quantity: "2",
+            },
+          ],
+        }
+      }
+      return {
+        rows: [
+          {
+            uid: "M100",
+            description: "Assembly",
+            item_type: "List",
+            production_type: "Barstock",
+            source_payload: { processesRequired: ["Machining", "Washing"] },
+            design_revision: "01",
+            design_status: "Released",
+            design_released_at: new Date("2026-09-01T00:00:00Z"),
+            product_cost_inr: "42.5",
+            machining_cost: "10",
+            washing: "2",
+            checking: "0",
+            marking: "0",
+            plating: "0",
+            annealing: "0",
+            deburring: "0",
+            buffing: "0",
+            sealant: "0",
+            assembly_operation_cost: "0",
+            drawing_revision: "01",
+            drawing_number: "M100",
+            drawing_status: "Released",
+            drawing_requirement: "Required",
+            drawing_file_id: "file-1",
+            drawing_file_name: "M100.pdf",
+            drawing_media_type: "application/pdf",
+            latest_ecn_number: "ECN-9",
+            latest_ecn_status: "Completed",
+            latest_ecn_reason: "Thread update",
+          },
+        ],
+      }
+    })
+    const repository = createProductPortfolioRepository({
+      pool: { query } as unknown as Pool,
+    })
+
+    await expect(
+      repository.getDossierForOrganization("MRMPL", "M100")
+    ).resolves.toEqual(
+      expect.objectContaining({
+        uid: "M100",
+        processesRequired: ["Machining", "Washing"],
+        design: expect.objectContaining({ revision: "01" }),
+        drawing: expect.objectContaining({ fileName: "M100.pdf" }),
+        latestEcn: expect.objectContaining({ number: "ECN-9" }),
+        bom: [expect.objectContaining({ componentUid: "M101", depth: 1 })],
+      })
+    )
   })
 })

@@ -12,6 +12,7 @@ const product = {
   rodSize: "16 Round",
   subCategory: "Male Compression Adapter",
   uid: "M25",
+  designRevision: "03",
 }
 
 describe("ProductPortfolioTable", () => {
@@ -30,5 +31,16 @@ describe("ProductPortfolioTable", () => {
     expect(markup).toContain(
       'href="/commercial/design/line-1/new?product=M25&amp;selectedLine=2&amp;section=bom"'
     )
+  })
+
+  test("links the released Product UID and revision to its read-only dossier", () => {
+    const markup = renderToStaticMarkup(
+      <ProductPortfolioTable rows={[product]} />
+    )
+
+    expect(markup).toContain("Design Rev.")
+    expect(markup).toContain(">03<")
+    expect(markup).toContain('href="/commercial/products/M25"')
+    expect(markup).toContain("View Dossier")
   })
 })

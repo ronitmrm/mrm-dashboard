@@ -43,6 +43,7 @@ const columns = [
   { key: "subCategory", label: "Subcategory" },
   { key: "mrmplDescription", label: "MRMPL Description" },
   { key: "productType", label: "Product Type" },
+  { key: "designRevision", label: "Design Rev." },
 ] as const satisfies ReadonlyArray<{
   key: keyof ProductPortfolioRow
   label: string
@@ -191,7 +192,7 @@ export function ProductPortfolioTable({
         >
           <TableHeader className="sticky top-0 z-10 bg-background">
             <TableRow>
-              {selection ? <TableHead>Select</TableHead> : null}
+              <TableHead>{selection ? "Select" : "Dossier"}</TableHead>
               {facetedColumns.map((column) => (
                 <TableHead data-filterable="true" key={column.label}>
                   <span className="block">{column.label}</span>
@@ -240,7 +241,15 @@ export function ProductPortfolioTable({
                         </Link>
                       </Button>
                     </TableCell>
-                  ) : null}
+                  ) : (
+                    <TableCell>
+                      <Button asChild size="sm" variant="outline">
+                        <Link href={`/commercial/products/${product.uid}`}>
+                          View Dossier
+                        </Link>
+                      </Button>
+                    </TableCell>
+                  )}
                   <TableCell className="font-mono font-medium" translate="no">
                     {product.uid}
                   </TableCell>
@@ -255,13 +264,14 @@ export function ProductPortfolioTable({
                     {product.mrmplDescription}
                   </TableCell>
                   <TableCell>{product.productType || "—"}</TableCell>
+                  <TableCell>{product.designRevision || "—"}</TableCell>
                 </TableRow>
               ))
             ) : (
               <TableRow>
                 <TableCell
                   className="h-32 text-center text-muted-foreground"
-                  colSpan={columns.length + (selection ? 1 : 0)}
+                  colSpan={columns.length + 1}
                 >
                   No Products Match These Filters.
                 </TableCell>
