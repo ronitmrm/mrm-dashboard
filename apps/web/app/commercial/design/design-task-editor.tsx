@@ -35,6 +35,7 @@ type BomLine = {
   componentCategory?: string | null
   componentProductSize?: string | null
   componentSubcategory?: string | null
+  drawingRequirement?: string | null
   existingProductId?: string | null
   grade?: string | null
   lineNumber: number
@@ -57,6 +58,7 @@ type EditorInitial = {
   componentsRequired: string | null
   designBomCompleted: string
   designRemarks: string | null
+  drawingRequirement?: string
   designerName: string | null
   fixtureApproxCost: number
   fixtureRequired: string
@@ -872,6 +874,7 @@ const blankBomLine = (
   componentCode: "",
   componentItemType: "List",
   componentSource: "New",
+  drawingRequirement: "Required",
   lineNumber,
   parentLineNumber,
   quantity: 1,
@@ -929,6 +932,9 @@ export function DesignTaskEditor({
   const [activeSection, setActiveSection] =
     useState<DesignSection>(initialSection)
   const [activeFileGroup, setActiveFileGroup] = useState("root")
+  const [rootDrawingRequirement, setRootDrawingRequirement] = useState(
+    initial.drawingRequirement ?? "Required"
+  )
   const [packageProcesses, setPackageProcesses] = useState(() => {
     const allowed = new Set<string>(
       costingProcessOptions.map(([value]) => value)
@@ -1303,6 +1309,7 @@ export function DesignTaskEditor({
                   : "List BOM"}
               </FieldLegend>
               <FieldDescription>
+                Step 1 of 2: complete all structured Product and BOM data. {" "}
                 {itemType === "List"
                   ? "A List is one manufactured part. Enter its material, weight, and process details in this single row. The main Q/C Number becomes its Part UID."
                   : "Add each Package component. Existing components select an ordered Product; new components receive a UID on save. Parent Line is used only for a child below an Assembly component."}
@@ -1548,8 +1555,8 @@ export function DesignTaskEditor({
             <FieldSet className="rounded-xl border bg-muted/20 p-5">
               <FieldLegend>Design Files</FieldLegend>
               <FieldDescription>
-                Keep the root Product and every BOM line&apos;s drawings in their
-                own file group.
+                Step 2 of 2: resolve every part as Uploaded or Not Required.
+                Initial released drawings use revision 00.
               </FieldDescription>
               <div
                 aria-label="Design file groups"
@@ -1586,6 +1593,28 @@ export function DesignTaskEditor({
                 })}
               </div>
               <div hidden={activeFileGroup !== "root"} role="tabpanel">
+                <Field className="mb-4 max-w-sm">
+                  <FieldLabel>
+                    Root Product Drawing Status
+                    <NativeSelect
+                      name="drawing_requirement"
+                      onChange={(event) =>
+                        setRootDrawingRequirement(event.currentTarget.value)
+                      }
+                      value={rootDrawingRequirement}
+                    >
+                      <NativeSelectOption value="Required">Required</NativeSelectOption>
+                      <NativeSelectOption value="Not Required">Not Required</NativeSelectOption>
+                    </NativeSelect>
+                  </FieldLabel>
+                  <FieldDescription>
+                    Revision 00 · {rootDrawingRequirement === "Not Required"
+                      ? "Not Required"
+                      : attachments.some(({ purpose }) => purpose === "internal_drawing")
+                        ? "Uploaded"
+                        : "Missing"}
+                  </FieldDescription>
+                </Field>
                 <DesignFileFields
                   attachments={attachments.filter((attachment) =>
                     ["cad", "customer_marked", "internal_drawing"].includes(
@@ -1600,6 +1629,51 @@ export function DesignTaskEditor({
                   key={row.lineNumber}
                   role="tabpanel"
                 >
+                  {row.componentSource === "Existing" ? (
+                    <input
+                      name="bom_drawing_requirement"
+                      type="hidden"
+                      value="Not Required"
+                    />
+                  ) : (
+                    <Field className="mb-4 max-w-sm">
+                      <FieldLabel>
+                        Drawing Status
+                        <NativeSelect
+                          name="bom_drawing_requirement"
+                          onChange={(event) => {
+                            const drawingRequirement = event.currentTarget.value
+                            setRows((current) =>
+                              current.map((entry) =>
+                                entry.row.lineNumber === row.lineNumber
+                                  ? { ...entry, row: { ...entry.row, drawingRequirement } }
+                                  : entry
+                              )
+                            )
+                          }}
+                          value={row.drawingRequirement ?? "Required"}
+                        >
+                          <NativeSelectOption value="Required">Required</NativeSelectOption>
+                          <NativeSelectOption value="Not Required">Not Required</NativeSelectOption>
+                        </NativeSelect>
+                      </FieldLabel>
+                      <FieldDescription>
+                        Revision 00 · {row.drawingRequirement === "Not Required"
+                          ? "Not Required"
+                          : attachments.some(
+                                ({ purpose }) =>
+                                  purpose === `bom_line_${row.lineNumber}_internal_drawing`
+                              )
+                            ? "Uploaded"
+                            : "Missing"}
+                      </FieldDescription>
+                    </Field>
+                  )}
+                  {row.componentSource === "Existing" ? (
+                    <p className="mb-4 text-sm text-muted-foreground">
+                      Drawing status: Not Required (uses the selected Product&apos;s released drawing).
+                    </p>
+                  ) : null}
                   <DesignFileFields
                     attachments={attachments.filter((attachment) =>
                       attachment.purpose.startsWith(

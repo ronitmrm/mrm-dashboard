@@ -254,6 +254,7 @@ describe("Pricing Design Task contract", () => {
     expect(designStatuses).toEqual([
       "Pending Design",
       "In Progress",
+      "Drawings Pending",
       "Need Clarification",
       "Changes Required",
       "Design Complete",
@@ -298,7 +299,7 @@ describe("Pricing Design Task contract", () => {
       assemblyRequired: "No",
       designBomCompleted: "Yes",
       designBomRequired: "Yes",
-      designStatus: "In Progress",
+      designStatus: "Drawings Pending",
       isPortfolioMatch: false,
       nextStageStatus: "Not Started",
     })

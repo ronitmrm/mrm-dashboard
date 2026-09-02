@@ -306,6 +306,7 @@ export default async function NewDesignWorkspacePage({
                 componentsRequired: selectedItem.componentsRequired,
                 designBomCompleted: selectedItem.designBomCompleted,
                 designRemarks: selectedItem.designRemarks,
+                drawingRequirement: selectedItem.drawingRequirement,
                 designerName: selectedItem.designerName,
                 fixtureApproxCost: selectedItem.fixtureApproxCost,
                 fixtureRequired: selectedItem.fixtureRequired,

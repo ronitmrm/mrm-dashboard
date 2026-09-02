@@ -187,6 +187,7 @@ type DesignBomLine = {
   componentProductSize?: string | null
   componentSource: string
   componentSubcategory?: string | null
+  drawingRequirement?: string | null
   existingProductId?: string | null
   grade?: string | null
   lineNumber: number
@@ -230,6 +231,7 @@ type DesignQueueDatabaseRow = {
   designer_name: string | null
   description: string
   drawing_reference: string | null
+  drawing_requirement: string | null
   enquiry_id: string
   enquiry_item_id: string
   enquiry_number: string
@@ -295,6 +297,7 @@ function designQueueItemFromRow(
     designerName: row.designer_name,
     description: row.description,
     drawingReference: row.drawing_reference ?? null,
+    drawingRequirement: row.drawing_requirement ?? "Required",
     enquiryId: row.enquiry_id,
     enquiryItemId: row.enquiry_item_id,
     enquiryNumber: row.enquiry_number,
@@ -363,6 +366,7 @@ async function designRowsWithRelations(
           component_subcategory: string | null
           design_notes: string | null
           design_task_id: string
+          drawing_requirement: string
           existing_product_id: string | null
           grade: string | null
           line_number: number
@@ -390,7 +394,8 @@ async function designRowsWithRelations(
               bom.parent_line_number, bom.quantity::text, bom.bom_item,
               bom.rod_size, bom.rod_type, bom.grade,
               bom.production_type, bom.manufacturing_process, bom.casting::text,
-              bom.piece_weight::text, bom.process_required
+              bom.piece_weight::text, bom.process_required,
+              bom.drawing_requirement
             FROM sales.design_bom_lines bom
             WHERE bom.design_task_id = ANY($1::uuid[])
             ORDER BY bom.design_task_id, bom.line_number, bom.id
@@ -472,6 +477,7 @@ async function designRowsWithRelations(
       componentProductSize: row.component_product_size,
       componentSource: row.component_source,
       componentSubcategory: row.component_subcategory,
+      drawingRequirement: row.drawing_requirement,
       existingProductId: row.existing_product_id,
       grade: row.grade,
       lineNumber: row.line_number,
@@ -852,6 +858,130 @@ async function enquiryRowsWithRelations(
 const asNumber = (value: unknown, fallback = 0) => {
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : fallback
+}
+
+function designProcessNames(value: string | null | undefined) {
+  return (value ?? "")
+    .replace(/^(package\s+process|process)\s*:\s*/i, "")
+    .split(/[,;\n]+/)
+    .map((process) => process.trim())
+    .filter(Boolean)
+}
+
+async function ensureInitialDesignRelease(
+  client: PoolClient,
+  input: {
+    actorUserId?: string | null
+    designTaskId: string
+    itemId: string
+    reason?: string
+  }
+) {
+  const inserted = await client.query<{ id: string }>(
+    `
+      INSERT INTO catalog.product_design_revisions (
+        organization_id, item_id, revision_number, revision_label, status,
+        is_current, effective_on, change_reason, design_snapshot, bom_snapshot,
+        created_by_user_id, approved_at, approved_by_user_id, released_at,
+        source_system, source_table, source_id, source_payload
+      )
+      SELECT item.organization_id, item.id, 0, '00', 'Released', true,
+        current_date, $1, to_jsonb(item), COALESCE((
+          SELECT jsonb_agg(to_jsonb(line) ORDER BY line.sequence, line.id)
+          FROM catalog.bom_lines line WHERE line.parent_item_id = item.id
+        ), '[]'::jsonb), $2, now(), $2, now(), 'mrm-dashboard',
+        'product_design_revisions', item.id::text || ':00',
+        jsonb_build_object('designTaskId', $3)
+      FROM catalog.items item
+      WHERE item.id = $4
+      ON CONFLICT (item_id, revision_number) DO NOTHING
+      RETURNING id
+    `,
+    [
+      input.reason ?? "Initial Release",
+      input.actorUserId ?? null,
+      input.designTaskId,
+      input.itemId,
+    ]
+  )
+  const revisionId =
+    inserted.rows[0]?.id ??
+    (
+      await client.query<{ id: string }>(
+        "SELECT id FROM catalog.product_design_revisions WHERE item_id = $1 AND revision_number = 0",
+        [input.itemId]
+      )
+    ).rows[0]?.id
+  if (!revisionId) throw new Error("Initial Product Design revision failed.")
+  await client.query(
+    `UPDATE catalog.items
+     SET source_payload = jsonb_set(
+       COALESCE(source_payload, '{}'::jsonb), '{currentDesignRevision}',
+       '"00"'::jsonb, true
+     )
+     WHERE id = $1`,
+    [input.itemId]
+  )
+  return revisionId
+}
+
+async function ensureInitialDrawingRelease(
+  client: PoolClient,
+  input: {
+    actorUserId?: string | null
+    designRevisionId: string
+    designTaskId: string
+    itemId: string
+    purpose: string
+    requirement: string
+  }
+) {
+  const file = await client.query<{
+    created_by_user_id: string | null
+    file_id: string
+  }>(
+    `
+      SELECT link.file_id, file.created_by_user_id
+      FROM core.file_links link
+      JOIN core.files file ON file.id = link.file_id
+      WHERE link.target_schema = 'sales'
+        AND link.target_table = 'design_tasks'
+        AND link.target_id = $1 AND link.purpose = $2 AND link.is_current
+      ORDER BY link.version DESC, link.id DESC
+      LIMIT 1
+    `,
+    [input.designTaskId, input.purpose]
+  )
+  if (input.requirement !== "Not Required" && !file.rows[0]) {
+    throw new Error("A required drawing is missing from the initial release.")
+  }
+  await client.query(
+    `
+      INSERT INTO catalog.drawing_revisions (
+        organization_id, item_id, product_design_revision_id, file_id,
+        drawing_number, revision_number, revision_label, requirement_status,
+        status, is_current, effective_on, change_reason, raised_by_user_id,
+        uploaded_by_user_id, approved_at, approved_by_user_id, released_at,
+        source_system, source_table, source_id, source_payload
+      )
+      SELECT item.organization_id, item.id, $1, $2, item.uid, 0, '00', $3,
+        'Released', true, current_date, 'Initial Release', $4, $5, now(), $4,
+        now(), 'mrm-dashboard', 'drawing_revisions', item.id::text || ':00',
+        jsonb_build_object('designTaskId', $6, 'purpose', $7)
+      FROM catalog.items item WHERE item.id = $8
+      ON CONFLICT (item_id, revision_number) DO NOTHING
+    `,
+    [
+      input.designRevisionId,
+      file.rows[0]?.file_id ?? null,
+      input.requirement === "Not Required" ? "Not Required" : "Required",
+      input.actorUserId ?? null,
+      file.rows[0]?.created_by_user_id ?? input.actorUserId ?? null,
+      input.designTaskId,
+      input.purpose,
+      input.itemId,
+    ]
+  )
 }
 
 async function classifyImportRow(
@@ -3774,6 +3904,7 @@ export function createCommercialWorkflowRepository(
             design.fixture_required, design.fixture_approx_cost::text,
             design.gauges_required, design.inspection_approx_cost::text,
             design.checked_by, design.approval_status,
+            design.drawing_requirement,
             COALESCE((
               SELECT jsonb_agg(
                 jsonb_build_object(
@@ -3793,6 +3924,7 @@ export function createCommercialWorkflowRepository(
                   'pieceWeight', bom.piece_weight,
                   'productionType', bom.production_type,
                   'processRequired', bom.process_required,
+                  'drawingRequirement', bom.drawing_requirement,
                   'quantity', bom.quantity,
                   'rodSize', bom.rod_size,
                   'rodType', bom.rod_type
@@ -4425,6 +4557,7 @@ export function createCommercialWorkflowRepository(
         )
         const result = await client.query<{
           design_status: string
+          drawing_requirement: string
           id: string
         }>(
           `
@@ -4484,6 +4617,7 @@ export function createCommercialWorkflowRepository(
       designBomCompleted?: string
       designBomRequired?: string
       designRemarks?: string | null
+      drawingRequirement?: string
       designStatus: string
       designerName?: string | null
       enquiryItemId: string
@@ -4692,7 +4826,8 @@ export function createCommercialWorkflowRepository(
               components_required, assembly_required, operation_notes,
               tooling_required, tooling_approx_cost, fixture_required,
               fixture_approx_cost, gauges_required, inspection_approx_cost,
-              checked_by, approval_status, source_system, source_table,
+              checked_by, approval_status, drawing_requirement,
+              source_system, source_table,
               source_id, source_payload
             ) VALUES (
               $1, $2, $3, $4, $5, $3, $6, $7, $8, $9, now(),
@@ -4700,7 +4835,7 @@ export function createCommercialWorkflowRepository(
                 THEN now() ELSE NULL END,
               $10, $11, $12, $13, $14, $15, $16, $17, $18, $6,
               $19, $20, $21, $22, $23, $24, $25, $26, $27, $28,
-              $29, $30, $31, 'mrm-dashboard', 'design_tasks', $32, $33
+              $29, $30, $31, $34, 'mrm-dashboard', 'design_tasks', $32, $33
             )
             ON CONFLICT (enquiry_item_id) DO UPDATE SET
               status = EXCLUDED.status,
@@ -4738,6 +4873,7 @@ export function createCommercialWorkflowRepository(
               inspection_approx_cost = EXCLUDED.inspection_approx_cost,
               checked_by = EXCLUDED.checked_by,
               approval_status = EXCLUDED.approval_status,
+              drawing_requirement = EXCLUDED.drawing_requirement,
               source_payload = EXCLUDED.source_payload,
               updated_by_user_id = EXCLUDED.updated_by_user_id,
               updated_at = now(),
@@ -4786,10 +4922,26 @@ export function createCommercialWorkflowRepository(
             state.approvalStatus,
             randomUUID(),
             input,
+            input.drawingRequirement ?? "Required",
           ]
         )
         const savedDesign = design.rows[0]
         if (!savedDesign) throw new Error("Design task could not be saved.")
+        await client.query(
+          `
+            UPDATE sales.design_tasks
+            SET structured_bom_completed_at = CASE
+                  WHEN $1 = 'Yes' THEN COALESCE(structured_bom_completed_at, now())
+                  ELSE NULL
+                END,
+                drawings_completed_at = CASE
+                  WHEN $2 = 'Design Complete' THEN COALESCE(drawings_completed_at, now())
+                  ELSE NULL
+                END
+            WHERE id = $3
+          `,
+          [designBomCompleted, designStatus, savedDesign.id]
+        )
         const bomRows: Array<
           DesignBomLine & { packagePartUid: string | null }
         > = []
@@ -4865,11 +5017,12 @@ export function createCommercialWorkflowRepository(
                 package_part_uid, package_part, bom_item, rod_size, rod_type,
                 grade, manufacturing_process, casting, piece_weight,
                 production_type, process_required, design_notes,
+                drawing_requirement,
                 source_system, source_table, source_id, source_payload
               ) VALUES (
                 $1, $2, $3, $4, $5, $6, $6, $7, $8, $9, $10, $11,
                 $12, $13, $14, $15, $16, $17, $18, $19, $20, $21,
-                $22, 'mrm-dashboard', 'design_bom_lines', $23, $24
+                $22, $25, 'mrm-dashboard', 'design_bom_lines', $23, $24
               )
             `,
             [
@@ -4897,6 +5050,9 @@ export function createCommercialWorkflowRepository(
               bomLine.notes ?? null,
               randomUUID(),
               bomLine,
+              bomLine.componentSource === "Existing"
+                ? "Not Required"
+                : (bomLine.drawingRequirement ?? "Required"),
             ]
           )
         }
@@ -4943,6 +5099,7 @@ export function createCommercialWorkflowRepository(
           description: string
           design_remarks: string | null
           design_status: string
+          drawing_requirement: string
           enquiry_item_id: string
           id: string
           item_type: string
@@ -4958,7 +5115,7 @@ export function createCommercialWorkflowRepository(
               task.design_status, task.next_stage_status,
               task.matched_product_id, task.quoted_part_uid, task.item_type,
               task.manufacturing_process, task.package_process_required,
-              task.design_remarks,
+              task.design_remarks, task.drawing_requirement,
               COALESCE(NULLIF(btrim(task.internal_part_name), ''), item.description)
                 AS description
             FROM sales.design_tasks task
@@ -5024,6 +5181,7 @@ export function createCommercialWorkflowRepository(
           component_source: string
           component_subcategory: string | null
           design_notes: string | null
+          drawing_requirement: string
           existing_product_id: string | null
           grade: string | null
           line_number: number
@@ -5049,7 +5207,8 @@ export function createCommercialWorkflowRepository(
                 AS component_subcategory,
               rod_type, grade, production_type, manufacturing_process,
               casting::text,
-              piece_weight::text, process_required, design_notes
+              piece_weight::text, process_required, design_notes,
+              drawing_requirement
             FROM sales.design_bom_lines
             WHERE design_task_id = $1
             ORDER BY line_number
@@ -5144,6 +5303,11 @@ export function createCommercialWorkflowRepository(
               firstMaterialLine: firstLine ?? null,
               manufacturing_process: row.manufacturing_process,
               process_required: row.package_process_required,
+              processesRequired: designProcessNames(
+                row.item_type === "List"
+                  ? firstLine?.process_required
+                  : row.package_process_required
+              ),
             },
           ]
         )
@@ -5248,6 +5412,9 @@ export function createCommercialWorkflowRepository(
                     designBomLineNumber: bomLine.line_number,
                     designTaskId: row.id,
                     productSize: bomLine.component_product_size,
+                    processesRequired: designProcessNames(
+                      bomLine.process_required
+                    ),
                     subcategory: bomLine.component_subcategory,
                   },
                 ]
@@ -5287,7 +5454,38 @@ export function createCommercialWorkflowRepository(
               ]
             )
           }
+          for (const bomLine of bomLines.rows) {
+            if (bomLine.component_source === "Existing") continue
+            const componentId = componentByLine.get(bomLine.line_number)
+            if (!componentId) continue
+            const designRevisionId = await ensureInitialDesignRelease(client, {
+              actorUserId,
+              designTaskId: row.id,
+              itemId: componentId,
+            })
+            await ensureInitialDrawingRelease(client, {
+              actorUserId,
+              designRevisionId,
+              designTaskId: row.id,
+              itemId: componentId,
+              purpose: `bom_line_${bomLine.line_number}_internal_drawing`,
+              requirement: bomLine.drawing_requirement,
+            })
+          }
         }
+        const designRevisionId = await ensureInitialDesignRelease(client, {
+          actorUserId,
+          designTaskId: row.id,
+          itemId: parentProduct.id,
+        })
+        await ensureInitialDrawingRelease(client, {
+          actorUserId,
+          designRevisionId,
+          designTaskId: row.id,
+          itemId: parentProduct.id,
+          purpose: "internal_drawing",
+          requirement: row.drawing_requirement,
+        })
         await client.query(
           `
             UPDATE sales.design_tasks
@@ -6832,7 +7030,8 @@ export function createCommercialWorkflowRepository(
             design.tooling_required, design.tooling_approx_cost::text,
             design.fixture_required, design.fixture_approx_cost::text,
             design.gauges_required, design.inspection_approx_cost::text,
-            design.checked_by, design.approval_status
+            design.checked_by, design.approval_status,
+            design.drawing_requirement
           FROM sales.enquiry_items enquiry_item
           JOIN sales.enquiries enquiry ON enquiry.id = enquiry_item.enquiry_id
           JOIN sales.customers customer ON customer.id = enquiry.customer_id
