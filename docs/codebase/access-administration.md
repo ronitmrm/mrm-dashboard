@@ -1,5 +1,21 @@
 # Access Administration
 
+## Workspace tabs
+
+- `Create Role` is the default tab for users allowed to create roles. It contains
+  only the role details and granular permission selector. Successful creation
+  opens the saved-role list.
+- `Application Roles` is a filterable register. Opening a role uses
+  `?section=roles&role=<key>` and renders only that role's editor; the register
+  does not mount hidden permission selectors for every role.
+- `Staff Accounts` retains staff provisioning, Approved Post role assignment,
+  and the staff-access register. Current post profiles include the designation.
+- Users without Create Role access default to Application Roles. All existing
+  server-side page/task guards remain unchanged; tabs do not grant permissions.
+- Navigation uses the shared `radix-luma` Tabs primitive with keyboard support
+  and URL-backed selection. Role-register and permission filters retain separate
+  browser-persisted filter keys.
+
 ## Architecture
 
 Access Administration derives its item-level inventory from the typed page

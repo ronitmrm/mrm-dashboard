@@ -1,6 +1,7 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
+import { redirect } from "next/navigation"
 
 import { createAccessAdministrationService } from "@/lib/auth/access-administration"
 import { getAuth, readAuthEnvironment } from "@/lib/auth/auth"
@@ -106,6 +107,7 @@ export async function createRoleAction(formData: FormData) {
       })
   )
   revalidatePath(accessPath)
+  redirect(`${accessPath}?section=roles`)
 }
 
 export async function updateRolePermissionsAction(formData: FormData) {
