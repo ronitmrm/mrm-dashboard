@@ -63,6 +63,10 @@ Low-level `Card` and native `table` are allowed only inside the canonical shared
 
 Record a new exception in this document before merging it. Prefer extending an existing primitive over adding an exception.
 
+Access Administration uses the existing shell title for page identity. At the
+user's request, omit its duplicate body banner and use a full-width summary-card
+row above the workspace tabs.
+
 ## Enforcement and extension
 
 ESLint rejects feature imports/usages of raw `Table`, raw `Card`, native `table`, and `DashboardPageHeader`. `apps/web/lib/ui-conformity.test.ts` scans source and validates the living reference route.
