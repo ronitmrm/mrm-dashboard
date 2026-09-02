@@ -552,6 +552,11 @@ export default async function CustomerBulkRevisionPage({
                         {stage.notes ? (
                           <p className="mt-1 text-sm">{stage.notes}</p>
                         ) : null}
+                        {stage.skippedRows.map((skipped) => (
+                          <p className="mt-1 text-xs text-destructive" key={skipped.itemId}>
+                            Skipped {skipped.uid}: {skipped.reason}
+                          </p>
+                        ))}
                       </div>
                       {!isCompleted && !stage.isApplied ? (
                         <form action={deleteBulkPriceRevisionStageAction}>

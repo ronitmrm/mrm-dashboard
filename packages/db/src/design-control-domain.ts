@@ -1,17 +1,18 @@
 const processDefinitions = [
-  { aliases: ["machining", "m/c", "machine"], field: "machiningCost", label: "Machining" },
-  { aliases: ["washing", "wash"], field: "washing", label: "Washing" },
-  { aliases: ["checking", "inspection", "quality checking"], field: "checking", label: "Checking" },
-  { aliases: ["marking", "mark"], field: "marking", label: "Marking" },
-  { aliases: ["plating", "plate"], field: "plating", label: "Plating" },
-  { aliases: ["annealing", "anneling"], field: "annealing", label: "Annealing" },
-  { aliases: ["deburring", "debbring"], field: "deburring", label: "Deburring" },
-  { aliases: ["buffing", "buff"], field: "buffing", label: "Buffing" },
-  { aliases: ["sealant", "sealing"], field: "sealant", label: "Sealant" },
+  { aliases: ["machining", "m/c", "machine"], field: "machiningCost", label: "Machining", storageField: "machining_cost" },
+  { aliases: ["washing", "wash"], field: "washing", label: "Washing", storageField: "washing" },
+  { aliases: ["checking", "inspection", "quality checking"], field: "checking", label: "Checking", storageField: "checking" },
+  { aliases: ["marking", "mark"], field: "marking", label: "Marking", storageField: "marking" },
+  { aliases: ["plating", "plate"], field: "plating", label: "Plating", storageField: "plating" },
+  { aliases: ["annealing", "anneling"], field: "annealing", label: "Annealing", storageField: "annealing" },
+  { aliases: ["deburring", "debbring"], field: "deburring", label: "Deburring", storageField: "deburring" },
+  { aliases: ["buffing", "buff"], field: "buffing", label: "Buffing", storageField: "buffing" },
+  { aliases: ["sealant", "sealing"], field: "sealant", label: "Sealant", storageField: "sealant" },
   {
     aliases: ["assembly", "package process", "package assembly"],
     field: "assemblyOperationCost",
     label: "Package Assembly",
+    storageField: "assembly_operation_cost",
   },
 ] as const
 
@@ -42,6 +43,15 @@ export function designProcessSelection(input: {
       .filter(Boolean)
       .sort()
   )
+}
+
+export function processesRequiredFromPayload(
+  sourcePayload: Readonly<Record<string, unknown>> | null | undefined
+) {
+  const value = sourcePayload?.processesRequired
+  return Array.isArray(value)
+    ? value.filter((process): process is string => typeof process === "string")
+    : []
 }
 
 function selectedProcessAllowsField(
@@ -78,7 +88,8 @@ export function processFieldIsApplicable(
   selectedProcesses: ReadonlySet<string>
 ) {
   const definition = processDefinitions.find(
-    (candidate) => candidate.field === field
+    (candidate) =>
+      candidate.field === field || candidate.storageField === field
   )
   return definition
     ? selectedProcessAllowsField(selectedProcesses, definition)

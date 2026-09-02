@@ -4,6 +4,12 @@ import type { Pool, PoolClient } from "pg"
 
 import { boundedResult, selectorSearchTerm } from "./commercial-bounds"
 import {
+  assertApplicableProcessPrices,
+  designProcessSelection,
+  processFieldIsApplicable,
+  processesRequiredFromPayload,
+} from "./design-control-domain"
+import {
   repositoryPool,
   withTransaction as transaction,
   type RepositoryPoolOptions,
@@ -504,23 +510,7 @@ function productSnapshot(product: ProductRow) {
 }
 
 function costingProcesses(sourcePayload: Record<string, unknown>) {
-  const firstMaterialLine = sourcePayload.firstMaterialLine
-  const firstMaterialRecord =
-    firstMaterialLine && typeof firstMaterialLine === "object"
-      ? (firstMaterialLine as Record<string, unknown>)
-      : null
-  const processText =
-    sourcePayload.process_required ??
-    firstMaterialRecord?.process_required ??
-    firstMaterialRecord?.manufacturing_process ??
-    sourcePayload.manufacturing_process
-  return typeof processText === "string"
-    ? processText
-        .replace(/^(package\s+process|process)\s*:\s*/i, "")
-        .split(/[,;\n]+/)
-        .map((process) => process.trim())
-        .filter(Boolean)
-    : []
+  return processesRequiredFromPayload(sourcePayload)
 }
 
 function costingProductType(
@@ -2313,37 +2303,98 @@ export function createCommercialCostingRepository(
               : 0
         const pricingMethod = input.pricingMethod ?? product.pricing_method
         const isDirectPurchase = pricingMethod === "Direct Purchase"
-        const machiningCost = isDirectPurchase
-          ? 0
-          : (input.machiningCost ?? asNumber(product.machining_cost))
-        const washing = isDirectPurchase
-          ? 0
-          : (input.washing ?? asNumber(product.washing))
-        const checking = isDirectPurchase
-          ? 0
-          : (input.checking ?? asNumber(product.checking))
-        const marking = isDirectPurchase
-          ? 0
-          : (input.marking ?? asNumber(product.marking))
-        const plating = isDirectPurchase
-          ? 0
-          : (input.plating ?? asNumber(product.plating))
-        const annealing = isDirectPurchase
-          ? 0
-          : (input.annealing ?? asNumber(product.annealing))
-        const deburring = isDirectPurchase
-          ? 0
-          : (input.deburring ?? asNumber(product.deburring))
-        const buffing = isDirectPurchase
-          ? 0
-          : (input.buffing ?? asNumber(product.buffing))
-        const sealant = isDirectPurchase
-          ? 0
-          : (input.sealant ?? asNumber(product.sealant))
-        const assemblyOperationCost = isDirectPurchase
-          ? 0
-          : (input.assemblyOperationCost ??
-            asNumber(product.assembly_operation_cost))
+        const selectedProcesses = designProcessSelection({
+          processesRequired: processesRequiredFromPayload(product.source_payload),
+        })
+        const currentProcessPrices = {
+          annealing: asNumber(product.annealing),
+          assemblyOperationCost: asNumber(product.assembly_operation_cost),
+          buffing: asNumber(product.buffing),
+          checking: asNumber(product.checking),
+          deburring: asNumber(product.deburring),
+          machiningCost: asNumber(product.machining_cost),
+          marking: asNumber(product.marking),
+          plating: asNumber(product.plating),
+          sealant: asNumber(product.sealant),
+          washing: asNumber(product.washing),
+        }
+        const submittedProcessPrices = {
+          annealing: input.annealing,
+          assemblyOperationCost: input.assemblyOperationCost,
+          buffing: input.buffing,
+          checking: input.checking,
+          deburring: input.deburring,
+          machiningCost: input.machiningCost,
+          marking: input.marking,
+          plating: input.plating,
+          sealant: input.sealant,
+          washing: input.washing,
+        }
+        assertApplicableProcessPrices({
+          current: currentProcessPrices,
+          next: submittedProcessPrices,
+          selectedProcesses,
+        })
+        const processPrice = (
+          field: string,
+          submitted: number | undefined,
+          current: number
+        ) =>
+          processFieldIsApplicable(field, selectedProcesses)
+            ? isDirectPurchase
+              ? 0
+              : (submitted ?? current)
+            : current
+        const machiningCost = processPrice(
+          "machiningCost",
+          input.machiningCost,
+          currentProcessPrices.machiningCost
+        )
+        const washing = processPrice(
+          "washing",
+          input.washing,
+          currentProcessPrices.washing
+        )
+        const checking = processPrice(
+          "checking",
+          input.checking,
+          currentProcessPrices.checking
+        )
+        const marking = processPrice(
+          "marking",
+          input.marking,
+          currentProcessPrices.marking
+        )
+        const plating = processPrice(
+          "plating",
+          input.plating,
+          currentProcessPrices.plating
+        )
+        const annealing = processPrice(
+          "annealing",
+          input.annealing,
+          currentProcessPrices.annealing
+        )
+        const deburring = processPrice(
+          "deburring",
+          input.deburring,
+          currentProcessPrices.deburring
+        )
+        const buffing = processPrice(
+          "buffing",
+          input.buffing,
+          currentProcessPrices.buffing
+        )
+        const sealant = processPrice(
+          "sealant",
+          input.sealant,
+          currentProcessPrices.sealant
+        )
+        const assemblyOperationCost = processPrice(
+          "assemblyOperationCost",
+          input.assemblyOperationCost,
+          currentProcessPrices.assemblyOperationCost
+        )
         const overheadCost = isDirectPurchase
           ? 0
           : (input.overheadCost ?? asNumber(product.overhead_cost))

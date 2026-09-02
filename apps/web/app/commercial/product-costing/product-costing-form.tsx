@@ -186,6 +186,14 @@ export function ProductCostingForm({
   const selectedProcesses = new Set(
     product.processesRequired.map((process) => process.toLowerCase())
   )
+  const machiningAllowed = ["machining", "m/c", "machine"].some((process) =>
+    selectedProcesses.has(process)
+  )
+  const assemblyAllowed = [
+    "package assembly",
+    "assembly",
+    "package process",
+  ].some((process) => selectedProcesses.has(process))
   const directChildren = bomParts.filter(
     (part) => part.parentItemId === product.id
   )
@@ -298,15 +306,6 @@ export function ProductCostingForm({
             "extrusion_cost",
             "forging_cost",
             "direct_purchase_price_per_kg",
-            "machining_cost",
-            "washing",
-            "checking",
-            "marking",
-            "plating",
-            "annealing",
-            "deburring",
-            "buffing",
-            "sealant",
             "overhead_cost",
             "burning_loss_percent",
           ].map((name) => (
@@ -326,7 +325,8 @@ export function ProductCostingForm({
             <Field>
               <FieldLabel>Assembly Cost (INR/kg)</FieldLabel>
               <Input
-                name="assembly_operation_cost"
+                disabled={!assemblyAllowed}
+                name={assemblyAllowed ? "assembly_operation_cost" : undefined}
                 onChange={(event) =>
                   setAssemblyOperationCost(Number(event.target.value) || 0)
                 }
@@ -410,16 +410,6 @@ export function ProductCostingForm({
                 "alloy_premium",
                 "extrusion_cost",
                 "forging_cost",
-                "machining_cost",
-                "washing",
-                "checking",
-                "marking",
-                "plating",
-                "annealing",
-                "deburring",
-                "buffing",
-                "sealant",
-                "assembly_operation_cost",
                 "overhead_cost",
                 "burning_loss_percent",
               ].map((name) => (
@@ -460,7 +450,6 @@ export function ProductCostingForm({
                 type="hidden"
                 value="0"
               />
-              <input name="assembly_operation_cost" type="hidden" value="0" />
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <Field>
                   <FieldLabel>Alloy Premium (INR/kg)</FieldLabel>
@@ -492,7 +481,8 @@ export function ProductCostingForm({
                 <Field>
                   <FieldLabel>Machining Cost (INR/kg)</FieldLabel>
                   <Input
-                    name="machining_cost"
+                    disabled={!machiningAllowed}
+                    name={machiningAllowed ? "machining_cost" : undefined}
                     onChange={(event) =>
                       setMachiningCost(Number(event.target.value) || 0)
                     }
@@ -519,15 +509,12 @@ export function ProductCostingForm({
                     <Field key={property}>
                       <FieldLabel>{label}</FieldLabel>
                       <Input
-                        defaultValue={allowed ? product[property] : 0}
+                        defaultValue={product[property]}
                         disabled={!allowed}
                         name={allowed ? name : undefined}
                         step="any"
                         type="number"
                       />
-                      {!allowed ? (
-                        <input name={name} type="hidden" value="0" />
-                      ) : null}
                     </Field>
                   )
                 })}

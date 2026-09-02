@@ -6,6 +6,8 @@ import {
   designProcessSelection,
   drawingRevisionLabel,
   engineeringChangeStatusAfterApproval,
+  processesRequiredFromPayload,
+  processFieldIsApplicable,
 } from "./design-control-domain"
 
 describe("Design control domain", () => {
@@ -22,6 +24,24 @@ describe("Design control domain", () => {
         selectedProcesses: selected,
       })
     ).toThrow("Plating is not selected in the released Design BOM")
+  })
+
+  test("reads only canonical Design process selection for database fields", () => {
+    const selected = designProcessSelection({
+      processesRequired: processesRequiredFromPayload({
+        processesRequired: ["Machining", "Package Assembly"],
+        process_required: "Washing",
+      }),
+    })
+
+    expect(processFieldIsApplicable("machining_cost", selected)).toBe(true)
+    expect(processFieldIsApplicable("assembly_operation_cost", selected)).toBe(
+      true
+    )
+    expect(processFieldIsApplicable("washing", selected)).toBe(false)
+    expect(processesRequiredFromPayload({ process_required: "Washing" })).toEqual(
+      []
+    )
   })
 
   test("formats sequential drawing revisions with a minimum of two digits", () => {
