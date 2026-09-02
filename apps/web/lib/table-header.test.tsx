@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it } from "vitest"
 
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -13,7 +13,7 @@ import {
 describe("TableHeader", () => {
   it("uses the available viewport while its header stays visible", () => {
     const markup = renderToStaticMarkup(
-      <Table>
+ <OperationalTable>
         <TableHeader>
           <TableRow>
             <TableHead>Title</TableHead>
@@ -24,7 +24,7 @@ describe("TableHeader", () => {
             <TableCell>Value</TableCell>
           </TableRow>
         </TableBody>
-      </Table>
+ </OperationalTable>
     )
 
     expect(markup).toContain("sticky top-0 z-10")

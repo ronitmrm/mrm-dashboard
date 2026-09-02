@@ -13,7 +13,7 @@ import {
   NativeSelectOption,
 } from "@workspace/ui/components/native-select"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -236,7 +236,7 @@ export function ProductCostingForm({
 
       {isRoot && bomParts.length ? (
         <div className="overflow-auto rounded-2xl border">
-          <Table className="w-full text-sm">
+ <OperationalTable className="w-full text-sm">
             <TableHeader className="bg-muted/50 text-left">
               <TableRow>
                 <TableHead className="px-3 py-2">Part</TableHead>
@@ -288,7 +288,7 @@ export function ProductCostingForm({
                 </TableRow>
               ))}
             </TableBody>
-          </Table>
+ </OperationalTable>
         </div>
       ) : null}
 

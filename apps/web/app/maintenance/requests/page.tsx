@@ -8,7 +8,7 @@ import {
 } from "@workspace/ui/components/alert"
 
 import {
-  DashboardPageHeader,
+ PageHeader,
   DashboardSection,
 } from "@/components/dashboard/dashboard-components"
 import { MaintenanceRequestForm } from "@/components/maintenance/maintenance-request-form"
@@ -63,7 +63,7 @@ export default async function MaintenanceRequestsPage() {
 
   return (
     <div className="grid gap-6">
-      <DashboardPageHeader
+ <PageHeader
         description="Submit one problem per request and track requests for your department."
         icon={ClipboardList}
         title="All Requests"

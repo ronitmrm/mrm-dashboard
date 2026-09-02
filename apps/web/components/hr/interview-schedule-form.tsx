@@ -7,7 +7,7 @@ import type {
 } from "@workspace/db"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -200,7 +200,7 @@ export function InterviewScheduleForm({
   )
 
   return (
-    <Card>
+ <SectionCard>
       <CardHeader>
         <CardTitle>Schedule Interview</CardTitle>
         <CardDescription>
@@ -213,7 +213,7 @@ export function InterviewScheduleForm({
           <ScheduleFields applications={applications} />
         </form>
       </CardContent>
-    </Card>
+ </SectionCard>
   )
 }
 

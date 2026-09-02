@@ -4,7 +4,7 @@ import { useMemo, useState } from "react"
 
 import { Badge } from "@workspace/ui/components/badge"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardHeader,
   CardTitle,
@@ -13,7 +13,7 @@ import {
 import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableRow,
@@ -91,7 +91,7 @@ export function CostingCalculator() {
 
   return (
     <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-      <Card>
+ <SectionCard>
         <CardHeader>
           <CardTitle>Audited Workbook Inputs</CardTitle>
         </CardHeader>
@@ -121,8 +121,8 @@ export function CostingCalculator() {
             </div>
           ))}
         </CardContent>
-      </Card>
-      <Card>
+ </SectionCard>
+ <SectionCard>
         <CardHeader>
           <CardTitle>Calculation Trace</CardTitle>
         </CardHeader>
@@ -138,7 +138,7 @@ export function CostingCalculator() {
             />
           </div>
           <div className="overflow-hidden rounded-3xl border">
-            <Table>
+ <OperationalTable>
               <TableBody>
                 {[
                   ["Pieces / Kg", result.piecesPerKg],
@@ -161,13 +161,13 @@ export function CostingCalculator() {
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+ </OperationalTable>
           </div>
           <Badge className="w-fit" variant="outline">
             Formula Regression Protected
           </Badge>
         </CardContent>
-      </Card>
+ </SectionCard>
     </div>
   )
 }

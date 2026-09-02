@@ -2,7 +2,7 @@
 
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -11,7 +11,7 @@ import {
 
 export default function MasterSelectionError({ reset }: { reset: () => void }) {
   return (
-    <Card className="mx-auto max-w-xl">
+ <SectionCard className="mx-auto max-w-xl">
       <CardHeader>
         <CardTitle>Master Selection could not be loaded</CardTitle>
         <CardDescription>
@@ -24,6 +24,6 @@ export default function MasterSelectionError({ reset }: { reset: () => void }) {
           Retry
         </Button>
       </CardContent>
-    </Card>
+ </SectionCard>
   )
 }

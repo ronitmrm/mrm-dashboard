@@ -1,7 +1,7 @@
 import { createProductRepository } from "@workspace/db"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -11,7 +11,7 @@ import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
 import { SearchableSelect } from "@workspace/ui/components/searchable-select"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -72,12 +72,12 @@ export default async function AssembliesPage({
   })()
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(22rem,1fr)]">
-      <Card className="min-w-0">
+ <SectionCard className="min-w-0">
         <CardHeader>
           <CardTitle>Assembly / Bom Register</CardTitle>
         </CardHeader>
         <CardContent className="overflow-x-auto">
-          <Table>
+ <OperationalTable>
             <TableHeader>
               <TableRow>
                 <TableHead>Parent</TableHead>
@@ -117,11 +117,11 @@ export default async function AssembliesPage({
                 </TableRow>
               )}
             </TableBody>
-          </Table>
+ </OperationalTable>
         </CardContent>
-      </Card>
+ </SectionCard>
 
-      <Card>
+ <SectionCard>
         <CardHeader>
           <CardTitle>Add Component</CardTitle>
           <CardDescription>
@@ -237,7 +237,7 @@ export default async function AssembliesPage({
             </p>
           )}
         </CardContent>
-      </Card>
+ </SectionCard>
     </div>
   )
 }

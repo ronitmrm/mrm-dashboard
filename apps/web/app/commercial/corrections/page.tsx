@@ -2,7 +2,7 @@ import { createCommercialRevisionsRepository } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -20,7 +20,7 @@ import {
   NativeSelectOption,
 } from "@workspace/ui/components/native-select"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -72,7 +72,7 @@ export default async function CommercialCorrectionsPage() {
       </section>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <Card>
+ <SectionCard>
           <CardHeader>
             <CardTitle>Reverse Design → Costing Handoff</CardTitle>
             <CardDescription>
@@ -114,9 +114,9 @@ export default async function CommercialCorrectionsPage() {
               </p>
             )}
           </CardContent>
-        </Card>
+ </SectionCard>
 
-        <Card>
+ <SectionCard>
           <CardHeader>
             <CardTitle>Reverse Unused Quoted Product</CardTitle>
             <CardDescription>
@@ -179,10 +179,10 @@ export default async function CommercialCorrectionsPage() {
               </p>
             )}
           </CardContent>
-        </Card>
+ </SectionCard>
       </div>
 
-      <Card>
+ <SectionCard>
         <CardHeader>
           <CardTitle>Historical Correction Quarantine</CardTitle>
           <CardDescription>
@@ -232,7 +232,7 @@ export default async function CommercialCorrectionsPage() {
           ) : null}
 
           <div className="overflow-hidden rounded-3xl border">
-            <Table>
+ <OperationalTable>
               <TableHeader>
                 <TableRow>
                   <TableHead>Target</TableHead>
@@ -266,10 +266,10 @@ export default async function CommercialCorrectionsPage() {
                   </TableRow>
                 )}
               </TableBody>
-            </Table>
+ </OperationalTable>
           </div>
         </CardContent>
-      </Card>
+ </SectionCard>
     </div>
   )
 }

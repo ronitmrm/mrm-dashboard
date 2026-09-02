@@ -8,7 +8,7 @@ import {
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -17,7 +17,7 @@ import {
 } from "@workspace/ui/components/card"
 import { Field, FieldGroup, FieldLabel } from "@workspace/ui/components/field"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -166,13 +166,13 @@ export async function ProductParameterCostingView({
             <MetricCard label="Total Costing Tasks" value={summary.total} />
           </section>
 
-          <Card>
+ <SectionCard>
             <CardHeader>
               <CardTitle>Product Parameter Costing Queue</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="max-h-[60vh] overflow-auto rounded-md border">
-                <Table
+ <OperationalTable
                   containerClassName="max-h-none overflow-visible"
                   excelFilters
                 >
@@ -228,15 +228,15 @@ export async function ProductParameterCostingView({
                       </TableRow>
                     ) : null}
                   </TableBody>
-                </Table>
+ </OperationalTable>
               </div>
             </CardContent>
-          </Card>
+ </SectionCard>
         </>
       ) : null}
 
       {standalone ? (
-        <Card id="product-cost-form">
+ <SectionCard id="product-cost-form">
           <CardHeader>
             <CardTitle>Product Cost Parameters</CardTitle>
             <CardDescription>
@@ -301,7 +301,7 @@ export async function ProductParameterCostingView({
               </p>
             )}
           </CardContent>
-        </Card>
+ </SectionCard>
       ) : null}
     </div>
   )

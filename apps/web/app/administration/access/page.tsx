@@ -15,7 +15,7 @@ import {
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -40,7 +40,7 @@ import {
   NativeSelectOption,
 } from "@workspace/ui/components/native-select"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -191,7 +191,7 @@ export default async function AccessAdministrationPage({
 
       <section className="grid gap-6 xl:grid-cols-2">
         {activeSection === "staff" && canProvisionStaff ? (
-          <Card>
+ <SectionCard>
             <CardHeader>
               <CardTitle>Provision Staff Account</CardTitle>
               <CardDescription>
@@ -265,11 +265,11 @@ export default async function AccessAdministrationPage({
                 </FieldGroup>
               </form>
             </CardContent>
-          </Card>
+ </SectionCard>
         ) : null}
 
         {activeSection === "roles" && canCreateRole ? (
-          <Card className="xl:col-span-2">
+ <SectionCard className="xl:col-span-2">
             <CardHeader>
               <CardTitle>Create Application Role</CardTitle>
               <CardDescription>
@@ -309,13 +309,13 @@ export default async function AccessAdministrationPage({
                 </FieldGroup>
               </form>
             </CardContent>
-          </Card>
+ </SectionCard>
         ) : null}
       </section>
 
       <section className="grid gap-6 xl:grid-cols-2">
         {activeSection === "staff" && canAssignPostAccess ? (
-          <Card className="xl:col-span-2">
+ <SectionCard className="xl:col-span-2">
             <CardHeader>
               <CardTitle>Post Access Profile</CardTitle>
               <CardDescription>
@@ -404,12 +404,12 @@ export default async function AccessAdministrationPage({
                 </div>
               </details>
             </CardContent>
-          </Card>
+ </SectionCard>
         ) : null}
       </section>
 
       {activeSection === "staff" ? (
-        <Card>
+ <SectionCard>
           <CardHeader>
             <CardTitle>Staff Access</CardTitle>
           </CardHeader>
@@ -428,7 +428,7 @@ export default async function AccessAdministrationPage({
                 </EmptyHeader>
               </Empty>
             ) : (
-              <Table>
+ <OperationalTable>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Staff Member</TableHead>
@@ -518,14 +518,14 @@ export default async function AccessAdministrationPage({
                     </TableRow>
                   ))}
                 </TableBody>
-              </Table>
+ </OperationalTable>
             )}
           </CardContent>
-        </Card>
+ </SectionCard>
       ) : null}
 
       {activeSection === "roles" ? (
-        <Card>
+ <SectionCard>
           <CardHeader>
             <CardTitle>Application Roles</CardTitle>
             <CardDescription>
@@ -576,7 +576,7 @@ export default async function AccessAdministrationPage({
               </details>
             ))}
           </CardContent>
-        </Card>
+ </SectionCard>
       ) : null}
     </>
   )

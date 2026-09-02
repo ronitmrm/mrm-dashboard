@@ -9,7 +9,7 @@ import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
 import {
-  Card,
+ SectionCard,
   CardAction,
   CardContent,
   CardDescription,
@@ -31,7 +31,7 @@ import {
   NativeSelectOption,
 } from "@workspace/ui/components/native-select"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -186,7 +186,7 @@ export default async function EnquiryDetailPage({
         ) : null}
       </section>
 
-      <Card>
+ <SectionCard>
         <CardHeader>
           <CardTitle>Enquiry Register Details</CardTitle>
           <CardDescription>
@@ -331,9 +331,9 @@ export default async function EnquiryDetailPage({
             </FieldGroup>
           </form>
         </CardContent>
-      </Card>
+ </SectionCard>
 
-      <Card>
+ <SectionCard>
         <CardHeader>
           <CardTitle>Add Line Item</CardTitle>
           <CardDescription>
@@ -425,7 +425,7 @@ export default async function EnquiryDetailPage({
             </FieldGroup>
           </form>
         </CardContent>
-      </Card>
+ </SectionCard>
 
       {snapshot.importReviews.some((review) => review.status === "Pending") ? (
         <section className="grid gap-4">
@@ -439,7 +439,7 @@ export default async function EnquiryDetailPage({
           {snapshot.importReviews
             .filter((review) => review.status === "Pending")
             .map((review) => (
-              <Card key={review.id}>
+ <SectionCard key={review.id}>
                 <CardHeader>
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
@@ -543,7 +543,7 @@ export default async function EnquiryDetailPage({
                     </FieldGroup>
                   </form>
                 </CardContent>
-              </Card>
+ </SectionCard>
             ))}
         </section>
       ) : null}
@@ -556,10 +556,10 @@ export default async function EnquiryDetailPage({
             and Design are handled in their own modules after handover.
           </p>
         </div>
-        <Card>
+ <SectionCard>
           <CardContent className="pt-6">
             <div className="overflow-x-auto rounded-md border">
-              <Table
+ <OperationalTable
                 excelFilters
                 filterStorageKey="mrmpl:commercial:enquiry-lines:filters:v1"
               >
@@ -621,13 +621,13 @@ export default async function EnquiryDetailPage({
                     </TableRow>
                   )}
                 </TableBody>
-              </Table>
+ </OperationalTable>
             </div>
           </CardContent>
-        </Card>
+ </SectionCard>
 
         {selectedItem ? (
-          <Card id="line-detail">
+ <SectionCard id="line-detail">
             <CardHeader>
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
@@ -805,7 +805,7 @@ export default async function EnquiryDetailPage({
                 </FieldGroup>
               </form>
             </CardContent>
-          </Card>
+ </SectionCard>
         ) : null}
       </section>
     </div>

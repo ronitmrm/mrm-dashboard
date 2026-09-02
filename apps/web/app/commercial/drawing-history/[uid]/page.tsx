@@ -5,14 +5,14 @@ import { createProductPortfolioRepository } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -60,14 +60,14 @@ export default async function DrawingRevisionHistoryPage({
         </Button>
       </section>
 
-      <Card>
+ <SectionCard>
         <CardHeader>
           <CardTitle>{rows[0]!.itemDescription}</CardTitle>
           <CardDescription>{rows.length} drawing records.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto rounded-2xl border">
-            <Table>
+ <OperationalTable>
               <TableHeader>
                 <TableRow>
                   <TableHead>Revision</TableHead>
@@ -127,10 +127,10 @@ export default async function DrawingRevisionHistoryPage({
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+ </OperationalTable>
           </div>
         </CardContent>
-      </Card>
+ </SectionCard>
     </div>
   )
 }

@@ -5,14 +5,14 @@ import { designTaskHref } from "@workspace/db/commercial-design-domain"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardHeader,
   CardTitle,
   MetricCard,
 } from "@workspace/ui/components/card"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -103,7 +103,7 @@ export default async function DesignPage({
         }
       />
 
-      <Card>
+ <SectionCard>
         <CardHeader>
           <CardTitle>
             {view === "completed"
@@ -113,7 +113,7 @@ export default async function DesignPage({
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto rounded-md border">
-            <Table
+ <OperationalTable
               excelFilters
               filterStorageKey="mrmpl:commercial:design-queue:filters:v2"
             >
@@ -188,10 +188,10 @@ export default async function DesignPage({
                   </TableRow>
                 )}
               </TableBody>
-            </Table>
+ </OperationalTable>
           </div>
         </CardContent>
-      </Card>
+ </SectionCard>
     </div>
   )
 }

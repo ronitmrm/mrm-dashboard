@@ -6,7 +6,7 @@ import { Alert, AlertDescription } from "@workspace/ui/components/alert"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -19,7 +19,7 @@ import {
   NativeSelectOption,
 } from "@workspace/ui/components/native-select"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -129,17 +129,17 @@ export default async function CandidateWorkspacePage({
           ["Experience", candidate.experience ?? "—"],
           ["Source", candidate.source ?? "—"],
         ].map(([label, value]) => (
-          <Card key={label}>
+ <SectionCard key={label}>
             <CardHeader className="pb-2">
               <CardDescription>{label}</CardDescription>
             </CardHeader>
             <CardContent className="font-medium">{value}</CardContent>
-          </Card>
+ </SectionCard>
         ))}
       </section>
 
       {canWrite ? (
-        <Card>
+ <SectionCard>
           <CardHeader>
             <CardTitle>Edit Candidate</CardTitle>
           </CardHeader>
@@ -289,15 +289,15 @@ export default async function CandidateWorkspacePage({
               </Button>
             </form>
           </CardContent>
-        </Card>
+ </SectionCard>
       ) : null}
 
-      <Card>
+ <SectionCard>
         <CardHeader>
           <CardTitle>Job Application History</CardTitle>
         </CardHeader>
         <CardContent className="overflow-x-auto">
-          <Table>
+ <OperationalTable>
             <TableHeader>
               <TableRow>
                 <TableHead>Job</TableHead>
@@ -338,9 +338,9 @@ export default async function CandidateWorkspacePage({
                 </TableRow>
               ) : null}
             </TableBody>
-          </Table>
+ </OperationalTable>
         </CardContent>
-      </Card>
+ </SectionCard>
 
       <ConversationLogsTable
         canWrite={canWrite}

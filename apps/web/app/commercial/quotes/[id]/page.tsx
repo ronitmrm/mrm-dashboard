@@ -5,7 +5,7 @@ import { createCommercialCostingRepository } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -14,7 +14,7 @@ import {
 } from "@workspace/ui/components/card"
 import { Input } from "@workspace/ui/components/input"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -62,7 +62,7 @@ export default async function QuoteDetailPage({
 
   return (
     <div className="grid gap-6">
-      <Card>
+ <SectionCard>
         <CardHeader className="gap-3">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
@@ -131,9 +131,9 @@ export default async function QuoteDetailPage({
             />
           </div>
         </CardContent>
-      </Card>
+ </SectionCard>
 
-      <Card>
+ <SectionCard>
         <CardHeader>
           <CardTitle>Immediate Component Snapshot</CardTitle>
           <CardDescription>
@@ -143,7 +143,7 @@ export default async function QuoteDetailPage({
         </CardHeader>
         <CardContent>
           <div className="overflow-hidden rounded-3xl border">
-            <Table>
+ <OperationalTable>
               <TableHeader>
                 <TableRow>
                   <TableHead data-filterable="true">Component</TableHead>
@@ -194,10 +194,10 @@ export default async function QuoteDetailPage({
                   </TableRow>
                 )}
               </TableBody>
-            </Table>
+ </OperationalTable>
           </div>
         </CardContent>
-      </Card>
+ </SectionCard>
     </div>
   )
 }

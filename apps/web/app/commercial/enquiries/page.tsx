@@ -8,7 +8,7 @@ import {
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -16,7 +16,7 @@ import {
 } from "@workspace/ui/components/card"
 
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -115,7 +115,7 @@ export default async function EnquiriesPage({
       </section>
 
       {operationalView === "dataEntry" ? (
-        <Card>
+ <SectionCard>
           <CardHeader>
             <CardTitle>Log Enquiry</CardTitle>
             <CardDescription>
@@ -138,11 +138,11 @@ export default async function EnquiriesPage({
               </p>
             )}
           </CardContent>
-        </Card>
+ </SectionCard>
       ) : null}
 
       {operationalView === "masterTables" ? (
-        <Card>
+ <SectionCard>
           <CardHeader>
             <CardTitle>Enquiry Register</CardTitle>
             <BoundedResultNotice
@@ -152,7 +152,7 @@ export default async function EnquiriesPage({
           </CardHeader>
           <CardContent>
             <div className="overflow-hidden rounded-3xl border">
-              <Table>
+ <OperationalTable>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Enq</TableHead>
@@ -213,10 +213,10 @@ export default async function EnquiriesPage({
                     </TableRow>
                   )}
                 </TableBody>
-              </Table>
+ </OperationalTable>
             </div>
           </CardContent>
-        </Card>
+ </SectionCard>
       ) : null}
     </div>
   )

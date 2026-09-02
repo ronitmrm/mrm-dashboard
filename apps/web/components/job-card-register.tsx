@@ -2,8 +2,8 @@
 
 import type { ProductionFloorCode } from "@workspace/db/production-floors"
 import { Button } from "@workspace/ui/components/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@workspace/ui/components/card"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@workspace/ui/components/table"
+import { SectionCard, CardContent, CardHeader, CardTitle } from "@workspace/ui/components/card"
+import { OperationalTable, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@workspace/ui/components/table"
 import { ExternalLink } from "lucide-react"
 import Link from "next/link"
 
@@ -43,7 +43,7 @@ export function JobCardRegister({
   rows: Row[]
 }) {
   return (
-    <Card>
+ <SectionCard>
       <CardHeader className="gap-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -54,7 +54,7 @@ export function JobCardRegister({
       </CardHeader>
       <CardContent>
         <div className="max-h-[70vh] overflow-auto rounded-md border">
-          <Table containerClassName="max-h-none overflow-visible" excelFilters>
+ <OperationalTable containerClassName="max-h-none overflow-visible" excelFilters>
             <TableHeader className="sticky top-0 z-10 bg-background"><TableRow>
               <TableHead data-filterable="true">Job Card</TableHead><TableHead>Part</TableHead><TableHead>Description</TableHead><TableHead>FG PO</TableHead><TableHead className="text-right">Order Qty</TableHead><TableHead>Stage</TableHead><TableHead>Production Progress</TableHead><TableHead>Route</TableHead><TableHead />
             </TableRow></TableHeader>
@@ -70,14 +70,14 @@ export function JobCardRegister({
                 <TableCell>{first(row, ["fgPoNo", "FG PO NO."])}</TableCell>
                 <TableCell className="text-right tabular-nums">{first(row, ["orderPcs", "orderedQty", "ORD. PCS."])}</TableCell>
                 <TableCell>{jobCardStage(row)}</TableCell>
-                <TableCell className="min-w-40"><div className="mb-1 flex justify-between gap-2 text-xs"><span>{progress.toFixed(1)}%</span><span>{new Intl.NumberFormat("en-IN").format(finishedPieces)} finished</span></div><div className="h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-emerald-600" style={{ width: `${progress}%` }} /></div></TableCell>
+ <TableCell className="min-w-40"><div className="mb-1 flex justify-between gap-2 text-xs"><span>{progress.toFixed(1)}%</span><span>{new Intl.NumberFormat("en-IN").format(finishedPieces)} finished</span></div><div className="h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-[var(--color-positive-bg)]" style={{ width: `${progress}%` }} /></div></TableCell>
                 <TableCell>{first(row, ["optionNumber", "selectedOption", "routeStatus"])}</TableCell>
                 <TableCell><Button asChild size="sm" variant="outline"><Link href={href}>Open <ExternalLink /></Link></Button></TableCell>
               </TableRow>
             }) : <TableRow><TableCell colSpan={9} className="py-10 text-center text-muted-foreground">No Job Cards match this search.</TableCell></TableRow>}</TableBody>
-          </Table>
+ </OperationalTable>
         </div>
       </CardContent>
-    </Card>
+ </SectionCard>
   )
 }

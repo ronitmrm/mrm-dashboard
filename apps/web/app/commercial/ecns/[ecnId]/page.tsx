@@ -5,7 +5,7 @@ import { createCommercialRevisionsRepository } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -115,7 +115,7 @@ export default async function EngineeringChangeNotePage({
           <Link href="/commercial/ecns">Back To ECN Register</Link>
         </Button>
       </section>
-      <Card id="ecn-workbench">
+ <SectionCard id="ecn-workbench">
         <CardHeader>
           <CardTitle>ECN Workbench</CardTitle>
           <CardDescription>
@@ -410,7 +410,7 @@ export default async function EngineeringChangeNotePage({
             </p>
           )}
         </CardContent>
-      </Card>
+ </SectionCard>
     </div>
   )
 }

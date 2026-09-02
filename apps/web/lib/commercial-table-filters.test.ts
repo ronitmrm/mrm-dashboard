@@ -58,7 +58,7 @@ describe("Costing module Excel filters", () => {
     expect(sales).not.toContain("Export Sales History")
     expect(sales).not.toContain("Export Follow-Ups")
     expect(sales).not.toContain("Export Sent Quotes")
-    expect(sales.match(/<Table excelFilters>/g)).toHaveLength(3)
+ expect(sales.match(/<OperationalTable excelFilters>/g)).toHaveLength(3)
     for (const label of [
       "Task",
       "Line",
@@ -83,7 +83,7 @@ describe("Costing module Excel filters", () => {
     expect(register).not.toContain('aria-label="Search Drawing History"')
     expect(register).not.toContain('name="q"')
     expect(register).toContain(".listDrawingRevisionsForOrganization")
-    expect(register).toContain("<Table excelFilters>")
+ expect(register).toContain("<OperationalTable excelFilters>")
     for (const label of [
       "Product UID",
       "Part",

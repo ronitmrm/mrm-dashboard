@@ -5,7 +5,7 @@ import { createStoreRepository } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -17,7 +17,7 @@ import {
   NativeSelectOption,
 } from "@workspace/ui/components/native-select"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -89,7 +89,7 @@ export default async function StoreStockPage({
         <h2 className="text-2xl font-semibold tracking-tight">Stock</h2>
       </div>
 
-      <Card>
+ <SectionCard>
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -141,7 +141,7 @@ export default async function StoreStockPage({
             </form>
           ) : null}
 
-          <Table>
+ <OperationalTable>
             <TableHeader>
               <TableRow>
                 {mode !== "view" ? <TableHead>Select</TableHead> : null}
@@ -312,7 +312,7 @@ export default async function StoreStockPage({
                 </TableRow>
               ) : null}
             </TableBody>
-          </Table>
+ </OperationalTable>
 
           {mode === "request" ? (
             <Button className="w-fit" form={actionFormId} type="submit">
@@ -340,7 +340,7 @@ export default async function StoreStockPage({
             .
           </p>
         </CardContent>
-      </Card>
+ </SectionCard>
     </div>
   )
 }

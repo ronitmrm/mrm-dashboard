@@ -4,7 +4,7 @@ import { createCommercialWorkflowRepository } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -16,7 +16,7 @@ import {
   NativeSelectOption,
 } from "@workspace/ui/components/native-select"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -101,7 +101,7 @@ export default async function EnquiryImportReviewPage({
         </p>
       </section>
 
-      <Card>
+ <SectionCard>
         <CardHeader>
           <CardTitle>Classified Rows</CardTitle>
           <CardDescription>
@@ -120,7 +120,7 @@ export default async function EnquiryImportReviewPage({
             />
             <FieldGroup>
               <div className="overflow-hidden rounded-3xl border">
-                <Table>
+ <OperationalTable>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Row</TableHead>
@@ -184,7 +184,7 @@ export default async function EnquiryImportReviewPage({
                       )
                     })}
                   </TableBody>
-                </Table>
+ </OperationalTable>
               </div>
               {review.status === "Pending" ? (
                 <Button className="w-fit" type="submit">
@@ -194,7 +194,7 @@ export default async function EnquiryImportReviewPage({
             </FieldGroup>
           </form>
         </CardContent>
-      </Card>
+ </SectionCard>
     </div>
   )
 }

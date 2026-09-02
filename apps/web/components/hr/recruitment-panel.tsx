@@ -14,10 +14,10 @@ import {
   type RecruitmentTemplateRow,
 } from "@workspace/db"
 import { listRecruitableApprovedPosts } from "@workspace/db/recruitment-domain"
-import { Badge } from "@workspace/ui/components/badge"
+import { StatusBadge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -30,7 +30,7 @@ import {
   NativeSelectOption,
 } from "@workspace/ui/components/native-select"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -125,7 +125,7 @@ function PanelForm({
   title: string
 }) {
   return (
-    <Card>
+ <SectionCard>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
         <CardDescription>{description}</CardDescription>
@@ -141,7 +141,7 @@ function PanelForm({
           </FieldGroup>
         </form>
       </CardContent>
-    </Card>
+ </SectionCard>
   )
 }
 
@@ -186,18 +186,6 @@ function EmptyRow({ columns, label }: { columns: number; label: string }) {
       </TableCell>
     </TableRow>
   )
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const variant =
-    status === "Open" || status === "Vacant" || status === "Occupied"
-      ? "default"
-      : status === "Resigned"
-        ? "destructive"
-        : status === "Appointed"
-          ? "secondary"
-          : "outline"
-  return <Badge variant={variant}>{status}</Badge>
 }
 
 function MastersPanel({
@@ -617,14 +605,14 @@ function EmployeePanel({
         />
       )}
       {showDataEntry && canManageEmployees ? (
-        <Card>
+ <SectionCard>
           <CardHeader>
             <CardTitle>Bulk Employee Assignment</CardTitle>
           </CardHeader>
           <CardContent>
             <EmployeeAssignmentUpload />
           </CardContent>
-        </Card>
+ </SectionCard>
       ) : null}
       {showMasterTables ? (
         <ApprovedPostsTable
@@ -684,13 +672,13 @@ function JobsPanel({
           </Button>
         </PanelForm>
       ) : null}
-      <Card>
+ <SectionCard>
         <CardHeader>
           <CardTitle>Job Posts</CardTitle>
           <CardDescription>{jobs.length} Recruitment Openings</CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
+ <OperationalTable>
             <TableHeader>
               <TableRow>
                 <TableHead>Job</TableHead>
@@ -723,7 +711,7 @@ function JobsPanel({
                     <TableCell>{row.targetDate ?? "—"}</TableCell>
                     <TableCell>{row.applicantCount}</TableCell>
                     <TableCell>
-                      <StatusBadge status={row.status} />
+                      <StatusBadge value={row.status} />
                     </TableCell>
                     <TableCell className="text-right">
                       <Button asChild size="sm" variant="outline">
@@ -736,9 +724,9 @@ function JobsPanel({
                 <EmptyRow columns={8} label="No Job Posts Found." />
               )}
             </TableBody>
-          </Table>
+ </OperationalTable>
         </CardContent>
-      </Card>
+ </SectionCard>
     </>
   )
 }

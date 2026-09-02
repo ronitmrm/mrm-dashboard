@@ -2,7 +2,7 @@ import Link from "next/link"
 import { createStoreRepository } from "@workspace/db"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -11,7 +11,7 @@ import {
 import { Field, FieldGroup, FieldLabel } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -77,7 +77,7 @@ export default async function NewStoreRequestPage({
       </div>
 
       {!data.items.length ? (
-        <Card>
+ <SectionCard>
           <CardHeader>
             <CardTitle>No items selected</CardTitle>
             <CardDescription>
@@ -89,9 +89,9 @@ export default async function NewStoreRequestPage({
               <Link href="/store/stock">Go to Current Stock</Link>
             </Button>
           </CardContent>
-        </Card>
+ </SectionCard>
       ) : (
-        <Card>
+ <SectionCard>
           <CardHeader>
             <CardTitle>Request Details</CardTitle>
             <CardDescription>
@@ -130,7 +130,7 @@ export default async function NewStoreRequestPage({
               </FieldGroup>
 
               <div className="mt-6 overflow-x-auto rounded-md border">
-                <Table>
+ <OperationalTable>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Item Code</TableHead>
@@ -167,7 +167,7 @@ export default async function NewStoreRequestPage({
                       </TableRow>
                     ))}
                   </TableBody>
-                </Table>
+ </OperationalTable>
               </div>
 
               <div className="mt-5 flex flex-wrap gap-3">
@@ -180,7 +180,7 @@ export default async function NewStoreRequestPage({
               </div>
             </form>
           </CardContent>
-        </Card>
+ </SectionCard>
       )}
     </div>
   )

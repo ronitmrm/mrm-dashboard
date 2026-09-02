@@ -5,7 +5,7 @@ import { useState } from "react"
 import type { RecruitmentMasterSnapshot } from "@workspace/db"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -26,7 +26,7 @@ import {
   NativeSelectOption,
 } from "@workspace/ui/components/native-select"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -82,7 +82,7 @@ function MasterTable({
 
   return (
     <>
-      <Card>
+ <SectionCard>
         <CardHeader>
           <CardTitle>{title}</CardTitle>
           <CardDescription>
@@ -102,7 +102,7 @@ function MasterTable({
               Clear All Filters
             </Button>
           </div>
-          <Table>
+ <OperationalTable>
             <TableHeader>
               <TableRow>
                 <TableHead>Code</TableHead>
@@ -172,9 +172,9 @@ function MasterTable({
                 </TableRow>
               ) : null}
             </TableBody>
-          </Table>
+ </OperationalTable>
         </CardContent>
-      </Card>
+ </SectionCard>
       <Dialog
         onOpenChange={(open) => {
           if (!open) setEditingRow(null)

@@ -7,10 +7,10 @@ import {
 } from "@workspace/db"
 import { recruitmentInterviewRound } from "@workspace/db/recruitment-interview-workflow"
 import { Alert, AlertDescription } from "@workspace/ui/components/alert"
-import { Badge } from "@workspace/ui/components/badge"
+import { StatusBadge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -18,7 +18,7 @@ import {
   MetricCard,
 } from "@workspace/ui/components/card"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -40,18 +40,6 @@ import { hrTaskCapabilities } from "@/lib/auth/task-capabilities"
 import { recruitmentInterviewerOptions } from "@/lib/shared-employee-master"
 
 export const dynamic = "force-dynamic"
-
-function StatusBadge({ status }: { status: string }) {
-  const variant =
-    status === "Open" || status === "Approved"
-      ? "default"
-      : status === "Rejected"
-        ? "destructive"
-        : status === "Scheduled" || status === "Interview"
-          ? "secondary"
-          : "outline"
-  return <Badge variant={variant}>{status}</Badge>
-}
 
 function formatInterviewScore(score: number | null) {
   if (score === null) return "—"
@@ -146,7 +134,7 @@ export default async function JobWorkspacePage({
               <h2 className="text-2xl font-semibold tracking-tight">
                 {job.title}
               </h2>
-              <StatusBadge status={job.status} />
+              <StatusBadge value={job.status} />
             </div>
             <p className="text-sm text-muted-foreground">
               {job.jobNumber} · Vacancy {job.vacancyCode} · Approved Post{" "}
@@ -200,7 +188,7 @@ export default async function JobWorkspacePage({
 
       {canWrite && job.status === "Open" ? (
         <section className="grid gap-6 xl:grid-cols-2">
-          <Card>
+ <SectionCard>
             <CardHeader>
               <CardTitle>Schedule Interview</CardTitle>
               <CardDescription>
@@ -211,9 +199,9 @@ export default async function JobWorkspacePage({
             <CardContent>
               <JobInterviewScheduleForm applications={applications} job={job} />
             </CardContent>
-          </Card>
+ </SectionCard>
 
-          <Card>
+ <SectionCard>
             <CardHeader>
               <CardTitle>Record Interview Outcome</CardTitle>
               <CardDescription>
@@ -232,11 +220,11 @@ export default async function JobWorkspacePage({
                 returnJobId={job.id}
               />
             </CardContent>
-          </Card>
+ </SectionCard>
         </section>
       ) : null}
 
-      <Card>
+ <SectionCard>
         <CardHeader>
           <CardTitle>Applicants For This Job</CardTitle>
           <CardDescription>
@@ -246,7 +234,7 @@ export default async function JobWorkspacePage({
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto rounded-2xl border">
-            <Table>
+ <OperationalTable>
               <TableHeader>
                 <TableRow>
                   <TableHead>Candidate</TableHead>
@@ -283,7 +271,7 @@ export default async function JobWorkspacePage({
                         </p>
                       </TableCell>
                       <TableCell>
-                        <StatusBadge status={application.status} />
+                        <StatusBadge value={application.status} />
                       </TableCell>
                       <TableCell>
                         {formatDateTime(application.interviewAt)}
@@ -345,18 +333,18 @@ export default async function JobWorkspacePage({
                   </TableRow>
                 )}
               </TableBody>
-            </Table>
+ </OperationalTable>
           </div>
         </CardContent>
-      </Card>
+ </SectionCard>
 
-      <Card>
+ <SectionCard>
         <CardHeader>
           <CardTitle>Complete Interview History</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto rounded-2xl border">
-            <Table>
+ <OperationalTable>
               <TableHeader>
                 <TableRow>
                   <TableHead>Candidate</TableHead>
@@ -385,7 +373,7 @@ export default async function JobWorkspacePage({
                         {formatDateTime(interview.scheduledAt)}
                       </TableCell>
                       <TableCell>
-                        <StatusBadge status={interview.status} />
+                        <StatusBadge value={interview.status} />
                       </TableCell>
                       <TableCell>{interview.interviewerName ?? "—"}</TableCell>
                       <TableCell>
@@ -423,10 +411,10 @@ export default async function JobWorkspacePage({
                   </TableRow>
                 )}
               </TableBody>
-            </Table>
+ </OperationalTable>
           </div>
         </CardContent>
-      </Card>
+ </SectionCard>
     </div>
   )
 }

@@ -43,11 +43,11 @@ import {
   Wrench,
 } from "lucide-react"
 
-import { Badge } from "@workspace/ui/components/badge"
+import { Badge, StatusBadge } from "@workspace/ui/components/badge"
 import type { MaintenanceRequestRow } from "@workspace/db"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+  SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -80,7 +80,7 @@ import {
 } from "@workspace/ui/components/sidebar"
 import { Skeleton } from "@workspace/ui/components/skeleton"
 import {
-  Table,
+  OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -91,7 +91,7 @@ import {
   DashboardErrorState,
   DashboardGrid,
   DashboardLoadingSkeleton,
-  DashboardPageHeader,
+  PageHeader,
   DashboardSection,
   DataTableCard,
 } from "@/components/dashboard/dashboard-components"
@@ -1273,7 +1273,7 @@ function HourlyQualityCheckShell({
           <ProcessingNotice message="Saving hourly quality check..." />
         ) : null}
         <fieldset aria-busy={isSaving} className="contents" disabled={isSaving}>
-          <Card>
+          <SectionCard>
             <CardContent className="grid gap-3 pt-4 md:grid-cols-5">
               <LabeledInput
                 label="Date"
@@ -1308,9 +1308,9 @@ function HourlyQualityCheckShell({
                 <Input value={performerDisplay || "Loading user..."} readOnly />
               </label>
             </CardContent>
-          </Card>
+          </SectionCard>
           {selectedRow ? (
-            <Card>
+            <SectionCard>
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">
                   {displayValue(selectedRow.machine)} Running Details
@@ -1323,9 +1323,9 @@ function HourlyQualityCheckShell({
                 <TileField label="Setup No." value={selectedRow.setupNo} />
                 <TileField label="Setup Name" value={selectedRow.setupName} />
               </CardContent>
-            </Card>
+            </SectionCard>
           ) : null}
-          <Card>
+          <SectionCard>
             <CardHeader>
               <CardTitle>Inspection Readings</CardTitle>
               <CardDescription>
@@ -1341,7 +1341,7 @@ function HourlyQualityCheckShell({
                 <Skeleton className="h-24 w-full" />
               ) : selectedRow && parameters.length ? (
                 <div className="overflow-auto rounded-lg border">
-                  <Table>
+                  <OperationalTable>
                     <TableHeader>
                       <TableRow>
                         <TableHead className="min-w-24">Code</TableHead>
@@ -1372,7 +1372,7 @@ function HourlyQualityCheckShell({
                             key={code || qualityParameterName(parameter)}
                             className={
                               resultTone === "bad"
-                                ? "bg-red-50/70 dark:bg-red-950/20"
+                                ? "bg-[var(--color-danger-bg)]"
                                 : ""
                             }
                           >
@@ -1446,7 +1446,7 @@ function HourlyQualityCheckShell({
                         )
                       })}
                     </TableBody>
-                  </Table>
+                  </OperationalTable>
                 </div>
               ) : selectedRow ? (
                 <EmptyRowsMessage>
@@ -1477,7 +1477,7 @@ function HourlyQualityCheckShell({
                 </Button>
               </div>
             </CardContent>
-          </Card>
+          </SectionCard>
         </fieldset>
       </div>
     </section>
@@ -1700,7 +1700,7 @@ function SetupChecklistShell({
         <fieldset aria-busy={isSaving} className="contents" disabled={isSaving}>
           {sessionId ? (
             <>
-              <Card>
+              <SectionCard>
                 <CardHeader>
                   <CardTitle className="text-base">
                     {phase === "end"
@@ -1750,7 +1750,7 @@ function SetupChecklistShell({
                     />
                   </div>
                 </CardContent>
-              </Card>
+              </SectionCard>
               {checklistPageData === undefined && !checklistItems.length ? (
                 <Skeleton className="h-56 w-full" />
               ) : (
@@ -1790,14 +1790,14 @@ function SetupChecklistShell({
               </div>
             </>
           ) : (
-            <Card>
+            <SectionCard>
               <CardContent className="pt-6">
                 <EmptyRowsMessage>
                   Checklist Setup Was Not Found. Open This Page From A Machinist
                   Task Row.
                 </EmptyRowsMessage>
               </CardContent>
-            </Card>
+            </SectionCard>
           )}
         </fieldset>
       </div>
@@ -2979,7 +2979,7 @@ function ProductionDashboardPanel({ payload }: { payload: DashboardPayload }) {
 
   return (
     <section className="grid gap-6">
-      <DashboardPageHeader
+      <PageHeader
         description={
           <>
             {formatNumber(rmReceived)} Work Orders Have Received Raw Material.
@@ -3006,14 +3006,14 @@ function ProductionDashboardPanel({ payload }: { payload: DashboardPayload }) {
             description="Awaiting dispatch completion"
             icon={<Activity aria-hidden="true" />}
             label="Pending Dispatch"
-            tone={pending ? "warning" : "success"}
+            tone={pending ? "warning" : "positive"}
             value={formatNumber(pending)}
           />
           <MetricCard
             description="Completed dispatches"
             icon={<CheckCircle2 aria-hidden="true" />}
             label="Dispatched"
-            tone="success"
+            tone="positive"
             value={formatNumber(dispatched)}
           />
         </DashboardGrid>
@@ -3039,7 +3039,7 @@ function ProductionDashboardPanel({ payload }: { payload: DashboardPayload }) {
               </div>
             ) : null}
             <div className="overflow-x-auto rounded-lg border">
-              <Table excelFilters>
+              <OperationalTable excelFilters>
                 <TableHeader className="sticky top-0 z-10 bg-background">
                   <TableRow>
                     <TableHead className="min-w-28">JC No.</TableHead>
@@ -3121,7 +3121,7 @@ function ProductionDashboardPanel({ payload }: { payload: DashboardPayload }) {
                     </TableRow>
                   )}
                 </TableBody>
-              </Table>
+              </OperationalTable>
             </div>
           </div>
         </DataTableCard>
@@ -4817,7 +4817,7 @@ function PlannerSessionSettlementNotice({
     )
   const actionLabel = mode === "close" ? "Close session" : "Start downtime"
   return (
-    <div className="grid gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
+    <div className="grid gap-2 rounded-md border border-[var(--color-warning)]/30 bg-[var(--color-warning-bg)] p-3 text-[var(--color-warning-text)]">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <div className="text-sm font-medium">
@@ -4853,7 +4853,7 @@ function PlannerSessionSettlementNotice({
           sessions.map((session) => (
             <div
               key={str(session.id)}
-              className="flex flex-wrap items-center justify-between gap-2 rounded border border-amber-200 bg-background px-2 py-1.5 text-foreground dark:border-amber-900"
+              className="flex flex-wrap items-center justify-between gap-2 rounded border border-[var(--color-warning)]/30 bg-background px-2 py-1.5 text-foreground"
             >
               <span>
                 {displayValue(session.sessionReference || session.id)} ·{" "}
@@ -6105,7 +6105,7 @@ function RouteChangePlannerForm({
         </Field>
       </div>
       <div className="overflow-x-auto rounded-md border">
-        <Table>
+        <OperationalTable>
           <TableHeader>
             <TableRow>
               <TableHead>Setup</TableHead>
@@ -6185,7 +6185,7 @@ function RouteChangePlannerForm({
               </TableRow>
             )}
           </TableBody>
-        </Table>
+        </OperationalTable>
       </div>
       <Button
         className="w-fit"
@@ -6451,7 +6451,7 @@ function JobCardsPanel({
         actionNeededCount={asArray(productionControl.allWorkOrderGaps).length}
         onOpenMasterReadiness={openMasterReadiness}
       />
-      <Card>
+      <SectionCard>
         <CardHeader>
           <CardTitle>Job Card Actions</CardTitle>
         </CardHeader>
@@ -6467,7 +6467,7 @@ function JobCardsPanel({
             onSubmit={(body) => submitAction("dispatch-approval", body)}
           />
         </CardContent>
-      </Card>
+      </SectionCard>
     </section>
   )
 }
@@ -6766,13 +6766,13 @@ function ShopFloorStatusPanel({
   }
 
   return (
-    <Card>
+    <SectionCard>
       <CardHeader>
         <CardTitle>Shop Floor Status</CardTitle>
       </CardHeader>
       <CardContent className="grid gap-4">
         <TrackingSummary
-          tones={["brand", "success", "info", "warning"]}
+          tones={["brand", "positive", "information", "warning"]}
           items={[
             ["Machines", formatNumber(floorRows.length)],
             ["Current running", formatNumber(currentCount)],
@@ -6826,7 +6826,7 @@ function ShopFloorStatusPanel({
         />
         {floorRows.length ? (
           <div className="max-h-[72vh] overflow-auto rounded-lg border">
-            <Table containerClassName="max-h-none overflow-visible">
+            <OperationalTable containerClassName="max-h-none overflow-visible">
               <TableHeader className="sticky top-0 z-10 bg-background">
                 <TableRow>
                   <TableHead className="min-w-32">Machine No.</TableHead>
@@ -6844,7 +6844,7 @@ function ShopFloorStatusPanel({
                     key={row.machine}
                     className={
                       !row.current && row.next
-                        ? "bg-amber-50/45 dark:bg-amber-950/15"
+                        ? "bg-[var(--color-warning-bg)]"
                         : ""
                     }
                   >
@@ -6904,7 +6904,7 @@ function ShopFloorStatusPanel({
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+            </OperationalTable>
           </div>
         ) : (
           <EmptyRowsMessage>
@@ -6912,7 +6912,7 @@ function ShopFloorStatusPanel({
           </EmptyRowsMessage>
         )}
       </CardContent>
-    </Card>
+    </SectionCard>
   )
 }
 
@@ -7023,7 +7023,7 @@ function RoleTaskPanel({
 
   return (
     <section className="grid gap-4">
-      <Card>
+      <SectionCard>
         <CardHeader>
           <CardTitle>{copy.title}</CardTitle>
         </CardHeader>
@@ -7081,7 +7081,7 @@ function RoleTaskPanel({
             Open Production Sessions
           </Button>
           <TrackingSummary
-            tones={["warning", "brand", "info"]}
+            tones={["warning", "brand", "information"]}
             items={[
               ["Pending", formatNumber(roleRows.length)],
               [
@@ -7104,7 +7104,7 @@ function RoleTaskPanel({
           />
           {roleRows.length ? (
             <div className="max-h-[72vh] overflow-auto rounded-lg border">
-              <Table containerClassName="max-h-none overflow-visible">
+              <OperationalTable containerClassName="max-h-none overflow-visible">
                 <TableHeader className="sticky top-0 z-10 bg-background">
                   <TableRow>
                     <TableHead className="min-w-32">Machine No.</TableHead>
@@ -7182,13 +7182,13 @@ function RoleTaskPanel({
                     </TableRow>
                   ))}
                 </TableBody>
-              </Table>
+              </OperationalTable>
             </div>
           ) : (
             <EmptyRowsMessage>{copy.empty}</EmptyRowsMessage>
           )}
         </CardContent>
-      </Card>
+      </SectionCard>
       {enableFirstPieceInspection ? (
         <>
           <DataRowsCard
@@ -7320,7 +7320,7 @@ function FirstPieceInspectionPanel({
       </div>
 
       {activeView === "tasks" ? (
-        <Card
+        <SectionCard
           aria-labelledby="first-piece-task-list-title"
           id="first-piece-task-list"
           role="tabpanel"
@@ -7337,7 +7337,7 @@ function FirstPieceInspectionPanel({
           <CardContent className="grid gap-4">
             {tasks.length ? (
               <div className="overflow-x-auto rounded-md border">
-                <Table>
+                <OperationalTable>
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-14"></TableHead>
@@ -7424,7 +7424,7 @@ function FirstPieceInspectionPanel({
                       )
                     })}
                   </TableBody>
-                </Table>
+                </OperationalTable>
               </div>
             ) : (
               <EmptyRowsMessage>
@@ -7433,7 +7433,7 @@ function FirstPieceInspectionPanel({
               </EmptyRowsMessage>
             )}
           </CardContent>
-        </Card>
+        </SectionCard>
       ) : (
         <div
           aria-label="Saved First Piece Inspection Reports"
@@ -8815,7 +8815,7 @@ function ProductionCardRoleEntryForm({
         entryKind === "rejection" ||
         entryKind === "close") &&
       selectedRow ? (
-        <div className="text-xs text-amber-700 dark:text-amber-300">
+        <div className="text-xs text-[var(--color-warning-text)]">
           Start the production session before recording this action.
         </div>
       ) : null}
@@ -8843,7 +8843,7 @@ function ProductionCardRoleEntryForm({
           </div>
         </div>
         <div className="max-h-64 overflow-auto rounded-md border bg-background">
-          <Table>
+          <OperationalTable>
             <TableHeader className="sticky top-0 bg-background">
               <TableRow>
                 <TableHead>Machine</TableHead>
@@ -8893,7 +8893,7 @@ function ProductionCardRoleEntryForm({
                 )
               })}
             </TableBody>
-          </Table>
+          </OperationalTable>
         </div>
       </div>
       <div className="grid gap-1">
@@ -8908,7 +8908,7 @@ function ProductionCardRoleEntryForm({
         </div>
         {sessionRows.length ? (
           <div className="max-h-72 overflow-auto rounded-md border bg-background">
-            <Table>
+            <OperationalTable>
               <TableHeader className="sticky top-0 bg-background">
                 <TableRow>
                   <TableHead>Session</TableHead>
@@ -8991,7 +8991,7 @@ function ProductionCardRoleEntryForm({
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+            </OperationalTable>
           </div>
         ) : (
           <div className="rounded-md border border-dashed bg-background p-4 text-center text-xs text-muted-foreground">
@@ -10093,11 +10093,11 @@ function SetupChecklistForm({
   const defaults = setupChecklistMasterDefaults()
   if (phase === "start" && !items.length) {
     return (
-      <div className="grid gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950/20">
-        <div className="font-medium text-amber-900 dark:text-amber-100">
+      <div className="grid gap-2 rounded-md border border-[var(--color-warning)]/30 bg-[var(--color-warning-bg)] p-3 text-sm">
+        <div className="font-medium text-[var(--color-warning-text)]">
           Setup Checklist Missing
         </div>
-        <div className="text-amber-800 dark:text-amber-200">
+        <div className="text-[var(--color-warning-text)]">
           Create An Active Setup Checklist Before Pre Setting Can Start.
         </div>
         {onAddMaster ? (
@@ -10116,7 +10116,7 @@ function SetupChecklistForm({
   }
   if (phase === "end" && !session) {
     return (
-      <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200">
+      <div className="rounded-md border border-[var(--color-warning)]/30 bg-[var(--color-warning-bg)] p-3 text-sm text-[var(--color-warning-text)]">
         Pre Setting Checklist Session Is Missing. Start Pre Setting For This
         Setup Before Saving Setting Done.
       </div>
@@ -10142,7 +10142,7 @@ function SetupChecklistForm({
         />
       </div>
       <div className="overflow-auto">
-        <Table>
+        <OperationalTable>
           <TableHeader>
             <TableRow>
               <TableHead className="min-w-12">Seq</TableHead>
@@ -10214,7 +10214,7 @@ function SetupChecklistForm({
               )
             })}
           </TableBody>
-        </Table>
+        </OperationalTable>
       </div>
     </div>
   )
@@ -10241,11 +10241,11 @@ function FirstPieceInspectionForm({
   const defaults = firstPieceMasterDefaults(row)
   if (!masters.length) {
     return (
-      <div className="grid gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950/20">
-        <div className="font-medium text-amber-900 dark:text-amber-100">
+      <div className="grid gap-2 rounded-md border border-[var(--color-warning)]/30 bg-[var(--color-warning-bg)] p-3 text-sm">
+        <div className="font-medium text-[var(--color-warning-text)]">
           First Piece Inspection Master Missing
         </div>
-        <div className="text-amber-800 dark:text-amber-200">
+        <div className="text-[var(--color-warning-text)]">
           Add Dimensions For This Part, Option, And Setup Before Quality
           Approval.
         </div>
@@ -10275,7 +10275,7 @@ function FirstPieceInspectionForm({
             Task Assigned: {displayValue(row.shopFloorUpdatedAt)}
           </div>
           {showDraftSaved ? (
-            <div className="mt-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+            <div className="mt-1 text-xs font-medium text-[var(--color-positive-text)]">
               Unfinished Readings Are Saved Automatically.
             </div>
           ) : null}
@@ -10335,7 +10335,7 @@ function FirstPieceInspectionForm({
         ))}
       </div>
       <div className="hidden overflow-auto @5xl/main:block">
-        <Table>
+        <OperationalTable>
           <TableHeader>
             <TableRow>
               <TableHead className="min-w-40">Dimension</TableHead>
@@ -10383,7 +10383,7 @@ function FirstPieceInspectionForm({
               </TableRow>
             ))}
           </TableBody>
-        </Table>
+        </OperationalTable>
       </div>
     </div>
   )
@@ -10401,7 +10401,7 @@ function FirstPieceReadingControl({
   const result = qualityReadingResult(master, value)
   return (
     <div
-      className={`grid gap-1 rounded-md ${qualityResultTone(result) === "bad" ? "bg-red-50/70 dark:bg-red-950/20" : ""}`}
+      className={`grid gap-1 rounded-md ${qualityResultTone(result) === "bad" ? "bg-[var(--color-danger-bg)]" : ""}`}
     >
       {qualityParameterInputType(master) === "pass_fail" ? (
         <SearchableSelect
@@ -10447,7 +10447,7 @@ function ShopFloorProgress({ activeIndex }: { activeIndex: number }) {
             variant="outline"
             className={
               done
-                ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                ? "border-[var(--color-positive)]/30 bg-[var(--color-positive-bg)] text-[var(--color-positive-text)]"
                 : "text-muted-foreground"
             }
           >
@@ -10517,7 +10517,7 @@ function WorkOrderGapTable({
 }) {
   const [visibleRowCount, setVisibleRowCount] = useState(rows.length)
   return (
-    <Card>
+    <SectionCard>
       <CardHeader className="flex-row items-center justify-between gap-3">
         <CardTitle>{title}</CardTitle>
         <Badge variant="outline">
@@ -10526,7 +10526,7 @@ function WorkOrderGapTable({
       </CardHeader>
       <CardContent className="grid gap-4">
         <div className="overflow-hidden rounded-md border">
-          <Table onFilteredRowCountChange={setVisibleRowCount}>
+          <OperationalTable onFilteredRowCountChange={setVisibleRowCount}>
             <TableHeader>
               <TableRow>
                 <TableHead>Job Card</TableHead>
@@ -10561,10 +10561,10 @@ function WorkOrderGapTable({
                 </TableRow>
               )}
             </TableBody>
-          </Table>
+          </OperationalTable>
         </div>
       </CardContent>
-    </Card>
+    </SectionCard>
   )
 }
 
@@ -10914,7 +10914,7 @@ function DataEntryPanel({
           />
         )
       ) : null}
-      <Card>
+      <SectionCard>
         <CardHeader>
           <CardTitle>{title}</CardTitle>
         </CardHeader>
@@ -10994,7 +10994,7 @@ function DataEntryPanel({
             </div>
           </CardContent>
         </fieldset>
-      </Card>
+      </SectionCard>
       {selectedSpec?.entryType === "store_masters" && storeMasterData ? (
         <StoreMasterWorkspace
           canManage={canManageStoreMasters}
@@ -11091,14 +11091,14 @@ function OperationalTablesPanel({
 
   if (!selectedSpec) {
     return (
-      <Card>
+      <SectionCard>
         <CardHeader>
           <CardTitle>Master Tables</CardTitle>
           <CardDescription>
             No Operational Entry Definitions Are Configured.
           </CardDescription>
         </CardHeader>
-      </Card>
+      </SectionCard>
     )
   }
 
@@ -11118,7 +11118,7 @@ function OperationalTablesPanel({
         }
         masterTablesHref={operationalTabs.masterTablesHref}
       />
-      <Card>
+      <SectionCard>
         <CardHeader>
           <CardTitle>Entry Tables</CardTitle>
         </CardHeader>
@@ -11207,9 +11207,9 @@ function OperationalTablesPanel({
             </Button>
           </div>
         </CardContent>
-      </Card>
+      </SectionCard>
 
-      <Card>
+      <SectionCard>
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -11228,7 +11228,9 @@ function OperationalTablesPanel({
             </div>
           ) : (
             <div className="overflow-x-auto rounded-md border">
-              <Table key={`${selectedSpec.entryType}-${tableResetKey}`}>
+              <OperationalTable
+                key={`${selectedSpec.entryType}-${tableResetKey}`}
+              >
                 <TableHeader>
                   <TableRow>
                     {columns.map((column) => (
@@ -11261,11 +11263,11 @@ function OperationalTablesPanel({
                     </TableRow>
                   ))}
                 </TableBody>
-              </Table>
+              </OperationalTable>
             </div>
           )}
         </CardContent>
-      </Card>
+      </SectionCard>
     </section>
   )
 }
@@ -11361,14 +11363,14 @@ function MasterTablesPanel({
 
   if (!selectedSpec) {
     return (
-      <Card>
+      <SectionCard>
         <CardHeader>
           <CardTitle>Master Tables</CardTitle>
           <CardDescription>
             No Master Definitions Are Configured.
           </CardDescription>
         </CardHeader>
-      </Card>
+      </SectionCard>
     )
   }
 
@@ -11390,7 +11392,7 @@ function MasterTablesPanel({
           mode="table"
         />
       ) : (
-        <Card>
+        <SectionCard>
           <CardHeader>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -11409,7 +11411,7 @@ function MasterTablesPanel({
               </div>
             ) : (
               <div className="overflow-x-auto rounded-md border">
-                <Table key={selectedSpec.entryType}>
+                <OperationalTable key={selectedSpec.entryType}>
                   <TableHeader>
                     <TableRow>
                       {columns.map((column) => (
@@ -11483,20 +11485,20 @@ function MasterTablesPanel({
                       </TableRow>
                     ))}
                   </TableBody>
-                </Table>
+                </OperationalTable>
               </div>
             )}
           </CardContent>
-        </Card>
+        </SectionCard>
       )}
       {selectedSpec.entryType !== "store_masters" && summaryRows.length ? (
-        <Card>
+        <SectionCard>
           <CardHeader>
             <CardTitle>{selectedSpec.title} Summary</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto rounded-md border">
-              <Table>
+              <OperationalTable>
                 <TableHeader>
                   <TableRow>
                     {tableColumns(summaryRows).map((column) => (
@@ -11519,10 +11521,10 @@ function MasterTablesPanel({
                     </TableRow>
                   ))}
                 </TableBody>
-              </Table>
+              </OperationalTable>
             </div>
           </CardContent>
-        </Card>
+        </SectionCard>
       ) : null}
       <Dialog
         open={canDeleteMasters && Boolean(deleteRow)}
@@ -12048,7 +12050,7 @@ function MachineMasterPanel({
     return (
       <section className="grid gap-4">
         <TrackingSummary
-          tones={["brand", "info", "accent", "success"]}
+          tones={["brand", "information", "accent", "positive"]}
           items={[
             ["Machines", formatNumber(machineRows.length)],
             ["Schedule master", formatNumber(maintenanceMasterRows.length)],
@@ -12056,7 +12058,7 @@ function MachineMasterPanel({
             ["Records", formatNumber(completionRows.length)],
           ]}
         />
-        <Card>
+        <SectionCard>
           <CardHeader>
             <CardTitle>All Machines</CardTitle>
           </CardHeader>
@@ -12078,7 +12080,7 @@ function MachineMasterPanel({
               </Button>
             </div>
             <div className="max-h-[72vh] overflow-auto rounded-lg border">
-              <Table containerClassName="max-h-none overflow-visible">
+              <OperationalTable containerClassName="max-h-none overflow-visible">
                 <TableHeader className="sticky top-0 z-10 bg-background">
                   <TableRow>
                     <TableHead>Machine No.</TableHead>
@@ -12131,10 +12133,10 @@ function MachineMasterPanel({
                     </TableRow>
                   )}
                 </TableBody>
-              </Table>
+              </OperationalTable>
             </div>
           </CardContent>
-        </Card>
+        </SectionCard>
       </section>
     )
   }
@@ -12142,7 +12144,7 @@ function MachineMasterPanel({
   if (!selectedMachine) {
     return (
       <section className="grid gap-4">
-        <Card>
+        <SectionCard>
           <CardHeader>
             <CardTitle>Machine Not Found</CardTitle>
             <CardDescription>
@@ -12154,7 +12156,7 @@ function MachineMasterPanel({
               Back To Machines
             </Button>
           </CardContent>
-        </Card>
+        </SectionCard>
       </section>
     )
   }
@@ -12172,7 +12174,7 @@ function MachineMasterPanel({
         </Button>
       </div>
       <TrackingSummary
-        tones={["accent", "success", "info", "brand"]}
+        tones={["accent", "positive", "information", "brand"]}
         items={[
           ["Schedules", formatNumber(machineSchedules.length)],
           ["Records", formatNumber(machineHistory.length)],
@@ -12180,7 +12182,7 @@ function MachineMasterPanel({
           ["Schedule master", formatNumber(maintenanceMasterRows.length)],
         ]}
       />
-      <Card>
+      <SectionCard>
         <CardHeader>
           <CardTitle>{displayValue(selectedMachine.machineNo)}</CardTitle>
         </CardHeader>
@@ -12219,11 +12221,11 @@ function MachineMasterPanel({
             />
           </div>
         </CardContent>
-      </Card>
+      </SectionCard>
       <MachineStoreAssets
         machineNumber={displayValue(selectedMachine.machineNo)}
       />
-      <Card>
+      <SectionCard>
         <CardHeader className="flex flex-row items-start justify-between gap-3">
           <div>
             <CardTitle>Assigned Maintenance Schedules</CardTitle>
@@ -12249,7 +12251,7 @@ function MachineMasterPanel({
           {isScheduleFormOpen ? (
             <div className="grid gap-4 rounded-lg border p-3">
               {!maintenanceMasterRows.length ? (
-                <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200">
+                <div className="flex flex-wrap items-center gap-2 rounded-md border border-[var(--color-warning)]/30 bg-[var(--color-warning-bg)] p-3 text-sm text-[var(--color-warning-text)]">
                   <span>No Maintenance Schedule Master Saved Yet.</span>
                   <Button
                     type="button"
@@ -12262,7 +12264,7 @@ function MachineMasterPanel({
                 </div>
               ) : null}
               {!checklistOptions.length ? (
-                <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200">
+                <div className="flex flex-wrap items-center gap-2 rounded-md border border-[var(--color-warning)]/30 bg-[var(--color-warning-bg)] p-3 text-sm text-[var(--color-warning-text)]">
                   <span>No Maintenance Checklist Saved Yet.</span>
                   <Button
                     type="button"
@@ -12380,7 +12382,7 @@ function MachineMasterPanel({
           ) : null}
           {machineSchedules.length ? (
             <div className="overflow-auto rounded-lg border">
-              <Table
+              <OperationalTable
                 onFilteredRowCountChange={(visible) =>
                   setVisibleScheduleCount(visible)
                 }
@@ -12424,7 +12426,7 @@ function MachineMasterPanel({
                     </TableRow>
                   )}
                 </TableBody>
-              </Table>
+              </OperationalTable>
             </div>
           ) : (
             <EmptyRowsMessage>
@@ -12432,8 +12434,8 @@ function MachineMasterPanel({
             </EmptyRowsMessage>
           )}
         </CardContent>
-      </Card>
-      <Card>
+      </SectionCard>
+      <SectionCard>
         <CardHeader>
           <CardTitle>Maintenance History</CardTitle>
         </CardHeader>
@@ -12487,7 +12489,7 @@ function MachineMasterPanel({
           </div>
           {filteredHistory.length ? (
             <div className="overflow-auto rounded-lg border">
-              <Table>
+              <OperationalTable>
                 <TableHeader className="sticky top-0 z-10 bg-background">
                   <TableRow>
                     <TableHead>Date</TableHead>
@@ -12544,7 +12546,7 @@ function MachineMasterPanel({
                     )
                   })}
                 </TableBody>
-              </Table>
+              </OperationalTable>
             </div>
           ) : (
             <EmptyRowsMessage>
@@ -12555,7 +12557,7 @@ function MachineMasterPanel({
             <MaintenanceReportDetail row={selectedReport} />
           ) : null}
         </CardContent>
-      </Card>
+      </SectionCard>
     </section>
   )
 }
@@ -12760,7 +12762,7 @@ function MaintenancePanel({
   return (
     <section className="grid gap-4">
       <TrackingSummary
-        tones={["brand", "success", "warning", "info", "error"]}
+        tones={["brand", "positive", "warning", "information", "danger"]}
         items={[
           ["Machines", formatNumber(machineRows.length)],
           ["Saved schedules", formatNumber(scheduleRows.length)],
@@ -12769,14 +12771,16 @@ function MaintenancePanel({
           ["Breakdowns", formatNumber(breakdownRows.length)],
         ]}
       />
-      <Card className={dueNowRows.length ? "border-amber-300/80" : ""}>
+      <SectionCard
+        className={dueNowRows.length ? "border-[var(--color-warning)]/30" : ""}
+      >
         <CardHeader>
           <CardTitle>Maintenance Pending Tasks</CardTitle>
         </CardHeader>
         <CardContent>
           {workRows.length ? (
             <div className="overflow-auto rounded-lg border">
-              <Table>
+              <OperationalTable>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Work Type</TableHead>
@@ -12912,7 +12916,7 @@ function MaintenancePanel({
                     )
                   })}
                 </TableBody>
-              </Table>
+              </OperationalTable>
             </div>
           ) : (
             <EmptyRowsMessage>
@@ -12921,8 +12925,8 @@ function MaintenancePanel({
             </EmptyRowsMessage>
           )}
         </CardContent>
-      </Card>
-      <Card>
+      </SectionCard>
+      <SectionCard>
         <CardHeader>
           <CardTitle>Breakdown Maintenance Entry</CardTitle>
         </CardHeader>
@@ -13003,7 +13007,7 @@ function MaintenancePanel({
             </Button>
           </form>
         </CardContent>
-      </Card>
+      </SectionCard>
     </section>
   )
 }
@@ -13043,7 +13047,7 @@ function MaintenanceReportDetail({ row }: { row: DashboardPayload }) {
       ) : null}
       {checklistSteps.length ? (
         <div className="overflow-auto rounded-md border bg-background">
-          <Table>
+          <OperationalTable>
             <TableHeader>
               <TableRow>
                 <TableHead>Step</TableHead>
@@ -13064,7 +13068,7 @@ function MaintenanceReportDetail({ row }: { row: DashboardPayload }) {
                 </TableRow>
               ))}
             </TableBody>
-          </Table>
+          </OperationalTable>
         </div>
       ) : null}
     </div>
@@ -13149,14 +13153,14 @@ function PlanningHolidayPanel({
   return (
     <section className="grid gap-4">
       <TrackingSummary
-        tones={["accent", "brand", "info"]}
+        tones={["accent", "brand", "information"]}
         items={[
           ["Weekly shutdown", displayValue(calendar.weeklyHoliday || "Friday")],
           ["Manual holidays", formatNumber(holidayRows.length)],
           ["Next saved date", nextPlanningHolidayLabel(holidayRows)],
         ]}
       />
-      <Card>
+      <SectionCard>
         <CardHeader>
           <CardTitle>Plan A Holiday</CardTitle>
           <CardDescription>
@@ -13215,15 +13219,15 @@ function PlanningHolidayPanel({
             </form>
           </CardContent>
         </fieldset>
-      </Card>
-      <Card>
+      </SectionCard>
+      <SectionCard>
         <CardHeader>
           <CardTitle>Saved Planning Holidays</CardTitle>
         </CardHeader>
         <CardContent>
           {holidayRows.length ? (
             <div className="overflow-auto rounded-md border">
-              <Table>
+              <OperationalTable>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Date</TableHead>
@@ -13244,7 +13248,7 @@ function PlanningHolidayPanel({
                     </TableRow>
                   ))}
                 </TableBody>
-              </Table>
+              </OperationalTable>
             </div>
           ) : (
             <EmptyRowsMessage>
@@ -13252,7 +13256,7 @@ function PlanningHolidayPanel({
             </EmptyRowsMessage>
           )}
         </CardContent>
-      </Card>
+      </SectionCard>
     </section>
   )
 }
@@ -13377,7 +13381,7 @@ function DataEntryForm({
     )
   }
   return (
-    <Card>
+    <SectionCard>
       <CardHeader>
         <CardTitle>{spec.title}</CardTitle>
       </CardHeader>
@@ -13404,7 +13408,7 @@ function DataEntryForm({
           }}
         />
       </CardContent>
-    </Card>
+    </SectionCard>
   )
 }
 
@@ -13460,7 +13464,7 @@ function PlanningMasterRelationForm({
   }
 
   return (
-    <Card>
+    <SectionCard>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
         <CardDescription>
@@ -13557,7 +13561,7 @@ function PlanningMasterRelationForm({
           </fieldset>
         </form>
       </CardContent>
-    </Card>
+    </SectionCard>
   )
 }
 
@@ -13814,7 +13818,7 @@ function QualityParameterMasterForm({
   }
 
   return (
-    <Card>
+    <SectionCard>
       <CardHeader>
         <CardTitle>{spec.title}</CardTitle>
       </CardHeader>
@@ -13901,7 +13905,7 @@ function QualityParameterMasterForm({
             </Field>
           </div>
           <div className="overflow-auto rounded-lg border">
-            <Table>
+            <OperationalTable>
               <TableHeader>
                 <TableRow>
                   <TableHead className="min-w-20">Seq</TableHead>
@@ -14051,7 +14055,7 @@ function QualityParameterMasterForm({
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+            </OperationalTable>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <Button type="button" variant="outline" onClick={addDraft}>
@@ -14074,7 +14078,7 @@ function QualityParameterMasterForm({
           </div>
         </CardContent>
       </fieldset>
-    </Card>
+    </SectionCard>
   )
 }
 function MaintenanceMasterForm({
@@ -14192,7 +14196,7 @@ function MaintenanceMasterForm({
   const selectedRemark = displayValue(selectedMaster?.remark ?? defaults.remark)
 
   return (
-    <Card>
+    <SectionCard>
       <CardHeader>
         <CardTitle>{spec.title}</CardTitle>
       </CardHeader>
@@ -14324,7 +14328,7 @@ function MaintenanceMasterForm({
           </Button>
         </form>
       </CardContent>
-    </Card>
+    </SectionCard>
   )
 }
 function MaintenanceChecklistMasterForm({
@@ -14538,7 +14542,7 @@ function MaintenanceChecklistMasterForm({
   }
 
   return (
-    <Card>
+    <SectionCard>
       <CardHeader>
         <CardTitle>{spec.title}</CardTitle>
       </CardHeader>
@@ -14602,7 +14606,7 @@ function MaintenanceChecklistMasterForm({
             </Field>
           </div>
           <div className="overflow-auto rounded-lg border">
-            <Table>
+            <OperationalTable>
               <TableHeader>
                 <TableRow>
                   <TableHead className="min-w-20">Step No.</TableHead>
@@ -14688,7 +14692,7 @@ function MaintenanceChecklistMasterForm({
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+            </OperationalTable>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <Button type="button" variant="outline" onClick={addDraft}>
@@ -14711,7 +14715,7 @@ function MaintenanceChecklistMasterForm({
           </div>
         </CardContent>
       </fieldset>
-    </Card>
+    </SectionCard>
   )
 }
 
@@ -14912,7 +14916,7 @@ function SetupChecklistMasterForm({
   }
 
   return (
-    <Card>
+    <SectionCard>
       <CardHeader>
         <CardTitle>{spec.title}</CardTitle>
       </CardHeader>
@@ -14981,7 +14985,7 @@ function SetupChecklistMasterForm({
             </Field>
           </div>
           <div className="overflow-auto rounded-lg border">
-            <Table>
+            <OperationalTable>
               <TableHeader>
                 <TableRow>
                   <TableHead className="min-w-20">Step</TableHead>
@@ -15106,7 +15110,7 @@ function SetupChecklistMasterForm({
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+            </OperationalTable>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <Button
@@ -15138,7 +15142,7 @@ function SetupChecklistMasterForm({
           </div>
         </CardContent>
       </fieldset>
-    </Card>
+    </SectionCard>
   )
 }
 function PlanningControlPanel({
@@ -15198,7 +15202,9 @@ function PlannerWorkflowExceptionPanel({
   }
 
   return (
-    <Card className={rows.length ? "border-amber-300/80" : ""}>
+    <SectionCard
+      className={rows.length ? "border-[var(--color-warning)]/30" : ""}
+    >
       <CardHeader>
         <CardTitle>Workflow Exceptions</CardTitle>
         <CardDescription>
@@ -15209,7 +15215,7 @@ function PlannerWorkflowExceptionPanel({
       <CardContent>
         {rows.length ? (
           <div className="max-h-80 overflow-auto rounded-lg border">
-            <Table>
+            <OperationalTable>
               <TableHeader className="sticky top-0 z-10 bg-background">
                 <TableRow>
                   <TableHead>Machine</TableHead>
@@ -15251,13 +15257,13 @@ function PlannerWorkflowExceptionPanel({
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+            </OperationalTable>
           </div>
         ) : (
           <EmptyRowsMessage>No Workflow Exceptions Found</EmptyRowsMessage>
         )}
       </CardContent>
-    </Card>
+    </SectionCard>
   )
 }
 
@@ -15329,7 +15335,7 @@ function CorrectionsPanel({
     setReasonById((current) => ({ ...current, [targetId]: "" }))
   }
   return (
-    <Card>
+    <SectionCard>
       <CardHeader>
         <CardTitle>Corrections</CardTitle>
         <CardDescription>
@@ -15340,7 +15346,7 @@ function CorrectionsPanel({
       </CardHeader>
       <CardContent className="grid gap-4">
         <TrackingSummary
-          tones={["brand", "info", "accent", "neutral"]}
+          tones={["brand", "information", "accent", "neutral"]}
           items={[
             ["Active entries", formatNumber(filteredRows.length)],
             ["Production units", formatNumber(productionUnitOptions.length)],
@@ -15404,7 +15410,7 @@ function CorrectionsPanel({
         </div>
         {filteredRows.length ? (
           <div className="max-h-[72vh] overflow-auto rounded-lg border">
-            <Table containerClassName="max-h-none overflow-visible">
+            <OperationalTable containerClassName="max-h-none overflow-visible">
               <TableHeader className="sticky top-0 z-10 bg-background">
                 <TableRow>
                   <TableHead className="min-w-40">Production Unit</TableHead>
@@ -15471,7 +15477,7 @@ function CorrectionsPanel({
                   )
                 })}
               </TableBody>
-            </Table>
+            </OperationalTable>
           </div>
         ) : (
           <EmptyRowsMessage>
@@ -15479,7 +15485,7 @@ function CorrectionsPanel({
           </EmptyRowsMessage>
         )}
       </CardContent>
-    </Card>
+    </SectionCard>
   )
 }
 
@@ -15493,7 +15499,7 @@ function correctionProductionUnitLabel(row: DashboardPayload) {
 
 function ToolFixturePanel({ rows }: { rows: DashboardPayload[] }) {
   return (
-    <Card>
+    <SectionCard>
       <CardHeader>
         <CardTitle>Next Tool / Fixture Number</CardTitle>
       </CardHeader>
@@ -15509,7 +15515,7 @@ function ToolFixturePanel({ rows }: { rows: DashboardPayload[] }) {
           ))}
         </section>
       </CardContent>
-    </Card>
+    </SectionCard>
   )
 }
 
@@ -15759,7 +15765,7 @@ function JobCardTileBoard({
   }
 
   return (
-    <Card>
+    <SectionCard>
       <CardHeader>
         <CardTitle>Job-Card Tiles</CardTitle>
         <CardDescription>
@@ -15772,7 +15778,7 @@ function JobCardTileBoard({
         {rows.length ? (
           <>
             <TrackingSummary
-              tones={["warning", "success", "error", "brand", "info"]}
+              tones={["warning", "positive", "danger", "brand", "information"]}
               items={[
                 ["Pending RM", formatNumber(pendingRm)],
                 ["Ready", formatNumber(ready)],
@@ -15896,7 +15902,7 @@ function JobCardTileBoard({
           <EmptyRowsMessage>No Job-Card Status Rows Returned</EmptyRowsMessage>
         )}
       </CardContent>
-    </Card>
+    </SectionCard>
   )
 }
 
@@ -16122,7 +16128,7 @@ function MachinePlanningBoard({
   }
 
   return (
-    <Card>
+    <SectionCard>
       <CardHeader>
         <CardTitle>Machine Planning Board</CardTitle>
         <CardDescription>
@@ -16135,7 +16141,7 @@ function MachinePlanningBoard({
         {boardRows.length ? (
           <>
             <TrackingSummary
-              tones={["info", "success", "brand", "accent"]}
+              tones={["information", "positive", "brand", "accent"]}
               items={[
                 ["Machine types", formatNumber(machineTypes.length)],
                 ["Running", formatNumber(runningRows)],
@@ -16255,7 +16261,7 @@ function MachinePlanningBoard({
           </EmptyRowsMessage>
         )}
       </CardContent>
-    </Card>
+    </SectionCard>
   )
 }
 
@@ -16304,7 +16310,7 @@ function MachinePlanningTile({
           <MachineStateBadge
             label="Run"
             value={isRunning ? "Running" : "Not running"}
-            tone={isRunning ? "success" : "neutral"}
+            tone={isRunning ? "positive" : "neutral"}
           />
           <MachineStateBadge
             label="Plan"
@@ -16316,7 +16322,7 @@ function MachinePlanningTile({
             value={status}
             tone={
               status === "Active"
-                ? "success"
+                ? "positive"
                 : status === "Inactive"
                   ? "danger"
                   : "warning"
@@ -16664,55 +16670,6 @@ function TileField({
   )
 }
 
-function StatusBadge({ value }: { value: unknown }) {
-  const text = displayValue(value)
-  const normalized = text.toLowerCase()
-  const toneClass = statusBadgeToneClass(normalized)
-
-  return (
-    <Badge variant="outline" className={toneClass}>
-      {text}
-    </Badge>
-  )
-}
-
-function statusBadgeToneClass(normalized: string) {
-  if (normalized === "-") return "border-slate-300 bg-slate-50 text-slate-700"
-  if (normalized.includes("in production") || normalized.includes("running"))
-    return "border-sky-300 bg-sky-50 text-sky-800"
-  if (normalized === "ok")
-    return "border-emerald-300 bg-emerald-50 text-emerald-800"
-  if (
-    normalized.includes("ready") ||
-    normalized.includes("received") ||
-    normalized.includes("dispatch") ||
-    normalized.includes("setup complete") ||
-    normalized.includes("on time")
-  )
-    return "border-emerald-300 bg-emerald-50 text-emerald-800"
-  if (normalized.includes("early"))
-    return "border-sky-300 bg-sky-50 text-sky-800"
-  if (normalized === "not ok" || normalized === "ng")
-    return "border-red-300 bg-red-50 text-red-800"
-  if (
-    normalized.includes("waiting") ||
-    normalized.includes("pending") ||
-    normalized.includes("shifted")
-  )
-    return "border-amber-300 bg-amber-50 text-amber-800"
-  if (
-    normalized.includes("delayed") ||
-    normalized.includes("need") ||
-    normalized.includes("action") ||
-    normalized.includes("missing") ||
-    normalized.includes("required") ||
-    normalized.includes("breakdown")
-  ) {
-    return "border-red-300 bg-red-50 text-red-800"
-  }
-  return "border-slate-300 bg-slate-50 text-slate-700"
-}
-
 function MachineStateBadge({
   label,
   value,
@@ -16720,20 +16677,13 @@ function MachineStateBadge({
 }: {
   label: string
   value: string
-  tone: "success" | "planning" | "warning" | "danger" | "neutral"
+  tone: "positive" | "information" | "warning" | "danger" | "neutral"
 }) {
-  const toneClass = {
-    success: "border-emerald-300 bg-emerald-50 text-emerald-800",
-    planning: "border-sky-300 bg-sky-50 text-sky-800",
-    warning: "border-amber-300 bg-amber-50 text-amber-800",
-    danger: "border-red-300 bg-red-50 text-red-800",
-    neutral: "border-slate-300 bg-slate-50 text-slate-700",
-  }[tone]
   return (
-    <Badge variant="outline" className={`gap-1 ${toneClass}`}>
+    <StatusBadge tone={tone} className="gap-1">
       <span className="text-[10px] font-semibold opacity-75">{label}</span>
       <span>{value}</span>
-    </Badge>
+    </StatusBadge>
   )
 }
 
@@ -16757,7 +16707,7 @@ function DataRowsCard({
   const columns = tableColumns(rows)
 
   return (
-    <Card>
+    <SectionCard>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
         <CardDescription>
@@ -16769,7 +16719,7 @@ function DataRowsCard({
       <CardContent>
         {rows.length && columns.length ? (
           <div className="overflow-x-auto">
-            <Table>
+            <OperationalTable>
               <TableHeader>
                 <TableRow>
                   {columns.map((column) => (
@@ -16791,13 +16741,13 @@ function DataRowsCard({
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+            </OperationalTable>
           </div>
         ) : (
           <EmptyRowsMessage>{empty}</EmptyRowsMessage>
         )}
       </CardContent>
-    </Card>
+    </SectionCard>
   )
 }
 
@@ -18426,9 +18376,9 @@ function qualityResultTone(result: unknown) {
 function qualityReadingInputClass(result: unknown) {
   const tone = qualityResultTone(result)
   if (tone === "bad")
-    return "border-red-400 bg-red-50 text-red-900 focus-visible:border-red-500 focus-visible:ring-red-200 dark:bg-red-950/30 dark:text-red-100"
+    return "border-[var(--color-danger)]/30 bg-[var(--color-danger-bg)] text-[var(--color-danger-text)] focus-visible:border-[var(--color-danger)]/30 focus-visible:ring-[var(--color-danger)]/25 "
   if (tone === "good")
-    return "border-emerald-300 bg-emerald-50 text-emerald-900 dark:bg-emerald-950/20 dark:text-emerald-100"
+    return "border-[var(--color-positive)]/30 bg-[var(--color-positive-bg)] text-[var(--color-positive-text)] "
   return ""
 }
 
@@ -18514,10 +18464,10 @@ function completedSetupDate(row: DashboardPayload | undefined) {
 
 function machinePlanningTone(
   status: string
-): "success" | "planning" | "warning" | "danger" | "neutral" {
+): "positive" | "information" | "warning" | "danger" | "neutral" {
   if (status === "Breakdown") return "danger"
-  if (status === "Setup complete") return "success"
-  if (status === "Planned") return "planning"
+  if (status === "Setup complete") return "positive"
+  if (status === "Planned") return "information"
   return "neutral"
 }
 

@@ -157,6 +157,16 @@ export function serializeTableFilters(
   })
 }
 
+export function tableFilterStorageKey(
+  explicitKey: string | undefined,
+  pathname: string,
+  reactId: string
+) {
+  if (explicitKey) return explicitKey
+  const stableId = reactId.replace(/[^a-z0-9_-]/gi, "")
+  return `mrmpl:${pathname}:operational-table:${stableId}`
+}
+
 export function parsePersistedTableFilters(
   value: string | null,
   columns: TableFilterColumn[]

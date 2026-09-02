@@ -18,7 +18,7 @@ describe("Bulk revision product tables", () => {
     for (const path of revisionPages) {
       const page = source(path)
 
-      expect(page).toMatch(/<Table[^>]*\bexcelFilters\b[^>]*>/)
+      expect(page).toMatch(/<OperationalTable[^>]*\bexcelFilters\b[^>]*>/)
       for (const label of ["UID", "Description", "Category", "Subcategory"]) {
         expect(page).toMatch(
           new RegExp(`(<TableHead[^>]*>${label}</TableHead>|"${label}",)`)

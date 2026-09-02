@@ -4,14 +4,14 @@ import { createProductPortfolioRepository } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -40,7 +40,7 @@ export default async function DrawingHistoryPage() {
 
   return (
     <div className="grid gap-6">
-      <Card>
+ <SectionCard>
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -53,16 +53,16 @@ export default async function DrawingHistoryPage() {
             <DataDownloadButton href={`${drawingHistoryPath}/export.xlsx`} />
           </div>
         </CardHeader>
-      </Card>
+ </SectionCard>
 
-      <Card>
+ <SectionCard>
         <CardHeader>
           <CardTitle>Drawing Records</CardTitle>
           <CardDescription>{rows.length} Products.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto rounded-2xl border">
-            <Table excelFilters>
+ <OperationalTable excelFilters>
               <TableHeader>
                 <TableRow>
                   <TableHead data-filterable="true">Product UID</TableHead>
@@ -136,10 +136,10 @@ export default async function DrawingHistoryPage() {
                   </TableRow>
                 )}
               </TableBody>
-            </Table>
+ </OperationalTable>
           </div>
         </CardContent>
-      </Card>
+ </SectionCard>
     </div>
   )
 }

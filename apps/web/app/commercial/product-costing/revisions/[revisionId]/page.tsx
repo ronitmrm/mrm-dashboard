@@ -6,7 +6,7 @@ import {
 } from "@workspace/db"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -19,7 +19,7 @@ import {
   NativeSelectOption,
 } from "@workspace/ui/components/native-select"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -102,7 +102,7 @@ export default async function ProductRevisionCostingPage({
 
   if (!revision) {
     return (
-      <Card>
+ <SectionCard>
         <CardHeader>
           <CardTitle>Product Revision Not Available</CardTitle>
           <CardDescription>
@@ -117,7 +117,7 @@ export default async function ProductRevisionCostingPage({
             </Link>
           </Button>
         </CardContent>
-      </Card>
+ </SectionCard>
     )
   }
 
@@ -131,7 +131,7 @@ export default async function ProductRevisionCostingPage({
         </Button>
       </div>
 
-      <Card>
+ <SectionCard>
         <CardHeader>
           <CardTitle>Products In Scope</CardTitle>
         </CardHeader>
@@ -142,7 +142,7 @@ export default async function ProductRevisionCostingPage({
               type="hidden"
               value={revision.id}
             />
-            <Table
+ <OperationalTable
               className="tabular-nums"
               containerClassName="h-[calc(100svh-24rem)] min-h-[34rem] rounded-md border"
               excelFilters
@@ -241,7 +241,7 @@ export default async function ProductRevisionCostingPage({
                   </TableRow>
                 ) : null}
               </TableBody>
-            </Table>
+ </OperationalTable>
 
             <div className="grid gap-3 md:grid-cols-[1fr_1fr_2fr_auto] md:items-end">
               <Field>
@@ -364,7 +364,7 @@ export default async function ProductRevisionCostingPage({
             ) : null}
           </section>
         </CardContent>
-      </Card>
+ </SectionCard>
     </div>
   )
 }

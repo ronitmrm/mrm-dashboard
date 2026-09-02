@@ -1,6 +1,6 @@
 import { createProductPortfolioRepository } from "@workspace/db"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -53,7 +53,7 @@ export async function ProductPortfolioPage({
         </p>
       </section>
 
-      <Card className="min-h-[70svh]">
+ <SectionCard className="min-h-[70svh]">
         <CardHeader>
           <CardTitle>Current Product Portfolio</CardTitle>
           <CardDescription>
@@ -65,7 +65,7 @@ export async function ProductPortfolioPage({
         <CardContent className="flex min-h-0 flex-1 flex-col">
           <ProductPortfolioTable rows={rows} selection={selection} />
         </CardContent>
-      </Card>
+ </SectionCard>
     </div>
   )
 }

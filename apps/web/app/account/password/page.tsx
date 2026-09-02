@@ -3,7 +3,7 @@ import { KeyRound, ShieldCheck } from "lucide-react"
 
 import { Badge } from "@workspace/ui/components/badge"
 import {
-  Card,
+ SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -42,7 +42,7 @@ export default async function PasswordPage() {
         ) : null}
       </div>
 
-      <Card>
+ <SectionCard>
         <CardHeader>
           <CardTitle>
             {context.isAdministrator
@@ -61,7 +61,7 @@ export default async function PasswordPage() {
             users={context.users}
           />
         </CardContent>
-      </Card>
+ </SectionCard>
     </FullPageWorkspace>
   )
 }

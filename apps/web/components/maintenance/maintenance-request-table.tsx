@@ -10,7 +10,7 @@ import {
   NativeSelectOption,
 } from "@workspace/ui/components/native-select"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -52,7 +52,7 @@ export function MaintenanceRequestTable({
 }) {
   return (
     <div className="overflow-x-auto rounded-lg border">
-      <Table>
+ <OperationalTable>
         <TableHeader>
           <TableRow>
             <TableHead>Request</TableHead>
@@ -257,7 +257,7 @@ export function MaintenanceRequestTable({
             </TableRow>
           ) : null}
         </TableBody>
-      </Table>
+ </OperationalTable>
     </div>
   )
 }

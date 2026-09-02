@@ -13,7 +13,7 @@ import {
   uniqueFilterOptions,
 } from "@workspace/ui/components/excel-column-filter"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -185,7 +185,7 @@ export function ProductPortfolioTable({
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto rounded-xl border">
-        <Table
+ <OperationalTable
           className="min-w-[76rem] text-xs"
           containerClassName="max-h-none overflow-visible"
           filterMode="external"
@@ -278,7 +278,7 @@ export function ProductPortfolioTable({
               </TableRow>
             )}
           </TableBody>
-        </Table>
+ </OperationalTable>
       </div>
     </div>
   )

@@ -8,6 +8,7 @@ import {
 } from "lucide-react"
 
 import { cn } from "@workspace/ui/lib/utils"
+import type { SemanticTone } from "@workspace/ui/lib/semantic-tone"
 import { Skeleton } from "@workspace/ui/components/skeleton"
 
 function Card({
@@ -100,14 +101,7 @@ function CardFooter({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
-type MetricCardTone =
-  | "neutral"
-  | "brand"
-  | "accent"
-  | "success"
-  | "warning"
-  | "error"
-  | "info"
+type MetricCardTone = SemanticTone
 
 type MetricCardTrend = "up" | "down" | "flat"
 
@@ -143,13 +137,18 @@ const metricToneClassNames: Record<
     icon: "bg-[var(--color-brand-tint)] text-primary",
     status: "border-primary/20 bg-[var(--color-brand-tint)] text-primary",
   },
-  error: {
-    accent: "bg-[var(--color-error)]",
-    icon: "bg-[var(--color-error-bg)] text-[var(--color-error-text)]",
+  danger: {
+    accent: "bg-[var(--color-danger)]",
+    icon: "bg-[var(--color-danger-bg)] text-[var(--color-danger-text)]",
     status:
-      "border-[var(--color-error)]/20 bg-[var(--color-error-bg)] text-[var(--color-error-text)]",
+      "border-[var(--color-danger)]/20 bg-[var(--color-danger-bg)] text-[var(--color-danger-text)]",
   },
-  info: {
+  inactive: {
+    accent: "bg-[var(--color-inactive)]",
+    icon: "bg-muted text-muted-foreground",
+    status: "border-border bg-muted text-muted-foreground",
+  },
+  information: {
     accent: "bg-[var(--color-info)]",
     icon: "bg-[var(--color-info-bg)] text-[var(--color-info-text)]",
     status:
@@ -160,11 +159,11 @@ const metricToneClassNames: Record<
     icon: "bg-muted text-muted-foreground",
     status: "border-border bg-muted text-muted-foreground",
   },
-  success: {
-    accent: "bg-[var(--color-success)]",
-    icon: "bg-[var(--color-success-bg)] text-[var(--color-success-text)]",
+  positive: {
+    accent: "bg-[var(--color-positive)]",
+    icon: "bg-[var(--color-positive-bg)] text-[var(--color-positive-text)]",
     status:
-      "border-[var(--color-success)]/20 bg-[var(--color-success-bg)] text-[var(--color-success-text)]",
+      "border-[var(--color-positive)]/20 bg-[var(--color-positive-bg)] text-[var(--color-positive-text)]",
   },
   warning: {
     accent: "bg-[var(--color-warning)]",
@@ -177,14 +176,46 @@ const metricToneClassNames: Record<
 const metricToneSurfaceClassNames: Record<MetricCardTone, string> = {
   accent: "bg-[color-mix(in_srgb,var(--mrm-tennis)_10%,var(--color-surface))]",
   brand: "bg-[color-mix(in_srgb,var(--mrm-green)_7%,var(--color-surface))]",
-  error: "bg-[color-mix(in_srgb,var(--color-error)_7%,var(--color-surface))]",
-  info: "bg-[color-mix(in_srgb,var(--color-info)_8%,var(--color-surface))]",
+  danger: "bg-[color-mix(in_srgb,var(--color-danger)_7%,var(--color-surface))]",
+  inactive: "bg-muted/45",
+  information:
+    "bg-[color-mix(in_srgb,var(--color-info)_8%,var(--color-surface))]",
   neutral: "bg-card",
-  success:
-    "bg-[color-mix(in_srgb,var(--color-success)_8%,var(--color-surface))]",
+  positive:
+    "bg-[color-mix(in_srgb,var(--color-positive)_8%,var(--color-surface))]",
   warning:
     "bg-[color-mix(in_srgb,var(--color-warning)_12%,var(--color-surface))]",
 }
+type SectionCardProps = React.ComponentProps<typeof Card> & {
+  tone?: SemanticTone
+}
+
+const sectionToneClassNames: Record<SemanticTone, string> = {
+  accent: "border-[var(--mrm-tennis)]/35 bg-[var(--color-accent-tint)]",
+  brand: "border-primary/25 bg-[var(--color-brand-tint)]",
+  danger: "border-[var(--color-danger)]/25 bg-[var(--color-danger-bg)]",
+  inactive: "border-border bg-muted/45",
+  information: "border-[var(--color-info)]/25 bg-[var(--color-info-bg)]",
+  neutral: "bg-card",
+  positive: "border-[var(--color-positive)]/25 bg-[var(--color-positive-bg)]",
+  warning: "border-[var(--color-warning)]/30 bg-[var(--color-warning-bg)]",
+}
+
+function SectionCard({
+  className,
+  tone = "neutral",
+  ...props
+}: SectionCardProps) {
+  return (
+    <Card
+      className={cn(sectionToneClassNames[tone], className)}
+      data-slot="section-card"
+      data-tone={tone}
+      {...props}
+    />
+  )
+}
+
 function MetricCard({
   chart,
   className,
@@ -348,8 +379,11 @@ export {
   CardTitle,
   CardAction,
   CardDescription,
+  SectionCard,
   CardContent,
   MetricCard,
+  type SectionCardProps,
+  type SemanticTone,
   type MetricCardProps,
   type MetricCardTone,
   type MetricCardTrend,

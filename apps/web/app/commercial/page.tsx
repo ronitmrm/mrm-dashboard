@@ -19,7 +19,7 @@ import {
 import { Badge } from "@workspace/ui/components/badge"
 import { MetricCard } from "@workspace/ui/components/card"
 import {
-  Table,
+ OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -31,7 +31,7 @@ import {
   ChartCard,
   DashboardBarChart,
   DashboardGrid,
-  DashboardPageHeader,
+ PageHeader,
   DashboardSection,
   DataTableCard,
 } from "@/components/dashboard/dashboard-components"
@@ -72,7 +72,7 @@ export default async function CommercialPage() {
       description: "Sent in the current month",
       icon: Send,
       label: "Quoted this month",
-      tone: "info",
+ tone: "information",
       value: dashboard.stats.monthlyQuoted,
     },
     {
@@ -93,7 +93,7 @@ export default async function CommercialPage() {
       description: "Converted commercial lines",
       icon: PackageCheck,
       label: "Ordered",
-      tone: "success",
+ tone: "positive",
       value: dashboard.stats.ordered,
     },
     {
@@ -107,14 +107,14 @@ export default async function CommercialPage() {
       description: "Customer actions now due",
       icon: Clock3,
       label: "Follow-ups due",
-      tone: "error",
+ tone: "danger",
       value: dashboard.stats.pendingFollowups,
     },
   ] as const
 
   return (
     <div className="grid gap-6">
-      <DashboardPageHeader
+ <PageHeader
         badge={
           <Badge variant="outline">
             <Database aria-hidden="true" /> Canonical Postgresql Analytics
@@ -201,7 +201,7 @@ export default async function CommercialPage() {
             title="Material Lead Time"
           >
             <div className="overflow-x-auto rounded-lg border">
-              <Table>
+ <OperationalTable>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Material</TableHead>
@@ -233,7 +233,7 @@ export default async function CommercialPage() {
                     </TableRow>
                   )}
                 </TableBody>
-              </Table>
+ </OperationalTable>
             </div>
           </DataTableCard>
         </DashboardGrid>
@@ -249,7 +249,7 @@ export default async function CommercialPage() {
           title="Customer Quote Pareto"
         >
           <div className="overflow-x-auto rounded-lg border">
-            <Table>
+ <OperationalTable>
               <TableHeader>
                 <TableRow>
                   <TableHead>Customer</TableHead>
@@ -281,7 +281,7 @@ export default async function CommercialPage() {
                   </TableRow>
                 )}
               </TableBody>
-            </Table>
+ </OperationalTable>
           </div>
         </DataTableCard>
       </DashboardSection>
