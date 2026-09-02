@@ -26,6 +26,8 @@ import {
 } from "@workspace/ui/components/native-select"
 import { Textarea } from "@workspace/ui/components/textarea"
 
+import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
+
 type BomLine = {
   bomItem?: string | null
   casting?: number | null
@@ -278,7 +280,10 @@ function DesignFileFields({
               size="sm"
               variant="outline"
             >
-              <Link href={attachment.href}>{attachment.fileName}</Link>
+              <AttachmentViewerLink
+                fileName={attachment.fileName}
+                href={attachment.href}
+              />
             </Button>
           ))}
         </div>

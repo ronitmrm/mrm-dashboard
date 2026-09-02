@@ -2,11 +2,11 @@ import { createRecruitmentRepository } from "@workspace/db"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireHrPage } from "@/lib/auth/require-hr-page"
-import { userAttachmentDownloadHeaders } from "@/lib/user-attachment-security"
+import { userAttachmentResponseHeaders } from "@/lib/user-attachment-security"
 import { readUserAttachment } from "@/lib/user-attachment-storage"
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   await requireHrPage(
@@ -28,7 +28,12 @@ export async function GET(
     }
     const file = await readUserAttachment(resume.storageKey)
     return new Response(file.body, {
-      headers: userAttachmentDownloadHeaders(resume.fileName, file.byteSize),
+      headers: userAttachmentResponseHeaders(
+        resume.fileName,
+        file.byteSize,
+        resume.mediaType,
+        new URL(request.url).searchParams.has("preview")
+      ),
     })
   } catch (error) {
     if (error instanceof Error && error.message.includes("not found")) {

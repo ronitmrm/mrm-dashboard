@@ -39,6 +39,29 @@ export type ProductPortfolioDossier = {
   uid: string
 }
 
+export type DrawingRevisionHistoryRow = {
+  approvedAt: Date | null
+  approvedBy: string | null
+  changeReason: string
+  createdAt: Date
+  current: boolean
+  drawingId: string
+  drawingNumber: string
+  effectiveOn: string | null
+  ecnNumber: string | null
+  fileId: string | null
+  fileName: string | null
+  itemDescription: string
+  itemId: string
+  mediaType: string | null
+  raisedBy: string | null
+  requirement: string
+  revision: string
+  status: string
+  uid: string
+  uploadedBy: string | null
+}
+
 type ProductPortfolioDatabaseRow = {
   category: string | null
   item_type: string
@@ -346,6 +369,132 @@ export function createProductPortfolioRepository(
         productType: row.production_type,
         uid: row.uid,
       }
+    },
+
+    async listDrawingRevisionsForOrganization(
+      organizationCode: string,
+      options: { uid?: string } = {}
+    ): Promise<DrawingRevisionHistoryRow[]> {
+      type Row = {
+        approved_at: Date | null
+        approved_by: string | null
+        change_reason: string
+        created_at: Date
+        drawing_id: string
+        drawing_number: string
+        effective_on: string | null
+        ecn_number: string | null
+        file_id: string | null
+        file_name: string | null
+        is_current: boolean
+        item_description: string
+        item_id: string
+        media_type: string | null
+        raised_by: string | null
+        requirement_status: string
+        revision_label: string
+        status: string
+        uid: string
+        uploaded_by: string | null
+      }
+      const result = await pool.query<Row>(
+        `
+          SELECT revision.id AS drawing_id, revision.item_id, item.uid,
+            item.description AS item_description, revision.drawing_number,
+            revision.revision_label, revision.requirement_status,
+            revision.status, revision.is_current,
+            revision.effective_on::text, revision.change_reason,
+            revision.created_at, revision.approved_at,
+            file.id AS file_id, file.file_name, file.media_type,
+            ecn.ecn_number,
+            COALESCE(raised.name, raised.email) AS raised_by,
+            COALESCE(uploaded.name, uploaded.email) AS uploaded_by,
+            COALESCE(approved.name, approved.email) AS approved_by
+          FROM catalog.drawing_revisions revision
+          JOIN catalog.items item ON item.id = revision.item_id
+          JOIN core.organizations organization
+            ON organization.id = revision.organization_id
+          LEFT JOIN core.files file ON file.id = revision.file_id
+          LEFT JOIN sales.engineering_change_notes ecn
+            ON ecn.id = revision.engineering_change_note_id
+          LEFT JOIN identity.users raised ON raised.id = revision.raised_by_user_id
+          LEFT JOIN identity.users uploaded
+            ON uploaded.id = revision.uploaded_by_user_id
+          LEFT JOIN identity.users approved
+            ON approved.id = revision.approved_by_user_id
+          WHERE lower(organization.code) = lower($1)
+            AND ($2::text = '' OR lower(item.uid) = lower($2))
+          ORDER BY CASE WHEN item.uid ~ '^[A-Za-z]+[0-9]+$'
+              THEN substring(item.uid from '[0-9]+$')::bigint
+              ELSE 9223372036854775807 END,
+            item.uid, revision.revision_number DESC
+        `,
+        [organizationCode.trim(), options.uid?.trim() ?? ""]
+      )
+      return result.rows.map((row) => ({
+        approvedAt: row.approved_at,
+        approvedBy: row.approved_by,
+        changeReason: row.change_reason,
+        createdAt: row.created_at,
+        current: row.is_current,
+        drawingId: row.drawing_id,
+        drawingNumber: row.drawing_number,
+        effectiveOn: row.effective_on,
+        ecnNumber: row.ecn_number,
+        fileId: row.file_id,
+        fileName: row.file_name,
+        itemDescription: row.item_description,
+        itemId: row.item_id,
+        mediaType: row.media_type,
+        raisedBy: row.raised_by,
+        requirement: row.requirement_status,
+        revision: row.revision_label,
+        status: row.status,
+        uid: row.uid,
+        uploadedBy: row.uploaded_by,
+      }))
+    },
+
+    async getDrawingFileForOrganization(
+      organizationCode: string,
+      productUid: string,
+      revisionLabel: string
+    ) {
+      const result = await pool.query<{
+        byte_size: string
+        file_name: string
+        media_type: string | null
+        public_url: string | null
+        storage_key: string | null
+      }>(
+        `
+          SELECT file.file_name, file.media_type, file.byte_size::text,
+            file.storage_key, object.public_url
+          FROM catalog.drawing_revisions revision
+          JOIN catalog.items item ON item.id = revision.item_id
+          JOIN core.organizations organization
+            ON organization.id = revision.organization_id
+          JOIN core.files file ON file.id = revision.file_id
+          LEFT JOIN core.file_objects object
+            ON object.id = file.physical_object_id
+          WHERE lower(organization.code) = lower($1)
+            AND lower(item.uid) = lower($2)
+            AND revision.revision_label = $3
+            AND file.lifecycle_state <> 'deleted'
+          LIMIT 1
+        `,
+        [organizationCode.trim(), productUid.trim(), revisionLabel.trim()]
+      )
+      const row = result.rows[0]
+      return row
+        ? {
+            byteSize: numeric(row.byte_size),
+            fileName: row.file_name,
+            mediaType: row.media_type,
+            publicUrl: row.public_url,
+            storageKey: row.storage_key,
+          }
+        : null
     },
   }
 }

@@ -5,11 +5,11 @@ import {
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
-import { userAttachmentDownloadHeaders } from "@/lib/user-attachment-security"
+import { userAttachmentResponseHeaders } from "@/lib/user-attachment-security"
 import { readUserAttachment } from "@/lib/user-attachment-storage"
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   await requireCapability("pricing.enquiries.read", "/commercial/enquiries")
@@ -28,7 +28,12 @@ export async function GET(
     }
     const file = await readUserAttachment(drawing.storageKey)
     return new Response(file.body, {
-      headers: userAttachmentDownloadHeaders(drawing.fileName, file.byteSize),
+      headers: userAttachmentResponseHeaders(
+        drawing.fileName,
+        file.byteSize,
+        drawing.mediaType,
+        new URL(request.url).searchParams.has("preview")
+      ),
     })
   } catch (error) {
     if (

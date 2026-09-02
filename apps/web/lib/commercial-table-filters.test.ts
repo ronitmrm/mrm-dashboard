@@ -76,23 +76,22 @@ describe("Costing module Excel filters", () => {
     expect(sales).not.toContain("Manual Follow-Up")
   })
 
-  it("uses a one-row-per-part Drawing Register and a filtered Change Log", () => {
+  it("uses a one-row-per-Product controlled Drawing Register", () => {
     const register = source("app/commercial/drawing-history/page.tsx")
-    const log = source("app/commercial/drawing-history/log/page.tsx")
+    const history = source("app/commercial/drawing-history/[uid]/page.tsx")
 
     expect(register).not.toContain('aria-label="Search Drawing History"')
     expect(register).not.toContain('name="q"')
-    expect(register).toContain("repository.listDrawingRegister")
+    expect(register).toContain(".listDrawingRevisionsForOrganization")
     expect(register).toContain("<Table excelFilters>")
     for (const label of [
-      "Sr. No.",
-      "Part Name",
-      "Uid",
+      "Product UID",
+      "Part",
       "Drawing No.",
       "Revision",
-      "Rev Date",
-      "Laminated B / C / Cnc",
-      "Remarks",
+      "Status",
+      "Effective",
+      "ECN",
     ]) {
       expect(register).toMatch(
         new RegExp(
@@ -101,26 +100,9 @@ describe("Costing module Excel filters", () => {
       )
     }
 
-    expect(log).toContain("repository.listDrawingChangeLog")
-    expect(log).toContain("<Table excelFilters>")
-    expect(log).toContain("Drawing Change Log")
-    for (const label of [
-      "Changed At",
-      "Change",
-      "Part Name",
-      "Uid",
-      "Drawing No.",
-      "Revision",
-      "Rev Date",
-      "Laminated B / C / Cnc",
-      "Remarks",
-      "Changed By",
-    ]) {
-      expect(log).toMatch(
-        new RegExp(
-          `<TableHead data-filterable="true">\\s*${label}\\s*</TableHead>`
-        )
-      )
-    }
+    expect(history).toContain("Drawing Revision History")
+    expect(history).toContain("Immutable released revisions")
+    expect(history).toContain("Approved")
+    expect(history).toContain("Change Reason / ECN")
   })
 })

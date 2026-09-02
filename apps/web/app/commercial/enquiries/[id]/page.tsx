@@ -7,6 +7,7 @@ import {
 } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
+import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
 import {
   Card,
   CardAction,
@@ -763,11 +764,12 @@ export default async function EnquiryDetailPage({
                     <Button type="submit">Update Line</Button>
                     {selectedItem.drawingFileId ? (
                       <Button asChild type="button" variant="outline">
-                        <Link
+                        <AttachmentViewerLink
+                          fileName={selectedItem.drawingFileName ?? "drawing.pdf"}
                           href={`/commercial/enquiry-items/${selectedItem.id}/drawing`}
                         >
                           Open {selectedItem.drawingFileName ?? "drawing"}
-                        </Link>
+                        </AttachmentViewerLink>
                       </Button>
                     ) : null}
                   </div>
@@ -788,12 +790,13 @@ export default async function EnquiryDetailPage({
                               {drawing.fileName} · {drawing.byteSize} Bytes
                             </span>
                             {index === 0 ? (
-                              <Link
+                              <AttachmentViewerLink
                                 className="font-medium underline underline-offset-4"
+                                fileName={drawing.fileName}
                                 href={`/commercial/enquiry-items/${selectedItem.id}/drawing`}
                               >
                                 Open
-                              </Link>
+                              </AttachmentViewerLink>
                             ) : null}
                           </div>
                         ))}
