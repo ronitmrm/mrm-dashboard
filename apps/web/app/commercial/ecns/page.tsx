@@ -19,8 +19,6 @@ import {
   FieldSet,
 } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
-import { NativeSelectOption } from "@workspace/ui/components/native-select"
-import { SearchableSelect } from "@workspace/ui/components/searchable-select"
 import {
   Table,
   TableBody,
@@ -34,9 +32,10 @@ import { Textarea } from "@workspace/ui/components/textarea"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
-import { ecnProductOptionLabel, ecnStageHref } from "@/lib/pricing/ecn-routes"
+import { ecnStageHref } from "@/lib/pricing/ecn-routes"
 
 import { createEngineeringChangeNoteAction } from "../revisions/actions"
+import { EcnProductSelector } from "./ecn-product-selector"
 
 export const dynamic = "force-dynamic"
 
@@ -126,34 +125,18 @@ export default async function EngineeringChangeNotesPage() {
               <FieldSet>
                 <FieldLegend>Engineering Request</FieldLegend>
                 <FieldGroup>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <Field>
-                      <FieldLabel htmlFor="ecn-item">Product</FieldLabel>
-                      <SearchableSelect
-                        id="ecn-item"
-                        name="item_id"
-                        required
-                        searchPlaceholder="Search UID, category, subcategory, or product name..."
-                      >
-                        {reference.items.map((item) => (
-                          <NativeSelectOption key={item.id} value={item.id}>
-                            {ecnProductOptionLabel(item)}
-                          </NativeSelectOption>
-                        ))}
-                      </SearchableSelect>
-                    </Field>
-                    <Field>
-                      <FieldLabel htmlFor="ecn-effective">
-                        Effective Date
-                      </FieldLabel>
-                      <Input
-                        defaultValue={localDate()}
-                        id="ecn-effective"
-                        name="effective_on"
-                        type="date"
-                      />
-                    </Field>
-                  </div>
+                  <EcnProductSelector items={reference.items} />
+                  <Field className="max-w-sm">
+                    <FieldLabel htmlFor="ecn-effective">
+                      Effective Date
+                    </FieldLabel>
+                    <Input
+                      defaultValue={localDate()}
+                      id="ecn-effective"
+                      name="effective_on"
+                      type="date"
+                    />
+                  </Field>
                   <Field>
                     <FieldLabel htmlFor="ecn-reason">Reason</FieldLabel>
                     <Textarea id="ecn-reason" name="reason" required />
