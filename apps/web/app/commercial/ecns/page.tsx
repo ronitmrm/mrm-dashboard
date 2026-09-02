@@ -52,7 +52,8 @@ function localDate() {
 function actionLabel(status: string) {
   if (status === "Pending Design") return "Open Design"
   if (status === "Pending Product Costing") return "Open Product Costing"
-  if (status === "Pending Costing") return "Open Customer Costing"
+  if (status === "Pending Customer Costing") return "Open Customer Costing"
+  if (status === "Pending Design Approval") return "Review Design"
   return "View ECN"
 }
 

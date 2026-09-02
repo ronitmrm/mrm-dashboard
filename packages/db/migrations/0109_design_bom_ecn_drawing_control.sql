@@ -24,6 +24,10 @@ ALTER TABLE sales.engineering_change_notes
   ADD COLUMN IF NOT EXISTS cost_impacting boolean,
   ADD COLUMN IF NOT EXISTS cost_impact_drivers_json jsonb NOT NULL DEFAULT '[]'::jsonb;
 
+UPDATE sales.engineering_change_notes
+SET status = 'Pending Customer Costing'
+WHERE status = 'Pending Costing';
+
 CREATE TABLE catalog.product_design_revisions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id uuid NOT NULL REFERENCES core.organizations(id),

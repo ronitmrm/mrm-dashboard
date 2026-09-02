@@ -4,7 +4,10 @@ import type { PoolClient } from "pg"
 
 import { selectorSearchTerm } from "./commercial-bounds"
 import {
+  assertApplicableProcessPrices,
+  classifyDesignCostImpact,
   designProcessSelection,
+  engineeringChangeStatusAfterApproval,
   processFieldIsApplicable,
   processesRequiredFromPayload,
 } from "./design-control-domain"
@@ -1282,6 +1285,100 @@ async function itemAndBomEvidence(client: PoolClient, itemId: string) {
       sequence: line.sequence,
     })),
     item: item.rows[0] ?? {},
+  }
+}
+
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {}
+}
+
+function proposedDesignEvidence(
+  before: Awaited<ReturnType<typeof itemAndBomEvidence>>,
+  patch: EngineeringChangeDesignPatch
+) {
+  const item = { ...before.item }
+  for (const [key, value] of Object.entries(patch)) {
+    const column = (designPatchColumns as Record<string, string>)[key]
+    if (column && value !== undefined) item[column] = value
+  }
+  if (patch.sourcePayloadPatch) {
+    item.source_payload = {
+      ...record(item.source_payload),
+      ...patch.sourcePayloadPatch,
+    }
+  }
+  return {
+    bomLines: patch.bomLines ?? before.bomLines,
+    designDetails: patch.designDetails ?? {},
+    item,
+  }
+}
+
+function designCostDrivers(
+  evidence: {
+    bomLines?: Array<Record<string, unknown> | EngineeringChangeBomLine>
+    item: Record<string, unknown>
+  } & {
+    designDetails?: Record<string, unknown>
+  }
+) {
+  const item = evidence.item
+  const payload = record(item.source_payload)
+  const dossier = {
+    ...record(payload.productDesignDossier),
+    ...record(evidence.designDetails),
+  }
+  return {
+    bom: (evidence.bomLines ?? []).map((line) => ({
+      componentItemId: line.componentItemId,
+      quantity: asNumber(line.quantity),
+    })),
+    casting: asNumber(dossier.casting ?? item.casting),
+    category: dossier.category ?? payload.category,
+    materialGradeId: dossier.materialGradeId ?? item.material_grade_id,
+    processesRequired:
+      dossier.processesRequired ?? payload.processesRequired ?? [],
+    productType: dossier.productType ?? payload.productType,
+    productionType: dossier.productionType ?? item.production_type,
+    rodSize: dossier.rodSize ?? item.rod_size,
+    rodTypeId: dossier.rodTypeId ?? item.rod_type_id,
+    subcategory: dossier.subcategory ?? payload.subcategory,
+    weight100Pcs: asNumber(dossier.weight100Pcs ?? item.weight_100_pcs),
+  }
+}
+
+async function assertDesignHod(
+  client: PoolClient,
+  organizationId: string,
+  actorUserId: string | null | undefined
+) {
+  if (!actorUserId) throw new Error("Design HOD approval requires a signed-in employee.")
+  const result = await client.query(
+    `
+      SELECT 1
+      FROM identity.employee_links employee_link
+      JOIN recruitment.posts post
+        ON post.organization_id = employee_link.organization_id
+       AND lower(btrim(post.employee_code)) =
+         lower(btrim(employee_link.employee_code))
+      JOIN recruitment.departments department ON department.id = post.department_id
+      JOIN recruitment.designations designation
+        ON designation.id = post.designation_id
+      WHERE employee_link.user_id = $1
+        AND employee_link.organization_id = $2
+        AND post.status = 'Occupied'
+        AND (lower(department.code) = 'design'
+          OR lower(department.name) = 'design')
+        AND (lower(designation.code) IN ('hod', 'h.o.d.')
+          OR designation.name ~* '(^|[^a-z])(hod|head of department)([^a-z]|$)')
+      LIMIT 1
+    `,
+    [actorUserId, organizationId]
+  )
+  if (!result.rows[0]) {
+    throw new Error("Only the occupied Design HOD may approve or reject ECN Design revisions.")
   }
 }
 
@@ -3032,7 +3129,7 @@ export function createCommercialRevisionsRepository(
           LEFT JOIN sales.engineering_change_decisions decision
             ON decision.engineering_change_note_id = ecn.id
           WHERE lower(organization.code) = lower($1)
-          GROUP BY ecn.id, item.uid, item.description, item.item_type
+          GROUP BY ecn.id, item.id
           ORDER BY ecn.created_at DESC, ecn.id DESC
           LIMIT $2
         `,
@@ -3071,11 +3168,31 @@ export function createCommercialRevisionsRepository(
         item_uid: string
         reason: string
         status: string
+        cost_impact_drivers_json: string[]
+        cost_impacting: boolean | null
+        design_approved_at: Date | null
+        design_approved_by: string | null
+        design_rejection_remarks: string | null
+        design_rejected_at: Date | null
+        design_submitted_at: Date | null
+        released_design_revision: string | null
+        released_drawing_revision: string | null
+        processes_required: string[]
       }>(
         `
           SELECT ecn.id, ecn.ecn_number, ecn.item_id, ecn.status,
             ecn.reason, ecn.effective_on::text, item.uid AS item_uid,
             item.description, item.item_type, ecn.created_at,
+            ecn.design_submitted_at, ecn.design_approved_at,
+            ecn.design_rejected_at, ecn.design_rejection_remarks,
+            ecn.cost_impacting, ecn.cost_impact_drivers_json,
+            ecn.source_payload ->> 'releasedDesignRevision'
+              AS released_design_revision,
+            ecn.source_payload ->> 'releasedDrawingRevision'
+              AS released_drawing_revision,
+            COALESCE(item.source_payload -> 'processesRequired', '[]'::jsonb)
+              AS processes_required,
+            max(COALESCE(approved.name, approved.email)) AS design_approved_by,
             jsonb_array_length(ecn.affected_quote_item_ids_json)
               AS affected_price_count,
             count(decision.id)::text AS decision_count
@@ -3085,8 +3202,10 @@ export function createCommercialRevisionsRepository(
           JOIN catalog.items item ON item.id = ecn.item_id
           LEFT JOIN sales.engineering_change_decisions decision
             ON decision.engineering_change_note_id = ecn.id
+          LEFT JOIN identity.users approved
+            ON approved.id = ecn.design_approved_by_user_id
           WHERE lower(organization.code) = lower($1) AND ecn.id = $2
-          GROUP BY ecn.id, item.uid, item.description, item.item_type
+          GROUP BY ecn.id, item.id
         `,
         [organizationCode, engineeringChangeNoteId]
       )
@@ -3097,6 +3216,13 @@ export function createCommercialRevisionsRepository(
             createdAt: row.created_at,
             decisionCount: Number(row.decision_count),
             description: row.description,
+            costImpactDrivers: row.cost_impact_drivers_json,
+            costImpacting: row.cost_impacting,
+            designApprovedAt: row.design_approved_at,
+            designApprovedBy: row.design_approved_by,
+            designRejectionRemarks: row.design_rejection_remarks,
+            designRejectedAt: row.design_rejected_at,
+            designSubmittedAt: row.design_submitted_at,
             ecnNumber: row.ecn_number,
             effectiveOn: row.effective_on,
             id: row.id,
@@ -3104,6 +3230,9 @@ export function createCommercialRevisionsRepository(
             itemType: row.item_type,
             itemUid: row.item_uid,
             reason: row.reason,
+            processesRequired: row.processes_required,
+            releasedDesignRevision: row.released_design_revision,
+            releasedDrawingRevision: row.released_drawing_revision,
             status: row.status,
           }
         : null
@@ -3123,6 +3252,10 @@ export function createCommercialRevisionsRepository(
         design_task_id: string | null
         designer_name: string | null
         die_code: string | null
+        drawing_file_id: string | null
+        drawing_file_name: string | null
+        drawing_number: string | null
+        drawing_requirement: string | null
         ecn_number: string
         fixture_approx_cost: string | null
         fixture_required: string | null
@@ -3135,6 +3268,7 @@ export function createCommercialRevisionsRepository(
         item_uid: string
         material_grade_id: string | null
         operation_notes: string | null
+        organization_id: string
         production_type: string | null
         product_size: string | null
         reason: string
@@ -3151,7 +3285,8 @@ export function createCommercialRevisionsRepository(
       }>(
         `
           SELECT ecn.id, ecn.ecn_number, ecn.reason, ecn.status,
-            ecn.source_payload, item.source_payload AS item_source_payload,
+            ecn.organization_id, ecn.source_payload,
+            item.source_payload AS item_source_payload,
             item.id AS item_id, item.uid AS item_uid,
             item.description, item.item_type, item.production_type,
             item.material_grade_id, item.rod_type_id,
@@ -3178,7 +3313,11 @@ export function createCommercialRevisionsRepository(
             design.fixture_approx_cost::text, design.gauges_required,
             design.inspection_approx_cost::text, design.checked_by,
             design.operation_notes, design.design_remarks,
-            design.id AS design_task_id
+            design.id AS design_task_id,
+            drawing.file_id AS drawing_file_id,
+            drawing_file.file_name AS drawing_file_name,
+            drawing.drawing_number,
+            drawing.requirement_status AS drawing_requirement
           FROM sales.engineering_change_notes ecn
           JOIN core.organizations organization
             ON organization.id = ecn.organization_id
@@ -3187,6 +3326,9 @@ export function createCommercialRevisionsRepository(
             ON profile.item_id = item.id
           LEFT JOIN sales.design_tasks design
             ON design.id::text = item.source_payload ->> 'designTaskId'
+          LEFT JOIN catalog.drawing_revisions drawing
+            ON drawing.item_id = item.id AND drawing.is_current
+          LEFT JOIN core.files drawing_file ON drawing_file.id = drawing.file_id
           WHERE lower(organization.code) = lower($1) AND ecn.id = $2
           LIMIT 1
         `,
@@ -3344,6 +3486,20 @@ export function createCommercialRevisionsRepository(
           asText(value("designRemarks", row.design_remarks)) || null,
         designerName: asText(value("designerName", row.designer_name)) || null,
         dieCode: asText(value("dieCode", row.die_code)) || null,
+        drawingFileId:
+          asText(value("drawingFileId", row.drawing_file_id)) || null,
+        drawingFileName:
+          asText(value("drawingFileName", row.drawing_file_name)) || null,
+        drawingFileHref: storedDraft.drawingFileId
+          ? `/commercial/ecns/${row.id}/file/drawing_revision`
+          : null,
+        drawingNumber:
+          asText(value("drawingNumber", row.drawing_number)) || row.item_uid,
+        drawingRequirement:
+          asText(value("drawingRequirement", row.drawing_requirement)) ||
+          "Required",
+        drawingRevisionRequested:
+          value("drawingRevisionRequested", false) === true,
         ecnNumber: row.ecn_number,
         fixtureApproxCost: asNumber(
           value("fixtureApproxCost", row.fixture_approx_cost)
@@ -3363,8 +3519,19 @@ export function createCommercialRevisionsRepository(
           asText(value("materialGradeId", row.material_grade_id)) || null,
         operationNotes:
           asText(value("operationNotes", row.operation_notes)) || null,
+        organizationId: row.organization_id,
         productionType:
           asText(value("productionType", row.production_type)) || null,
+        processesRequired: Array.isArray(
+          value("processesRequired", row.item_source_payload?.processesRequired)
+        )
+          ? (value(
+              "processesRequired",
+              row.item_source_payload?.processesRequired
+            ) as unknown[]).filter(
+              (process): process is string => typeof process === "string"
+            )
+          : [],
         productSize: asText(value("productSize", row.product_size)) || null,
         reason: row.reason,
         remarks: asText(value("remarks", row.remarks)) || null,
@@ -3396,11 +3563,13 @@ export function createCommercialRevisionsRepository(
         `
           SELECT count(*)::text AS total_count,
             count(*) FILTER (WHERE ecn.status <> 'Completed')::text AS open_count,
-            count(*) FILTER (WHERE ecn.status = 'Pending Design')::text
+            count(*) FILTER (WHERE ecn.status IN (
+              'Pending Design', 'Pending Design Approval'
+            ))::text
               AS pending_design_count,
             count(*) FILTER (WHERE ecn.status = 'Pending Product Costing')::text
               AS pending_product_costing_count,
-            count(*) FILTER (WHERE ecn.status = 'Pending Costing')::text
+            count(*) FILTER (WHERE ecn.status = 'Pending Customer Costing')::text
               AS pending_costing_count,
             count(*) FILTER (WHERE ecn.status = 'Completed')::text
               AS completed_count
@@ -4707,12 +4876,120 @@ export function createCommercialRevisionsRepository(
         }
         await getProduct(client, row.item_id, true)
         const before = await itemAndBomEvidence(client, row.item_id)
-        const { bomLines, designDetails, sourcePayloadPatch, ...itemPatch } =
-          input.itemPatch
+        const after = proposedDesignEvidence(before, input.itemPatch)
+        await client.query(
+          `
+            UPDATE sales.engineering_change_notes
+            SET status = 'Pending Design Approval', design_before = $1,
+              design_after = $2, design_submitted_at = now(),
+              design_submitted_by_user_id = $3,
+              design_approved_at = NULL, design_approved_by_user_id = NULL,
+              design_rejected_at = NULL, design_rejected_by_user_id = NULL,
+              design_rejection_remarks = NULL,
+              source_payload = jsonb_set(
+                COALESCE(source_payload, '{}'::jsonb),
+                '{designSubmission}', $4::jsonb, true
+              ),
+              updated_by_user_id = $3, updated_at = now(),
+              row_version = row_version + 1
+            WHERE id = $5
+          `,
+          [
+            before,
+            after,
+            input.actorUserId ?? null,
+            JSON.stringify({ itemPatch: input.itemPatch }),
+            input.engineeringChangeNoteId,
+          ]
+        )
+        await writeAuditEvent(client, {
+          actorUserId: input.actorUserId,
+          eventType: "engineering_change.design_submitted",
+          organizationId: row.organization_id,
+          targetId: input.engineeringChangeNoteId,
+          targetTable: "engineering_change_notes",
+        })
+        return {
+          id: input.engineeringChangeNoteId,
+          status: "Pending Design Approval",
+        }
+      })
+    },
+
+    async applyEngineeringChangeDesignReview(input: {
+      actorUserId?: string | null
+      decision: "Approve" | "Reject"
+      engineeringChangeNoteId: string
+      remarks?: string | null
+    }) {
+      return transaction(pool, async (client) => {
+        const result = await client.query<{
+          design_after: ReturnType<typeof proposedDesignEvidence>
+          design_before: Awaited<ReturnType<typeof itemAndBomEvidence>>
+          effective_on: string | null
+          item_id: string
+          organization_id: string
+          reason: string
+          source_payload: Record<string, unknown>
+          status: string
+        }>(
+          `SELECT organization_id, item_id, status, reason,
+             effective_on::text, source_payload, design_before, design_after
+           FROM sales.engineering_change_notes WHERE id = $1 FOR UPDATE`,
+          [input.engineeringChangeNoteId]
+        )
+        const row = result.rows[0]
+        if (!row || row.status !== "Pending Design Approval") {
+          throw new Error("Pending Design Approval ECN was not found.")
+        }
+        await assertDesignHod(client, row.organization_id, input.actorUserId)
+        const submission = record(row.source_payload.designSubmission)
+        const itemPatch = record(
+          submission.itemPatch
+        ) as EngineeringChangeDesignPatch
+
+        if (input.decision === "Reject") {
+          const remarks = asText(input.remarks)
+          if (!remarks) throw new Error("Design rejection remarks are required.")
+          await client.query(
+            `
+              UPDATE sales.engineering_change_notes
+              SET status = 'Pending Design', design_rejected_at = now(),
+                design_rejected_by_user_id = $1,
+                design_rejection_remarks = $2,
+                source_payload = jsonb_set(
+                  COALESCE(source_payload, '{}'::jsonb),
+                  '{designReviewHistory}',
+                  COALESCE(source_payload -> 'designReviewHistory', '[]'::jsonb)
+                    || jsonb_build_array(jsonb_build_object(
+                      'decision', 'Reject', 'remarks', $2::text,
+                      'actorUserId', $1::uuid, 'decidedAt', now()
+                    )), true
+                ),
+                updated_by_user_id = $1, updated_at = now(),
+                row_version = row_version + 1
+              WHERE id = $3
+            `,
+            [input.actorUserId ?? null, remarks, input.engineeringChangeNoteId]
+          )
+          await writeAuditEvent(client, {
+            actorUserId: input.actorUserId,
+            eventType: "engineering_change.design_rejected",
+            metadata: { remarks },
+            organizationId: row.organization_id,
+            targetId: input.engineeringChangeNoteId,
+            targetTable: "engineering_change_notes",
+          })
+          return { id: input.engineeringChangeNoteId, status: "Pending Design" }
+        }
+
+        await getProduct(client, row.item_id, true)
+        const { bomLines, designDetails, sourcePayloadPatch, ...productPatch } =
+          itemPatch
         await applyAllowlistedItemPatch(
           client,
           row.item_id,
-          itemPatch,
+          productPatch,
           designPatchColumns,
           input.actorUserId
         )
@@ -4734,36 +5011,212 @@ export function createCommercialRevisionsRepository(
             [sourcePayloadPatch, input.actorUserId ?? null, row.item_id]
           )
         }
+        const impact = classifyDesignCostImpact(
+          designCostDrivers(row.design_before),
+          designCostDrivers({
+            ...row.design_after,
+            designDetails: designDetails ?? row.design_after.designDetails,
+          })
+        )
+        const currentRevision = await client.query<{
+          id: string
+          revision_number: number
+        }>(
+          `SELECT id, revision_number
+           FROM catalog.product_design_revisions
+           WHERE item_id = $1 AND is_current FOR UPDATE`,
+          [row.item_id]
+        )
+        const current = currentRevision.rows[0]
+        if (!current) throw new Error("Released Product Design revision was not found.")
+        const revisionNumber = current.revision_number + 1
+        const revisionLabel = String(revisionNumber).padStart(2, "0")
+        await client.query(
+          `UPDATE catalog.product_design_revisions
+           SET status = 'Superseded', is_current = false WHERE id = $1`,
+          [current.id]
+        )
+        await client.query(
+          `UPDATE catalog.items
+           SET source_payload = jsonb_set(
+             COALESCE(source_payload, '{}'::jsonb),
+             '{currentDesignRevision}', to_jsonb($1::text), true
+           ), updated_by_user_id = $2, updated_at = now(),
+             row_version = row_version + 1
+           WHERE id = $3`,
+          [revisionLabel, input.actorUserId ?? null, row.item_id]
+        )
         const after = await itemAndBomEvidence(client, row.item_id)
+        const releasedDesign = await client.query<{ id: string }>(
+          `
+            INSERT INTO catalog.product_design_revisions (
+              organization_id, item_id, engineering_change_note_id,
+              revision_number, revision_label, status, is_current,
+              effective_on, change_reason, design_snapshot, bom_snapshot,
+              created_by_user_id, approved_at, approved_by_user_id,
+              released_at, source_system, source_table, source_id,
+              source_payload
+            ) VALUES (
+              $1, $2, $3, $4, $5, 'Released', true, $6::date, $7, $8, $9,
+              $10, now(), $10, now(), 'mrm-dashboard',
+              'product_design_revisions', $11, $12
+            )
+            RETURNING id
+          `,
+          [
+            row.organization_id,
+            row.item_id,
+            input.engineeringChangeNoteId,
+            revisionNumber,
+            revisionLabel,
+            row.effective_on,
+            row.reason,
+            JSON.stringify(after.item),
+            JSON.stringify(after.bomLines),
+            input.actorUserId ?? null,
+            randomUUID(),
+            JSON.stringify({ designDetails: designDetails ?? {}, impact }),
+          ]
+        )
+        const drawingDetails = record(designDetails)
+        let drawingRevisionLabel: string | null = null
+        if (drawingDetails.drawingRevisionRequested === true) {
+          const drawingRequirement = asText(drawingDetails.drawingRequirement)
+          if (
+            drawingRequirement !== "Required" &&
+            drawingRequirement !== "Not Required"
+          ) {
+            throw new Error("Drawing requirement must be Required or Not Required.")
+          }
+          const drawingNumber = asText(drawingDetails.drawingNumber)
+          if (!drawingNumber) throw new Error("Drawing number is required.")
+          const submittedFileId = asText(drawingDetails.drawingFileId)
+          let fileId: string | null = null
+          if (drawingRequirement === "Required") {
+            if (!submittedFileId) {
+              throw new Error("A drawing file is required for this revision.")
+            }
+            const linkedFile = await client.query<{ id: string }>(
+              `SELECT file.id
+               FROM core.files file
+               JOIN core.file_links link ON link.file_id = file.id
+               WHERE file.id = $1 AND file.organization_id = $2
+                 AND link.organization_id = $2
+                 AND link.target_schema = 'sales'
+                 AND link.target_table = 'engineering_change_notes'
+                 AND link.target_id = $3
+                 AND link.purpose = 'drawing_revision' AND link.is_current
+                 AND file.lifecycle_state = 'current'
+               LIMIT 1`,
+              [
+                submittedFileId,
+                row.organization_id,
+                input.engineeringChangeNoteId,
+              ]
+            )
+            fileId = linkedFile.rows[0]?.id ?? null
+            if (!fileId) {
+              throw new Error("The submitted drawing file is not linked to this ECN.")
+            }
+          }
+          const currentDrawing = await client.query<{
+            id: string
+            revision_number: number
+          }>(
+            `SELECT id, revision_number FROM catalog.drawing_revisions
+             WHERE item_id = $1 AND is_current FOR UPDATE`,
+            [row.item_id]
+          )
+          const currentDrawingRow = currentDrawing.rows[0]
+          const drawingRevisionNumber =
+            (currentDrawingRow?.revision_number ?? -1) + 1
+          drawingRevisionLabel = String(drawingRevisionNumber).padStart(2, "0")
+          if (currentDrawingRow) {
+            await client.query(
+              `UPDATE catalog.drawing_revisions
+               SET status = 'Superseded', is_current = false WHERE id = $1`,
+              [currentDrawingRow.id]
+            )
+          }
+          await client.query(
+            `INSERT INTO catalog.drawing_revisions (
+               organization_id, item_id, product_design_revision_id,
+               engineering_change_note_id, file_id, drawing_number,
+               revision_number, revision_label, requirement_status,
+               status, is_current, effective_on, change_reason,
+               raised_by_user_id, uploaded_by_user_id, approved_at,
+               approved_by_user_id, released_at, source_system,
+               source_table, source_id, source_payload
+             ) VALUES (
+               $1, $2, $3, $4, $5, $6, $7, $8, $9,
+               'Released', true, $10::date, $11, $12, $12, now(), $12,
+               now(), 'mrm-dashboard', 'drawing_revisions', $13, $14
+             )`,
+            [
+              row.organization_id,
+              row.item_id,
+              releasedDesign.rows[0]!.id,
+              input.engineeringChangeNoteId,
+              fileId,
+              drawingNumber,
+              drawingRevisionNumber,
+              drawingRevisionLabel,
+              drawingRequirement,
+              row.effective_on,
+              row.reason,
+              input.actorUserId ?? null,
+              randomUUID(),
+              JSON.stringify({
+                fileName: asText(drawingDetails.drawingFileName) || null,
+              }),
+            ]
+          )
+        }
+        const status = engineeringChangeStatusAfterApproval(
+          impact.costImpacting
+        )
         await client.query(
           `
             UPDATE sales.engineering_change_notes
-            SET status = 'Pending Product Costing', design_before = $1,
-              design_after = $2, design_completed_at = now(),
+            SET status = $1, design_after = $2, design_completed_at = now(),
+              design_approved_at = now(), design_approved_by_user_id = $3,
+              cost_impacting = $4, cost_impact_drivers_json = $5,
+              completed_at = CASE WHEN $1 = 'Completed' THEN now() ELSE NULL END,
               source_payload = (COALESCE(source_payload, '{}'::jsonb) - 'designDraft')
-                || jsonb_build_object('designRevision', $3::jsonb),
-              updated_by_user_id = $4, updated_at = now(),
+                || jsonb_build_object(
+                  'releasedDesignRevision', $6::text,
+                  'releasedDrawingRevision', $7::text
+                ),
+              updated_by_user_id = $3, updated_at = now(),
               row_version = row_version + 1
-            WHERE id = $5
+            WHERE id = $8
           `,
           [
-            before,
+            status,
             { ...after, designDetails: designDetails ?? {} },
-            designDetails ?? {},
             input.actorUserId ?? null,
+            impact.costImpacting,
+            JSON.stringify(impact.drivers),
+            revisionLabel,
+            drawingRevisionLabel,
             input.engineeringChangeNoteId,
           ]
         )
         await writeAuditEvent(client, {
           actorUserId: input.actorUserId,
-          eventType: "engineering_change.design_completed",
+          eventType: "engineering_change.design_approved",
+          metadata: { ...impact, drawingRevisionLabel, revisionLabel, status },
           organizationId: row.organization_id,
           targetId: input.engineeringChangeNoteId,
           targetTable: "engineering_change_notes",
         })
         return {
+          costImpactDrivers: impact.drivers,
+          costImpacting: impact.costImpacting,
           id: input.engineeringChangeNoteId,
-          status: "Pending Product Costing",
+          revisionLabel,
+          drawingRevisionLabel,
+          status,
         }
       })
     },
@@ -4832,6 +5285,38 @@ export function createCommercialRevisionsRepository(
         if (!row || row.status !== "Pending Product Costing") {
           throw new Error("Pending-product-costing ECN was not found.")
         }
+        const product = await getProduct(client, row.item_id, true)
+        assertApplicableProcessPrices({
+          current: {
+            annealing: asNumber(product.annealing),
+            assemblyOperationCost: asNumber(product.assembly_operation_cost),
+            buffing: asNumber(product.buffing),
+            checking: asNumber(product.checking),
+            deburring: asNumber(product.deburring),
+            machiningCost: asNumber(product.machining_cost),
+            marking: asNumber(product.marking),
+            plating: asNumber(product.plating),
+            sealant: asNumber(product.sealant),
+            washing: asNumber(product.washing),
+          },
+          next: {
+            annealing: input.itemPatch.annealing,
+            assemblyOperationCost: input.itemPatch.assemblyOperationCost,
+            buffing: input.itemPatch.buffing,
+            checking: input.itemPatch.checking,
+            deburring: input.itemPatch.deburring,
+            machiningCost: input.itemPatch.machiningCost,
+            marking: input.itemPatch.marking,
+            plating: input.itemPatch.plating,
+            sealant: input.itemPatch.sealant,
+            washing: input.itemPatch.washing,
+          },
+          selectedProcesses: designProcessSelection({
+            processesRequired: processesRequiredFromPayload(
+              product.source_payload
+            ),
+          }),
+        })
         const before = await itemAndBomEvidence(client, row.item_id)
         await applyAllowlistedItemPatch(
           client,
@@ -4847,7 +5332,9 @@ export function createCommercialRevisionsRepository(
           row.organization_id
         )
         const status =
-          affectedQuoteItemIds.length > 0 ? "Pending Costing" : "Completed"
+          affectedQuoteItemIds.length > 0
+            ? "Pending Customer Costing"
+            : "Completed"
         await client.query(
           `
             UPDATE sales.engineering_change_notes
@@ -5000,7 +5487,7 @@ export function createCommercialRevisionsRepository(
           [input.engineeringChangeNoteId]
         )
         const row = ecn.rows[0]
-        if (!row || row.status !== "Pending Costing") {
+        if (!row || row.status !== "Pending Customer Costing") {
           throw new Error("Pending-costing ECN was not found.")
         }
         const existing = await client.query(
@@ -5122,7 +5609,7 @@ export function createCommercialRevisionsRepository(
           newPrice: revised.newPrice,
           newProfitPercent: revised.newProfitPercent,
           replacementQuoteItemId: revised.replacementQuoteItemId,
-          status: completed ? "Completed" : "Pending Costing",
+          status: completed ? "Completed" : "Pending Customer Costing",
         }
       })
     },

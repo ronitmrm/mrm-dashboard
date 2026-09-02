@@ -80,8 +80,8 @@ export default async function EngineeringChangeDesignPage({
           <CardTitle>Product Design Dossier</CardTitle>
           <CardDescription>
             Revise the complete Product design. Save Draft keeps the Product
-            unchanged; completion publishes the Product and BOM with locked
-            before/after evidence.
+            unchanged; submission locks before/after evidence for Design HOD
+            approval. Product and BOM publish only after approval.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -90,6 +90,11 @@ export default async function EngineeringChangeDesignPage({
               name="engineering_change_note_id"
               type="hidden"
               value={data.dossier.id}
+            />
+            <input
+              name="organization_id"
+              type="hidden"
+              value={data.dossier.organizationId}
             />
             <EcnDesignWorkspace
               dossier={data.dossier}

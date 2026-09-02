@@ -1,5 +1,9 @@
 import { renderToStaticMarkup } from "react-dom/server"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
+
+vi.mock("@/components/attachment-viewer-link", () => ({
+  AttachmentViewerLink: ({ children }: { children: React.ReactNode }) => children,
+}))
 
 import { EcnDesignWorkspace } from "./ecn-design-workspace"
 
@@ -17,6 +21,10 @@ describe("ECN Design workspace", () => {
           designRemarks: null,
           designerName: "Designer One",
           dieCode: null,
+          drawingFileId: null,
+          drawingFileName: null,
+          drawingNumber: "M1",
+          drawingRequirement: "Required",
           ecnNumber: "ECN-0001",
           fixtureApproxCost: 0,
           fixtureRequired: "No",
@@ -29,6 +37,7 @@ describe("ECN Design workspace", () => {
           materialGradeId: null,
           operationNotes: null,
           productionType: "Conventional",
+          processesRequired: ["Machining"],
           productSize: "1/4 X 1/4",
           reason: "Revise design",
           remarks: null,
@@ -51,6 +60,11 @@ describe("ECN Design workspace", () => {
     expect(markup).toContain('name="description"')
     expect(markup).toContain('name="bom_mode"')
     expect(markup).toContain('name="design_remarks"')
-    expect(markup).toContain("Complete ECN Design")
+    expect(markup).toContain('name="processes_required"')
+    expect(markup).toContain('name="drawing_requirement"')
+    expect(markup).toContain('name="drawing_number"')
+    expect(markup).toContain('name="drawing_file"')
+    expect(markup).toContain("Released only after Design HOD approval")
+    expect(markup).toContain("Submit For Design HOD Approval")
   })
 })

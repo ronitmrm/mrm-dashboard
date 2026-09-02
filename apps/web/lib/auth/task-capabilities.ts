@@ -14,6 +14,7 @@ export const commercialTaskCapabilities = {
   addEnquiryItem: "pricing.enquiries.items.add",
   addPurchaseOrderLine: "pricing.purchase_orders.lines.add",
   applyEngineeringChangeDecision: "pricing.ecns.decision.apply",
+  approveEngineeringChangeDesign: "pricing.ecns.engineering_approve",
   applyEnquiryImportReview: "pricing.enquiries.import_review.apply",
   approveProformaInvoice: "pricing.proforma_invoices.approve",
   cancelPurchaseOrder: "pricing.purchase_orders.cancel",
@@ -114,6 +115,8 @@ export const taskCapabilityLabels = {
   [commercialTaskCapabilities.addEnquiryItem]: "Add Line",
   [commercialTaskCapabilities.addPurchaseOrderLine]: "Match And Add Line",
   [commercialTaskCapabilities.applyEngineeringChangeDecision]: "Record",
+  [commercialTaskCapabilities.approveEngineeringChangeDesign]:
+    "Approve Or Reject ECN Design",
   [commercialTaskCapabilities.applyEnquiryImportReview]:
     "Apply Reviewed Decisions",
   [commercialTaskCapabilities.approveProformaInvoice]:
@@ -123,7 +126,7 @@ export const taskCapabilityLabels = {
   [commercialTaskCapabilities.completeEngineeringChangeCosting]:
     "Complete Product Costing",
   [commercialTaskCapabilities.completeEngineeringChangeDesign]:
-    "Complete Design And Send To Product Costing",
+    "Submit Design For HOD Approval",
   [commercialTaskCapabilities.completeFollowup]: "Complete Follow-Up",
   [commercialTaskCapabilities.completeSalesClarification]:
     "Complete Clarification",

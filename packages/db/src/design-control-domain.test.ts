@@ -66,6 +66,12 @@ describe("Design control domain", () => {
       costImpacting: true,
       drivers: ["processesRequired", "weight100Pcs"],
     })
+    expect(
+      classifyDesignCostImpact(
+        { bom: [{ componentItemId: "a", quantity: 1 }] },
+        { bom: [{ componentItemId: "b", quantity: 1 }] }
+      )
+    ).toEqual({ costImpacting: true, drivers: ["bom"] })
   })
 
   test("routes approved cost changes through both costing stages", () => {

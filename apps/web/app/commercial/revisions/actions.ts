@@ -1,7 +1,11 @@
 "use server"
 
+import { createHash } from "node:crypto"
+
 import {
+  authorizeCommercialAttachmentTarget,
   bulkRevisionFields,
+  createArtifactService,
   createCommercialRevisionsRepository,
 } from "@workspace/db"
 import { revalidatePath } from "next/cache"
@@ -12,6 +16,11 @@ import { requireCapability } from "@/lib/auth/require-capability"
 import { commercialTaskCapabilities } from "@/lib/auth/task-capabilities"
 import { ecnDesignHref, ecnHref } from "@/lib/pricing/ecn-routes"
 import { optionalText, requiredText } from "@/lib/form-data"
+import {
+  commercialAttachmentLimitBytes,
+  validateCommercialAttachment,
+} from "@/lib/commercial-attachment"
+import { createUploadThingArtifactProvider } from "@/lib/uploadthing-artifact-provider"
 
 const revisionsPath = "/commercial/revisions"
 const ecnsPath = "/commercial/ecns"
@@ -44,6 +53,68 @@ function selectedValues(formData: FormData, name: string) {
     .filter((value): value is string => typeof value === "string")
     .map((value) => value.trim())
     .filter(Boolean)
+}
+
+async function persistEcnDrawing(
+  file: File,
+  input: {
+    engineeringChangeNoteId: string
+    organizationId: string
+  }
+) {
+  if (file.size > commercialAttachmentLimitBytes) {
+    throw new Error("Drawing files must not exceed 25 MB.")
+  }
+  const session = await requireCapability(
+    commercialTaskCapabilities.completeEngineeringChangeDesign,
+    ecnDesignHref(input.engineeringChangeNoteId)
+  )
+  const bytes = Buffer.from(await file.arrayBuffer())
+  const { fileName, mediaType } = validateCommercialAttachment({
+    bytes,
+    declaredMediaType: file.type,
+    fileName: file.name,
+    purpose: "drawing",
+  })
+  const sha256 = createHash("sha256").update(bytes).digest("hex")
+  const artifacts = createArtifactService({
+    connectionString: readAuthEnvironment().connectionString,
+    provider: createUploadThingArtifactProvider(),
+  })
+  try {
+    return await artifacts.store({
+      actorUserId: session.user.id,
+      authorizeTarget: (client, { isRetry }) =>
+        authorizeCommercialAttachmentTarget(
+          client,
+          {
+            engineeringChangeNoteId: input.engineeringChangeNoteId,
+            kind: "engineering_change",
+            organizationId: input.organizationId,
+          },
+          { requireOpenState: !isRetry }
+        ),
+      bytes,
+      fileName,
+      idempotencyKey: [
+        "ecn-drawing",
+        input.engineeringChangeNoteId,
+        fileName,
+        sha256,
+      ].join(":"),
+      mediaType,
+      organizationId: input.organizationId,
+      origin: "uploaded",
+      purpose: "drawing_revision",
+      target: {
+        id: input.engineeringChangeNoteId,
+        schema: "sales",
+        table: "engineering_change_notes",
+      },
+    })
+  } finally {
+    await artifacts.close()
+  }
 }
 
 function optionalBomLines(formData: FormData) {
@@ -274,6 +345,27 @@ export async function completeEngineeringChangeDesignAction(
     "engineering_change_note_id"
   )
   const bomLines = optionalBomLines(formData)
+  const drawingFile = formData.get("drawing_file")
+  const uploadedDrawing =
+    drawingFile instanceof File && drawingFile.size > 0
+      ? await persistEcnDrawing(drawingFile, {
+          engineeringChangeNoteId,
+          organizationId: requiredText(formData, "organization_id"),
+        })
+      : null
+  const drawingRevisionRequested =
+    formData.has("drawing_revision_requested") || uploadedDrawing !== null
+  const drawingRequirement =
+    optionalText(formData, "drawing_requirement") ?? "Required"
+  const drawingFileId =
+    uploadedDrawing?.id ?? optionalText(formData, "drawing_file_id") ?? null
+  if (
+    drawingRevisionRequested &&
+    drawingRequirement === "Required" &&
+    !drawingFileId
+  ) {
+    throw new Error("A drawing file is required for a Required drawing revision.")
+  }
   const designDetails = {
     bomLines,
     casting: optionalNumber(formData, "casting"),
@@ -284,6 +376,12 @@ export async function completeEngineeringChangeDesignAction(
     designRemarks: optionalText(formData, "design_remarks"),
     designerName: optionalText(formData, "designer_name"),
     dieCode: optionalText(formData, "die_code"),
+    drawingFileId,
+    drawingFileName:
+      uploadedDrawing?.fileName ?? optionalText(formData, "drawing_file_name"),
+    drawingNumber: optionalText(formData, "drawing_number"),
+    drawingRequirement,
+    drawingRevisionRequested,
     fixtureApproxCost: optionalNumber(formData, "fixture_approx_cost"),
     fixtureRequired: optionalText(formData, "fixture_required"),
     gaugesRequired: optionalText(formData, "gauges_required"),
@@ -292,6 +390,10 @@ export async function completeEngineeringChangeDesignAction(
     materialGradeId: optionalText(formData, "material_grade_id"),
     operationNotes: optionalText(formData, "operation_notes"),
     productionType: optionalText(formData, "production_type"),
+    processesRequired: (optionalText(formData, "processes_required") ?? "")
+      .split(/[,;\n]+/)
+      .map((process) => process.trim())
+      .filter(Boolean),
     productSize: optionalText(formData, "product_size"),
     remarks: optionalText(formData, "remarks"),
     rodSize: optionalText(formData, "rod_size"),
@@ -330,6 +432,7 @@ export async function completeEngineeringChangeDesignAction(
                 category: designDetails.category,
                 productDesignDossier: designDetails,
                 productSize: designDetails.productSize,
+                processesRequired: designDetails.processesRequired,
                 subcategory: designDetails.subcategory,
               },
               weight100Pcs: designDetails.weight100Pcs,
@@ -347,6 +450,35 @@ export async function completeEngineeringChangeDesignAction(
       ? ecnDesignHref(engineeringChangeNoteId)
       : ecnHref(engineeringChangeNoteId)
   )
+}
+
+export async function applyEngineeringChangeDesignReviewAction(
+  formData: FormData
+) {
+  const engineeringChangeNoteId = requiredText(
+    formData,
+    "engineering_change_note_id"
+  )
+  const decision = requiredText(formData, "decision")
+  if (decision !== "Approve" && decision !== "Reject") {
+    throw new Error("Choose Approve or Reject for the ECN Design review.")
+  }
+  await withRevisions(
+    (repository, actorUserId) =>
+      repository.applyEngineeringChangeDesignReview({
+        actorUserId,
+        decision,
+        engineeringChangeNoteId,
+        remarks: optionalText(formData, "remarks"),
+      }),
+    commercialTaskCapabilities.approveEngineeringChangeDesign,
+    ecnsPath
+  )
+  revalidatePath(revisionsPath)
+  revalidatePath(ecnsPath)
+  revalidatePath(ecnHref(engineeringChangeNoteId))
+  revalidatePath(ecnDesignHref(engineeringChangeNoteId))
+  redirect(ecnHref(engineeringChangeNoteId))
 }
 
 export async function completeEngineeringChangeProductCostingAction(

@@ -9,6 +9,7 @@ import {
   createCommercialRevisionsRepository,
 } from "./commercial-revisions"
 import { migrateDatabase } from "./migrate"
+import { createArtifactService } from "./artifacts"
 
 const connectionString =
   process.env.TEST_DATABASE_URL ??
@@ -22,20 +23,48 @@ const repository = createCommercialRevisionsRepository({ connectionString })
 let organizationId: string
 let organizationCode: string
 let customerId: string
+let designHodUserId: string
 
 async function createItem(uid: string, itemType: string) {
   const result = await pool.query<{ id: string }>(
     `
       INSERT INTO catalog.items (
         organization_id, uid, uid_kind, lifecycle_status, description,
-        item_type, source_system, source_table, source_id
+        item_type, source_system, source_table, source_id, source_payload
       )
-      VALUES ($1, $2, 'INTERNAL', 'P', $2, $3, 'test', 'items', $4)
+      VALUES ($1, $2, 'INTERNAL', 'P', $2, $3, 'test', 'items', $4,
+        '{"processesRequired":["Machining","Package Assembly"]}'::jsonb)
       RETURNING id
     `,
     [organizationId, uid, itemType, randomUUID()]
   )
-  return result.rows[0]!.id
+  const itemId = result.rows[0]!.id
+  const designRevision = await pool.query<{ id: string }>(
+    `INSERT INTO catalog.product_design_revisions (
+       organization_id, item_id, revision_number, revision_label, status,
+       is_current, change_reason, design_snapshot, source_system,
+       source_table, source_id
+     ) VALUES ($1, $2, 0, '00', 'Released', true, 'Test initial release',
+       '{}'::jsonb, 'test', 'product_design_revisions', $3)
+     RETURNING id`,
+    [organizationId, itemId, randomUUID()]
+  )
+  await pool.query(
+    `INSERT INTO catalog.drawing_revisions (
+       organization_id, item_id, product_design_revision_id, drawing_number,
+       revision_number, revision_label, requirement_status, status,
+       is_current, change_reason, source_system, source_table, source_id
+     ) VALUES ($1, $2, $3, $4, 0, '00', 'Not Required', 'Released', true,
+       'Test initial release', 'test', 'drawing_revisions', $5)`,
+    [
+      organizationId,
+      itemId,
+      designRevision.rows[0]!.id,
+      uid,
+      randomUUID(),
+    ]
+  )
+  return itemId
 }
 
 async function createQuote(input: {
@@ -164,7 +193,9 @@ async function createQuote(input: {
 }
 
 beforeAll(async () => {
-  await migrateDatabase({ connectionString })
+  if (process.env.SKIP_TEST_MIGRATION !== "1") {
+    await migrateDatabase({ connectionString })
+  }
   organizationCode = `REV-${randomUUID()}`
   const organization = await pool.query<{ id: string }>(
     `
@@ -175,6 +206,49 @@ beforeAll(async () => {
     [organizationCode]
   )
   organizationId = organization.rows[0]!.id
+  const hodUser = await pool.query<{ id: string }>(
+    `INSERT INTO identity.users (name, email, email_verified)
+     VALUES ('Design HOD', $1, true) RETURNING id`,
+    [`design-hod-${randomUUID()}@example.test`]
+  )
+  designHodUserId = hodUser.rows[0]!.id
+  const department = await pool.query<{ id: string }>(
+    `INSERT INTO recruitment.departments (
+       organization_id, code, name, source_system, source_table, source_id
+     ) VALUES ($1, 'DESIGN', 'Design', 'test', 'departments', $2)
+     RETURNING id`,
+    [organizationId, randomUUID()]
+  )
+  const designation = await pool.query<{ id: string }>(
+    `INSERT INTO recruitment.designations (
+       organization_id, code, name, source_system, source_table, source_id
+     ) VALUES ($1, 'HOD', 'Head of Department', 'test', 'designations', $2)
+     RETURNING id`,
+    [organizationId, randomUUID()]
+  )
+  const employeeCode = `HOD-${randomUUID()}`
+  await pool.query(
+    `INSERT INTO recruitment.posts (
+       organization_id, department_id, designation_id, vacancy_number,
+       post_code, vacancy_code, employee_name, employee_code, status,
+       source_system, source_table, source_id
+     ) VALUES ($1, $2, $3, '1', $4, $4, 'Design HOD', $5, 'Occupied',
+       'test', 'posts', $6)`,
+    [
+      organizationId,
+      department.rows[0]!.id,
+      designation.rows[0]!.id,
+      `POST-${randomUUID()}`,
+      employeeCode,
+      randomUUID(),
+    ]
+  )
+  await pool.query(
+    `INSERT INTO identity.employee_links (
+       user_id, organization_id, employee_code
+     ) VALUES ($1, $2, $3)`,
+    [designHodUserId, organizationId, employeeCode]
+  )
   const customer = await pool.query<{ id: string }>(
     `
       INSERT INTO sales.customers (
@@ -976,10 +1050,9 @@ describe("commercial revisions and corrections", () => {
     ).rejects.toThrow("at least one")
   })
 
-  test("runs ECN through Design, Product Costing, Costing, and completion with BOM evidence", async () => {
+  test("runs ECN through Design, Product Costing, Costing, and completion with immutable evidence", async () => {
     const suffix = randomUUID()
     const firstComponentId = await createItem(`M-ECN-A-${suffix}`, "List")
-    const secondComponentId = await createItem(`M-ECN-B-${suffix}`, "List")
     const packageId = await createItem(`P-ECN-${suffix}`, "Package")
     await pool.query(
       `
@@ -1000,18 +1073,12 @@ describe("commercial revisions and corrections", () => {
     const designed = await repository.completeEngineeringChangeDesign({
       engineeringChangeNoteId: ecn.id,
       itemPatch: {
-        bomLines: [
-          {
-            componentItemId: secondComponentId,
-            notes: "ECN replacement",
-            quantity: 2,
-          },
-        ],
         description: "Revised ECN package",
         remarks: "Package process: assembly",
+        weight100Pcs: 25,
       },
     })
-    expect(designed.status).toBe("Pending Product Costing")
+    expect(designed.status).toBe("Pending Design Approval")
     const designEvidence = await pool.query<{
       design_after: Record<string, unknown>
       design_before: Record<string, unknown>
@@ -1023,6 +1090,36 @@ describe("commercial revisions and corrections", () => {
     expect(designEvidence.rows[0]!.design_after).toMatchObject({
       item: { description: "Revised ECN package" },
     })
+    const unchanged = await pool.query<{
+      component_item_id: string
+      description: string
+    }>(
+      `SELECT item.description, line.component_item_id
+       FROM catalog.items item
+       JOIN catalog.bom_lines line ON line.parent_item_id = item.id
+       WHERE item.id = $1`,
+      [packageId]
+    )
+    expect(unchanged.rows[0]).toMatchObject({
+      component_item_id: firstComponentId,
+      description: `P-ECN-${suffix}`,
+    })
+    await expect(
+      repository.applyEngineeringChangeDesignReview({
+        decision: "Approve",
+        engineeringChangeNoteId: ecn.id,
+      })
+    ).rejects.toThrow("Design HOD")
+    const approved = await repository.applyEngineeringChangeDesignReview({
+      actorUserId: designHodUserId,
+      decision: "Approve",
+      engineeringChangeNoteId: ecn.id,
+    })
+    expect(approved).toMatchObject({
+      costImpacting: true,
+      revisionLabel: "01",
+      status: "Pending Product Costing",
+    })
 
     const costed = await repository.completeEngineeringChangeProductCosting({
       engineeringChangeNoteId: ecn.id,
@@ -1031,19 +1128,158 @@ describe("commercial revisions and corrections", () => {
     expect(costed.status).toBe("Completed")
     const stored = await pool.query<{
       assembly_operation_cost: string
+      revision_label: string
       status: string
     }>(
       `
-        SELECT item.assembly_operation_cost, ecn.status
+        SELECT item.assembly_operation_cost, ecn.status,
+          revision.revision_label
         FROM sales.engineering_change_notes ecn
         JOIN catalog.items item ON item.id = ecn.item_id
+        JOIN catalog.product_design_revisions revision
+          ON revision.item_id = item.id AND revision.is_current
         WHERE ecn.id = $1
       `,
       [ecn.id]
     )
     expect(Number(stored.rows[0]!.assembly_operation_cost)).toBe(25)
+    expect(stored.rows[0]!.revision_label).toBe("01")
     expect(stored.rows[0]!.status).toBe("Completed")
-  })
+  }, 30_000)
+
+  test("rejects an ECN Design submission without mutating the released Product", async () => {
+    const suffix = randomUUID()
+    const itemId = await createItem(`M-ECN-REJECT-${suffix}`, "List")
+    const ecn = await repository.createEngineeringChangeNote({
+      itemId,
+      organizationId,
+      reason: "Reject unsafe design",
+    })
+    await repository.completeEngineeringChangeDesign({
+      engineeringChangeNoteId: ecn.id,
+      itemPatch: { description: "Unapproved description" },
+    })
+
+    const rejected = await repository.applyEngineeringChangeDesignReview({
+      actorUserId: designHodUserId,
+      decision: "Reject",
+      engineeringChangeNoteId: ecn.id,
+      remarks: "Dimension evidence is incomplete.",
+    })
+    expect(rejected.status).toBe("Pending Design")
+    const stored = await pool.query<{
+      description: string
+      design_rejection_remarks: string
+      revision_label: string
+      status: string
+    }>(
+      `SELECT item.description, ecn.status, ecn.design_rejection_remarks,
+         revision.revision_label
+       FROM sales.engineering_change_notes ecn
+       JOIN catalog.items item ON item.id = ecn.item_id
+       JOIN catalog.product_design_revisions revision
+         ON revision.item_id = item.id AND revision.is_current
+       WHERE ecn.id = $1`,
+      [ecn.id]
+    )
+    expect(stored.rows[0]).toMatchObject({
+      description: `M-ECN-REJECT-${suffix}`,
+      design_rejection_remarks: "Dimension evidence is incomplete.",
+      revision_label: "00",
+      status: "Pending Design",
+    })
+  }, 30_000)
+
+  test("releases an ECN drawing as the next immutable revision after HOD approval", async () => {
+    const suffix = randomUUID()
+    const itemId = await createItem(`M-ECN-DRAWING-${suffix}`, "List")
+    const ecn = await repository.createEngineeringChangeNote({
+      itemId,
+      organizationId,
+      reason: "Release controlled drawing",
+    })
+    const artifacts = createArtifactService({
+      connectionString,
+      provider: {
+        delete: async () => undefined,
+        upload: async ({ customId }) => ({
+          key: `test/${customId}`,
+          url: `https://example.test/${customId}`,
+        }),
+      },
+    })
+    const drawing = await artifacts.store({
+      actorUserId: designHodUserId,
+      bytes: Buffer.from("%PDF-1.4\ncontrolled drawing"),
+      fileName: "controlled-drawing.pdf",
+      idempotencyKey: `ecn-drawing:${ecn.id}`,
+      mediaType: "application/pdf",
+      organizationId,
+      origin: "uploaded",
+      purpose: "drawing_revision",
+      target: {
+        id: ecn.id,
+        schema: "sales",
+        table: "engineering_change_notes",
+      },
+    })
+    await repository.completeEngineeringChangeDesign({
+      engineeringChangeNoteId: ecn.id,
+      itemPatch: {
+        designDetails: {
+          drawingFileId: drawing.id,
+          drawingFileName: drawing.fileName,
+          drawingNumber: `DRW-${suffix}`,
+          drawingRequirement: "Required",
+          drawingRevisionRequested: true,
+        },
+      },
+    })
+    const approved = await repository.applyEngineeringChangeDesignReview({
+      actorUserId: designHodUserId,
+      decision: "Approve",
+      engineeringChangeNoteId: ecn.id,
+    })
+    expect(approved).toMatchObject({
+      drawingRevisionLabel: "01",
+      revisionLabel: "01",
+    })
+
+    const history = await pool.query<{
+      file_id: string | null
+      is_current: boolean
+      revision_label: string
+      status: string
+    }>(
+      `SELECT revision_label, status, is_current, file_id
+       FROM catalog.drawing_revisions
+       WHERE item_id = $1 ORDER BY revision_number`,
+      [itemId]
+    )
+    expect(history.rows).toEqual([
+      expect.objectContaining({
+        is_current: false,
+        revision_label: "00",
+        status: "Superseded",
+      }),
+      expect.objectContaining({
+        file_id: drawing.id,
+        is_current: true,
+        revision_label: "01",
+        status: "Released",
+      }),
+    ])
+    await expect(
+      artifacts.delete({
+        actorUserId: designHodUserId,
+        artifactId: drawing.id,
+        confirmation: drawing.fileName,
+        organizationId,
+        reason: "Attempt to remove released evidence",
+      })
+    ).rejects.toThrow("Released drawing revision evidence cannot be deleted")
+    await artifacts.close()
+  }, 30_000)
 
   test("freezes ECN affected prices and preserves Keep Price Same semantics", async () => {
     const suffix = randomUUID()
@@ -1071,7 +1307,12 @@ describe("commercial revisions and corrections", () => {
     })
     await repository.completeEngineeringChangeDesign({
       engineeringChangeNoteId: ecn.id,
-      itemPatch: { description: `Revised ${suffix}` },
+      itemPatch: { description: `Revised ${suffix}`, weight100Pcs: 12 },
+    })
+    await repository.applyEngineeringChangeDesignReview({
+      actorUserId: designHodUserId,
+      decision: "Approve",
+      engineeringChangeNoteId: ecn.id,
     })
     const costing = await repository.completeEngineeringChangeProductCosting({
       engineeringChangeNoteId: ecn.id,
@@ -1079,7 +1320,7 @@ describe("commercial revisions and corrections", () => {
     })
     expect(costing).toMatchObject({
       affectedPriceCount: 1,
-      status: "Pending Costing",
+      status: "Pending Customer Costing",
     })
     const affected = await repository.listEngineeringChangeAffectedPrices(
       ecn.id
@@ -1096,7 +1337,7 @@ describe("commercial revisions and corrections", () => {
       sourceQuoteItemId: quoteItemId,
     })
     expect(decision).toMatchObject({ newPrice: 120, status: "Completed" })
-  })
+  }, 30_000)
 
   test("loads the ECN affected-price graph within six statements", async () => {
     const suffix = randomUUID()
@@ -1143,7 +1384,12 @@ describe("commercial revisions and corrections", () => {
     })
     await repository.completeEngineeringChangeDesign({
       engineeringChangeNoteId: ecn.id,
-      itemPatch: { description: `Revised ${suffix}` },
+      itemPatch: { description: `Revised ${suffix}`, weight100Pcs: 1 },
+    })
+    await repository.applyEngineeringChangeDesignReview({
+      actorUserId: designHodUserId,
+      decision: "Approve",
+      engineeringChangeNoteId: ecn.id,
     })
     await repository.completeEngineeringChangeProductCosting({
       engineeringChangeNoteId: ecn.id,
@@ -1229,7 +1475,12 @@ describe("commercial revisions and corrections", () => {
     })
     await repository.completeEngineeringChangeDesign({
       engineeringChangeNoteId: ecn.id,
-      itemPatch: { description: `Decision revision ${suffix}` },
+      itemPatch: { description: `Decision revision ${suffix}`, weight100Pcs: 1 },
+    })
+    await repository.applyEngineeringChangeDesignReview({
+      actorUserId: designHodUserId,
+      decision: "Approve",
+      engineeringChangeNoteId: ecn.id,
     })
     await repository.completeEngineeringChangeProductCosting({
       engineeringChangeNoteId: ecn.id,
@@ -1264,7 +1515,7 @@ describe("commercial revisions and corrections", () => {
       expect(decision).toMatchObject({
         newPrice: selectedPreview.revisePriceUsd,
         newProfitPercent: selectedPreview.reviseProfitPercent,
-        status: "Pending Costing",
+        status: "Pending Customer Costing",
       })
       expect(readStatements).toBeLessThanOrEqual(6)
 
@@ -1394,7 +1645,12 @@ describe("commercial revisions and corrections", () => {
     })
     await repository.completeEngineeringChangeDesign({
       engineeringChangeNoteId: ecn.id,
-      itemPatch: { description: "Revised drawing product" },
+      itemPatch: { description: "Revised drawing product", weight100Pcs: 1 },
+    })
+    await repository.applyEngineeringChangeDesignReview({
+      actorUserId: designHodUserId,
+      decision: "Approve",
+      engineeringChangeNoteId: ecn.id,
     })
     await repository.completeEngineeringChangeProductCosting({
       engineeringChangeNoteId: ecn.id,

@@ -23,6 +23,7 @@ import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
 
 import {
+  applyEngineeringChangeDesignReviewAction,
   applyEngineeringChangeDecisionAction,
   completeEngineeringChangeProductCostingAction,
 } from "../../revisions/actions"
@@ -49,6 +50,21 @@ const productCostingFields = [
   ["burning_loss_percent", "Burning Loss %"],
 ] as const
 
+const processForCostingField: Partial<
+  Record<(typeof productCostingFields)[number][0], string>
+> = {
+  annealing: "annealing",
+  assembly_operation_cost: "package assembly",
+  buffing: "buffing",
+  checking: "checking",
+  deburring: "deburring",
+  machining_cost: "machining",
+  marking: "marking",
+  plating: "plating",
+  sealant: "sealant",
+  washing: "washing",
+}
+
 function money(value: number) {
   return new Intl.NumberFormat("en-US", {
     maximumFractionDigits: 4,
@@ -73,7 +89,7 @@ export default async function EngineeringChangeNotePage({
     try {
       const selected = await repository.getEngineeringChangeNote("MRMPL", ecnId)
       const affected =
-        selected?.status === "Pending Costing"
+        selected?.status === "Pending Customer Costing"
           ? await repository.listEngineeringChangeAffectedPrices(selected.id)
           : []
       return { affected, selected }
@@ -135,6 +151,37 @@ export default async function EngineeringChangeNotePage({
                   Decisions
                 </p>
               </div>
+              {selected.designSubmittedAt ? (
+                <div className="grid gap-1 rounded-xl border bg-muted/30 p-3 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
+                  <span>
+                    Submitted: {selected.designSubmittedAt.toLocaleString()}
+                  </span>
+                  <span>
+                    Approved: {selected.designApprovedAt?.toLocaleString() || "—"}
+                    {selected.designApprovedBy
+                      ? ` by ${selected.designApprovedBy}`
+                      : ""}
+                  </span>
+                  <span>
+                    Released Revision: {selected.releasedDesignRevision || "—"}
+                  </span>
+                  <span>
+                    Drawing Revision: {selected.releasedDrawingRevision || "—"}
+                  </span>
+                  <span>
+                    Cost Impact: {selected.costImpacting === null
+                      ? "Pending classification"
+                      : selected.costImpacting
+                        ? selected.costImpactDrivers.join(", ")
+                        : "No cost impact"}
+                  </span>
+                  {selected.designRejectedAt ? (
+                    <span className="text-destructive sm:col-span-2 lg:col-span-4">
+                      Rejected {selected.designRejectedAt.toLocaleString()}: {selected.designRejectionRemarks}
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
               {selected.status === "Pending Design" ? (
                 <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
                   <p className="text-sm text-muted-foreground">
@@ -146,6 +193,54 @@ export default async function EngineeringChangeNotePage({
                       Open Design Workspace
                     </Link>
                   </Button>
+                </div>
+              ) : null}
+              {selected.status === "Pending Design Approval" ? (
+                <div className="grid gap-4 border-t pt-4">
+                  <div>
+                    <p className="text-sm font-medium">Design HOD Review</p>
+                    <p className="text-xs text-muted-foreground">
+                      Approval releases the next Product Design revision.
+                      Rejection returns the same ECN to Design with remarks and
+                      leaves the Product, BOM, and drawing unchanged.
+                    </p>
+                  </div>
+                  <div className="grid gap-3 lg:grid-cols-2">
+                    <form
+                      action={applyEngineeringChangeDesignReviewAction}
+                      className="grid gap-2 rounded-xl border p-3"
+                    >
+                      <input
+                        name="engineering_change_note_id"
+                        type="hidden"
+                        value={selected.id}
+                      />
+                      <input name="decision" type="hidden" value="Approve" />
+                      <Field>
+                        <FieldLabel>Approval Remarks</FieldLabel>
+                        <Input name="remarks" placeholder="Optional" />
+                      </Field>
+                      <Button type="submit">Approve Design Revision</Button>
+                    </form>
+                    <form
+                      action={applyEngineeringChangeDesignReviewAction}
+                      className="grid gap-2 rounded-xl border border-destructive/40 p-3"
+                    >
+                      <input
+                        name="engineering_change_note_id"
+                        type="hidden"
+                        value={selected.id}
+                      />
+                      <input name="decision" type="hidden" value="Reject" />
+                      <Field>
+                        <FieldLabel>Rejection Remarks</FieldLabel>
+                        <Input name="remarks" required />
+                      </Field>
+                      <Button type="submit" variant="destructive">
+                        Reject To Design
+                      </Button>
+                    </form>
+                  </div>
                 </div>
               ) : null}
               {selected.status === "Pending Product Costing" ? (
@@ -171,7 +266,17 @@ export default async function EngineeringChangeNotePage({
                     {productCostingFields.map(([name, label]) => (
                       <Field key={name}>
                         <FieldLabel>{label}</FieldLabel>
-                        <Input name={name} step="any" type="number" />
+                        <Input
+                          disabled={
+                            processForCostingField[name] !== undefined &&
+                            !selected.processesRequired
+                              .map((process) => process.toLowerCase())
+                              .includes(processForCostingField[name])
+                          }
+                          name={name}
+                          step="any"
+                          type="number"
+                        />
                       </Field>
                     ))}
                     <Field>
@@ -218,7 +323,7 @@ export default async function EngineeringChangeNotePage({
                   </Button>
                 </form>
               ) : null}
-              {selected.status === "Pending Costing" ? (
+              {selected.status === "Pending Customer Costing" ? (
                 affected.length ? (
                   <div className="grid gap-3 border-t pt-4">
                     {affected.map((price) => (

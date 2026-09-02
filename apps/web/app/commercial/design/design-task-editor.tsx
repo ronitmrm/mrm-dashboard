@@ -1,7 +1,6 @@
 "use client"
 
 import { useRef, useState } from "react"
-import Link from "next/link"
 
 import {
   designAssemblyPieceWeight,
@@ -26,7 +25,7 @@ import {
 } from "@workspace/ui/components/native-select"
 import { Textarea } from "@workspace/ui/components/textarea"
 
-import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
+import { AttachmentViewerLink } from "../../../components/attachment-viewer-link"
 
 type BomLine = {
   bomItem?: string | null

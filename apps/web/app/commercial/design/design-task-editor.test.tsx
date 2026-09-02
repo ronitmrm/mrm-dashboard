@@ -142,8 +142,9 @@ describe("DesignTaskEditor", () => {
     expect(markup).toContain('name="bom_line_1_customer_marked_file"')
     expect(markup).toContain('name="bom_line_1_cad_file"')
     expect(markup).toContain("line-1-internal.pdf")
+    expect(markup).toContain('href="/attachments/view?')
     expect(markup).toContain(
-      'href="/commercial/design/design-1/file/bom_line_1_internal_drawing"'
+      "src=%2Fcommercial%2Fdesign%2Fdesign-1%2Ffile%2Fbom_line_1_internal_drawing"
     )
   })
 

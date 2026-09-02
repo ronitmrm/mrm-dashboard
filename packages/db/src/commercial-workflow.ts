@@ -1989,12 +1989,39 @@ export type CommercialAttachmentAuthorization =
       kind: "design"
       organizationId: string
     }
+  | {
+      engineeringChangeNoteId: string
+      kind: "engineering_change"
+      organizationId: string
+    }
 
 export async function authorizeCommercialAttachmentTarget(
   client: PoolClient,
   input: CommercialAttachmentAuthorization,
   options: { actorUserId?: string | null; requireOpenState: boolean }
 ) {
+  if (input.kind === "engineering_change") {
+    const target = await client.query<{ id: string }>(
+      `
+        SELECT ecn.id
+        FROM sales.engineering_change_notes ecn
+        WHERE ecn.id = $1
+          AND ecn.organization_id = $2
+          AND ($3::boolean = false OR ecn.status = 'Pending Design')
+        FOR UPDATE OF ecn
+      `,
+      [
+        input.engineeringChangeNoteId,
+        input.organizationId,
+        options.requireOpenState,
+      ]
+    )
+    if (!target.rows[0]) {
+      throw new Error("ECN drawing attachment target was not found or is locked.")
+    }
+    return
+  }
+
   if (input.kind === "sales_clarification") {
     const target = await client.query<{ id: string }>(
       `
@@ -5684,7 +5711,10 @@ export function createCommercialWorkflowRepository(
       organizationId: string
       purpose?: string
       targetId: string
-      targetTable: "design_tasks" | "enquiry_items"
+      targetTable:
+        | "design_tasks"
+        | "engineering_change_notes"
+        | "enquiry_items"
     }) {
       const files = await pool.query<{
         byte_size: string
@@ -5747,7 +5777,10 @@ export function createCommercialWorkflowRepository(
       organizationId: string
       purpose?: string
       targetIds: string[]
-      targetTable: "design_tasks" | "enquiry_items"
+      targetTable:
+        | "design_tasks"
+        | "engineering_change_notes"
+        | "enquiry_items"
     }) {
       if (input.targetIds.length === 0) {
         return new Map<

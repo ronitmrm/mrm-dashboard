@@ -104,6 +104,7 @@ export function drawingRevisionLabel(revision: number) {
 }
 
 const costDriverKeys = [
+  "bom",
   "processesRequired",
   "weight100Pcs",
   "casting",
