@@ -10,6 +10,18 @@ version. Initial release is `00`; each approved ECN increments it. Exactly one
 revision is Current and every earlier released revision is Superseded.
 _Avoid_: Editing released Product/BOM evidence, reusing a revision number.
 
+**Component Design Revision**: The released Product Design Revision used by one
+BOM component. Current BOM summaries show it beside a component link to that
+Product's Design Dossier. Every new parent revision snapshot pins the component
+revision used at release; an older snapshot never resolves this value from the
+component's current revision.
+
+**Package / Assembly Design Weight**: The bottom-up sum of each current direct
+component's Product Weight multiplied by its BOM quantity. It never starts from
+the parent's previously stored weight. When a component Design Revision is
+released, every direct and indirect Package / Assembly parent is recalculated
+in dependency order and receives its own next immutable Product Design Revision.
+
 **Initial Design Release**: A two-step Design workflow. Design first completes
 all structured Product/BOM data bottom-up, then resolves every required part's
 drawing as Uploaded or Not Required. Missing drawings keep the Design In

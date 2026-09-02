@@ -149,6 +149,7 @@ export function ProductDesignSummary({
                 <TableHead>Level</TableHead>
                 <TableHead>Parent</TableHead>
                 <TableHead>Component</TableHead>
+                <TableHead>Component Revision</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>Qty.</TableHead>
@@ -172,8 +173,14 @@ export function ProductDesignSummary({
                       {line.parentUid}
                     </TableCell>
                     <TableCell className="font-mono">
-                      {line.componentUid}
+                      <Link
+                        className="font-medium text-primary underline-offset-4 hover:underline"
+                        href={`/commercial/products/${encodeURIComponent(line.componentUid)}`}
+                      >
+                        {line.componentUid}
+                      </Link>
                     </TableCell>
+                    <TableCell>{display(line.designRevision)}</TableCell>
                     <TableCell>{line.description}</TableCell>
                     <TableCell>{line.itemType}</TableCell>
                     <TableCell>{line.quantity}</TableCell>
@@ -194,7 +201,7 @@ export function ProductDesignSummary({
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={13}>
+                  <TableCell colSpan={14}>
                     No component lines. This Product is a BOM leaf.
                   </TableCell>
                 </TableRow>

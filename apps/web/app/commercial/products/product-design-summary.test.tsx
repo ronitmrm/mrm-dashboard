@@ -13,6 +13,7 @@ const dossier = {
       componentUid: "M2",
       depth: 1,
       description: "Nut",
+      designRevision: "03",
       drawingRequirement: "Required",
       grade: "CW614N",
       itemType: "List",
@@ -97,11 +98,14 @@ describe("ProductDesignSummary", () => {
       "M2",
       "Total Qty.",
       "Design Revision History",
+      "Component Revision",
+      "03",
     ]) {
       expect(markup).toContain(value)
     }
     expect(markup).toContain('href="/commercial/products/M1/design"')
     expect(markup).toContain('href="/commercial/products/M1/revisions/00"')
+    expect(markup).toContain('href="/commercial/products/M2"')
     expect(markup).not.toContain("Pricing")
     expect(markup).not.toContain("Product Cost")
   })
