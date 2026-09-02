@@ -21,6 +21,7 @@ import {
 
 import { sendQuoteAction } from "@/app/commercial/costing/actions"
 import { readAuthEnvironment } from "@/lib/auth/auth"
+import { MetricSummary } from "@/components/ui/golden-patterns"
 import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { istDateValue } from "@/lib/date-time"
@@ -61,6 +62,23 @@ export default async function QuotesPage() {
         </div>
       </CardHeader>
       <CardContent>
+        <MetricSummary
+          className="mb-4"
+          scope="Your latest 200 quote lines at most · before table filters"
+          items={[
+            { label: "Quote Lines", value: quotes.length, tone: "information" },
+            {
+              label: "Ready to Send",
+              value: quotes.filter((row) => row.status === "Ready").length,
+              tone: "warning"
+            },
+            {
+              label: "Active Prices",
+              value: quotes.filter((row) => row.isActive).length,
+              tone: "positive"
+            }
+          ]}
+        />
         <div className="overflow-hidden rounded-3xl border">
  <OperationalTable>
             <TableHeader>

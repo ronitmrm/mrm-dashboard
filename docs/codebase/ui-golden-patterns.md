@@ -26,6 +26,17 @@ Use `OperationalTable` for comparable records, scanning, filtering, sorting, sel
 
 Use `PageHeader` once per dashboard screen. Put primary and secondary page actions in its `actions` slot or an adjacent `ActionToolbar`. Use `FormSection` to group related fields and `FormGrid` for responsive field layout.
 
+Use `MetricSummary` from `apps/web/components/ui/golden-patterns.tsx` for a
+full-width, responsive row of register counts. It composes `MetricCard`, formats
+numbers consistently, and requires a visible scope label. Use existing authorized
+page data; do not add global reads just to populate cards. Distinguish loaded,
+paginated, search-matching and table-filtered records. Count distinct entities
+where rows repeat (orders versus order lines, employees versus posts, checklists
+versus steps). Do not sum quantities with different units or money in different
+currencies. One useful card is enough for a simple master. Forms, navigation-only
+screens and individual record dossiers need no artificial totals. Preserve
+existing dashboard cards; do not duplicate them.
+
 ## Operational tables
 
 `OperationalTable` owns the shared density, sticky header, scrolling boundary, Excel-style column filters, faceted options, natural sorting, clear-all control, filtered bulk selection, selected-row treatment, and empty/loading/error presentation.

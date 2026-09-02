@@ -28,6 +28,7 @@ import {
 } from "@workspace/ui/components/table"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
+import { MetricSummary } from "@/components/ui/golden-patterns"
 import { commercialTaskCapabilities } from "@/lib/auth/task-capabilities"
 import { CompanyWideMasterScope } from "@/components/company-wide-master-scope"
 import { DataDownloadButton } from "@/components/data-download-button"
@@ -195,6 +196,26 @@ export default async function CustomersPage({
         }
         masterTablesHref={externalMasterViewHref(customersPath, "masterTables")}
       />
+
+      {showMasterTables ? (
+        <MetricSummary
+          scope={`Customer register · page ${bounds.page} of ${totalPages} · before table filters`}
+          items={[
+            {
+              label: "Total Customers",
+              value: customerPage.coverage.total ?? "—",
+              tone: "information"
+            },
+            { label: "On This Page", value: visibleCustomers.length },
+            {
+              label: "Active on Page",
+              value: visibleCustomers.filter((row) => row.status === "Active")
+                .length,
+              tone: "positive"
+            }
+          ]}
+        />
+      ) : null}
 
       {canCreateCustomers && showDataEntry ? (
  <SectionCard>

@@ -25,6 +25,7 @@ import {
 } from "@workspace/ui/components/table"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
+import { MetricSummary } from "@/components/ui/golden-patterns"
 import { istDateValue } from "@/lib/date-time"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { BoundedResultNotice } from "@/components/bounded-result-notice"
@@ -113,6 +114,31 @@ export default async function EnquiriesPage({
       <section className="grid gap-2">
         <h2 className="text-2xl font-semibold tracking-tight">Enquiries</h2>
       </section>
+
+      {operationalView === "masterTables" ? (
+        <MetricSummary
+          scope="Your loaded enquiry register · before table filters"
+          items={[
+            {
+              label: "Enquiries",
+              value: enquiries.length,
+              tone: "information"
+            },
+            {
+              label: "Enquiry Lines",
+              value: enquiries.reduce((total, row) => total + row.itemCount, 0)
+            },
+            {
+              label: "Due Follow-ups",
+              value: enquiries.reduce(
+                (total, row) => total + row.dueFollowupCount,
+                0
+              ),
+              tone: "warning"
+            }
+          ]}
+        />
+      ) : null}
 
       {operationalView === "dataEntry" ? (
  <SectionCard>

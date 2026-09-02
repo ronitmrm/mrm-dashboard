@@ -8,6 +8,7 @@ import { ExternalLink } from "lucide-react"
 import Link from "next/link"
 
 import { jobCardWorkspaceHref } from "@/lib/unified-navigation"
+import { MetricSummary } from "@/components/ui/golden-patterns"
 
 type Row = Record<string, unknown>
 const text = (value: unknown) => String(value ?? "").trim()
@@ -53,6 +54,27 @@ export function JobCardRegister({
         </div>
       </CardHeader>
       <CardContent>
+        <MetricSummary
+          className="mb-4"
+          scope="Selected production unit · before table filters"
+          items={[
+            { label: "Job Cards", value: rows.length, tone: "information" },
+            {
+              label: "Awaiting RM",
+              value: rows.filter((row) => jobCardStage(row) === "Awaiting RM")
+                .length,
+              tone: "warning"
+            },
+            {
+              label: "Production Complete",
+              value: rows.filter(
+                (row) => jobCardStage(row) === "Production complete"
+              ).length,
+              description: "Completed, not yet in dispatch stage",
+              tone: "positive"
+            }
+          ]}
+        />
         <div className="max-h-[70vh] overflow-auto rounded-md border">
  <OperationalTable containerClassName="max-h-none overflow-visible" excelFilters>
             <TableHeader className="sticky top-0 z-10 bg-background"><TableRow>

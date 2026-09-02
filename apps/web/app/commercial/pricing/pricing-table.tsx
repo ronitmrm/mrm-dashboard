@@ -20,6 +20,7 @@ import {
   type TableSort,
 } from "@workspace/ui/lib/table-filter-state"
 import Link from "next/link"
+import { MetricSummary } from "@/components/ui/golden-patterns"
 
 import {
   isPricingFormulaCell,
@@ -145,6 +146,26 @@ export function PricingTable({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
+      <MetricSummary
+        scope="Pricing rows matching current table filters · all pages"
+        items={[
+          {
+            label: "Matching Rows",
+            value: filteredRows.length,
+            tone: "information"
+          },
+          {
+            label: "Customers",
+            value: new Set(
+              filteredRows.flatMap((row) =>
+                row.customerId ? [row.customerId] : []
+              )
+            ).size,
+            tone: "brand"
+          },
+          { label: "On This Page", value: visibleRows.length }
+        ]}
+      />
       <div className="flex shrink-0 items-center justify-between gap-3 text-xs text-muted-foreground">
         <div className="flex items-center gap-2">
           <span

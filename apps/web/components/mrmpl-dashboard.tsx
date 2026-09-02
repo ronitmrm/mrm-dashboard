@@ -181,6 +181,7 @@ import {
 } from "@/lib/maintenance-schedule-options"
 import { unifiedMechanicalWorkRows } from "@/lib/maintenance-work-list"
 import { MachineStoreAssets } from "@/components/machine-store-assets"
+import { MetricSummary } from "@/components/ui/golden-patterns"
 import {
   StoreMasterWorkspace,
   type StoreMasterData,
@@ -10488,6 +10489,23 @@ function MasterReadinessPanel({
   const allWorkOrderGaps = asArray(productionControl.allWorkOrderGaps)
   return (
     <section className="grid gap-4">
+      <MetricSummary
+        scope="Selected production unit · before table filters"
+        items={[
+          {
+            label: "Validation Rows",
+            value: masterGaps.length,
+            description: "Rows in Production Validation",
+            tone: "warning"
+          },
+          {
+            label: "Missing-detail Rows",
+            value: allWorkOrderGaps.length,
+            description: "Rows in Whole Work-Order Missing Details",
+            tone: "information"
+          }
+        ]}
+      />
       <WorkOrderGapTable
         title="Production Validation"
         rows={masterGaps}
@@ -11118,6 +11136,17 @@ function OperationalTablesPanel({
         }
         masterTablesHref={operationalTabs.masterTablesHref}
       />
+      <MetricSummary
+        scope={`${selectedSpec.title} · search applied, before column filters`}
+        items={[
+          { label: "Saved Rows", value: rows.length, tone: "information" },
+          {
+            label: "Search Matches",
+            value: filteredRows.length,
+            tone: "brand"
+          }
+        ]}
+      />
       <SectionCard>
         <CardHeader>
           <CardTitle>Entry Tables</CardTitle>
@@ -11311,7 +11340,6 @@ function MasterTablesPanel({
   const [replacementRecordId, setReplacementRecordId] = useState("")
   const [deleteReason, setDeleteReason] = useState("")
   const [isDeleting, setIsDeleting] = useState(false)
-  const dataEntry = asRecord(payload.dataEntry)
   const rows = useMemo(
     () =>
       selectedSpec
@@ -11324,13 +11352,6 @@ function MasterTablesPanel({
     [selectedSpec]
   )
   const filteredRows = rows
-  const summaryRows = useMemo(
-    () =>
-      selectedSpec
-        ? masterTableKeySummaryRows(selectedSpec, dataEntry, rows, filteredRows)
-        : [],
-    [selectedSpec, dataEntry, rows, filteredRows]
-  )
   const deleteRecordId = deleteRow ? masterTableRecordId(deleteRow) : ""
   const replacementRows = rows.filter(
     (row) =>
@@ -11385,6 +11406,37 @@ function MasterTablesPanel({
         }
         productionFloorCode={productionFloorCode}
       />
+      {selectedSpec.entryType !== "store_masters" ? (
+        <MetricSummary
+          scope={`${selectedSpec.title} · loaded records, before table filters`}
+          items={
+            ["setup_checklist_master", "maintenance_checklist_master"].includes(
+              selectedSpec.entryType
+            )
+              ? [
+                  {
+                    label: "Checklists",
+                    value: new Set(
+                      rows.map((row) => str(row.checklistCode)).filter(Boolean)
+                    ).size,
+                    tone: "information"
+                  },
+                  {
+                    label: "Checklist Steps",
+                    value: rows.length,
+                    tone: "brand"
+                  }
+                ]
+              : [
+                  {
+                    label: "Master Records",
+                    value: rows.length,
+                    tone: "information"
+                  }
+                ]
+          }
+        />
+      ) : null}
       {selectedSpec.entryType === "store_masters" && storeMasterData ? (
         <StoreMasterWorkspace
           canManage={canManageStoreMasters}
@@ -11491,41 +11543,6 @@ function MasterTablesPanel({
           </CardContent>
         </SectionCard>
       )}
-      {selectedSpec.entryType !== "store_masters" && summaryRows.length ? (
-        <SectionCard>
-          <CardHeader>
-            <CardTitle>{selectedSpec.title} Summary</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto rounded-md border">
-              <OperationalTable>
-                <TableHeader>
-                  <TableRow>
-                    {tableColumns(summaryRows).map((column) => (
-                      <TableHead key={column}>
-                        {humanizeMasterTableColumn(column)}
-                      </TableHead>
-                    ))}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {summaryRows.map((row, index) => (
-                    <TableRow
-                      key={`${selectedSpec.entryType}-summary-${index}`}
-                    >
-                      {tableColumns(summaryRows).map((column) => (
-                        <TableCell key={column} className="text-xs">
-                          {formatCell(row[column])}
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </OperationalTable>
-            </div>
-          </CardContent>
-        </SectionCard>
-      ) : null}
       <Dialog
         open={canDeleteMasters && Boolean(deleteRow)}
         onOpenChange={(open) => {
@@ -11608,38 +11625,6 @@ type MasterTableColumn = {
   label: string
 }
 
-function masterTableKeySummaryRows(
-  spec: DataEntrySpec,
-  dataEntry: DashboardPayload,
-  rows: DashboardPayload[],
-  filteredRows: DashboardPayload[]
-) {
-  const existingRows = asArray(dataEntry.keySummary).filter((row) => {
-    const rowType = str(
-      row.entryType || row.type || row.master || row.table || row.name
-    )
-    return (
-      rowType.toLowerCase() === spec.entryType.toLowerCase() ||
-      rowType.toLowerCase() === spec.title.toLowerCase()
-    )
-  })
-  if (existingRows.length) return existingRows
-  return [
-    {
-      master: spec.title,
-      entryType: spec.entryType,
-      totalRows: rows.length,
-      filteredRows: filteredRows.length,
-      uniqueKeys: uniqueValues(
-        rows.map(
-          (row, index) =>
-            dataEntryKey(spec.entryType, row) ||
-            masterTableRowKey(spec.entryType, row, index)
-        )
-      ).length,
-    },
-  ]
-}
 function masterTableRows(
   entryType: string,
   payload: DashboardPayload,
@@ -11690,13 +11675,6 @@ function dedupeMasterTableRows(entryType: string, rows: DashboardPayload[]) {
 
 function masterTableColumns(spec: DataEntrySpec): MasterTableColumn[] {
   return columnsForProductionMaster(spec.fields)
-}
-
-function humanizeMasterTableColumn(key: string) {
-  return key
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .replace(/[_-]+/g, " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase())
 }
 
 function masterTableCellText(row: DashboardPayload, key: string) {

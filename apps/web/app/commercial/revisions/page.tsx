@@ -28,6 +28,7 @@ import {
 import { Textarea } from "@workspace/ui/components/textarea"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
+import { MetricSummary } from "@/components/ui/golden-patterns"
 import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { ecnHref } from "@/lib/pricing/ecn-routes"
@@ -119,6 +120,24 @@ export default async function CommercialRevisionsPage() {
 
   return (
     <div className="grid gap-6">
+      <MetricSummary
+        scope="Loaded revision register · before table filters"
+        items={[
+          {
+            label: "Bulk Revisions",
+            value: bulkRevisions.length,
+            tone: "information"
+          },
+          {
+            label: "Completed",
+            value: bulkRevisions.filter((row) => row.status === "Completed")
+              .length,
+            description: "Completed bulk revisions",
+            tone: "positive"
+          },
+          { label: "ECNs", value: ecns.length, tone: "brand" }
+        ]}
+      />
       <div className="grid gap-6 xl:grid-cols-2">
  <SectionCard>
           <CardHeader>

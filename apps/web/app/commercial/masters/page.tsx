@@ -5,7 +5,6 @@ import {
   type EditableCommercialMasterKind,
 } from "@workspace/db"
 import { Alert, AlertDescription } from "@workspace/ui/components/alert"
-import { Badge } from "@workspace/ui/components/badge"
 import {
  SectionCard,
   CardContent,
@@ -37,6 +36,7 @@ import {
   isCustomerDefaultCommercialMaster,
 } from "@/lib/commercial-master-workspace"
 import { CommercialMasterTable } from "./commercial-master-table"
+import { MetricSummary } from "@/components/ui/golden-patterns"
 
 export const dynamic = "force-dynamic"
 
@@ -185,13 +185,23 @@ export default async function MastersPage({
       ) : null}
 
       {showMasterTables ? (
+        <>
+          <MetricSummary
+            scope="Selected commercial master · before table filters"
+            items={[
+              {
+                label: "Master Records",
+                value: editableRows.length,
+                tone: "information"
+              }
+            ]}
+          />
  <SectionCard>
           <CardHeader>
             <div className="flex items-center justify-between gap-3">
               <div>
                 <CardTitle>Commercial Master Tables</CardTitle>
               </div>
-              <Badge variant="outline">{editableRows.length}</Badge>
             </div>
           </CardHeader>
           <CardContent>
@@ -202,8 +212,9 @@ export default async function MastersPage({
               rows={editableRows}
               selectionLocked={true}
             />
-          </CardContent>
+        </CardContent>
  </SectionCard>
+        </>
       ) : null}
     </div>
   )

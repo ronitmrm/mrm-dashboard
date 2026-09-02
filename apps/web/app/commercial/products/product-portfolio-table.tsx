@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { FilterX } from "lucide-react"
 import Link from "next/link"
+import { MetricSummary } from "../../../components/ui/golden-patterns"
 
 import type { ProductPortfolioRow } from "@workspace/db"
 import { designProductSelectionReturnHref } from "@workspace/db/commercial-design-domain"
@@ -139,6 +140,26 @@ export function ProductPortfolioTable({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
+      <MetricSummary
+        scope="Portfolio matching current table filters · all pages"
+        items={[
+          {
+            label: "Products",
+            value: filteredRows.length,
+            tone: "information"
+          },
+          {
+            label: "Categories",
+            value: new Set(
+              filteredRows.flatMap((row) =>
+                row.category ? [row.category] : []
+              )
+            ).size,
+            tone: "brand"
+          },
+          { label: "On This Page", value: visibleRows.length }
+        ]}
+      />
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
         <span>
           {filteredRows.length} of {rows.length} products

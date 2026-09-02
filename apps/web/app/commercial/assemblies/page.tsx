@@ -21,6 +21,7 @@ import {
 import { Textarea } from "@workspace/ui/components/textarea"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
+import { MetricSummary } from "@/components/ui/golden-patterns"
 import { commercialTaskCapabilities } from "@/lib/auth/task-capabilities"
 import {
   listGrantedCapabilities,
@@ -72,6 +73,23 @@ export default async function AssembliesPage({
   })()
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(22rem,1fr)]">
+      <MetricSummary
+        className="xl:col-span-2"
+        scope="Loaded BOM register · before table filters"
+        items={[
+          {
+            label: "Parent Products",
+            value: new Set(lines.map((row) => row.parentUid)).size,
+            tone: "information"
+          },
+          { label: "BOM Lines", value: lines.length },
+          {
+            label: "Components",
+            value: new Set(lines.map((row) => row.componentUid)).size,
+            tone: "brand"
+          }
+        ]}
+      />
  <SectionCard className="min-w-0">
         <CardHeader>
           <CardTitle>Assembly / Bom Register</CardTitle>
