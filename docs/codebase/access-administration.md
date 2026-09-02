@@ -113,3 +113,25 @@ account was removed after verification.
 
 Migration 0113 also preserves the canonical designation acronym `HOD` in both
 newly normalized text and existing designation rows.
+
+## Verification safety
+
+Access and authentication integration tests delete identity fixtures. Never run
+them against the shared staging/live database or load the managed application
+environment into a test process. Use an isolated test database; its connection
+must not reuse the live endpoint. A `_test` role name alone does not isolate data.
+
+If Drizzle table types unexpectedly lose `$inferSelect`, inspect the installed
+package before changing application schemas. Installed declarations had altered
+Drizzle `Table` imports to `OperationalTable`; restoring the locked dependencies
+resolved the typecheck and build failures on 2026-09-03:
+
+```powershell
+pnpm install --force --frozen-lockfile --optimistic-repeat-install=false
+pnpm typecheck
+pnpm build
+```
+
+Scope source rewrites to tracked application files; never include `node_modules`,
+generated declarations, or caches. Do not weaken application types to compensate
+for altered dependency files.
