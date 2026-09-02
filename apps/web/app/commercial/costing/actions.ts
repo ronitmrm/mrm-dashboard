@@ -90,17 +90,16 @@ export async function updateProductCostingAction(formData: FormData) {
             ? "complete"
             : "in_progress",
         actorUserId,
-        annealing: numberValue(formData, "annealing", 0),
-        assemblyOperationCost: numberValue(
+        annealing: optionalNumber(formData, "annealing"),
+        assemblyOperationCost: optionalNumber(
           formData,
-          "assembly_operation_cost",
-          0
+          "assembly_operation_cost"
         ),
-        buffing: numberValue(formData, "buffing", 0),
+        buffing: optionalNumber(formData, "buffing"),
         burningLossPercent:
           numberValue(formData, "burning_loss_percent", 0) / 100,
-        checking: numberValue(formData, "checking", 0),
-        deburring: numberValue(formData, "deburring", 0),
+        checking: optionalNumber(formData, "checking"),
+        deburring: optionalNumber(formData, "deburring"),
         directPurchasePricePerKg: numberValue(
           formData,
           "direct_purchase_price_per_kg",
@@ -109,19 +108,19 @@ export async function updateProductCostingAction(formData: FormData) {
         forgingCost: numberValue(formData, "forging_cost", 0),
         itemId: requiredText(formData, "item_id"),
         machineTypeId: optionalText(formData, "machine_type_id") ?? null,
-        machiningCost: numberValue(formData, "machining_cost", 0),
-        marking: numberValue(formData, "marking", 0),
+        machiningCost: optionalNumber(formData, "machining_cost"),
+        marking: optionalNumber(formData, "marking"),
         overheadCost: numberValue(formData, "overhead_cost", 0),
         piecesPerKg: optionalNumber(formData, "pieces_per_kg"),
-        plating: numberValue(formData, "plating", 0),
+        plating: optionalNumber(formData, "plating"),
         pricingMethod:
           requiredText(formData, "pricing_method") === "Direct Purchase"
             ? "Direct Purchase"
             : "Derived",
         rejectionPercent: numberValue(formData, "rejection_percent", 0) / 100,
         remarks: optionalText(formData, "remarks"),
-        sealant: numberValue(formData, "sealant", 0),
-        washing: numberValue(formData, "washing", 0),
+        sealant: optionalNumber(formData, "sealant"),
+        washing: optionalNumber(formData, "washing"),
         weight100Pcs: numberValue(formData, "weight_100_pcs", 0),
       })
   )

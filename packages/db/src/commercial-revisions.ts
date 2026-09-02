@@ -4,6 +4,11 @@ import type { PoolClient } from "pg"
 
 import { selectorSearchTerm } from "./commercial-bounds"
 import {
+  designProcessSelection,
+  processFieldIsApplicable,
+  processesRequiredFromPayload,
+} from "./design-control-domain"
+import {
   repositoryPool,
   withTransaction as transaction,
   type RepositoryPoolOptions,
@@ -279,6 +284,7 @@ const productColumnByField: Partial<Record<BulkRevisionFieldName, string>> = {
 }
 
 const lockedBulkProcessFields = new Set<BulkRevisionFieldName>([
+  "machining_cost",
   "washing",
   "checking",
   "marking",
@@ -303,20 +309,6 @@ const productProcessCostFields = new Set<BulkRevisionFieldName>([
   "assembly_operation_cost",
   "overhead_cost",
 ])
-
-const bulkProcessFieldAliases: Partial<
-  Record<BulkRevisionFieldName, string[]>
-> = {
-  annealing: ["annealing", "anneling"],
-  assembly_operation_cost: ["assembly", "package process", "package assembly"],
-  buffing: ["buffing", "buff"],
-  checking: ["checking", "inspection", "quality checking"],
-  deburring: ["deburring", "debbring"],
-  marking: ["marking", "mark"],
-  plating: ["plating", "plate"],
-  sealant: ["sealant", "sealing"],
-  washing: ["washing", "wash"],
-}
 
 function isBulkRevisionField(value: string): value is BulkRevisionFieldName {
   return value in bulkRevisionFields
@@ -544,16 +536,6 @@ function overrideNumber(
   return override?.get(fieldName) ?? asNumber(fallback)
 }
 
-function processTextAllowsField(
-  processText: string | null,
-  fieldName: BulkRevisionFieldName
-) {
-  const normalized = asText(processText).toLowerCase()
-  return (bulkProcessFieldAliases[fieldName] ?? []).some((alias) =>
-    normalized.includes(alias)
-  )
-}
-
 async function quoteAllowsBulkProcessField(
   client: PoolClient,
   quoteItemId: string,
@@ -562,9 +544,8 @@ async function quoteAllowsBulkProcessField(
   const column = productColumnByField[fieldName]
   if (!column) return false
   const result = await client.query<{
-    current_value: string
     item_type: string
-    remarks: string | null
+    source_payload: Record<string, unknown>
   }>(
     `
       WITH RECURSIVE quote_tree AS (
@@ -581,7 +562,7 @@ async function quoteAllowsBulkProcessField(
         JOIN sales.quote_items child
           ON child.id = component.child_quote_item_id
       )
-      SELECT item.item_type, item.remarks, item.${column}::text AS current_value
+      SELECT item.item_type, item.source_payload
       FROM quote_tree
       JOIN catalog.items item ON item.id = quote_tree.item_id
     `,
@@ -594,9 +575,11 @@ async function quoteAllowsBulkProcessField(
     ) {
       return false
     }
-    return (
-      asNumber(row.current_value) > 0 ||
-      processTextAllowsField(row.remarks, fieldName)
+    return processFieldIsApplicable(
+      fieldName,
+      designProcessSelection({
+        processesRequired: processesRequiredFromPayload(row.source_payload),
+      })
     )
   })
 }
@@ -613,23 +596,11 @@ function productAllowsBulkProcessField(
   ) {
     return false
   }
-  const firstMaterialLine = product.source_payload.firstMaterialLine
-  const firstMaterialRecord =
-    firstMaterialLine && typeof firstMaterialLine === "object"
-      ? (firstMaterialLine as Record<string, unknown>)
-      : null
-  const processText = [
-    product.remarks,
-    product.source_payload.process_required,
-    product.source_payload.manufacturing_process,
-    firstMaterialRecord?.process_required,
-    firstMaterialRecord?.manufacturing_process,
-  ]
-    .filter((value): value is string => typeof value === "string")
-    .join(", ")
-  return (
-    asNumber((product as unknown as Record<string, unknown>)[column]) > 0 ||
-    processTextAllowsField(processText, fieldName)
+  return processFieldIsApplicable(
+    fieldName,
+    designProcessSelection({
+      processesRequired: processesRequiredFromPayload(product.source_payload),
+    })
   )
 }
 
@@ -2985,6 +2956,11 @@ export function createCommercialRevisionsRepository(
           oldPrice: number
           quoteItemId: string
         }>
+        skipped_rows: Array<{
+          itemId: string
+          reason: string
+          uid: string
+        }>
         selected_count: number
         skipped_count: number
         stage_group_id: string
@@ -2996,6 +2972,8 @@ export function createCommercialRevisionsRepository(
             max(change.skipped_count)::integer AS skipped_count,
             bool_or(change.applied_at IS NOT NULL) AS is_applied,
             max(change.notes) AS notes,
+            (array_agg(change.source_payload ORDER BY change.created_at, change.id))[1]
+              -> 'skippedRows' AS skipped_rows,
             jsonb_agg(change.preview_json ORDER BY change.created_at, change.id)
               AS preview_rows
           FROM sales.bulk_price_revision_changes change
@@ -3014,6 +2992,7 @@ export function createCommercialRevisionsRepository(
         newValue: asNumber(row.new_value),
         notes: row.notes,
         previewRows: row.preview_rows,
+        skippedRows: row.skipped_rows ?? [],
         selectedCount: row.selected_count,
         skippedCount: row.skipped_count,
         stageGroupId: row.stage_group_id,
@@ -3966,9 +3945,14 @@ export function createCommercialRevisionsRepository(
           )
         }
         const eligible: typeof valid = []
+        const skippedRows: Array<{
+          itemId: string
+          reason: string
+          uid: string
+        }> = []
         for (const candidate of valid) {
           const product = await getProduct(client, candidate.itemId)
-          if (
+          const applicable =
             !lockedBulkProcessFields.has(input.fieldName) ||
             (isProductStage
               ? productAllowsBulkProcessField(product, input.fieldName)
@@ -3977,8 +3961,14 @@ export function createCommercialRevisionsRepository(
                   candidate.id,
                   input.fieldName
                 ))
-          ) {
+          if (applicable) {
             eligible.push(candidate)
+          } else {
+            skippedRows.push({
+              itemId: product.id,
+              reason: `${field.label} is not selected in the released Design BOM.`,
+              uid: product.uid,
+            })
           }
         }
         const skippedCount = valid.length - eligible.length
@@ -4061,6 +4051,7 @@ export function createCommercialRevisionsRepository(
                 eligibleProductIds: eligible.map((row) => row.itemId),
                 eligibleQuoteItemIds: eligible.map((row) => row.id),
                 productItemId: quote.itemId,
+                skippedRows,
               },
             ]
           )
@@ -4070,6 +4061,7 @@ export function createCommercialRevisionsRepository(
           changeIds: createdIds,
           selectedCount: eligible.length,
           skippedCount,
+          skippedRows,
           stageGroupId,
         }
       })
