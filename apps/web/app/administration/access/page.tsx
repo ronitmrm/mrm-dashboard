@@ -1,11 +1,6 @@
 import Link from "next/link"
 
-import {
-  BriefcaseBusiness,
-  ShieldCheck,
-  UserRoundPlus,
-  UsersRound,
-} from "lucide-react"
+import { ShieldCheck, UserRoundPlus, UsersRound } from "lucide-react"
 
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
@@ -59,37 +54,23 @@ import {
   updateRolePermissionsAction,
 } from "./actions"
 import { PermissionSelector } from "./permission-selector"
+import { AccessWorkspaceTabs } from "./access-workspace-tabs"
 
 export const dynamic = "force-dynamic"
 
-const accessSections = [
-  {
-    icon: BriefcaseBusiness,
-    id: "roles",
-    label: "Roles",
-  },
-  {
-    icon: UsersRound,
-    id: "staff",
-    label: "Staff Accounts",
-  },
-] as const
-
-type AccessSection = (typeof accessSections)[number]["id"]
-
-function selectedAccessSection(value: string | string[] | undefined) {
-  const section = Array.isArray(value) ? value[0] : value
-  return accessSections.some(({ id }) => id === section)
-    ? (section as AccessSection)
-    : "roles"
+function firstQueryValue(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value
 }
 
 export default async function AccessAdministrationPage({
   searchParams,
 }: {
-  searchParams: Promise<{ section?: string | string[] }>
+  searchParams: Promise<{
+    section?: string | string[]
+    role?: string | string[]
+  }>
 }) {
-  const activeSection = selectedAccessSection((await searchParams).section)
+  const query = await searchParams
   const session = await requireCapability(
     "administration.access.read",
     "/administration/access"
@@ -108,6 +89,13 @@ export default async function AccessAdministrationPage({
   const canCreateRole = grantedTasks.has(
     administrationTaskCapabilities.createRole
   )
+  const requestedSection = firstQueryValue(query.section)
+  const activeSection =
+    requestedSection === "staff" || requestedSection === "roles"
+      ? requestedSection
+      : canCreateRole
+        ? "create"
+        : "roles"
   const canProvisionStaff = grantedTasks.has(
     administrationTaskCapabilities.provisionStaff
   )
@@ -125,42 +113,22 @@ export default async function AccessAdministrationPage({
   const unlinkedEmployees = snapshot.employees.filter(
     (employee) => !employee.linkedUserId
   )
+  const selectedRole = snapshot.roles.find(
+    (role) => role.key === firstQueryValue(query.role)
+  )
 
   return (
     <>
       <PageHeader
-        description="Manage application roles and staff access. Legacy Convex and SQLite users remain outside this identity boundary."
+        description="Create roles, define responsibilities, and manage staff access."
         icon={ShieldCheck}
         title="Access Administration"
       />
 
-      <nav
-        aria-label="Access administration sections"
-        className="flex w-fit gap-1 rounded-lg border bg-muted/30 p-1"
+      <AccessWorkspaceTabs
+        activeSection={activeSection}
+        canCreateRole={canCreateRole}
       >
-        {accessSections.map((section) => {
-          const Icon = section.icon
-          const selected = activeSection === section.id
-          return (
-            <Button
-              asChild
-              className="h-8 justify-start rounded-md px-3 text-xs"
-              key={section.id}
-              variant={selected ? "default" : "ghost"}
-            >
-              <Link
-                aria-current={selected ? "page" : undefined}
-                href={`/administration/access?section=${section.id}`}
-              >
-                <Icon className="size-5 shrink-0" />
-                <span>{section.label}</span>
-              </Link>
-            </Button>
-          )
-        })}
-      </nav>
-
-      <section className="grid gap-4 xl:grid-cols-2">
         {activeSection === "staff" && canProvisionStaff ? (
           <SectionCard size="sm">
             <CardHeader className="border-b">
@@ -239,19 +207,19 @@ export default async function AccessAdministrationPage({
           </SectionCard>
         ) : null}
 
-        {activeSection === "roles" && canCreateRole ? (
-          <SectionCard className="xl:col-span-2" size="sm">
+        {activeSection === "create" && canCreateRole ? (
+          <SectionCard size="sm">
             <CardHeader className="border-b">
               <CardTitle>Create Application Role</CardTitle>
               <CardDescription>
-                Bundle Granular Capabilities Without Changing Better Auth&apos;s
-                Internal Admin And User Roles.
+                Name the role and select its pages and tasks. Saved roles appear
+                in Application Roles.
               </CardDescription>
             </CardHeader>
             <CardContent>
               <form action={createRoleAction}>
                 <FieldGroup className="gap-4">
-                  <div className="grid gap-4 md:grid-cols-2">
+                  <div className="grid gap-4 md:grid-cols-3">
                     <Field>
                       <FieldLabel htmlFor="role-name">Role Name</FieldLabel>
                       <Input id="role-name" name="name" required />
@@ -269,25 +237,24 @@ export default async function AccessAdministrationPage({
                         Automatically.
                       </FieldDescription>
                     </Field>
+                    <Field>
+                      <FieldLabel htmlFor="role-description">
+                        Description
+                      </FieldLabel>
+                      <Input id="role-description" name="description" />
+                    </Field>
                   </div>
-                  <Field>
-                    <FieldLabel htmlFor="role-description">
-                      Description
-                    </FieldLabel>
-                    <Input id="role-description" name="description" />
-                  </Field>
                   <PermissionSelector permissions={snapshot.permissions} />
-                  <Button type="submit">Create Role</Button>
+                  <Button className="w-fit" type="submit">
+                    Create Role
+                  </Button>
                 </FieldGroup>
               </form>
             </CardContent>
           </SectionCard>
         ) : null}
-      </section>
-
-      <section className="grid gap-4 xl:grid-cols-2">
         {activeSection === "staff" && canAssignPostAccess ? (
-          <SectionCard className="xl:col-span-2" size="sm">
+          <SectionCard size="sm">
             <CardHeader className="border-b">
               <CardTitle>Post Access Profile</CardTitle>
               <CardDescription>
@@ -359,14 +326,14 @@ export default async function AccessAdministrationPage({
                   Review Current Post Profiles (
                   {snapshot.postAccessProfiles.length})
                 </summary>
-                <div className="max-h-64 space-y-2 overflow-y-auto border-t p-3">
+                <div className="flex max-h-64 flex-col gap-2 overflow-y-auto border-t p-3">
                   {snapshot.postAccessProfiles.map((post) => (
                     <div
                       className="flex items-start justify-between gap-3 text-sm"
                       key={post.id}
                     >
                       <span>
-                        {post.postCode} · {post.department}
+                        {post.postCode} · {post.department} · {post.designation}
                       </span>
                       <span className="text-right text-muted-foreground">
                         {post.roleKeys.join(", ") || "No role"}
@@ -378,178 +345,248 @@ export default async function AccessAdministrationPage({
             </CardContent>
           </SectionCard>
         ) : null}
-      </section>
 
-      {activeSection === "staff" ? (
-        <SectionCard size="sm">
-          <CardHeader className="border-b">
-            <CardTitle>Staff Access</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {snapshot.users.length === 0 ? (
-              <Empty className="border">
-                <EmptyHeader>
-                  <EmptyMedia variant="icon">
-                    <UsersRound />
-                  </EmptyMedia>
-                  <EmptyTitle>No Staff Accounts</EmptyTitle>
-                  <EmptyDescription>
-                    Provision The First Administrator With The Explicit Cli
-                    Command, Then Create Staff Accounts Here.
-                  </EmptyDescription>
-                </EmptyHeader>
-              </Empty>
-            ) : (
-              <OperationalTable>
+        {activeSection === "staff" ? (
+          <SectionCard size="sm">
+            <CardHeader className="border-b">
+              <CardTitle>Staff Access</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {snapshot.users.length === 0 ? (
+                <Empty className="border">
+                  <EmptyHeader>
+                    <EmptyMedia variant="icon">
+                      <UsersRound />
+                    </EmptyMedia>
+                    <EmptyTitle>No Staff Accounts</EmptyTitle>
+                    <EmptyDescription>
+                      Provision The First Administrator With The Explicit Cli
+                      Command, Then Create Staff Accounts Here.
+                    </EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
+              ) : (
+                <OperationalTable>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Staff Member</TableHead>
+                      <TableHead>Employee / Post</TableHead>
+                      <TableHead>Roles</TableHead>
+                      <TableHead>Overrides</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {snapshot.users.map((user) => (
+                      <TableRow key={user.id}>
+                        <TableCell>
+                          <div className="grid gap-0.5">
+                            <span className="font-medium">{user.name}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {user.email}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {user.employee ? (
+                            <div className="grid gap-0.5">
+                              <span>{user.employee.employeeCode}</span>
+                              <span className="text-xs text-muted-foreground">
+                                {user.employee.departments.join(", ")} ·{" "}
+                                {user.employee.postCodes.join(", ")}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">
+                              Not linked
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1.5">
+                            {user.roleKeys.length ||
+                            user.employee?.inheritedRoleKeys.length ? (
+                              [
+                                ...user.roleKeys.map((roleKey) => ({
+                                  key: roleKey,
+                                  source: "direct",
+                                })),
+                                ...(user.employee?.inheritedRoleKeys ?? []).map(
+                                  (roleKey) => ({
+                                    key: roleKey,
+                                    source: "post",
+                                  })
+                                ),
+                              ].map((role) => (
+                                <Badge
+                                  key={`${role.source}:${role.key}`}
+                                  variant="secondary"
+                                >
+                                  {role.key} · {role.source}
+                                </Badge>
+                              ))
+                            ) : (
+                              <span className="text-sm text-muted-foreground">
+                                No Application Roles
+                              </span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1.5">
+                            {user.overrides.length ? (
+                              user.overrides.map((override) => (
+                                <Badge
+                                  key={override.permissionKey}
+                                  variant={
+                                    override.effect === "deny"
+                                      ? "destructive"
+                                      : "outline"
+                                  }
+                                >
+                                  {override.effect}: {override.permissionKey}
+                                </Badge>
+                              ))
+                            ) : (
+                              <span className="text-sm text-muted-foreground">
+                                No Overrides
+                              </span>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </OperationalTable>
+              )}
+            </CardContent>
+          </SectionCard>
+        ) : null}
+
+        {activeSection === "roles" && !selectedRole ? (
+          <SectionCard size="sm">
+            <CardHeader className="border-b">
+              <CardTitle>Application Roles</CardTitle>
+              <CardDescription>
+                Open a role to review or edit its responsibilities.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <OperationalTable filterStorageKey="access-administration-roles">
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Staff Member</TableHead>
-                    <TableHead>Employee / Post</TableHead>
-                    <TableHead>Roles</TableHead>
-                    <TableHead>Overrides</TableHead>
+                    <TableHead>Role</TableHead>
+                    <TableHead>Description</TableHead>
+                    <TableHead>Capabilities</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>
+                      <span className="sr-only">Actions</span>
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {snapshot.users.map((user) => (
-                    <TableRow key={user.id}>
-                      <TableCell>
-                        <div className="grid gap-0.5">
-                          <span className="font-medium">{user.name}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {user.email}
-                          </span>
-                        </div>
+                  {snapshot.roles.map((role) => (
+                    <TableRow key={role.id}>
+                      <TableCell className="font-medium">{role.name}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {role.description || "—"}
                       </TableCell>
+                      <TableCell>{role.permissionKeys.length}</TableCell>
                       <TableCell>
-                        {user.employee ? (
-                          <div className="grid gap-0.5">
-                            <span>{user.employee.employeeCode}</span>
-                            <span className="text-xs text-muted-foreground">
-                              {user.employee.departments.join(", ")} ·{" "}
-                              {user.employee.postCodes.join(", ")}
-                            </span>
-                          </div>
-                        ) : (
-                          <span className="text-sm text-muted-foreground">
-                            Not linked
-                          </span>
-                        )}
+                        <Badge
+                          variant={role.isSystem ? "secondary" : "outline"}
+                        >
+                          {role.isSystem ? "System" : "Custom"}
+                        </Badge>
                       </TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-1.5">
-                          {user.roleKeys.length ||
-                          user.employee?.inheritedRoleKeys.length ? (
-                            [
-                              ...user.roleKeys.map((roleKey) => ({
-                                key: roleKey,
-                                source: "direct",
-                              })),
-                              ...(user.employee?.inheritedRoleKeys ?? []).map(
-                                (roleKey) => ({
-                                  key: roleKey,
-                                  source: "post",
-                                })
-                              ),
-                            ].map((role) => (
-                              <Badge
-                                key={`${role.source}:${role.key}`}
-                                variant="secondary"
-                              >
-                                {role.key} · {role.source}
-                              </Badge>
-                            ))
-                          ) : (
-                            <span className="text-sm text-muted-foreground">
-                              No Application Roles
-                            </span>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-1.5">
-                          {user.overrides.length ? (
-                            user.overrides.map((override) => (
-                              <Badge
-                                key={override.permissionKey}
-                                variant={
-                                  override.effect === "deny"
-                                    ? "destructive"
-                                    : "outline"
-                                }
-                              >
-                                {override.effect}: {override.permissionKey}
-                              </Badge>
-                            ))
-                          ) : (
-                            <span className="text-sm text-muted-foreground">
-                              No Overrides
-                            </span>
-                          )}
-                        </div>
+                      <TableCell className="text-right">
+                        <Button asChild size="sm" variant="outline">
+                          <Link
+                            href={{
+                              pathname: "/administration/access",
+                              query: { section: "roles", role: role.key },
+                            }}
+                          >
+                            {role.isSystem || !canUpdateRolePermissions
+                              ? "View"
+                              : "Edit Access"}
+                            <span className="sr-only"> for {role.name}</span>
+                          </Link>
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </OperationalTable>
-            )}
-          </CardContent>
-        </SectionCard>
-      ) : null}
+            </CardContent>
+          </SectionCard>
+        ) : null}
 
-      {activeSection === "roles" ? (
-        <SectionCard size="sm">
-          <CardHeader className="border-b">
-            <CardTitle>Application Roles</CardTitle>
-            <CardDescription>
-              The System Administrator Role Is Seeded And Immutable By
-              Convention. Custom Roles Use Only The Selected Capabilities.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-3">
-            {snapshot.roles.map((role) => (
-              <details className="rounded-lg border" key={role.id}>
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-3">
-                  <span>
-                    <span className="block font-medium">{role.name}</span>
-                    <span className="block text-sm text-muted-foreground">
-                      {role.description ?? role.key} ·{" "}
-                      {role.permissionKeys.length} capabilities
-                    </span>
-                  </span>
-                  {role.isSystem ? (
-                    <Badge>System</Badge>
-                  ) : (
-                    <Badge variant="outline">
-                      {canUpdateRolePermissions ? "Edit Access" : "View Only"}
-                    </Badge>
-                  )}
-                </summary>
-                {role.isSystem || !canUpdateRolePermissions ? (
-                  <p className="border-t p-4 text-sm text-muted-foreground">
-                    {role.isSystem
-                      ? "System Administrator access is managed by the software."
-                      : "You can review this role but cannot change its capabilities."}
+        {activeSection === "roles" && selectedRole ? (
+          <SectionCard size="sm">
+            <CardHeader className="border-b">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="grid gap-1">
+                  <CardTitle>{selectedRole.name}</CardTitle>
+                  <CardDescription>
+                    {selectedRole.description || selectedRole.key}
+                  </CardDescription>
+                </div>
+                <Button asChild size="sm" variant="outline">
+                  <Link href="/administration/access?section=roles">
+                    Back to Application Roles
+                  </Link>
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {selectedRole.isSystem ? (
+                <p className="text-sm text-muted-foreground">
+                  System Administrator access is managed by the software.
+                </p>
+              ) : canUpdateRolePermissions ? (
+                <form
+                  action={updateRolePermissionsAction}
+                  className="grid gap-4"
+                >
+                  <input
+                    name="roleKey"
+                    type="hidden"
+                    value={selectedRole.key}
+                  />
+                  <PermissionSelector
+                    key={selectedRole.key}
+                    initialPermissionKeys={selectedRole.permissionKeys}
+                    permissions={snapshot.permissions}
+                  />
+                  <Button className="w-fit" type="submit">
+                    Save {selectedRole.name} Access
+                  </Button>
+                </form>
+              ) : (
+                <div className="grid gap-3">
+                  <p className="text-sm text-muted-foreground">
+                    You can review this role but cannot change its capabilities.
                   </p>
-                ) : (
-                  <form
-                    action={updateRolePermissionsAction}
-                    className="grid gap-3 border-t p-3"
-                  >
-                    <input name="roleKey" type="hidden" value={role.key} />
-                    <PermissionSelector
-                      initialPermissionKeys={role.permissionKeys}
-                      permissions={snapshot.permissions}
-                    />
-                    <Button className="w-fit" type="submit">
-                      Save {role.name} Access
-                    </Button>
-                  </form>
-                )}
-              </details>
-            ))}
-          </CardContent>
-        </SectionCard>
-      ) : null}
+                  <ul className="grid list-inside list-disc gap-1 text-sm">
+                    {snapshot.permissions
+                      .filter((permission) =>
+                        selectedRole.permissionKeys.includes(permission.key)
+                      )
+                      .map((permission) => (
+                        <li key={permission.key}>{permission.name}</li>
+                      ))}
+                  </ul>
+                  {!selectedRole.permissionKeys.length ? (
+                    <p className="text-sm text-muted-foreground">
+                      No capabilities assigned.
+                    </p>
+                  ) : null}
+                </div>
+              )}
+            </CardContent>
+          </SectionCard>
+        ) : null}
+      </AccessWorkspaceTabs>
     </>
   )
 }
