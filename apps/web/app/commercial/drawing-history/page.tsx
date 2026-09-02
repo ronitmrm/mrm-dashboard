@@ -22,6 +22,7 @@ import {
 import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
 import { DataDownloadButton } from "@/components/data-download-button"
 import { readAuthEnvironment } from "@/lib/auth/auth"
+import { MetricSummary } from "@/components/ui/golden-patterns"
 import { requireCapability } from "@/lib/auth/require-capability"
 
 const drawingHistoryPath = "/commercial/drawing-history"
@@ -40,6 +41,27 @@ export default async function DrawingHistoryPage() {
 
   return (
     <div className="grid gap-6">
+      <MetricSummary
+        scope="Current drawing register · before table filters"
+        items={[
+          {
+            label: "Products",
+            value: new Set(rows.map((row) => row.uid)).size,
+            tone: "information"
+          },
+          {
+            label: "Current Drawings",
+            value: rows.filter((row) => row.current && !row.pendingUpload)
+              .length,
+            tone: "positive"
+          },
+          {
+            label: "Pending Upload",
+            value: rows.filter((row) => row.pendingUpload).length,
+            tone: "warning"
+          }
+        ]}
+      />
  <SectionCard>
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">

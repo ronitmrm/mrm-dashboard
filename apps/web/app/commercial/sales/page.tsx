@@ -33,6 +33,7 @@ import {
   type SalesWorkspaceView,
 } from "@/components/sales-workspace-tabs"
 import { readAuthEnvironment } from "@/lib/auth/auth"
+import { MetricSummary } from "@/components/ui/golden-patterns"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { salesTaskRows } from "@/lib/sales-task-rows"
 
@@ -134,6 +135,67 @@ export default async function SalesPage({
         </section>
 
         <SalesWorkspaceTabs activeView={activeView} />
+
+        <MetricSummary
+          scope="Your loaded sales view · before table filters"
+          items={
+            activeView === "sent-quotes"
+              ? [
+                  {
+                    label: "Quoted Enquiries",
+                    value: sentQuoteTasks.length,
+                    tone: "information"
+                  },
+                  {
+                    label: "Quote Items Sent",
+                    value: sentQuoteTasks.reduce(
+                      (total, row) => total + row.sentQuoteItems,
+                      0
+                    ),
+                    tone: "positive"
+                  },
+                  {
+                    label: "Pending Follow-ups",
+                    value: sentQuoteTasks.reduce(
+                      (total, row) => total + row.pendingFollowups,
+                      0
+                    ),
+                    tone: "warning"
+                  }
+                ]
+              : activeView === "followup-history"
+                ? [
+                    {
+                      label: "Follow-ups",
+                      value: followups.length,
+                      tone: "information"
+                    },
+                    {
+                      label: "Pending",
+                      value: followups.filter((row) => row.status === "Pending")
+                        .length,
+                      tone: "warning"
+                    }
+                  ]
+                : [
+                    {
+                      label: "Open Tasks",
+                      value: taskRows.length,
+                      tone: "information"
+                    },
+                    {
+                      label: "Clarifications",
+                      value: clarificationTasks.length,
+                      tone: "warning"
+                    },
+                    {
+                      label: "Quote Ready",
+                      value: quoteReadyTasks.length,
+                      tone: "positive"
+                    }
+                  ]
+          }
+        />
 
         {activeView === "tasks" ? (
  <SectionCard>

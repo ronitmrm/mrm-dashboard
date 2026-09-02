@@ -15,6 +15,7 @@ import {
   ActionToolbar,
   FormGrid,
   FormSection,
+  MetricSummary,
   PageHeader,
   StandardDialogContent,
   StandardDrawerContent,
@@ -137,6 +138,15 @@ export default async function UiReferencePage() {
         description="Production components, semantic states, and interaction standards for every MRMPL dashboard module."
         icon={LayoutTemplate}
         title="Golden UI Patterns"
+      />
+
+      <MetricSummary
+        scope="Example register · before table filters"
+        items={[
+          { label: "Records", value: 1240, tone: "information" },
+          { label: "Awaiting Review", value: 12, tone: "warning" },
+          { label: "Completed", value: 0, tone: "positive" }
+        ]}
       />
 
       <SectionCard size="sm">

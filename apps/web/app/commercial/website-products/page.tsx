@@ -31,6 +31,7 @@ import {
 import { Textarea } from "@workspace/ui/components/textarea"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
+import { MetricSummary } from "@/components/ui/golden-patterns"
 import { BoundedResultNotice } from "@/components/bounded-result-notice"
 import { CompanyWideMasterScope } from "@/components/company-wide-master-scope"
 import { DataDownloadButton } from "@/components/data-download-button"
@@ -330,6 +331,30 @@ export default async function WebsiteProductsPage({
           "masterTables"
         )}
       />
+
+      {showMasterTables ? (
+        <MetricSummary
+          scope="Loaded website products matching page search · before table filters"
+          items={[
+            {
+              label: "Product Profiles",
+              value: rows.length,
+              tone: "information"
+            },
+            {
+              label: "Website Active",
+              value: rows.filter((row) => row.isActive).length,
+              tone: "positive"
+            },
+            {
+              label: "Completed Profiles",
+              value: rows.filter((row) => row.websiteStatus === "Completed")
+                .length,
+              tone: "brand"
+            }
+          ]}
+        />
+      ) : null}
 
       {showMasterTables ? (
  <SectionCard>

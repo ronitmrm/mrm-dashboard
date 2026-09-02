@@ -60,6 +60,7 @@ import {
 import { APPROVED_POST_FILTER_COLUMNS } from "@/components/hr/approved-post-filter-columns"
 import { SingleEmployeeAssignmentFields } from "@/components/hr/single-employee-assignment-fields"
 import { EmployeeLetterDialog } from "@/components/hr/employee-letter-dialog"
+import { MetricSummary } from "@/components/ui/golden-patterns"
 
 type TemplateOption = Pick<
   RecruitmentTemplateRow,
@@ -147,6 +148,32 @@ export function ApprovedPostsTable({
 
   return (
     <>
+      <MetricSummary
+        scope="Approved posts matching current table filters"
+        items={[
+          {
+            label: "Approved Posts",
+            value: filteredPosts.length,
+            tone: "information"
+          },
+          {
+            label: "Vacant Posts",
+            value: filteredPosts.filter((post) => post.status === "Vacant")
+              .length,
+            tone: "warning"
+          },
+          {
+            label: "Linked Employees",
+            value: new Set(
+              filteredPosts.flatMap((post) =>
+                post.employeeCode ? [post.employeeCode] : []
+              )
+            ).size,
+            description: "Distinct Employee IDs across these posts",
+            tone: "positive"
+          }
+        ]}
+      />
       <Sheet
         onOpenChange={(open) => {
           if (!open) setEditingPost(null)

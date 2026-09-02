@@ -16,6 +16,7 @@ import {
 import { listRecruitableApprovedPosts } from "@workspace/db/recruitment-domain"
 import { StatusBadge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
+import { MetricSummary } from "@/components/ui/golden-patterns"
 import {
  SectionCard,
   CardContent,
@@ -247,6 +248,24 @@ function MastersPanel({
         </PanelForm>
       ) : null}
       {showMasterTables ? (
+        <MetricSummary
+          scope="Selected HR master · before table filters"
+          items={[
+            {
+              label:
+                activeMasterKind === "department"
+                  ? "Departments"
+                  : "Designations",
+              value:
+                activeMasterKind === "department"
+                  ? masters.departments.length
+                  : masters.designations.length,
+              tone: "information"
+            }
+          ]}
+        />
+      ) : null}
+      {showMasterTables ? (
         <MasterTables
           canWrite={canWrite}
           kind={activeMasterKind}
@@ -372,6 +391,24 @@ function TemplatePanel({
             Save Template
           </Button>
         </PanelForm>
+      ) : null}
+      {showMasterTables ? (
+        <MetricSummary
+          scope="Loaded requirement templates · before table filters"
+          items={[
+            {
+              label: "Templates",
+              value: templates.length,
+              tone: "information"
+            },
+            {
+              label: "Combined Role",
+              value: templates.filter((row) => row.combinedRoleId).length,
+              description: "Templates for combined posts",
+              tone: "brand"
+            }
+          ]}
+        />
       ) : null}
       {showMasterTables ? (
         <JobTemplatesTable
@@ -532,6 +569,24 @@ function CombinedRolePanel({
               status,
             })
           )}
+        />
+      ) : null}
+      {showMasterTables ? (
+        <MetricSummary
+          scope="Combined approved posts · before table filters"
+          items={[
+            {
+              label: "Combined Roles",
+              value: combinedRoles.length,
+              tone: "information"
+            },
+            {
+              label: "Active",
+              value: combinedRoles.filter((row) => row.status === "Active")
+                .length,
+              tone: "positive"
+            }
+          ]}
         />
       ) : null}
       {showMasterTables ? (
@@ -859,6 +914,28 @@ function LogCandidatePanel({
             Save Candidate
           </Button>
         </PanelForm>
+      ) : null}
+      {showMasterTables ? (
+        <MetricSummary
+          scope="Loaded candidate register · before table filters"
+          items={[
+            {
+              label: "Candidates",
+              value: candidates.length,
+              tone: "information"
+            },
+            {
+              label: "With Resume",
+              value: candidates.filter((row) => row.hasResume).length,
+              tone: "positive"
+            },
+            {
+              label: "Without Resume",
+              value: candidates.filter((row) => !row.hasResume).length,
+              tone: "warning"
+            }
+          ]}
+        />
       ) : null}
       {showMasterTables ? (
         <CandidatesTable

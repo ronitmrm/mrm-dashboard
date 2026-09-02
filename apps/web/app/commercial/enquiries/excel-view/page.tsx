@@ -21,6 +21,7 @@ import {
 import { BoundedResultNotice } from "@/components/bounded-result-notice"
 import { DataDownloadButton } from "@/components/data-download-button"
 import { readAuthEnvironment } from "@/lib/auth/auth"
+import { MetricSummary } from "@/components/ui/golden-patterns"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { formatIstDateTime } from "@/lib/date-time"
 import { enquiryExcelViewColumns } from "@/lib/pricing/enquiry-excel-view"
@@ -59,6 +60,23 @@ export default async function EnquiryExcelViewPage() {
           section="Enquiry Excel view"
         />
       </section>
+
+      <MetricSummary
+        scope="Your loaded workflow lines · before table filters"
+        items={[
+          {
+            label: "Enquiry Lines",
+            value: result.rows.length,
+            tone: "information"
+          },
+          {
+            label: "Quote PDF Sent",
+            value: result.rows.filter((row) => row.quotePdfSentAt).length,
+            description: "Lines with a sent quote PDF",
+            tone: "positive"
+          }
+        ]}
+      />
 
  <SectionCard>
         <CardHeader>

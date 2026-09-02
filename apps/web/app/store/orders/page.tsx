@@ -30,6 +30,7 @@ import {
 } from "@workspace/ui/components/table"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
+import { MetricSummary } from "@/components/ui/golden-patterns"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { listGrantedStoreActions } from "@/lib/auth/store-action-access"
 
@@ -62,6 +63,29 @@ export default async function StoreOrdersPage() {
           order row.
         </p>
       </div>
+
+      <MetricSummary
+        scope="Purchase register · before table filters"
+        items={[
+          {
+            label: "Purchase Orders",
+            value: new Set(data.map((row) => row.purchaseOrderId)).size,
+            tone: "information"
+          },
+          { label: "Order Lines", value: data.length },
+          {
+            label: "Awaiting Receipt",
+            value: data.filter(
+              (row) =>
+                row.orderType === "GOODS" &&
+                row.status !== "Cancelled" &&
+                Number(row.remainingQuantity) > 0
+            ).length,
+            description: "Goods lines with quantity remaining",
+            tone: "warning"
+          }
+        ]}
+      />
 
  <SectionCard>
         <CardHeader>

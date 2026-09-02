@@ -1,4 +1,4 @@
-import type { ComponentType, ReactNode } from "react"
+import type { ComponentProps, ComponentType, ReactNode } from "react"
 import type { LucideProps } from "lucide-react"
 
 import {
@@ -6,6 +6,7 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  MetricCard,
   SectionCard,
 } from "@workspace/ui/components/card"
 import {
@@ -27,6 +28,45 @@ import {
   type StandardStateVariant,
 } from "@workspace/ui/components/standard-state"
 type PatternIcon = ComponentType<LucideProps>
+
+const summaryNumberFormat = new Intl.NumberFormat("en-IN")
+
+function MetricSummary({
+  items,
+  scope,
+  className,
+}: {
+  items: readonly Pick<
+    ComponentProps<typeof MetricCard>,
+    "label" | "value" | "description" | "tone"
+  >[]
+  scope: string
+  className?: string
+}) {
+  return (
+    <section
+      aria-label={scope}
+      className={cn("grid min-w-0 shrink-0 gap-2", className)}
+      data-slot="metric-summary"
+    >
+      <div className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))] gap-3">
+        {items.map((item) => (
+          <MetricCard
+            {...item}
+            className="min-w-0 p-3"
+            key={String(item.label)}
+            value={
+              typeof item.value === "number"
+                ? summaryNumberFormat.format(item.value)
+                : item.value
+            }
+          />
+        ))}
+      </div>
+      <p className="text-xs text-muted-foreground">{scope}</p>
+    </section>
+  )
+}
 
 function PageHeader({
   actions,
@@ -172,6 +212,7 @@ export {
   ActionToolbar,
   FormGrid,
   FormSection,
+  MetricSummary,
   PageHeader,
   StandardDialogContent,
   StandardDrawerContent,

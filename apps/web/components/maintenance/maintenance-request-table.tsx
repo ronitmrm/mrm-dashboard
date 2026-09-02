@@ -5,6 +5,7 @@ import type { MaintenanceCategory } from "@workspace/db/maintenance-request-doma
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
+import { MetricSummary } from "@/components/ui/golden-patterns"
 import {
   NativeSelect,
   NativeSelectOption,
@@ -51,6 +52,26 @@ export function MaintenanceRequestTable({
   trade?: MaintenanceCategory
 }) {
   return (
+    <div className="grid min-w-0 gap-4">
+      <MetricSummary
+        scope="Requests in this worklist · before table filters"
+        items={[
+          { label: "Requests", value: rows.length, tone: "information" },
+          {
+            label: "Urgent",
+            value: rows.filter(
+              (row) => (row.finalPriority ?? row.requestedPriority) === "Urgent"
+            ).length,
+            description: "Urgent priority in this worklist",
+            tone: "warning"
+          },
+          {
+            label: "In Progress",
+            value: rows.filter((row) => row.status === "In Progress").length,
+            tone: "brand"
+          }
+        ]}
+      />
     <div className="overflow-x-auto rounded-lg border">
  <OperationalTable>
         <TableHeader>
@@ -258,6 +279,7 @@ export function MaintenanceRequestTable({
           ) : null}
         </TableBody>
  </OperationalTable>
+    </div>
     </div>
   )
 }

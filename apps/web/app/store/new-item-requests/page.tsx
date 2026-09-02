@@ -25,6 +25,7 @@ import {
 
 import { StoreRequestIdentityFields } from "@/components/store/store-request-identity-fields"
 import { readAuthEnvironment } from "@/lib/auth/auth"
+import { MetricSummary } from "@/components/ui/golden-patterns"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { listGrantedStoreActions } from "@/lib/auth/store-action-access"
 import { formatIstDateTime } from "@/lib/date-time"
@@ -72,6 +73,23 @@ export default async function NewItemRequestsPage() {
           and has no Asset Code.
         </p>
       </div>
+
+      <MetricSummary
+        scope="New item request register · before table filters"
+        items={[
+          {
+            label: "Requests",
+            value: data.requests.length,
+            tone: "information"
+          },
+          {
+            label: "Pending",
+            value: data.requests.filter((row) => row.status === "Pending")
+              .length,
+            tone: "warning"
+          }
+        ]}
+      />
 
       {canSubmitRequests ? (
  <SectionCard>

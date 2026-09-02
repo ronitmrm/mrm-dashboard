@@ -30,6 +30,7 @@ import {
 import { Textarea } from "@workspace/ui/components/textarea"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
+import { MetricSummary } from "@/components/ui/golden-patterns"
 import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
 
@@ -70,6 +71,23 @@ export default async function CommercialCorrectionsPage() {
           Commercial Evidence Remain Immutable And Use Quarantine Requests.
         </p>
       </section>
+
+      <MetricSummary
+        scope="Loaded correction workspace · before table filters"
+        items={[
+          {
+            label: "Reversible Handoffs",
+            value: candidates.designHandoffs.length,
+            tone: "information"
+          },
+          {
+            label: "Reversible Products",
+            value: candidates.products.filter((row) => row.canReverse).length,
+            tone: "warning"
+          },
+          { label: "Correction Records", value: corrections.length }
+        ]}
+      />
 
       <div className="grid gap-6 xl:grid-cols-2">
  <SectionCard>

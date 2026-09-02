@@ -5,10 +5,10 @@ import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { Pencil, Trash2 } from "lucide-react"
 import { Button } from "@workspace/ui/components/button"
+import { MetricSummary } from "@/components/ui/golden-patterns"
 import {
  SectionCard,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
@@ -236,10 +236,21 @@ export function StoreMasterWorkspace({
       ) : null}
 
       {mode !== "entry" ? (
+        <MetricSummary
+          scope={`${selectedLabel} master · before table filters`}
+          items={[
+            {
+              label: "Master Records",
+              value: rows.length,
+              tone: "information"
+            }
+          ]}
+        />
+      ) : null}
+      {mode !== "entry" ? (
  <SectionCard>
           <CardHeader>
             <CardTitle>Saved {selectedLabel} Records</CardTitle>
-            <CardDescription>{rows.length} active records</CardDescription>
           </CardHeader>
           <CardContent className="overflow-x-auto">
             {selectedMaster === "ITEM_TYPE" ? (

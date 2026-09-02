@@ -24,6 +24,7 @@ import {
 } from "@workspace/ui/components/table"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
+import { MetricSummary } from "@/components/ui/golden-patterns"
 import { requireCapability } from "@/lib/auth/require-capability"
 
 const drawingHistoryPath = "/commercial/drawing-history"
@@ -78,6 +79,18 @@ export default async function DrawingChangeLogPage() {
         </div>
       </CardHeader>
       <CardContent>
+        <MetricSummary
+          className="mb-4"
+          scope="Loaded drawing change history · before table filters"
+          items={[
+            { label: "Changes", value: rows.length, tone: "information" },
+            {
+              label: "Products",
+              value: new Set(rows.map((row) => row.uid)).size,
+              tone: "brand"
+            }
+          ]}
+        />
         <div className="max-h-[75vh] overflow-auto rounded-2xl border">
  <OperationalTable excelFilters>
             <TableHeader className="sticky top-0 z-10 bg-background">

@@ -23,6 +23,7 @@ import {
 } from "@workspace/ui/components/table"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
+import { MetricSummary } from "@/components/ui/golden-patterns"
 import {
   requireCapability,
 } from "@/lib/auth/require-capability"
@@ -60,6 +61,28 @@ export default async function StoreRequestsPage() {
           Current Stock.
         </p>
       </div>
+
+      <MetricSummary
+        scope="Loaded request lines · before table filters"
+        items={[
+          {
+            label: "Requests",
+            value: new Set(requests.map((row) => row.requestNumber)).size,
+            tone: "information"
+          },
+          {
+            label: "Pending Lines",
+            value: requests.filter((row) => row.status === "Pending").length,
+            tone: "warning"
+          },
+          {
+            label: "Partly Issued Lines",
+            value: requests.filter((row) => row.status === "Partially Issued")
+              .length,
+            tone: "brand"
+          }
+        ]}
+      />
 
  <SectionCard>
         <CardHeader>

@@ -26,6 +26,7 @@ import {
 } from "@workspace/ui/components/table"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
+import { MetricSummary } from "@/components/ui/golden-patterns"
 import {
   listGrantedCapabilities,
   requireCapability,
@@ -88,6 +89,36 @@ export default async function StoreStockPage({
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">Stock</h2>
       </div>
+
+      <MetricSummary
+        scope="Stock register · before table filters"
+        items={[
+          {
+            label: "Asset Codes",
+            value: data.items.length,
+            tone: "information"
+          },
+          {
+            label: "Available Units",
+            value: data.items.reduce(
+              (total, item) => total + item.availableUnitIds.length,
+              0
+            ),
+            description: "Non Consumable physical units",
+            tone: "positive"
+          },
+          {
+            label: "Out of Stock",
+            value: data.items.filter((item) =>
+              item.trackingMode === "SERIALIZED"
+                ? !item.availableUnitIds.length
+                : Number(item.availableStock) <= 0
+            ).length,
+            description: "Asset codes without available stock",
+            tone: "warning"
+          }
+        ]}
+      />
 
  <SectionCard>
         <CardHeader>

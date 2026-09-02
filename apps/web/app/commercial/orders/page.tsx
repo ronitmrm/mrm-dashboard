@@ -36,6 +36,7 @@ import {
 import { Textarea } from "@workspace/ui/components/textarea"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
+import { MetricSummary } from "@/components/ui/golden-patterns"
 import { istDateValue } from "@/lib/date-time"
 import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
@@ -125,6 +126,23 @@ export default async function PurchaseOrdersPage({
         }
         masterTablesHref="/commercial/orders?operationalView=masterTables"
       />
+      {operationalView === "masterTables" ? (
+        <MetricSummary
+          scope="Loaded customer purchase orders · before table filters"
+          items={[
+            {
+              label: "Purchase Orders",
+              value: orders.length,
+              tone: "information"
+            },
+            {
+              label: "Approved",
+              value: orders.filter((row) => row.status === "Approved").length,
+              tone: "positive"
+            }
+          ]}
+        />
+      ) : null}
       {operationalView === "dataEntry" ? (
  <SectionCard>
           <CardHeader>
