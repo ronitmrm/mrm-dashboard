@@ -1259,6 +1259,7 @@ async function itemAndBomEvidence(client: PoolClient, itemId: string) {
       [itemId]
     ),
     client.query<{
+      component_design_revision: string | null
       component_item_id: string
       component_uid: string
       notes: string | null
@@ -1267,9 +1268,13 @@ async function itemAndBomEvidence(client: PoolClient, itemId: string) {
     }>(
       `
         SELECT line.component_item_id, component.uid AS component_uid,
-          line.quantity::text, line.notes, line.sequence
+          line.quantity::text, line.notes, line.sequence,
+          component_design.revision_label AS component_design_revision
         FROM catalog.bom_lines line
         JOIN catalog.items component ON component.id = line.component_item_id
+        LEFT JOIN catalog.product_design_revisions component_design
+          ON component_design.item_id = component.id
+          AND component_design.is_current
         WHERE line.parent_item_id = $1
         ORDER BY line.sequence, line.created_at, line.id
       `,
@@ -1279,6 +1284,7 @@ async function itemAndBomEvidence(client: PoolClient, itemId: string) {
   return {
     bomLines: bom.rows.map((line) => ({
       componentItemId: line.component_item_id,
+      componentDesignRevision: line.component_design_revision,
       componentUid: line.component_uid,
       notes: line.notes,
       quantity: asNumber(line.quantity),
@@ -1286,6 +1292,155 @@ async function itemAndBomEvidence(client: PoolClient, itemId: string) {
     })),
     item: item.rows[0] ?? {},
   }
+}
+
+type AffectedParentDesignRevision = {
+  revisionLabel: string
+  uid: string
+  weight: number
+}
+
+async function releaseAffectedParentDesignRevisions(
+  client: PoolClient,
+  input: {
+    actorUserId?: string | null
+    changedItemId: string
+    changedRevisionLabel: string
+    effectiveOn: string | null
+    engineeringChangeNoteId: string
+    organizationId: string
+  }
+): Promise<AffectedParentDesignRevision[]> {
+  const ancestors = await client.query<{
+    depth: number
+    item_id: string
+    uid: string
+  }>(
+    `
+      WITH RECURSIVE ancestors AS (
+        SELECT line.parent_item_id AS item_id, 1 AS depth,
+          ARRAY[$1::uuid, line.parent_item_id] AS path
+        FROM catalog.bom_lines line
+        WHERE line.component_item_id = $1
+        UNION ALL
+        SELECT line.parent_item_id, ancestors.depth + 1,
+          ancestors.path || line.parent_item_id
+        FROM ancestors
+        JOIN catalog.bom_lines line
+          ON line.component_item_id = ancestors.item_id
+        WHERE NOT line.parent_item_id = ANY(ancestors.path)
+      )
+      SELECT item.id AS item_id, item.uid, max(ancestors.depth)::integer AS depth
+      FROM ancestors
+      JOIN catalog.items item ON item.id = ancestors.item_id
+      WHERE item.organization_id = $2
+        AND item.item_type IN ('Package', 'Assembly')
+        AND item.lifecycle_status = 'P'
+      GROUP BY item.id, item.uid
+      ORDER BY max(ancestors.depth), item.uid, item.id
+    `,
+    [input.changedItemId, input.organizationId]
+  )
+  if (!ancestors.rows.length) return []
+
+  const changedItem = await client.query<{ uid: string }>(
+    "SELECT uid FROM catalog.items WHERE id = $1",
+    [input.changedItemId]
+  )
+  const changedUid = changedItem.rows[0]?.uid ?? input.changedItemId
+  const released: AffectedParentDesignRevision[] = []
+
+  for (const ancestor of ancestors.rows) {
+    const currentResult = await client.query<{
+      revision_id: string
+      revision_number: number
+      weight: string
+    }>(
+      `SELECT revision.id AS revision_id, revision.revision_number,
+         item.weight_100_pcs::text AS weight
+       FROM catalog.items item
+       JOIN catalog.product_design_revisions revision
+         ON revision.item_id = item.id AND revision.is_current
+       WHERE item.id = $1 AND item.organization_id = $2
+       FOR UPDATE OF item, revision`,
+      [ancestor.item_id, input.organizationId]
+    )
+    const current = currentResult.rows[0]
+    if (!current) {
+      throw new Error(
+        `Current Product Design revision was not found for parent ${ancestor.uid}.`
+      )
+    }
+    const derivedWeightResult = await client.query<{ weight: string }>(
+      `SELECT COALESCE(
+         sum(line.quantity * component.weight_100_pcs), 0
+       )::text AS weight
+       FROM catalog.bom_lines line
+       JOIN catalog.items component ON component.id = line.component_item_id
+       WHERE line.parent_item_id = $1`,
+      [ancestor.item_id]
+    )
+    const weight = asNumber(derivedWeightResult.rows[0]?.weight)
+    const revisionNumber = current.revision_number + 1
+    const revisionLabel = String(revisionNumber).padStart(2, "0")
+    const reason = `Component ${changedUid} design revision ${input.changedRevisionLabel} released; ${ancestor.uid} weight recalculated from current BOM components.`
+
+    await client.query(
+      `UPDATE catalog.product_design_revisions
+       SET status = 'Superseded', is_current = false WHERE id = $1`,
+      [current.revision_id]
+    )
+    await client.query(
+      `UPDATE catalog.items
+       SET weight_100_pcs = $1,
+         source_payload = jsonb_set(
+           COALESCE(source_payload, '{}'::jsonb),
+           '{currentDesignRevision}', to_jsonb($2::text), true
+         ),
+         updated_by_user_id = $3, updated_at = now(),
+         row_version = row_version + 1
+       WHERE id = $4`,
+      [weight, revisionLabel, input.actorUserId ?? null, ancestor.item_id]
+    )
+    const evidence = await itemAndBomEvidence(client, ancestor.item_id)
+    await client.query(
+      `INSERT INTO catalog.product_design_revisions (
+         organization_id, item_id, engineering_change_note_id,
+         revision_number, revision_label, status, is_current,
+         effective_on, change_reason, design_snapshot, bom_snapshot,
+         created_by_user_id, approved_at, approved_by_user_id,
+         released_at, source_system, source_table, source_id,
+         source_payload
+       ) VALUES (
+         $1, $2, $3, $4, $5, 'Released', true, $6::date, $7, $8, $9,
+         $10, now(), $10, now(), 'mrm-dashboard',
+         'product_design_revisions', $11, $12
+       )`,
+      [
+        input.organizationId,
+        ancestor.item_id,
+        input.engineeringChangeNoteId,
+        revisionNumber,
+        revisionLabel,
+        input.effectiveOn,
+        reason,
+        JSON.stringify(evidence.item),
+        JSON.stringify(evidence.bomLines),
+        input.actorUserId ?? null,
+        randomUUID(),
+        JSON.stringify({
+          propagatedFrom: {
+            itemId: input.changedItemId,
+            revisionLabel: input.changedRevisionLabel,
+            uid: changedUid,
+          },
+        }),
+      ]
+    )
+    released.push({ revisionLabel, uid: ancestor.uid, weight })
+  }
+
+  return released
 }
 
 function record(value: unknown): Record<string, unknown> {
@@ -5078,6 +5233,15 @@ export function createCommercialRevisionsRepository(
             JSON.stringify({ designDetails: designDetails ?? {}, impact }),
           ]
         )
+        const affectedParentRevisions =
+          await releaseAffectedParentDesignRevisions(client, {
+            actorUserId: input.actorUserId,
+            changedItemId: row.item_id,
+            changedRevisionLabel: revisionLabel,
+            effectiveOn: row.effective_on,
+            engineeringChangeNoteId: input.engineeringChangeNoteId,
+            organizationId: row.organization_id,
+          })
         const drawingDetails = record(designDetails)
         let drawingRevisionLabel: string | null = null
         if (drawingDetails.drawingRevisionRequested === true) {
@@ -5185,11 +5349,12 @@ export function createCommercialRevisionsRepository(
               source_payload = (COALESCE(source_payload, '{}'::jsonb) - 'designDraft')
                 || jsonb_build_object(
                   'releasedDesignRevision', $6::text,
-                  'releasedDrawingRevision', $7::text
+                  'releasedDrawingRevision', $7::text,
+                  'affectedParentRevisions', $8::jsonb
                 ),
               updated_by_user_id = $3, updated_at = now(),
               row_version = row_version + 1
-            WHERE id = $8
+            WHERE id = $9
           `,
           [
             status,
@@ -5199,13 +5364,20 @@ export function createCommercialRevisionsRepository(
             JSON.stringify(impact.drivers),
             revisionLabel,
             drawingRevisionLabel,
+            JSON.stringify(affectedParentRevisions),
             input.engineeringChangeNoteId,
           ]
         )
         await writeAuditEvent(client, {
           actorUserId: input.actorUserId,
           eventType: "engineering_change.design_approved",
-          metadata: { ...impact, drawingRevisionLabel, revisionLabel, status },
+          metadata: {
+            ...impact,
+            affectedParentRevisions,
+            drawingRevisionLabel,
+            revisionLabel,
+            status,
+          },
           organizationId: row.organization_id,
           targetId: input.engineeringChangeNoteId,
           targetTable: "engineering_change_notes",
@@ -5213,6 +5385,7 @@ export function createCommercialRevisionsRepository(
         return {
           costImpactDrivers: impact.drivers,
           costImpacting: impact.costImpacting,
+          affectedParentRevisions,
           id: input.engineeringChangeNoteId,
           revisionLabel,
           drawingRevisionLabel,

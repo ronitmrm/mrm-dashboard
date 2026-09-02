@@ -1190,6 +1190,120 @@ describe("commercial revisions and corrections", () => {
     })
   }, 30_000)
 
+  test("releases recalculated recursive parent weights and component revisions with a child ECN", async () => {
+    const suffix = randomUUID()
+    const m2bId = await createItem(`M2B-${suffix}`, "List")
+    const r26Id = await createItem(`R26-${suffix}`, "List")
+    const r51Id = await createItem(`R51-${suffix}`, "List")
+    const m2Id = await createItem(`M2-${suffix}`, "Package")
+    const parentId = await createItem(`PARENT-${suffix}`, "Assembly")
+    await pool.query(
+      `UPDATE catalog.items
+       SET weight_100_pcs = CASE id
+         WHEN $1::uuid THEN 9.7 WHEN $2::uuid THEN 4.9
+         WHEN $3::uuid THEN 0.4 WHEN $4::uuid THEN 15
+         WHEN $5::uuid THEN 30 END
+       WHERE id = ANY($6::uuid[])`,
+      [
+        m2bId,
+        r26Id,
+        r51Id,
+        m2Id,
+        parentId,
+        [m2bId, r26Id, r51Id, m2Id, parentId],
+      ]
+    )
+    await pool.query(
+      `INSERT INTO catalog.bom_lines (
+         organization_id, parent_item_id, component_item_id, quantity,
+         sequence, source_system, source_table, source_id
+       ) VALUES
+         ($1, $2, $3, 1, 1, 'test', 'bom_lines', $7),
+         ($1, $2, $4, 1, 2, 'test', 'bom_lines', $8),
+         ($1, $2, $5, 1, 3, 'test', 'bom_lines', $9),
+         ($1, $6, $2, 2, 1, 'test', 'bom_lines', $10)`,
+      [
+        organizationId,
+        m2Id,
+        m2bId,
+        r26Id,
+        r51Id,
+        parentId,
+        randomUUID(),
+        randomUUID(),
+        randomUUID(),
+        randomUUID(),
+      ]
+    )
+    const ecn = await repository.createEngineeringChangeNote({
+      itemId: r26Id,
+      organizationId,
+      reason: "Increase R26 piece weight",
+    })
+    await repository.completeEngineeringChangeDesign({
+      engineeringChangeNoteId: ecn.id,
+      itemPatch: { weight100Pcs: 6 },
+    })
+
+    const approved = await repository.applyEngineeringChangeDesignReview({
+      actorUserId: designHodUserId,
+      decision: "Approve",
+      engineeringChangeNoteId: ecn.id,
+    })
+
+    expect(approved).toMatchObject({
+      affectedParentRevisions: [
+        expect.objectContaining({
+          revisionLabel: "01",
+          uid: `M2-${suffix}`,
+          weight: 16.1,
+        }),
+        expect.objectContaining({
+          revisionLabel: "01",
+          uid: `PARENT-${suffix}`,
+          weight: 32.2,
+        }),
+      ],
+    })
+    const released = await pool.query<{
+      bom_snapshot: Array<{
+        componentDesignRevision?: string
+        componentUid: string
+      }>
+      revision_label: string
+      uid: string
+      weight_100_pcs: string
+    }>(
+      `SELECT item.uid, item.weight_100_pcs::text,
+         revision.revision_label, revision.bom_snapshot
+       FROM catalog.items item
+       JOIN catalog.product_design_revisions revision
+         ON revision.item_id = item.id AND revision.is_current
+       WHERE item.id = ANY($1::uuid[]) ORDER BY item.uid`,
+      [[m2Id, parentId, r26Id]]
+    )
+    expect(
+      released.rows.map((row) => ({
+        revision: row.revision_label,
+        uid: row.uid,
+        weight: Number(row.weight_100_pcs),
+      }))
+    ).toEqual([
+      { revision: "01", uid: `M2-${suffix}`, weight: 16.1 },
+      { revision: "01", uid: `PARENT-${suffix}`, weight: 32.2 },
+      { revision: "01", uid: `R26-${suffix}`, weight: 6 },
+    ])
+    const m2 = released.rows.find((row) => row.uid === `M2-${suffix}`)!
+    expect(m2.bom_snapshot).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          componentDesignRevision: "01",
+          componentUid: `R26-${suffix}`,
+        }),
+      ])
+    )
+  }, 30_000)
+
   test("releases an ECN drawing as the next immutable revision after HOD approval", async () => {
     const suffix = randomUUID()
     const itemId = await createItem(`M-ECN-DRAWING-${suffix}`, "List")

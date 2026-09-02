@@ -20,6 +20,7 @@ export type ProductPortfolioDossier = {
     componentUid: string
     depth: number
     description: string
+    designRevision: string | null
     drawingRequirement: string | null
     grade: string | null
     itemType: string
@@ -354,6 +355,7 @@ export function createProductPortfolioRepository(
         component_uid: string
         depth: number
         description: string
+        design_revision: string | null
         drawing_requirement: string | null
         grade: string | null
         item_type: string
@@ -415,6 +417,7 @@ export function createProductPortfolioRepository(
             hierarchy.parent_line_path, hierarchy.notes,
             hierarchy.component_uid, hierarchy.description,
             hierarchy.item_type, hierarchy.quantity::text,
+            component_design.revision_label AS design_revision,
             hierarchy.total_quantity::text,
             component.weight_100_pcs::text AS weight,
             component.casting::text AS blank_piece_weight,
@@ -445,6 +448,9 @@ export function createProductPortfolioRepository(
           LEFT JOIN catalog.drawing_revisions component_drawing
             ON component_drawing.item_id = component.id
             AND component_drawing.is_current
+          LEFT JOIN catalog.product_design_revisions component_design
+            ON component_design.item_id = component.id
+            AND component_design.is_current
           LEFT JOIN catalog.website_product_profiles profile
             ON profile.item_id = component.id
           ORDER BY hierarchy.sequence_path, hierarchy.line_path
@@ -498,6 +504,7 @@ export function createProductPortfolioRepository(
           componentUid: line.component_uid,
           depth: Number(line.depth),
           description: line.description,
+          designRevision: line.design_revision,
           drawingRequirement: line.drawing_requirement,
           grade: line.grade,
           itemType: line.item_type,
@@ -685,6 +692,12 @@ export function createProductPortfolioRepository(
             depth: numeric(line.depth) || 1,
             description:
               textValue(line.description) ?? "Not captured in this revision",
+            designRevision: textValue(
+              line.componentDesignRevision,
+              line.component_design_revision,
+              line.designRevision,
+              line.design_revision
+            ),
             drawingRequirement: textValue(
               line.drawingRequirement,
               line.drawing_requirement

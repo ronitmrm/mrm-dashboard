@@ -118,6 +118,7 @@ describe("Product Portfolio repository", () => {
               parent_uid: "M100",
               component_uid: "M101",
               description: "Nut",
+              design_revision: "03",
               item_type: "List",
               process_required: ["Machining"],
               product_size: "M8",
@@ -194,6 +195,7 @@ describe("Product Portfolio repository", () => {
           expect.objectContaining({
             componentUid: "M101",
             depth: 1,
+            designRevision: "03",
             productType: "Barstock",
             productionType: "CNC",
             totalQuantity: 2,
