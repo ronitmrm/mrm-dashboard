@@ -29,6 +29,8 @@ import {
 import { Textarea } from "@workspace/ui/components/textarea"
 import { ArrowLeft, FileText } from "lucide-react"
 
+import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
+
 import { saveCandidateAction } from "@/app/hr/actions"
 import { ConversationLogsTable } from "@/components/hr/conversation-logs-table"
 import { readAuthEnvironment } from "@/lib/auth/auth"
@@ -108,14 +110,13 @@ export default async function CandidateWorkspacePage({
         </div>
         {candidate.hasResume ? (
           <Button asChild>
-            <a
+            <AttachmentViewerLink
+              fileName={`${candidate.name} resume.pdf`}
               href={`/hr/candidates/${candidate.id}/resume`}
-              rel="noreferrer"
-              target="_blank"
             >
               <FileText data-icon="inline-start" />
               View Resume
-            </a>
+            </AttachmentViewerLink>
           </Button>
         ) : null}
       </section>

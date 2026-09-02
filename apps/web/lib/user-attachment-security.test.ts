@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   userAttachmentDownloadHeaders,
+  userAttachmentResponseHeaders,
   validateUserAttachment,
 } from "./user-attachment-security"
 
@@ -85,6 +86,26 @@ describe("user attachment security", () => {
       "Content-Length": "42",
       "Content-Type": "application/octet-stream",
       "X-Content-Type-Options": "nosniff",
+    })
+  })
+
+  it("allows only PDF and image previews inline while retaining safe download", () => {
+    expect(
+      userAttachmentResponseHeaders("drawing.pdf", 42, "application/pdf", true)
+    ).toMatchObject({
+      "Content-Disposition": expect.stringContaining("inline"),
+      "Content-Type": "application/pdf",
+    })
+    expect(
+      userAttachmentResponseHeaders(
+        "drawing.dwg",
+        42,
+        "application/octet-stream",
+        true
+      )
+    ).toMatchObject({
+      "Content-Disposition": expect.stringContaining("attachment"),
+      "Content-Type": "application/octet-stream",
     })
   })
 })

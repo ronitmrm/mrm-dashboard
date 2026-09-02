@@ -142,4 +142,47 @@ describe("Product Portfolio repository", () => {
       })
     )
   })
+
+  it("lists immutable drawing revisions with their approval evidence", async () => {
+    const query = vi.fn(async () => ({
+      rows: [
+        {
+          approved_at: new Date("2026-09-01T00:00:00Z"),
+          approved_by: "Design HOD",
+          change_reason: "Initial release",
+          created_at: new Date("2026-08-31T00:00:00Z"),
+          drawing_id: "drawing-1",
+          drawing_number: "M100",
+          effective_on: "2026-09-01",
+          ecn_number: null,
+          file_id: "file-1",
+          file_name: "M100.pdf",
+          is_current: true,
+          item_description: "Assembly",
+          item_id: "item-1",
+          media_type: "application/pdf",
+          raised_by: "Designer",
+          requirement_status: "Required",
+          revision_label: "00",
+          status: "Released",
+          uid: "M100",
+          uploaded_by: "Designer",
+        },
+      ],
+    }))
+    const repository = createProductPortfolioRepository({
+      pool: { query } as unknown as Pool,
+    })
+
+    await expect(
+      repository.listDrawingRevisionsForOrganization("MRMPL", { uid: "M100" })
+    ).resolves.toEqual([
+      expect.objectContaining({
+        approvedBy: "Design HOD",
+        current: true,
+        revision: "00",
+        uid: "M100",
+      }),
+    ])
+  })
 })

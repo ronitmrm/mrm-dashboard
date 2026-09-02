@@ -5,14 +5,14 @@ import {
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
-import { userAttachmentDownloadHeaders } from "@/lib/user-attachment-security"
+import { userAttachmentResponseHeaders } from "@/lib/user-attachment-security"
 import { readUserAttachment } from "@/lib/user-attachment-storage"
 import { parseDesignBomAttachmentPurpose } from "@/lib/commercial-attachment"
 
 const purposes = new Set(["cad", "customer_marked", "internal_drawing"])
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string; purpose: string }> }
 ) {
   await requireCapability("pricing.design.read", "/commercial/design")
@@ -50,9 +50,11 @@ export async function GET(
     }
     const file = await readUserAttachment(attachment.storageKey)
     return new Response(file.body, {
-      headers: userAttachmentDownloadHeaders(
+      headers: userAttachmentResponseHeaders(
         attachment.fileName,
-        file.byteSize
+        file.byteSize,
+        attachment.mediaType,
+        new URL(request.url).searchParams.has("preview")
       ),
     })
   } finally {

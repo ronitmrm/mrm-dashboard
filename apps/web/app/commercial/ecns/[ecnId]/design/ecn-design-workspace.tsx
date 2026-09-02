@@ -11,6 +11,8 @@ import {
 } from "@workspace/ui/components/native-select"
 import { Textarea } from "@workspace/ui/components/textarea"
 
+import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
+
 import { EcnBomEditor } from "../../../revisions/ecn-bom-editor"
 
 type Dossier = {
@@ -274,7 +276,10 @@ export function EcnDesignWorkspace({
                   size="sm"
                   variant="outline"
                 >
-                  <a href={attachment.href}>{attachment.fileName}</a>
+                  <AttachmentViewerLink
+                    fileName={attachment.fileName}
+                    href={attachment.href}
+                  />
                 </Button>
               ))}
             </div>

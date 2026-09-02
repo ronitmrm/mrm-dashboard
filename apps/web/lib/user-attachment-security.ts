@@ -126,11 +126,38 @@ export function validateUserAttachment({
 }
 
 export function userAttachmentDownloadHeaders(fileName: string, size: number) {
+  return userAttachmentResponseHeaders(
+    fileName,
+    size,
+    "application/octet-stream",
+    false
+  )
+}
+
+export function userAttachmentResponseHeaders(
+  fileName: string,
+  size: number,
+  declaredMediaType: string | null,
+  inline: boolean
+) {
   const safeName = path.basename(fileName).replace(/[\r\n"]/g, "_")
+  const extension = path.extname(safeName).toLowerCase()
+  const previewMediaType =
+    extension === ".pdf"
+      ? "application/pdf"
+      : extension === ".png"
+        ? "image/png"
+        : extension === ".jpg" || extension === ".jpeg"
+          ? "image/jpeg"
+          : null
+  const disposition = inline && previewMediaType ? "inline" : "attachment"
   return {
-    "Content-Disposition": `attachment; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(safeName)}`,
+    "Content-Disposition": `${disposition}; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(safeName)}`,
     "Content-Length": String(size),
-    "Content-Type": "application/octet-stream",
+    "Content-Type": (inline ? previewMediaType : null) ??
+      (declaredMediaType === "application/octet-stream"
+        ? declaredMediaType
+        : "application/octet-stream"),
     "X-Content-Type-Options": "nosniff",
   }
 }
