@@ -79,6 +79,13 @@ export {
 export { createDashboardReadModelRepository } from "./dashboard-read-model-repository"
 export { createMaintenanceRepository } from "./maintenance"
 export {
+  buildLegacyDrawingBaselinePlan,
+  createLegacyDrawingBaselineRepository,
+  type LegacyDrawingBaseline,
+  type LegacyDrawingRegisterRow,
+  type ReleasedDrawingBaselineProduct,
+} from "./legacy-drawing-baseline"
+export {
   createMasterDataLifecycleRepository,
   isMasterDataKind,
   type MasterDataKind,

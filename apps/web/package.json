@@ -5,6 +5,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --webpack -p 3001",
+    "drawing:baseline": "node --env-file=.env.local --import tsx scripts/migrate-legacy-drawing-baseline.ts",
     "auth:provision-admin": "tsx scripts/provision-initial-administrator.ts",
     "build": "next build",
     "start": "next start",

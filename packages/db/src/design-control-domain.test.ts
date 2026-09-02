@@ -4,6 +4,7 @@ import {
   assertApplicableProcessPrices,
   classifyDesignCostImpact,
   designProcessSelection,
+  drawingRevisionForReleasedDesign,
   drawingRevisionLabel,
   engineeringChangeStatusAfterApproval,
   processesRequiredFromPayload,
@@ -48,6 +49,13 @@ describe("Design control domain", () => {
     expect(drawingRevisionLabel(0)).toBe("00")
     expect(drawingRevisionLabel(9)).toBe("09")
     expect(drawingRevisionLabel(105)).toBe("105")
+  })
+
+  test("uses the released Product Design/BOM revision for a changed drawing", () => {
+    expect(drawingRevisionForReleasedDesign(7)).toEqual({
+      revisionLabel: "07",
+      revisionNumber: 7,
+    })
   })
 
   test("classifies canonical cost-driver changes independently of descriptions", () => {
