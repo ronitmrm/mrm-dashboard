@@ -295,6 +295,7 @@ function BomRow({
   assemblyWeight,
   canRemove,
   designOptions,
+  editable,
   generatedProductName,
   index,
   itemType,
@@ -312,6 +313,7 @@ function BomRow({
   assemblyWeight: number
   canRemove: boolean
   designOptions: DesignOptions
+  editable: boolean
   generatedProductName: string
   index: number
   itemType: string
@@ -509,7 +511,7 @@ function BomRow({
             {effectiveSource} · {effectiveComponentType}
           </span>
         </div>
-        {!isListProduct ? (
+        {!isListProduct && editable ? (
           <div className="flex flex-wrap gap-2">
             {effectiveComponentType === "Assembly" && !isExistingComponent ? (
               <Button
@@ -1327,14 +1329,16 @@ export function DesignTaskEditor({
                         Root · Package
                       </span>
                     </div>
-                    <Button
-                      onClick={() => addBomLine()}
-                      size="sm"
-                      type="button"
-                      variant="outline"
-                    >
-                      Add Component Line
-                    </Button>
+                    {editable ? (
+                      <Button
+                        onClick={() => addBomLine()}
+                        size="sm"
+                        type="button"
+                        variant="outline"
+                      >
+                        Add Component Line
+                      </Button>
+                    ) : null}
                   </div>
                   <TextField
                     defaultValue={initial.quotedPartUid ?? ""}
@@ -1444,9 +1448,12 @@ export function DesignTaskEditor({
                       row.lineNumber
                     )}
                     canRemove={
-                      itemType === "Package" && visibleRows.length > 1
+                      editable &&
+                      itemType === "Package" &&
+                      visibleRows.length > 1
                     }
                     designOptions={designOptions}
+                    editable={editable}
                     generatedProductName={generatedProductName}
                     index={index}
                     itemType={itemType}
@@ -1693,27 +1700,33 @@ export function DesignTaskEditor({
         </>
       ) : null}
 
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-muted/20 p-4">
-        <p className="text-sm text-muted-foreground">
-          Save draft progress at any time. Complete Design from the final
-          Design Controls tab after all required fields are entered.
-        </p>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            name="design_save_intent"
-            type="submit"
-            value="draft"
-            variant="outline"
-          >
-            Save Draft
-          </Button>
-          {activeSection === "controls" ? (
-            <Button name="design_save_intent" type="submit" value="complete">
-              Complete Design Task
+      {editable ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-muted/20 p-4">
+          <p className="text-sm text-muted-foreground">
+            Save draft progress at any time. Complete Design from the final
+            Design Controls tab after all required fields are entered.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              name="design_save_intent"
+              type="submit"
+              value="draft"
+              variant="outline"
+            >
+              Save Draft
             </Button>
-          ) : null}
+            {activeSection === "controls" ? (
+              <Button name="design_save_intent" type="submit" value="complete">
+                Complete Design Task
+              </Button>
+            ) : null}
+          </div>
         </div>
-      </div>
+      ) : (
+        <p className="rounded-xl border bg-muted/20 p-4 text-sm text-muted-foreground">
+          Released Design Task · Read-only
+        </p>
+      )}
       </fieldset>
     </div>
   )

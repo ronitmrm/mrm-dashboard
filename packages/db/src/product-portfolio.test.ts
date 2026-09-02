@@ -74,17 +74,61 @@ describe("Product Portfolio repository", () => {
     ])
   })
 
-  it("returns the released Product dossier with BOM, pricing, drawing, and ECN evidence", async () => {
+  it("returns a design-only Product BOM summary with detailed hierarchy and revision history", async () => {
     const query = vi.fn(async (statement: string) => {
+      if (
+        statement.includes("FROM catalog.product_design_revisions revision")
+      ) {
+        return {
+          rows: [
+            {
+              approved_at: new Date("2026-09-01T00:00:00Z"),
+              approved_by: "Design HOD",
+              change_reason: "Thread update",
+              ecn_id: "ecn-9",
+              ecn_number: "ECN-9",
+              effective_on: "2026-09-01",
+              is_current: true,
+              released_at: new Date("2026-09-01T00:00:00Z"),
+              revision_label: "01",
+              status: "Released",
+            },
+            {
+              approved_at: new Date("2026-08-01T00:00:00Z"),
+              approved_by: "Design HOD",
+              change_reason: "Initial Release",
+              ecn_id: null,
+              ecn_number: null,
+              effective_on: "2026-08-01",
+              is_current: false,
+              released_at: new Date("2026-08-01T00:00:00Z"),
+              revision_label: "00",
+              status: "Superseded",
+            },
+          ],
+        }
+      }
       if (statement.includes("WITH RECURSIVE hierarchy")) {
         return {
           rows: [
             {
+              blank_piece_weight: "18.5",
+              category: "Hardware",
               depth: 1,
               parent_uid: "M100",
               component_uid: "M101",
               description: "Nut",
+              item_type: "List",
+              process_required: ["Machining"],
+              product_size: "M8",
+              product_type: "Barstock",
+              production_type: "CNC",
               quantity: "2",
+              rod_size: "12 Hex",
+              rod_type: "Solid",
+              subcategory: "Nut",
+              total_quantity: "2",
+              weight: "10",
             },
           ],
         }
@@ -94,23 +138,21 @@ describe("Product Portfolio repository", () => {
           {
             uid: "M100",
             description: "Assembly",
-            item_type: "List",
+            item_type: "Package",
             production_type: "Barstock",
+            production_process: "CNC",
+            weight_100_pcs: "20",
+            casting: "22",
+            rod_size: "16 Round",
+            rod_type: "Solid",
+            die_code: "D-100",
+            category: "Hydraulics",
+            subcategory: "Assembly",
+            product_size: "1/4 inch",
             source_payload: { processesRequired: ["Machining", "Washing"] },
             design_revision: "01",
             design_status: "Released",
             design_released_at: new Date("2026-09-01T00:00:00Z"),
-            product_cost_inr: "42.5",
-            machining_cost: "10",
-            washing: "2",
-            checking: "0",
-            marking: "0",
-            plating: "0",
-            annealing: "0",
-            deburring: "0",
-            buffing: "0",
-            sealant: "0",
-            assembly_operation_cost: "0",
             drawing_revision: "01",
             drawing_number: "M100",
             drawing_status: "Released",
@@ -129,18 +171,37 @@ describe("Product Portfolio repository", () => {
       pool: { query } as unknown as Pool,
     })
 
-    await expect(
-      repository.getDossierForOrganization("MRMPL", "M100")
-    ).resolves.toEqual(
+    const dossier = await repository.getDossierForOrganization("MRMPL", "M100")
+    expect(dossier).toEqual(
       expect.objectContaining({
-        uid: "M100",
+        blankPieceWeight: 22,
+        category: "Hydraulics",
+        dieCode: "D-100",
+        itemType: "Package",
+        productSize: "1/4 inch",
+        productType: "Barstock",
+        productionType: "CNC",
+        productWeight: 20,
         processesRequired: ["Machining", "Washing"],
-        design: expect.objectContaining({ revision: "01" }),
-        drawing: expect.objectContaining({ fileName: "M100.pdf" }),
-        latestEcn: expect.objectContaining({ number: "ECN-9" }),
-        bom: [expect.objectContaining({ componentUid: "M101", depth: 1 })],
+        revisionHistory: [
+          expect.objectContaining({ current: true, revision: "01" }),
+          expect.objectContaining({ current: false, revision: "00" }),
+        ],
+        rodSize: "16 Round",
+        rodType: "Solid",
+        uid: "M100",
+        bom: [
+          expect.objectContaining({
+            componentUid: "M101",
+            depth: 1,
+            productType: "Barstock",
+            productionType: "CNC",
+            totalQuantity: 2,
+          }),
+        ],
       })
     )
+    expect(dossier).not.toHaveProperty("pricing")
   })
 
   it("lists immutable drawing revisions with their approval evidence", async () => {
@@ -184,5 +245,87 @@ describe("Product Portfolio repository", () => {
         uid: "M100",
       }),
     ])
+  })
+
+  it("reads an old BOM summary only from its immutable revision snapshot", async () => {
+    let issuedStatement = ""
+    const query = vi.fn(async (statement: string) => {
+      issuedStatement = statement
+      return {
+        rows: [
+          {
+            approved_at: new Date("2026-08-01T00:00:00Z"),
+            approved_by: "Design HOD",
+            bom_snapshot: [
+              {
+                componentUid: "M101-OLD",
+                notes: "Original component",
+                quantity: 2,
+                sequence: 1,
+              },
+            ],
+            change_reason: "Initial Release",
+            design_snapshot: {
+              casting: 23,
+              description: "Original package",
+              itemType: "Package",
+              processesRequired: ["Machining"],
+              productionType: "Barstock",
+              rodSize: "16 Round",
+              sourcePayload: {
+                category: "Historic category",
+                productSize: "1/4 inch",
+                subcategory: "Historic subcategory",
+              },
+              uid: "M100",
+              weight100Pcs: 21,
+            },
+            drawing_file_id: null,
+            drawing_file_name: null,
+            drawing_media_type: null,
+            drawing_number: null,
+            drawing_requirement: null,
+            drawing_revision: null,
+            drawing_status: null,
+            ecn_number: null,
+            ecn_reason: null,
+            ecn_status: null,
+            effective_on: "2026-08-01",
+            item_uid: "M100",
+            released_at: new Date("2026-08-01T00:00:00Z"),
+            revision_label: "00",
+            source_payload: {},
+            status: "Superseded",
+          },
+        ],
+      }
+    })
+    const repository = createProductPortfolioRepository({
+      pool: { query } as unknown as Pool,
+    })
+
+    const summary = await repository.getDesignRevisionSummaryForOrganization(
+      "MRMPL",
+      "M100",
+      "00"
+    )
+
+    expect(summary).toEqual(
+      expect.objectContaining({
+        blankPieceWeight: 23,
+        category: "Historic category",
+        description: "Original package",
+        productWeight: 21,
+        revisionHistory: [],
+        bom: [
+          expect.objectContaining({
+            componentUid: "M101-OLD",
+            quantity: 2,
+          }),
+        ],
+      })
+    )
+    expect(issuedStatement).not.toContain("AND drawing.is_current")
+    expect(summary).not.toHaveProperty("pricing")
   })
 })

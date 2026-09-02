@@ -161,6 +161,11 @@ describe("DesignTaskEditor", () => {
     expect(markup.indexOf('role="tablist"')).toBeLessThan(
       markup.indexOf('disabled=""')
     )
+    expect(markup).toContain("Released Design Task · Read-only")
+    expect(markup).not.toContain("Save Draft")
+    expect(markup).not.toContain("Complete Design Task")
+    expect(markup).not.toContain("Add Component Line")
+    expect(markup).not.toContain("Select Product from Portfolio")
     expect(markup).not.toContain("Package Process")
     expect(markup).not.toContain("Components Required?")
     expect(markup).toContain("Product Size")
