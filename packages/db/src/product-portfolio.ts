@@ -9,6 +9,34 @@ export type ProductPortfolioRow = {
   rodSize: string | null
   subCategory: string | null
   uid: string
+  designRevision: string | null
+}
+
+export type ProductPortfolioDossier = {
+  bom: Array<{
+    componentUid: string
+    depth: number
+    description: string
+    parentUid: string
+    quantity: number
+  }>
+  design: null | { releasedAt: Date | null; revision: string; status: string }
+  description: string
+  drawing: null | {
+    fileId: string | null
+    fileName: string | null
+    mediaType: string | null
+    number: string
+    requirement: string
+    revision: string
+    status: string
+  }
+  itemType: string
+  latestEcn: null | { number: string; reason: string; status: string }
+  pricing: { productCostInr: number; processes: Record<string, number> }
+  processesRequired: string[]
+  productType: string | null
+  uid: string
 }
 
 type ProductPortfolioDatabaseRow = {
@@ -20,6 +48,12 @@ type ProductPortfolioDatabaseRow = {
   rod_size: string | null
   sub_category: string | null
   uid: string
+  design_revision: string | null
+}
+
+function numeric(value: string | number | null | undefined) {
+  const parsed = Number(value ?? 0)
+  return Number.isFinite(parsed) ? parsed : 0
 }
 
 export function createProductPortfolioRepository(
@@ -59,6 +93,7 @@ export function createProductPortfolioRepository(
               item.description
             ) AS mrmpl_description,
             item.production_type AS product_type
+            , design_revision.revision_label AS design_revision
           FROM catalog.items item
           JOIN core.organizations organization
             ON organization.id = item.organization_id
@@ -66,6 +101,12 @@ export function createProductPortfolioRepository(
             ON profile.item_id = item.id
           LEFT JOIN sales.design_tasks design
             ON design.id::text = item.source_payload ->> 'designTaskId'
+          LEFT JOIN LATERAL (
+            SELECT revision.revision_label
+            FROM catalog.product_design_revisions revision
+            WHERE revision.item_id = item.id AND revision.is_current
+            LIMIT 1
+          ) design_revision ON true
           WHERE lower(organization.code) = lower($1)
             AND (
               (
@@ -108,12 +149,203 @@ export function createProductPortfolioRepository(
         rodSize: row.rod_size,
         subCategory: row.sub_category,
         uid: row.uid,
+        designRevision: row.design_revision,
       }))
       return [
         ...new Map(
           products.map((product) => [product.uid.toLowerCase(), product])
         ).values(),
       ]
+    },
+
+    async getDossierForOrganization(
+      organizationCode: string,
+      productUid: string
+    ): Promise<ProductPortfolioDossier | null> {
+      type HeaderRow = {
+        annealing: string
+        assembly_operation_cost: string
+        buffing: string
+        checking: string
+        deburring: string
+        description: string
+        design_released_at: Date | null
+        design_revision: string | null
+        design_status: string | null
+        drawing_file_id: string | null
+        drawing_file_name: string | null
+        drawing_media_type: string | null
+        drawing_number: string | null
+        drawing_requirement: string | null
+        drawing_revision: string | null
+        drawing_status: string | null
+        item_type: string
+        latest_ecn_number: string | null
+        latest_ecn_reason: string | null
+        latest_ecn_status: string | null
+        machining_cost: string
+        marking: string
+        plating: string
+        product_cost_inr: string
+        production_type: string | null
+        sealant: string
+        source_payload: Record<string, unknown> | null
+        uid: string
+        washing: string
+      }
+      const header = await pool.query<HeaderRow>(
+        `
+          SELECT item.uid, item.description, item.item_type,
+            item.production_type, item.source_payload,
+            item.product_cost_inr::text, item.machining_cost::text,
+            item.washing::text, item.checking::text, item.marking::text,
+            item.plating::text, item.annealing::text, item.deburring::text,
+            item.buffing::text, item.sealant::text,
+            item.assembly_operation_cost::text,
+            design.revision_label AS design_revision,
+            design.status AS design_status,
+            design.released_at AS design_released_at,
+            drawing.revision_label AS drawing_revision,
+            drawing.drawing_number, drawing.status AS drawing_status,
+            drawing.requirement_status AS drawing_requirement,
+            drawing.file_id AS drawing_file_id,
+            file.file_name AS drawing_file_name,
+            file.media_type AS drawing_media_type,
+            ecn.ecn_number AS latest_ecn_number,
+            ecn.status AS latest_ecn_status,
+            ecn.reason AS latest_ecn_reason
+          FROM catalog.items item
+          JOIN core.organizations organization
+            ON organization.id = item.organization_id
+          LEFT JOIN catalog.product_design_revisions design
+            ON design.item_id = item.id AND design.is_current
+          LEFT JOIN catalog.drawing_revisions drawing
+            ON drawing.item_id = item.id AND drawing.is_current
+          LEFT JOIN core.files file ON file.id = drawing.file_id
+          LEFT JOIN LATERAL (
+            SELECT change.ecn_number, change.status, change.reason
+            FROM sales.engineering_change_notes change
+            WHERE change.item_id = item.id
+            ORDER BY change.created_at DESC, change.id DESC
+            LIMIT 1
+          ) ecn ON true
+          WHERE lower(organization.code) = lower($1)
+            AND lower(item.uid) = lower($2)
+            AND item.lifecycle_status IN ('P', 'Q')
+          LIMIT 1
+        `,
+        [organizationCode.trim(), productUid.trim()]
+      )
+      const row = header.rows[0]
+      if (!row) return null
+
+      type BomRow = {
+        component_uid: string
+        depth: number
+        description: string
+        parent_uid: string
+        quantity: string
+      }
+      const hierarchy = await pool.query<BomRow>(
+        `
+          WITH RECURSIVE hierarchy AS (
+            SELECT line.component_item_id, line.parent_item_id,
+              component.uid AS component_uid, parent.uid AS parent_uid,
+              component.description, line.quantity, 1 AS depth,
+              ARRAY[line.parent_item_id, line.component_item_id] AS path
+            FROM catalog.bom_lines line
+            JOIN catalog.items parent ON parent.id = line.parent_item_id
+            JOIN catalog.items component ON component.id = line.component_item_id
+            JOIN core.organizations organization
+              ON organization.id = parent.organization_id
+            WHERE lower(organization.code) = lower($1)
+              AND lower(parent.uid) = lower($2)
+            UNION ALL
+            SELECT line.component_item_id, line.parent_item_id,
+              component.uid, parent.uid, component.description,
+              line.quantity, hierarchy.depth + 1,
+              hierarchy.path || line.component_item_id
+            FROM hierarchy
+            JOIN catalog.bom_lines line
+              ON line.parent_item_id = hierarchy.component_item_id
+            JOIN catalog.items parent ON parent.id = line.parent_item_id
+            JOIN catalog.items component ON component.id = line.component_item_id
+            WHERE NOT line.component_item_id = ANY(hierarchy.path)
+          )
+          SELECT depth, parent_uid, component_uid, description, quantity::text
+          FROM hierarchy
+          ORDER BY depth, parent_uid, component_uid
+        `,
+        [organizationCode.trim(), productUid.trim()]
+      )
+      const configuredProcesses = row.source_payload?.processesRequired
+      const processesRequired = Array.isArray(configuredProcesses)
+        ? configuredProcesses.filter(
+            (value): value is string => typeof value === "string"
+          )
+        : []
+      return {
+        bom: hierarchy.rows.map((line) => ({
+          componentUid: line.component_uid,
+          depth: Number(line.depth),
+          description: line.description,
+          parentUid: line.parent_uid,
+          quantity: numeric(line.quantity),
+        })),
+        design:
+          row.design_revision && row.design_status
+            ? {
+                releasedAt: row.design_released_at,
+                revision: row.design_revision,
+                status: row.design_status,
+              }
+            : null,
+        description: row.description,
+        drawing:
+          row.drawing_revision &&
+          row.drawing_number &&
+          row.drawing_status &&
+          row.drawing_requirement
+            ? {
+                fileId: row.drawing_file_id,
+                fileName: row.drawing_file_name,
+                mediaType: row.drawing_media_type,
+                number: row.drawing_number,
+                requirement: row.drawing_requirement,
+                revision: row.drawing_revision,
+                status: row.drawing_status,
+              }
+            : null,
+        itemType: row.item_type,
+        latestEcn:
+          row.latest_ecn_number &&
+          row.latest_ecn_status &&
+          row.latest_ecn_reason
+            ? {
+                number: row.latest_ecn_number,
+                reason: row.latest_ecn_reason,
+                status: row.latest_ecn_status,
+              }
+            : null,
+        pricing: {
+          productCostInr: numeric(row.product_cost_inr),
+          processes: {
+            Annealing: numeric(row.annealing),
+            Assembly: numeric(row.assembly_operation_cost),
+            Buffing: numeric(row.buffing),
+            Checking: numeric(row.checking),
+            Deburring: numeric(row.deburring),
+            Machining: numeric(row.machining_cost),
+            Marking: numeric(row.marking),
+            Plating: numeric(row.plating),
+            Sealant: numeric(row.sealant),
+            Washing: numeric(row.washing),
+          },
+        },
+        processesRequired,
+        productType: row.production_type,
+        uid: row.uid,
+      }
     },
   }
 }

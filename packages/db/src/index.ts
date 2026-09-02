@@ -173,6 +173,7 @@ export { createUserDashboardRepository } from "./user-dashboard"
 export { migrateDatabase } from "./migrate"
 export {
   createProductPortfolioRepository,
+  type ProductPortfolioDossier,
   type ProductPortfolioRow,
 } from "./product-portfolio"
 export { createProductRepository } from "./products"
