@@ -2,7 +2,7 @@
 
 ## Storage
 
-Migration `0111_maintenance_requests.sql` adds `maintenance.requests` and append-only `maintenance.request_events`. A request row is the task; no child task table exists. Requester user ID, requester name, Department, and submission time are retained on submission. Approval and work transitions retain actor/timestamps.
+Migrations `0111_maintenance_requests.sql` and `0112_maintenance_request_sequence_permission.sql` add `maintenance.requests`, append-only `maintenance.request_events`, the Maintenance capabilities and roles, and web-role request-number sequence access. A request row is the task; no child task table exists. Requester user ID, requester name, Department, and submission time are retained on submission. Approval and work transitions retain actor/timestamps.
 
 Photos use the existing Artifact service and UploadThing provider. Links target `maintenance.requests`, use `request-photo:<sequence>` purposes, and accept at most eight signature-verified PNG/JPEG files of 10 MB each.
 
