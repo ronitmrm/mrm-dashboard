@@ -121,6 +121,37 @@ them against the shared staging/live database or load the managed application
 environment into a test process. Use an isolated test database; its connection
 must not reuse the live endpoint. A `_test` role name alone does not isolate data.
 
+All four SQL-consuming Vitest configurations (Web, DB, Migration, Runtime) call
+`scripts/test-database-safety.ts` before test modules load. The guard requires
+`mrmpl_test` (or an `mrmpl_test_` suffix), rejects connection-routing query
+overrides, and requires `TEST_DATABASE_ALLOWED_HOST` for remote endpoints.
+Remote endpoints must differ from application endpoints in both the process
+environment and workspace/Web environment files; pooled/direct Neon aliases
+count as the same endpoint. Errors never include connection strings.
+
+The startup regression launches the real runner with a sentinel fixture and
+proves unsafe configurations stop before that fixture loads. Local CI keeps its
+existing `localhost:5434/mrmpl_test` target; this workstation must use an isolated
+managed branch, never provision local containers. That branch's test role needs
+`CREATEDB` for disposable auth databases and enough connections for concurrent
+repository reads (the shared test role's two-connection limit is insufficient).
+Do not change the shared branch's role privileges or limits for testing.
+
+On 2026-09-03, ten leaked `Design HOD` integration fixtures were backed up and
+removed with their employee links, posts, departments, and designations. The
+cleanup compared exact snapshots and incoming references, was rehearsed on an
+isolated clone, and preserved non-actor revision evidence. Two immutable-revision
+triggers were disabled only inside the owner-controlled transaction and restored
+before commit to allow backed-up actor references to become null. No business
+organizations, commercial records, or files were deleted. Operational backup
+and recovery IDs remain in the ignored `.handoff/` directory, not source control.
+
+Browser follow-up verified separate Create Role, Application Roles, and Staff
+Accounts tabs, compact summary cards, and wrapped employee/post cells. Adding
+Design Team to Khattar Ankit's Design & Engineering post succeeded on an isolated
+copy while preserving Administrative. The reported multiple-role error did not
+reproduce; no speculative authorization changes or live role grants were made.
+
 If Drizzle table types unexpectedly lose `$inferSelect`, inspect the installed
 package before changing application schemas. Installed declarations had altered
 Drizzle `Table` imports to `OperationalTable`; restoring the locked dependencies
