@@ -6,6 +6,10 @@ const migrationUrl = new URL(
   "../migrations/0109_design_bom_ecn_drawing_control.sql",
   import.meta.url
 )
+const pendingUploadMigrationUrl = new URL(
+  "../migrations/0110_legacy_drawing_pending_upload.sql",
+  import.meta.url
+)
 
 describe("Design BOM, drawing, and ECN control migration", () => {
   test("creates immutable current-only Product Design and Drawing revisions", async () => {
@@ -32,5 +36,14 @@ describe("Design BOM, drawing, and ECN control migration", () => {
     expect(migration).toMatch(/processesRequired/i)
     expect(migration).toMatch(/'00'/)
     expect(migration).toMatch(/pricing\.ecns\.engineering_approve/i)
+  })
+
+  test("allows a Required legacy drawing to remain Draft until its file is attached", async () => {
+    const migration = await readFile(pendingUploadMigrationUrl, "utf8")
+
+    expect(migration).toMatch(/DROP CONSTRAINT drawing_revisions_check2/i)
+    expect(migration).toMatch(
+      /status NOT IN \('Released', 'Superseded'\)[\s\S]*requirement_status = 'Not Required'[\s\S]*file_id IS NOT NULL/i
+    )
   })
 })

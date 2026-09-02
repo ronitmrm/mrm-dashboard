@@ -34,7 +34,9 @@ export default async function DrawingHistoryPage() {
   const revisions = await repository
     .listDrawingRevisionsForOrganization("MRMPL")
     .finally(() => repository.close())
-  const rows = revisions.filter((revision) => revision.current)
+  const rows = revisions.filter(
+    (revision) => revision.current || revision.pendingUpload
+  )
 
   return (
     <div className="grid gap-6">
@@ -44,8 +46,8 @@ export default async function DrawingHistoryPage() {
             <div>
               <CardTitle>Drawing Register</CardTitle>
               <CardDescription>
-                Current released drawing per Product. Revision evidence is
-                immutable and originates in Initial Design or an approved ECN.
+                Current released drawings and legacy records awaiting their
+                drawing upload.
               </CardDescription>
             </div>
             <DataDownloadButton href={`${drawingHistoryPath}/export.xlsx`} />
@@ -55,7 +57,7 @@ export default async function DrawingHistoryPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Current Controlled Drawings</CardTitle>
+          <CardTitle>Drawing Records</CardTitle>
           <CardDescription>{rows.length} Products.</CardDescription>
         </CardHeader>
         <CardContent>
@@ -87,9 +89,17 @@ export default async function DrawingHistoryPage() {
                         <TableCell>
                           <Badge variant="secondary">{row.revision}</Badge>
                         </TableCell>
-                        <TableCell>{row.status}</TableCell>
+                        <TableCell>
+                          {row.pendingUpload
+                            ? "Pending Drawing Upload"
+                            : row.status}
+                        </TableCell>
                         <TableCell>{row.effectiveOn || "—"}</TableCell>
-                        <TableCell>{row.ecnNumber || "Initial Design"}</TableCell>
+                        <TableCell>
+                          {row.pendingUpload
+                            ? "Legacy Baseline"
+                            : row.ecnNumber || "Initial Design"}
+                        </TableCell>
                         <TableCell>
                           <div className="flex gap-2">
                             {row.fileName ? (
@@ -121,7 +131,7 @@ export default async function DrawingHistoryPage() {
                       className="h-32 text-center text-muted-foreground"
                       colSpan={8}
                     >
-                      No released controlled drawings.
+                      No drawing records.
                     </TableCell>
                   </TableRow>
                 )}

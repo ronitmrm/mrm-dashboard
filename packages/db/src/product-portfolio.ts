@@ -96,6 +96,7 @@ export type DrawingRevisionHistoryRow = {
   itemDescription: string
   itemId: string
   mediaType: string | null
+  pendingUpload: boolean
   raisedBy: string | null
   requirement: string
   revision: string
@@ -818,6 +819,8 @@ export function createProductPortfolioRepository(
         raised_by: string | null
         requirement_status: string
         revision_label: string
+        source_payload: Record<string, unknown> | null
+        source_system: string
         status: string
         uid: string
         uploaded_by: string | null
@@ -830,6 +833,7 @@ export function createProductPortfolioRepository(
             revision.status, revision.is_current,
             revision.effective_on::text, revision.change_reason,
             revision.created_at, revision.approved_at,
+            revision.source_system, revision.source_payload,
             file.id AS file_id, file.file_name, file.media_type,
             ecn.ecn_number,
             COALESCE(raised.name, raised.email) AS raised_by,
@@ -871,6 +875,11 @@ export function createProductPortfolioRepository(
         itemDescription: row.item_description,
         itemId: row.item_id,
         mediaType: row.media_type,
+        pendingUpload:
+          row.source_system === "legacy-drawing-baseline" &&
+          row.status === "Draft" &&
+          row.file_id === null &&
+          row.source_payload?.filePending === true,
         raisedBy: row.raised_by,
         requirement: row.requirement_status,
         revision: row.revision_label,

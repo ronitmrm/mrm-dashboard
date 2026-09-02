@@ -5,6 +5,7 @@ import {
   buildLegacyDrawingBaselinePlan,
   createArtifactService,
   createLegacyDrawingBaselineRepository,
+  migrateDatabase,
   type LegacyDrawingRegisterRow,
 } from "@workspace/db"
 import * as XLSX from "xlsx"
@@ -18,7 +19,9 @@ function argument(name: string) {
 
 function isoDate(value: unknown) {
   if (value instanceof Date && !Number.isNaN(value.valueOf())) {
-    return value.toISOString().slice(0, 10)
+    return `${String(value.getFullYear()).padStart(4, "0")}-${String(
+      value.getMonth() + 1
+    ).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`
   }
   if (typeof value === "number" && Number.isFinite(value)) {
     const parsed = XLSX.SSF.parse_date_code(value)
@@ -126,14 +129,19 @@ if (!connectionString) {
     "MIGRATION_DATABASE_URL, WEB_DATABASE_URL, or DATABASE_URL is required."
   )
 }
-if (apply && !drawingsDirectory) {
-  throw new Error("--drawings-dir is required with --apply.")
-}
 // eslint-disable-next-line turbo/no-undeclared-env-vars -- one-time managed migration guard
 if (apply && process.env.MRM_NEON_BRANCH !== "staging") {
   throw new Error(
     "This one-time migration is restricted to the staging branch."
   )
+}
+
+if (apply) {
+  const migrationConnectionString = process.env.MIGRATION_DATABASE_URL
+  if (!migrationConnectionString) {
+    throw new Error("MIGRATION_DATABASE_URL is required with --apply.")
+  }
+  await migrateDatabase({ connectionString: migrationConnectionString })
 }
 
 const repository = createLegacyDrawingBaselineRepository({ connectionString })
@@ -147,9 +155,14 @@ try {
   })
   const report = {
     ambiguousFileUids: summarized(plan.ambiguousFileUids),
+    baselines: plan.baselines.length,
     ignoredRegisterUids: summarized(plan.ignoredRegisterUids),
     missingFileUids: summarized(plan.missingFileUids),
-    mode: apply ? "apply" : "dry-run",
+    mode: apply
+      ? drawingsDirectory
+        ? "apply-with-files"
+        : "apply-metadata"
+      : "dry-run",
     ready: plan.ready.length,
     releasedProducts: products.length,
     unmatchedFileNames: summarized(plan.unmatchedFileNames),
@@ -157,54 +170,66 @@ try {
   if (!apply) {
     console.log(JSON.stringify(report, null, 2))
   } else {
-    const filePaths = new Map(
-      files.map((file) => [file.fileName.toLowerCase(), file.filePath])
-    )
-    const artifactService = createArtifactService({
-      connectionString,
-      provider: createUploadThingArtifactProvider(),
+    const staged = await repository.stageBaselines({
+      baselines: plan.baselines,
+      organizationCode,
     })
-    const results = new Map<string, number>()
-    try {
-      for (const [index, baseline] of plan.ready.entries()) {
-        const filePath = filePaths.get(baseline.fileName.toLowerCase())
-        if (!filePath)
-          throw new Error(`File path was not found for ${baseline.uid}.`)
-        const artifact = await artifactService.store({
-          actorUserId: null,
-          bytes: await readFile(filePath),
-          fileName: baseline.fileName,
-          idempotencyKey: `legacy-drawing-baseline:${baseline.uid}:${baseline.revisionLabel}`,
-          mediaType: mediaType(baseline.fileName),
-          organizationId: baseline.organizationId,
-          origin: "uploaded",
-          purpose: "legacy_drawing_baseline",
-          target: {
-            id: baseline.itemId,
-            schema: "catalog",
-            table: "items",
-          },
-        })
-        const outcome = await repository.applyBaseline({
-          baseline,
-          fileId: artifact.id,
-          organizationCode,
-        })
-        results.set(outcome.status, (results.get(outcome.status) ?? 0) + 1)
-        if ((index + 1) % 50 === 0) {
-          console.log(`Processed ${index + 1}/${plan.ready.length}`)
-        }
-      }
-    } finally {
-      await artifactService.close()
-    }
-    console.log(
-      JSON.stringify(
-        { ...report, outcomes: Object.fromEntries(results) },
-        null,
-        2
+    if (!drawingsDirectory) {
+      console.log(JSON.stringify({ ...report, staged }, null, 2))
+    } else {
+      const filePaths = new Map(
+        files.map((file) => [file.fileName.toLowerCase(), file.filePath])
       )
-    )
+      const artifactService = createArtifactService({
+        connectionString,
+        provider: createUploadThingArtifactProvider(),
+      })
+      const results = new Map<string, number>()
+      try {
+        for (const [index, baseline] of plan.ready.entries()) {
+          const fileName = baseline.fileName
+          if (!fileName) {
+            throw new Error(`File name was not found for ${baseline.uid}.`)
+          }
+          const filePath = filePaths.get(fileName.toLowerCase())
+          if (!filePath)
+            throw new Error(`File path was not found for ${baseline.uid}.`)
+          const artifact = await artifactService.store({
+            actorUserId: null,
+            bytes: await readFile(filePath),
+            fileName,
+            idempotencyKey: `legacy-drawing-baseline:${baseline.uid}:${baseline.revisionLabel}`,
+            mediaType: mediaType(fileName),
+            organizationId: baseline.organizationId,
+            origin: "uploaded",
+            purpose: "legacy_drawing_baseline",
+            target: {
+              id: baseline.itemId,
+              schema: "catalog",
+              table: "items",
+            },
+          })
+          const outcome = await repository.applyBaseline({
+            baseline,
+            fileId: artifact.id,
+            organizationCode,
+          })
+          results.set(outcome.status, (results.get(outcome.status) ?? 0) + 1)
+          if ((index + 1) % 50 === 0) {
+            console.log(`Processed ${index + 1}/${plan.ready.length}`)
+          }
+        }
+      } finally {
+        await artifactService.close()
+      }
+      console.log(
+        JSON.stringify(
+          { ...report, outcomes: Object.fromEntries(results), staged },
+          null,
+          2
+        )
+      )
+    }
   }
 } finally {
   await repository.close()

@@ -25,7 +25,7 @@ export type ReleasedDrawingBaselineProduct = {
 export type LegacyDrawingBaseline = {
   drawingNumber: string
   effectiveOn: string
-  fileName: string
+  fileName: string | null
   itemId: string
   organizationId: string
   revisionLabel: string
@@ -37,9 +37,15 @@ export type LegacyDrawingBaselineApplyResult = {
   status:
     | "applied"
     | "already-applied"
+    | "baseline-not-staged"
     | "newer-live-revision"
     | "live-drawing-exists"
   uid: string
+}
+
+export type LegacyDrawingBaselineStageResult = {
+  processed: number
+  skipped: number
 }
 
 const defaultBaselineDate = "2026-09-02"
@@ -58,7 +64,9 @@ function revisionNumber(value: unknown) {
 
 function isoDate(value: unknown) {
   if (value instanceof Date && !Number.isNaN(value.valueOf())) {
-    return value.toISOString().slice(0, 10)
+    return `${String(value.getFullYear()).padStart(4, "0")}-${String(
+      value.getMonth() + 1
+    ).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`
   }
   const candidate = text(value)
   return /^\d{4}-\d{2}-\d{2}$/.test(candidate) ? candidate : null
@@ -93,6 +101,7 @@ export function buildLegacyDrawingBaselinePlan(input: {
     filesByUid.set(stem, matches)
   }
 
+  const baselines: LegacyDrawingBaseline[] = []
   const ready: LegacyDrawingBaseline[] = []
   const missingFileUids: string[] = []
   const ambiguousFileUids: string[] = []
@@ -107,27 +116,28 @@ export function buildLegacyDrawingBaselinePlan(input: {
     const files = filesByUid.get(key) ?? []
     if (files.length === 0) {
       missingFileUids.push(product.uid)
-      continue
     }
     if (files.length > 1) {
       ambiguousFileUids.push(product.uid)
-      continue
     }
     const revision = drawingRevisionForReleasedDesign(currentRevision)
-    ready.push({
+    const baseline = {
       drawingNumber: text(row?.drawingNumber) || product.uid,
       effectiveOn,
-      fileName: files[0]!,
+      fileName: files.length === 1 ? files[0]! : null,
       itemId: product.itemId,
       organizationId: product.organizationId,
       revisionLabel: revision.revisionLabel,
       revisionNumber: revision.revisionNumber,
       uid: product.uid,
-    })
+    }
+    baselines.push(baseline)
+    if (baseline.fileName) ready.push(baseline)
   }
 
   return {
     ambiguousFileUids,
+    baselines,
     ignoredRegisterUids: [...registerByUid.keys()]
       .filter((uid) => !productsByUid.has(uid))
       .map((uid) => text(registerByUid.get(uid)?.uid))
@@ -203,11 +213,98 @@ export function createLegacyDrawingBaselineRepository(
       return result.rows
     },
 
+    async stageBaselines(input: {
+      baselines: readonly LegacyDrawingBaseline[]
+      organizationCode: string
+    }): Promise<LegacyDrawingBaselineStageResult> {
+      if (!input.baselines.length) return { processed: 0, skipped: 0 }
+      const baselines = input.baselines.map((baseline) => ({
+        drawing_number: baseline.drawingNumber,
+        effective_on: baseline.effectiveOn,
+        item_id: baseline.itemId,
+        organization_id: baseline.organizationId,
+        revision_label: baseline.revisionLabel,
+        revision_number: baseline.revisionNumber,
+        uid: baseline.uid,
+      }))
+      const processed = await withTransaction(pool, async (client) => {
+        const result = await client.query<{ item_id: string }>(
+          `WITH baseline AS (
+             SELECT * FROM jsonb_to_recordset($1::jsonb) AS input(
+               drawing_number text, effective_on date, item_id uuid,
+               organization_id uuid, revision_label text,
+               revision_number integer, uid text
+             )
+           ), eligible AS (
+             SELECT baseline.*, revision.id AS product_design_revision_id
+             FROM baseline
+             JOIN catalog.items item ON item.id = baseline.item_id
+               AND item.organization_id = baseline.organization_id
+               AND lower(item.uid) = lower(baseline.uid)
+             JOIN core.organizations organization
+               ON organization.id = item.organization_id
+             JOIN catalog.product_design_revisions revision
+               ON revision.item_id = item.id AND revision.is_current
+             WHERE lower(organization.code) = lower($2)
+               AND item.uid_kind = 'INTERNAL' AND item.lifecycle_status = 'P'
+               AND NOT EXISTS (
+                 SELECT 1 FROM catalog.drawing_revisions existing
+                 WHERE existing.item_id = item.id
+                   AND NOT (
+                     existing.revision_number = baseline.revision_number
+                     AND existing.status = 'Draft'
+                     AND existing.file_id IS NULL
+                     AND existing.source_system = 'legacy-drawing-baseline'
+                     AND existing.source_id = baseline.organization_id::text
+                       || ':' || baseline.uid || ':' || baseline.revision_label
+                   )
+               )
+           )
+           INSERT INTO catalog.drawing_revisions (
+             organization_id, item_id, product_design_revision_id, file_id,
+             drawing_number, revision_number, revision_label,
+             requirement_status, status, is_current, effective_on,
+             change_reason, source_system, source_table, source_id,
+             source_payload
+           )
+           SELECT organization_id, item_id, product_design_revision_id, NULL,
+             drawing_number, revision_number, revision_label,
+             'Required', 'Draft', false, effective_on,
+             'Legacy Drawing Register Baseline',
+             'legacy-drawing-baseline', 'drawing.xlsx',
+             organization_id::text || ':' || uid || ':' || revision_label,
+             jsonb_build_object(
+               'filePending', true, 'legacyBaseline', true
+             )
+           FROM eligible
+           ON CONFLICT (item_id, revision_number) DO UPDATE
+             SET drawing_number = EXCLUDED.drawing_number,
+               effective_on = EXCLUDED.effective_on,
+               source_payload = EXCLUDED.source_payload
+             WHERE drawing_revisions.status = 'Draft'
+               AND drawing_revisions.file_id IS NULL
+               AND drawing_revisions.source_system = 'legacy-drawing-baseline'
+           RETURNING item_id`,
+          [JSON.stringify(baselines), input.organizationCode.trim()]
+        )
+        return result.rowCount ?? result.rows.length
+      })
+      return {
+        processed,
+        skipped: input.baselines.length - processed,
+      }
+    },
+
     async applyBaseline(input: {
       baseline: LegacyDrawingBaseline
       fileId: string
       organizationCode: string
     }): Promise<LegacyDrawingBaselineApplyResult> {
+      if (!input.baseline.fileName) {
+        throw new Error(
+          `A drawing file is required to release ${input.baseline.uid}.`
+        )
+      }
       return withTransaction(pool, async (client) => {
         const current = await client.query<{
           design_revision_id: string
@@ -238,28 +335,44 @@ export function createLegacyDrawingBaselineRepository(
           )
         }
         const sourceId = `${row.organization_id}:${row.uid}:${input.baseline.revisionLabel}`
-        const existingDrawing = await client.query<{
-          revision_number: number
+        const stagedDrawing = await client.query<{
+          id: string
           source_id: string
           source_system: string
+          status: string
         }>(
-          `SELECT revision_number, source_system, source_id
+          `SELECT id, source_system, source_id, status
            FROM catalog.drawing_revisions
-           WHERE item_id = $1 AND is_current
+           WHERE item_id = $1 AND revision_number = $2
            FOR UPDATE`,
-          [input.baseline.itemId]
+          [input.baseline.itemId, input.baseline.revisionNumber]
         )
-        const drawing = existingDrawing.rows[0]
-        if (drawing) {
+        const drawing = stagedDrawing.rows[0]
+        if (!drawing) {
+          return { status: "baseline-not-staged", uid: row.uid }
+        }
+        const isLegacyBaseline =
+          drawing.source_system === "legacy-drawing-baseline" &&
+          drawing.source_id === sourceId
+        if (
+          isLegacyBaseline &&
+          ["Released", "Superseded"].includes(drawing.status)
+        ) {
           return {
-            status:
-              drawing.source_system === "legacy-drawing-baseline" &&
-              drawing.source_id === sourceId &&
-              drawing.revision_number === input.baseline.revisionNumber
-                ? "already-applied"
-                : "live-drawing-exists",
+            status: "already-applied",
             uid: row.uid,
           }
+        }
+        if (!isLegacyBaseline || drawing.status !== "Draft") {
+          return { status: "live-drawing-exists", uid: row.uid }
+        }
+        const currentDrawing = await client.query<{ id: string }>(
+          `SELECT id FROM catalog.drawing_revisions
+           WHERE item_id = $1 AND is_current FOR UPDATE`,
+          [input.baseline.itemId]
+        )
+        if (currentDrawing.rows[0]) {
+          return { status: "live-drawing-exists", uid: row.uid }
         }
         if (row.design_revision_number > input.baseline.revisionNumber) {
           return { status: "newer-live-revision", uid: row.uid }
@@ -322,29 +435,20 @@ export function createLegacyDrawingBaselineRepository(
           designRevisionId = inserted.rows[0]!.id
         }
         await client.query(
-          `INSERT INTO catalog.drawing_revisions (
-             organization_id, item_id, product_design_revision_id, file_id,
-             drawing_number, revision_number, revision_label,
-             requirement_status, status, is_current, effective_on,
-             change_reason, released_at, source_system, source_table,
-             source_id, source_payload
-           ) VALUES (
-             $1, $2, $3, $4, $5, $6, $7, 'Required', 'Released', true,
-             $8::date, 'Legacy Drawing Register Import', $8::date,
-             'legacy-drawing-baseline', 'drawing.xlsx', $9,
-             jsonb_build_object('legacyBaseline', true, 'fileName', $10::text)
-           )`,
+          `UPDATE catalog.drawing_revisions
+           SET product_design_revision_id = $1, file_id = $2,
+             status = 'Released', is_current = true,
+             released_at = $3::date,
+             source_payload = source_payload || jsonb_build_object(
+               'fileName', $4::text, 'filePending', false
+             )
+           WHERE id = $5 AND status = 'Draft'`,
           [
-            row.organization_id,
-            input.baseline.itemId,
             designRevisionId,
             input.fileId,
-            input.baseline.drawingNumber,
-            input.baseline.revisionNumber,
-            input.baseline.revisionLabel,
             input.baseline.effectiveOn,
-            sourceId,
             input.baseline.fileName,
+            drawing.id,
           ]
         )
         return { status: "applied", uid: row.uid }

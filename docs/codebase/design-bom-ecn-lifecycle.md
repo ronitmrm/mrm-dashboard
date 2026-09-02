@@ -22,6 +22,12 @@ evidence and returns the active ECN to `Pending Design`.
 Product Design and Drawing revisions use `Draft`, `Released`, `Superseded`, or
 `Rejected`. Only a `Released` row can be current.
 
+A Legacy Drawing Baseline is inserted as a non-current `Draft` with Required
+drawing metadata and no file. Drawing History labels it `Pending Drawing
+Upload`. Attaching the UID-matched file promotes that same row to current
+`Released` and aligns the current Product Design/BOM revision to its stored
+revision number; its revision and effective date never change during upload.
+
 ## Database invariants
 
 - A Product has at most one current released Product Design revision.
@@ -53,9 +59,10 @@ Product Design and Drawing revisions use `Draft`, `Released`, `Superseded`, or
 - Seed selected processes once from existing Design dossier fields. Only legacy
   rows without a canonical selection may use positive process prices for this
   one-time backfill.
-- Seed one current Drawing revision `00` from the latest existing drawing/file
-  evidence per Product where an unambiguous Product link exists. Keep unmatched
-  legacy evidence available and report it; do not invent links.
+- Stage one provisional Drawing row per released Product from the approved
+  legacy register, including Products with no matched file yet. Attach and
+  release only an unambiguous UID-matched file. Keep unmatched legacy evidence
+  available and report it; do not invent links.
 - Existing open ECNs remain in their current stage. An ECN still in
   `Pending Design` adopts HOD review on its next submission. Already published
   ECN evidence is not rewritten.
