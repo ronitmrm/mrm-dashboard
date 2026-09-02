@@ -1,6 +1,6 @@
 import Link from "next/link"
 
-import { attachmentViewerHref } from "@/lib/attachment-viewer"
+import { attachmentViewerHref } from "../lib/attachment-viewer"
 
 export function AttachmentViewerLink({
   byteSize,

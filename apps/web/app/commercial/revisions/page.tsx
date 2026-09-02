@@ -669,7 +669,7 @@ export default async function CommercialRevisionsPage() {
                       </Button>
                     </form>
                   ) : null}
-                  {ecn.status === "Pending Costing" ? (
+                  {ecn.status === "Pending Customer Costing" ? (
                     <div className="border-t pt-4">
                       <Button asChild variant="outline">
                         <Link href={ecnHref(ecn.id)}>

@@ -35,6 +35,12 @@ type Dossier = {
   designRemarks: string | null
   designerName: string | null
   dieCode: string | null
+  drawingFileHref?: string | null
+  drawingFileId: string | null
+  drawingFileName: string | null
+  drawingNumber: string
+  drawingRequirement: string
+  drawingRevisionRequested?: boolean
   ecnNumber: string
   fixtureApproxCost: number
   fixtureRequired: string
@@ -47,6 +53,7 @@ type Dossier = {
   materialGradeId: string | null
   operationNotes: string | null
   productionType: string | null
+  processesRequired: string[]
   productSize: string | null
   reason: string
   remarks: string | null
@@ -111,6 +118,9 @@ export function EcnDesignWorkspace({
   rodTypes?: NamedOption[]
 }) {
   const [activeSection, setActiveSection] = useState<Section>("product")
+  const [drawingRevisionRequested, setDrawingRevisionRequested] = useState(
+    dossier.drawingRevisionRequested ?? false
+  )
 
   return (
     <div className="grid gap-6">
@@ -247,6 +257,14 @@ export function EcnDesignWorkspace({
             <FieldLabel>Design / Process Remarks</FieldLabel>
             <Textarea defaultValue={dossier.remarks ?? ""} name="remarks" />
           </Field>
+          <Field className="md:col-span-2 xl:col-span-4">
+            <FieldLabel>Processes Required</FieldLabel>
+            <Input
+              defaultValue={dossier.processesRequired.join(", ")}
+              name="processes_required"
+              placeholder="Machining, Washing, Plating"
+            />
+          </Field>
         </div>
       </section>
 
@@ -288,6 +306,75 @@ export function EcnDesignWorkspace({
               No approved design files are linked to this Product yet.
             </p>
           )}
+          <div className="grid gap-4 border-t pt-4 md:grid-cols-2">
+            <label className="flex items-center gap-2 text-sm font-medium md:col-span-2">
+              <input
+                checked={drawingRevisionRequested}
+                name="drawing_revision_requested"
+                onChange={(event) =>
+                  setDrawingRevisionRequested(event.currentTarget.checked)
+                }
+                type="checkbox"
+              />
+              Release new drawing revision
+            </label>
+            <p className="text-sm text-muted-foreground md:col-span-2">
+              Uploaded evidence remains on this ECN. Released only after Design
+              HOD approval.
+            </p>
+            <Field>
+              <FieldLabel>Drawing Requirement</FieldLabel>
+              <NativeSelect
+                defaultValue={dossier.drawingRequirement}
+                disabled={!drawingRevisionRequested}
+                name="drawing_requirement"
+              >
+                <NativeSelectOption value="Required">Required</NativeSelectOption>
+                <NativeSelectOption value="Not Required">
+                  Not Required
+                </NativeSelectOption>
+              </NativeSelect>
+            </Field>
+            <Field>
+              <FieldLabel>Drawing Number</FieldLabel>
+              <Input
+                defaultValue={dossier.drawingNumber}
+                disabled={!drawingRevisionRequested}
+                name="drawing_number"
+              />
+            </Field>
+            <Field className="md:col-span-2">
+              <FieldLabel>Replacement Drawing</FieldLabel>
+              <Input
+                accept=".pdf,.png,.jpg,.jpeg,.webp,.dwg,.dxf,.step,.stp"
+                disabled={!drawingRevisionRequested}
+                name="drawing_file"
+                type="file"
+              />
+            </Field>
+            {dossier.drawingFileName ? (
+              <p className="text-sm text-muted-foreground md:col-span-2">
+                Current selection: {dossier.drawingFileHref ? (
+                  <AttachmentViewerLink
+                    fileName={dossier.drawingFileName}
+                    href={dossier.drawingFileHref}
+                  />
+                ) : (
+                  dossier.drawingFileName
+                )}
+              </p>
+            ) : null}
+            <input
+              name="drawing_file_id"
+              type="hidden"
+              value={dossier.drawingFileId ?? ""}
+            />
+            <input
+              name="drawing_file_name"
+              type="hidden"
+              value={dossier.drawingFileName ?? ""}
+            />
+          </div>
         </div>
       </section>
 
@@ -382,7 +469,7 @@ export function EcnDesignWorkspace({
           Save Draft
         </Button>
         <Button name="design_save_intent" type="submit" value="complete">
-          Complete ECN Design
+          Submit For Design HOD Approval
         </Button>
       </div>
     </div>

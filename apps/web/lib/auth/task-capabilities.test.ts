@@ -12,7 +12,7 @@ describe("button and function capability catalog", () => {
     const keys = Object.values(taskCapabilityCatalog)
     expect(new Set(keys).size).toBe(keys.length)
     expect(Object.keys(administrationTaskCapabilities)).toHaveLength(8)
-    expect(Object.keys(commercialTaskCapabilities)).toHaveLength(52)
+    expect(Object.keys(commercialTaskCapabilities)).toHaveLength(53)
     expect(Object.keys(hrTaskCapabilities)).toHaveLength(23)
   })
 

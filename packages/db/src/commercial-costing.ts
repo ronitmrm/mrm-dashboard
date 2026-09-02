@@ -1900,7 +1900,7 @@ export function createCommercialCostingRepository(
             FROM sales.engineering_change_notes ecn
             JOIN catalog.items item ON item.id = ecn.item_id
             WHERE ecn.organization_id = (SELECT id FROM organization)
-              AND ecn.status = 'Pending Costing'
+              AND ecn.status = 'Pending Customer Costing'
 
             UNION ALL
 
@@ -1998,7 +1998,7 @@ export function createCommercialCostingRepository(
             (
               SELECT count(*)::text FROM sales.engineering_change_notes ecn
               WHERE ecn.organization_id = organization.id
-                AND ecn.status = 'Pending Costing'
+                AND ecn.status = 'Pending Customer Costing'
             ) AS ecn_price_review
           FROM core.organizations organization
           WHERE lower(organization.code) = lower($1)

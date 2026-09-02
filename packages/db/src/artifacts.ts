@@ -552,6 +552,17 @@ export function createArtifactService(input: {
         )
         const row = artifact.rows[0]
         if (!row) throw new Error("Artifact was not found.")
+        const releasedDrawing = await client.query<{ exists: boolean }>(
+          `SELECT EXISTS (
+             SELECT 1 FROM catalog.drawing_revisions revision
+             WHERE revision.file_id = $1
+               AND revision.status IN ('Released', 'Superseded')
+           ) AS exists`,
+          [deleteInput.artifactId]
+        )
+        if (releasedDrawing.rows[0]?.exists) {
+          throw new Error("Released drawing revision evidence cannot be deleted.")
+        }
         if (deleteInput.confirmation !== row.file_name) {
           throw new Error(
             "Artifact deletion confirmation must match the filename."
