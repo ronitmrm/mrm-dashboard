@@ -1,10 +1,11 @@
 "use client"
 
-import { Search, X } from "lucide-react"
+import { ChevronDown, Search, X } from "lucide-react"
 import { useMemo, useState } from "react"
 
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
+import { Checkbox } from "@workspace/ui/components/checkbox"
 import {
   FieldDescription,
   FieldLegend,
@@ -12,11 +13,12 @@ import {
 } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
 import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@workspace/ui/components/native-select"
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@workspace/ui/components/popover"
 import {
- OperationalTable,
+  OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -26,10 +28,15 @@ import {
 
 import {
   type PermissionAccessLevel,
+  type PermissionAccessAction,
+  type PermissionAccessRow,
   type PermissionOption,
+  normalizePermissionKeys,
+  permissionAccessLevelForKeys,
   permissionAccessRows,
-  permissionKeysForSelections,
-  permissionSelectionsForKeys,
+  permissionAccessSummary,
+  permissionKeysForActionToggle,
+  permissionKeysForPreset,
 } from "./permission-access"
 
 export function PermissionSelector({
@@ -41,37 +48,49 @@ export function PermissionSelector({
 }) {
   const [query, setQuery] = useState("")
   const rows = useMemo(() => permissionAccessRows(permissions), [permissions])
-  const [selections, setSelections] = useState<
-    Record<string, PermissionAccessLevel>
-  >(() => permissionSelectionsForKeys(rows, initialPermissionKeys))
+  const [permissionKeys, setPermissionKeys] = useState<string[]>(() => {
+    const assignable = new Set(rows.flatMap((row) => row.fullPermissionKeys))
+    return initialPermissionKeys.filter((key) => assignable.has(key)).sort()
+  })
   const normalizedQuery = query.trim().toLowerCase()
   const visibleRows = rows.filter(
     (row) =>
-      (!normalizedQuery ||
-        row.module.toLowerCase().includes(normalizedQuery) ||
-        row.submodule.toLowerCase().includes(normalizedQuery) ||
-        row.label.toLowerCase().includes(normalizedQuery) ||
-        row.fullPermissionKeys.some((key) =>
-          key.toLowerCase().includes(normalizedQuery)
-        ))
+      !normalizedQuery ||
+      row.module.toLowerCase().includes(normalizedQuery) ||
+      row.submodule.toLowerCase().includes(normalizedQuery) ||
+      row.label.toLowerCase().includes(normalizedQuery) ||
+      row.fullPermissionKeys.some((key) =>
+        key.toLowerCase().includes(normalizedQuery)
+      )
   )
-  const selectedPermissionKeys = permissionKeysForSelections(rows, selections)
-  const configuredCount = Object.values(selections).filter(
-    (level) => level !== "none"
+  const selectedPermissionKeys = normalizePermissionKeys(permissionKeys)
+  const configuredCount = rows.filter(
+    (row) => permissionAccessLevelForKeys(row, permissionKeys) !== "none"
   ).length
 
   function setAccess(id: string, level: PermissionAccessLevel) {
-    setSelections((current) => ({ ...current, [id]: level }))
+    const row = rows.find((candidate) => candidate.id === id)
+    if (!row) return
+    setPermissionKeys((current) => permissionKeysForPreset(row, current, level))
+  }
+
+  function toggleAction(
+    row: (typeof rows)[number],
+    action: (typeof row.actions)[number]
+  ) {
+    setPermissionKeys((current) =>
+      permissionKeysForActionToggle(row, current, action)
+    )
   }
 
   return (
-    <FieldSet className="rounded-xl border p-4">
+    <FieldSet className="gap-3 rounded-lg border p-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <FieldLegend>Capabilities</FieldLegend>
           <FieldDescription>
-            Pages are listed separately. Task permissions are shown only when
-            they do not represent a page. Full Access includes Read Only.
+            Set a preset or open Custom to choose only the actions this role
+            needs. Modifying actions keep View selected when available.
           </FieldDescription>
         </div>
         <Badge variant="secondary">{configuredCount} configured</Badge>
@@ -93,18 +112,17 @@ export function PermissionSelector({
           />
         </div>
         {query ? (
-          <Button
-            onClick={() => setQuery("")}
-            type="button"
-            variant="outline"
-          >
+          <Button onClick={() => setQuery("")} type="button" variant="outline">
             <X /> Clear
           </Button>
         ) : null}
       </div>
 
-      <div className="max-h-[36rem] overflow-y-auto rounded-lg border">
- <OperationalTable>
+      <div className="rounded-lg border">
+        <OperationalTable
+          containerClassName="max-h-[min(34rem,calc(100svh-16rem))]"
+          filterStorageKey="access-administration-permissions"
+        >
           <TableHeader className="sticky top-0 z-10 bg-background">
             <TableRow>
               <TableHead className="w-48">Main Module</TableHead>
@@ -138,31 +156,12 @@ export function PermissionSelector({
                     ) : null}
                   </TableCell>
                   <TableCell>
-                    <NativeSelect
-                      aria-label={`${row.label} access`}
-                      className="w-full"
-                      onChange={(event) =>
-                        setAccess(
-                          row.id,
-                          event.target.value as PermissionAccessLevel
-                        )
-                      }
-                      value={selections[row.id] ?? "none"}
-                    >
-                      <NativeSelectOption value="none">
-                        No Access
-                      </NativeSelectOption>
-                      {row.supportedLevels.includes("read") ? (
-                        <NativeSelectOption value="read">
-                          Read Only
-                        </NativeSelectOption>
-                      ) : null}
-                      {row.supportedLevels.includes("full") ? (
-                        <NativeSelectOption value="full">
-                          Full Access
-                        </NativeSelectOption>
-                      ) : null}
-                    </NativeSelect>
+                    <AccessChip
+                      onActionToggle={(action) => toggleAction(row, action)}
+                      onPresetChange={(level) => setAccess(row.id, level)}
+                      permissionKeys={permissionKeys}
+                      row={row}
+                    />
                   </TableCell>
                 </TableRow>
               ))
@@ -177,8 +176,91 @@ export function PermissionSelector({
               </TableRow>
             )}
           </TableBody>
- </OperationalTable>
+        </OperationalTable>
       </div>
     </FieldSet>
+  )
+}
+
+function AccessChip({
+  onActionToggle,
+  onPresetChange,
+  permissionKeys,
+  row,
+}: {
+  onActionToggle: (action: PermissionAccessAction) => void
+  onPresetChange: (level: PermissionAccessLevel) => void
+  permissionKeys: readonly string[]
+  row: PermissionAccessRow
+}) {
+  const level = permissionAccessLevelForKeys(row, permissionKeys)
+  const summary = permissionAccessSummary(row, permissionKeys)
+  const granted = new Set(permissionKeys)
+  const presets = [
+    ["none", "No Access"],
+    ["view", "View Only"],
+    ["full", "Full Access"],
+    ["custom", "Custom"],
+  ] as const satisfies readonly (readonly [PermissionAccessLevel, string])[]
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          aria-label={`${row.label} access: ${summary}`}
+          className="h-8 w-full min-w-44 justify-between rounded-full px-3 text-xs font-medium"
+          size="sm"
+          type="button"
+          variant={level === "none" ? "outline" : "secondary"}
+        >
+          <span className="max-w-40 truncate">{summary}</span>
+          <ChevronDown className="size-3.5" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-80 gap-3 p-3">
+        <div className="grid grid-cols-2 gap-1.5">
+          {presets.map(([preset, label]) => (
+            <Button
+              aria-pressed={level === preset}
+              className="justify-start"
+              disabled={
+                preset === "view" && row.readPermissionKeys.length === 0
+              }
+              key={preset}
+              onClick={() => onPresetChange(preset)}
+              size="sm"
+              type="button"
+              variant={level === preset ? "secondary" : "ghost"}
+            >
+              {label}
+            </Button>
+          ))}
+        </div>
+        <div className="border-t pt-3">
+          <p className="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+            Applicable actions
+          </p>
+          <div className="grid gap-2.5">
+            {row.actions.map((action) => {
+              const checked = action.permissionKeys.every((key) =>
+                granted.has(key)
+              )
+              return (
+                <label
+                  className="flex cursor-pointer items-center gap-2.5 text-sm"
+                  key={`${row.id}:${action.label}`}
+                >
+                  <Checkbox
+                    checked={checked}
+                    onCheckedChange={() => onActionToggle(action)}
+                  />
+                  <span>{action.label}</span>
+                </label>
+              )
+            })}
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
   )
 }

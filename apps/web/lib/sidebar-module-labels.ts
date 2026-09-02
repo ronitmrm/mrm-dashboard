@@ -53,6 +53,7 @@ export function sidebarModuleForPermission(
 
   switch (storedModule) {
     case "administration":
+    case "artifacts":
       return sidebarModuleLabels.accessAdministration
     case "hr":
     case "recruitment":
@@ -85,6 +86,7 @@ export function sidebarSubmoduleForPermission(
 
   const mappings = [
     ["administration.", "Access Administration"],
+    ["artifacts.", "Artifacts"],
     ["pricing.dashboard.", "Pricing"],
     ["pricing.pricing.", "Pricing"],
     ["pricing.products.", "Product Parameter Costing"],

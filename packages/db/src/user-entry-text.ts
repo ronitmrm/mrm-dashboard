@@ -67,6 +67,7 @@ export function properCaseUserText(value: string) {
       (_, apostrophe: string, suffix: string) =>
         `${apostrophe}${suffix.toLocaleLowerCase("en-IN")}`
     )
+    .replace(/\bHod\b/g, "HOD")
 }
 
 export function normalizeUserEnteredPayload<T>(value: T, fieldName = ""): T {
