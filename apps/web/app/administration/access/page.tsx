@@ -407,17 +407,17 @@ export default async function AccessAdministrationPage({
                   <TableBody>
                     {snapshot.users.map((user) => (
                       <TableRow key={user.id}>
-                        <TableCell>
-                          <div className="grid gap-0.5">
+                        <TableCell className="max-w-64 whitespace-normal">
+                          <div className="grid min-w-0 grid-cols-1 gap-0.5 break-words">
                             <span className="font-medium">{user.name}</span>
                             <span className="text-xs text-muted-foreground">
                               {user.email}
                             </span>
                           </div>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="w-80 max-w-80 whitespace-normal">
                           {user.employee ? (
-                            <div className="grid gap-0.5">
+                            <div className="grid min-w-0 grid-cols-1 gap-0.5 break-words">
                               <span>{user.employee.employeeCode}</span>
                               <span className="text-xs text-muted-foreground">
                                 {user.employee.departments.join(", ")} ·{" "}
