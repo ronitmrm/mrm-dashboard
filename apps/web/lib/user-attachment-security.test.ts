@@ -57,32 +57,73 @@ describe("user attachment security", () => {
     ["supplier-quote", "quotation.pdf", Buffer.from("%PDF-1.7\n")],
     ["purchase-order", "source.xlsx", zipWithEntry("xl/workbook.xml")],
     ["purchase-order", "source.docx", zipWithEntry("word/document.xml")],
-  ] as const)("accepts a valid %s attachment named %s", (purpose, name, data) => {
-    expect(validateUserAttachment({ bytes: data, fileName: name, purpose })).toEqual({
-      fileName: name,
-      mediaType: "application/octet-stream",
-    })
-  })
+  ] as const)(
+    "accepts a valid %s attachment named %s",
+    (purpose, name, data) => {
+      expect(
+        validateUserAttachment({ bytes: data, fileName: name, purpose })
+      ).toEqual({
+        fileName: name,
+        mediaType: "application/octet-stream",
+      })
+    }
+  )
 
   it("rejects disallowed extensions and mismatched signatures", () => {
-    expect(() => validateUserAttachment({
-      bytes: Buffer.from("MZ executable"), fileName: "drawing.pdf", purpose: "drawing",
-    })).toThrow("does not match its extension")
-    expect(() => validateUserAttachment({
-      bytes: Buffer.from("plain text"), fileName: "drawing.svg", purpose: "drawing",
-    })).toThrow("must be a PDF, DWG, DXF, PNG, or JPEG")
-    expect(() => validateUserAttachment({
-      bytes: zipWithEntry("word/document.xml"), fileName: "source.xlsx", purpose: "purchase-order",
-    })).toThrow("does not match its extension")
-    expect(() => validateUserAttachment({
-      bytes: Buffer.concat([bytes(0x50, 0x4b, 0x03, 0x04), Buffer.from("[Content_Types].xml xl/workbook.xml")]),
-      fileName: "spoofed.xlsx", purpose: "purchase-order",
-    })).toThrow("does not match its extension")
+    expect(() =>
+      validateUserAttachment({
+        bytes: Buffer.from("MZ executable"),
+        fileName: "drawing.pdf",
+        purpose: "drawing",
+      })
+    ).toThrow("does not match its extension")
+    expect(() =>
+      validateUserAttachment({
+        bytes: Buffer.from("plain text"),
+        fileName: "drawing.svg",
+        purpose: "drawing",
+      })
+    ).toThrow("must be a PDF, DWG, DXF, PNG, or JPEG")
+    expect(() =>
+      validateUserAttachment({
+        bytes: zipWithEntry("word/document.xml"),
+        fileName: "source.xlsx",
+        purpose: "purchase-order",
+      })
+    ).toThrow("does not match its extension")
+    expect(() =>
+      validateUserAttachment({
+        bytes: Buffer.concat([
+          bytes(0x50, 0x4b, 0x03, 0x04),
+          Buffer.from("[Content_Types].xml xl/workbook.xml"),
+        ]),
+        fileName: "spoofed.xlsx",
+        purpose: "purchase-order",
+      })
+    ).toThrow("does not match its extension")
+  })
+
+  it("accepts only signature-verified PNG or JPEG Maintenance photos", () => {
+    expect(
+      validateUserAttachment({
+        bytes: bytes(0xff, 0xd8, 0xff, 0xe0),
+        fileName: "repair.jpeg",
+        purpose: "maintenance-photo",
+      })
+    ).toEqual({ fileName: "repair.jpeg", mediaType: "image/jpeg" })
+    expect(() =>
+      validateUserAttachment({
+        bytes: Buffer.from("%PDF-1.7\n"),
+        fileName: "repair.pdf",
+        purpose: "maintenance-photo",
+      })
+    ).toThrow("must be a PNG or JPEG")
   })
 
   it("forces user uploads to download with a server-controlled content type", () => {
     expect(userAttachmentDownloadHeaders('unsafe\r\n"name.pdf', 42)).toEqual({
-      "Content-Disposition": "attachment; filename=\"unsafe___name.pdf\"; filename*=UTF-8''unsafe___name.pdf",
+      "Content-Disposition":
+        "attachment; filename=\"unsafe___name.pdf\"; filename*=UTF-8''unsafe___name.pdf",
       "Content-Length": "42",
       "Content-Type": "application/octet-stream",
       "X-Content-Type-Options": "nosniff",

@@ -1,9 +1,14 @@
 import path from "node:path"
 
-type AttachmentPurpose = "drawing" | "purchase-order" | "supplier-quote"
+type AttachmentPurpose =
+  | "drawing"
+  | "maintenance-photo"
+  | "purchase-order"
+  | "supplier-quote"
 
 const allowedExtensions: Record<AttachmentPurpose, ReadonlySet<string>> = {
   drawing: new Set([".pdf", ".dwg", ".dxf", ".png", ".jpg", ".jpeg"]),
+  "maintenance-photo": new Set([".png", ".jpg", ".jpeg"]),
   "supplier-quote": new Set([".pdf"]),
   "purchase-order": new Set([
     ".pdf",
@@ -17,6 +22,7 @@ const allowedExtensions: Record<AttachmentPurpose, ReadonlySet<string>> = {
 
 const allowedDescription: Record<AttachmentPurpose, string> = {
   drawing: "PDF, DWG, DXF, PNG, or JPEG",
+  "maintenance-photo": "PNG or JPEG",
   "supplier-quote": "PDF",
   "purchase-order": "PDF, XLSX, DOCX, PNG, or JPEG",
 }
@@ -112,17 +118,27 @@ export function validateUserAttachment({
 }) {
   const safeName = path.basename(fileName).replace(/[<>:"/\\|?*\r\n]+/g, "_")
   const extension = path.extname(safeName).toLowerCase()
+  const label =
+    purpose === "drawing"
+      ? "Drawing"
+      : purpose === "maintenance-photo"
+        ? "Maintenance photo"
+        : purpose === "supplier-quote"
+          ? "Supplier quote"
+          : "PO source"
   if (!allowedExtensions[purpose].has(extension)) {
-    throw new Error(
-      `${purpose === "drawing" ? "Drawing" : purpose === "supplier-quote" ? "Supplier quote" : "PO source"} files must be a ${allowedDescription[purpose]}.`
-    )
+    throw new Error(`${label} files must be a ${allowedDescription[purpose]}.`)
   }
   if (!signatureMatches(extension, bytes)) {
-    throw new Error(
-      `${purpose === "drawing" ? "Drawing" : purpose === "supplier-quote" ? "Supplier quote" : "PO source"} file content does not match its extension.`
-    )
+    throw new Error(`${label} file content does not match its extension.`)
   }
-  return { fileName: safeName, mediaType: "application/octet-stream" }
+  const mediaType =
+    purpose === "maintenance-photo"
+      ? extension === ".png"
+        ? "image/png"
+        : "image/jpeg"
+      : "application/octet-stream"
+  return { fileName: safeName, mediaType }
 }
 
 export function userAttachmentDownloadHeaders(fileName: string, size: number) {
@@ -154,7 +170,8 @@ export function userAttachmentResponseHeaders(
   return {
     "Content-Disposition": `${disposition}; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(safeName)}`,
     "Content-Length": String(size),
-    "Content-Type": (inline ? previewMediaType : null) ??
+    "Content-Type":
+      (inline ? previewMediaType : null) ??
       (declaredMediaType === "application/octet-stream"
         ? declaredMediaType
         : "application/octet-stream"),

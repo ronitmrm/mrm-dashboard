@@ -18,6 +18,7 @@ import {
   ListChecks,
   LayoutDashboard,
   Search,
+  Wrench,
   X,
 } from "lucide-react"
 import {
@@ -61,6 +62,7 @@ import {
   consolidatedProductionNavigation,
   dashboardNavigationDestination,
   hrSidebarNavigation,
+  maintenanceNavigation,
   navigationHrefMatches,
   operationalEntryNavigation,
   personalDashboardNavigation,
@@ -114,6 +116,9 @@ function defaultExpandedSections(
       activeDashboardTab === "operationalEntryTab" ||
       activeDashboardTab === "operationalTablesTab" ||
       onCommercialOperationalEntry,
+    maintenance:
+      pathname.startsWith("/maintenance") ||
+      activeDashboardTab === "maintenanceTab",
     store: pathname.startsWith("/store"),
     productionConventional:
       onProduction && activeProductionFloor === "conventional",
@@ -198,6 +203,11 @@ export function UnifiedSidebarNavigation({
     : navigationAccess.store
       ? storeNavigation
       : []
+  const visibleMaintenanceNavigation = maintenanceNavigation.filter((item) =>
+    (navigationAccess.maintenanceHrefs ?? ["/maintenance/requests"]).includes(
+      item.href
+    )
+  )
   const visibleAdministrationNavigation = administrationNavigation.filter(
     (item) =>
       (item.href !== "/administration/access" ||
@@ -220,6 +230,11 @@ export function UnifiedSidebarNavigation({
     visibleStoreNavigation,
     normalizedMenuSearch,
     "store inventory assets requests receipts"
+  )
+  const filteredMaintenanceNavigation = filterNavigationItems(
+    visibleMaintenanceNavigation,
+    normalizedMenuSearch,
+    "maintenance requests manager approval electrical plumbing mechanical"
   )
   const filteredProductionNavigation = navigationAccess.operations
     ? productionFloors
@@ -514,6 +529,42 @@ export function UnifiedSidebarNavigation({
         </NavigationSection>
       ) : null}
 
+      {filteredMaintenanceNavigation.length ? (
+        <NavigationSection
+          icon={Wrench}
+          isActive={
+            activeDashboardTab === "maintenanceTab" ||
+            visibleMaintenanceNavigation.some((item) =>
+              navigationHrefMatches(pathname, searchParams, item.href)
+            )
+          }
+          label={sidebarModuleLabels.maintenance}
+          onOpenChange={(open) => {
+            if (!normalizedMenuSearch) setSectionOpen("maintenance", open)
+          }}
+          open={normalizedMenuSearch ? true : expandedSections.maintenance}
+        >
+          {filteredMaintenanceNavigation.map((item) => (
+            <SidebarMenuSubItem key={item.href}>
+              <SidebarMenuSubButton
+                asChild
+                className={submoduleButtonClassName}
+                isActive={
+                  (item.href.includes("maintenanceTab") &&
+                    activeDashboardTab === "maintenanceTab") ||
+                  navigationHrefMatches(pathname, searchParams, item.href)
+                }
+              >
+                <a href={item.href}>
+                  <SubmoduleBranch />
+                  <span>{item.label}</span>
+                </a>
+              </SidebarMenuSubButton>
+            </SidebarMenuSubItem>
+          ))}
+        </NavigationSection>
+      ) : null}
+
       {filteredStoreNavigation.length ? (
         <NavigationSection
           icon={Boxes}
@@ -697,6 +748,7 @@ export function UnifiedSidebarNavigation({
 
       {normalizedMenuSearch &&
       !filteredHrNavigation.length &&
+      !filteredMaintenanceNavigation.length &&
       !filteredStoreNavigation.length &&
       !filteredCommercialNavigation.length &&
       !filteredMasterDataNavigation.length &&

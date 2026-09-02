@@ -3,6 +3,7 @@ export const sidebarSectionIds = [
   "hr",
   "masterData",
   "operationalEntry",
+  "maintenance",
   "store",
   "productionConventional",
   "productionConventional02",

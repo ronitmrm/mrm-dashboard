@@ -49,6 +49,7 @@ export type PersonalDashboardWidget = {
     | "Operational Entry"
     | "Production"
     | "Store"
+    | "Maintenance"
   requiredHref?: string
   scope: "administration" | "commercial" | "hr" | "operations" | "store"
   summary: "commercial" | "hr" | "none" | "store"
@@ -362,10 +363,10 @@ const widgetCatalog: readonly PersonalDashboardWidget[] = [
   },
   {
     id: "mechanical-maintenance",
-    title: "Mechanical Maintenance",
+    title: "Mechanical",
     description: "Planned and breakdown maintenance work.",
     href: "/?tab=maintenanceTab",
-    module: "Production",
+    module: "Maintenance",
     scope: "operations",
     summary: "none",
   },

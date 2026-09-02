@@ -32,6 +32,7 @@
     "./dashboard-corrections": "./src/dashboard-corrections.ts",
     "./dashboard-coverage": "./src/dashboard-coverage.ts",
     "./dashboard-domain": "./src/dashboard-domain.ts",
+    "./maintenance-request-domain": "./src/maintenance-request-domain.ts",
     "./planning-rules": "./src/planning-rules.ts",
     "./pricing-calculation": "./src/pricing-calculation.ts",
     "./production-floors": "./src/production-floors.ts",

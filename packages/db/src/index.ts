@@ -79,6 +79,12 @@ export {
 export { createDashboardReadModelRepository } from "./dashboard-read-model-repository"
 export { createMaintenanceRepository } from "./maintenance"
 export {
+  authorizeMaintenanceRequestPhotoTarget,
+  createMaintenanceRequestRepository,
+  type MaintenanceRequestPhoto,
+  type MaintenanceRequestRow,
+} from "./maintenance-requests"
+export {
   buildLegacyDrawingBaselinePlan,
   createLegacyDrawingBaselineRepository,
   type LegacyDrawingBaseline,

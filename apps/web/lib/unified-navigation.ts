@@ -260,8 +260,8 @@ export const dashboardNavigation: readonly DashboardNavigationItem[] = [
     href: dashboardTabHref("maintenanceTab"),
     icon: Settings2,
     id: "maintenanceTab",
-    subtitle: "Machine Pm Schedule",
-    title: "Mechanical Maintenance",
+    subtitle: "Scheduled And Request Work",
+    title: "Mechanical",
   },
 
   {
@@ -347,7 +347,6 @@ export const machineMasterNavigation = dashboardNavigation.find(
 const universalProductionNavigationOrder: DashboardTabId[] = [
   "productionDashboardTab",
   "machineMasterTab",
-  "maintenanceTab",
 ]
 const universalProductionNavigationIds = new Set(
   universalProductionNavigationOrder
@@ -391,6 +390,7 @@ export const productionFloorNavigation = dashboardNavigation
         "masterTablesTab",
         "operationalEntryTab",
         "operationalTablesTab",
+        "maintenanceTab",
         "machineMasterTab",
         "setupChecklistMasterTab",
         "maintenanceMastersTab",
@@ -561,6 +561,34 @@ export const storeNavigation = [
     href: "/store/stock",
     icon: Boxes,
     label: "Stock",
+  },
+] as const
+
+export const maintenanceNavigation = [
+  {
+    href: "/maintenance/approval",
+    icon: ShieldCheck,
+    label: "Manager Approval",
+  },
+  {
+    href: "/maintenance/requests",
+    icon: ClipboardList,
+    label: "All Requests",
+  },
+  {
+    href: "/maintenance/electrical",
+    icon: Settings2,
+    label: "Electrical",
+  },
+  {
+    href: "/maintenance/plumbing",
+    icon: Wrench,
+    label: "Plumbing",
+  },
+  {
+    href: dashboardTabHref("maintenanceTab"),
+    icon: Settings2,
+    label: "Mechanical",
   },
 ] as const
 

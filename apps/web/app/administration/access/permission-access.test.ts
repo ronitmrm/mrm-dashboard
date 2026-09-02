@@ -266,8 +266,8 @@ describe("permission access table", () => {
       submodule: "Access Administration",
     })
     expect(rows.find(({ id }) => id === "maintenance.tasks")).toMatchObject({
-      module: "Mechanical Maintenance",
-      submodule: "Mechanical Maintenance",
+      module: "Maintenance",
+      submodule: "Mechanical",
     })
     expect(rows.map(({ module }) => module)).not.toEqual(
       expect.arrayContaining([
@@ -378,9 +378,9 @@ describe("permission access table", () => {
     expect(
       rows.find(({ id }) => id === "page:commercial.customer-costing")
     ).toMatchObject({ submodule: "Customer Parameter Costing" })
-    expect(rows.find(({ id }) => id === "page:commercial.ecns")).toMatchObject(
-      { submodule: "Engineering Changes" }
-    )
+    expect(rows.find(({ id }) => id === "page:commercial.ecns")).toMatchObject({
+      submodule: "Engineering Changes",
+    })
     expect(
       rows.find(({ id }) => id === "page:commercial.revisions")
     ).toMatchObject({ submodule: "Product Bulk Revision" })
@@ -456,9 +456,7 @@ describe("permission access table", () => {
       module: "PPAC CNC-01",
       submodule: "Planner Actions",
     })
-    expect(
-      rows.find(({ id }) => id === "planning.priority")
-    ).toBeUndefined()
+    expect(rows.find(({ id }) => id === "planning.priority")).toBeUndefined()
   })
 
   it("submits only the selected floor task plus its legacy server gate", () => {

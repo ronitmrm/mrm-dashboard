@@ -6,6 +6,7 @@ import { listGrantedCapabilities } from "./require-capability"
 import { hrMasterNavigation, hrNavigation } from "../unified-navigation"
 import { productionModuleIsEnabled } from "../production-module"
 import { productionPageCapabilities } from "./production-capabilities"
+import { maintenanceNavigationAccess } from "./maintenance-capabilities"
 import {
   isProductionFloorTab,
   productionFloorPageCapabilities,
@@ -22,6 +23,7 @@ export type UnifiedNavigationAccess = {
   artifacts?: boolean
   commercialHrefs: string[]
   hrHrefs: string[]
+  maintenanceHrefs?: string[]
   operations: boolean
   productionFloorTabIds?: Partial<Record<ProductionFloorCode, DashboardTabId[]>>
   productionTabIds?: DashboardTabId[]
@@ -44,6 +46,7 @@ async function readUnifiedNavigationAccess(
       ({ requiredCapability }) => requiredCapability
     ),
     ...commercialNavigationAccess.map(([, capability]) => capability),
+    ...maintenanceNavigationAccess.map(([, capability]) => capability),
   ]
   const grantedCapabilities = new Set(
     await listGrantedCapabilities(userId, [...new Set(capabilities)])
@@ -105,6 +108,12 @@ async function readUnifiedNavigationAccess(
             grantedCapabilities.has("hr.recruitment.read"))
       )
       .map(({ href }) => href),
+    maintenanceHrefs: [
+      "/maintenance/requests",
+      ...maintenanceNavigationAccess
+        .filter(([, capability]) => grantedCapabilities.has(capability))
+        .map(([href]) => href),
+    ],
     operations: productionModuleIsEnabled() && productionTabIds.length > 0,
     productionFloorTabIds,
     productionTabIds,

@@ -120,7 +120,7 @@ describe("Production operational page loading", () => {
     expect(panel).not.toContain("const [selectedMachineNo] = useState")
   })
 
-  it("loads Mechanical Maintenance across every Production Unit", () => {
+  it("loads Mechanical scheduled work across every Production Unit", () => {
     const source = readFileSync(
       new URL("./mrmpl-dashboard.tsx", import.meta.url),
       "utf8"
@@ -135,6 +135,22 @@ describe("Production operational page loading", () => {
     }
     expect(workspace).toContain("combinedMachineMasterProductionControl")
     expect(workspace).toContain("<MaintenancePanel")
+  })
+
+  it("combines approved Mechanical requests with scheduled work", () => {
+    const source = readFileSync(
+      new URL("./mrmpl-dashboard.tsx", import.meta.url),
+      "utf8"
+    )
+    const panel = source.slice(
+      source.indexOf("function MaintenancePanel"),
+      source.indexOf("function MaintenanceReportDetail")
+    )
+
+    expect(panel).toContain("unifiedMechanicalWorkRows(dueRows, requestRows)")
+    expect(panel).toContain("<TableHead>Work Type</TableHead>")
+    expect(panel).toContain('work.priority === "Urgent"')
+    expect(panel).toContain("markMaintenanceDone(scheduled)")
   })
 
   it("keeps production-unit and connection badges out of the dashboard header", () => {

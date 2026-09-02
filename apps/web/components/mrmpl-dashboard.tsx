@@ -44,6 +44,7 @@ import {
 } from "lucide-react"
 
 import { Badge } from "@workspace/ui/components/badge"
+import type { MaintenanceRequestRow } from "@workspace/db"
 import { Button } from "@workspace/ui/components/button"
 import {
   Card,
@@ -178,6 +179,7 @@ import {
   maintenanceChecklistRowsForSchedule,
   maintenanceMasterRowsForMachineAssignment,
 } from "@/lib/maintenance-schedule-options"
+import { unifiedMechanicalWorkRows } from "@/lib/maintenance-work-list"
 import { MachineStoreAssets } from "@/components/machine-store-assets"
 import {
   StoreMasterWorkspace,
@@ -12565,6 +12567,8 @@ function MaintenancePanel({
   productionControl: DashboardPayload
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
 }) {
+  const [requestRows, setRequestRows] = useState<MaintenanceRequestRow[]>([])
+  const [requestReloadKey, setRequestReloadKey] = useState(0)
   const machineRows = useMemo(
     () =>
       maintenanceMachineRows(asArray(productionControl.machinePlanningRows)),
@@ -12604,9 +12608,44 @@ function MaintenancePanel({
     ]
   )
   const dueNowRows = dueRows.filter((row) => row.status !== "Upcoming")
+  const workRows = useMemo(
+    () => unifiedMechanicalWorkRows(dueRows, requestRows),
+    [dueRows, requestRows]
+  )
   const breakdownRows = completionRows.filter(
     (row) => str(row.maintenanceType).toLowerCase() === "breakdown"
   )
+
+  useEffect(() => {
+    let active = true
+    void fetch("/api/maintenance/requests", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) return { rows: [] }
+        return (await response.json()) as { rows?: MaintenanceRequestRow[] }
+      })
+      .then((result) => {
+        if (active) setRequestRows(result.rows ?? [])
+      })
+      .catch(() => {
+        if (active) setRequestRows([])
+      })
+    return () => {
+      active = false
+    }
+  }, [requestReloadKey])
+
+  async function advanceRequest(
+    requestId: string,
+    action: "start" | "complete"
+  ) {
+    const response = await fetch("/api/maintenance/requests", {
+      body: JSON.stringify({ action, requestId }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    })
+    if (!response.ok) throw new Error("Maintenance request update failed.")
+    setRequestReloadKey((current) => current + 1)
+  }
 
   async function markMaintenanceDone(row: DashboardPayload) {
     const completedBy = window.prompt("Completed by")?.trim()
@@ -12721,11 +12760,12 @@ function MaintenancePanel({
   return (
     <section className="grid gap-4">
       <TrackingSummary
-        tones={["brand", "success", "warning", "error"]}
+        tones={["brand", "success", "warning", "info", "error"]}
         items={[
           ["Machines", formatNumber(machineRows.length)],
           ["Saved schedules", formatNumber(scheduleRows.length)],
           ["Due now", formatNumber(dueNowRows.length)],
+          ["Request work", formatNumber(requestRows.length)],
           ["Breakdowns", formatNumber(breakdownRows.length)],
         ]}
       />
@@ -12734,76 +12774,143 @@ function MaintenancePanel({
           <CardTitle>Maintenance Pending Tasks</CardTitle>
         </CardHeader>
         <CardContent>
-          {dueRows.length ? (
+          {workRows.length ? (
             <div className="overflow-auto rounded-lg border">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Machine</TableHead>
-                    <TableHead>Maintenance</TableHead>
-                    <TableHead>Checklist</TableHead>
-                    <TableHead>Due Date</TableHead>
+                    <TableHead>Work Type</TableHead>
+                    <TableHead>Priority</TableHead>
+                    <TableHead>Machine / Location</TableHead>
+                    <TableHead>Description</TableHead>
+                    <TableHead>Relevant Date</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Last Done</TableHead>
+                    <TableHead>Assignee</TableHead>
                     <TableHead></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {dueRows.map((row) => (
-                    <TableRow key={maintenanceScheduleKey(row)}>
-                      <TableCell>
-                        <div className="font-medium">
-                          {displayValue(row.machineNo)}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {displayValue(row.machineType)}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="font-medium">
-                          {displayValue(row.maintenanceCode)} -{" "}
-                          {displayValue(row.maintenanceTitle)}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          Every {maintenanceFrequencyLabel(row)}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div>{displayValue(row.checklistCode)}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {formatNumber(asArray(row.checklistSteps).length)}{" "}
-                          Steps
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div>{displayValue(row.nextDueDate)}</div>
-                        {displayValue(row.dueProgress) !== "-" ? (
-                          <div className="text-xs text-muted-foreground">
-                            {displayValue(row.dueProgress)}
+                  {workRows.map((work) => {
+                    const scheduled =
+                      work.workType === "Scheduled"
+                        ? (work.scheduled as DashboardPayload)
+                        : null
+                    return (
+                      <TableRow
+                        className={
+                          work.priority === "Urgent"
+                            ? "bg-[var(--color-error-bg)]/55 hover:bg-[var(--color-error-bg)]/75"
+                            : undefined
+                        }
+                        key={
+                          work.workType === "Scheduled"
+                            ? `scheduled:${maintenanceScheduleKey(
+                                work.scheduled as DashboardPayload
+                              )}`
+                            : `request:${work.requestId}`
+                        }
+                      >
+                        <TableCell>
+                          <Badge variant="outline">{work.workType}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              work.priority === "Urgent"
+                                ? "destructive"
+                                : "secondary"
+                            }
+                          >
+                            {work.priority}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="font-medium">
+                            {work.machineOrLocation}
                           </div>
-                        ) : null}
-                      </TableCell>
-                      <TableCell>
-                        <StatusBadge value={row.status} />
-                      </TableCell>
-                      <TableCell>
-                        {displayValue(row.lastCompletedDate)}
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant={
-                            row.status === "Upcoming" ? "outline" : "default"
-                          }
-                          onClick={() => void markMaintenanceDone(row)}
-                        >
-                          <CheckCircle2 className="size-4" />
-                          Mark Done
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                          {scheduled ? (
+                            <div className="text-xs text-muted-foreground">
+                              {displayValue(scheduled.machineType)}
+                            </div>
+                          ) : null}
+                        </TableCell>
+                        <TableCell className="max-w-96">
+                          {scheduled ? (
+                            <>
+                              <div className="font-medium">
+                                {displayValue(scheduled.maintenanceCode)} -{" "}
+                                {displayValue(scheduled.maintenanceTitle)}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                Every {maintenanceFrequencyLabel(scheduled)} ·{" "}
+                                {formatNumber(
+                                  asArray(scheduled.checklistSteps).length
+                                )}{" "}
+                                checklist steps
+                              </div>
+                            </>
+                          ) : (
+                            <div className="line-clamp-3">
+                              {work.description}
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div>
+                            {work.date ? formatIstDateTime(work.date) : "—"}
+                          </div>
+                          {scheduled &&
+                          displayValue(scheduled.dueProgress) !== "-" ? (
+                            <div className="text-xs text-muted-foreground">
+                              {displayValue(scheduled.dueProgress)}
+                            </div>
+                          ) : null}
+                        </TableCell>
+                        <TableCell>
+                          <StatusBadge value={work.status} />
+                        </TableCell>
+                        <TableCell>{work.assignee ?? "Unassigned"}</TableCell>
+                        <TableCell>
+                          {scheduled ? (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant={
+                                scheduled.status === "Upcoming"
+                                  ? "outline"
+                                  : "default"
+                              }
+                              onClick={() =>
+                                void markMaintenanceDone(scheduled)
+                              }
+                            >
+                              <CheckCircle2 className="size-4" />
+                              Mark Done
+                            </Button>
+                          ) : work.workType === "Request" &&
+                            (work.status === "Approved" ||
+                              work.status === "In Progress") ? (
+                            <Button
+                              onClick={() =>
+                                void advanceRequest(
+                                  work.requestId,
+                                  work.status === "Approved"
+                                    ? "start"
+                                    : "complete"
+                                )
+                              }
+                              size="sm"
+                              type="button"
+                            >
+                              {work.status === "Approved"
+                                ? "Start"
+                                : "Complete"}
+                            </Button>
+                          ) : null}
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
                 </TableBody>
               </Table>
             </div>
