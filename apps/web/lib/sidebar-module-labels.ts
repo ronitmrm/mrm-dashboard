@@ -5,7 +5,7 @@ export const sidebarModuleLabels = {
   hr: "HR & Recruitment",
   machines: "Machines",
   masterData: "Master Data",
-  mechanicalMaintenance: "Mechanical Maintenance",
+  maintenance: "Maintenance",
   operationalEntry: "Operational Entry",
   productionDashboard: "Production Dashboard",
   store: "Store",
@@ -36,10 +36,7 @@ const operationalEntryPermissionPrefixes = [
   "operations.training.",
 ] as const
 
-function startsWithAny(
-  permissionKey: string,
-  prefixes: readonly string[]
-) {
+function startsWithAny(permissionKey: string, prefixes: readonly string[]) {
   return prefixes.some((prefix) => permissionKey.startsWith(prefix))
 }
 
@@ -47,14 +44,10 @@ export function sidebarModuleForPermission(
   permissionKey: string,
   storedModule: string
 ) {
-  if (
-    startsWithAny(permissionKey, masterDataPermissionPrefixes)
-  ) {
+  if (startsWithAny(permissionKey, masterDataPermissionPrefixes)) {
     return sidebarModuleLabels.masterData
   }
-  if (
-    startsWithAny(permissionKey, operationalEntryPermissionPrefixes)
-  ) {
+  if (startsWithAny(permissionKey, operationalEntryPermissionPrefixes)) {
     return sidebarModuleLabels.operationalEntry
   }
 
@@ -65,7 +58,7 @@ export function sidebarModuleForPermission(
     case "recruitment":
       return sidebarModuleLabels.hr
     case "maintenance":
-      return sidebarModuleLabels.mechanicalMaintenance
+      return sidebarModuleLabels.maintenance
     case "operations":
     case "planning":
     case "quality":
@@ -83,14 +76,10 @@ export function sidebarSubmoduleForPermission(
   permissionKey: string,
   fallbackLabel: string
 ) {
-  if (
-    startsWithAny(permissionKey, masterDataPermissionPrefixes)
-  ) {
+  if (startsWithAny(permissionKey, masterDataPermissionPrefixes)) {
     return "Master Selection"
   }
-  if (
-    startsWithAny(permissionKey, operationalEntryPermissionPrefixes)
-  ) {
+  if (startsWithAny(permissionKey, operationalEntryPermissionPrefixes)) {
     return "Entry Selection"
   }
 
@@ -122,7 +111,10 @@ export function sidebarSubmoduleForPermission(
     ["store.receipts.", "Purchase Register"],
     ["store.asset_", "Stock"],
     ["store.stock.", "Stock"],
-    ["maintenance.", "Mechanical Maintenance"],
+    ["maintenance.requests.manage", "Manager Approval"],
+    ["maintenance.trade.electrical", "Electrical"],
+    ["maintenance.trade.plumbing", "Plumbing"],
+    ["maintenance.", "Mechanical"],
     ["hr.jobs.", "Job Posts"],
     ["hr.candidate_search.", "Search Candidate"],
     ["hr.conversations.", "Conversation History"],

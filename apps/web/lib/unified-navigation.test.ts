@@ -62,7 +62,7 @@ describe("unified navigation", () => {
     )
     const nativeLinks = source.match(/<a href=\{item\.href\}>/g) ?? []
 
-    expect(nativeLinks).toHaveLength(4)
+    expect(nativeLinks).toHaveLength(5)
     expect(source).toContain(
       "<a href={productionNavigationHref(item.id, floor.code)}>"
     )
@@ -110,7 +110,6 @@ describe("unified navigation", () => {
     expect(universalProductionNavigation.map(({ id }) => id)).toEqual([
       "productionDashboardTab",
       "machineMasterTab",
-      "maintenanceTab",
     ])
     expect(
       masterDataNavigation.map(({ id, title }) => ({ id, title }))
@@ -188,7 +187,7 @@ describe("unified navigation", () => {
     expect(
       dashboardNavigation.find(({ id }) => id === "maintenanceTab")
     ).toMatchObject({
-      title: "Mechanical Maintenance",
+      title: "Mechanical",
     })
     expect(commercialNavigation).toHaveLength(20)
     expect(dashboardNavigation.map(({ title }) => title)).not.toContain(
