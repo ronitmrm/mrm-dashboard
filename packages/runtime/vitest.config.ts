@@ -4,7 +4,5 @@ import { assertSafeTestDatabase } from "../../scripts/test-database-safety"
 assertSafeTestDatabase()
 
 export default defineConfig({
-  test: {
-    fileParallelism: false,
-  },
+  test: { fileParallelism: false },
 })
