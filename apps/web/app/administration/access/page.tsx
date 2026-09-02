@@ -5,6 +5,7 @@ import { ShieldCheck, UserRoundPlus, UsersRound } from "lucide-react"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
+  MetricCard,
   SectionCard,
   CardContent,
   CardDescription,
@@ -119,11 +120,39 @@ export default async function AccessAdministrationPage({
 
   return (
     <>
-      <PageHeader
-        description="Create roles, define responsibilities, and manage staff access."
-        icon={ShieldCheck}
-        title="Access Administration"
-      />
+      <div className="grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1fr)_28rem]">
+        <PageHeader
+          description="Create roles, define responsibilities, and manage staff access."
+          icon={ShieldCheck}
+          title="Access Administration"
+        />
+        <section
+          aria-label="Access summary"
+          className="grid min-w-0 grid-cols-3 gap-2"
+        >
+          <MetricCard
+            className="p-3"
+            label="Staff Accounts"
+            description="Provisioned users"
+            value={snapshot.users.length}
+            tone="information"
+          />
+          <MetricCard
+            className="p-3"
+            label="Application Roles"
+            description="Configured roles"
+            value={snapshot.roles.length}
+            tone="brand"
+          />
+          <MetricCard
+            className="p-3"
+            label="Without Login"
+            description="Unlinked employees"
+            value={unlinkedEmployees.length}
+            tone={unlinkedEmployees.length ? "warning" : "neutral"}
+          />
+        </section>
+      </div>
 
       <AccessWorkspaceTabs
         activeSection={activeSection}
