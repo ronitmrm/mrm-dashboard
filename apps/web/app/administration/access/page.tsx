@@ -50,12 +50,12 @@ import { administrationTaskCapabilities } from "@/lib/auth/task-capabilities"
 import {
   createRoleAction,
   provisionStaffAction,
-  setPostRoleAction,
   updateRolePermissionsAction,
 } from "./actions"
 import { PermissionSelector } from "./permission-selector"
 import { AccessWorkspaceTabs } from "./access-workspace-tabs"
 import { RoleDeleteControl } from "./role-delete-control"
+import { PostAccessProfileForm } from "./post-access-profile-form"
 
 export const dynamic = "force-dynamic"
 
@@ -289,64 +289,15 @@ export default async function AccessAdministrationPage({
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-5">
-              <form action={setPostRoleAction}>
-                <FieldGroup className="gap-4 md:grid-cols-[2fr_1fr_1fr_auto] md:items-end">
-                  <Field>
-                    <FieldLabel htmlFor="profile-post">
-                      Approved Post
-                    </FieldLabel>
-                    <NativeSelect
-                      className="w-full"
-                      id="profile-post"
-                      name="postId"
-                      required
-                    >
-                      {snapshot.postAccessProfiles.map((post) => (
-                        <NativeSelectOption key={post.id} value={post.id}>
-                          {post.postCode} · {post.department} ·{" "}
-                          {post.designation}
-                        </NativeSelectOption>
-                      ))}
-                    </NativeSelect>
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="profile-role">
-                      Application Role
-                    </FieldLabel>
-                    <NativeSelect
-                      className="w-full"
-                      id="profile-role"
-                      name="roleKey"
-                      required
-                    >
-                      {snapshot.roles
-                        .filter((role) => !role.isSystem)
-                        .map((role) => (
-                          <NativeSelectOption key={role.id} value={role.key}>
-                            {role.name}
-                          </NativeSelectOption>
-                        ))}
-                    </NativeSelect>
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="profile-effect">Change</FieldLabel>
-                    <NativeSelect
-                      className="w-full"
-                      id="profile-effect"
-                      name="effect"
-                      required
-                    >
-                      <NativeSelectOption value="assign">
-                        Assign Role
-                      </NativeSelectOption>
-                      <NativeSelectOption value="remove">
-                        Remove Role
-                      </NativeSelectOption>
-                    </NativeSelect>
-                  </Field>
-                  <Button type="submit">Save Post Access</Button>
-                </FieldGroup>
-              </form>
+              <PostAccessProfileForm
+                posts={snapshot.postAccessProfiles}
+                roles={snapshot.roles.map(({ id, key, name, isSystem }) => ({
+                  id,
+                  key,
+                  name,
+                  isSystem,
+                }))}
+              />
               <details className="rounded-xl border">
                 <summary className="cursor-pointer px-4 py-3 text-sm font-medium">
                   Review Current Post Profiles (

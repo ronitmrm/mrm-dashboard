@@ -20,6 +20,19 @@
   and URL-backed selection. Role-register and permission filters retain separate
   browser-persisted filter keys.
 
+## Post access profile
+
+Select an Approved Post, then its linked designation, before the current
+occupant and role controls appear. This is not a designation reassignment
+form: each post retains the designation defined in HR. Changing the post
+clears the downstream selections.
+
+The snapshot matches occupants by immutable post ID using the existing
+current-employment query, including joining/last-working-date eligibility.
+Vacant posts and occupants without a linked login have explicit explanations.
+Roles remain attached to the post. Assign/remove changes one role at a time
+and preserves other roles, with the existing server capability and audit checks.
+
 ## Role deletion
 
 Application Roles and the role badges in Staff Access expose the same **Delete
