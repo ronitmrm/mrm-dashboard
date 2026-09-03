@@ -3,6 +3,7 @@ export const administrationTaskCapabilities = {
   assignPostAccess: "administration.post_access.assign",
   assignStaffRole: "administration.staff_roles.assign",
   createRole: "administration.roles.create",
+  deleteRole: "administration.roles.delete",
   linkStaffAccount: "administration.staff.link",
   managePermissionOverrides: "administration.permission_overrides.manage",
   provisionStaff: "administration.staff.provision",
@@ -106,6 +107,7 @@ export const taskCapabilityLabels = {
   [administrationTaskCapabilities.assignPostAccess]: "Save Post Access",
   [administrationTaskCapabilities.assignStaffRole]: "Assign Role",
   [administrationTaskCapabilities.createRole]: "Create Role",
+  [administrationTaskCapabilities.deleteRole]: "Delete Role",
   [administrationTaskCapabilities.linkStaffAccount]: "Link Staff Account",
   [administrationTaskCapabilities.managePermissionOverrides]:
     "Save Permission Overrides",

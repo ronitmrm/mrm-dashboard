@@ -175,6 +175,18 @@ export function createAccessAdministrationService({
       })
     },
 
+    async deleteRole(input: {
+      actorUserId: string
+      confirmation: string
+      roleId: string
+    }) {
+      await requireActorCapability(
+        input.actorUserId,
+        administrationTaskCapabilities.deleteRole
+      )
+      return access.deleteRole(input)
+    },
+
     async assignRole({ actorUserId, roleKey, userId }: AssignRoleInput) {
       await requireActorCapability(
         actorUserId,

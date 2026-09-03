@@ -110,6 +110,43 @@ export async function createRoleAction(formData: FormData) {
   redirect(`${accessPath}?section=roles`)
 }
 
+export type DeleteRoleActionState = { error?: string }
+
+export async function deleteRoleAction(
+  _previousState: DeleteRoleActionState,
+  formData: FormData
+): Promise<DeleteRoleActionState> {
+  const state = await withAccessService(
+    administrationTaskCapabilities.deleteRole,
+    async (access, actorUserId): Promise<DeleteRoleActionState> => {
+      try {
+        await access.deleteRole({
+          actorUserId,
+          confirmation: requiredText(formData, "confirmation"),
+          roleId: requiredText(formData, "roleId"),
+        })
+        return {}
+      } catch (error) {
+        const message = error instanceof Error ? error.message : ""
+        const expectedErrors = [
+          "The selected role no longer exists",
+          "System roles cannot be deleted",
+          "Role key confirmation does not match",
+        ]
+        return {
+          error: expectedErrors.includes(message)
+            ? message
+            : "Could not delete the role. Refresh and try again.",
+        }
+      }
+    }
+  )
+  if (state.error) return state
+  revalidatePath(accessPath)
+  const section = formData.get("section") === "staff" ? "staff" : "roles"
+  redirect(`${accessPath}?section=${section}`)
+}
+
 export async function updateRolePermissionsAction(formData: FormData) {
   const permissionKeys = formData
     .getAll("permissionKeys")

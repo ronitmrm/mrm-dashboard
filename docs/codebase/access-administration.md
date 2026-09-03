@@ -20,6 +20,23 @@
   and URL-backed selection. Role-register and permission filters retain separate
   browser-persisted filter keys.
 
+## Role deletion
+
+Application Roles and the role badges in Staff Access expose the same **Delete
+Role Everywhere** command, not account deletion or single-staff unassignment.
+The confirmation requires the exact role key. `administration.roles.delete`
+is an independent task grant, initially seeded only for the system administrator
+by migration 0114. Create/Edit permissions do not authorize deletion.
+
+The service checks the capability again; the repository locks the immutable
+role ID, rejects system roles and stale/mismatched confirmations, records an
+`access.role.deleted` audit event (role details, permission keys, direct user
+IDs and post IDs), and deletes the role in one transaction. Existing foreign
+keys cascade only its permission and direct/post assignment rows. Accounts,
+employee links, posts, other roles, user overrides and existing audit evidence
+are preserved. Closed dialogs mount no confirmation form; pending submissions
+disable repeat deletion and dismissal. Success refreshes the originating tab.
+
 ## Architecture
 
 Access Administration derives its item-level inventory from the typed page

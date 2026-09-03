@@ -55,6 +55,7 @@ import {
 } from "./actions"
 import { PermissionSelector } from "./permission-selector"
 import { AccessWorkspaceTabs } from "./access-workspace-tabs"
+import { RoleDeleteControl } from "./role-delete-control"
 
 export const dynamic = "force-dynamic"
 
@@ -79,6 +80,7 @@ export default async function AccessAdministrationPage({
     await listGrantedCapabilities(session.user.id, [
       administrationTaskCapabilities.assignPostAccess,
       administrationTaskCapabilities.createRole,
+      administrationTaskCapabilities.deleteRole,
       administrationTaskCapabilities.provisionStaff,
       administrationTaskCapabilities.updateRolePermissions,
     ])
@@ -88,6 +90,9 @@ export default async function AccessAdministrationPage({
   )
   const canCreateRole = grantedTasks.has(
     administrationTaskCapabilities.createRole
+  )
+  const canDeleteRole = grantedTasks.has(
+    administrationTaskCapabilities.deleteRole
   )
   const requestedSection = firstQueryValue(query.section)
   const activeSection =
@@ -438,12 +443,31 @@ export default async function AccessAdministrationPage({
                                   })
                                 ),
                               ].map((role) => (
-                                <Badge
+                                <div
                                   key={`${role.source}:${role.key}`}
-                                  variant="secondary"
+                                  className="flex items-center gap-1"
                                 >
-                                  {role.key} · {role.source}
-                                </Badge>
+                                  <Badge variant="secondary">
+                                    {role.key} · {role.source}
+                                  </Badge>
+                                  {canDeleteRole
+                                    ? snapshot.roles
+                                        .filter(
+                                          (item) =>
+                                            item.key === role.key &&
+                                            !item.isSystem
+                                        )
+                                        .map((item) => (
+                                          <RoleDeleteControl
+                                            key={item.id}
+                                            roleId={item.id}
+                                            roleKey={item.key}
+                                            roleName={item.name}
+                                            section="staff"
+                                          />
+                                        ))
+                                    : null}
+                                </div>
                               ))
                             ) : (
                               <span className="text-sm text-muted-foreground">
@@ -520,19 +544,29 @@ export default async function AccessAdministrationPage({
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button asChild size="sm" variant="outline">
-                          <Link
-                            href={{
-                              pathname: "/administration/access",
-                              query: { section: "roles", role: role.key },
-                            }}
-                          >
-                            {role.isSystem || !canUpdateRolePermissions
-                              ? "View"
-                              : "Edit Access"}
-                            <span className="sr-only"> for {role.name}</span>
-                          </Link>
-                        </Button>
+                        <div className="flex justify-end gap-2">
+                          <Button asChild size="sm" variant="outline">
+                            <Link
+                              href={{
+                                pathname: "/administration/access",
+                                query: { section: "roles", role: role.key },
+                              }}
+                            >
+                              {role.isSystem || !canUpdateRolePermissions
+                                ? "View"
+                                : "Edit Access"}
+                              <span className="sr-only"> for {role.name}</span>
+                            </Link>
+                          </Button>
+                          {canDeleteRole && !role.isSystem ? (
+                            <RoleDeleteControl
+                              roleId={role.id}
+                              roleKey={role.key}
+                              roleName={role.name}
+                              section="roles"
+                            />
+                          ) : null}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
