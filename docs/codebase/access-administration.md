@@ -13,7 +13,13 @@
   `?section=roles&role=<key>` and renders only that role's editor; the register
   does not mount hidden permission selectors for every role.
 - `Staff Accounts` retains staff provisioning, Approved Post role assignment,
-  and the staff-access register. Current post profiles include the designation.
+  and the staff-access register. The post selector shows its linked designation
+  and occupant; the duplicate review dropdown is omitted.
+- Staff Access uses three bounded, wrapping columns: staff identity (including
+  employee number), assigned roles and overrides. It does not repeat every
+  occupied department/post. Each direct or inherited role chip opens that role's
+  rights with a return link to Staff Access. Existing edit capabilities still
+  control editing; system roles expose their assigned rights read-only.
 - Users without Create Role access default to Application Roles. All existing
   server-side page/task guards remain unchanged; tabs do not grant permissions.
 - Navigation uses the shared `radix-luma` Tabs primitive with keyboard support
