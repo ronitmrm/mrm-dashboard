@@ -82,7 +82,7 @@ export default async function AssembliesPage({
             value: new Set(lines.map((row) => row.parentUid)).size,
             tone: "information"
           },
-          { label: "BOM Lines", value: lines.length },
+          { tone: "brand", label: "BOM Lines", value: lines.length },
           {
             label: "Components",
             value: new Set(lines.map((row) => row.componentUid)).size,

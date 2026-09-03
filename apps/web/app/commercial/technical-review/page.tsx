@@ -57,12 +57,12 @@ export default async function TechnicalReviewPage() {
       </section>
 
       <section className="grid gap-3 sm:grid-cols-3">
-        <MetricCard label="Pending Review" value={summary.pendingReview} />
-        <MetricCard
+        <MetricCard tone="warning" label="Pending Review" value={summary.pendingReview} />
+        <MetricCard tone="warning"
           label="Need Clarification"
           value={summary.needClarification}
         />
-        <MetricCard label="Open Review Tasks" value={summary.openReviewTasks} />
+        <MetricCard tone="information" label="Open Review Tasks" value={summary.openReviewTasks} />
       </section>
 
  <SectionCard>

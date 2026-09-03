@@ -116,7 +116,7 @@ type MetricCardProps = {
   loading?: boolean
   onClick?: () => void
   status?: React.ReactNode
-  tone?: MetricCardTone
+  tone: MetricCardTone
   trend?: MetricCardTrend
   unit?: React.ReactNode
   value: React.ReactNode

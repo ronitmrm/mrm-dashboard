@@ -85,7 +85,7 @@ export default async function CommercialCorrectionsPage() {
             value: candidates.products.filter((row) => row.canReverse).length,
             tone: "warning"
           },
-          { label: "Correction Records", value: corrections.length }
+          { tone: "brand", label: "Correction Records", value: corrections.length }
         ]}
       />
 

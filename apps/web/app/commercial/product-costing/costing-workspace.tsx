@@ -154,16 +154,16 @@ export async function ProductParameterCostingView({
           </section>
 
           <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <MetricCard
+            <MetricCard tone="information"
               label="New Product Costing"
               value={summary.newProductCosting}
             />
-            <MetricCard
+            <MetricCard tone="accent"
               label="Product Bulk Revision"
               value={summary.productBulkRevisions}
             />
-            <MetricCard label="ECN Product Change" value={summary.ecn} />
-            <MetricCard label="Total Costing Tasks" value={summary.total} />
+            <MetricCard tone="warning" label="ECN Product Change" value={summary.ecn} />
+            <MetricCard tone="brand" label="Total Costing Tasks" value={summary.total} />
           </section>
 
  <SectionCard>

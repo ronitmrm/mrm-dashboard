@@ -124,7 +124,7 @@ export default async function EnquiriesPage({
               value: enquiries.length,
               tone: "information"
             },
-            {
+            { tone: "brand",
               label: "Enquiry Lines",
               value: enquiries.reduce((total, row) => total + row.itemCount, 0)
             },

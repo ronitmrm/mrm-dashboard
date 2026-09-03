@@ -171,15 +171,15 @@ export default async function CustomerBulkRevisionPage({
       </section>
 
       <section className="grid gap-3 sm:grid-cols-3">
-        <MetricCard
+        <MetricCard tone="information"
           label="Customer Revision Requests"
           value={summary.openRevisionCount}
         />
-        <MetricCard
+        <MetricCard tone="accent"
           label="Commercial-Only Revision"
           value={summary.commercialOnlyRevision}
         />
-        <MetricCard
+        <MetricCard tone="brand"
           label="Customer Prices In Scope"
           value={summary.activePriceCount}
         />

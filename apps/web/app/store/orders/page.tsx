@@ -72,7 +72,7 @@ export default async function StoreOrdersPage() {
             value: new Set(data.map((row) => row.purchaseOrderId)).size,
             tone: "information"
           },
-          { label: "Order Lines", value: data.length },
+          { tone: "brand", label: "Order Lines", value: data.length },
           {
             label: "Awaiting Receipt",
             value: data.filter(

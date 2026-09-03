@@ -193,8 +193,8 @@ export default async function UiReferencePage() {
           {metricVariants.map((metric) => (
             <MetricCard {...metric} key={metric.tone} />
           ))}
-          <MetricCard label="Loading" loading value="" />
-          <MetricCard
+          <MetricCard tone="inactive" label="Loading" loading value="" />
+          <MetricCard tone="danger"
             error="Metric data could not be loaded."
             label="Error"
             value=""

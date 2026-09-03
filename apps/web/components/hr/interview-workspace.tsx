@@ -13,6 +13,7 @@ import {
   CardHeader,
   CardTitle,
   MetricCard,
+  type MetricCardTone,
 } from "@workspace/ui/components/card"
 import { Field, FieldLabel } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
@@ -70,17 +71,19 @@ function SummaryCards({
   items: Array<{
     icon: typeof CalendarClock
     label: string
+    tone: MetricCardTone
     value: number
   }>
 }) {
   return (
     <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-      {items.map(({ icon: Icon, label, value }) => (
+      {items.map(({ icon: Icon, label, tone, value }) => (
         <MetricCard
-          icon={<Icon className="size-5" />}
+          icon={<Icon aria-hidden="true" />}
           key={label}
           label={label}
-          value={value}
+          tone={tone}
+          value={value.toLocaleString("en-IN")}
         />
       ))}
     </div>
@@ -138,21 +141,25 @@ export function InterviewScheduleBoard({
               ? "Interviews On Selected Date"
               : "All Pending Interviews",
             value: visiblePlanned.length,
+            tone: "information",
           },
           {
             icon: ListTodo,
             label: "Need Scheduling",
             value: awaitingSchedule.length,
+            tone: "warning",
           },
           {
             icon: ClipboardCheck,
             label: "All Scheduled",
             value: planned.length,
+            tone: "brand",
           },
           {
             icon: CheckCircle2,
             label: "Applications",
             value: interviews.length,
+            tone: "accent",
           },
         ]}
       />
@@ -312,10 +319,11 @@ export function InterviewResultsWorkspace({
             icon: ClipboardCheck,
             label: "Completed Interviews",
             value: completed.length,
+            tone: "information",
           },
-          { icon: CheckCircle2, label: "Approved", value: approved.length },
-          { icon: CalendarClock, label: "On Hold", value: held.length },
-          { icon: ListTodo, label: "Rejected", value: rejected.length },
+          { icon: CheckCircle2, label: "Approved", value: approved.length, tone: "positive" },
+          { icon: CalendarClock, label: "On Hold", value: held.length, tone: "warning" },
+          { icon: ListTodo, label: "Rejected", value: rejected.length, tone: "inactive" },
         ]}
       />
  <SectionCard>

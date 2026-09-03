@@ -1075,17 +1075,17 @@ function FirstPieceInspectionShell({
       </div>
 
       <div className="grid gap-3 @2xl/main:grid-cols-2 @5xl/main:grid-cols-3">
-        <MetricCard
+        <MetricCard tone="warning"
           label="Pending Reports"
           value={formatNumber(tasks.length)}
         />
-        <MetricCard
+        <MetricCard tone="information"
           label="Inspection Parameters"
           value={formatNumber(
             combinedQualityInspectionMasterRows(productionControl).length
           )}
         />
-        <MetricCard label="Required Readings" value="5 Per Dimension" />
+        <MetricCard tone="brand" label="Required Readings" value="5 Per Dimension" />
       </div>
 
       {processingAction ? (
@@ -15488,6 +15488,7 @@ function ToolFixturePanel({ rows }: { rows: DashboardPayload[] }) {
               description={`${str(row.recommendationType || "Next Number")} | ${formatNumber(numValue(row, "usedCount"))} Used`}
               key={str(row.category)}
               label={str(row.category)}
+              tone="information"
               value={str(row.recommendedNumber || row.nextNew)}
             />
           ))}
@@ -16471,7 +16472,7 @@ function TrackingSummary({
           key={label}
           label={label}
           onClick={onClick}
-          tone={tones?.[index]}
+          tone={tones?.[index] ?? "information"}
           value={value}
         />
       ))}

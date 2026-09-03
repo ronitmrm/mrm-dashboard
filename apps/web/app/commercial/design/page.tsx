@@ -60,9 +60,9 @@ export default async function DesignPage({
       </section>
 
       <section className="grid gap-3 sm:grid-cols-3">
-        <MetricCard label="Pending Design" value={summary.pendingDesign} />
-        <MetricCard label="In Progress" value={summary.inProgress} />
-        <MetricCard label="Open Design Tasks" value={summary.openTasks} />
+        <MetricCard tone="warning" label="Pending Design" value={summary.pendingDesign} />
+        <MetricCard tone="brand" label="In Progress" value={summary.inProgress} />
+        <MetricCard tone="information" label="Open Design Tasks" value={summary.openTasks} />
       </section>
 
       <nav aria-label="Design task views" className="flex flex-wrap gap-2">

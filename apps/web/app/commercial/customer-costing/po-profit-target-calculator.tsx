@@ -197,10 +197,10 @@ export function PoProfitTargetCalculator({
       className="grid gap-3 rounded-2xl border border-dashed p-4 sm:grid-cols-2 xl:grid-cols-5"
       ref={rootRef}
     >
-      <MetricCard label="PO Target / Pc" value={`${currency} ${money(targetPrice)}`} />
-      <MetricCard label="Target INR / Pc" value={`₹ ${money(suggestion.targetInr)}`} />
-      <MetricCard label="Base Before Profit" value={`₹ ${money(suggestion.rateInrWithoutProfit)}`} />
-      <MetricCard label="Required Profit" value={`${money(suggestion.profitPercent * 100)}%`} />
+      <MetricCard tone="brand" label="PO Target / Pc" value={`${currency} ${money(targetPrice)}`} />
+      <MetricCard tone="information" label="Target INR / Pc" value={`₹ ${money(suggestion.targetInr)}`} />
+      <MetricCard tone="accent" label="Base Before Profit" value={`₹ ${money(suggestion.rateInrWithoutProfit)}`} />
+      <MetricCard tone="brand" label="Required Profit" value={`${money(suggestion.profitPercent * 100)}%`} />
       <div className="grid content-center gap-2">
         <span className="text-xs text-muted-foreground">
           Profit Amount ₹ {money(suggestion.profitAmount)}
