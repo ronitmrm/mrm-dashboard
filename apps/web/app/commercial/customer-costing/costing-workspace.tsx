@@ -168,16 +168,16 @@ export async function CustomerParameterCostingView({
           </section>
 
           <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <MetricCard
+            <MetricCard tone="information"
               label="New Quote Costing"
               value={summary.newQuoteCosting}
             />
-            <MetricCard label="PO Price Match" value={summary.poPriceMatch} />
-            <MetricCard
+            <MetricCard tone="brand" label="PO Price Match" value={summary.poPriceMatch} />
+            <MetricCard tone="accent"
               label="Bulk Price Revision"
               value={summary.bulkPriceRevision}
             />
-            <MetricCard
+            <MetricCard tone="warning"
               label="ECN Price Review"
               value={summary.ecnPriceReview}
             />
@@ -538,15 +538,15 @@ export async function CustomerParameterCostingView({
 
                 {selectedTask.quoteDefaults.id ? (
                   <div className="grid gap-3 sm:grid-cols-3">
-                    <MetricCard
+                    <MetricCard tone="information"
                       label="Saved INR / Pc"
                       value={`₹ ${money(selectedTask.quoteDefaults.rateInr)}`}
                     />
-                    <MetricCard
+                    <MetricCard tone="brand"
                       label="Saved USD / Pc"
                       value={`$ ${money(selectedTask.quoteDefaults.rateUsd)}`}
                     />
-                    <MetricCard
+                    <MetricCard tone="positive"
                       label="Approved USD / Pc"
                       value={`$ ${money(selectedTask.quoteDefaults.approvedPriceUsd)}`}
                     />

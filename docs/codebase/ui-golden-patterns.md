@@ -62,6 +62,21 @@ Use these names through typed component props. `StatusBadge` accepts an explicit
 
 Never introduce raw red, amber, emerald, sky, or slate classes for application state. Add or revise a semantic token centrally when a new meaning is truly required.
 
+`MetricCard` requires an explicit `tone`; `MetricSummary` items inherit that
+requirement. Missing tones must fail type checking rather than silently create
+white cards. Use information/brand/accent for ordinary totals, warning for
+pending attention, positive for successful/approved outcomes, and inactive for
+closed/inactive outcomes. Neutral remains an intentional choice, not a default
+for top-of-page summaries. Preserve explicit status tones in shared wrappers;
+general tracking totals may use a documented information fallback. Never cycle
+warning, danger or positive colours by card position.
+
+HR overview cards appear above Job Posts and other overview-backed panels.
+They describe all HR records, not the rows visible after Job Posts table filters;
+keep that scope visible and let the row wrap at narrow widths. Job workspace
+cards describe only the selected job. Shared card colours, typography and
+surfaces remain owned by `packages/ui/src/components/card.tsx` in both themes.
+
 ## States and accessibility
 
 Use `StandardState` for empty, loading, and error states. Give recovery actions to error states when available. Loading content announces with `role="status"`; errors use `role="alert"`.

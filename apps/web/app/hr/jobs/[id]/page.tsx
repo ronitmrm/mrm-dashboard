@@ -176,13 +176,13 @@ export default async function JobWorkspacePage({
       ) : null}
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {[
-          ["Applicants", String(applications.length)],
-          ["Interview Records", String(interviews.length)],
-          ["Posted", job.postDate],
-          ["Target", job.targetDate ?? "Not Set"],
-        ].map(([label, value]) => (
-          <MetricCard key={label} label={label} value={value} />
+        {([
+          { label: "Applicants", value: applications.length.toLocaleString("en-IN"), tone: "information" },
+          { label: "Interview Records", value: interviews.length.toLocaleString("en-IN"), tone: "brand" },
+          { label: "Posted", value: job.postDate, tone: "accent" },
+          { label: "Target", value: job.targetDate ?? "Not Set", tone: job.targetDate ? "information" : "warning" },
+        ] as const).map(({ label, value, tone }) => (
+          <MetricCard key={label} label={label} tone={tone} value={value} />
         ))}
       </section>
 

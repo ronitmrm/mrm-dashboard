@@ -64,15 +64,15 @@ export default async function ProductBulkRevisionPage() {
       </section>
 
       <section className="grid gap-3 sm:grid-cols-3">
-        <MetricCard
+        <MetricCard tone="information"
           label="Product Revision Requests"
           value={summary.openRevisionCount}
         />
-        <MetricCard
+        <MetricCard tone="accent"
           label="Product Changes Staged"
           value={summary.stagedChangeCount}
         />
-        <MetricCard
+        <MetricCard tone="brand"
           label="Customer Prices Affected"
           value={summary.activePriceCount}
         />

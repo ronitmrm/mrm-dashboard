@@ -206,7 +206,7 @@ export default async function CustomersPage({
               value: customerPage.coverage.total ?? "—",
               tone: "information"
             },
-            { label: "On This Page", value: visibleCustomers.length },
+            { tone: "brand", label: "On This Page", value: visibleCustomers.length },
             {
               label: "Active on Page",
               value: visibleCustomers.filter((row) => row.status === "Active")

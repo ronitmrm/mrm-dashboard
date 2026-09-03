@@ -128,11 +128,11 @@ export function CostingCalculator() {
         </CardHeader>
         <CardContent className="grid gap-4">
           <div className="grid grid-cols-2 gap-3">
-            <MetricCard
+            <MetricCard tone="information"
               label="Inr / Piece"
               value={money(result.totalRateInr, 4)}
             />
-            <MetricCard
+            <MetricCard tone="brand"
               label="Usd / Piece"
               value={money(result.rateUsd, 4)}
             />

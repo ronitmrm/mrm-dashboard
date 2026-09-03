@@ -157,7 +157,7 @@ export function ProductPortfolioTable({
             ).size,
             tone: "brand"
           },
-          { label: "On This Page", value: visibleRows.length }
+          { tone: "brand", label: "On This Page", value: visibleRows.length }
         ]}
       />
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">

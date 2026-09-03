@@ -215,17 +215,18 @@ export default async function HrRecruitmentPage({
       activeItem.panelId !== "employeeMasterPanel" &&
       activeItem.panelId !== "interviewsPanel" &&
       activeItem.panelId !== "interviewWorkspacePanel" ? (
-        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-          {[
-            ["Approved Posts", stats.posts],
-            ["Vacant Posts", stats.vacantPosts],
-            ["Templates", stats.templates],
-            ["Open Jobs", stats.openJobs],
-            ["Candidates", stats.candidates],
-            ["Interviews", stats.interviews],
-          ].map(([label, value]) => (
-            <MetricCard key={label} label={label} value={value} />
+        <section aria-label="HR overview" className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))] gap-3">
+          {([
+            { label: "Approved Posts", value: stats.posts, tone: "information" },
+            { label: "Vacant Posts", value: stats.vacantPosts, tone: "warning" },
+            { label: "Templates", value: stats.templates, tone: "brand" },
+            { label: "Open Jobs", value: stats.openJobs, tone: "accent" },
+            { label: "Candidates", value: stats.candidates, tone: "information" },
+            { label: "Interviews", value: stats.interviews, tone: "brand" },
+          ] as const).map(({ label, value, tone }) => (
+            <MetricCard key={label} label={label} tone={tone} value={value.toLocaleString("en-IN")} />
           ))}
+          <p className="col-span-full text-xs text-muted-foreground">HR overview · all records, before table filters</p>
         </section>
       ) : null}
 

@@ -98,7 +98,7 @@ export default async function StoreOverviewPage() {
             description="Active stock locations"
             icon={<Building2 aria-hidden="true" />}
             label="Store Locations"
-            tone="neutral"
+            tone="information"
             value={snapshot.locations.length}
           />
           <MetricCard

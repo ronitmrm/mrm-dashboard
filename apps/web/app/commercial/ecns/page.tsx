@@ -96,13 +96,13 @@ export default async function EngineeringChangeNotesPage() {
       </section>
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="Open ECNs" value={metrics.open} />
-        <MetricCard label="With Design" value={metrics.pendingDesign} />
-        <MetricCard
+        <MetricCard tone="information" label="Open ECNs" value={metrics.open} />
+        <MetricCard tone="brand" label="With Design" value={metrics.pendingDesign} />
+        <MetricCard tone="accent"
           label="With Product Costing"
           value={metrics.pendingProductCosting}
         />
-        <MetricCard
+        <MetricCard tone="warning"
           label="With Customer Costing"
           value={metrics.pendingCosting}
         />

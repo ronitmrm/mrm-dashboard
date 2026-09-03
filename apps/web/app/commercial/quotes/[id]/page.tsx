@@ -117,15 +117,15 @@ export default async function QuoteDetailPage({
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 sm:grid-cols-3">
-            <MetricCard
+            <MetricCard tone="information"
               label="Rate Before Rejection"
               value={`₹ ${money(quote.rateInr)}`}
             />
-            <MetricCard
+            <MetricCard tone="brand"
               label="Total Inr"
               value={`₹ ${money(quote.totalRateInr)}`}
             />
-            <MetricCard
+            <MetricCard tone="positive"
               label="Approved Usd / Pc"
               value={`$ ${money(quote.approvedPriceUsd)}`}
             />

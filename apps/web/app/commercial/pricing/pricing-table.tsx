@@ -163,7 +163,7 @@ export function PricingTable({
             ).size,
             tone: "brand"
           },
-          { label: "On This Page", value: visibleRows.length }
+          { tone: "brand", label: "On This Page", value: visibleRows.length }
         ]}
       />
       <div className="flex shrink-0 items-center justify-between gap-3 text-xs text-muted-foreground">

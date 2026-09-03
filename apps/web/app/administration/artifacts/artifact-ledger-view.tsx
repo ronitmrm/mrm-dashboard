@@ -113,19 +113,19 @@ export function ArtifactLedgerView({
         aria-label="Artifact storage summary"
         className="grid gap-2 sm:grid-cols-3"
       >
-        <MetricCard
+        <MetricCard tone="information"
           description={`${ledger.totals.livePhysicalObjects} live physical object${ledger.totals.livePhysicalObjects === 1 ? "" : "s"}`}
           icon={<HardDrive className="size-4" aria-hidden="true" />}
           label="Unique live storage"
           value={`${byteSize(ledger.totals.uniqueLiveBytes)} of ${byteSize(ledger.totals.allowanceBytes)}`}
         />
-        <MetricCard
+        <MetricCard tone="brand"
           description="Uploaded and generated records"
           icon={<Files className="size-4" aria-hidden="true" />}
           label="Logical Artifacts"
           value={ledger.totals.logicalArtifacts.toLocaleString("en-IN")}
         />
-        <MetricCard
+        <MetricCard tone="accent"
           description={`${ledger.totalArtifacts.toLocaleString("en-IN")} match the current filters`}
           icon={<Search className="size-4" aria-hidden="true" />}
           label="Filtered results"
