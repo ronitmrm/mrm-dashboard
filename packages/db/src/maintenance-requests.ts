@@ -55,8 +55,8 @@ async function requesterContextWithClient(
   input: { organizationId: string; userId: string }
 ) {
   const [account, departments] = await Promise.all([
-    client.query<{ email: string; name: string }>(
-      `SELECT email, name FROM identity.users WHERE id = $1`,
+    client.query<{ email: string; name: string; role: string | null }>(
+      `SELECT email, name, role FROM identity.users WHERE id = $1`,
       [input.userId]
     ),
     client.query<{ department: string }>(
@@ -97,18 +97,27 @@ async function requesterContextWithClient(
   ])
   const user = account.rows[0]
   if (!user) throw new Error("The signed-in user account was not found.")
-  if (!departments.rows.length) {
+  const isSystemAdministrator = user.role === "admin"
+  const eligibleDepartments = isSystemAdministrator
+    ? await client.query<{ department: string }>(
+        `SELECT DISTINCT btrim(name) AS department
+         FROM recruitment.departments
+         WHERE organization_id = $1 AND active
+           AND nullif(btrim(name), '') IS NOT NULL
+         ORDER BY department`,
+        [input.organizationId]
+      )
+    : departments
+  if (!eligibleDepartments.rows.length) {
     throw new Error(
-      "Your account must be linked to one active Employee Master department."
-    )
-  }
-  if (departments.rows.length > 1) {
-    throw new Error(
-      "Your account is linked to multiple departments; ask an administrator to correct Employee Master."
+      isSystemAdministrator
+        ? "No active departments are available for this organization."
+        : "Your account must be linked to an active Employee Master department."
     )
   }
   return {
-    department: departments.rows[0]!.department,
+    departments: eligibleDepartments.rows.map(({ department }) => department),
+    isSystemAdministrator,
     requesterEmail: user.email,
     requesterName: user.name,
   }
@@ -207,6 +216,7 @@ export function createMaintenanceRequestRepository(
     },
 
     async submitRequest(input: {
+      department?: string
       location: string
       organizationId: string
       problemDescription: string
@@ -219,6 +229,17 @@ export function createMaintenanceRequestRepository(
           organizationId: input.organizationId,
           userId: input.requesterUserId,
         })
+        const department =
+          input.department?.trim() ||
+          (context.departments.length === 1 ? context.departments[0]! : "")
+        if (!department) {
+          throw new Error("Select the department for this maintenance request.")
+        }
+        if (!context.departments.includes(department)) {
+          throw new Error(
+            "Select one of the departments available to your account."
+          )
+        }
         const result = await client.query<{ id: string }>(
           `INSERT INTO maintenance.requests (
              organization_id, requester_user_id, requester_name, department,
@@ -230,7 +251,7 @@ export function createMaintenanceRequestRepository(
             input.organizationId,
             input.requesterUserId,
             context.requesterName,
-            context.department,
+            department,
             requiredText(input.location, "Location"),
             requiredText(input.problemDescription, "Problem description"),
             input.suggestedCategory,
@@ -251,7 +272,7 @@ export function createMaintenanceRequestRepository(
             input.requesterUserId,
           ]
         )
-        return { ...context, id: requestId }
+        return { ...context, department, id: requestId }
       })
     },
 
@@ -259,15 +280,18 @@ export function createMaintenanceRequestRepository(
       organizationId: string
       scope:
         | { kind: "manager" }
-        | { department: string; kind: "department" }
+        | { departments: readonly string[]; kind: "department" }
         | { kind: "trade"; trade: MaintenanceCategory }
     }): Promise<MaintenanceRequestRow[]> {
       const values: unknown[] = [input.organizationId]
       let scopeClause = ""
       if (input.scope.kind === "department") {
-        values.push(input.scope.department)
-        scopeClause =
-          "AND lower(btrim(request.department)) = lower(btrim($2::text))"
+        values.push(
+          input.scope.departments.map((department) =>
+            department.trim().toLowerCase()
+          )
+        )
+        scopeClause = "AND lower(btrim(request.department)) = ANY($2::text[])"
       } else if (input.scope.kind === "trade") {
         values.push(input.scope.trade)
         scopeClause = `AND request.final_category = $2

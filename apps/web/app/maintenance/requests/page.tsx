@@ -8,7 +8,7 @@ import {
 } from "@workspace/ui/components/alert"
 
 import {
- PageHeader,
+  PageHeader,
   DashboardSection,
 } from "@/components/dashboard/dashboard-components"
 import { MaintenanceRequestForm } from "@/components/maintenance/maintenance-request-form"
@@ -54,7 +54,7 @@ export default async function MaintenanceRequestsPage() {
     } else if (context) {
       rows = await repository.listRequests({
         organizationId,
-        scope: { department: context.department, kind: "department" },
+        scope: { departments: context.departments, kind: "department" },
       })
     }
   } finally {
@@ -63,20 +63,21 @@ export default async function MaintenanceRequestsPage() {
 
   return (
     <div className="grid gap-6">
- <PageHeader
-        description="Submit one problem per request and track requests for your department."
+      <PageHeader
+        description="Submit one problem per request and track requests for your assigned departments."
         icon={ClipboardList}
         title="All Requests"
       />
       {context ? (
         <MaintenanceRequestForm
-          department={context.department}
+          departments={context.departments}
+          isSystemAdministrator={context.isSystemAdministrator}
           requesterName={context.requesterName}
         />
       ) : (
         <Alert variant="destructive">
           <AlertTriangle aria-hidden="true" />
-          <AlertTitle>Employee profile required</AlertTitle>
+          <AlertTitle>Requester setup required</AlertTitle>
           <AlertDescription>{contextError}</AlertDescription>
         </Alert>
       )}
@@ -84,7 +85,9 @@ export default async function MaintenanceRequestsPage() {
         description={
           manager
             ? "Manager view across all departments."
-            : `Requests submitted by ${context?.department ?? "your department"}.`
+            : context?.departments.length === 1
+              ? `Requests submitted by ${context.departments[0]}.`
+              : "Requests submitted by your active assigned departments."
         }
         title="Request Register"
       >

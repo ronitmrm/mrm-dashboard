@@ -8,12 +8,25 @@ Photos use the existing Artifact service and UploadThing provider. Links target 
 
 ## Authorization
 
-- Authenticated users submit requests; server code resolves requester and Department from the user/Employee Master link and ignores client identity fields.
+- Authenticated users submit requests; server code resolves requester identity
+  and active Departments from Employee Master and ignores client identity fields.
+  A multi-department employee selects one of those Departments, rather than
+  being rejected as an invalid profile. A single Department remains automatic.
+  Submission re-resolves assignments and validates the selection inside the
+  transaction; forged or no-longer-assigned Departments are rejected. The
+  Administrative Role does not imply manager or trade access.
+- The protected Better Auth `admin` identity may choose any active Department
+  in the current Organization without an employee link. The repository resolves
+  this from `identity.users.role`, never a client flag, and rechecks it within
+  the submission transaction. An ordinary unlinked account remains rejected.
+  Manager and trade decisions still require their existing independent grants.
 - `maintenance.requests.manage` is assigned to Maintenance Manager and Administrator.
 - `maintenance.trade.<trade>.work` grants only that trade's approved work.
 - Mechanical trade and manager roles also retain `maintenance.workspace.read` and `maintenance.tasks.write` for the existing scheduled workflow.
 
-Repository reads are explicitly scoped as Manager, Department, or Trade. Trade reads exclude Pending Approval, Returned, Rejected, and Closed requests.
+Repository reads are explicitly scoped as Manager, active assigned Departments,
+or Trade. A multi-department employee's register includes only their assigned
+Departments. Trade reads exclude Pending Approval, Returned, Rejected, and Closed requests.
 
 ## UI
 

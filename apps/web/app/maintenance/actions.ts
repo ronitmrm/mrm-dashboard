@@ -84,6 +84,7 @@ export async function submitMaintenanceRequestAction(formData: FormData) {
   let request: Awaited<ReturnType<typeof repository.submitRequest>>
   try {
     request = await repository.submitRequest({
+      department: String(formData.get("department") ?? ""),
       location: requiredText(formData, "location"),
       organizationId,
       problemDescription: requiredText(formData, "problem_description"),
