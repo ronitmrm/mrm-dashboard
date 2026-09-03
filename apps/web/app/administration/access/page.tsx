@@ -1,6 +1,6 @@
 import Link from "next/link"
 
-import { UserRoundPlus, UsersRound } from "lucide-react"
+import { ArrowUpRight, UserRoundPlus, UsersRound } from "lucide-react"
 
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
@@ -69,6 +69,7 @@ export default async function AccessAdministrationPage({
   searchParams: Promise<{
     section?: string | string[]
     role?: string | string[]
+    from?: string | string[]
   }>
 }) {
   const query = await searchParams
@@ -121,6 +122,7 @@ export default async function AccessAdministrationPage({
   const selectedRole = snapshot.roles.find(
     (role) => role.key === firstQueryValue(query.role)
   )
+  const returnToStaff = firstQueryValue(query.from) === "staff"
 
   return (
     <>
@@ -288,7 +290,7 @@ export default async function AccessAdministrationPage({
                 Occupying The Post.
               </CardDescription>
             </CardHeader>
-            <CardContent className="grid gap-5">
+            <CardContent>
               <PostAccessProfileForm
                 posts={snapshot.postAccessProfiles}
                 roles={snapshot.roles.map(({ id, key, name, isSystem }) => ({
@@ -298,27 +300,6 @@ export default async function AccessAdministrationPage({
                   isSystem,
                 }))}
               />
-              <details className="rounded-xl border">
-                <summary className="cursor-pointer px-4 py-3 text-sm font-medium">
-                  Review Current Post Profiles (
-                  {snapshot.postAccessProfiles.length})
-                </summary>
-                <div className="flex max-h-64 flex-col gap-2 overflow-y-auto border-t p-3">
-                  {snapshot.postAccessProfiles.map((post) => (
-                    <div
-                      className="flex items-start justify-between gap-3 text-sm"
-                      key={post.id}
-                    >
-                      <span>
-                        {post.postCode} · {post.department} · {post.designation}
-                      </span>
-                      <span className="text-right text-muted-foreground">
-                        {post.roleKeys.join(", ") || "No role"}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </details>
             </CardContent>
           </SectionCard>
         ) : null}
@@ -327,6 +308,10 @@ export default async function AccessAdministrationPage({
           <SectionCard size="sm">
             <CardHeader className="border-b">
               <CardTitle>Staff Access</CardTitle>
+              <CardDescription>
+                Select a role to view its rights. Manage occupied posts in Post
+                Access Profile above.
+              </CardDescription>
             </CardHeader>
             <CardContent>
               {snapshot.users.length === 0 ? (
@@ -343,42 +328,36 @@ export default async function AccessAdministrationPage({
                   </EmptyHeader>
                 </Empty>
               ) : (
-                <OperationalTable>
+                <OperationalTable
+                  className="min-w-[40rem] table-fixed"
+                  filterStorageKey="access-administration-staff"
+                >
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Staff Member</TableHead>
-                      <TableHead>Employee / Post</TableHead>
-                      <TableHead>Roles</TableHead>
-                      <TableHead>Overrides</TableHead>
+                      <TableHead className="w-[36%]">Staff Member</TableHead>
+                      <TableHead className="w-[40%]">Roles</TableHead>
+                      <TableHead className="w-[24%]">Overrides</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {snapshot.users.map((user) => (
                       <TableRow key={user.id}>
-                        <TableCell className="max-w-64 whitespace-normal">
-                          <div className="grid min-w-0 grid-cols-1 gap-0.5 break-words">
-                            <span className="font-medium">{user.name}</span>
+                        <TableCell className="align-top whitespace-normal">
+                          <div className="grid min-w-0 grid-cols-1 gap-0.5 wrap-anywhere">
+                            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                              <span className="font-medium">{user.name}</span>
+                              <span className="text-xs text-muted-foreground">
+                                {user.employee
+                                  ? `Employee #${user.employee.employeeCode}`
+                                  : "Not linked"}
+                              </span>
+                            </div>
                             <span className="text-xs text-muted-foreground">
                               {user.email}
                             </span>
                           </div>
                         </TableCell>
-                        <TableCell className="w-80 max-w-80 whitespace-normal">
-                          {user.employee ? (
-                            <div className="grid min-w-0 grid-cols-1 gap-0.5 break-words">
-                              <span>{user.employee.employeeCode}</span>
-                              <span className="text-xs text-muted-foreground">
-                                {user.employee.departments.join(", ")} ·{" "}
-                                {user.employee.postCodes.join(", ")}
-                              </span>
-                            </div>
-                          ) : (
-                            <span className="text-sm text-muted-foreground">
-                              Not linked
-                            </span>
-                          )}
-                        </TableCell>
-                        <TableCell>
+                        <TableCell className="align-top whitespace-normal">
                           <div className="flex flex-wrap gap-1.5">
                             {user.roleKeys.length ||
                             user.employee?.inheritedRoleKeys.length ? (
@@ -396,10 +375,29 @@ export default async function AccessAdministrationPage({
                               ].map((role) => (
                                 <div
                                   key={`${role.source}:${role.key}`}
-                                  className="flex items-center gap-1"
+                                  className="flex max-w-full items-center gap-1"
                                 >
-                                  <Badge variant="secondary">
-                                    {role.key} · {role.source}
+                                  <Badge
+                                    asChild
+                                    variant="secondary"
+                                    className="h-auto min-h-7 min-w-0 shrink text-left whitespace-normal"
+                                  >
+                                    <Link
+                                      href={{
+                                        pathname: "/administration/access",
+                                        query: {
+                                          section: "roles",
+                                          role: role.key,
+                                          from: "staff",
+                                        },
+                                      }}
+                                      aria-label={`View ${role.key} rights (${role.source})`}
+                                    >
+                                      <span className="wrap-anywhere">
+                                        {role.key} · {role.source}
+                                      </span>
+                                      <ArrowUpRight data-icon="inline-end" />
+                                    </Link>
                                   </Badge>
                                   {canDeleteRole
                                     ? snapshot.roles
@@ -427,12 +425,13 @@ export default async function AccessAdministrationPage({
                             )}
                           </div>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="align-top whitespace-normal">
                           <div className="flex flex-wrap gap-1.5">
                             {user.overrides.length ? (
                               user.overrides.map((override) => (
                                 <Badge
                                   key={override.permissionKey}
+                                  className="h-auto max-w-full wrap-anywhere whitespace-normal"
                                   variant={
                                     override.effect === "deny"
                                       ? "destructive"
@@ -538,18 +537,22 @@ export default async function AccessAdministrationPage({
                   </CardDescription>
                 </div>
                 <Button asChild size="sm" variant="outline">
-                  <Link href="/administration/access?section=roles">
-                    Back to Application Roles
+                  <Link
+                    href={
+                      returnToStaff
+                        ? "/administration/access?section=staff"
+                        : "/administration/access?section=roles"
+                    }
+                  >
+                    {returnToStaff
+                      ? "Back to Staff Access"
+                      : "Back to Application Roles"}
                   </Link>
                 </Button>
               </div>
             </CardHeader>
             <CardContent>
-              {selectedRole.isSystem ? (
-                <p className="text-sm text-muted-foreground">
-                  System Administrator access is managed by the software.
-                </p>
-              ) : canUpdateRolePermissions ? (
+              {!selectedRole.isSystem && canUpdateRolePermissions ? (
                 <form
                   action={updateRolePermissionsAction}
                   className="grid gap-4"
@@ -571,7 +574,9 @@ export default async function AccessAdministrationPage({
               ) : (
                 <div className="grid gap-3">
                   <p className="text-sm text-muted-foreground">
-                    You can review this role but cannot change its capabilities.
+                    {selectedRole.isSystem
+                      ? "System Administrator access is managed by the software. Assigned rights are listed below."
+                      : "You can review this role but cannot change its capabilities."}
                   </p>
                   <ul className="grid list-inside list-disc gap-1 text-sm">
                     {snapshot.permissions
