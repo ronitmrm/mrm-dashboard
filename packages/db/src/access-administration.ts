@@ -767,6 +767,21 @@ export function createAccessAdministrationRepository(
           .filter((employee) => employee.linked_user_id)
           .map((employee) => [employee.linked_user_id!, employee])
       )
+      const occupantsByPost = new Map(
+        employees.rows.flatMap((employee) =>
+          employee.post_ids.map(
+            (postId) =>
+              [
+                postId,
+                {
+                  employeeCode: employee.employee_code,
+                  employeeName: employee.employee_name,
+                  linkedUserId: employee.linked_user_id,
+                },
+              ] as const
+          )
+        )
+      )
       const roleKeysByPost = new Map(
         postProfiles.rows.map((profile) => [profile.id, profile.role_keys])
       )
@@ -787,6 +802,7 @@ export function createAccessAdministrationRepository(
           department: row.department,
           designation: row.designation,
           id: row.id,
+          occupant: occupantsByPost.get(row.id) ?? null,
           postCode: row.post_code,
           roleKeys: row.role_keys,
         })),
