@@ -11,7 +11,7 @@ describe("button and function capability catalog", () => {
   it("keeps every business command independently assignable", () => {
     const keys = Object.values(taskCapabilityCatalog)
     expect(new Set(keys).size).toBe(keys.length)
-    expect(Object.keys(administrationTaskCapabilities)).toHaveLength(8)
+    expect(Object.keys(administrationTaskCapabilities)).toHaveLength(9)
     expect(Object.keys(commercialTaskCapabilities)).toHaveLength(53)
     expect(Object.keys(hrTaskCapabilities)).toHaveLength(23)
   })

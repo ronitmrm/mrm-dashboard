@@ -15,6 +15,12 @@ type AssignRoleInput = {
   userId: string
 }
 
+type DeleteRoleInput = {
+  actorUserId: string
+  confirmation: string
+  roleId: string
+}
+
 type EmployeeReference = {
   employeeCode: string
   organizationId: string
@@ -170,6 +176,68 @@ export function createAccessAdministrationRepository(
         await client.query("COMMIT")
 
         return { id: roleId, key }
+      } catch (error) {
+        await client.query("ROLLBACK")
+        throw error
+      } finally {
+        client.release()
+      }
+    },
+
+    async deleteRole({ actorUserId, confirmation, roleId }: DeleteRoleInput) {
+      const client = await pool.connect()
+      try {
+        await client.query("BEGIN")
+        // Lock the immutable ID so a newly recreated role cannot be deleted by a stale form.
+        const result = await client.query<{
+          id: string
+          key: string
+          name: string
+          description: string | null
+          is_system: boolean
+        }>(
+          `SELECT id, key, name, description, is_system
+           FROM identity.roles WHERE id = $1 FOR UPDATE`,
+          [roleId]
+        )
+        const role = result.rows[0]
+        if (!role) throw new Error("The selected role no longer exists")
+        if (role.is_system) throw new Error("System roles cannot be deleted")
+        if (confirmation !== role.key)
+          throw new Error("Role key confirmation does not match")
+
+        const grants = await client.query<{
+          permission_keys: string[]
+          user_ids: string[]
+          post_ids: string[]
+        }>(
+          `SELECT
+             ARRAY(SELECT p.key FROM identity.role_permissions rp
+               JOIN identity.permissions p ON p.id = rp.permission_id
+               WHERE rp.role_id = $1 ORDER BY p.key) AS permission_keys,
+             ARRAY(SELECT user_id::text FROM identity.user_roles
+               WHERE role_id = $1 ORDER BY user_id) AS user_ids,
+             ARRAY(SELECT post_id::text FROM identity.post_role_assignments
+               WHERE role_id = $1 ORDER BY post_id) AS post_ids`,
+          [roleId]
+        )
+        await appendAccessAuditChanges(client, [
+          {
+            actorUserId,
+            eventType: "access.role.deleted",
+            metadata: {
+              roleKey: role.key,
+              name: role.name,
+              description: role.description,
+              ...grants.rows[0],
+            },
+            targetId: roleId,
+            targetTable: "roles",
+          },
+        ])
+        // Foreign keys remove only this role's permissions and direct/post assignments.
+        await client.query("DELETE FROM identity.roles WHERE id = $1", [roleId])
+        await client.query("COMMIT")
       } catch (error) {
         await client.query("ROLLBACK")
         throw error

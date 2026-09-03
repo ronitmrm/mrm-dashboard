@@ -118,6 +118,132 @@ afterAll(async () => {
 })
 
 describe("access administration", () => {
+  it("deletes a confirmed custom role everywhere without deleting staff or posts", async () => {
+    const system = createAuthSystem({
+      allowSignUp: true,
+      baseURL: "http://localhost:3001",
+      connectionString,
+      secret: "test-only-better-auth-secret-000000000000",
+    })
+    const provisioner = createInitialAdministratorProvisioner({
+      connectionString,
+    })
+    const access = createAccessAdministrationService({
+      auth: system.auth,
+      connectionString,
+    })
+    const authorization = createAuthorizationRepository({ connectionString })
+    try {
+      const administrator = await system.auth.api.signUpEmail({
+        body: {
+          email: "administrator@mrmpl.test",
+          name: "Administrator",
+          password: "test-only-password",
+        },
+      })
+      await provisioner.promote({
+        email: administrator.user.email,
+        userId: administrator.user.id,
+      })
+      const actorUserId = administrator.user.id
+      const staff = await access.provisionStaff({
+        actorUserId,
+        employeeCode,
+        organizationId,
+        email: "planner@mrmpl.test",
+        password: "planner-test-password",
+      })
+      const role = await access.createRole({
+        actorUserId,
+        key: "delete-planner",
+        name: "Delete planner",
+        permissionKeys: ["planning.plan.read"],
+      })
+      await access.assignRole({
+        actorUserId,
+        roleKey: role.key,
+        userId: staff.id,
+      })
+      await access.setPostRole({
+        actorUserId,
+        roleKey: role.key,
+        postId,
+        enabled: true,
+      })
+      await expect(
+        authorization.hasCapability(staff.id, "planning.plan.read")
+      ).resolves.toBe(true)
+
+      await expect(
+        access.deleteRole({
+          actorUserId: staff.id,
+          roleId: role.id,
+          confirmation: role.key,
+        })
+      ).rejects.toThrow("administration.roles.delete")
+      await expect(
+        access.deleteRole({
+          actorUserId,
+          roleId: role.id,
+          confirmation: "wrong-role",
+        })
+      ).rejects.toThrow("confirmation")
+      const before = await access.getSnapshot({ actorUserId })
+      const systemRole = before.roles.find(
+        (item) => item.key === "administrator"
+      )!
+      await expect(
+        access.deleteRole({
+          actorUserId,
+          roleId: systemRole.id,
+          confirmation: systemRole.key,
+        })
+      ).rejects.toThrow("System roles cannot be deleted")
+
+      await access.deleteRole({
+        actorUserId,
+        roleId: role.id,
+        confirmation: role.key,
+      })
+      const after = await access.getSnapshot({ actorUserId })
+      expect(after.roles).not.toContainEqual(
+        expect.objectContaining({ id: role.id })
+      )
+      expect(after.roles).toContainEqual(systemRole)
+      expect(after.users).toContainEqual(
+        expect.objectContaining({
+          id: staff.id,
+          roleKeys: [],
+          employee: expect.objectContaining({
+            employeeCode,
+            inheritedRoleKeys: [],
+            postCodes: ["ACCESS-POST-001"],
+          }),
+        })
+      )
+      expect(after.postAccessProfiles).toContainEqual(
+        expect.objectContaining({ id: postId, roleKeys: [] })
+      )
+      expect(after.employees).toEqual(before.employees)
+      await expect(
+        authorization.hasCapability(staff.id, "planning.plan.read")
+      ).resolves.toBe(false)
+      await expect(
+        system.auth.api.signInEmail({
+          body: {
+            email: staff.email,
+            password: "planner-test-password",
+          },
+        })
+      ).resolves.toMatchObject({ user: { id: staff.id } })
+    } finally {
+      await authorization.close()
+      await access.close()
+      await provisioner.close()
+      await system.close()
+    }
+  })
+
   it("lets a capable administrator provision a sign-in-ready staff account", async () => {
     const system = createAuthSystem({
       allowSignUp: true,

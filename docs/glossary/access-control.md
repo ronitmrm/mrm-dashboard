@@ -4,6 +4,13 @@
 Account or inherited from an Approved Post. Its access can be changed after the
 role is created.
 
+**Delete Application Role**: Permanently removes a non-system Application Role
+and its direct Staff Account assignments, Approved Post assignments, and role
+permissions. Requires separate Delete Role Task Access and exact role-key
+confirmation. Staff Accounts, Employee Master, Approved Posts, user overrides,
+other roles, and historical audit evidence remain intact. System roles cannot
+be deleted. This is not removal of just one staff member's assignment.
+
 **Administrative Role**: The assignable, non-system Application Role for staff
 who manage application access and administration. It remains separate from the
 protected System Administrator identity so it can be assigned to Staff Accounts
