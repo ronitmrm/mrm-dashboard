@@ -64,6 +64,11 @@ columns: Main Module, Sub Module, Type, Page / Task, and Access. Each row owns
 only its own action keys. The Access chip derives No Access, View Only, Full
 Access, and Custom; presets are never persisted.
 
+The selector fieldset must allow shrinking (`min-w-0`). Its bounded table wraps
+module/page labels and keeps the Access column pinned on the right. On narrow
+screens only the table scrolls horizontally; the surrounding card must not clip
+the permission controls. Create Role and the saved-role editor share this layout.
+
 Navigation and direct page access use the page capability definitions. Server
 actions and route handlers use the matching task capability through
 `requireCapability`, `requireHrPage`, `requireProductionPage`, or the dashboard
