@@ -12,8 +12,9 @@
 - `Application Roles` is a filterable register. Opening a role uses
   `?section=roles&role=<key>` and renders only that role's editor; the register
   does not mount hidden permission selectors for every role.
-- `Staff Accounts` retains staff provisioning, Approved Post role assignment,
-  and the staff-access register. The post selector shows its linked designation
+- `Staff Accounts` starts with login creation, direct role assignment and optional
+  Employee Master linking, then Approved Post profiles and the staff register.
+  The post selector shows its linked designation
   and occupant; the duplicate review dropdown is omitted.
 - Staff Access uses three bounded, wrapping columns: staff identity (including
   employee number), assigned roles and overrides. It does not repeat every
@@ -25,6 +26,31 @@
 - Navigation uses the shared `radix-luma` Tabs primitive with keyboard support
   and URL-backed selection. Role-register and permission filters retain separate
   browser-persisted filter keys.
+
+## Account-first staff setup
+
+1. Create a login with staff name, email/login ID and a temporary password. No
+   employee selection or roles are required. Success selects the created account
+   in the next step; passwords are never returned in action state or audit data.
+2. Select one or more existing non-system Application Roles. The repository
+   validates the entire selection before an atomic, additive grant and audit.
+   Other direct roles and post-inherited roles remain unchanged. System roles
+   cannot be selected or forged into this batch operation.
+3. Optionally link that account to an eligible, unlinked Employee Master entry.
+   The existing employee uniqueness, current employment and System Administrator
+   exclusions remain server-enforced. Linking enables current-post inheritance;
+   it does not replace direct roles. Ordinary unlinked accounts still cannot use
+   workflows requiring an employee Department.
+
+Provision, Assign Staff Role and Link Staff Account remain independent task
+capabilities, checked in both server actions and service methods. Provisioning
+records `access.user.provisioned`; audit/link failure removes only the newly
+created account. The service retains its employee-first input for existing
+programmatic callers; the dashboard always uses the account-first input.
+Shared Field, Checkbox, NativeSelect, Alert and SectionCard primitives provide
+pending states and safe inline feedback. The existing post profile editor stays
+available separately; role-name normalization is unchanged despite removing its
+helper text.
 
 ## Post access profile
 

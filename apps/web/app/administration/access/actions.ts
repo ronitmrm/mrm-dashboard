@@ -56,38 +56,117 @@ async function withAccessService<T>(
   }
 }
 
-export async function provisionStaffAction(formData: FormData) {
-  const password = requiredText(formData, "password")
-  if (password.length < 6) {
-    throw new Error("password must contain at least 6 characters")
-  }
+export type StaffActionState = { error?: string; success?: string }
 
-  const employee = employeeReference(formData)
-  await withAccessService(
-    administrationTaskCapabilities.provisionStaff,
-    (access, actorUserId) =>
-      access.provisionStaff({
-        actorUserId,
-        email: requiredText(formData, "email").toLowerCase(),
-        ...employee,
-        password,
-      })
-  )
-  revalidatePath(accessPath)
+function staffActionError(error: unknown): StaffActionState {
+  const message = error instanceof Error ? error.message : ""
+  const expected = [
+    "Staff name is required",
+    "Password must contain at least 6 characters",
+    "Select at least one application role",
+    "Select existing non-system application roles",
+    "The selected staff account no longer exists",
+    "The selected active employee does not exist",
+    "The selected employee already has a login account",
+    "The selected user or active employee does not exist",
+    "name is required",
+    "email is required",
+    "password is required",
+    "employee is required",
+    "userId is required",
+  ]
+  if (expected.includes(message)) return { error: message }
+  if (/user already exists|email already exists/i.test(message)) {
+    return {
+      error:
+        "This email already has an account. Select it below to assign roles.",
+    }
+  }
+  return { error: "Could not save. Check the details, refresh and try again." }
 }
 
-export async function linkEmployeeAction(formData: FormData) {
-  const employee = employeeReference(formData)
-  await withAccessService(
-    administrationTaskCapabilities.linkStaffAccount,
-    (access, actorUserId) =>
-      access.linkEmployee({
-        actorUserId,
-        ...employee,
-        userId: requiredText(formData, "userId"),
-      })
+export async function provisionStaffAction(
+  _previousState: StaffActionState,
+  formData: FormData
+): Promise<StaffActionState> {
+  const result = await withAccessService(
+    administrationTaskCapabilities.provisionStaff,
+    async (access, actorUserId) => {
+      try {
+        const password = formData.get("password")
+        if (typeof password !== "string" || password.length < 6) {
+          throw new Error("Password must contain at least 6 characters")
+        }
+        const user = await access.provisionStaff({
+          actorUserId,
+          email: requiredText(formData, "email").toLowerCase(),
+          name: requiredText(formData, "name"),
+          password,
+        })
+        return { userId: user.id }
+      } catch (error) {
+        return staffActionError(error)
+      }
+    }
   )
+  if (!("userId" in result)) return result
   revalidatePath(accessPath)
+  redirect(
+    `${accessPath}?section=staff&staff=${encodeURIComponent(result.userId)}&created=1#staff-role-assignment`
+  )
+}
+
+export async function linkEmployeeAction(
+  _previousState: StaffActionState,
+  formData: FormData
+): Promise<StaffActionState> {
+  const result = await withAccessService(
+    administrationTaskCapabilities.linkStaffAccount,
+    async (access, actorUserId) => {
+      try {
+        await access.linkEmployee({
+          actorUserId,
+          ...employeeReference(formData),
+          userId: requiredText(formData, "userId"),
+        })
+        return {
+          success: "Employee linked. Current post roles now apply as well.",
+        }
+      } catch (error) {
+        return staffActionError(error)
+      }
+    }
+  )
+  if (!result.error) revalidatePath(accessPath)
+  return result
+}
+
+export async function assignStaffRolesAction(
+  _previousState: StaffActionState,
+  formData: FormData
+): Promise<StaffActionState> {
+  const result = await withAccessService(
+    administrationTaskCapabilities.assignStaffRole,
+    async (access, actorUserId) => {
+      try {
+        await access.assignRoles({
+          actorUserId,
+          userId: requiredText(formData, "userId"),
+          roleKeys: formData
+            .getAll("roleKeys")
+            .filter((key): key is string => typeof key === "string"),
+        })
+        return {
+          success:
+            "Roles assigned. Existing direct and post roles are preserved.",
+        }
+      } catch (error) {
+        return staffActionError(error)
+      }
+    }
+  )
+  if (!result.error) revalidatePath(accessPath)
+  return result
 }
 
 export async function createRoleAction(formData: FormData) {
