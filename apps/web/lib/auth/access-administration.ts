@@ -14,10 +14,11 @@ type CreateAccessAdministrationServiceOptions = {
 type ProvisionStaffInput = {
   actorUserId: string
   email: string
-  employeeCode: string
-  organizationId: string
   password: string
-}
+} & (
+  | { name: string; employeeCode?: never; organizationId?: never }
+  | { name?: never; employeeCode: string; organizationId: string }
+)
 
 const roleKeyPattern = /^[a-z][a-z0-9-]*$/
 
@@ -105,6 +106,7 @@ export function createAccessAdministrationService({
     async provisionStaff({
       actorUserId,
       email,
+      name,
       employeeCode,
       organizationId,
       password,
@@ -114,28 +116,39 @@ export function createAccessAdministrationService({
         administrationTaskCapabilities.provisionStaff
       )
 
-      const employee = await access.employeeForAccount({
-        employeeCode,
-        organizationId,
-      })
+      const employee =
+        employeeCode !== undefined
+          ? await access.employeeForAccount({ employeeCode, organizationId })
+          : null
+      const accountName = employee?.name ?? name?.trim()
+      if (!accountName) throw new Error("Staff name is required")
+      if (password.length < 6)
+        throw new Error("Password must contain at least 6 characters")
 
       const created = await auth.api.createUser({
         body: {
-          email,
-          name: employee.name,
+          email: email.trim().toLowerCase(),
+          name: accountName,
           password,
           role: "user",
         },
       })
 
       try {
-        await access.linkEmployeeUser({
-          accountOrigin: "new",
-          actorUserId,
-          employeeCode: employee.employeeCode,
-          organizationId: employee.organizationId,
-          userId: created.user.id,
-        })
+        if (employee) {
+          await access.linkEmployeeUser({
+            accountOrigin: "new",
+            actorUserId,
+            employeeCode: employee.employeeCode,
+            organizationId: employee.organizationId,
+            userId: created.user.id,
+          })
+        } else {
+          await access.recordStaffProvisioned({
+            actorUserId,
+            userId: created.user.id,
+          })
+        }
       } catch (error) {
         await auth.api.removeUser({ body: { userId: created.user.id } })
         throw error
@@ -193,6 +206,18 @@ export function createAccessAdministrationService({
         administrationTaskCapabilities.assignStaffRole
       )
       return access.assignRole({ actorUserId, roleKey, userId })
+    },
+
+    async assignRoles(input: {
+      actorUserId: string
+      roleKeys: string[]
+      userId: string
+    }) {
+      await requireActorCapability(
+        input.actorUserId,
+        administrationTaskCapabilities.assignStaffRole
+      )
+      return access.assignRoles(input)
     },
 
     async updateRolePermissions({

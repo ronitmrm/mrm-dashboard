@@ -1,6 +1,6 @@
 import Link from "next/link"
 
-import { ArrowUpRight, UserRoundPlus, UsersRound } from "lucide-react"
+import { ArrowUpRight, UsersRound } from "lucide-react"
 
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
@@ -19,17 +19,8 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@workspace/ui/components/empty"
-import {
-  Field,
-  FieldDescription,
-  FieldGroup,
-  FieldLabel,
-} from "@workspace/ui/components/field"
+import { Field, FieldGroup, FieldLabel } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@workspace/ui/components/native-select"
 import {
   OperationalTable,
   TableBody,
@@ -47,15 +38,12 @@ import {
 } from "@/lib/auth/require-capability"
 import { administrationTaskCapabilities } from "@/lib/auth/task-capabilities"
 
-import {
-  createRoleAction,
-  provisionStaffAction,
-  updateRolePermissionsAction,
-} from "./actions"
+import { createRoleAction, updateRolePermissionsAction } from "./actions"
 import { PermissionSelector } from "./permission-selector"
 import { AccessWorkspaceTabs } from "./access-workspace-tabs"
 import { RoleDeleteControl } from "./role-delete-control"
 import { PostAccessProfileForm } from "./post-access-profile-form"
+import { StaffAccountWorkflow } from "./staff-account-workflow"
 
 export const dynamic = "force-dynamic"
 
@@ -70,6 +58,8 @@ export default async function AccessAdministrationPage({
     section?: string | string[]
     role?: string | string[]
     from?: string | string[]
+    staff?: string | string[]
+    created?: string | string[]
   }>
 }) {
   const query = await searchParams
@@ -80,6 +70,8 @@ export default async function AccessAdministrationPage({
   const grantedTasks = new Set(
     await listGrantedCapabilities(session.user.id, [
       administrationTaskCapabilities.assignPostAccess,
+      administrationTaskCapabilities.assignStaffRole,
+      administrationTaskCapabilities.linkStaffAccount,
       administrationTaskCapabilities.createRole,
       administrationTaskCapabilities.deleteRole,
       administrationTaskCapabilities.provisionStaff,
@@ -157,82 +149,43 @@ export default async function AccessAdministrationPage({
         activeSection={activeSection}
         canCreateRole={canCreateRole}
       >
-        {activeSection === "staff" && canProvisionStaff ? (
-          <SectionCard size="sm">
-            <CardHeader className="border-b">
-              <CardTitle>Provision Staff Account</CardTitle>
-              <CardDescription>
-                Create A Sign-In-Ready Better Auth Account. Application Roles
-                Are Granted Separately.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form action={provisionStaffAction}>
-                <FieldGroup className="gap-4">
-                  <Field>
-                    <FieldLabel htmlFor="staff-employee">Employee</FieldLabel>
-                    <NativeSelect
-                      className="w-full"
-                      id="staff-employee"
-                      name="employee"
-                      required
-                    >
-                      <NativeSelectOption value="" disabled>
-                        Select an employee
-                      </NativeSelectOption>
-                      {unlinkedEmployees.map((employee) => (
-                        <NativeSelectOption
-                          key={`${employee.organizationId}:${employee.employeeCode}`}
-                          value={JSON.stringify({
-                            employeeCode: employee.employeeCode,
-                            organizationId: employee.organizationId,
-                          })}
-                        >
-                          {employee.employeeName} ({employee.employeeCode}) ·{" "}
-                          {employee.departments.join(", ")} ·{" "}
-                          {employee.postCodes.join(", ")}
-                        </NativeSelectOption>
-                      ))}
-                    </NativeSelect>
-                    <FieldDescription>
-                      Name, department, and posts come from Employee Master.
-                    </FieldDescription>
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="staff-email">Email Address</FieldLabel>
-                    <Input
-                      id="staff-email"
-                      name="email"
-                      type="email"
-                      autoComplete="email"
-                      required
-                    />
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="staff-password">
-                      Temporary Password
-                    </FieldLabel>
-                    <Input
-                      id="staff-password"
-                      name="password"
-                      type="password"
-                      minLength={6}
-                      autoComplete="new-password"
-                      required
-                    />
-                    <FieldDescription>
-                      Use At Least 6 Characters And Share It Outside The
-                      Application.
-                    </FieldDescription>
-                  </Field>
-                  <Button type="submit" disabled={!unlinkedEmployees.length}>
-                    <UserRoundPlus />
-                    Provision Staff
-                  </Button>
-                </FieldGroup>
-              </form>
-            </CardContent>
-          </SectionCard>
+        {activeSection === "staff" ? (
+          <StaffAccountWorkflow
+            key={firstQueryValue(query.staff) ?? "staff-workflow"}
+            canProvision={canProvisionStaff}
+            canAssignRoles={grantedTasks.has(
+              administrationTaskCapabilities.assignStaffRole
+            )}
+            canLinkEmployee={grantedTasks.has(
+              administrationTaskCapabilities.linkStaffAccount
+            )}
+            created={firstQueryValue(query.created) === "1"}
+            selectedUserId={firstQueryValue(query.staff)}
+            users={snapshot.users.map((user) => ({
+              id: user.id,
+              name: user.name,
+              email: user.email,
+              roleKeys: user.roleKeys,
+              employeeCode: user.employee?.employeeCode ?? null,
+              isSystemAdministrator: user.betterAuthRole === "admin",
+            }))}
+            roles={snapshot.roles
+              .filter((role) => !role.isSystem)
+              .map(({ key, name }) => ({ key, name }))}
+            employees={unlinkedEmployees.map(
+              ({
+                employeeCode,
+                employeeName,
+                organizationId,
+                organizationName,
+              }) => ({
+                employeeCode,
+                employeeName,
+                organizationId,
+                organizationName,
+              })
+            )}
+          />
         ) : null}
 
         {activeSection === "create" && canCreateRole ? (
@@ -260,10 +213,6 @@ export default async function AccessAdministrationPage({
                         placeholder="production-planner"
                         required
                       />
-                      <FieldDescription>
-                        Spaces And Symbols Are Converted To Hyphens
-                        Automatically.
-                      </FieldDescription>
                     </Field>
                     <Field>
                       <FieldLabel htmlFor="role-description">
@@ -305,7 +254,11 @@ export default async function AccessAdministrationPage({
         ) : null}
 
         {activeSection === "staff" ? (
-          <SectionCard size="sm">
+          <SectionCard
+            size="sm"
+            id="staff-access-register"
+            className="scroll-mt-20"
+          >
             <CardHeader className="border-b">
               <CardTitle>Staff Access</CardTitle>
               <CardDescription>

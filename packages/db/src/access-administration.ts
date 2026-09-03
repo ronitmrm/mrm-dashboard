@@ -114,6 +114,75 @@ export function createAccessAdministrationRepository(
   return {
     close,
 
+    async recordStaffProvisioned(input: {
+      actorUserId: string
+      userId: string
+    }) {
+      await appendAccessAuditChanges(pool, [
+        {
+          actorUserId: input.actorUserId,
+          eventType: "access.user.provisioned",
+          targetId: input.userId,
+          targetTable: "users",
+        },
+      ])
+    },
+
+    async assignRoles({
+      actorUserId,
+      roleKeys,
+      userId,
+    }: {
+      actorUserId: string
+      roleKeys: string[]
+      userId: string
+    }) {
+      const uniqueKeys = [...new Set(roleKeys)].sort()
+      if (!uniqueKeys.length)
+        throw new Error("Select at least one application role")
+      const client = await pool.connect()
+      try {
+        await client.query("BEGIN")
+        const roles = await client.query<{ id: string; key: string }>(
+          `SELECT id, key FROM identity.roles
+           WHERE key = ANY($1::text[]) AND NOT is_system
+           ORDER BY key FOR SHARE`,
+          [uniqueKeys]
+        )
+        if (roles.rows.length !== uniqueKeys.length) {
+          throw new Error("Select existing non-system application roles")
+        }
+        const user = await client.query(
+          "SELECT id FROM identity.users WHERE id = $1 FOR KEY SHARE",
+          [userId]
+        )
+        if (!user.rowCount)
+          throw new Error("The selected staff account no longer exists")
+        await client.query(
+          `INSERT INTO identity.user_roles (user_id, role_id, assigned_by_user_id)
+           SELECT $1, unnest($2::uuid[]), $3
+           ON CONFLICT (user_id, role_id) DO NOTHING`,
+          [userId, roles.rows.map((role) => role.id), actorUserId]
+        )
+        await appendAccessAuditChanges(
+          client,
+          roles.rows.map((role) => ({
+            actorUserId,
+            eventType: "access.role.assigned",
+            metadata: { roleKey: role.key },
+            targetId: userId,
+            targetTable: "users",
+          }))
+        )
+        await client.query("COMMIT")
+      } catch (error) {
+        await client.query("ROLLBACK")
+        throw error
+      } finally {
+        client.release()
+      }
+    },
+
     async createRole({
       actorUserId,
       description,
