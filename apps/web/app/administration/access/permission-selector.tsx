@@ -84,7 +84,7 @@ export function PermissionSelector({
   }
 
   return (
-    <FieldSet className="gap-3 rounded-lg border p-3">
+    <FieldSet className="min-w-0 gap-3 rounded-lg border p-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <FieldLegend>Capabilities</FieldLegend>
@@ -118,28 +118,29 @@ export function PermissionSelector({
         ) : null}
       </div>
 
-      <div className="rounded-lg border">
+      <div className="min-w-0 rounded-lg border">
         <OperationalTable
+          className="min-w-[44rem] table-fixed"
           containerClassName="max-h-[min(34rem,calc(100svh-16rem))]"
           filterStorageKey="access-administration-permissions"
         >
           <TableHeader className="sticky top-0 z-10 bg-background">
             <TableRow>
-              <TableHead className="w-48">Main Module</TableHead>
-              <TableHead className="w-48">Sub Module</TableHead>
-              <TableHead className="w-24">Type</TableHead>
+              <TableHead className="w-[18%]">Main Module</TableHead>
+              <TableHead className="w-[18%]">Sub Module</TableHead>
+              <TableHead className="w-20">Type</TableHead>
               <TableHead>Page / Task</TableHead>
-              <TableHead className="w-52">Access</TableHead>
+              <TableHead className="sticky right-0 w-48 bg-muted">Access</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {visibleRows.length ? (
               visibleRows.map((row) => (
                 <TableRow key={row.id}>
-                  <TableCell className="text-muted-foreground capitalize">
+                  <TableCell className="wrap-anywhere whitespace-normal text-muted-foreground capitalize">
                     {row.module}
                   </TableCell>
-                  <TableCell>{row.submodule}</TableCell>
+                  <TableCell className="wrap-anywhere whitespace-normal">{row.submodule}</TableCell>
                   <TableCell>
                     <Badge
                       variant={row.kind === "page" ? "default" : "outline"}
@@ -147,7 +148,7 @@ export function PermissionSelector({
                       {row.kind === "page" ? "Page" : "Task"}
                     </Badge>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="wrap-anywhere whitespace-normal">
                     <span className="font-medium">{row.label}</span>
                     {row.href ? (
                       <span className="block text-xs text-muted-foreground">
@@ -155,7 +156,7 @@ export function PermissionSelector({
                       </span>
                     ) : null}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="sticky right-0 bg-card">
                     <AccessChip
                       onActionToggle={(action) => toggleAction(row, action)}
                       onPresetChange={(level) => setAccess(row.id, level)}
@@ -208,12 +209,12 @@ function AccessChip({
       <PopoverTrigger asChild>
         <Button
           aria-label={`${row.label} access: ${summary}`}
-          className="h-8 w-full min-w-44 justify-between rounded-full px-3 text-xs font-medium"
+          className="h-8 w-full min-w-0 justify-between rounded-full px-3 text-xs font-medium"
           size="sm"
           type="button"
           variant={level === "none" ? "outline" : "secondary"}
         >
-          <span className="max-w-40 truncate">{summary}</span>
+          <span className="min-w-0 truncate">{summary}</span>
           <ChevronDown className="size-3.5" />
         </Button>
       </PopoverTrigger>
