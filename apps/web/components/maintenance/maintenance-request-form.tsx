@@ -2,7 +2,7 @@ import { Camera, Send } from "lucide-react"
 
 import { Button } from "@workspace/ui/components/button"
 import {
- SectionCard,
+  SectionCard,
   CardContent,
   CardHeader,
   CardTitle,
@@ -22,14 +22,16 @@ import { Textarea } from "@workspace/ui/components/textarea"
 import { submitMaintenanceRequestAction } from "@/app/maintenance/actions"
 
 export function MaintenanceRequestForm({
-  department,
+  departments,
+  isSystemAdministrator,
   requesterName,
 }: {
-  department: string
+  departments: readonly string[]
+  isSystemAdministrator: boolean
   requesterName: string
 }) {
   return (
- <SectionCard>
+    <SectionCard>
       <CardHeader className="border-b border-border/70 pb-4">
         <CardTitle>New Maintenance Request</CardTitle>
       </CardHeader>
@@ -48,11 +50,44 @@ export function MaintenanceRequestForm({
                 value={requesterName}
               />
             </Field>
-            <Field>
+            <Field className="relative min-w-0">
               <FieldLabel htmlFor="maintenance-department">
                 Department
               </FieldLabel>
-              <Input id="maintenance-department" readOnly value={department} />
+              {departments.length === 1 ? (
+                <Input
+                  id="maintenance-department"
+                  name="department"
+                  readOnly
+                  value={departments[0]}
+                />
+              ) : (
+                <NativeSelect
+                  aria-label="Department"
+                  aria-describedby="maintenance-department-help"
+                  className="w-full"
+                  defaultValue=""
+                  id="maintenance-department"
+                  name="department"
+                  required
+                >
+                  <NativeSelectOption value="">
+                    Select a department
+                  </NativeSelectOption>
+                  {departments.map((department) => (
+                    <NativeSelectOption key={department} value={department}>
+                      {department}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+              )}
+              <FieldDescription id="maintenance-department-help">
+                {isSystemAdministrator
+                  ? "System Administrator: choose an active department."
+                  : departments.length === 1
+                    ? "From your active Employee Master assignment."
+                    : "Choose from your active Employee Master departments."}
+              </FieldDescription>
             </Field>
             <Field>
               <FieldLabel htmlFor="maintenance-location">Location</FieldLabel>
@@ -130,6 +165,6 @@ export function MaintenanceRequestForm({
           </Button>
         </form>
       </CardContent>
- </SectionCard>
+    </SectionCard>
   )
 }
