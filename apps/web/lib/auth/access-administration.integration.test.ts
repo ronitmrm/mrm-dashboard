@@ -343,6 +343,109 @@ describe("access administration", () => {
     }
   })
 
+  it("replaces direct roles for only the selected staff account", async () => {
+    const system = createAuthSystem({
+      allowSignUp: true,
+      baseURL: "http://localhost:3001",
+      connectionString,
+      secret: "test-only-better-auth-secret-000000000000",
+    })
+    const provisioner = createInitialAdministratorProvisioner({
+      connectionString,
+    })
+    const access = createAccessAdministrationService({
+      auth: system.auth,
+      connectionString,
+    })
+
+    try {
+      const administrator = await system.auth.api.signUpEmail({
+        body: {
+          email: "administrator@mrmpl.test",
+          name: "System Administrator",
+          password: "test-only-password",
+        },
+      })
+      await provisioner.promote({
+        email: administrator.user.email,
+        userId: administrator.user.id,
+      })
+      const staff = await access.provisionStaff({
+        actorUserId: administrator.user.id,
+        email: "sales@mrmpl.test",
+        employeeCode,
+        organizationId,
+        password: "sales-test-password",
+      })
+      await access.createRole({
+        actorUserId: administrator.user.id,
+        key: "sales-marketing",
+        name: "Sales & Marketing",
+        permissionKeys: ["pricing.sales.read"],
+      })
+      await access.createRole({
+        actorUserId: administrator.user.id,
+        key: "design-team",
+        name: "Design Team",
+        permissionKeys: ["pricing.design.read"],
+      })
+      await access.assignRole({
+        actorUserId: administrator.user.id,
+        roleKey: "sales-marketing",
+        userId: administrator.user.id,
+      })
+      await access.assignRole({
+        actorUserId: administrator.user.id,
+        roleKey: "sales-marketing",
+        userId: staff.id,
+      })
+
+      await access.replaceDirectRoles({
+        actorUserId: administrator.user.id,
+        roleKeys: ["design-team"],
+        userId: staff.id,
+      })
+
+      const snapshot = await access.getSnapshot({
+        actorUserId: administrator.user.id,
+      })
+      expect(snapshot.users).toContainEqual(
+        expect.objectContaining({
+          id: staff.id,
+          roleKeys: ["design-team"],
+        })
+      )
+      expect(snapshot.users).toContainEqual(
+        expect.objectContaining({
+          id: administrator.user.id,
+          roleKeys: ["sales-marketing"],
+        })
+      )
+      const audit = await pool.query<{
+        event_type: string
+        target_id: string
+      }>(
+        `SELECT event_type, target_id
+         FROM audit.events
+         WHERE actor_user_id = $1
+           AND target_id = $2
+           AND event_type IN ('access.role.assigned', 'access.role.removed')
+         ORDER BY event_type`,
+        [administrator.user.id, staff.id]
+      )
+      expect(audit.rows).toEqual(
+        expect.arrayContaining([
+          { event_type: "access.role.assigned", target_id: staff.id },
+          { event_type: "access.role.removed", target_id: staff.id },
+        ])
+      )
+    } finally {
+      await access.close()
+      await provisioner.close()
+      await system.close()
+    }
+  })
+
   it("applies role capabilities and explicit user overrides", async () => {
     const system = createAuthSystem({
       allowSignUp: true,

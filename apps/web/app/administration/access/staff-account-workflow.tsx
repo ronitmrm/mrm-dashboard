@@ -39,6 +39,7 @@ type StaffAccount = {
   name: string
   email: string
   roleKeys: string[]
+  inheritedRoleKeys: string[]
 }
 
 type StaffWorkflowProps = {
@@ -177,7 +178,6 @@ function StaffRoleForm({
   roles: StaffWorkflowProps["roles"]
 }) {
   const [state, action, pending] = useActionState(assignStaffRolesAction, {})
-  const available = roles.some((role) => !user.roleKeys.includes(role.key))
   return (
     <form action={action}>
       <input type="hidden" name="userId" value={user.id} />
@@ -185,8 +185,8 @@ function StaffRoleForm({
         <FieldSet className="min-w-0" disabled={pending}>
           <FieldLegend variant="label">Application Roles</FieldLegend>
           <FieldDescription>
-            Select one or more roles to add. Existing direct and inherited post
-            roles are kept.
+            Select the complete set of direct roles. Changes apply only to this
+            staff account; post-inherited roles stay unchanged.
           </FieldDescription>
           <FieldGroup className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {roles.map((role) => {
@@ -195,21 +195,20 @@ function StaffRoleForm({
                 <Field
                   key={`${role.key}:${assigned}`}
                   orientation="horizontal"
-                  data-disabled={assigned || pending}
+                  data-disabled={pending}
                 >
                   <Checkbox
                     id={`staff-role-${role.key}`}
                     name="roleKeys"
                     value={role.key}
                     defaultChecked={assigned}
-                    disabled={assigned || pending}
+                    disabled={pending}
                   />
                   <FieldLabel
                     className="min-w-0 flex-wrap"
                     htmlFor={`staff-role-${role.key}`}
                   >
                     {role.name}
-                    {assigned ? " · assigned" : ""}
                   </FieldLabel>
                 </Field>
               )
@@ -222,13 +221,19 @@ function StaffRoleForm({
             </FieldDescription>
           ) : null}
         </FieldSet>
+        {user.inheritedRoleKeys.length ? (
+          <FieldDescription>
+            Inherited from current post (not editable here):{" "}
+            {user.inheritedRoleKeys.join(", ")}.
+          </FieldDescription>
+        ) : null}
         <StaffFeedback state={state} />
         <Button
           className="w-fit"
           type="submit"
-          disabled={pending || !available}
+          disabled={pending || !roles.length}
         >
-          {pending ? "Assigning…" : "Assign Selected Roles"}
+          {pending ? "Saving…" : "Save Direct Roles"}
         </Button>
       </FieldGroup>
     </form>
@@ -250,7 +255,7 @@ export function StaffAccountWorkflow(props: StaffWorkflowProps) {
           className="scroll-mt-20"
         >
           <CardHeader className="border-b">
-            <CardTitle>2. Assign Roles</CardTitle>
+            <CardTitle>2. Assign or Edit Roles</CardTitle>
             <CardDescription>
               Choose the newly created or an existing staff account, then add
               the roles required for that employee.
@@ -261,7 +266,7 @@ export function StaffAccountWorkflow(props: StaffWorkflowProps) {
               <StaffFeedback
                 state={{
                   success:
-                    "Account created. Choose its application roles below.",
+                    "Account created and linked. Choose its direct roles below.",
                 }}
               />
             ) : null}

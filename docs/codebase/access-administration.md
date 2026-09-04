@@ -21,7 +21,9 @@
   employee number), assigned roles and overrides. It does not repeat every
   occupied department/post. Each direct or inherited role chip opens that role's
   rights with a return link to Staff Access. Existing edit capabilities still
-  control editing; system roles expose their assigned rights read-only.
+  control editing; system roles expose their assigned rights read-only. The
+  staff-account editor replaces only the selected account's direct roles and
+  lists post-inherited roles separately as non-editable context.
 - Users without Create Role access default to Application Roles. All existing
   server-side page/task guards remain unchanged; tabs do not grant permissions.
 - Navigation uses the shared `radix-luma` Tabs primitive with keyboard support
@@ -35,11 +37,13 @@
    new login is linked automatically. Staff credentials cannot be provisioned
    without this employee reference. Passwords are never returned in action state
    or audit data.
-2. Select one or more existing non-system Application Roles for the newly created
-   or an existing staff account. The repository
-   validates the entire selection before an atomic, additive grant and audit.
-   Other direct roles and post-inherited roles remain unchanged. System roles
-   cannot be selected or forged into this batch operation.
+2. Select the complete set of existing non-system Application Roles for the
+   newly created or an existing staff account. The repository validates the
+   entire selection before atomically replacing only that account's direct role
+   assignments and auditing each addition or removal. Other staff accounts and
+   post-inherited roles remain unchanged. System roles cannot be selected or
+   forged into this operation. An empty selection removes all direct roles from
+   the selected account.
 
 Provision and Assign Staff Role remain independent task capabilities, checked in
 both server actions and service methods. The legacy Link Staff Account capability
