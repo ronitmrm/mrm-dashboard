@@ -61,7 +61,6 @@ export type StaffActionState = { error?: string; success?: string }
 function staffActionError(error: unknown): StaffActionState {
   const message = error instanceof Error ? error.message : ""
   const expected = [
-    "Staff name is required",
     "Password must contain at least 6 characters",
     "Select at least one application role",
     "Select existing non-system application roles",
@@ -100,7 +99,7 @@ export async function provisionStaffAction(
         const user = await access.provisionStaff({
           actorUserId,
           email: requiredText(formData, "email").toLowerCase(),
-          name: requiredText(formData, "name"),
+          ...employeeReference(formData),
           password,
         })
         return { userId: user.id }

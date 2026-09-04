@@ -14,11 +14,10 @@ type CreateAccessAdministrationServiceOptions = {
 type ProvisionStaffInput = {
   actorUserId: string
   email: string
+  employeeCode: string
+  organizationId: string
   password: string
-} & (
-  | { name: string; employeeCode?: never; organizationId?: never }
-  | { name?: never; employeeCode: string; organizationId: string }
-)
+}
 
 const roleKeyPattern = /^[a-z][a-z0-9-]*$/
 
@@ -106,7 +105,6 @@ export function createAccessAdministrationService({
     async provisionStaff({
       actorUserId,
       email,
-      name,
       employeeCode,
       organizationId,
       password,
@@ -116,39 +114,30 @@ export function createAccessAdministrationService({
         administrationTaskCapabilities.provisionStaff
       )
 
-      const employee =
-        employeeCode !== undefined
-          ? await access.employeeForAccount({ employeeCode, organizationId })
-          : null
-      const accountName = employee?.name ?? name?.trim()
-      if (!accountName) throw new Error("Staff name is required")
+      const employee = await access.employeeForAccount({
+        employeeCode,
+        organizationId,
+      })
       if (password.length < 6)
         throw new Error("Password must contain at least 6 characters")
 
       const created = await auth.api.createUser({
         body: {
           email: email.trim().toLowerCase(),
-          name: accountName,
+          name: employee.name,
           password,
           role: "user",
         },
       })
 
       try {
-        if (employee) {
-          await access.linkEmployeeUser({
-            accountOrigin: "new",
-            actorUserId,
-            employeeCode: employee.employeeCode,
-            organizationId: employee.organizationId,
-            userId: created.user.id,
-          })
-        } else {
-          await access.recordStaffProvisioned({
-            actorUserId,
-            userId: created.user.id,
-          })
-        }
+        await access.linkEmployeeUser({
+          accountOrigin: "new",
+          actorUserId,
+          employeeCode: employee.employeeCode,
+          organizationId: employee.organizationId,
+          userId: created.user.id,
+        })
       } catch (error) {
         await auth.api.removeUser({ body: { userId: created.user.id } })
         throw error

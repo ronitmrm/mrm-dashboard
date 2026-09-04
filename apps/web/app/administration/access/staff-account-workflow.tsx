@@ -30,7 +30,6 @@ import {
 
 import {
   assignStaffRolesAction,
-  linkEmployeeAction,
   provisionStaffAction,
   type StaffActionState,
 } from "./actions"
@@ -40,14 +39,11 @@ type StaffAccount = {
   name: string
   email: string
   roleKeys: string[]
-  employeeCode: string | null
-  isSystemAdministrator: boolean
 }
 
 type StaffWorkflowProps = {
   canProvision: boolean
   canAssignRoles: boolean
-  canLinkEmployee: boolean
   created: boolean
   selectedUserId?: string
   users: StaffAccount[]
@@ -72,30 +68,61 @@ function StaffFeedback({ state }: { state: StaffActionState }) {
   )
 }
 
-function CreateStaffAccountForm() {
+function CreateStaffAccountForm({
+  employees,
+}: {
+  employees: StaffWorkflowProps["employees"]
+}) {
   const [state, action, pending] = useActionState(provisionStaffAction, {})
+  const unavailable = !employees.length
   return (
     <SectionCard size="sm">
       <CardHeader className="border-b">
-        <CardTitle>1. Create Staff Account</CardTitle>
+        <CardTitle>1. Select Employee &amp; Create Account</CardTitle>
         <CardDescription>
-          Create the login first. Assign roles below; Employee Master linking is
-          optional.
+          Credentials can only be created for an active Employee Master record.
+          The account is linked automatically.
         </CardDescription>
       </CardHeader>
       <CardContent>
         <form action={action}>
           <FieldGroup className="gap-4">
             <FieldGroup className="grid gap-4 md:grid-cols-3">
-              <Field>
-                <FieldLabel htmlFor="staff-name">Staff Name</FieldLabel>
-                <Input
-                  id="staff-name"
-                  name="name"
-                  autoComplete="name"
+              <Field
+                className="relative min-w-0"
+                data-disabled={pending || unavailable}
+              >
+                <FieldLabel htmlFor="staff-employee">Employee</FieldLabel>
+                <NativeSelect
+                  aria-label="Employee"
+                  className="w-full"
+                  id="staff-employee"
+                  name="employee"
+                  defaultValue=""
                   required
-                  disabled={pending}
-                />
+                  disabled={pending || unavailable}
+                >
+                  <NativeSelectOption value="">
+                    Select an employee
+                  </NativeSelectOption>
+                  {employees.map((employee) => (
+                    <NativeSelectOption
+                      key={`${employee.organizationId}:${employee.employeeCode}`}
+                      value={JSON.stringify({
+                        employeeCode: employee.employeeCode,
+                        organizationId: employee.organizationId,
+                      })}
+                    >
+                      {employee.employeeName} · #{employee.employeeCode} ·{" "}
+                      {employee.organizationName}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+                <FieldDescription>
+                  {employees.length
+                    ? "Only active employees without a login are available."
+                    : "No eligible employees without a login. Add the employee to Employee Master first."}
+                </FieldDescription>
               </Field>
               <Field>
                 <FieldLabel htmlFor="staff-email">Email / Login ID</FieldLabel>
@@ -105,7 +132,7 @@ function CreateStaffAccountForm() {
                   type="email"
                   autoComplete="off"
                   required
-                  disabled={pending}
+                  disabled={pending || unavailable}
                 />
               </Field>
               <Field>
@@ -119,7 +146,7 @@ function CreateStaffAccountForm() {
                   minLength={6}
                   autoComplete="new-password"
                   required
-                  disabled={pending}
+                  disabled={pending || unavailable}
                 />
                 <FieldDescription>
                   At least 6 characters. Share securely with the staff member.
@@ -127,7 +154,11 @@ function CreateStaffAccountForm() {
               </Field>
             </FieldGroup>
             <StaffFeedback state={state} />
-            <Button className="w-fit" type="submit" disabled={pending}>
+            <Button
+              className="w-fit"
+              type="submit"
+              disabled={pending || unavailable}
+            >
               <UserRoundPlus data-icon="inline-start" />
               {pending ? "Creating account…" : "Create Account & Continue"}
             </Button>
@@ -204,99 +235,25 @@ function StaffRoleForm({
   )
 }
 
-function EmployeeLinkForm({
-  user,
-  employees,
-}: {
-  user: StaffAccount
-  employees: StaffWorkflowProps["employees"]
-}) {
-  const [state, action, pending] = useActionState(linkEmployeeAction, {})
-  return (
-    <FieldGroup className="gap-4">
-      {user.isSystemAdministrator ? (
-        <FieldDescription>
-          System Administrator stays separate from Employee Master and can
-          submit maintenance requests without a link.
-        </FieldDescription>
-      ) : user.employeeCode ? (
-        <FieldDescription>
-          Linked to Employee #{user.employeeCode}. Current post roles apply
-          alongside direct roles.
-        </FieldDescription>
-      ) : (
-        <form action={action}>
-          <input type="hidden" name="userId" value={user.id} />
-          <FieldGroup className="gap-4">
-            <Field
-              className="relative min-w-0"
-              data-disabled={pending || !employees.length}
-            >
-              <FieldLabel htmlFor="staff-link-employee">Employee</FieldLabel>
-              <NativeSelect
-                aria-label="Employee"
-                className="w-full"
-                id="staff-link-employee"
-                name="employee"
-                defaultValue=""
-                required
-                disabled={pending || !employees.length}
-              >
-                <NativeSelectOption value="">
-                  Select an employee
-                </NativeSelectOption>
-                {employees.map((employee) => (
-                  <NativeSelectOption
-                    key={`${employee.organizationId}:${employee.employeeCode}`}
-                    value={JSON.stringify({
-                      employeeCode: employee.employeeCode,
-                      organizationId: employee.organizationId,
-                    })}
-                  >
-                    {employee.employeeName} · #{employee.employeeCode} ·{" "}
-                    {employee.organizationName}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-              <FieldDescription>
-                {employees.length
-                  ? "Enables department-based workflows and current post role inheritance."
-                  : "No unlinked active employees available. The account can still use its assigned roles."}
-              </FieldDescription>
-            </Field>
-            <Button
-              className="w-fit"
-              variant="outline"
-              type="submit"
-              disabled={pending || !employees.length}
-            >
-              {pending ? "Linking…" : "Link Employee"}
-            </Button>
-          </FieldGroup>
-        </form>
-      )}
-      <StaffFeedback state={state} />
-    </FieldGroup>
-  )
-}
-
 export function StaffAccountWorkflow(props: StaffWorkflowProps) {
   const [userId, setUserId] = useState(props.selectedUserId ?? "")
   const user = props.users.find((user) => user.id === userId)
   return (
     <>
-      {props.canProvision ? <CreateStaffAccountForm /> : null}
-      {props.canAssignRoles || props.canLinkEmployee ? (
+      {props.canProvision ? (
+        <CreateStaffAccountForm employees={props.employees} />
+      ) : null}
+      {props.canAssignRoles ? (
         <SectionCard
           size="sm"
           id="staff-role-assignment"
           className="scroll-mt-20"
         >
           <CardHeader className="border-b">
-            <CardTitle>2. Assign Account Roles</CardTitle>
+            <CardTitle>2. Assign Roles</CardTitle>
             <CardDescription>
-              Choose a newly created or existing login. No employee link is
-              needed to assign roles.
+              Choose the newly created or an existing staff account, then add
+              the roles required for that employee.
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
@@ -342,30 +299,6 @@ export function StaffAccountWorkflow(props: StaffWorkflowProps) {
                 </Link>
               </Button>
             ) : null}
-          </CardContent>
-        </SectionCard>
-      ) : null}
-      {props.canLinkEmployee ? (
-        <SectionCard size="sm">
-          <CardHeader className="border-b">
-            <CardTitle>3. Link Employee / Posts (Optional)</CardTitle>
-            <CardDescription>
-              Connect the selected login to Employee Master when employee-based
-              access is needed.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {user ? (
-              <EmployeeLinkForm
-                key={user.id}
-                user={user}
-                employees={props.employees}
-              />
-            ) : (
-              <FieldDescription>
-                Select a staff account above to link an employee.
-              </FieldDescription>
-            )}
           </CardContent>
         </SectionCard>
       ) : null}

@@ -114,20 +114,6 @@ export function createAccessAdministrationRepository(
   return {
     close,
 
-    async recordStaffProvisioned(input: {
-      actorUserId: string
-      userId: string
-    }) {
-      await appendAccessAuditChanges(pool, [
-        {
-          actorUserId: input.actorUserId,
-          eventType: "access.user.provisioned",
-          targetId: input.userId,
-          targetTable: "users",
-        },
-      ])
-    },
-
     async assignRoles({
       actorUserId,
       roleKeys,
