@@ -18,6 +18,7 @@ import {
   ListChecks,
   LayoutDashboard,
   Search,
+  TableProperties,
   Wrench,
   X,
 } from "lucide-react"
@@ -74,8 +75,10 @@ import {
 
 const storageKey = "mrmpl:sidebar:expanded-modules"
 const stateChangedEvent = "mrmpl:sidebar:expanded-modules-changed"
+const topLevelButtonClassName =
+  "h-10 rounded-lg px-3 font-medium text-sidebar-foreground/85 transition-[transform,background-color,color,box-shadow] duration-[var(--dur-fast)] hover:translate-x-0.5 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground data-[active=true]:bg-[var(--color-brand-tint)] data-[active=true]:font-semibold data-[active=true]:text-sidebar-foreground data-[active=true]:shadow-[inset_3px_0_0_var(--sidebar-primary)] data-[active=true]:hover:bg-[var(--color-brand-tint)]"
 const submoduleButtonClassName =
-  "group/submodule h-8 rounded-md px-2.5 text-sidebar-foreground/70 transition-[background-color,color] duration-[var(--dur-fast)] hover:bg-sidebar-accent hover:text-sidebar-foreground data-[active=true]:bg-sidebar-accent data-[active=true]:font-semibold data-[active=true]:text-sidebar-foreground"
+  "group/submodule h-8 rounded-md px-2.5 text-sidebar-foreground/70 transition-[transform,background-color,color,box-shadow] duration-[var(--dur-fast)] hover:translate-x-0.5 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground data-[active=true]:bg-[var(--color-brand-tint)] data-[active=true]:font-semibold data-[active=true]:text-sidebar-foreground data-[active=true]:shadow-[inset_3px_0_0_var(--sidebar-primary)] data-[active=true]:hover:bg-[var(--color-brand-tint)]"
 
 type SectionId = SidebarSectionId
 type ExpandedSections = ExpandedSidebarSections
@@ -86,7 +89,6 @@ const productionSectionIds: Record<ProductionFloorCode, SectionId> = {
   cnc: "productionCnc",
   forging: "productionForging",
 }
-
 function defaultExpandedSections(
   pathname: string,
   activeProductionFloor: ProductionFloorCode,
@@ -271,6 +273,7 @@ export function UnifiedSidebarNavigation({
   const visibleMasterDataNavigation = [
     {
       destination: "/masters",
+      icon: Database,
       id: "masterSelection" as const,
       title: "Master Selection" as const,
     },
@@ -279,7 +282,7 @@ export function UnifiedSidebarNavigation({
       pathname,
       productionFloorCode: activeProductionFloor,
       searchParams,
-    }),
+    }).map((item) => ({ ...item, icon: TableProperties })),
   ]
   const filteredMasterDataNavigation = visibleMasterDataNavigation.filter(
     (item) =>
@@ -312,6 +315,7 @@ export function UnifiedSidebarNavigation({
     .map((item) => ({
       dashboardTabId: item.id,
       destination: item.href,
+      icon: item.icon,
       id: item.id,
       title: item.title,
     }))
@@ -362,7 +366,7 @@ export function UnifiedSidebarNavigation({
             aria-label="Search navigation menu"
             className="h-10 rounded-lg border-sidebar-border bg-background pr-16 pl-9 shadow-none"
             onChange={(event) => setMenuSearch(event.target.value)}
-            placeholder="Search menu..."
+            placeholder="Search menu…"
             ref={searchInputRef}
             type="search"
             value={menuSearch}
@@ -377,7 +381,7 @@ export function UnifiedSidebarNavigation({
               }}
               type="button"
             >
-              <X className="size-3.5" />
+              <X aria-hidden="true" className="size-3.5" />
             </button>
           ) : (
             <kbd className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 rounded border border-sidebar-border bg-sidebar-accent/70 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
@@ -394,11 +398,11 @@ export function UnifiedSidebarNavigation({
               <SidebarMenuItem>
                 <SidebarMenuButton
                   asChild
-                  className="h-10 rounded-lg px-3 font-medium hover:bg-sidebar-accent hover:text-sidebar-foreground data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-foreground data-[active=true]:shadow-[inset_2px_0_0_var(--sidebar-primary)]"
+                  className={topLevelButtonClassName}
                   isActive={pathname === personalDashboardNavigation.href}
                 >
                   <a href={personalDashboardNavigation.href}>
-                    <LayoutDashboard />
+                    <LayoutDashboard aria-hidden="true" />
                     <span>{personalDashboardNavigation.label}</span>
                   </a>
                 </SidebarMenuButton>
@@ -442,7 +446,7 @@ export function UnifiedSidebarNavigation({
                 }
               >
                 <a href={item.destination}>
-                  <SubmoduleBranch />
+                  <item.icon aria-hidden="true" />
                   <span>{item.title}</span>
                 </a>
               </SidebarMenuSubButton>
@@ -487,7 +491,7 @@ export function UnifiedSidebarNavigation({
                 }
               >
                 <a href={item.destination}>
-                  <SubmoduleBranch />
+                  <item.icon aria-hidden="true" />
                   <span>{item.title}</span>
                 </a>
               </SidebarMenuSubButton>
@@ -520,7 +524,7 @@ export function UnifiedSidebarNavigation({
                 )}
               >
                 <a href={item.href}>
-                  <SubmoduleBranch />
+                  <item.icon aria-hidden="true" />
                   <span>{item.label}</span>
                 </a>
               </SidebarMenuSubButton>
@@ -556,7 +560,7 @@ export function UnifiedSidebarNavigation({
                 }
               >
                 <a href={item.href}>
-                  <SubmoduleBranch />
+                  <item.icon aria-hidden="true" />
                   <span>{item.label}</span>
                 </a>
               </SidebarMenuSubButton>
@@ -589,7 +593,7 @@ export function UnifiedSidebarNavigation({
                 )}
               >
                 <a href={item.href}>
-                  <SubmoduleBranch />
+                  <item.icon aria-hidden="true" />
                   <span>{item.label}</span>
                 </a>
               </SidebarMenuSubButton>
@@ -622,7 +626,7 @@ export function UnifiedSidebarNavigation({
                 )}
               >
                 <a href={item.href}>
-                  <SubmoduleBranch />
+                  <item.icon aria-hidden="true" />
                   <span>{item.label}</span>
                 </a>
               </SidebarMenuSubButton>
@@ -663,12 +667,12 @@ export function UnifiedSidebarNavigation({
                       onClick={() => onDashboardTabSelect(item.id, floor.code)}
                       type="button"
                     >
-                      <SubmoduleBranch />
+                      <item.icon aria-hidden="true" />
                       <span>{item.title}</span>
                     </button>
                   ) : (
                     <a href={productionNavigationHref(item.id, floor.code)}>
-                      <SubmoduleBranch />
+                      <item.icon aria-hidden="true" />
                       <span>{item.title}</span>
                     </a>
                   )}
@@ -687,7 +691,7 @@ export function UnifiedSidebarNavigation({
                 <SidebarMenuItem key={item.id}>
                   <SidebarMenuButton
                     asChild
-                    className="h-10 rounded-lg px-3 font-medium hover:bg-sidebar-accent hover:text-sidebar-foreground data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-foreground data-[active=true]:shadow-[inset_2px_0_0_var(--sidebar-primary)]"
+                    className={topLevelButtonClassName}
                     isActive={activeDashboardTab === item.id}
                   >
                     {onDashboardTabSelect ? (
@@ -697,7 +701,7 @@ export function UnifiedSidebarNavigation({
                         }
                         type="button"
                       >
-                        <item.icon />
+                        <item.icon aria-hidden="true" />
                         <span>{item.title}</span>
                       </button>
                     ) : (
@@ -707,7 +711,7 @@ export function UnifiedSidebarNavigation({
                           activeProductionFloor
                         )}
                       >
-                        <item.icon />
+                        <item.icon aria-hidden="true" />
                         <span>{item.title}</span>
                       </a>
                     )}
@@ -727,7 +731,7 @@ export function UnifiedSidebarNavigation({
                 <SidebarMenuItem key={item.href}>
                   <SidebarMenuButton
                     asChild
-                    className="h-10 rounded-lg px-3 font-medium hover:bg-sidebar-accent hover:text-sidebar-foreground data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-foreground data-[active=true]:shadow-[inset_2px_0_0_var(--sidebar-primary)]"
+                    className={topLevelButtonClassName}
                     isActive={navigationHrefMatches(
                       pathname,
                       searchParams,
@@ -735,7 +739,7 @@ export function UnifiedSidebarNavigation({
                     )}
                   >
                     <a href={item.href}>
-                      <item.icon />
+                      <item.icon aria-hidden="true" />
                       <span>{item.label}</span>
                     </a>
                   </SidebarMenuButton>
@@ -826,15 +830,15 @@ function NavigationSection({
     >
       <SidebarGroup className="p-0">
         <SidebarMenu>
-          <SidebarMenuItem className="overflow-hidden rounded-lg transition-colors group-data-[state=open]/collapsible:bg-sidebar-accent">
+          <SidebarMenuItem className="overflow-hidden rounded-lg">
             <CollapsibleTrigger asChild>
               <SidebarMenuButton
-                className="h-10 rounded-lg px-3 font-medium group-data-[state=open]/collapsible:text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-foreground data-[active=true]:shadow-[inset_2px_0_0_var(--sidebar-primary)]"
+                className={topLevelButtonClassName}
                 isActive={isActive}
                 title={label}
                 type="button"
               >
-                <Icon className="size-[18px]" />
+                <Icon aria-hidden="true" className="size-[18px]" />
                 <span className="truncate">{label}</span>
                 <span
                   aria-hidden="true"
@@ -843,14 +847,14 @@ function NavigationSection({
                   {submoduleCount}
                 </span>
                 <span className="flex size-6 shrink-0 origin-center items-center justify-center rounded-md text-muted-foreground transition-[transform,color] duration-[var(--dur-base)] group-data-[state=open]/collapsible:rotate-90 group-data-[state=open]/collapsible:text-sidebar-foreground">
-                  <ChevronRight className="size-3.5" />
+                  <ChevronRight aria-hidden="true" className="size-3.5" />
                 </span>
               </SidebarMenuButton>
             </CollapsibleTrigger>
             <CollapsibleContent className="sidebar-submenu-content">
               <SidebarMenuSub
                 aria-label={`${label} submodules`}
-                className="mx-5 mt-0 mb-1 gap-0 border-sidebar-primary/30 px-1 py-1"
+                className="mx-5 mt-0 mb-1 gap-0 border-l-0 px-1 py-1"
               >
                 {children}
               </SidebarMenuSub>
@@ -859,14 +863,5 @@ function NavigationSection({
         </SidebarMenu>
       </SidebarGroup>
     </Collapsible>
-  )
-}
-
-function SubmoduleBranch() {
-  return (
-    <span
-      aria-hidden="true"
-      className="h-px w-3 shrink-0 bg-sidebar-border transition-[background-color] duration-[var(--dur-fast)] group-hover/submodule:bg-sidebar-foreground/55 group-data-[active=true]/submodule:bg-sidebar-primary"
-    />
   )
 }
