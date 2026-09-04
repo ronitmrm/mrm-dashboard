@@ -17,13 +17,13 @@
   Post profiles and the staff register.
   The post selector shows its linked designation
   and occupant; the duplicate review dropdown is omitted.
-- Staff Access uses three bounded, wrapping columns: staff identity (including
-  employee number), assigned roles and overrides. It does not repeat every
-  occupied department/post. Each direct or inherited role chip opens that role's
-  rights with a return link to Staff Access. Existing edit capabilities still
-  control editing; system roles expose their assigned rights read-only. The
-  staff-account editor replaces only the selected account's direct roles and
-  lists post-inherited roles separately as non-editable context.
+- Staff Access uses separate, filterable Employee ID, employee identity,
+  designation, department, assigned roles, overrides and action columns. Each
+  direct or inherited role chip labels its source and opens that role's rights
+  with a return link to Staff Access. Existing edit capabilities still control
+  editing; system roles expose their assigned rights read-only. The staff-account
+  editor replaces only the selected account's direct roles and lists
+  post-inherited roles separately as non-editable context.
 - Users without Create Role access default to Application Roles. All existing
   server-side page/task guards remain unchanged; tabs do not grant permissions.
 - Navigation uses the shared `radix-luma` Tabs primitive with keyboard support
@@ -71,8 +71,8 @@ and preserves other roles, with the existing server capability and audit checks.
 
 ## Role deletion
 
-Application Roles and the role badges in Staff Access expose the same **Delete
-Role Everywhere** command, not account deletion or single-staff unassignment.
+Application Roles exposes **Delete Role Everywhere**, not account deletion or
+single-staff unassignment. Staff Access role badges navigate to that role.
 The confirmation requires the exact role key. `administration.roles.delete`
 is an independent task grant, initially seeded only for the system administrator
 by migration 0114. Create/Edit permissions do not authorize deletion.

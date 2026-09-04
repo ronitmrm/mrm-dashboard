@@ -23,6 +23,8 @@ describe("StaffAccountWorkflow", () => {
             employeeName: "Khattar Ankit",
             organizationId: "organization-1",
             organizationName: "MRMPL",
+            departments: ["Design & Engineering"],
+            designations: ["Manager"],
           },
         ]}
       />
@@ -31,6 +33,11 @@ describe("StaffAccountWorkflow", () => {
     expect(markup).toContain("1. Select Employee &amp; Create Account")
     expect(markup).toContain('name="employee"')
     expect(markup).toContain("Khattar Ankit · #33 · MRMPL")
+    expect(markup).toContain("Design &amp; Engineering")
+    expect(markup).toContain("Manager")
+    expect(markup).toContain(
+      "Search by employee ID, name, designation or department."
+    )
     expect(markup).not.toContain('name="name"')
     expect(markup).not.toContain("Link Employee / Posts (Optional)")
   })
@@ -49,6 +56,9 @@ describe("StaffAccountWorkflow", () => {
             email: "sales@mrmpl.test",
             roleKeys: ["sales-marketing"],
             inheritedRoleKeys: [],
+            employeeCode: "62",
+            departments: ["Sales & Marketing"],
+            designations: ["Executive"],
           },
         ]}
         roles={[

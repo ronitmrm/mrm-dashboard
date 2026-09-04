@@ -1,7 +1,5 @@
 import Link from "next/link"
 
-import { ArrowUpRight, UsersRound } from "lucide-react"
-
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
@@ -12,13 +10,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@workspace/ui/components/empty"
 import { Field, FieldGroup, FieldLabel } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
 import {
@@ -43,6 +34,7 @@ import { PermissionSelector } from "./permission-selector"
 import { AccessWorkspaceTabs } from "./access-workspace-tabs"
 import { RoleDeleteControl } from "./role-delete-control"
 import { PostAccessProfileForm } from "./post-access-profile-form"
+import { StaffAccessRegister } from "./staff-access-register"
 import { StaffAccountWorkflow } from "./staff-account-workflow"
 
 export const dynamic = "force-dynamic"
@@ -158,6 +150,9 @@ export default async function AccessAdministrationPage({
             created={firstQueryValue(query.created) === "1"}
             selectedUserId={firstQueryValue(query.staff)}
             users={snapshot.users.map((user) => ({
+              departments: user.employee?.departments ?? [],
+              designations: user.employee?.designations ?? [],
+              employeeCode: user.employee?.employeeCode ?? null,
               id: user.id,
               name: user.name,
               email: user.email,
@@ -169,11 +164,15 @@ export default async function AccessAdministrationPage({
               .map(({ key, name }) => ({ key, name }))}
             employees={unlinkedEmployees.map(
               ({
+                departments,
+                designations,
                 employeeCode,
                 employeeName,
                 organizationId,
                 organizationName,
               }) => ({
+                departments,
+                designations,
                 employeeCode,
                 employeeName,
                 organizationId,
@@ -262,145 +261,22 @@ export default async function AccessAdministrationPage({
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {snapshot.users.length === 0 ? (
-                <Empty className="border">
-                  <EmptyHeader>
-                    <EmptyMedia variant="icon">
-                      <UsersRound />
-                    </EmptyMedia>
-                    <EmptyTitle>No Staff Accounts</EmptyTitle>
-                    <EmptyDescription>
-                      Provision The First Administrator With The Explicit Cli
-                      Command, Then Create Staff Accounts Here.
-                    </EmptyDescription>
-                  </EmptyHeader>
-                </Empty>
-              ) : (
-                <OperationalTable
-                  className="min-w-[40rem] table-fixed"
-                  filterStorageKey="access-administration-staff"
-                >
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[36%]">Staff Member</TableHead>
-                      <TableHead className="w-[40%]">Roles</TableHead>
-                      <TableHead className="w-[24%]">Overrides</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {snapshot.users.map((user) => (
-                      <TableRow key={user.id}>
-                        <TableCell className="align-top whitespace-normal">
-                          <div className="grid min-w-0 grid-cols-1 gap-0.5 wrap-anywhere">
-                            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                              <span className="font-medium">{user.name}</span>
-                              <span className="text-xs text-muted-foreground">
-                                {user.employee
-                                  ? `Employee #${user.employee.employeeCode}`
-                                  : "Not linked"}
-                              </span>
-                            </div>
-                            <span className="text-xs text-muted-foreground">
-                              {user.email}
-                            </span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="align-top whitespace-normal">
-                          <div className="flex flex-wrap gap-1.5">
-                            {user.roleKeys.length ||
-                            user.employee?.inheritedRoleKeys.length ? (
-                              [
-                                ...user.roleKeys.map((roleKey) => ({
-                                  key: roleKey,
-                                  source: "direct",
-                                })),
-                                ...(user.employee?.inheritedRoleKeys ?? []).map(
-                                  (roleKey) => ({
-                                    key: roleKey,
-                                    source: "post",
-                                  })
-                                ),
-                              ].map((role) => (
-                                <div
-                                  key={`${role.source}:${role.key}`}
-                                  className="flex max-w-full items-center gap-1"
-                                >
-                                  <Badge
-                                    asChild
-                                    variant="secondary"
-                                    className="h-auto min-h-7 min-w-0 shrink text-left whitespace-normal"
-                                  >
-                                    <Link
-                                      href={{
-                                        pathname: "/administration/access",
-                                        query: {
-                                          section: "roles",
-                                          role: role.key,
-                                          from: "staff",
-                                        },
-                                      }}
-                                      aria-label={`View ${role.key} rights (${role.source})`}
-                                    >
-                                      <span className="wrap-anywhere">
-                                        {role.key} · {role.source}
-                                      </span>
-                                      <ArrowUpRight data-icon="inline-end" />
-                                    </Link>
-                                  </Badge>
-                                  {canDeleteRole
-                                    ? snapshot.roles
-                                        .filter(
-                                          (item) =>
-                                            item.key === role.key &&
-                                            !item.isSystem
-                                        )
-                                        .map((item) => (
-                                          <RoleDeleteControl
-                                            key={item.id}
-                                            roleId={item.id}
-                                            roleKey={item.key}
-                                            roleName={item.name}
-                                            section="staff"
-                                          />
-                                        ))
-                                    : null}
-                                </div>
-                              ))
-                            ) : (
-                              <span className="text-sm text-muted-foreground">
-                                No Application Roles
-                              </span>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="align-top whitespace-normal">
-                          <div className="flex flex-wrap gap-1.5">
-                            {user.overrides.length ? (
-                              user.overrides.map((override) => (
-                                <Badge
-                                  key={override.permissionKey}
-                                  className="h-auto max-w-full wrap-anywhere whitespace-normal"
-                                  variant={
-                                    override.effect === "deny"
-                                      ? "destructive"
-                                      : "outline"
-                                  }
-                                >
-                                  {override.effect}: {override.permissionKey}
-                                </Badge>
-                              ))
-                            ) : (
-                              <span className="text-sm text-muted-foreground">
-                                No Overrides
-                              </span>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </OperationalTable>
-              )}
+              <StaffAccessRegister
+                canAssignRoles={grantedTasks.has(
+                  administrationTaskCapabilities.assignStaffRole
+                )}
+                users={snapshot.users.map((user) => ({
+                  departments: user.employee?.departments ?? [],
+                  designations: user.employee?.designations ?? [],
+                  email: user.email,
+                  employeeCode: user.employee?.employeeCode ?? null,
+                  id: user.id,
+                  inheritedRoleKeys: user.employee?.inheritedRoleKeys ?? [],
+                  name: user.name,
+                  overrides: user.overrides,
+                  roleKeys: user.roleKeys,
+                }))}
+              />
             </CardContent>
           </SectionCard>
         ) : null}

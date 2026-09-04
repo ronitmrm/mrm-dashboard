@@ -35,7 +35,10 @@ import {
 } from "./actions"
 
 type StaffAccount = {
+  departments: string[]
+  designations: string[]
   id: string
+  employeeCode: string | null
   name: string
   email: string
   roleKeys: string[]
@@ -50,6 +53,8 @@ type StaffWorkflowProps = {
   users: StaffAccount[]
   roles: { key: string; name: string }[]
   employees: {
+    departments: string[]
+    designations: string[]
     employeeCode: string
     employeeName: string
     organizationId: string
@@ -102,6 +107,7 @@ function CreateStaffAccountForm({
                   defaultValue=""
                   required
                   disabled={pending || unavailable}
+                  searchPlaceholder="Search ID, name, designation or department..."
                 >
                   <NativeSelectOption value="">
                     Select an employee
@@ -115,13 +121,15 @@ function CreateStaffAccountForm({
                       })}
                     >
                       {employee.employeeName} · #{employee.employeeCode} ·{" "}
-                      {employee.organizationName}
+                      {employee.organizationName} ·{" "}
+                      {employee.designations.join(", ")} ·{" "}
+                      {employee.departments.join(", ")}
                     </NativeSelectOption>
                   ))}
                 </NativeSelect>
                 <FieldDescription>
                   {employees.length
-                    ? "Only active employees without a login are available."
+                    ? "Search by employee ID, name, designation or department. Only active employees without a login are available."
                     : "No eligible employees without a login. Add the employee to Employee Master first."}
                 </FieldDescription>
               </Field>
@@ -278,16 +286,22 @@ export function StaffAccountWorkflow(props: StaffWorkflowProps) {
                 id="staff-account"
                 value={userId}
                 onChange={(event) => setUserId(event.target.value)}
+                searchPlaceholder="Search ID, name, designation or department..."
               >
                 <NativeSelectOption value="">
                   Select a staff account
                 </NativeSelectOption>
                 {props.users.map((user) => (
                   <NativeSelectOption key={user.id} value={user.id}>
-                    {user.name} · {user.email}
+                    {user.employeeCode ? `#${user.employeeCode} · ` : ""}
+                    {user.name} · {user.designations.join(", ") || "—"} ·{" "}
+                    {user.departments.join(", ") || "—"} · {user.email}
                   </NativeSelectOption>
                 ))}
               </NativeSelect>
+              <FieldDescription>
+                Search by employee ID, name, designation or department.
+              </FieldDescription>
             </Field>
             {user && props.canAssignRoles ? (
               <StaffRoleForm key={user.id} user={user} roles={props.roles} />
