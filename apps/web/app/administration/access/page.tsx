@@ -71,7 +71,6 @@ export default async function AccessAdministrationPage({
     await listGrantedCapabilities(session.user.id, [
       administrationTaskCapabilities.assignPostAccess,
       administrationTaskCapabilities.assignStaffRole,
-      administrationTaskCapabilities.linkStaffAccount,
       administrationTaskCapabilities.createRole,
       administrationTaskCapabilities.deleteRole,
       administrationTaskCapabilities.provisionStaff,
@@ -156,9 +155,6 @@ export default async function AccessAdministrationPage({
             canAssignRoles={grantedTasks.has(
               administrationTaskCapabilities.assignStaffRole
             )}
-            canLinkEmployee={grantedTasks.has(
-              administrationTaskCapabilities.linkStaffAccount
-            )}
             created={firstQueryValue(query.created) === "1"}
             selectedUserId={firstQueryValue(query.staff)}
             users={snapshot.users.map((user) => ({
@@ -166,8 +162,6 @@ export default async function AccessAdministrationPage({
               name: user.name,
               email: user.email,
               roleKeys: user.roleKeys,
-              employeeCode: user.employee?.employeeCode ?? null,
-              isSystemAdministrator: user.betterAuthRole === "admin",
             }))}
             roles={snapshot.roles
               .filter((role) => !role.isSystem)

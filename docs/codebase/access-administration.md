@@ -12,8 +12,9 @@
 - `Application Roles` is a filterable register. Opening a role uses
   `?section=roles&role=<key>` and renders only that role's editor; the register
   does not mount hidden permission selectors for every role.
-- `Staff Accounts` starts with login creation, direct role assignment and optional
-  Employee Master linking, then Approved Post profiles and the staff register.
+- `Staff Accounts` starts by selecting an eligible Employee Master record,
+  creating its linked login, and assigning direct roles, then shows Approved
+  Post profiles and the staff register.
   The post selector shows its linked designation
   and occupant; the duplicate review dropdown is omitted.
 - Staff Access uses three bounded, wrapping columns: staff identity (including
@@ -27,26 +28,25 @@
   and URL-backed selection. Role-register and permission filters retain separate
   browser-persisted filter keys.
 
-## Account-first staff setup
+## Employee-first staff setup
 
-1. Create a login with staff name, email/login ID and a temporary password. No
-   employee selection or roles are required. Success selects the created account
-   in the next step; passwords are never returned in action state or audit data.
-2. Select one or more existing non-system Application Roles. The repository
+1. Select an eligible, unlinked Employee Master record, then enter its email/login
+   ID and temporary password. The account name comes from Employee Master and the
+   new login is linked automatically. Staff credentials cannot be provisioned
+   without this employee reference. Passwords are never returned in action state
+   or audit data.
+2. Select one or more existing non-system Application Roles for the newly created
+   or an existing staff account. The repository
    validates the entire selection before an atomic, additive grant and audit.
    Other direct roles and post-inherited roles remain unchanged. System roles
    cannot be selected or forged into this batch operation.
-3. Optionally link that account to an eligible, unlinked Employee Master entry.
-   The existing employee uniqueness, current employment and System Administrator
-   exclusions remain server-enforced. Linking enables current-post inheritance;
-   it does not replace direct roles. Ordinary unlinked accounts still cannot use
-   workflows requiring an employee Department.
 
-Provision, Assign Staff Role and Link Staff Account remain independent task
-capabilities, checked in both server actions and service methods. Provisioning
-records `access.user.provisioned`; audit/link failure removes only the newly
-created account. The service retains its employee-first input for existing
-programmatic callers; the dashboard always uses the account-first input.
+Provision and Assign Staff Role remain independent task capabilities, checked in
+both server actions and service methods. The legacy Link Staff Account capability
+is retained only for controlled repair of pre-existing unlinked identities; it is
+not part of the dashboard workflow. Provisioning records both
+`access.user.provisioned` and `access.employee.linked`; audit/link failure removes
+only the newly created account.
 Shared Field, Checkbox, NativeSelect, Alert and SectionCard primitives provide
 pending states and safe inline feedback. The existing post profile editor stays
 available separately; role-name normalization is unchanged despite removing its
@@ -114,21 +114,21 @@ The live item-level inventory is the Access Administration table. With the
 managed staging catalogue at migration 0113 it contains 268 independently
 adjustable rows: 91 Pages and 177 Tasks from 314 registered permissions.
 
-| Main Module | Sub Module | Type | Page / Task | Applicable actions | Route | Backend/API handler | Existing permission | Stable permission source | Status |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Access Administration | Access Administration, Artifacts | 2 Pages / 10 Tasks | Access Administration, Artifacts, profile/staff commands, artifact deletion | View plus each visible command | `/administration/access`, `/administration/artifacts` | `app/administration/access/actions.ts`, artifact server helpers | administration and artifact keys | administration page/task catalogue | Covered |
-| Costing | Pricing, Product Parameter Costing, Sales, Technical Review, Design Tasks, Engineering Changes, Drawing History, Excel View | 16 Pages / 26 Tasks | Commercial pages and exact workflow buttons | View, create, edit, delete, import, upload, approve and workflow actions where present | `/commercial/**` | `app/commercial/**/actions.ts`, scoped route handlers | `pricing.*` | commercial page/task catalogues | Covered |
-| HR & Recruitment | Existing HR navigation labels | 5 Pages / 10 Tasks | Recruitment pages, interviews, jobs and exact workflow buttons | View, create, edit, delete, assign, schedule, record, close and withdraw where present | `/hr`, `/hr/**` | `app/hr/actions.ts`, approved-post export route | `hr.*` | HR page/task catalogues | Covered |
-| Machines | Machines | 1 Page | Machines | View | production dashboard route/tab | dashboard API boundary | operations machine capability | production page catalogue | Covered |
-| Maintenance | Requests and trade worklists | 1 Page / 7 Tasks | Requests, approval and trade tasks | View, approve and complete where present | `/maintenance/**` | maintenance server actions | `maintenance.*` | maintenance navigation plus registered task keys | Covered |
-| Master Data | Master Selection, Master Tables | 11 Pages / 23 Tasks | Commercial, HR, Store and Production master pages/tasks | View, create, edit, delete, rename and import where present | `/masters`, `/commercial/**`, `/hr`, dashboard tabs | domain server actions and dashboard API boundary | scoped `pricing.*`, `hr.*`, `store.*`, `operations.*`, `quality.*` | page/task catalogues and exact registered task keys | Covered |
-| Operational Entry | Entry Selection, Entry Tables | 4 Pages / 21 Tasks | Enquiries, purchase orders, attendance, training and production entry | View plus exact entry/workflow actions | `/operational-entry`, `/commercial/**`, dashboard tabs | commercial actions and dashboard API boundary | scoped pricing and operations keys | page/task catalogues and exact registered task keys | Covered |
-| PPAC Conventional-01 | Existing PPAC tabs | 11 Pages / 17 Tasks | Floor pages and production commands | View plus each exact production command | dashboard floor tabs | `app/api/[...path]/route.ts` and dashboard events | floor-scoped operations keys plus migrated server gates | floor page/task catalogues | Covered |
-| PPAC Conventional-02 | Existing PPAC tabs | 11 Pages / 17 Tasks | Floor pages and production commands | View plus each exact production command | dashboard floor tabs | `app/api/[...path]/route.ts` and dashboard events | floor-scoped operations keys plus migrated server gates | floor page/task catalogues | Covered |
-| PPAC CNC-01 | Existing PPAC tabs | 11 Pages / 17 Tasks | Floor pages and production commands | View plus each exact production command | dashboard floor tabs | `app/api/[...path]/route.ts` and dashboard events | floor-scoped operations keys plus migrated server gates | floor page/task catalogues | Covered |
-| PPAC Forging | Existing PPAC tabs | 11 Pages / 17 Tasks | Floor pages and production commands | View plus each exact production command | dashboard floor tabs | `app/api/[...path]/route.ts` and dashboard events | floor-scoped operations keys plus migrated server gates | floor page/task catalogues | Covered |
-| Production Dashboard | Production Dashboard | 1 Page / 2 Tasks | Dashboard and registered dashboard tasks | View plus exact task actions | `/` dashboard tabs | dashboard API and event authorization | granular operations keys | production page catalogue and registered tasks | Covered |
-| Store | Store Overview, Requests & Issues, New Item Requests, Purchase Register, Stock | 6 Pages / 10 Tasks | Store pages and exact request, receipt, purchase and asset commands | View, submit, issue, resolve, receive and lifecycle actions where present | `/store/**` | Store actions/routes using `requireStoreAction` | granular `store.*` | Store page/action catalogues | Covered |
+| Main Module           | Sub Module                                                                                                                  | Type                | Page / Task                                                                 | Applicable actions                                                                     | Route                                                  | Backend/API handler                                             | Existing permission                                                | Stable permission source                            | Status  |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------- | --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------ | --------------------------------------------------------------- | ------------------------------------------------------------------ | --------------------------------------------------- | ------- |
+| Access Administration | Access Administration, Artifacts                                                                                            | 2 Pages / 10 Tasks  | Access Administration, Artifacts, profile/staff commands, artifact deletion | View plus each visible command                                                         | `/administration/access`, `/administration/artifacts`  | `app/administration/access/actions.ts`, artifact server helpers | administration and artifact keys                                   | administration page/task catalogue                  | Covered |
+| Costing               | Pricing, Product Parameter Costing, Sales, Technical Review, Design Tasks, Engineering Changes, Drawing History, Excel View | 16 Pages / 26 Tasks | Commercial pages and exact workflow buttons                                 | View, create, edit, delete, import, upload, approve and workflow actions where present | `/commercial/**`                                       | `app/commercial/**/actions.ts`, scoped route handlers           | `pricing.*`                                                        | commercial page/task catalogues                     | Covered |
+| HR & Recruitment      | Existing HR navigation labels                                                                                               | 5 Pages / 10 Tasks  | Recruitment pages, interviews, jobs and exact workflow buttons              | View, create, edit, delete, assign, schedule, record, close and withdraw where present | `/hr`, `/hr/**`                                        | `app/hr/actions.ts`, approved-post export route                 | `hr.*`                                                             | HR page/task catalogues                             | Covered |
+| Machines              | Machines                                                                                                                    | 1 Page              | Machines                                                                    | View                                                                                   | production dashboard route/tab                         | dashboard API boundary                                          | operations machine capability                                      | production page catalogue                           | Covered |
+| Maintenance           | Requests and trade worklists                                                                                                | 1 Page / 7 Tasks    | Requests, approval and trade tasks                                          | View, approve and complete where present                                               | `/maintenance/**`                                      | maintenance server actions                                      | `maintenance.*`                                                    | maintenance navigation plus registered task keys    | Covered |
+| Master Data           | Master Selection, Master Tables                                                                                             | 11 Pages / 23 Tasks | Commercial, HR, Store and Production master pages/tasks                     | View, create, edit, delete, rename and import where present                            | `/masters`, `/commercial/**`, `/hr`, dashboard tabs    | domain server actions and dashboard API boundary                | scoped `pricing.*`, `hr.*`, `store.*`, `operations.*`, `quality.*` | page/task catalogues and exact registered task keys | Covered |
+| Operational Entry     | Entry Selection, Entry Tables                                                                                               | 4 Pages / 21 Tasks  | Enquiries, purchase orders, attendance, training and production entry       | View plus exact entry/workflow actions                                                 | `/operational-entry`, `/commercial/**`, dashboard tabs | commercial actions and dashboard API boundary                   | scoped pricing and operations keys                                 | page/task catalogues and exact registered task keys | Covered |
+| PPAC Conventional-01  | Existing PPAC tabs                                                                                                          | 11 Pages / 17 Tasks | Floor pages and production commands                                         | View plus each exact production command                                                | dashboard floor tabs                                   | `app/api/[...path]/route.ts` and dashboard events               | floor-scoped operations keys plus migrated server gates            | floor page/task catalogues                          | Covered |
+| PPAC Conventional-02  | Existing PPAC tabs                                                                                                          | 11 Pages / 17 Tasks | Floor pages and production commands                                         | View plus each exact production command                                                | dashboard floor tabs                                   | `app/api/[...path]/route.ts` and dashboard events               | floor-scoped operations keys plus migrated server gates            | floor page/task catalogues                          | Covered |
+| PPAC CNC-01           | Existing PPAC tabs                                                                                                          | 11 Pages / 17 Tasks | Floor pages and production commands                                         | View plus each exact production command                                                | dashboard floor tabs                                   | `app/api/[...path]/route.ts` and dashboard events               | floor-scoped operations keys plus migrated server gates            | floor page/task catalogues                          | Covered |
+| PPAC Forging          | Existing PPAC tabs                                                                                                          | 11 Pages / 17 Tasks | Floor pages and production commands                                         | View plus each exact production command                                                | dashboard floor tabs                                   | `app/api/[...path]/route.ts` and dashboard events               | floor-scoped operations keys plus migrated server gates            | floor page/task catalogues                          | Covered |
+| Production Dashboard  | Production Dashboard                                                                                                        | 1 Page / 2 Tasks    | Dashboard and registered dashboard tasks                                    | View plus exact task actions                                                           | `/` dashboard tabs                                     | dashboard API and event authorization                           | granular operations keys                                           | production page catalogue and registered tasks      | Covered |
+| Store                 | Store Overview, Requests & Issues, New Item Requests, Purchase Register, Stock                                              | 6 Pages / 10 Tasks  | Store pages and exact request, receipt, purchase and asset commands         | View, submit, issue, resolve, receive and lifecycle actions where present              | `/store/**`                                            | Store actions/routes using `requireStoreAction`                 | granular `store.*`                                                 | Store page/action catalogues                        | Covered |
 
 Broad compatibility keys are intentionally omitted from the UI after their
 grants and overrides are copied to granular keys by migrations 0077, 0085,

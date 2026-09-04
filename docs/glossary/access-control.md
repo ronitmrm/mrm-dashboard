@@ -1,11 +1,13 @@
 # Access Control Glossary
 
-**Staff Account**: A sign-in identity created with a name, email login ID and
-password. Creation grants no Application Roles. An administrator assigns one or
-more roles after creation; Employee Master linking is a separate optional step.
-Linking enables employee-dependent workflows and current Approved Post role
-inheritance, while preserving direct role assignments. System Administrator
-identities stay separate from Employee Master.
+**Staff Account**: A sign-in identity created only for an existing, active
+Employee Master record. The employee is selected first; the account name comes
+from Employee Master, and the new login is linked to that employee
+automatically. Creation grants no Application Roles. An administrator assigns
+one or more roles after account creation; current Approved Post role inheritance
+also applies through the automatic employee link. The protected System
+Administrator identity is the sole account that stays separate from Employee
+Master.
 
 **Application Role**: A reusable access profile assigned directly to a Staff
 Account or inherited from an Approved Post. Its access can be changed after the

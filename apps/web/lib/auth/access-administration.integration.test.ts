@@ -244,7 +244,7 @@ describe("access administration", () => {
     }
   })
 
-  it("lets a capable administrator provision a sign-in-ready staff account", async () => {
+  it("provisions and automatically links an Employee Master account", async () => {
     const system = createAuthSystem({
       allowSignUp: true,
       baseURL: "http://localhost:3001",
