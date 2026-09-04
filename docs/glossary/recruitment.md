@@ -3,6 +3,10 @@
 ## Employment Letter
 
 An immutable, generated PDF retained against one employment lifecycle record.
+The Offer Letter belongs to the Candidate through the Candidate Application that
+produced it. A Candidate's Offer Letter count is the number of completed,
+generated Offer Letter files across all of that Candidate's applications; it is
+derived from the retained letter history rather than stored as a mutable counter.
 The Offer Letter is issued after the candidate accepts the final joining terms;
 the Appointment Letter is issued only after the employee has joined and HR
 confirms probation completion; the Experience Letter is issued only after the

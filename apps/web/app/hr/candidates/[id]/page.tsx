@@ -121,13 +121,14 @@ export default async function CandidateWorkspacePage({
         ) : null}
       </section>
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
         {[
           ["Departments", candidate.departments.join(", ") || "—"],
           ["Designation", candidate.preferredDesignation ?? "—"],
           ["Current Company", candidate.currentCompany ?? "—"],
           ["Experience", candidate.experience ?? "—"],
           ["Source", candidate.source ?? "—"],
+          ["Offer Letters", String(candidate.offerLetterCount)],
         ].map(([label, value]) => (
  <SectionCard key={label}>
             <CardHeader className="pb-2">
