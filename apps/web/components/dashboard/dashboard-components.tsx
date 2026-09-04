@@ -24,7 +24,7 @@ import {
 import { Skeleton } from "@workspace/ui/components/skeleton"
 import { StandardState } from "@workspace/ui/components/standard-state"
 import { cn } from "@workspace/ui/lib/utils"
-import { PageHeader } from "@/components/ui/golden-patterns"
+import { PageHeader } from "../ui/golden-patterns"
 
 type DashboardTone = SemanticTone
 

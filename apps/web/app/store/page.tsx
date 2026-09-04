@@ -14,14 +14,14 @@ import {
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
- SectionCard,
+  SectionCard,
   CardContent,
   CardHeader,
   CardTitle,
   MetricCard,
 } from "@workspace/ui/components/card"
 import {
- OperationalTable,
+  OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -31,11 +31,12 @@ import {
 
 import {
   DashboardGrid,
- PageHeader,
+  PageHeader,
   DashboardSection,
   DataTableCard,
   StatusSummary,
 } from "@/components/dashboard/dashboard-components"
+import { PinDashboardMetricButton } from "@/components/dashboard/pin-dashboard-metric-button"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { istDateValue } from "@/lib/date-time"
@@ -73,7 +74,7 @@ export default async function StoreOverviewPage() {
 
   return (
     <div className="grid gap-6">
- <PageHeader
+      <PageHeader
         actions={
           <>
             <Button asChild variant="outline">
@@ -95,6 +96,7 @@ export default async function StoreOverviewPage() {
       >
         <DashboardGrid columns="five">
           <MetricCard
+            action={<PinDashboardMetricButton metricId="store.locations" />}
             description="Active stock locations"
             icon={<Building2 aria-hidden="true" />}
             label="Store Locations"
@@ -102,6 +104,7 @@ export default async function StoreOverviewPage() {
             value={snapshot.locations.length}
           />
           <MetricCard
+            action={<PinDashboardMetricButton metricId="store.item-types" />}
             description="Coded inventory types"
             icon={<Boxes aria-hidden="true" />}
             label="Item Types"
@@ -109,6 +112,9 @@ export default async function StoreOverviewPage() {
             value={snapshot.items.length}
           />
           <MetricCard
+            action={
+              <PinDashboardMetricButton metricId="store.physical-assets" />
+            }
             description="Tracked returnable units"
             icon={<Package aria-hidden="true" />}
             label="Physical Assets"
@@ -116,17 +122,21 @@ export default async function StoreOverviewPage() {
             value={snapshot.assets.length}
           />
           <MetricCard
+            action={<PinDashboardMetricButton metricId="store.open-requests" />}
             description="Pending or partially issued"
             icon={<ClipboardList aria-hidden="true" />}
             label="Open Requests"
- tone={openRequests.length ? "warning" : "positive"}
+            tone={openRequests.length ? "warning" : "positive"}
             value={openRequests.length}
           />
           <MetricCard
+            action={
+              <PinDashboardMetricButton metricId="store.due-maintenance" />
+            }
             description="Maintenance or calibration due"
             icon={<Wrench aria-hidden="true" />}
             label="Due Maintenance"
- tone={dueAssets.length ? "danger" : "positive"}
+            tone={dueAssets.length ? "danger" : "positive"}
             value={dueAssets.length}
           />
         </DashboardGrid>
@@ -143,7 +153,7 @@ export default async function StoreOverviewPage() {
             title="Open Department Requests"
           >
             <div className="overflow-x-auto rounded-lg border">
- <OperationalTable>
+              <OperationalTable>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Request</TableHead>
@@ -180,11 +190,11 @@ export default async function StoreOverviewPage() {
                     </TableRow>
                   ) : null}
                 </TableBody>
- </OperationalTable>
+              </OperationalTable>
             </div>
           </DataTableCard>
 
- <SectionCard className="h-full">
+          <SectionCard className="h-full">
             <CardHeader className="border-b border-border/70 pb-4">
               <div className="flex items-start gap-3">
                 <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[var(--color-warning-bg)] text-[var(--color-warning-text)]">
@@ -201,25 +211,25 @@ export default async function StoreOverviewPage() {
                   {
                     href: "/store/stock",
                     label: "Low Stock Items",
- tone: lowStock.length ? "danger" : "positive",
+                    tone: lowStock.length ? "danger" : "positive",
                     value: lowStock.length,
                   },
                   {
                     href: "/store/new-item-requests",
                     label: "Pending Code Requests",
- tone: pendingCodeRequests ? "warning" : "positive",
+                    tone: pendingCodeRequests ? "warning" : "positive",
                     value: pendingCodeRequests,
                   },
                   {
                     href: "/store/stock",
                     label: "Maintenance / Calibration Due",
- tone: dueAssets.length ? "danger" : "positive",
+                    tone: dueAssets.length ? "danger" : "positive",
                     value: dueAssets.length,
                   },
                 ]}
               />
             </CardContent>
- </SectionCard>
+          </SectionCard>
         </DashboardGrid>
       </DashboardSection>
     </div>

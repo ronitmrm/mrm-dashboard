@@ -16,6 +16,7 @@ import { Alert, AlertDescription } from "@workspace/ui/components/alert"
 import { MetricCard } from "@workspace/ui/components/card"
 import { BriefcaseBusiness } from "lucide-react"
 import { redirect } from "next/navigation"
+import { PinDashboardMetricButton } from "@/components/dashboard/pin-dashboard-metric-button"
 
 import { RecruitmentPanel } from "@/components/hr/recruitment-panel"
 import { readAuthEnvironment } from "@/lib/auth/auth"
@@ -215,18 +216,61 @@ export default async function HrRecruitmentPage({
       activeItem.panelId !== "employeeMasterPanel" &&
       activeItem.panelId !== "interviewsPanel" &&
       activeItem.panelId !== "interviewWorkspacePanel" ? (
-        <section aria-label="HR overview" className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))] gap-3">
-          {([
-            { label: "Approved Posts", value: stats.posts, tone: "information" },
-            { label: "Vacant Posts", value: stats.vacantPosts, tone: "warning" },
-            { label: "Templates", value: stats.templates, tone: "brand" },
-            { label: "Open Jobs", value: stats.openJobs, tone: "accent" },
-            { label: "Candidates", value: stats.candidates, tone: "information" },
-            { label: "Interviews", value: stats.interviews, tone: "brand" },
-          ] as const).map(({ label, value, tone }) => (
-            <MetricCard key={label} label={label} tone={tone} value={value.toLocaleString("en-IN")} />
+        <section
+          aria-label="HR overview"
+          className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))] gap-3"
+        >
+          {(
+            [
+              {
+                label: "Approved Posts",
+                metricId: "hr.approved-posts",
+                value: stats.posts,
+                tone: "information",
+              },
+              {
+                label: "Vacant Posts",
+                metricId: "hr.vacant-posts",
+                value: stats.vacantPosts,
+                tone: "warning",
+              },
+              {
+                label: "Templates",
+                metricId: "hr.templates",
+                value: stats.templates,
+                tone: "brand",
+              },
+              {
+                label: "Open Jobs",
+                metricId: "hr.open-jobs",
+                value: stats.openJobs,
+                tone: "accent",
+              },
+              {
+                label: "Candidates",
+                metricId: "hr.candidates",
+                value: stats.candidates,
+                tone: "information",
+              },
+              {
+                label: "Interviews",
+                metricId: "hr.interviews",
+                value: stats.interviews,
+                tone: "brand",
+              },
+            ] as const
+          ).map(({ label, metricId, value, tone }) => (
+            <MetricCard
+              action={<PinDashboardMetricButton metricId={metricId} />}
+              key={label}
+              label={label}
+              tone={tone}
+              value={value.toLocaleString("en-IN")}
+            />
           ))}
-          <p className="col-span-full text-xs text-muted-foreground">HR overview · all records, before table filters</p>
+          <p className="col-span-full text-xs text-muted-foreground">
+            HR overview · all records, before table filters
+          </p>
         </section>
       ) : null}
 
