@@ -11,7 +11,14 @@ Master.
 
 **Application Role**: A reusable access profile assigned directly to a Staff
 Account or inherited from an Approved Post. Its access can be changed after the
-role is created.
+role is created; changing the role definition changes access for every account
+and post using it.
+
+**Direct Role Assignment**: The set of Application Roles assigned to one Staff
+Account. Access Administration can replace this set for one employee without
+changing the role definition, any other employee's assignments, or roles
+inherited from Approved Posts. Saving an empty set removes all direct roles from
+that account.
 
 **Delete Application Role**: Permanently removes a non-system Application Role
 and its direct Staff Account assignments, Approved Post assignments, and role

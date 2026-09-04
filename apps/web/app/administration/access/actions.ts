@@ -62,7 +62,6 @@ function staffActionError(error: unknown): StaffActionState {
   const message = error instanceof Error ? error.message : ""
   const expected = [
     "Password must contain at least 6 characters",
-    "Select at least one application role",
     "Select existing non-system application roles",
     "The selected staff account no longer exists",
     "The selected active employee does not exist",
@@ -148,7 +147,7 @@ export async function assignStaffRolesAction(
     administrationTaskCapabilities.assignStaffRole,
     async (access, actorUserId) => {
       try {
-        await access.assignRoles({
+        await access.replaceDirectRoles({
           actorUserId,
           userId: requiredText(formData, "userId"),
           roleKeys: formData
@@ -156,8 +155,7 @@ export async function assignStaffRolesAction(
             .filter((key): key is string => typeof key === "string"),
         })
         return {
-          success:
-            "Roles assigned. Existing direct and post roles are preserved.",
+          success: "Direct roles updated for this staff account only.",
         }
       } catch (error) {
         return staffActionError(error)

@@ -34,4 +34,37 @@ describe("StaffAccountWorkflow", () => {
     expect(markup).not.toContain('name="name"')
     expect(markup).not.toContain("Link Employee / Posts (Optional)")
   })
+
+  it("lets an administrator replace one staff account's direct roles", () => {
+    const markup = renderToStaticMarkup(
+      <StaffAccountWorkflow
+        canProvision={false}
+        canAssignRoles
+        created={false}
+        selectedUserId="staff-1"
+        users={[
+          {
+            id: "staff-1",
+            name: "Sales Employee",
+            email: "sales@mrmpl.test",
+            roleKeys: ["sales-marketing"],
+            inheritedRoleKeys: [],
+          },
+        ]}
+        roles={[
+          { key: "sales-marketing", name: "Sales & Marketing" },
+          { key: "design-team", name: "Design Team" },
+        ]}
+        employees={[]}
+      />
+    )
+
+    const salesCheckbox = markup.match(
+      /<button[^>]*id="staff-role-sales-marketing"[^>]*>/
+    )?.[0]
+    expect(salesCheckbox).toContain('aria-checked="true"')
+    expect(salesCheckbox).not.toContain(' disabled=""')
+    expect(markup).toContain("Changes apply only to this staff account")
+    expect(markup).toContain("Save Direct Roles")
+  })
 })

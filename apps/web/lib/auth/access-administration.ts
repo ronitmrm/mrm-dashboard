@@ -197,7 +197,7 @@ export function createAccessAdministrationService({
       return access.assignRole({ actorUserId, roleKey, userId })
     },
 
-    async assignRoles(input: {
+    async replaceDirectRoles(input: {
       actorUserId: string
       roleKeys: string[]
       userId: string
@@ -206,7 +206,7 @@ export function createAccessAdministrationService({
         input.actorUserId,
         administrationTaskCapabilities.assignStaffRole
       )
-      return access.assignRoles(input)
+      return access.replaceDirectRoles(input)
     },
 
     async updateRolePermissions({

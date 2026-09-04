@@ -114,7 +114,7 @@ export function createAccessAdministrationRepository(
   return {
     close,
 
-    async assignRoles({
+    async replaceDirectRoles({
       actorUserId,
       roleKeys,
       userId,
@@ -124,11 +124,15 @@ export function createAccessAdministrationRepository(
       userId: string
     }) {
       const uniqueKeys = [...new Set(roleKeys)].sort()
-      if (!uniqueKeys.length)
-        throw new Error("Select at least one application role")
       const client = await pool.connect()
       try {
         await client.query("BEGIN")
+        const user = await client.query(
+          "SELECT id FROM identity.users WHERE id = $1 FOR UPDATE",
+          [userId]
+        )
+        if (!user.rowCount)
+          throw new Error("The selected staff account no longer exists")
         const roles = await client.query<{ id: string; key: string }>(
           `SELECT id, key FROM identity.roles
            WHERE key = ANY($1::text[]) AND NOT is_system
@@ -138,28 +142,55 @@ export function createAccessAdministrationRepository(
         if (roles.rows.length !== uniqueKeys.length) {
           throw new Error("Select existing non-system application roles")
         }
-        const user = await client.query(
-          "SELECT id FROM identity.users WHERE id = $1 FOR KEY SHARE",
+        const current = await client.query<{ id: string; key: string }>(
+          `SELECT roles.id, roles.key
+           FROM identity.user_roles
+           JOIN identity.roles ON roles.id = user_roles.role_id
+           WHERE user_roles.user_id = $1 AND NOT roles.is_system
+           ORDER BY roles.key`,
           [userId]
         )
-        if (!user.rowCount)
-          throw new Error("The selected staff account no longer exists")
-        await client.query(
-          `INSERT INTO identity.user_roles (user_id, role_id, assigned_by_user_id)
-           SELECT $1, unnest($2::uuid[]), $3
-           ON CONFLICT (user_id, role_id) DO NOTHING`,
-          [userId, roles.rows.map((role) => role.id), actorUserId]
+        const selectedKeys = new Set(roles.rows.map((role) => role.key))
+        const currentKeys = new Set(current.rows.map((role) => role.key))
+        const removed = current.rows.filter(
+          (role) => !selectedKeys.has(role.key)
         )
-        await appendAccessAuditChanges(
-          client,
-          roles.rows.map((role) => ({
+        const assigned = roles.rows.filter((role) => !currentKeys.has(role.key))
+        if (removed.length) {
+          await client.query(
+            `DELETE FROM identity.user_roles
+             WHERE user_id = $1 AND role_id = ANY($2::uuid[])`,
+            [userId, removed.map((role) => role.id)]
+          )
+        }
+        if (assigned.length) {
+          await client.query(
+            `INSERT INTO identity.user_roles (
+               user_id, role_id, assigned_by_user_id
+             )
+             SELECT $1, unnest($2::uuid[]), $3`,
+            [userId, assigned.map((role) => role.id), actorUserId]
+          )
+        }
+        const auditChanges = [
+          ...removed.map((role) => ({
+            actorUserId,
+            eventType: "access.role.removed",
+            metadata: { roleKey: role.key },
+            targetId: userId,
+            targetTable: "users",
+          })),
+          ...assigned.map((role) => ({
             actorUserId,
             eventType: "access.role.assigned",
             metadata: { roleKey: role.key },
             targetId: userId,
             targetTable: "users",
-          }))
-        )
+          })),
+        ]
+        if (auditChanges.length) {
+          await appendAccessAuditChanges(client, auditChanges)
+        }
         await client.query("COMMIT")
       } catch (error) {
         await client.query("ROLLBACK")

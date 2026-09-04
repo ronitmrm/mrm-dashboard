@@ -162,6 +162,7 @@ export default async function AccessAdministrationPage({
               name: user.name,
               email: user.email,
               roleKeys: user.roleKeys,
+              inheritedRoleKeys: user.employee?.inheritedRoleKeys ?? [],
             }))}
             roles={snapshot.roles
               .filter((role) => !role.isSystem)
