@@ -6,17 +6,17 @@ This is the mandatory UI contract for `apps/web`. Start at the canonical primiti
 
 ## Canonical primitives
 
-| Need | Primitive | Source |
-| --- | --- | --- |
-| Operational records | `OperationalTable` | `packages/ui/src/components/table.tsx` |
-| KPI or single measure | `MetricCard` | `packages/ui/src/components/card.tsx` |
-| Grouped content | `SectionCard` | `packages/ui/src/components/card.tsx` |
-| Status label | `StatusBadge` | `packages/ui/src/components/badge.tsx` |
-| Page identity | `PageHeader` | `apps/web/components/ui/golden-patterns.tsx` |
-| Page actions | `ActionToolbar` | `apps/web/components/ui/golden-patterns.tsx` |
-| Form grouping | `FormSection`, `FormGrid` | `apps/web/components/ui/golden-patterns.tsx` |
-| Empty/loading/error | `StandardState` | `packages/ui/src/components/standard-state.tsx` |
-| Simple overlay | `StandardDialogContent`, `StandardDrawerContent` | `apps/web/components/ui/golden-patterns.tsx` |
+| Need                  | Primitive                                        | Source                                          |
+| --------------------- | ------------------------------------------------ | ----------------------------------------------- |
+| Operational records   | `OperationalTable`                               | `packages/ui/src/components/table.tsx`          |
+| KPI or single measure | `MetricCard`                                     | `packages/ui/src/components/card.tsx`           |
+| Grouped content       | `SectionCard`                                    | `packages/ui/src/components/card.tsx`           |
+| Status label          | `StatusBadge`                                    | `packages/ui/src/components/badge.tsx`          |
+| Page identity         | `PageHeader`                                     | `apps/web/components/ui/golden-patterns.tsx`    |
+| Page actions          | `ActionToolbar`                                  | `apps/web/components/ui/golden-patterns.tsx`    |
+| Form grouping         | `FormSection`, `FormGrid`                        | `apps/web/components/ui/golden-patterns.tsx`    |
+| Empty/loading/error   | `StandardState`                                  | `packages/ui/src/components/standard-state.tsx` |
+| Simple overlay        | `StandardDialogContent`, `StandardDrawerContent` | `apps/web/components/ui/golden-patterns.tsx`    |
 
 The authenticated living reference is `/ui-reference`. Check it in light and dark themes and at desktop and narrow widths.
 
@@ -70,6 +70,10 @@ closed/inactive outcomes. Neutral remains an intentional choice, not a default
 for top-of-page summaries. Preserve explicit status tones in shared wrappers;
 general tracking totals may use a documented information fallback. Never cycle
 warning, danger or positive colours by card position.
+
+Use the typed `MetricCard` `action` slot for a compact secondary operation such
+as **Add to My Dashboard**. Keep the metric itself readable and non-clickable;
+the action must have an accessible name and visible keyboard focus.
 
 HR overview cards appear above Job Posts and other overview-backed panels.
 They describe all HR records, not the rows visible after Job Posts table filters;

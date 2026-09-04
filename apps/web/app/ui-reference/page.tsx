@@ -5,6 +5,7 @@ import {
   Clock3,
   Info,
   LayoutTemplate,
+  Pin,
   Plus,
   RefreshCw,
   Search,
@@ -145,7 +146,7 @@ export default async function UiReferencePage() {
         items={[
           { label: "Records", value: 1240, tone: "information" },
           { label: "Awaiting Review", value: 12, tone: "warning" },
-          { label: "Completed", value: 0, tone: "positive" }
+          { label: "Completed", value: 0, tone: "positive" },
         ]}
       />
 
@@ -194,7 +195,24 @@ export default async function UiReferencePage() {
             <MetricCard {...metric} key={metric.tone} />
           ))}
           <MetricCard tone="inactive" label="Loading" loading value="" />
-          <MetricCard tone="danger"
+          <MetricCard
+            action={
+              <Button
+                aria-label="Add example KPI to My Dashboard"
+                size="icon-xs"
+                type="button"
+                variant="ghost"
+              >
+                <Pin />
+              </Button>
+            }
+            description="Secondary actions use the typed action slot."
+            label="Pinnable KPI"
+            tone="information"
+            value="24"
+          />
+          <MetricCard
+            tone="danger"
             error="Metric data could not be loaded."
             label="Error"
             value=""

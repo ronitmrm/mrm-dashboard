@@ -107,6 +107,7 @@ type MetricCardTrend = "up" | "down" | "flat"
 
 type MetricCardProps = {
   className?: string
+  action?: React.ReactNode
   chart?: React.ReactNode
   comparison?: React.ReactNode
   description?: React.ReactNode
@@ -218,6 +219,7 @@ function SectionCard({
 
 function MetricCard({
   chart,
+  action,
   className,
   comparison,
   description,
@@ -293,15 +295,22 @@ function MetricCard({
                 ) : null}
               </div>
             </div>
-            {icon ? (
-              <span
-                className={cn(
-                  "flex size-9 shrink-0 items-center justify-center rounded-lg [&_svg]:size-4",
-                  toneClassNames.icon
-                )}
-              >
-                {icon}
-              </span>
+            {action || icon ? (
+              <div className="flex shrink-0 items-start gap-1">
+                {action ? (
+                  <div data-slot="metric-card-action">{action}</div>
+                ) : null}
+                {icon ? (
+                  <span
+                    className={cn(
+                      "flex size-9 shrink-0 items-center justify-center rounded-lg [&_svg]:size-4",
+                      toneClassNames.icon
+                    )}
+                  >
+                    {icon}
+                  </span>
+                ) : null}
+              </div>
             ) : null}
           </div>
           {description ? (

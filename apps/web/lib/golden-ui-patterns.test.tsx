@@ -61,4 +61,16 @@ describe("Golden UI patterns", () => {
     }
     expect(markup).toContain('role="alert"')
   })
+  it("renders a secondary action inside a metric card", () => {
+    const markup = renderToStaticMarkup(
+      <MetricCard
+        action={<button type="button">Pin metric</button>}
+        label="Open requests"
+        tone="warning"
+        value="7"
+      />
+    )
+
+    expect(markup).toContain("Pin metric")
+  })
 })

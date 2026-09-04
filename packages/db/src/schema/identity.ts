@@ -2,6 +2,7 @@ import {
   bigint,
   boolean,
   integer,
+  jsonb,
   pgSchema,
   text,
   timestamp,
@@ -30,6 +31,7 @@ export const user = identity.table("users", {
     withTimezone: true,
   }),
   dashboardWidgets: text("dashboard_widgets").array(),
+  dashboardAnalytics: jsonb("dashboard_analytics"),
 })
 
 export const session = identity.table("sessions", {

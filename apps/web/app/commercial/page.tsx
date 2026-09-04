@@ -19,7 +19,7 @@ import {
 import { Badge } from "@workspace/ui/components/badge"
 import { MetricCard } from "@workspace/ui/components/card"
 import {
- OperationalTable,
+  OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -31,10 +31,11 @@ import {
   ChartCard,
   DashboardBarChart,
   DashboardGrid,
- PageHeader,
+  PageHeader,
   DashboardSection,
   DataTableCard,
 } from "@/components/dashboard/dashboard-components"
+import { PinDashboardMetricButton } from "@/components/dashboard/pin-dashboard-metric-button"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
@@ -56,6 +57,7 @@ export default async function CommercialPage() {
   const stats = [
     {
       description: "Canonical customer masters",
+      metricId: "commercial.customers",
       icon: Users,
       label: "Customers",
       tone: "neutral",
@@ -63,6 +65,7 @@ export default async function CommercialPage() {
     },
     {
       description: "Commercial enquiries received",
+      metricId: "commercial.enquiries",
       icon: Inbox,
       label: "Enquiries",
       tone: "brand",
@@ -70,13 +73,15 @@ export default async function CommercialPage() {
     },
     {
       description: "Sent in the current month",
+      metricId: "commercial.quoted-this-month",
       icon: Send,
       label: "Quoted this month",
- tone: "information",
+      tone: "information",
       value: dashboard.stats.monthlyQuoted,
     },
     {
       description: "Awaiting costing completion",
+      metricId: "commercial.pending-costing",
       icon: Calculator,
       label: "Pending costing",
       tone: "warning",
@@ -84,6 +89,7 @@ export default async function CommercialPage() {
     },
     {
       description: "Active quoted prices",
+      metricId: "commercial.active-quotes",
       icon: CircleDollarSign,
       label: "Q prices",
       tone: "neutral",
@@ -91,13 +97,15 @@ export default async function CommercialPage() {
     },
     {
       description: "Converted commercial lines",
+      metricId: "commercial.ordered",
       icon: PackageCheck,
       label: "Ordered",
- tone: "positive",
+      tone: "positive",
       value: dashboard.stats.ordered,
     },
     {
       description: "Active production prices",
+      metricId: "commercial.active-production-prices",
       icon: BadgeCheck,
       label: "Active P prices",
       tone: "accent",
@@ -105,16 +113,17 @@ export default async function CommercialPage() {
     },
     {
       description: "Customer actions now due",
+      metricId: "commercial.followups-due",
       icon: Clock3,
       label: "Follow-ups due",
- tone: "danger",
+      tone: "danger",
       value: dashboard.stats.pendingFollowups,
     },
   ] as const
 
   return (
     <div className="grid gap-6">
- <PageHeader
+      <PageHeader
         badge={
           <Badge variant="outline">
             <Database aria-hidden="true" /> Canonical Postgresql Analytics
@@ -134,6 +143,7 @@ export default async function CommercialPage() {
             const Icon = stat.icon
             return (
               <MetricCard
+                action={<PinDashboardMetricButton metricId={stat.metricId} />}
                 description={stat.description}
                 icon={<Icon aria-hidden="true" />}
                 key={stat.label}
@@ -201,7 +211,7 @@ export default async function CommercialPage() {
             title="Material Lead Time"
           >
             <div className="overflow-x-auto rounded-lg border">
- <OperationalTable>
+              <OperationalTable>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Material</TableHead>
@@ -233,7 +243,7 @@ export default async function CommercialPage() {
                     </TableRow>
                   )}
                 </TableBody>
- </OperationalTable>
+              </OperationalTable>
             </div>
           </DataTableCard>
         </DashboardGrid>
@@ -249,7 +259,7 @@ export default async function CommercialPage() {
           title="Customer Quote Pareto"
         >
           <div className="overflow-x-auto rounded-lg border">
- <OperationalTable>
+            <OperationalTable>
               <TableHeader>
                 <TableRow>
                   <TableHead>Customer</TableHead>
@@ -281,7 +291,7 @@ export default async function CommercialPage() {
                   </TableRow>
                 )}
               </TableBody>
- </OperationalTable>
+            </OperationalTable>
           </div>
         </DataTableCard>
       </DashboardSection>
