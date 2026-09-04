@@ -18,7 +18,7 @@ and post using it.
 Account. Access Administration can replace this set for one employee without
 changing the role definition, any other employee's assignments, or roles
 inherited from Approved Posts. Saving an empty set removes all direct roles from
-that account.
+that account; inherited post roles remain effective.
 
 **Delete Application Role**: Permanently removes a non-system Application Role
 and its direct Staff Account assignments, Approved Post assignments, and role

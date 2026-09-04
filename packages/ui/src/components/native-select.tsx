@@ -1,11 +1,15 @@
 import * as React from "react"
 
 import { cn } from "@workspace/ui/lib/utils"
-import { SearchableSelect } from "@workspace/ui/components/searchable-select"
+import {
+  SearchableSelect,
+  type SearchableSelectProps,
+} from "@workspace/ui/components/searchable-select"
 
-type NativeSelectProps = Omit<React.ComponentProps<"select">, "size"> & {
-  size?: "sm" | "default"
-}
+type NativeSelectProps = Omit<React.ComponentProps<"select">, "size"> &
+  Pick<SearchableSelectProps, "searchPlaceholder"> & {
+    size?: "sm" | "default"
+  }
 
 function NativeSelect({
   className,

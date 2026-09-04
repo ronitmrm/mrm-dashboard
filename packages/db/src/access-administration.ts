@@ -908,6 +908,7 @@ export function createAccessAdministrationRepository(
             employee: employee
               ? {
                   departments: employee.departments,
+                  designations: employee.designations,
                   employeeCode: employee.employee_code,
                   inheritedRoleKeys: [
                     ...new Set(
