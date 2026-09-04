@@ -320,7 +320,7 @@ export function EcnDesignWorkspace({
             </label>
             <p className="text-sm text-muted-foreground md:col-span-2">
               Uploaded evidence remains on this ECN. Released only after Design
-              HOD approval.
+              approval.
             </p>
             <Field>
               <FieldLabel>Drawing Requirement</FieldLabel>
@@ -469,7 +469,7 @@ export function EcnDesignWorkspace({
           Save Draft
         </Button>
         <Button name="design_save_intent" type="submit" value="complete">
-          Submit For Design HOD Approval
+          Submit For Design Approval
         </Button>
       </div>
     </div>

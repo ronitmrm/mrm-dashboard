@@ -1505,36 +1505,11 @@ function designCostDrivers(
   }
 }
 
-async function assertDesignHod(
-  client: PoolClient,
-  organizationId: string,
+function assertDesignReviewer(
   actorUserId: string | null | undefined
-) {
-  if (!actorUserId) throw new Error("Design HOD approval requires a signed-in employee.")
-  const result = await client.query(
-    `
-      SELECT 1
-      FROM identity.employee_links employee_link
-      JOIN recruitment.posts post
-        ON post.organization_id = employee_link.organization_id
-       AND lower(btrim(post.employee_code)) =
-         lower(btrim(employee_link.employee_code))
-      JOIN recruitment.departments department ON department.id = post.department_id
-      JOIN recruitment.designations designation
-        ON designation.id = post.designation_id
-      WHERE employee_link.user_id = $1
-        AND employee_link.organization_id = $2
-        AND post.status = 'Occupied'
-        AND (lower(department.code) = 'design'
-          OR lower(department.name) = 'design')
-        AND (lower(designation.code) IN ('hod', 'h.o.d.')
-          OR designation.name ~* '(^|[^a-z])(hod|head of department)([^a-z]|$)')
-      LIMIT 1
-    `,
-    [actorUserId, organizationId]
-  )
-  if (!result.rows[0]) {
-    throw new Error("Only the occupied Design HOD may approve or reject ECN Design revisions.")
+): asserts actorUserId is string {
+  if (!actorUserId) {
+    throw new Error("ECN Design approval requires a signed-in reviewer.")
   }
 }
 
@@ -5098,7 +5073,7 @@ export function createCommercialRevisionsRepository(
         if (!row || row.status !== "Pending Design Approval") {
           throw new Error("Pending Design Approval ECN was not found.")
         }
-        await assertDesignHod(client, row.organization_id, input.actorUserId)
+        assertDesignReviewer(input.actorUserId)
         const submission = record(row.source_payload.designSubmission)
         const itemPatch = record(
           submission.itemPatch

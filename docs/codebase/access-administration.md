@@ -169,6 +169,10 @@ rather than feature authorization. The Store administrator boolean only affects
 the unlinked department chooser. These do not replace page or task capability
 checks.
 
+All feature authorization is capability-based and configured through Access
+Administration. Department and designation names may classify operational data,
+but never grant page or task rights.
+
 ## Acceptance case
 
 The managed `design-team` role contains only Commercial Design, Drawing History,

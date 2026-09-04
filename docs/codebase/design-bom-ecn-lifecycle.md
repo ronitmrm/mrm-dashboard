@@ -7,7 +7,8 @@ Repository commands are authoritative; UI state is advisory.
 - Initial Design: save structured draft -> complete structured BOM -> complete
   required drawings -> release revision `00`.
 - Released dossier: read-only Product Portfolio detail.
-- Later Design: ECN draft -> Design HOD decision -> release or return to Design.
+- Later Design: ECN draft -> authorized Design decision -> release or return to
+  Design.
 - Cost impact: released Design -> Product Parameter Costing -> Customer Product
   Parameter Costing -> close ECN.
 - Files: authenticated viewer -> inline preview -> explicit original download.
@@ -38,16 +39,17 @@ revision number; its revision and effective date never change during upload.
 - Pricing writes never change the dossier's selected processes.
 - A process price can change only when that process is selected in the current
   released dossier.
-- A Design HOD decision is required before an ECN draft is published.
+- An authorized Design decision is required before an ECN draft is published.
 - A cost-impacting ECN cannot close until Product and all affected Customer
   costing work is complete.
 
 ## Authorization
 
 - Design users may create/save drafts and submit them for review.
-- Engineering approval/rejection requires the narrow ECN approval capability
-  and a linked occupied Approved Post in the Design department with HOD
-  designation. Server-side employee/post validation is authoritative.
+- Engineering approval/rejection requires the narrow ECN approval capability.
+  It may be assigned directly to a staff account or inherited from an occupied
+  Approved Post through Access Administration. Department and designation names
+  never grant authority.
 - Rejection requires remarks.
 - Portfolio, Drawing History, attachment preview, and download remain
   authenticated reads.
