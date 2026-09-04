@@ -83,6 +83,15 @@ Use `StandardState` for empty, loading, and error states. Give recovery actions 
 
 Preserve keyboard operation, visible focus, labelled controls, sufficient contrast, and touch-friendly controls. Tables remain horizontally scrollable at narrow widths. Dialogs and drawers require a title and use the standard content wrappers when the workflow is simple.
 
+## Navigation shell
+
+The shared sidebar uses a white surface with green foreground in light mode and
+the existing dark surface in dark mode. Light green is reserved for hover and
+expanded-navigation feedback; the current destination keeps a stronger brand
+tint and green leading marker so hover never looks selected. Every submodule
+uses its navigation icon rather than branch lines or bullet marks. Expand and
+collapse motion uses only opacity and transform and honors reduced motion.
+
 ## Approved exceptions
 
 Low-level `Card` and native `table` are allowed only inside the canonical shared implementations. Complex multi-step workflow overlays may use the underlying dialog or sheet primitives when the standard wrapper cannot express their structure. Unique charts and operational visualizations may use bespoke layout, but their surrounding status, card, header, and state semantics remain canonical. Compact embedded identity bars are not page headers.

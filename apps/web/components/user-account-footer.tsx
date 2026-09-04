@@ -45,7 +45,7 @@ export function UserAccountFooter({
       </Link>
       <Button
         aria-label="Sign out"
-        className="size-9 shrink-0 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-white"
+        className="size-9 shrink-0 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
         disabled={isSigningOut}
         onClick={() => void signOut()}
         title="Sign out"
