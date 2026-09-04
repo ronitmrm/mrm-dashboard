@@ -1752,6 +1752,7 @@ describe("candidate application cycles", () => {
           experience: "4 years",
           id: "candidate-1",
           name: "Candidate One",
+          offer_letter_count: 2,
           phone: "9999999999",
           source: "Referral",
           status: "Active",
@@ -1767,6 +1768,7 @@ describe("candidate application cycles", () => {
         activeApplicationJobIds: ["job-1", "job-2"],
         applicationCount: 3,
         id: "candidate-1",
+        offerLetterCount: 2,
       }),
     ])
   })

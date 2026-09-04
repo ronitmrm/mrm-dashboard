@@ -121,6 +121,7 @@ export type RecruitmentCandidateRow = {
   id: string
   hasResume: boolean
   name: string
+  offerLetterCount: number
   phone: string
   preferredDepartmentCode: string | null
   preferredDesignation: string | null
@@ -1238,6 +1239,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         has_resume: boolean
         id: string
         name: string
+        offer_letter_count: number
         phone: string
         preferred_department_code: string | null
         preferred_designation: string | null
@@ -1260,7 +1262,8 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
               FILTER (WHERE application.status IN ('Assigned', 'Interview', 'Hold')),
               ARRAY[]::uuid[]) AS active_application_job_ids,
             count(DISTINCT application.id)::int AS application_count,
-            count(DISTINCT event.id)::int AS event_count
+            count(DISTINCT event.id)::int AS event_count,
+            count(DISTINCT offer_letter.id)::int AS offer_letter_count
           FROM recruitment.candidates candidate
           LEFT JOIN recruitment.candidate_departments candidate_department
             ON candidate_department.candidate_id = candidate.id
@@ -1272,6 +1275,10 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             ON preferred_designation.id = candidate.preferred_designation_id
           LEFT JOIN recruitment.applications application
             ON application.candidate_id = candidate.id
+          LEFT JOIN recruitment.employment_letters offer_letter
+            ON offer_letter.application_id = application.id
+            AND offer_letter.letter_type = 'offer'
+            AND offer_letter.pdf_bytes IS NOT NULL
           LEFT JOIN recruitment.candidate_events event
             ON event.candidate_id = candidate.id
           LEFT JOIN LATERAL (
@@ -1307,6 +1314,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         hasResume: row.has_resume,
         id: row.id,
         name: row.name,
+        offerLetterCount: row.offer_letter_count,
         phone: row.phone,
         preferredDepartmentCode: row.preferred_department_code,
         preferredDesignation: row.preferred_designation,

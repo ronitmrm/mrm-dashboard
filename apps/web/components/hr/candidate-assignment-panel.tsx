@@ -51,6 +51,7 @@ type CandidateFilterKey =
   | "experience"
   | "logs"
   | "name"
+  | "offers"
   | "phone"
   | "resume"
   | "source"
@@ -83,6 +84,7 @@ export function CandidatesTable({
         experience: candidate.experience ?? "—",
         logs: String(candidate.eventCount),
         name: candidate.name,
+        offers: String(candidate.offerLetterCount),
         phone: candidate.phone,
         resume: candidate.hasResume
           ? (candidate.resumeFileName ?? "PDF")
@@ -102,6 +104,7 @@ export function CandidatesTable({
     { key: "experience", label: "Experience" },
     { key: "source", label: "Source" },
     { key: "applications", label: "Applications" },
+    { key: "offers", label: "Offer Letters" },
     { key: "logs", label: "Logs" },
     { key: "resume", label: "Resume" },
     { key: "status", label: "Status" },
@@ -183,6 +186,7 @@ export function CandidatesTable({
                   <TableCell>{row.experience}</TableCell>
                   <TableCell>{row.source}</TableCell>
                   <TableCell>{row.applications}</TableCell>
+                  <TableCell>{row.offers}</TableCell>
                   <TableCell>{row.logs}</TableCell>
                   <TableCell>
                     {row.candidate.hasResume ? (
@@ -222,7 +226,7 @@ export function CandidatesTable({
                 <TableRow>
                   <TableCell
                     className="py-10 text-center text-muted-foreground"
-                    colSpan={canWrite ? 13 : 12}
+                    colSpan={canWrite ? 14 : 13}
                   >
                     No Candidates Match The Selected Filters.
                   </TableCell>
