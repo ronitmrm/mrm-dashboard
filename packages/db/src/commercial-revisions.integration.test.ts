@@ -1050,7 +1050,7 @@ describe("commercial revisions and corrections", () => {
     ).rejects.toThrow("at least one")
   })
 
-  test("runs ECN through Design, Product Costing, Costing, and completion with immutable evidence", async () => {
+  test("runs ECN through Design review without deriving authority from designation", async () => {
     const suffix = randomUUID()
     const firstComponentId = await createItem(`M-ECN-A-${suffix}`, "List")
     const packageId = await createItem(`P-ECN-${suffix}`, "Package")
@@ -1104,14 +1104,20 @@ describe("commercial revisions and corrections", () => {
       component_item_id: firstComponentId,
       description: `P-ECN-${suffix}`,
     })
+    const accessManagedReviewer = await pool.query<{ id: string }>(
+      `INSERT INTO identity.users (name, email, email_verified)
+       VALUES ('Access Managed Design Reviewer', $1, true)
+       RETURNING id`,
+      [`design-reviewer-${randomUUID()}@example.test`]
+    )
     await expect(
       repository.applyEngineeringChangeDesignReview({
         decision: "Approve",
         engineeringChangeNoteId: ecn.id,
       })
-    ).rejects.toThrow("Design HOD")
+    ).rejects.toThrow("signed-in reviewer")
     const approved = await repository.applyEngineeringChangeDesignReview({
-      actorUserId: designHodUserId,
+      actorUserId: accessManagedReviewer.rows[0]!.id,
       decision: "Approve",
       engineeringChangeNoteId: ecn.id,
     })

@@ -198,7 +198,7 @@ export default async function EngineeringChangeNotePage({
               {selected.status === "Pending Design Approval" ? (
                 <div className="grid gap-4 border-t pt-4">
                   <div>
-                    <p className="text-sm font-medium">Design HOD Review</p>
+                    <p className="text-sm font-medium">Design Approval</p>
                     <p className="text-xs text-muted-foreground">
                       Approval releases the next Product Design revision.
                       Rejection returns the same ECN to Design with remarks and

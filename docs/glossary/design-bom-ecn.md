@@ -33,10 +33,11 @@ positive process prices, but after initial creation only the BOM selection is
 authoritative. Pricing cannot add or select a process.
 
 **ECN Design Revision**: The editable Design-stage draft for one Engineering
-Change Note. Submission locks before/after evidence for Design HOD review; it
-does not publish. Design HOD approval publishes the next Product Design and
-Drawing revisions. Rejection requires remarks, retains rejected evidence, and
-returns the ECN to Design.
+Change Note. Submission locks before/after evidence for an authorized Design
+review; it does not publish. Approval by a staff account holding the ECN Design
+approval right publishes the next Product Design and Drawing revisions.
+Rejection requires remarks, retains rejected evidence, and returns the ECN to
+Design. Designation names never grant this authority.
 
 **Drawing Revision**: One immutable drawing version for one controlled Product
 or part. Initial release is `00`; later releases are `01`, `02`, and so on.
@@ -67,7 +68,7 @@ approver, and a read-only view action when a file exists.
 
 **Drawing Revision History**: The immutable per-part sequence of all released
 Drawing Revisions, including release/effective date, ECN or Initial Release,
-reason, raiser, uploader, Design HOD approval, linked BOM revision, and separate
+reason, raiser, uploader, Design approval, linked BOM revision, and separate
 view/download actions.
 
 **Authenticated Attachment Viewer**: The shared signed-in file surface opened

@@ -80,8 +80,8 @@ export default async function EngineeringChangeDesignPage({
           <CardTitle>Product Design Dossier</CardTitle>
           <CardDescription>
             Revise the complete Product design. Save Draft keeps the Product
-            unchanged; submission locks before/after evidence for Design HOD
-            approval. Product and BOM publish only after approval.
+            unchanged; submission locks before/after evidence for authorized
+            Design approval. Product and BOM publish only after approval.
           </CardDescription>
         </CardHeader>
         <CardContent>
