@@ -33,7 +33,6 @@ import { createRoleAction, updateRolePermissionsAction } from "./actions"
 import { PermissionSelector } from "./permission-selector"
 import { AccessWorkspaceTabs } from "./access-workspace-tabs"
 import { RoleDeleteControl } from "./role-delete-control"
-import { PostAccessProfileForm } from "./post-access-profile-form"
 import { StaffAccessRegister } from "./staff-access-register"
 import { StaffAccountWorkflow } from "./staff-account-workflow"
 
@@ -61,16 +60,12 @@ export default async function AccessAdministrationPage({
   )
   const grantedTasks = new Set(
     await listGrantedCapabilities(session.user.id, [
-      administrationTaskCapabilities.assignPostAccess,
       administrationTaskCapabilities.assignStaffRole,
       administrationTaskCapabilities.createRole,
       administrationTaskCapabilities.deleteRole,
       administrationTaskCapabilities.provisionStaff,
       administrationTaskCapabilities.updateRolePermissions,
     ])
-  )
-  const canAssignPostAccess = grantedTasks.has(
-    administrationTaskCapabilities.assignPostAccess
   )
   const canCreateRole = grantedTasks.has(
     administrationTaskCapabilities.createRole
@@ -224,29 +219,6 @@ export default async function AccessAdministrationPage({
             </CardContent>
           </SectionCard>
         ) : null}
-        {activeSection === "staff" && canAssignPostAccess ? (
-          <SectionCard size="sm">
-            <CardHeader className="border-b">
-              <CardTitle>Post Access Profile</CardTitle>
-              <CardDescription>
-                Roles Assigned Here Apply Automatically To The Employee
-                Occupying The Post.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <PostAccessProfileForm
-                posts={snapshot.postAccessProfiles}
-                roles={snapshot.roles.map(({ id, key, name, isSystem }) => ({
-                  id,
-                  key,
-                  name,
-                  isSystem,
-                }))}
-              />
-            </CardContent>
-          </SectionCard>
-        ) : null}
-
         {activeSection === "staff" ? (
           <SectionCard
             size="sm"
@@ -256,8 +228,8 @@ export default async function AccessAdministrationPage({
             <CardHeader className="border-b">
               <CardTitle>Staff Access</CardTitle>
               <CardDescription>
-                Select a role to view its rights. Manage occupied posts in Post
-                Access Profile above.
+                Select a role to view its rights. Use Assign or Edit Roles above
+                to manage direct roles for an employee.
               </CardDescription>
             </CardHeader>
             <CardContent>
