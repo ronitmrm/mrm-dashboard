@@ -188,6 +188,66 @@ export function createRecruitmentEmploymentLetterRepository(
       }))
     },
 
+    async listForCandidate(
+      organizationId: string,
+      candidateId: string
+    ): Promise<RecruitmentEmploymentLetterRow[]> {
+      const result = await pool.query<{
+        application_id: string
+        department: string
+        designation: string
+        details: unknown
+        employee_code: string | null
+        employee_name: string
+        file_available: boolean
+        id: string
+        issued_on: string
+        joining_date: string
+        last_working_date: string | null
+        letter_type: "offer"
+        post_code: string | null
+        post_id: string | null
+        reference_number: string
+      }>(
+        `SELECT letter.id, letter.letter_type, letter.application_id,
+           letter.post_id, letter.employee_name, letter.employee_code,
+           letter.designation, letter.department, letter.joining_date::text,
+           letter.last_working_date::text, letter.reference_number,
+           letter.issued_on::text, letter.details, post.post_code,
+           (letter.pdf_bytes IS NOT NULL) AS file_available
+         FROM recruitment.employment_letters letter
+         JOIN recruitment.applications application
+           ON application.id = letter.application_id
+          AND application.organization_id = letter.organization_id
+         LEFT JOIN recruitment.posts post ON post.id = letter.post_id
+         WHERE letter.organization_id = $1
+           AND application.candidate_id = $2
+           AND letter.letter_type = 'offer'
+         ORDER BY letter.issued_on DESC, letter.created_at DESC`,
+        [organizationId, required(candidateId, "Candidate")]
+      )
+      return result.rows.map((row) => ({
+        applicationId: row.application_id,
+        department: row.department,
+        designation: row.designation,
+        details:
+          row.details && typeof row.details === "object"
+            ? (row.details as Record<string, unknown>)
+            : {},
+        employeeCode: row.employee_code,
+        employeeName: row.employee_name,
+        fileAvailable: row.file_available,
+        id: row.id,
+        issuedOn: row.issued_on,
+        joiningDate: row.joining_date,
+        lastWorkingDate: row.last_working_date,
+        letterType: row.letter_type,
+        postCode: row.post_code,
+        postId: row.post_id,
+        referenceNumber: row.reference_number,
+      }))
+    },
+
     async storePdf(
       input: Context & {
         bytes: Buffer

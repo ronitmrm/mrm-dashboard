@@ -112,6 +112,11 @@ authorization boundary. Store commands resolve through
 `requireStoreAction`. Permission strings are checked on the server even when
 the corresponding control is hidden in the UI.
 
+Candidate profiles expose their generated Offer Letter History only when the
+signed-in user also has the Employee Master page capability
+(`hr.employees.read`). The PDF download route enforces the same capability, so
+Access Administration controls both register visibility and file access.
+
 ## Coverage inventory
 
 The live item-level inventory is the Access Administration table. With the

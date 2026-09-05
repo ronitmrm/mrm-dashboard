@@ -1,12 +1,15 @@
 import Link from "next/link"
 import { notFound } from "next/navigation"
 
-import { createRecruitmentRepository } from "@workspace/db"
+import {
+  createRecruitmentEmploymentLetterRepository,
+  createRecruitmentRepository,
+} from "@workspace/db"
 import { Alert, AlertDescription } from "@workspace/ui/components/alert"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
- SectionCard,
+  SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -19,7 +22,7 @@ import {
   NativeSelectOption,
 } from "@workspace/ui/components/native-select"
 import {
- OperationalTable,
+  OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -32,6 +35,7 @@ import { ArrowLeft, FileText } from "lucide-react"
 import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
 
 import { saveCandidateAction } from "@/app/hr/actions"
+import { CandidateOfferLetterRegister } from "@/components/hr/candidate-offer-letter-register"
 import { ConversationLogsTable } from "@/components/hr/conversation-logs-table"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { listGrantedCapabilities } from "@/lib/auth/require-capability"
@@ -54,29 +58,39 @@ export default async function CandidateWorkspacePage({
     "hr.candidate_search.read",
     "/hr?panel=candidatesPanel"
   )
-  const canWrite =
-    (
-      await listGrantedCapabilities(
-        session.user.id,
-        Object.values(hrTaskCapabilities)
-      )
-    ).length > 0
+  const taskCapabilities = Object.values(hrTaskCapabilities)
+  const grantedCapabilities = await listGrantedCapabilities(session.user.id, [
+    ...taskCapabilities,
+    "hr.employees.read",
+  ])
+  const taskCapabilitySet = new Set<string>(taskCapabilities)
+  const canWrite = grantedCapabilities.some((capability) =>
+    taskCapabilitySet.has(capability)
+  )
+  const canViewOfferLetters = grantedCapabilities.includes("hr.employees.read")
+  const connectionString = readAuthEnvironment().connectionString
   const repository = createRecruitmentRepository({
-    connectionString: readAuthEnvironment().connectionString,
+    connectionString,
   })
+  const letterRepository = canViewOfferLetters
+    ? createRecruitmentEmploymentLetterRepository({ connectionString })
+    : null
   const loaded = await (async () => {
     try {
       const organizationId = await repository.organizationIdForCode("MRMPL")
-      const [workspace, masters] = await Promise.all([
+      const [workspace, masters, offerLetters] = await Promise.all([
         repository.getCandidateWorkspace(organizationId, id),
         repository.listMasters(organizationId),
+        letterRepository
+          ? letterRepository.listForCandidate(organizationId, id)
+          : Promise.resolve([]),
       ])
-      return { masters, workspace }
+      return { masters, offerLetters, workspace }
     } finally {
-      await repository.close()
+      await Promise.all([repository.close(), letterRepository?.close()])
     }
   })()
-  const { masters, workspace } = loaded
+  const { masters, offerLetters, workspace } = loaded
   if (!workspace) notFound()
 
   const { applications, candidate, events } = workspace
@@ -130,17 +144,21 @@ export default async function CandidateWorkspacePage({
           ["Source", candidate.source ?? "—"],
           ["Offer Letters", String(candidate.offerLetterCount)],
         ].map(([label, value]) => (
- <SectionCard key={label}>
+          <SectionCard key={label}>
             <CardHeader className="pb-2">
               <CardDescription>{label}</CardDescription>
             </CardHeader>
             <CardContent className="font-medium">{value}</CardContent>
- </SectionCard>
+          </SectionCard>
         ))}
       </section>
 
+      {canViewOfferLetters ? (
+        <CandidateOfferLetterRegister letters={offerLetters} />
+      ) : null}
+
       {canWrite ? (
- <SectionCard>
+        <SectionCard>
           <CardHeader>
             <CardTitle>Edit Candidate</CardTitle>
           </CardHeader>
@@ -290,15 +308,15 @@ export default async function CandidateWorkspacePage({
               </Button>
             </form>
           </CardContent>
- </SectionCard>
+        </SectionCard>
       ) : null}
 
- <SectionCard>
+      <SectionCard>
         <CardHeader>
           <CardTitle>Job Application History</CardTitle>
         </CardHeader>
         <CardContent className="overflow-x-auto">
- <OperationalTable>
+          <OperationalTable>
             <TableHeader>
               <TableRow>
                 <TableHead>Job</TableHead>
@@ -339,9 +357,9 @@ export default async function CandidateWorkspacePage({
                 </TableRow>
               ) : null}
             </TableBody>
- </OperationalTable>
+          </OperationalTable>
         </CardContent>
- </SectionCard>
+      </SectionCard>
 
       <ConversationLogsTable
         canWrite={canWrite}
