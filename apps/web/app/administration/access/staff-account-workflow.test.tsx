@@ -32,12 +32,11 @@ describe("StaffAccountWorkflow", () => {
 
     expect(markup).toContain("1. Select Employee &amp; Create Account")
     expect(markup).toContain('name="employee"')
-    expect(markup).toContain("Khattar Ankit · #33 · MRMPL")
+    expect(markup).toContain("Khattar Ankit selected.")
+    expect(markup).toContain('&quot;employeeCode&quot;:&quot;33&quot;')
+    expect(markup).not.toContain('id="staff-employee"')
     expect(markup).toContain("Design &amp; Engineering")
     expect(markup).toContain("Manager")
-    expect(markup).toContain(
-      "Search by employee ID, name, designation or department."
-    )
     expect(markup).not.toContain('name="name"')
     expect(markup).not.toContain("Link Employee / Posts (Optional)")
   })
@@ -48,7 +47,6 @@ describe("StaffAccountWorkflow", () => {
         canProvision={false}
         canAssignRoles
         created={false}
-        selectedUserId="staff-1"
         users={[
           {
             id: "staff-1",
@@ -76,5 +74,30 @@ describe("StaffAccountWorkflow", () => {
     expect(salesCheckbox).not.toContain(' disabled=""')
     expect(markup).toContain("Changes apply only to this staff account")
     expect(markup).toContain("Save Direct Roles")
+    expect(markup).toContain("Sales Employee selected.")
+    expect(markup).not.toContain('id="staff-account"')
+  })
+
+  it("keeps multiple choices available without choosing an account to change", () => {
+    const employees = ["31", "32"].map((employeeCode) => ({
+      employeeCode, employeeName: `Employee ${employeeCode}`,
+      organizationId: "org-1", organizationName: "MRMPL",
+      departments: ["Sales"], designations: ["Executive"],
+    }))
+    const markup = renderToStaticMarkup(<StaffAccountWorkflow
+      canProvision canAssignRoles created={false} roles={[]}
+      employees={employees} users={employees.map((employee) => ({
+        ...employee, id: employee.employeeCode, name: employee.employeeName,
+        email: `${employee.employeeCode}@example.test`, roleKeys: [], inheritedRoleKeys: [],
+      }))}
+    />)
+    expect(markup).toContain("2 matching employees")
+    expect(markup).toContain("2 matching staff accounts")
+    expect(markup).toContain('name="employee" value=""')
+    expect(markup).not.toContain("Save Direct Roles")
+    expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>[\s\S]*?Create Account/)
+    expect(markup).toContain('value="31"')
+    expect(markup).toContain('value="32"')
+    expect(markup).toContain("Clear selection")
   })
 })

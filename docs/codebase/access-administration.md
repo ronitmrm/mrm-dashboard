@@ -158,6 +158,18 @@ legacy gate; selecting a granular row adds only that gate and never sibling
 rows. Unknown keys are not referenced by navigation or a backend boundary and
 therefore grant no application access.
 
+## Employee dropdown selection
+
+Both staff workflow sections use the four Employee ID, Employee Name,
+Designation and Department dropdowns directly; no additional Employee or Staff
+Account selector is needed. Each dropdown respects other explicit filters and
+displays its sole option automatically, without persisting inferred values as
+filters. Multiple options remain selectable. Clear selection resets explicit
+filters. Only exactly one matching record enables creation or opens role editing;
+ambiguous identities must never default to the first result. Existing account
+links open with employee ID/name filters. Account creation still submits the
+organization ID and employee code to the existing protected server action.
+
 ## Security and scope
 
 - Page grants independently control navigation, dashboard links, tabs and

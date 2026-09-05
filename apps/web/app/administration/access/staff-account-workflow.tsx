@@ -126,7 +126,7 @@ function StaffSearchFields({
             aria-label={label}
             className="w-full"
             searchPlaceholder={`Search ${label.toLowerCase()}`}
-            value={value[key]}
+            value={value[key] || (options.length === 1 ? options[0] : "")}
             disabled={disabled}
             onChange={(event) => onChange({ ...value, [key]: event.target.value })}
           >
@@ -138,6 +138,10 @@ function StaffSearchFields({
         </Field>
         )
       })}
+      <Button type="button" variant="ghost" className="w-fit" disabled={disabled}
+        onClick={() => onChange(emptySearch)}>
+        Clear selection
+      </Button>
     </FieldGroup>
   )
 }
@@ -161,11 +165,11 @@ function CreateStaffAccountForm({
 }) {
   const [state, action, pending] = useActionState(provisionStaffAction, {})
   const [search, setSearch] = useState(emptySearch)
-  const [employeeValue, setEmployeeValue] = useState("")
   const matchingEmployees = employees.filter((employee) =>
     matchesStaffSearch({ ...employee, name: employee.employeeName }, search)
   )
   const unavailable = !employees.length
+  const employee = matchingEmployees.length === 1 ? matchingEmployees[0] : undefined
   return (
     <SectionCard size="sm">
       <CardHeader className="border-b">
@@ -183,56 +187,18 @@ function CreateStaffAccountForm({
               people={employees.map((employee) => ({ ...employee, name: employee.employeeName }))}
               value={search}
               disabled={pending || unavailable}
-              onChange={(next) => {
-                setSearch(next)
-                setEmployeeValue("")
-              }}
+              onChange={setSearch}
             />
             <FieldDescription role="status">
-              {matchingEmployees.length} matching employees. Select a result below.
+              {employee
+                ? `${employee.employeeName} selected.`
+                : `${matchingEmployees.length} matching employees. Narrow the dropdowns to one employee.`}
             </FieldDescription>
-            <FieldGroup className="grid gap-4 md:grid-cols-3">
-              <Field
-                className="relative min-w-0"
-                data-disabled={pending || unavailable}
-              >
-                <FieldLabel htmlFor="staff-employee">Employee</FieldLabel>
-                <NativeSelect
-                  aria-label="Employee"
-                  className="w-full"
-                  id="staff-employee"
-                  name="employee"
-                  value={employeeValue}
-                  onChange={(event) => setEmployeeValue(event.target.value)}
-                  required
-                  disabled={pending || unavailable}
-                  searchPlaceholder="Search ID, name, designation or department..."
-                >
-                  <NativeSelectOption value="">
-                    Select an employee
-                  </NativeSelectOption>
-                  {matchingEmployees.map((employee) => (
-                    <NativeSelectOption
-                      key={`${employee.organizationId}:${employee.employeeCode}`}
-                      value={JSON.stringify({
-                        employeeCode: employee.employeeCode,
-                        organizationId: employee.organizationId,
-                      })}
-                    >
-                      {employee.employeeName} · #{employee.employeeCode} ·{" "}
-                      {employee.organizationName} ·{" "}
-                      {employee.designations.join(", ")} ·{" "}
-                      {employee.departments.join(", ")}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
-                {!employees.length ? (
-                  <FieldDescription>
-                    No eligible employees without a login. Add the employee to
-                    Employee Master first.
-                  </FieldDescription>
-                ) : null}
-              </Field>
+            <input type="hidden" name="employee" value={employee ? JSON.stringify({
+              employeeCode: employee.employeeCode,
+              organizationId: employee.organizationId,
+            }) : ""} />
+            <FieldGroup className="grid gap-4 md:grid-cols-2">
               <Field>
                 <FieldLabel htmlFor="staff-email">Email / Login ID</FieldLabel>
                 <Input
@@ -266,7 +232,7 @@ function CreateStaffAccountForm({
             <Button
               className="w-fit"
               type="submit"
-              disabled={pending || unavailable}
+              disabled={pending || !employee}
             >
               <UserRoundPlus data-icon="inline-start" />
               {pending ? "Creating account…" : "Create Account & Continue"}
@@ -349,10 +315,12 @@ function StaffRoleForm({
 }
 
 export function StaffAccountWorkflow(props: StaffWorkflowProps) {
-  const [userId, setUserId] = useState(props.selectedUserId ?? "")
-  const [search, setSearch] = useState(emptySearch)
+  const [search, setSearch] = useState(() => {
+    const selected = props.users.find((user) => user.id === props.selectedUserId)
+    return selected ? { ...emptySearch, employeeCode: selected.employeeCode ?? "", name: selected.name } : emptySearch
+  })
   const matchingUsers = props.users.filter((user) => matchesStaffSearch(user, search))
-  const user = props.users.find((user) => user.id === userId)
+  const user = matchingUsers.length === 1 ? matchingUsers[0] : undefined
   return (
     <>
       {props.canProvision ? (
@@ -374,17 +342,14 @@ export function StaffAccountWorkflow(props: StaffWorkflowProps) {
           <CardContent className="grid gap-4">
             <StaffSearchFields
               prefix="staff-search"
-              people={props.users.filter((user) => user.employeeCode !== null)}
+              people={props.users}
               value={search}
-              onChange={(next) => {
-                setSearch(next)
-                setUserId("")
-              }}
+              onChange={setSearch}
             />
             <FieldDescription role="status">
-              {matchingUsers.length} matching staff accounts. Select a result below.
+              {user ? `${user.name} selected.` : `${matchingUsers.length} matching staff accounts. Narrow the dropdowns to one account.`}
             </FieldDescription>
-            {props.created && userId === props.selectedUserId ? (
+            {props.created && user?.id === props.selectedUserId ? (
               <StaffFeedback
                 state={{
                   success:
@@ -392,31 +357,6 @@ export function StaffAccountWorkflow(props: StaffWorkflowProps) {
                 }}
               />
             ) : null}
-            <Field className="relative min-w-0">
-              <FieldLabel htmlFor="staff-account">Staff Account</FieldLabel>
-              <NativeSelect
-                aria-label="Staff Account"
-                className="w-full"
-                id="staff-account"
-                value={userId}
-                onChange={(event) => setUserId(event.target.value)}
-                searchPlaceholder="Search ID, name, designation or department..."
-              >
-                <NativeSelectOption value="">
-                  Select a staff account
-                </NativeSelectOption>
-                {matchingUsers.map((user) => (
-                  <NativeSelectOption key={user.id} value={user.id}>
-                    {user.employeeCode ? `#${user.employeeCode} · ` : ""}
-                    {user.name} · {user.designations.join(", ") || "—"} ·{" "}
-                    {user.departments.join(", ") || "—"} · {user.email}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-              <FieldDescription>
-                Search by employee ID, name, designation or department.
-              </FieldDescription>
-            </Field>
             {user && props.canAssignRoles ? (
               <StaffRoleForm key={user.id} user={user} roles={props.roles} />
             ) : null}
