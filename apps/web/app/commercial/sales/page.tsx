@@ -26,6 +26,7 @@ import {
 } from "@workspace/ui/components/table"
 import { Textarea } from "@workspace/ui/components/textarea"
 
+import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
 import { BoundedResultNotice } from "@/components/bounded-result-notice"
 import {
   SalesWorkspaceTabs,
@@ -746,11 +747,13 @@ export default async function SalesPage({
                         <TableCell>{task.pendingFollowups}</TableCell>
                         <TableCell>
                           <Button asChild size="sm" variant="outline">
-                            <Link
+                            <AttachmentViewerLink
+                              fileName={`${task.enquiryNumber}-quote.pdf`}
                               href={`/commercial/quotes/enquiry/${task.enquiryId}/pdf`}
+                              mediaType="application/pdf"
                             >
                               Open PDF
-                            </Link>
+                            </AttachmentViewerLink>
                           </Button>
                         </TableCell>
                       </TableRow>

@@ -26,6 +26,20 @@ export function attachmentViewerHref(input: {
   return `/attachments/view?${search.toString()}`
 }
 
+export function attachmentContentDisposition(
+  requestUrl: string,
+  fileName: string
+) {
+  const safeName = fileName.replace(/[\r\n"]/g, "_")
+  const disposition = new URL(requestUrl).searchParams.has("download")
+    ? "attachment"
+    : "inline"
+  return (
+    `${disposition}; filename="${safeName}"; filename*=UTF-8''` +
+    encodeURIComponent(safeName)
+  )
+}
+
 export function attachmentSourceWithMode(
   source: string,
   mode: "download" | "preview"

@@ -32,6 +32,10 @@ describe("CandidateOfferLetterRegister", () => {
     expect(html).toContain("Offer Letter History")
     expect(html).toContain("MRMPL-HR-202627-OL-1")
     expect(html).toContain("HOD / Human Resources")
-    expect(html).toContain('href="/hr/employment-letters/letter-1/download"')
+    expect(html).toContain('href="/attachments/view?')
+    expect(html).toContain(
+      "src=%2Fhr%2Femployment-letters%2Fletter-1%2Fdownload"
+    )
+    expect(html).toContain("View PDF")
   })
 })

@@ -19,6 +19,7 @@ import {
   TableRow,
 } from "@workspace/ui/components/table"
 
+import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
 import { sendQuoteAction } from "@/app/commercial/costing/actions"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { MetricSummary } from "@/components/ui/golden-patterns"
@@ -128,15 +129,13 @@ export default async function QuotesPage() {
                       <div className="flex justify-end gap-2">
                         {quote.enquiryId ? (
                           <Button asChild size="sm" variant="outline">
-                            <Link
-                              href={
-                                "/commercial/quotes/enquiry/" +
-                                quote.enquiryId +
-                                "/pdf"
-                              }
+                            <AttachmentViewerLink
+                              fileName={`${quote.quoteNumber}.pdf`}
+                              href={`/commercial/quotes/enquiry/${quote.enquiryId}/pdf`}
+                              mediaType="application/pdf"
                             >
-                              Pdf
-                            </Link>
+                              Open PDF
+                            </AttachmentViewerLink>
                           </Button>
                         ) : null}
                         {quote.status === "Ready" ? (

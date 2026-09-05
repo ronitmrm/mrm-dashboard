@@ -43,7 +43,7 @@ import { ExcelColumnFilter } from "@workspace/ui/components/excel-column-filter"
 import { useExcelTable } from "@workspace/ui/hooks/use-excel-table"
 import {
   BriefcaseBusiness,
-  Download,
+  FileText,
   FilterX,
   Pencil,
   Trash2,
@@ -51,6 +51,7 @@ import {
 } from "lucide-react"
 import { useState } from "react"
 
+import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
 import {
   assignEmployeeAction,
   createJobAction,
@@ -455,12 +456,14 @@ export function ApprovedPostsTable({
                           <TableCell className="text-right">
                             {letter.fileAvailable ? (
                               <Button asChild size="sm" variant="outline">
-                                <a
+                                <AttachmentViewerLink
+                                  fileName={`${letter.referenceNumber}-${letter.letterType}-letter.pdf`}
                                   href={`/hr/employment-letters/${letter.id}/download`}
+                                  mediaType="application/pdf"
                                 >
-                                  <Download data-icon="inline-start" />
-                                  Download
-                                </a>
+                                  <FileText data-icon="inline-start" />
+                                  View PDF
+                                </AttachmentViewerLink>
                               </Button>
                             ) : (
                               <Badge variant="destructive">
@@ -621,14 +624,18 @@ export function ApprovedPostsTable({
                   .filter((letter) => letter.fileAvailable)
                   .map((letter) => (
                     <Button asChild key={letter.id} size="sm" variant="outline">
-                      <a href={`/hr/employment-letters/${letter.id}/download`}>
-                        <Download data-icon="inline-start" />
+                      <AttachmentViewerLink
+                        fileName={`${letter.referenceNumber}-${letter.letterType}-letter.pdf`}
+                        href={`/hr/employment-letters/${letter.id}/download`}
+                        mediaType="application/pdf"
+                      >
+                        <FileText data-icon="inline-start" />
                         {letter.letterType === "offer"
                           ? "Offer"
                           : letter.letterType === "appointment"
                             ? "Appointment"
                             : "Experience"}
-                      </a>
+                      </AttachmentViewerLink>
                     </Button>
                   ))}
                 {selectedEmployeePost.status === "Occupied" &&

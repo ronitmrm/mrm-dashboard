@@ -1,6 +1,10 @@
 import { describe, expect, test } from "vitest"
 
-import { attachmentViewerHref, safeAttachmentSource } from "./attachment-viewer"
+import {
+  attachmentContentDisposition,
+  attachmentViewerHref,
+  safeAttachmentSource,
+} from "./attachment-viewer"
 
 describe("attachment viewer links", () => {
   test("accepts only same-origin absolute paths and preserves metadata", () => {
@@ -16,5 +20,20 @@ describe("attachment viewer links", () => {
         source: "/commercial/design/1/file/cad",
       })
     ).toContain("/attachments/view?")
+  })
+
+  test("previews PDFs inline and downloads them only on request", () => {
+    expect(
+      attachmentContentDisposition(
+        "https://app.test/document?preview=1",
+        "offer.pdf"
+      )
+    ).toBe(`inline; filename="offer.pdf"; filename*=UTF-8''offer.pdf`)
+    expect(
+      attachmentContentDisposition(
+        "https://app.test/document?download=1",
+        "offer.pdf"
+      )
+    ).toBe(`attachment; filename="offer.pdf"; filename*=UTF-8''offer.pdf`)
   })
 })

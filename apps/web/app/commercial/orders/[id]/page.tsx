@@ -32,6 +32,7 @@ import {
 } from "@workspace/ui/components/table"
 import { Textarea } from "@workspace/ui/components/textarea"
 
+import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { DataDownloadButton } from "@/components/data-download-button"
 import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
@@ -499,12 +500,13 @@ export default async function PurchaseOrderPage({
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Button asChild size="sm" variant="outline">
-                    <Link
+                    <AttachmentViewerLink
+                      fileName={`${currentInvoice.invoiceNumber}.pdf`}
                       href={`/commercial/orders/${order.id}/pi`}
-                      target="_blank"
+                      mediaType="application/pdf"
                     >
                       Open Pi Pdf
-                    </Link>
+                    </AttachmentViewerLink>
                   </Button>
                   <DataDownloadButton
                     href={`/commercial/orders/${order.id}/pi.xlsx`}

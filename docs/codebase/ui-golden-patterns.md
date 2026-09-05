@@ -87,6 +87,11 @@ Use `StandardState` for empty, loading, and error states. Give recovery actions 
 
 Preserve keyboard operation, visible focus, labelled controls, sufficient contrast, and touch-friendly controls. Tables remain horizontally scrollable at narrow widths. Dialogs and drawers require a title and use the standard content wrappers when the workflow is simple.
 
+User-facing PDF actions open the authenticated in-app attachment viewer through
+`AttachmentViewerLink`. PDF routes serve inline content for viewer previews and
+attachment content only for the viewer's explicit **Download Original** action.
+Exports such as CSV and Excel remain direct downloads.
+
 ## Navigation shell
 
 The shared sidebar uses a white surface with green foreground in light mode and

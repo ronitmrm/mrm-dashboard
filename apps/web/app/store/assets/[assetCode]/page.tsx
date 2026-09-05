@@ -28,6 +28,7 @@ import {
 } from "@workspace/ui/components/table"
 import { Textarea } from "@workspace/ui/components/textarea"
 
+import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
 import {
   StoreAssetWorkspacePane,
   StoreAssetWorkspaceTabs,
@@ -591,7 +592,13 @@ export default async function StoreAssetWorkspacePage({
                   </TableCell>
                   <TableCell>
                     <Button asChild size="sm" variant="outline">
-                      <a href={`/store/orders/${order.id}/pdf`}>Download</a>
+                      <AttachmentViewerLink
+                        fileName={`${order.orderNumber}.pdf`}
+                        href={`/store/orders/${order.id}/pdf`}
+                        mediaType="application/pdf"
+                      >
+                        View PDF
+                      </AttachmentViewerLink>
                     </Button>
                   </TableCell>
                   {canRepair ? (

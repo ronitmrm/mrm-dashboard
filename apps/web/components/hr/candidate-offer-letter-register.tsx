@@ -16,7 +16,9 @@ import {
   TableHeader,
   TableRow,
 } from "@workspace/ui/components/table"
-import { Download } from "lucide-react"
+import { FileText } from "lucide-react"
+
+import { AttachmentViewerLink } from "../attachment-viewer-link"
 
 export function CandidateOfferLetterRegister({
   letters,
@@ -57,10 +59,14 @@ export function CandidateOfferLetterRegister({
                 <TableCell className="text-right">
                   {letter.fileAvailable ? (
                     <Button asChild size="sm" variant="outline">
-                      <a href={`/hr/employment-letters/${letter.id}/download`}>
-                        <Download data-icon="inline-start" />
-                        Download
-                      </a>
+                      <AttachmentViewerLink
+                        fileName={`${letter.referenceNumber}-offer-letter.pdf`}
+                        href={`/hr/employment-letters/${letter.id}/download`}
+                        mediaType="application/pdf"
+                      >
+                        <FileText data-icon="inline-start" />
+                        View PDF
+                      </AttachmentViewerLink>
                     </Button>
                   ) : (
                     <Badge variant="destructive">Generation Incomplete</Badge>
