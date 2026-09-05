@@ -2,10 +2,12 @@
 
 ## Workspace tabs
 
-- Header metrics reuse the current snapshot: Staff Accounts counts identity
-  users, Application Roles counts all roles (including system roles), and Without
-  Login counts eligible Employee Master entries without a linked user. No extra
-  database queries are issued for these cards.
+- Header metrics reuse the current snapshot and shared MetricSummary: eligible
+  employees with/without login and with/without at least one direct or inherited
+  role. Non-employee identities are excluded, and employees without login also
+  count as without roles. Counts ignore dropdown filters. See the canonical
+  [employee access summary](../glossary/access-control.md#employee-access-summary).
+  No extra database queries are issued for these cards.
 - `Create Role` is the default tab for users allowed to create roles. It contains
   only the role details and granular permission selector. Successful creation
   opens the saved-role list.

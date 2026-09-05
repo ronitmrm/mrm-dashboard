@@ -89,3 +89,18 @@ possesses an UploadThing `public-read` URL can read them.
 audited manual deletion with exact-target confirmation and a reason. Read access
 never implies delete access. Administrators receive both capabilities by
 default; normal module permissions continue governing routine file discovery.
+
+## Employee access summary
+
+Access Administration counts eligible active Employee Master records, once per
+organization and employee ID, across the full workspace rather than filtered
+dropdown results. Non-employee accounts, including the standalone System
+Administrator, are excluded.
+
+- **Employees With Login:** employees linked to a login account.
+- **Employees Without Login:** eligible employees minus employees with login.
+- **Employees With Roles:** employees whose linked account has at least one
+  direct or inherited application role. Multiple roles count the employee once;
+  role definitions and individual permission overrides are not employee counts.
+- **Employees Without Roles:** eligible employees minus employees with roles,
+  including employees without login accounts.
