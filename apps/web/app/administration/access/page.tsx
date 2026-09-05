@@ -3,7 +3,6 @@ import Link from "next/link"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
-  MetricCard,
   SectionCard,
   CardContent,
   CardDescription,
@@ -28,6 +27,7 @@ import {
   requireCapability,
 } from "@/lib/auth/require-capability"
 import { administrationTaskCapabilities } from "@/lib/auth/task-capabilities"
+import { MetricSummary } from "@/components/ui/golden-patterns"
 
 import { createRoleAction, updateRolePermissionsAction } from "./actions"
 import { PermissionSelector } from "./permission-selector"
@@ -97,6 +97,15 @@ export default async function AccessAdministrationPage({
   const unlinkedEmployees = snapshot.employees.filter(
     (employee) => !employee.linkedUserId
   )
+  const usersWithRoles = new Set(
+    snapshot.users
+      .filter((user) => user.roleKeys.length || user.employee?.inheritedRoleKeys.length)
+      .map((user) => user.id)
+  )
+  const employeesWithRoles = snapshot.employees.filter(
+    (employee) => employee.linkedUserId && usersWithRoles.has(employee.linkedUserId)
+  ).length
+  const employeesWithoutRoles = snapshot.employees.length - employeesWithRoles
   const selectedRole = snapshot.roles.find(
     (role) => role.key === firstQueryValue(query.role)
   )
@@ -104,32 +113,35 @@ export default async function AccessAdministrationPage({
 
   return (
     <>
-      <section
-        aria-label="Access summary"
-        className="grid min-w-0 grid-cols-3 gap-3"
-      >
-        <MetricCard
-          className="p-3"
-          label="Staff Accounts"
-          description="Provisioned users"
-          value={snapshot.users.length}
-          tone="information"
-        />
-        <MetricCard
-          className="p-3"
-          label="Application Roles"
-          description="Configured roles"
-          value={snapshot.roles.length}
-          tone="brand"
-        />
-        <MetricCard
-          className="p-3"
-          label="Without Login"
-          description="Unlinked employees"
-          value={unlinkedEmployees.length}
-          tone={unlinkedEmployees.length ? "warning" : "neutral"}
-        />
-      </section>
+      <MetricSummary
+        scope="Eligible active Employee Master records · All employees, regardless of filters · Non-employee accounts excluded"
+        items={[
+          {
+            label: "Employees With Login",
+            description: "Linked login accounts",
+            value: snapshot.employees.length - unlinkedEmployees.length,
+            tone: "information",
+          },
+          {
+            label: "Employees Without Login",
+            description: "Login account not created",
+            value: unlinkedEmployees.length,
+            tone: unlinkedEmployees.length ? "warning" : "positive",
+          },
+          {
+            label: "Employees With Roles",
+            description: "At least one assigned role",
+            value: employeesWithRoles,
+            tone: "brand",
+          },
+          {
+            label: "Employees Without Roles",
+            description: "Includes employees without login",
+            value: employeesWithoutRoles,
+            tone: employeesWithoutRoles ? "warning" : "positive",
+          },
+        ]}
+      />
 
       <AccessWorkspaceTabs
         activeSection={activeSection}
