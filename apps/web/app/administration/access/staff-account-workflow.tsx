@@ -8,6 +8,7 @@ import { Alert, AlertDescription } from "@workspace/ui/components/alert"
 import { Button } from "@workspace/ui/components/button"
 import {
   SectionCard,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -138,10 +139,6 @@ function StaffSearchFields({
         </Field>
         )
       })}
-      <Button type="button" variant="ghost" className="w-fit" disabled={disabled}
-        onClick={() => onChange(emptySearch)}>
-        Clear selection
-      </Button>
     </FieldGroup>
   )
 }
@@ -174,6 +171,12 @@ function CreateStaffAccountForm({
     <SectionCard size="sm">
       <CardHeader className="border-b">
         <CardTitle>1. Select Employee &amp; Create Account</CardTitle>
+        <CardAction>
+          <Button type="button" variant="ghost" disabled={pending || unavailable}
+            onClick={() => setSearch(emptySearch)}>
+            Clear selection
+          </Button>
+        </CardAction>
         <CardDescription>
           Select an employee already assigned in Employee Master, including
           appointed employees. The login is linked automatically.
@@ -189,11 +192,6 @@ function CreateStaffAccountForm({
               disabled={pending || unavailable}
               onChange={setSearch}
             />
-            <FieldDescription role="status">
-              {employee
-                ? `${employee.employeeName} selected.`
-                : `${matchingEmployees.length} matching employees. Narrow the dropdowns to one employee.`}
-            </FieldDescription>
             <input type="hidden" name="employee" value={employee ? JSON.stringify({
               employeeCode: employee.employeeCode,
               organizationId: employee.organizationId,
@@ -334,10 +332,11 @@ export function StaffAccountWorkflow(props: StaffWorkflowProps) {
         >
           <CardHeader className="border-b">
             <CardTitle>2. Assign or Edit Roles</CardTitle>
-            <CardDescription>
-              Choose the newly created or an existing staff account, then add
-              the roles required for that employee.
-            </CardDescription>
+            <CardAction>
+              <Button type="button" variant="ghost" onClick={() => setSearch(emptySearch)}>
+                Clear selection
+              </Button>
+            </CardAction>
           </CardHeader>
           <CardContent className="grid gap-4">
             <StaffSearchFields
@@ -346,9 +345,6 @@ export function StaffAccountWorkflow(props: StaffWorkflowProps) {
               value={search}
               onChange={setSearch}
             />
-            <FieldDescription role="status">
-              {user ? `${user.name} selected.` : `${matchingUsers.length} matching staff accounts. Narrow the dropdowns to one account.`}
-            </FieldDescription>
             {props.created && user?.id === props.selectedUserId ? (
               <StaffFeedback
                 state={{

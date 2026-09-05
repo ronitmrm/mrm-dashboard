@@ -32,7 +32,6 @@ describe("StaffAccountWorkflow", () => {
 
     expect(markup).toContain("1. Select Employee &amp; Create Account")
     expect(markup).toContain('name="employee"')
-    expect(markup).toContain("Khattar Ankit selected.")
     expect(markup).toContain('&quot;employeeCode&quot;:&quot;33&quot;')
     expect(markup).not.toContain('id="staff-employee"')
     expect(markup).toContain("Design &amp; Engineering")
@@ -74,7 +73,6 @@ describe("StaffAccountWorkflow", () => {
     expect(salesCheckbox).not.toContain(' disabled=""')
     expect(markup).toContain("Changes apply only to this staff account")
     expect(markup).toContain("Save Direct Roles")
-    expect(markup).toContain("Sales Employee selected.")
     expect(markup).not.toContain('id="staff-account"')
   })
 
@@ -91,8 +89,7 @@ describe("StaffAccountWorkflow", () => {
         email: `${employee.employeeCode}@example.test`, roleKeys: [], inheritedRoleKeys: [],
       }))}
     />)
-    expect(markup).toContain("2 matching employees")
-    expect(markup).toContain("2 matching staff accounts")
+    expect(markup).not.toContain("Narrow the dropdowns")
     expect(markup).toContain('name="employee" value=""')
     expect(markup).not.toContain("Save Direct Roles")
     expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>[\s\S]*?Create Account/)
