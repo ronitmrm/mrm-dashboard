@@ -110,7 +110,11 @@ function StaffSearchFields({
   return (
     <FieldGroup className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       {searchFields.map(({ key, label }) => {
-        const options = [...new Set(people.flatMap((person) => {
+        // Like Excel, each column's options respect every other active filter.
+        const matchingPeople = people.filter((person) =>
+          matchesStaffSearch(person, { ...value, [key]: "" })
+        )
+        const options = [...new Set(matchingPeople.flatMap((person) => {
           const field = person[key]
           return Array.isArray(field) ? field : field ? [field] : []
         }))].sort((left, right) => left.localeCompare(right, undefined, { numeric: true }))
