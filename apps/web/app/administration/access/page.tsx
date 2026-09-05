@@ -102,10 +102,13 @@ export default async function AccessAdministrationPage({
       .filter((user) => user.roleKeys.length || user.employee?.inheritedRoleKeys.length)
       .map((user) => user.id)
   )
-  const employeesWithRoles = snapshot.employees.filter(
+  const employeesWithoutLogin = snapshot.employeeMaster.filter(
+    (employee) => !employee.linkedUserId
+  ).length
+  const employeesWithRoles = snapshot.employeeMaster.filter(
     (employee) => employee.linkedUserId && usersWithRoles.has(employee.linkedUserId)
   ).length
-  const employeesWithoutRoles = snapshot.employees.length - employeesWithRoles
+  const employeesWithoutRoles = snapshot.employeeMaster.length - employeesWithRoles
   const selectedRole = snapshot.roles.find(
     (role) => role.key === firstQueryValue(query.role)
   )
@@ -114,19 +117,19 @@ export default async function AccessAdministrationPage({
   return (
     <>
       <MetricSummary
-        scope="Eligible active Employee Master records · All employees, regardless of filters · Non-employee accounts excluded"
+        scope="Full Employee Master · Includes appointed and departed employees · Unaffected by filters · Non-employee accounts excluded"
         items={[
           {
             label: "Employees With Login",
             description: "Linked login accounts",
-            value: snapshot.employees.length - unlinkedEmployees.length,
+            value: snapshot.employeeMaster.length - employeesWithoutLogin,
             tone: "information",
           },
           {
             label: "Employees Without Login",
             description: "Login account not created",
-            value: unlinkedEmployees.length,
-            tone: unlinkedEmployees.length ? "warning" : "positive",
+            value: employeesWithoutLogin,
+            tone: employeesWithoutLogin ? "warning" : "positive",
           },
           {
             label: "Employees With Roles",

@@ -457,10 +457,7 @@ export function createAccessAdministrationRepository(
            AND lower(btrim(posts.employee_code)) = lower(btrim($2))
            AND (
              posts.status = 'Occupied'
-             OR (
-               posts.status = 'Appointed'
-               AND posts.joining_date <= current_date
-             )
+             OR posts.status = 'Appointed'
              OR (
                posts.status = 'Resigned'
                AND posts.last_working_date >= current_date
@@ -511,10 +508,7 @@ export function createAccessAdministrationRepository(
              AND lower(btrim(posts.employee_code)) = lower(btrim($4))
              AND (
                posts.status = 'Occupied'
-               OR (
-                 posts.status = 'Appointed'
-                 AND posts.joining_date <= current_date
-               )
+               OR posts.status = 'Appointed'
                OR (
                  posts.status = 'Resigned'
                  AND posts.last_working_date >= current_date
@@ -695,7 +689,7 @@ export function createAccessAdministrationRepository(
     },
 
     async getSnapshot() {
-      const [users, overrides, roles, permissions, employees, postProfiles] =
+      const [users, overrides, roles, permissions, employees, postProfiles, employeeMaster] =
         await Promise.all([
           pool.query<UserRow>(
             `SELECT
@@ -768,8 +762,13 @@ export function createAccessAdministrationRepository(
                AS designations,
              array_agg(DISTINCT posts.post_code ORDER BY posts.post_code)
                AS post_codes,
-             array_agg(DISTINCT posts.id::text ORDER BY posts.id::text)
-               AS post_ids,
+             COALESCE(
+               array_agg(DISTINCT posts.id::text ORDER BY posts.id::text)
+                 FILTER (WHERE posts.status = 'Occupied'
+                   OR (posts.status = 'Appointed' AND posts.joining_date <= current_date)
+                   OR (posts.status = 'Resigned' AND posts.last_working_date >= current_date)),
+               ARRAY[]::text[]
+             ) AS post_ids,
              max(employee_links.user_id::text) AS linked_user_id
            FROM recruitment.posts
            JOIN core.organizations
@@ -786,10 +785,7 @@ export function createAccessAdministrationRepository(
              AND nullif(btrim(posts.employee_name), '') IS NOT NULL
              AND (
                posts.status = 'Occupied'
-               OR (
-                 posts.status = 'Appointed'
-                 AND posts.joining_date <= current_date
-               )
+               OR posts.status = 'Appointed'
                OR (
                  posts.status = 'Resigned'
                  AND posts.last_working_date >= current_date
@@ -825,6 +821,22 @@ export function createAccessAdministrationRepository(
            ORDER BY lower(COALESCE(departments.name, '')),
              lower(designations.name),
              lower(posts.post_code)`
+          ),
+          pool.query<{
+            organization_id: string
+            employee_code: string
+            linked_user_id: string | null
+          }>(
+            `SELECT posts.organization_id,
+               lower(btrim(posts.employee_code)) AS employee_code,
+               max(employee_links.user_id::text) AS linked_user_id
+             FROM recruitment.posts
+             LEFT JOIN identity.employee_links
+               ON employee_links.organization_id = posts.organization_id
+              AND lower(btrim(employee_links.employee_code)) = lower(btrim(posts.employee_code))
+             WHERE nullif(btrim(posts.employee_code), '') IS NOT NULL
+               AND nullif(btrim(posts.employee_name), '') IS NOT NULL
+             GROUP BY posts.organization_id, lower(btrim(posts.employee_code))`
           ),
         ])
       const overridesByUser = new Map<
@@ -873,6 +885,11 @@ export function createAccessAdministrationRepository(
       )
 
       return {
+        employeeMaster: employeeMaster.rows.map((row) => ({
+          organizationId: row.organization_id,
+          employeeCode: row.employee_code,
+          linkedUserId: row.linked_user_id,
+        })),
         employees: employees.rows.map((row) => ({
           departments: row.departments,
           designations: row.designations,

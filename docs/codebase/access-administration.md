@@ -2,12 +2,13 @@
 
 ## Workspace tabs
 
-- Header metrics reuse the current snapshot and shared MetricSummary: eligible
+- Header metrics use the full Employee Master snapshot and shared MetricSummary:
   employees with/without login and with/without at least one direct or inherited
   role. Non-employee identities are excluded, and employees without login also
   count as without roles. Counts ignore dropdown filters. See the canonical
   [employee access summary](../glossary/access-control.md#employee-access-summary).
-  No extra database queries are issued for these cards.
+  A grouped Employee Master query includes appointed and departed employees,
+  independently of the narrower new-account eligibility list.
 - `Create Role` is the default tab for users allowed to create roles. It contains
   only the role details and granular permission selector. Successful creation
   opens the saved-role list.
@@ -47,6 +48,11 @@
    new login is linked automatically. Staff credentials cannot be provisioned
    without this employee reference. Passwords are never returned in action state
    or audit data.
+   Occupied and Appointed assignments are eligible without a joining-date
+   requirement. Resigned assignments qualify only through their last working
+   date; vacant/inactive assignments do not authorize account creation. Both
+   preflight and transactional linking enforce this rule. Existing links are
+   reused, never recreated. Post-inheritance eligibility remains unchanged.
 2. Select the complete set of existing non-system Application Roles for the
    newly created or an existing staff account. The repository validates the
    entire selection before atomically replacing only that account's direct role
