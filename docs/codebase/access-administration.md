@@ -16,8 +16,11 @@
   creating its linked login, and assigning direct roles, then shows the staff
   register. The Post Access Profile editor is not shown in this workspace.
 - Both employee and staff-account selection expose separate Employee ID,
-  Employee Name, Designation and Department search fields. Case-insensitive
-  partial matches combine across fields; each workflow keeps its own filters.
+  Employee Name, Designation and Department searchable dropdowns, populated from
+  their eligible Employee Master records (unlinked employees for creation,
+  linked staff for role assignment). Distinct values are sorted; All clears a
+  filter. Selected values match exactly and combine across fields; each workflow
+  keeps its own filters. Dropdown search narrows the available master values.
   Changing a filter clears its selection so a hidden account cannot be submitted.
 - Staff Access uses separate, filterable Employee ID, employee identity,
   designation, department, assigned roles, overrides and action columns. Each

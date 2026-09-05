@@ -88,9 +88,9 @@ function matchesStaffSearch(
   search: StaffSearch
 ) {
   return searchFields.every(({ key }) => {
+    if (!search[key]) return true
     const value = person[key]
-    const text = Array.isArray(value) ? value.join(" ") : value ?? ""
-    return text.toLocaleLowerCase().includes(search[key].trim().toLocaleLowerCase())
+    return Array.isArray(value) ? value.includes(search[key]) : value === search[key]
   })
 }
 
@@ -99,30 +99,41 @@ function StaffSearchFields({
   value,
   onChange,
   disabled,
+  people,
 }: {
   prefix: string
   value: StaffSearch
   onChange: (value: StaffSearch) => void
   disabled?: boolean
+  people: Pick<StaffAccount, "employeeCode" | "name" | "designations" | "departments">[]
 }) {
   return (
     <FieldGroup className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      {searchFields.map(({ key, label }) => (
+      {searchFields.map(({ key, label }) => {
+        const options = [...new Set(people.flatMap((person) => {
+          const field = person[key]
+          return Array.isArray(field) ? field : field ? [field] : []
+        }))].sort((left, right) => left.localeCompare(right, undefined, { numeric: true }))
+        return (
         <Field key={key}>
           <FieldLabel htmlFor={`${prefix}-${key}`}>{label}</FieldLabel>
-          <Input
+          <NativeSelect
             id={`${prefix}-${key}`}
-            type="search"
-            placeholder={`Search ${label.toLowerCase()}`}
+            aria-label={label}
+            className="w-full"
+            searchPlaceholder={`Search ${label.toLowerCase()}`}
             value={value[key]}
             disabled={disabled}
             onChange={(event) => onChange({ ...value, [key]: event.target.value })}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") event.preventDefault()
-            }}
-          />
+          >
+            <NativeSelectOption value="">All {label.toLowerCase()}</NativeSelectOption>
+            {options.map((option) => (
+              <NativeSelectOption key={option} value={option}>{option}</NativeSelectOption>
+            ))}
+          </NativeSelect>
         </Field>
-      ))}
+        )
+      })}
     </FieldGroup>
   )
 }
@@ -165,6 +176,7 @@ function CreateStaffAccountForm({
           <FieldGroup className="gap-4">
             <StaffSearchFields
               prefix="employee-search"
+              people={employees.map((employee) => ({ ...employee, name: employee.employeeName }))}
               value={search}
               disabled={pending || unavailable}
               onChange={(next) => {
@@ -357,6 +369,7 @@ export function StaffAccountWorkflow(props: StaffWorkflowProps) {
           <CardContent className="grid gap-4">
             <StaffSearchFields
               prefix="staff-search"
+              people={props.users.filter((user) => user.employeeCode !== null)}
               value={search}
               onChange={(next) => {
                 setSearch(next)

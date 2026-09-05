@@ -149,7 +149,8 @@ export default async function AccessAdministrationPage({
               designations: user.employee?.designations ?? [],
               employeeCode: user.employee?.employeeCode ?? null,
               id: user.id,
-              name: user.name,
+              name: snapshot.employees.find((employee) => employee.linkedUserId === user.id)
+                ?.employeeName ?? user.name,
               email: user.email,
               roleKeys: user.roleKeys,
               inheritedRoleKeys: user.employee?.inheritedRoleKeys ?? [],
