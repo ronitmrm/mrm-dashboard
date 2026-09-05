@@ -243,10 +243,6 @@ export default async function AccessAdministrationPage({
           >
             <CardHeader className="border-b">
               <CardTitle>Staff Access</CardTitle>
-              <CardDescription>
-                Select a role to view its rights. Use Assign or Edit Roles above
-                to manage direct roles for an employee.
-              </CardDescription>
             </CardHeader>
             <CardContent>
               <StaffAccessRegister
