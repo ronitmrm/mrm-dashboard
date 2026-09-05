@@ -13,10 +13,8 @@
   `?section=roles&role=<key>` and renders only that role's editor; the register
   does not mount hidden permission selectors for every role.
 - `Staff Accounts` starts by selecting an eligible Employee Master record,
-  creating its linked login, and assigning direct roles, then shows Approved
-  Post profiles and the staff register.
-  The post selector shows its linked designation
-  and occupant; the duplicate review dropdown is omitted.
+  creating its linked login, and assigning direct roles, then shows the staff
+  register. The Post Access Profile editor is not shown in this workspace.
 - Staff Access uses separate, filterable Employee ID, employee identity,
   designation, department, assigned roles, overrides and action columns. Each
   direct or inherited role chip labels its source and opens that role's rights
@@ -52,22 +50,15 @@ not part of the dashboard workflow. Provisioning records both
 `access.user.provisioned` and `access.employee.linked`; audit/link failure removes
 only the newly created account.
 Shared Field, Checkbox, NativeSelect, Alert and SectionCard primitives provide
-pending states and safe inline feedback. The existing post profile editor stays
-available separately; role-name normalization is unchanged despite removing its
-helper text.
+pending states and safe inline feedback. Role-name normalization is unchanged
+despite removing its helper text.
 
 ## Post access profile
 
-Select an Approved Post, then its linked designation, before the current
-occupant and role controls appear. This is not a designation reassignment
-form: each post retains the designation defined in HR. Changing the post
-clears the downstream selections.
-
-The snapshot matches occupants by immutable post ID using the existing
-current-employment query, including joining/last-working-date eligibility.
-Vacant posts and occupants without a linked login have explicit explanations.
-Roles remain attached to the post. Assign/remove changes one role at a time
-and preserves other roles, with the existing server capability and audit checks.
+The Post Access Profile card was removed from Staff Accounts. Existing
+post-role assignments, inheritance, server capability checks and audit behavior
+are preserved; removing the editor does not revoke existing access. Inherited
+roles remain visible as non-editable context in the staff workflow and register.
 
 ## Role deletion
 
