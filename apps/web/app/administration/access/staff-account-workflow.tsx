@@ -62,6 +62,71 @@ type StaffWorkflowProps = {
   }[]
 }
 
+const searchFields = [
+  { key: "employeeCode", label: "Employee ID" },
+  { key: "name", label: "Employee Name" },
+  { key: "designations", label: "Designation" },
+  { key: "departments", label: "Department" },
+] as const
+
+type StaffSearch = Record<(typeof searchFields)[number]["key"], string>
+
+const emptySearch: StaffSearch = {
+  employeeCode: "",
+  name: "",
+  designations: "",
+  departments: "",
+}
+
+function matchesStaffSearch(
+  person: {
+    employeeCode: string | null
+    name: string
+    designations: string[]
+    departments: string[]
+  },
+  search: StaffSearch
+) {
+  return searchFields.every(({ key }) => {
+    const value = person[key]
+    const text = Array.isArray(value) ? value.join(" ") : value ?? ""
+    return text.toLocaleLowerCase().includes(search[key].trim().toLocaleLowerCase())
+  })
+}
+
+function StaffSearchFields({
+  prefix,
+  value,
+  onChange,
+  disabled,
+}: {
+  prefix: string
+  value: StaffSearch
+  onChange: (value: StaffSearch) => void
+  disabled?: boolean
+}) {
+  return (
+    <FieldGroup className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      {searchFields.map(({ key, label }) => (
+        <Field key={key}>
+          <FieldLabel htmlFor={`${prefix}-${key}`}>{label}</FieldLabel>
+          <Input
+            id={`${prefix}-${key}`}
+            type="search"
+            placeholder={`Search ${label.toLowerCase()}`}
+            value={value[key]}
+            disabled={disabled}
+            onChange={(event) => onChange({ ...value, [key]: event.target.value })}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") event.preventDefault()
+            }}
+          />
+        </Field>
+      ))}
+    </FieldGroup>
+  )
+}
+
 function StaffFeedback({ state }: { state: StaffActionState }) {
   if (!state.error && !state.success) return null
   return (
@@ -80,6 +145,11 @@ function CreateStaffAccountForm({
   employees: StaffWorkflowProps["employees"]
 }) {
   const [state, action, pending] = useActionState(provisionStaffAction, {})
+  const [search, setSearch] = useState(emptySearch)
+  const [employeeValue, setEmployeeValue] = useState("")
+  const matchingEmployees = employees.filter((employee) =>
+    matchesStaffSearch({ ...employee, name: employee.employeeName }, search)
+  )
   const unavailable = !employees.length
   return (
     <SectionCard size="sm">
@@ -93,6 +163,18 @@ function CreateStaffAccountForm({
       <CardContent>
         <form action={action}>
           <FieldGroup className="gap-4">
+            <StaffSearchFields
+              prefix="employee-search"
+              value={search}
+              disabled={pending || unavailable}
+              onChange={(next) => {
+                setSearch(next)
+                setEmployeeValue("")
+              }}
+            />
+            <FieldDescription role="status">
+              {matchingEmployees.length} matching employees. Select a result below.
+            </FieldDescription>
             <FieldGroup className="grid gap-4 md:grid-cols-3">
               <Field
                 className="relative min-w-0"
@@ -104,7 +186,8 @@ function CreateStaffAccountForm({
                   className="w-full"
                   id="staff-employee"
                   name="employee"
-                  defaultValue=""
+                  value={employeeValue}
+                  onChange={(event) => setEmployeeValue(event.target.value)}
                   required
                   disabled={pending || unavailable}
                   searchPlaceholder="Search ID, name, designation or department..."
@@ -112,7 +195,7 @@ function CreateStaffAccountForm({
                   <NativeSelectOption value="">
                     Select an employee
                   </NativeSelectOption>
-                  {employees.map((employee) => (
+                  {matchingEmployees.map((employee) => (
                     <NativeSelectOption
                       key={`${employee.organizationId}:${employee.employeeCode}`}
                       value={JSON.stringify({
@@ -250,6 +333,8 @@ function StaffRoleForm({
 
 export function StaffAccountWorkflow(props: StaffWorkflowProps) {
   const [userId, setUserId] = useState(props.selectedUserId ?? "")
+  const [search, setSearch] = useState(emptySearch)
+  const matchingUsers = props.users.filter((user) => matchesStaffSearch(user, search))
   const user = props.users.find((user) => user.id === userId)
   return (
     <>
@@ -270,6 +355,17 @@ export function StaffAccountWorkflow(props: StaffWorkflowProps) {
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
+            <StaffSearchFields
+              prefix="staff-search"
+              value={search}
+              onChange={(next) => {
+                setSearch(next)
+                setUserId("")
+              }}
+            />
+            <FieldDescription role="status">
+              {matchingUsers.length} matching staff accounts. Select a result below.
+            </FieldDescription>
             {props.created && userId === props.selectedUserId ? (
               <StaffFeedback
                 state={{
@@ -291,7 +387,7 @@ export function StaffAccountWorkflow(props: StaffWorkflowProps) {
                 <NativeSelectOption value="">
                   Select a staff account
                 </NativeSelectOption>
-                {props.users.map((user) => (
+                {matchingUsers.map((user) => (
                   <NativeSelectOption key={user.id} value={user.id}>
                     {user.employeeCode ? `#${user.employeeCode} · ` : ""}
                     {user.name} · {user.designations.join(", ") || "—"} ·{" "}
