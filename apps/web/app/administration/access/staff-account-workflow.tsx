@@ -226,11 +226,12 @@ function CreateStaffAccountForm({
                     </NativeSelectOption>
                   ))}
                 </NativeSelect>
-                <FieldDescription>
-                  {employees.length
-                    ? "Search by employee ID, name, designation or department. Only active employees without a login are available."
-                    : "No eligible employees without a login. Add the employee to Employee Master first."}
-                </FieldDescription>
+                {!employees.length ? (
+                  <FieldDescription>
+                    No eligible employees without a login. Add the employee to
+                    Employee Master first.
+                  </FieldDescription>
+                ) : null}
               </Field>
               <Field>
                 <FieldLabel htmlFor="staff-email">Email / Login ID</FieldLabel>
