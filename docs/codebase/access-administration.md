@@ -21,6 +21,9 @@
   linked staff for role assignment). Distinct values are sorted; All clears a
   filter. Selected values match exactly and combine across fields; each workflow
   keeps its own filters. Dropdown search narrows the available master values.
+  Like Excel, each dropdown derives its options from employees matching all
+  other active filters (excluding its own), so selecting a name narrows IDs,
+  designations and departments. Clearing a filter restores compatible options.
   Changing a filter clears its selection so a hidden account cannot be submitted.
 - Staff Access uses separate, filterable Employee ID, employee identity,
   designation, department, assigned roles, overrides and action columns. Each
