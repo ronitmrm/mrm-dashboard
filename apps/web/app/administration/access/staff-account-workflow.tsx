@@ -171,8 +171,8 @@ function CreateStaffAccountForm({
       <CardHeader className="border-b">
         <CardTitle>1. Select Employee &amp; Create Account</CardTitle>
         <CardDescription>
-          Credentials can only be created for an active Employee Master record.
-          The account is linked automatically.
+          Select an employee already assigned in Employee Master, including
+          appointed employees. The login is linked automatically.
         </CardDescription>
       </CardHeader>
       <CardContent>

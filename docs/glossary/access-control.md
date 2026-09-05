@@ -1,7 +1,9 @@
 # Access Control Glossary
 
 **Staff Account**: A sign-in identity created only for an existing, active
-Employee Master record. The employee is selected first; the account name comes
+Employee Master record with an Occupied or Appointed assignment (joining date
+is not required), or a Resigned assignment through its last working date.
+The employee is selected first; the account name comes
 from Employee Master, and the new login is linked to that employee
 automatically. Creation grants no Application Roles. An administrator assigns
 one or more roles after account creation; current Approved Post role inheritance
@@ -92,15 +94,16 @@ default; normal module permissions continue governing routine file discovery.
 
 ## Employee access summary
 
-Access Administration counts eligible active Employee Master records, once per
+Access Administration counts all named Employee Master records with an employee
+ID, including appointed and departed employees, once per
 organization and employee ID, across the full workspace rather than filtered
 dropdown results. Non-employee accounts, including the standalone System
 Administrator, are excluded.
 
 - **Employees With Login:** employees linked to a login account.
-- **Employees Without Login:** eligible employees minus employees with login.
+- **Employees Without Login:** all employees minus employees with login.
 - **Employees With Roles:** employees whose linked account has at least one
   direct or inherited application role. Multiple roles count the employee once;
   role definitions and individual permission overrides are not employee counts.
-- **Employees Without Roles:** eligible employees minus employees with roles,
+- **Employees Without Roles:** all employees minus employees with roles,
   including employees without login accounts.
