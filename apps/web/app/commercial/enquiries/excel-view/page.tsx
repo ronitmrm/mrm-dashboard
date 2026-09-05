@@ -18,6 +18,7 @@ import {
   TableRow,
 } from "@workspace/ui/components/table"
 
+import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
 import { BoundedResultNotice } from "@/components/bounded-result-notice"
 import { DataDownloadButton } from "@/components/data-download-button"
 import { readAuthEnvironment } from "@/lib/auth/auth"
@@ -115,12 +116,13 @@ export default async function EnquiryExcelViewPage() {
                     <TableCell className="sticky left-0 z-10 bg-background">
                       {row.quotePdfSentAt ? (
                         <Button asChild size="sm" variant="outline">
-                          <Link
+                          <AttachmentViewerLink
+                            fileName={`${row.enquiryNumber}-quote.pdf`}
                             href={`/commercial/quotes/enquiry/${row.enquiryId}/pdf`}
-                            target="_blank"
+                            mediaType="application/pdf"
                           >
                             Open PDF
-                          </Link>
+                          </AttachmentViewerLink>
                         </Button>
                       ) : (
                         "—"

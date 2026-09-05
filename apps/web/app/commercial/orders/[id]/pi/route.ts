@@ -3,6 +3,7 @@ import {
   proformaInvoicePdfArtifactPurpose,
 } from "@workspace/db"
 
+import { attachmentContentDisposition } from "@/lib/attachment-viewer"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
@@ -10,7 +11,7 @@ import { requireCapability } from "@/lib/auth/require-capability"
 import { buildProformaInvoicePdf } from "../../order-artifacts"
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   await requireCapability(
@@ -43,7 +44,10 @@ export async function GET(
     const safeName = invoice.invoiceNumber.replace(/[\r\n"]/g, "_")
     return new Response(bytes as BodyInit, {
       headers: {
-        "Content-Disposition": `inline; filename="${safeName}.pdf"`,
+        "Content-Disposition": attachmentContentDisposition(
+          request.url,
+          `${safeName}.pdf`
+        ),
         "Content-Type": "application/pdf",
         "X-Content-Type-Options": "nosniff",
       },

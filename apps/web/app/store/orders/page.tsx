@@ -1,4 +1,3 @@
-import Link from "next/link"
 import { createStoreRepository } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
@@ -29,6 +28,7 @@ import {
   TableRow,
 } from "@workspace/ui/components/table"
 
+import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { MetricSummary } from "@/components/ui/golden-patterns"
 import { requireCapability } from "@/lib/auth/require-capability"
@@ -150,11 +150,13 @@ export default async function StoreOrdersPage() {
                     <TableCell>
                       <div className="grid min-w-32 gap-2">
                         <Button asChild size="sm" variant="outline">
-                          <Link
+                          <AttachmentViewerLink
+                            fileName={`${order.orderNumber}.pdf`}
                             href={`/store/orders/${encodeURIComponent(order.purchaseOrderId)}/pdf`}
+                            mediaType="application/pdf"
                           >
-                            Download PDF
-                          </Link>
+                            View PDF
+                          </AttachmentViewerLink>
                         </Button>
                         {emailHref ? (
                           <Button asChild size="sm" variant="outline">

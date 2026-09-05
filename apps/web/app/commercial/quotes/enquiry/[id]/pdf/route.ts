@@ -1,5 +1,6 @@
 import { createCommercialCostingRepository } from "@workspace/db"
 
+import { attachmentContentDisposition } from "@/lib/attachment-viewer"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
@@ -12,7 +13,7 @@ import {
 export const dynamic = "force-dynamic"
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await requireCapability(
@@ -45,6 +46,7 @@ export async function GET(
     })
     const bytes = await buildQuotePdf(document, market)
     const safeName = document.enquiryNumber.replace(/[\r\n"]/g, "_")
+    const fileName = `${safeName}-Rev-${document.revision}-quote.pdf`
     return new Response(
       bytes.buffer.slice(
         bytes.byteOffset,
@@ -52,12 +54,10 @@ export async function GET(
       ) as ArrayBuffer,
       {
         headers: {
-          "Content-Disposition":
-            'inline; filename="' +
-            safeName +
-            "-Rev-" +
-            String(document.revision) +
-            '-quote.pdf"',
+          "Content-Disposition": attachmentContentDisposition(
+            request.url,
+            fileName
+          ),
           "Content-Length": String(bytes.byteLength),
           "Content-Type": "application/pdf",
           "X-Content-Type-Options": "nosniff",

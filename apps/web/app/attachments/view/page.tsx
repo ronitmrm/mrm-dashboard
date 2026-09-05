@@ -59,7 +59,9 @@ export default async function AttachmentViewerPage({
         </div>
         <div className="flex gap-2">
           <Button asChild variant="outline">
-            <Link href={downloadHref}>Download Original</Link>
+            <Link download={fileName} href={downloadHref}>
+              Download Original
+            </Link>
           </Button>
         </div>
       </header>

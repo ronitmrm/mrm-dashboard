@@ -3,11 +3,12 @@ import {
   createRecruitmentRepository,
 } from "@workspace/db"
 
+import { attachmentContentDisposition } from "@/lib/attachment-viewer"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireHrPage } from "@/lib/auth/require-hr-page"
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   await requireHrPage("hr.employees.read", "/hr?panel=employeeMasterPanel")
@@ -23,7 +24,10 @@ export async function GET(
     return new Response(new Uint8Array(pdf.bytes), {
       headers: {
         "Cache-Control": "private, no-store",
-        "Content-Disposition": `attachment; filename="${pdf.fileName}"`,
+        "Content-Disposition": attachmentContentDisposition(
+          request.url,
+          pdf.fileName
+        ),
         "Content-Length": String(pdf.bytes.byteLength),
         "Content-Type": "application/pdf",
       },
