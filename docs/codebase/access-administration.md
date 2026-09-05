@@ -15,6 +15,10 @@
 - `Staff Accounts` starts by selecting an eligible Employee Master record,
   creating its linked login, and assigning direct roles, then shows the staff
   register. The Post Access Profile editor is not shown in this workspace.
+- Both employee and staff-account selection expose separate Employee ID,
+  Employee Name, Designation and Department search fields. Case-insensitive
+  partial matches combine across fields; each workflow keeps its own filters.
+  Changing a filter clears its selection so a hidden account cannot be submitted.
 - Staff Access uses separate, filterable Employee ID, employee identity,
   designation, department, assigned roles, overrides and action columns. Each
   direct or inherited role chip labels its source and opens that role's rights
