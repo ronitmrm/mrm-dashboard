@@ -4,6 +4,11 @@ import type { PoolClient } from "pg"
 
 import { selectorSearchTerm } from "./commercial-bounds"
 import {
+  customerRevisionParametersSql,
+  customerRevisionParameterJoins,
+  type CustomerRevisionParameters,
+} from "./commercial-revision-parameters"
+import {
   assertApplicableProcessPrices,
   classifyDesignCostImpact,
   designProcessSelection,
@@ -2596,6 +2601,7 @@ export function createCommercialRevisionsRepository(
       )
       const search = selectorSearchTerm(options.query ?? "")
       const result = await pool.query<{
+        parameters: CustomerRevisionParameters
         approved_price_usd: string
         category: string | null
         company_name: string
@@ -2619,7 +2625,8 @@ export function createCommercialRevisionsRepository(
             FROM sales.bulk_price_revisions
             WHERE id = $1
           )
-          SELECT quote.id, quote.quote_number, quote.customer_part_code,
+          SELECT ${customerRevisionParametersSql} AS parameters,
+            quote.id, quote.quote_number, quote.customer_part_code,
             quote.approved_price_usd, quote.scrap_rate, quote.packing_cost,
             quote.shipping_cost, quote.purchase_times, quote.profit_percent,
             quote.conversion_rate, customer.company_name, item.uid,
@@ -2639,6 +2646,7 @@ export function createCommercialRevisionsRepository(
           JOIN revision ON revision.organization_id = quote.organization_id
           JOIN sales.customers customer ON customer.id = quote.customer_id
           JOIN catalog.items item ON item.id = quote.item_id
+          ${customerRevisionParameterJoins}
           LEFT JOIN catalog.website_product_profiles profile
             ON profile.item_id = item.id
           LEFT JOIN sales.design_tasks design
@@ -2685,6 +2693,7 @@ export function createCommercialRevisionsRepository(
           truncated: result.rows.length < total,
         },
         rows: result.rows.map((row) => ({
+          parameters: row.parameters,
           approvedPriceUsd: asNumber(row.approved_price_usd),
           companyName: row.company_name,
           category: row.category,
@@ -2752,6 +2761,7 @@ export function createCommercialRevisionsRepository(
           ]
         )
         const prices = await client.query<{
+          parameters: CustomerRevisionParameters
           approved_price_usd: string
           category: string | null
           company_name: string
@@ -2768,7 +2778,8 @@ export function createCommercialRevisionsRepository(
             WITH roots AS (
               SELECT unnest($1::uuid[]) AS quote_item_id
             )
-            SELECT quote.id AS quote_item_id, quote.customer_part_code,
+            SELECT ${customerRevisionParametersSql} AS parameters,
+              quote.id AS quote_item_id, quote.customer_part_code,
               quote.approved_price_usd, quote.profit_percent,
               customer.company_name, item.uid, item.description,
               COALESCE(
@@ -2787,6 +2798,7 @@ export function createCommercialRevisionsRepository(
             JOIN sales.quote_items quote ON quote.id = roots.quote_item_id
             JOIN sales.customers customer ON customer.id = quote.customer_id
             JOIN catalog.items item ON item.id = quote.item_id
+            ${customerRevisionParameterJoins}
             LEFT JOIN catalog.website_product_profiles profile
               ON profile.item_id = item.id
             LEFT JOIN sales.design_tasks design
@@ -2844,6 +2856,7 @@ export function createCommercialRevisionsRepository(
           )
           return {
             approvedPriceUsd,
+            parameters: price.parameters,
             category: price.category,
             companyName: price.company_name,
             currentProfitPercent: asNumber(price.profit_percent),

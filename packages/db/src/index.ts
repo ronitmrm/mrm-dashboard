@@ -210,3 +210,4 @@ export {
   type QuoteCostingInput,
 } from "./pricing-calculation"
 export { identitySchema } from "./schema"
+export { customerRevisionParameterColumns, type CustomerRevisionParameters } from "./commercial-revision-parameters"

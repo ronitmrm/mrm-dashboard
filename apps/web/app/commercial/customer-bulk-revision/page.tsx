@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { CustomerParameterCells, CustomerParameterHeaders, customerParameterColumnCount } from "../revisions/customer-parameter-columns"
 
 import {
   bulkRevisionFields,
@@ -62,12 +63,6 @@ const activePriceHeadings = [
   "Category",
   "Subcategory",
   "Current Price",
-  "Scrap",
-  "Packing",
-  "Shipping",
-  "OR",
-  "Profit",
-  "FX",
 ] as const
 const bulkRevisionTableLimit = 10_000
 
@@ -330,6 +325,10 @@ export default async function CustomerBulkRevisionPage({
  <SectionCard hidden={!selectedRevisionId} id="customer-bulk-workbench">
         <CardHeader>
           <CardTitle>Customer Revision Workbench</CardTitle>
+          <CardDescription>
+            Filter any column. Scroll horizontally for current product and customer
+            costing parameters; saved quote inputs take precedence over Product master values.
+          </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-6">
           {selectedRevision ? (
@@ -394,6 +393,7 @@ export default async function CustomerBulkRevisionPage({
                             {heading}
                           </TableHead>
                         ))}
+                        <CustomerParameterHeaders />
                       </TableRow>
                     </TableHeader>
                     <TableBody className="[&_tr:last-child]:border-0">
@@ -419,7 +419,7 @@ export default async function CustomerBulkRevisionPage({
                           <TableCell className="p-3 align-middle font-mono whitespace-nowrap">
                             {price.uid}
                           </TableCell>
-                          <TableCell className="max-w-64 p-3 align-middle">
+                          <TableCell className="min-w-64 max-w-64 p-3 align-middle whitespace-normal break-words">
                             {price.description}
                           </TableCell>
                           <TableCell className="p-3 align-middle whitespace-nowrap">
@@ -431,29 +431,12 @@ export default async function CustomerBulkRevisionPage({
                           <TableCell className="p-3 align-middle whitespace-nowrap tabular-nums">
                             $ {money(price.approvedPriceUsd)}
                           </TableCell>
-                          <TableCell className="p-3 align-middle whitespace-nowrap">
-                            {money(price.scrapRate)}
-                          </TableCell>
-                          <TableCell className="p-3 align-middle whitespace-nowrap">
-                            {money(price.packingCost)}
-                          </TableCell>
-                          <TableCell className="p-3 align-middle whitespace-nowrap">
-                            {money(price.shippingCost)}
-                          </TableCell>
-                          <TableCell className="p-3 align-middle whitespace-nowrap">
-                            {money(price.purchaseTimes)}
-                          </TableCell>
-                          <TableCell className="p-3 align-middle whitespace-nowrap">
-                            {percent(price.profitPercent)}
-                          </TableCell>
-                          <TableCell className="p-3 align-middle whitespace-nowrap">
-                            {money(price.conversionRate)}
-                          </TableCell>
+                          <CustomerParameterCells values={price.parameters} />
                         </TableRow>
                       ))}
                       {!prices.rows.length ? (
                         <TableRow>
-                          <TableCell className="h-24 text-center" colSpan={14}>
+                          <TableCell className="h-24 text-center" colSpan={activePriceHeadings.length + customerParameterColumnCount}>
                             No Active Prices Are In Scope.
                           </TableCell>
                         </TableRow>
