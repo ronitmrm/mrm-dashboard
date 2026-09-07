@@ -3037,6 +3037,8 @@ export function createCommercialRevisionsRepository(
         item_type: string
         machining_cost: string
         marking: string
+        grade: string | null
+        product_size: string | null
         overhead_cost: string
         pieces_per_kg: string
         plating: string
@@ -3094,6 +3096,12 @@ export function createCommercialRevisionsRepository(
                 NULLIF(btrim(item.source_payload ->> 'subcategory'), ''),
                 NULLIF(btrim(design.internal_part_sub_category), '')
               ) AS subcategory,
+              grade.name AS grade,
+              COALESCE(
+                NULLIF(btrim(profile.size), ''),
+                NULLIF(btrim(item.source_payload ->> 'productSize'), ''),
+                NULLIF(btrim(design.internal_part_size), '')
+              ) AS product_size,
               item.production_type, item.pieces_per_kg, item.weight_100_pcs,
               item.product_cost_inr, item.casting, item.alloy_premium,
               item.rejection_percent,
@@ -3104,6 +3112,8 @@ export function createCommercialRevisionsRepository(
               products.affected_price_count
             FROM products
             JOIN catalog.items item ON item.id = products.item_id
+            LEFT JOIN catalog.material_grades grade
+              ON grade.id = item.material_grade_id
             LEFT JOIN catalog.website_product_profiles profile
               ON profile.item_id = item.id
             LEFT JOIN sales.design_tasks design
@@ -3153,6 +3163,8 @@ export function createCommercialRevisionsRepository(
           description: row.description,
           extCost: asNumber(row.ext_cost),
           forgingCost: asNumber(row.forging_cost),
+          grade: row.grade,
+          productSize: row.product_size,
           id: row.id,
           itemType: row.item_type,
           machiningCost: asNumber(row.machining_cost),

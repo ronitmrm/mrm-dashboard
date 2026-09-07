@@ -134,6 +134,10 @@ export default async function ProductRevisionCostingPage({
  <SectionCard>
         <CardHeader>
           <CardTitle>Products In Scope</CardTitle>
+          <CardDescription>
+            Filter any column to find products, then select the matching rows.
+            Scroll horizontally for all process costs (INR/kg).
+          </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-6">
           <form action={stageBulkPriceRevisionAction} className="grid gap-4">
@@ -153,16 +157,19 @@ export default async function ProductRevisionCostingPage({
                   <TableHead>Select</TableHead>
                   <TableHead>UID</TableHead>
                   <TableHead>Description</TableHead>
+                  <TableHead>Grade</TableHead>
+                  <TableHead>Size</TableHead>
                   <TableHead>Category</TableHead>
                   <TableHead>Subcategory</TableHead>
+                  <TableHead>Rejection %</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Production</TableHead>
                   <TableHead>Affected Prices</TableHead>
                   <TableHead>Current Product Base (₹/pc)</TableHead>
                   <TableHead>Pcs/Kg</TableHead>
                   <TableHead>Weight (g)</TableHead>
-                  <TableHead>Rejection</TableHead>
-                  <TableHead>Alloy</TableHead>
+                  <TableHead>Blank Piece Weight (gm)</TableHead>
+                  <TableHead>Alloy Premium</TableHead>
                   <TableHead>Extrusion</TableHead>
                   <TableHead>Forging</TableHead>
                   <TableHead>M/C</TableHead>
@@ -192,14 +199,23 @@ export default async function ProductRevisionCostingPage({
                     <TableCell className="font-mono whitespace-nowrap">
                       {product.uid}
                     </TableCell>
-                    <TableCell className="min-w-64">
+                    <TableCell className="min-w-64 max-w-64 whitespace-normal break-words">
                       {product.description}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      {product.grade ?? "—"}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      {product.productSize ?? "—"}
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
                       {product.category ?? "—"}
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
                       {product.subcategory ?? "—"}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      {money(product.rejectionPercent * 100)}%
                     </TableCell>
                     {[
                       product.itemType,
@@ -208,7 +224,7 @@ export default async function ProductRevisionCostingPage({
                       money(product.productCostInr),
                       money(product.piecesPerKg),
                       money(product.weight100Pcs),
-                      `${money(product.rejectionPercent * 100)}%`,
+                      money(product.casting),
                       money(product.alloyPremium),
                       money(product.extCost),
                       money(product.forgingCost),
@@ -235,7 +251,7 @@ export default async function ProductRevisionCostingPage({
                 ))}
                 {!products.rows.length ? (
                   <TableRow>
-                    <TableCell className="h-24 text-center" colSpan={26}>
+                    <TableCell className="h-24 text-center" colSpan={29}>
                       No Products Are In Scope.
                     </TableCell>
                   </TableRow>
