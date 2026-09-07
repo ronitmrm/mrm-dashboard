@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { CustomerParameterCells, CustomerParameterHeaders, customerParameterColumnCount } from "../../../revisions/customer-parameter-columns"
 
 import { createCommercialRevisionsRepository } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
@@ -112,6 +113,11 @@ export default async function ProductRevisionCustomerCostingPage({
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <CardTitle>Affected Customer Prices</CardTitle>
+              <CardDescription>
+                Scroll horizontally for current product and customer costing parameters.
+                Saved quote inputs take precedence over Product master values;
+                Revise Price and Keep Price Same show the proposed outcomes.
+              </CardDescription>
             </div>
             <Badge variant="outline">
               {work.decidedPriceCount} / {work.affectedPriceCount} Decided
@@ -133,6 +139,7 @@ export default async function ProductRevisionCustomerCostingPage({
                   <TableHead>Revise Price</TableHead>
                   <TableHead>Keep Price Same</TableHead>
                   <TableHead>Decision</TableHead>
+                  <CustomerParameterHeaders />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -145,7 +152,7 @@ export default async function ProductRevisionCustomerCostingPage({
                     <TableCell className="font-mono whitespace-nowrap">
                       {price.uid}
                     </TableCell>
-                    <TableCell className="min-w-64">
+                    <TableCell className="min-w-64 max-w-64 whitespace-normal break-words">
                       {price.description}
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
@@ -203,11 +210,12 @@ export default async function ProductRevisionCustomerCostingPage({
                         </form>
                       )}
                     </TableCell>
+                    <CustomerParameterCells values={price.parameters} />
                   </TableRow>
                 ))}
                 {!work.rows.length ? (
                   <TableRow>
-                    <TableCell className="h-24 text-center" colSpan={10}>
+                    <TableCell className="h-24 text-center" colSpan={10 + customerParameterColumnCount}>
                       No Affected Prices Are In Scope.
                     </TableCell>
                   </TableRow>
