@@ -3039,6 +3039,18 @@ export function createCommercialRevisionsRepository(
         marking: string
         grade: string | null
         product_size: string | null
+        rod_size: string | null
+        rod_type: string | null
+        die_code: string | null
+        machine_type: string | null
+        pricing_method: string
+        lifecycle_status: string
+        uid_kind: string
+        direct_purchase_price_per_kg: string
+        direct_purchase_price_per_piece: string
+        machining_price_per_piece: string
+        burning_loss_percent: string
+        remarks: string | null
         overhead_cost: string
         pieces_per_kg: string
         plating: string
@@ -3097,6 +3109,13 @@ export function createCommercialRevisionsRepository(
                 NULLIF(btrim(design.internal_part_sub_category), '')
               ) AS subcategory,
               grade.name AS grade,
+              item.rod_size, rod.name AS rod_type, item.die_code,
+              machine.name AS machine_type, item.pricing_method,
+              item.lifecycle_status, item.uid_kind,
+              item.direct_purchase_price_per_kg,
+              item.direct_purchase_price_per_piece,
+              item.machining_price_per_piece, item.burning_loss_percent,
+              item.remarks,
               COALESCE(
                 NULLIF(btrim(profile.size), ''),
                 NULLIF(btrim(item.source_payload ->> 'productSize'), ''),
@@ -3114,6 +3133,8 @@ export function createCommercialRevisionsRepository(
             JOIN catalog.items item ON item.id = products.item_id
             LEFT JOIN catalog.material_grades grade
               ON grade.id = item.material_grade_id
+            LEFT JOIN catalog.rod_types rod ON rod.id = item.rod_type_id
+            LEFT JOIN catalog.machine_types machine ON machine.id = item.machine_type_id
             LEFT JOIN catalog.website_product_profiles profile
               ON profile.item_id = item.id
             LEFT JOIN sales.design_tasks design
@@ -3165,6 +3186,18 @@ export function createCommercialRevisionsRepository(
           forgingCost: asNumber(row.forging_cost),
           grade: row.grade,
           productSize: row.product_size,
+          rodSize: row.rod_size,
+          rodType: row.rod_type,
+          dieCode: row.die_code,
+          machineType: row.machine_type,
+          pricingMethod: row.pricing_method,
+          lifecycleStatus: row.lifecycle_status,
+          uidKind: row.uid_kind,
+          directPurchasePricePerKg: asNumber(row.direct_purchase_price_per_kg),
+          directPurchasePricePerPiece: asNumber(row.direct_purchase_price_per_piece),
+          machiningPricePerPiece: asNumber(row.machining_price_per_piece),
+          burningLossPercent: asNumber(row.burning_loss_percent),
+          remarks: row.remarks,
           id: row.id,
           itemType: row.item_type,
           machiningCost: asNumber(row.machining_cost),

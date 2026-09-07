@@ -136,7 +136,7 @@ export default async function ProductRevisionCostingPage({
           <CardTitle>Products In Scope</CardTitle>
           <CardDescription>
             Filter any column to find products, then select the matching rows.
-            Scroll horizontally for all process costs (INR/kg).
+            Scroll horizontally for all product parameters and process costs.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-6">
@@ -162,27 +162,39 @@ export default async function ProductRevisionCostingPage({
                   <TableHead>Category</TableHead>
                   <TableHead>Subcategory</TableHead>
                   <TableHead>Rejection %</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Production</TableHead>
+                  <TableHead>List / Package</TableHead>
+                  <TableHead>Product Type</TableHead>
+                  <TableHead>Production Type</TableHead>
+                  <TableHead>UID Kind</TableHead>
+                  <TableHead>Product Status</TableHead>
+                  <TableHead>Rod Size</TableHead>
+                  <TableHead>Rod Type</TableHead>
+                  <TableHead>Die Code</TableHead>
+                  <TableHead>Pricing Method</TableHead>
                   <TableHead>Affected Prices</TableHead>
                   <TableHead>Current Product Base (₹/pc)</TableHead>
                   <TableHead>Pcs/Kg</TableHead>
-                  <TableHead>Weight (g)</TableHead>
+                  <TableHead>1 Piece Weight (gm)</TableHead>
                   <TableHead>Blank Piece Weight (gm)</TableHead>
-                  <TableHead>Alloy Premium</TableHead>
-                  <TableHead>Extrusion</TableHead>
-                  <TableHead>Forging</TableHead>
-                  <TableHead>M/C</TableHead>
-                  <TableHead>Washing</TableHead>
-                  <TableHead>Checking</TableHead>
-                  <TableHead>Marking</TableHead>
-                  <TableHead>Plating</TableHead>
-                  <TableHead>Annealing</TableHead>
-                  <TableHead>Deburring</TableHead>
-                  <TableHead>Buffing</TableHead>
-                  <TableHead>Sealant</TableHead>
-                  <TableHead>Assembly</TableHead>
-                  <TableHead>Overhead</TableHead>
+                  <TableHead>Burning Loss %</TableHead>
+                  <TableHead>Direct Purchase (INR/kg)</TableHead>
+                  <TableHead>Direct Purchase (INR/pc)</TableHead>
+                  <TableHead>Alloy Premium (INR/kg)</TableHead>
+                  <TableHead>Extrusion (INR/kg)</TableHead>
+                  <TableHead>Forging (INR/kg)</TableHead>
+                  <TableHead>M/C (INR/kg)</TableHead>
+                  <TableHead>M/C (INR/pc)</TableHead>
+                  <TableHead>Washing (INR/kg)</TableHead>
+                  <TableHead>Checking (INR/kg)</TableHead>
+                  <TableHead>Marking (INR/kg)</TableHead>
+                  <TableHead>Plating (INR/kg)</TableHead>
+                  <TableHead>Annealing (INR/kg)</TableHead>
+                  <TableHead>Deburring (INR/kg)</TableHead>
+                  <TableHead>Buffing (INR/kg)</TableHead>
+                  <TableHead>Sealant (INR/kg)</TableHead>
+                  <TableHead>Assembly (INR/kg)</TableHead>
+                  <TableHead>Overhead (INR/kg)</TableHead>
+                  <TableHead>Remarks</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -220,15 +232,26 @@ export default async function ProductRevisionCostingPage({
                     {[
                       product.itemType,
                       product.productionType ?? "—",
+                      product.machineType ?? "—",
+                      product.uidKind,
+                      product.lifecycleStatus,
+                      product.rodSize ?? "—",
+                      product.rodType ?? "—",
+                      product.dieCode ?? "—",
+                      product.pricingMethod,
                       product.affectedPriceCount,
                       money(product.productCostInr),
                       money(product.piecesPerKg),
                       money(product.weight100Pcs),
                       money(product.casting),
+                      `${money(product.burningLossPercent * 100)}%`,
+                      money(product.directPurchasePricePerKg),
+                      money(product.directPurchasePricePerPiece),
                       money(product.alloyPremium),
                       money(product.extCost),
                       money(product.forgingCost),
                       money(product.machiningCost),
+                      money(product.machiningPricePerPiece),
                       money(product.washing),
                       money(product.checking),
                       money(product.marking),
@@ -247,11 +270,14 @@ export default async function ProductRevisionCostingPage({
                         {value}
                       </TableCell>
                     ))}
+                    <TableCell className="min-w-64 max-w-64 whitespace-normal break-words">
+                      {product.remarks || "—"}
+                    </TableCell>
                   </TableRow>
                 ))}
                 {!products.rows.length ? (
                   <TableRow>
-                    <TableCell className="h-24 text-center" colSpan={29}>
+                    <TableCell className="h-24 text-center" colSpan={41}>
                       No Products Are In Scope.
                     </TableCell>
                   </TableRow>
