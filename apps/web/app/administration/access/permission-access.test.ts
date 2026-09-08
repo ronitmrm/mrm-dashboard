@@ -14,13 +14,13 @@ import {
 
 it("separates Universal masters and keeps CNC Tooling grants out of other units", () => {
   const rows = permissionAccessRows(masterPermissionOptions)
-  expect(rows).toHaveLength(78)
+  expect(rows).toHaveLength(69)
   const tooling = rows.find((row) => row.id === "master:cnc:tooling")!
   const grants = permissionKeysForSelections(rows, { [tooling.id]: "full" })
   expect(permissionAccessLevelForKeys(tooling, grants)).toBe("full")
   for (const id of [
     "master:forging:tooling",
-    "master:cnc:setup_checklist_master",
+    "master:universal:setup_checklist_master",
     "master:universal:department",
     "master:universal:designation",
   ]) {

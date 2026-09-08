@@ -36,6 +36,7 @@ import { AccessWorkspaceTabs } from "./access-workspace-tabs"
 import { RoleDeleteControl } from "./role-delete-control"
 import { StaffAccessRegister } from "./staff-access-register"
 import { StaffAccountWorkflow } from "./staff-account-workflow"
+import { MasterInventory } from "./master-inventory"
 
 export const dynamic = "force-dynamic"
 
@@ -148,6 +149,7 @@ export default async function AccessAdministrationPage({
         ]}
       />
 
+      <MasterInventory />
       <AccessWorkspaceTabs
         activeSection={activeSection}
         canCreateRole={canCreateRole}

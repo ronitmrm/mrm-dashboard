@@ -115,11 +115,15 @@ record-scope checks have been migrated together. New master keys must not
 implicitly grant shared legacy permissions. Existing role grants and deny
 overrides need an explicit, tested migration that does not broaden access.
 
-The UI places Setup Checklist, Maintenance Checklist and Maintenance Master
-under units, but their repositories currently identify definitions without a
-production floor (`quality.ts` and `maintenance.ts`). Their shared stored-record
-scope must be resolved before promising independent unit editing. The candidate
-catalogue has 78 entries; this count depends on that scope decision.
+Setup Checklist, Maintenance Checklist and Maintenance Master are confirmed
+company-wide definitions. Master Selection lists each under Universal and their
+payloads omit production-floor scope; existing records remain shared. The
+catalogue has 69 entries: 41 Universal and seven in each of four units.
+
+Access Administration exposes an expandable Included masters inventory with
+scope, category and individual master columns. It explicitly states that these
+are inventory rows, not activated independent permissions. The existing grouped
+editor is unchanged pending server enforcement and registry migration.
 
 The No Access preset removes all keys owned by its row. It must not fall through
 to the View Only preset.

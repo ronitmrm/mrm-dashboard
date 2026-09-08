@@ -29,6 +29,29 @@ const fullAccess: MasterModuleAccess = {
 }
 
 describe("master module selection", () => {
+  it("keeps shared checklists and maintenance definitions in Universal", () => {
+    for (const main of [
+      "setup_checklist_master",
+      "maintenance_checklist_master",
+      "maintenance_master",
+    ]) {
+      expect(
+        availableMainMasters("universal", fullAccess).map(({ id }) => id)
+      ).toContain(main)
+      expect(
+        availableMainMasters("cnc", fullAccess).map(({ id }) => id)
+      ).not.toContain(main)
+      const selection = resolveMasterSelection(
+        { unit: "universal", main, sub: main },
+        fullAccess
+      )!
+      expect(
+        new URL(masterFormHref(selection), "http://localhost").searchParams.get(
+          "entry"
+        )
+      ).toBe(main)
+    }
+  })
   it("hides units that contain no permitted masters", () => {
     const noAccess = Object.fromEntries(
       Object.keys(fullAccess).map((key) => [key, false])
