@@ -226,7 +226,7 @@ export function previousMasterCapabilities(
   )
     return ["quality.parameters.manage"]
   if (master.master === "setup_checklist_master")
-    return ["quality.setup_checklist.write"]
+    return ["quality.parameters.manage"]
   if (
     ["maintenance_master", "maintenance_checklist_master"].includes(
       master.master

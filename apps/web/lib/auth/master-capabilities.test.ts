@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 import {
   masterPermissionKey,
   masterPermissionOptions,
+  previousMasterCapabilities,
   scopedMasters,
   supportedMasterActions,
 } from "./master-capabilities"
@@ -12,6 +13,14 @@ import { mergeDashboardStateResponse } from "../dashboard-view-model"
 import { selectedStoreMasterData } from "./store-master-access"
 
 describe("independent master permissions", () => {
+  it("does not turn checklist execution access into master definition access", () => {
+    const migratedFrom = (oldKey: string) => scopedMasters.flatMap((master) =>
+      supportedMasterActions(master).filter((action) => previousMasterCapabilities(master, action).includes(oldKey)).map((action) => masterPermissionKey(master.unit, master.master, action))
+    )
+    expect(migratedFrom("quality.setup_checklist.write")).toEqual([])
+    expect(migratedFrom("quality.parameters.manage")).toContain("masters.universal.setup_checklist_master.save")
+    expect(migratedFrom("quality.parameters.manage")).toContain("masters.universal.setup_checklist_master.import")
+  })
   it("preserves maintenance checklist labels and inactive status for the selected master form", () => {
     const checklist = { checklistCode: "PM-1", checklistTitle: "Cleaning", sequence: 1, stepDescription: "Clean filters", inputType: "checkbox", status: "Inactive", required: "Yes" }
     const view = productionMasterSnapshot({ productionControl: { maintenanceChecklistMasterRows: [{ ...checklist, internalNote: "private" }] } }, new Set(["masters.universal.maintenance_master.read", "masters.universal.maintenance_master.save"]), "cnc")
