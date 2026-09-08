@@ -3,7 +3,7 @@ import {
   createDatabase,
   identitySchema,
 } from "@workspace/db"
-import { readRedisAccelerationEnvironment } from "@workspace/runtime"
+import { readRedisAccelerationEnvironment } from "@workspace/runtime/redis-acceleration"
 import { betterAuth } from "better-auth"
 import { admin } from "better-auth/plugins"
 import type { Pool } from "pg"
