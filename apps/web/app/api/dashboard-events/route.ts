@@ -1,4 +1,4 @@
-import { subscribeRedisInvalidations } from "@workspace/runtime"
+import { subscribeRedisInvalidations } from "@workspace/runtime/redis-invalidation-subscriber"
 import type { NextRequest } from "next/server"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"

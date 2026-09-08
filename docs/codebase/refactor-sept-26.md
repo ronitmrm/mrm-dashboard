@@ -40,9 +40,10 @@ not change production rules or merely accept new snapshots to make tests pass.
    browser checks cover repeated input, recovery, and narrow/light/dark views.
 7. Separate runtime environment exports from worker/backup exports. Acceptance:
    web imports avoid command-only dependencies and all public consumers compile.
-8. Split dashboard responsibilities and narrow planner types at existing seams.
-   Acceptance: unchanged routes, permissions, visible workflows, calculations,
-   and planning output; no new framework or speculative abstraction.
+8. Preserve inferred planner types at existing mappings and remove redundant
+   casts. Broader dashboard decomposition is deferred: moving shared helpers
+   without a clear data boundary adds coupling rather than reducing it. Keep
+   runtime expressions and planning output unchanged.
 9. Assess derived-data retention. Do not delete history or choose a new retention
    policy unless existing contracts already permit it. Record any policy-dependent
    recommendation explicitly rather than presenting it as implemented.

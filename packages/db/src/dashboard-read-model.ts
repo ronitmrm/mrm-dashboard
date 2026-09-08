@@ -51,7 +51,7 @@ type PreviousPlanningRow = {
 }
 
 export type CanonicalDashboardSource = {
-  allDataEntries: JsonRecord[]
+  allDataEntries: ReturnType<typeof dataEntryRecord>[]
   attendanceRecords: JsonRecord[]
   corrections: JsonRecord[]
   dispatchApprovals: JsonRecord[]
@@ -351,10 +351,10 @@ const companyWideQualityEntryTypes = new Set([
   "rejection_remark_master",
 ])
 
-export function dashboardDataEntriesForFloor(
-  rows: JsonRecord[],
+export function dashboardDataEntriesForFloor<Row extends JsonRecord>(
+  rows: Row[],
   floorCode: ProductionFloorCode
-) {
+): Row[] {
   return rows.filter(
     (row) =>
       (typeof row.entryType === "string" &&
@@ -601,12 +601,12 @@ export async function buildCanonicalDashboardReadModel(
     context.organizationId
   )
   const correctionTargets = dataEntryCorrectionTargetsWithWorkflowCascade(
-    source.allDataEntries as never,
+    source.allDataEntries,
     activeCorrectionTargetKeys(source.corrections as CorrectionTargetRow[]),
     source.corrections as CorrectionTargetRow[]
   )
   const dataEntries = withoutCorrectedRows(
-    source.allDataEntries as Array<JsonRecord & { _id: unknown }>,
+    source.allDataEntries,
     "dataEntries",
     correctionTargets
   )
@@ -756,7 +756,7 @@ export async function buildCanonicalDashboardReadModel(
         corrected(source.attendanceRecords, "attendanceRecords"),
         floorCode
       ) as never,
-      dataEntries: floorDataEntries as never,
+      dataEntries: floorDataEntries,
       dispatchApprovals: floorRows(
         corrected(source.dispatchApprovals, "dispatchApprovals"),
         floorCode

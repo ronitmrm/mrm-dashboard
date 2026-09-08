@@ -14,7 +14,7 @@ const eventMocks = vi.hoisted(() => ({
   unsubscribe: vi.fn(),
 }))
 
-vi.mock("@workspace/runtime", () => ({
+vi.mock("@workspace/runtime/redis-invalidation-subscriber", () => ({
   subscribeRedisInvalidations: eventMocks.subscribe,
 }))
 
