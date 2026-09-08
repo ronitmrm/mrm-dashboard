@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>September refactor delivery checklist</title>
+    <style>
+      :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+      body { max-width: 100rem; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }
+      .scroll { overflow-x: auto; }
+      table { width: 100%; border-collapse: collapse; text-align: left; }
+      th, td { border: 1px solid #8888; padding: .65rem; vertical-align: top; }
+      th { background: #8882; }
+      caption { text-align: left; font-weight: 600; margin-bottom: .75rem; }
+      a { color: inherit; }
+      code { overflow-wrap: anywhere; }
+    </style>
+  </head>
+  <body>
+    <h1>September refactor delivery checklist</h1>
+    <p><code>refactor/sept-26</code> → <code>staging</code>. Starting commit: <code>d920a2c</code>. Updated 8 September 2026.</p>
+    <p><strong>Business logic is fixed. Merge requires the user's greenlight.</strong> <a href="refactor-sept-26.md">Scope and acceptance criteria</a>.</p>
+    <p>One writer at a time. Research is read-only. Status reflects demonstrated results, not implementation intent. No design score is assigned without an inspected interaction.</p>
+    <div class="scroll">
+      <table>
+        <caption>Deliverables and verification</caption>
+        <thead><tr><th scope="col">Deliverable</th><th scope="col">Owner</th><th scope="col">Status</th><th scope="col">Evidence</th><th scope="col">Remaining blocker</th></tr></thead>
+        <tbody>
+          <tr id="foundation"><td>Branch, scope, draft PR</td><td>Coordinating engineer</td><td>In progress</td><td>Branch created from latest staging; scope records fixed contracts.</td><td>Publish initial checklist and open draft PR.</td></tr>
+          <tr id="tests"><td>Test isolation and development setup</td><td>Implementation engineer</td><td>Pending</td><td>Audit reproduced schema reset interference and Webpack plugin resolution failure.</td><td>Revalidate baseline, repair infrastructure and classify stale fixtures.</td></tr>
+          <tr id="deletions"><td>Verified dead-code deletion</td><td>Implementation engineer</td><td>Pending</td><td>Audit candidate list; references require recheck after staging changes.</td><td>Prove no reachable consumers; review removals.</td></tr>
+          <tr id="queries"><td>Canonical source and correction queries</td><td>Implementation engineer; query researcher</td><td>Researching</td><td>Local two-CPU baseline recorded in scope.</td><td>Prove ordering, coverage, reversal and cap equivalence.</td></tr>
+          <tr id="metrics"><td>Equivalent overview metrics and scoped data loading</td><td>Implementation engineer</td><td>Pending</td><td>Register-loading paths identified in audit.</td><td>Verify metric formulas and new master permissions.</td></tr>
+          <tr id="worker"><td>Refresh concurrency without blocking writes</td><td>Implementation engineer; worker researcher</td><td>Researching</td><td>Controlled build delay blocks queue upsert.</td><td>Preserve snapshot consistency, dirty updates and crash recovery.</td></tr>
+          <tr id="tables"><td>Shared table filtering performance</td><td>Design engineer</td><td>Pending</td><td>Audit: 400k value accesses for 1k rows × 20 columns.</td><td>Preserve facets, persistence, sorting and selection; browser verification.</td></tr>
+          <tr id="runtime"><td>Runtime subpath exports</td><td>Implementation engineer</td><td>Pending</td><td>Audit build traced backup code through auth's runtime import.</td><td>Update consumers and verify production build.</td></tr>
+          <tr id="modules"><td>Dashboard seams and planner types</td><td>Implementation engineer; design engineer</td><td>Pending</td><td>Large live modules identified; legacy planning is not dead code.</td><td>Extract at existing contracts; demonstrate identical output.</td></tr>
+          <tr id="retention"><td>Derived-data retention assessment</td><td>Coordinating engineer; worker researcher</td><td>Researching</td><td>No retention change authorized to alter historical behavior.</td><td>Determine existing consumers and whether a business policy is required.</td></tr>
+          <tr id="verification"><td>Full checks, benchmarks, blast-radius review</td><td>Coordinating engineer</td><td>Pending</td><td>Historical audit results are not checks of this branch.</td><td>Run after implementation; record remaining failures honestly.</td></tr>
+          <tr id="browser"><td>Primary UI, recovery, repeated input, navigation, narrow/light/dark</td><td>Design engineer; coordinating engineer</td><td>Unverified</td><td>No interaction on this branch inspected yet.</td><td>Local synthetic fixture and browser checks after UI changes.</td></tr>
+          <tr id="providers"><td>Production provider settings and deployment</td><td>Coordinating engineer</td><td>Not changed</td><td>Testing uses isolated local PostgreSQL/Redis; no live data.</td><td>No deployment requested; merge requires explicit greenlight.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </body>
+</html>
