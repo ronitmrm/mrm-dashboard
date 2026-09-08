@@ -1,4 +1,4 @@
-import { PDFDocument } from "pdf-lib"
+import { PDFDocument, PDFRawStream, decodePDFRawStream } from "pdf-lib"
 import { describe, expect, it } from "vitest"
 import type { PreparedEmploymentLetter } from "@workspace/db"
 
@@ -89,6 +89,15 @@ describe("employment letter PDF", () => {
       expect(pdf.getPageCount()).toBe(pageCount)
       expect(pdf.getTitle()).toContain(letter.identity.employeeName)
       expect(pdf.getSubject()).toContain(`${type}`)
+      if (type === "offer" || type === "appointment") {
+        const content = pdf.context.enumerateIndirectObjects()
+          .filter((entry): entry is [typeof entry[0], PDFRawStream] => entry[1] instanceof PDFRawStream)
+          .map(([, stream]) => Buffer.from(decodePDFRawStream(stream).decode()).toString())
+          .join("\n")
+        for (const text of ["Acknowledged and Accepted by:", letter.identity.employeeName, "Date: ____________________"]) {
+          expect(content).toContain(`<${Buffer.from(text).toString("hex").toUpperCase()}> Tj`)
+        }
+      }
     }
   )
 })

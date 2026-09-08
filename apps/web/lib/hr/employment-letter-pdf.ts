@@ -17,7 +17,7 @@ const MUTED = rgb(0.32, 0.36, 0.34)
 function safe(value: unknown) {
   return String(value ?? "")
     .normalize("NFKD")
-    .replace(/[^ -~]/g, "")
+    .replace(/[^ -~\r\n]/g, "")
 }
 
 function wrapped(value: unknown, font: PDFFont, size: number, width: number) {
