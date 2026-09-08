@@ -745,9 +745,7 @@ function revisedCalculation(
     }
   }
 
-  const directPurchaseCost = asNumber(
-    product.direct_purchase_price_per_piece
-  )
+  const directPurchaseCost = asNumber(product.direct_purchase_price_per_piece)
   const isDirectPurchase =
     product.pricing_method === "Direct Purchase" && directPurchaseCost > 0
   const assembledPartInr = asNumber(quote.assembled_part_inr)
@@ -811,11 +809,7 @@ function revisedCalculation(
       )
         ? 0
         : asNumber(product.forging_cost),
-      packingCost: overrideNumber(
-        override,
-        "packing_cost",
-        quote.packing_cost
-      ),
+      packingCost: overrideNumber(override, "packing_cost", quote.packing_cost),
       profitPercent: profit,
       purchaseTimes: overrideNumber(
         override,
@@ -1720,13 +1714,16 @@ async function productComponentCostPerPiece(
   return asNumber(result.rows[0]?.component_cost)
 }
 
-async function calculatedProductBase(client: PoolClient, product: ProductRow) {
+async function calculatedProductBase(
+  client: PoolClient,
+  product: ProductRow,
+  componentCostPerPiece?: number
+) {
   return calculateProductBaseCost({
     ...productProcessInput(product),
-    componentCostPerPiece: await productComponentCostPerPiece(
-      client,
-      product.id
-    ),
+    componentCostPerPiece:
+      componentCostPerPiece ??
+      (await productComponentCostPerPiece(client, product.id)),
     directPurchasePricePerPiece: asNumber(
       product.direct_purchase_price_per_piece
     ),
@@ -3207,7 +3204,9 @@ export function createCommercialRevisionsRepository(
           lifecycleStatus: row.lifecycle_status,
           uidKind: row.uid_kind,
           directPurchasePricePerKg: asNumber(row.direct_purchase_price_per_kg),
-          directPurchasePricePerPiece: asNumber(row.direct_purchase_price_per_piece),
+          directPurchasePricePerPiece: asNumber(
+            row.direct_purchase_price_per_piece
+          ),
           machiningPricePerPiece: asNumber(row.machining_price_per_piece),
           burningLossPercent: asNumber(row.burning_loss_percent),
           remarks: row.remarks,
@@ -3240,6 +3239,7 @@ export function createCommercialRevisionsRepository(
         preview_rows: Array<{
           newPrice: number
           oldPrice: number
+          productItemId?: string
           quoteItemId: string
         }>
         skipped_rows: Array<{
@@ -3258,8 +3258,8 @@ export function createCommercialRevisionsRepository(
             max(change.skipped_count)::integer AS skipped_count,
             bool_or(change.applied_at IS NOT NULL) AS is_applied,
             max(change.notes) AS notes,
-            (array_agg(change.source_payload ORDER BY change.created_at, change.id))[1]
-              -> 'skippedRows' AS skipped_rows,
+            (array_agg(change.source_payload -> 'skippedRows' ORDER BY change.created_at, change.id)
+              FILTER (WHERE change.source_payload ? 'skippedRows'))[1] AS skipped_rows,
             jsonb_agg(change.preview_json ORDER BY change.created_at, change.id)
               AS preview_rows
           FROM sales.bulk_price_revision_changes change
@@ -3714,10 +3714,12 @@ export function createCommercialRevisionsRepository(
         processesRequired: Array.isArray(
           value("processesRequired", row.item_source_payload?.processesRequired)
         )
-          ? (value(
-              "processesRequired",
-              row.item_source_payload?.processesRequired
-            ) as unknown[]).filter(
+          ? (
+              value(
+                "processesRequired",
+                row.item_source_payload?.processesRequired
+              ) as unknown[]
+            ).filter(
               (process): process is string => typeof process === "string"
             )
           : [],
@@ -4229,6 +4231,8 @@ export function createCommercialRevisionsRepository(
         const selectedQuoteItemIds = input.selectedQuoteItemIds ?? []
         const selectedProductIds = input.selectedProductIds ?? []
         const valid: Array<{ id: string; itemId: string; price: string }> = []
+        const stageProducts = new Map<string, ProductRow>()
+        const componentCosts = new Map<string, number>()
         if (isProductStage) {
           let productIds = [...new Set(selectedProductIds)]
           if (!productIds.length && selectedQuoteItemIds.length) {
@@ -4259,15 +4263,55 @@ export function createCommercialRevisionsRepository(
               "One or more selected products are no longer available."
             )
           }
-          for (const product of products.rows) {
-            const affectedQuoteIds = await activeAffectedQuoteIds(
-              client,
-              product.id,
-              row.organization_id
+          // Traverse the active quote graph once for the entire selection.
+          const affected = await client.query<{
+            item_id: string
+            quote_item_id: string
+          }>(
+            `WITH RECURSIVE quote_tree AS (
+              SELECT root.id AS root_quote_item_id, root.id AS quote_item_id, root.item_id
+              FROM sales.quote_items root
+              WHERE root.organization_id = $2 AND root.is_active
+                AND root.status IN ('Sent', 'Accepted')
+                AND NULLIF(btrim(root.customer_part_code), '') IS NOT NULL
+              UNION
+              SELECT quote_tree.root_quote_item_id,
+                component.child_quote_item_id, component.component_item_id
+              FROM quote_tree
+              JOIN sales.quote_product_snapshots snapshot ON snapshot.quote_item_id = quote_tree.quote_item_id
+              JOIN sales.quote_package_components component ON component.quote_product_snapshot_id = snapshot.id
+              WHERE component.child_quote_item_id IS NOT NULL
             )
-            if (!affectedQuoteIds.length) continue
+            SELECT DISTINCT ON (item_id) item_id, root_quote_item_id AS quote_item_id
+            FROM quote_tree WHERE item_id = ANY($1::uuid[])
+            ORDER BY item_id, root_quote_item_id`,
+            [productIds, row.organization_id]
+          )
+          const quoteByProduct = new Map(
+            affected.rows.map((entry) => [entry.item_id, entry.quote_item_id])
+          )
+          const costs = await client.query<{
+            item_id: string
+            component_cost: string
+          }>(
+            `SELECT line.parent_item_id AS item_id, COALESCE(sum(
+              line.quantity * CASE WHEN child.pricing_method = 'Direct Purchase'
+                THEN child.direct_purchase_price_per_piece ELSE child.product_cost_inr END
+              ), 0)::text AS component_cost
+            FROM catalog.bom_lines line
+            JOIN catalog.items child ON child.id = line.component_item_id
+            WHERE line.parent_item_id = ANY($1::uuid[])
+            GROUP BY line.parent_item_id`,
+            [productIds]
+          )
+          for (const cost of costs.rows)
+            componentCosts.set(cost.item_id, asNumber(cost.component_cost))
+          for (const product of products.rows) {
+            stageProducts.set(product.id, product)
+            const quoteId = quoteByProduct.get(product.id)
+            if (!quoteId) continue
             valid.push({
-              id: affectedQuoteIds[0]!,
+              id: quoteId,
               itemId: product.id,
               price: product.product_cost_inr,
             })
@@ -4309,7 +4353,9 @@ export function createCommercialRevisionsRepository(
           uid: string
         }> = []
         for (const candidate of valid) {
-          const product = await getProduct(client, candidate.itemId)
+          const product =
+            stageProducts.get(candidate.itemId) ??
+            (await getProduct(client, candidate.itemId))
           const applicable =
             !lockedBulkProcessFields.has(input.fieldName) ||
             (isProductStage
@@ -4346,6 +4392,83 @@ export function createCommercialRevisionsRepository(
                 .join(" ")
             : (input.notes ?? null)
         const createdIds: string[] = []
+        if (isProductStage) {
+          const override = new Map([[input.fieldName, input.newValue]])
+          const prepared = await Promise.all(
+            eligible.map(async (quote, index) => {
+              const product = stageProducts.get(quote.itemId)!
+              const newPrice = await calculatedProductBase(
+                client,
+                productWithOverrides(product, override),
+                componentCosts.get(product.id) ?? 0
+              )
+              return {
+                id: randomUUID(),
+                quote_id: quote.id,
+                item_id: quote.itemId,
+                old_price: asNumber(quote.price),
+                new_price: newPrice,
+                preview: {
+                  newPrice,
+                  oldPrice: asNumber(quote.price),
+                  productItemId: quote.itemId,
+                  quoteItemId: quote.id,
+                },
+                // Keep group audit data once, rather than copying the full selection into every row.
+                payload:
+                  index === 0
+                    ? {
+                        ...input,
+                        eligibleProductIds: eligible.map(
+                          (entry) => entry.itemId
+                        ),
+                        eligibleQuoteItemIds: eligible.map((entry) => entry.id),
+                        productItemId: quote.itemId,
+                        skippedRows,
+                      }
+                    : { productItemId: quote.itemId },
+              }
+            })
+          )
+          const created = await client.query<{ id: string }>(
+            `INSERT INTO sales.bulk_price_revision_changes (
+              id, organization_id, bulk_price_revision_id, prior_quote_item_id,
+              old_price, new_price, field_name, field_label, new_value,
+              selection_json, selected_count, skipped_count, stage_group_id,
+              preview_json, notes, created_by_user_id, source_system,
+              source_table, source_id, source_payload
+            )
+            SELECT staged.id, $2::uuid, $3::uuid, staged.quote_id,
+              staged.old_price, staged.new_price, $4, $5, $6,
+              jsonb_build_array(staged.item_id), $7, $8, $9::uuid,
+              staged.preview, $10, $11::uuid, 'mrm-dashboard',
+              'bulk_price_revision_changes', staged.id::text, staged.payload
+            FROM jsonb_to_recordset($1::jsonb) AS staged(
+              id uuid, quote_id uuid, item_id uuid, old_price numeric, new_price numeric,
+              preview jsonb, payload jsonb
+            ) RETURNING id`,
+            [
+              JSON.stringify(prepared),
+              row.organization_id,
+              input.bulkPriceRevisionId,
+              input.fieldName,
+              field.label,
+              input.newValue,
+              eligible.length,
+              skippedCount,
+              stageGroupId,
+              notes,
+              input.actorUserId ?? null,
+            ]
+          )
+          return {
+            changeIds: created.rows.map((entry) => entry.id),
+            selectedCount: eligible.length,
+            skippedCount,
+            skippedRows,
+            stageGroupId,
+          }
+        }
         for (const quote of eligible) {
           const product = await getProduct(client, quote.itemId)
           const override = new Map<string, number>([
@@ -5139,7 +5262,8 @@ export function createCommercialRevisionsRepository(
 
         if (input.decision === "Reject") {
           const remarks = asText(input.remarks)
-          if (!remarks) throw new Error("Design rejection remarks are required.")
+          if (!remarks)
+            throw new Error("Design rejection remarks are required.")
           await client.query(
             `
               UPDATE sales.engineering_change_notes
@@ -5217,7 +5341,8 @@ export function createCommercialRevisionsRepository(
           [row.item_id]
         )
         const current = currentRevision.rows[0]
-        if (!current) throw new Error("Released Product Design revision was not found.")
+        if (!current)
+          throw new Error("Released Product Design revision was not found.")
         const revisionNumber = current.revision_number + 1
         const revisionLabel = String(revisionNumber).padStart(2, "0")
         await client.query(
@@ -5284,7 +5409,9 @@ export function createCommercialRevisionsRepository(
             drawingRequirement !== "Required" &&
             drawingRequirement !== "Not Required"
           ) {
-            throw new Error("Drawing requirement must be Required or Not Required.")
+            throw new Error(
+              "Drawing requirement must be Required or Not Required."
+            )
           }
           const drawingNumber = asText(drawingDetails.drawingNumber)
           if (!drawingNumber) throw new Error("Drawing number is required.")
@@ -5314,7 +5441,9 @@ export function createCommercialRevisionsRepository(
             )
             fileId = linkedFile.rows[0]?.id ?? null
             if (!fileId) {
-              throw new Error("The submitted drawing file is not linked to this ECN.")
+              throw new Error(
+                "The submitted drawing file is not linked to this ECN."
+              )
             }
           }
           const currentDrawing = await client.query<{ id: string }>(

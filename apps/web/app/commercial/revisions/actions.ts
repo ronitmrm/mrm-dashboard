@@ -212,6 +212,7 @@ export async function createBulkPriceRevisionAction(formData: FormData) {
 }
 
 export async function stageBulkPriceRevisionAction(formData: FormData) {
+  const bulkPriceRevisionId = requiredText(formData, "bulk_price_revision_id")
   const fieldName = requiredText(formData, "field_name")
   const enteredValue = numberValue(formData, "new_value")
   const field =
@@ -224,7 +225,7 @@ export async function stageBulkPriceRevisionAction(formData: FormData) {
     (repository, actorUserId) =>
       repository.stageBulkPriceRevisionChange({
         actorUserId,
-        bulkPriceRevisionId: requiredText(formData, "bulk_price_revision_id"),
+        bulkPriceRevisionId,
         fieldName,
         newValue,
         notes: optionalText(formData, "notes"),
@@ -240,6 +241,7 @@ export async function stageBulkPriceRevisionAction(formData: FormData) {
   revalidatePath(customerBulkRevisionPath)
   revalidatePath(productBulkRevisionPath)
   revalidatePath(productCostingPath)
+  revalidatePath(`${productCostingPath}/revisions/${bulkPriceRevisionId}`)
 }
 
 export async function deleteBulkPriceRevisionStageAction(formData: FormData) {
