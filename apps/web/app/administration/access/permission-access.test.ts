@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  configuredPermissionCount,
   permissionAccessLevelForKeys,
   permissionAccessRows,
   permissionAccessSummary,
@@ -9,6 +10,16 @@ import {
   permissionKeysForSelections,
   permissionSelectionsForKeys,
 } from "./permission-access"
+
+it("counts configured pages consistently when pages share a saved capability", () => {
+  const rows = permissionAccessRows([
+    { key: "pricing.costing.read", module: "pricing", name: "View costing" },
+    { key: "hr.recruitment.read", module: "hr", name: "Legacy HR access" },
+  ])
+
+  expect(configuredPermissionCount(rows, ["pricing.costing.read"])).toBe(2)
+  expect(configuredPermissionCount(rows, ["hr.recruitment.read"])).toBe(0)
+})
 
 const permissions = [
   {
