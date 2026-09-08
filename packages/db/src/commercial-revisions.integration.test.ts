@@ -56,13 +56,7 @@ async function createItem(uid: string, itemType: string) {
        is_current, change_reason, source_system, source_table, source_id
      ) VALUES ($1, $2, $3, $4, 0, '00', 'Not Required', 'Released', true,
        'Test initial release', 'test', 'drawing_revisions', $5)`,
-    [
-      organizationId,
-      itemId,
-      designRevision.rows[0]!.id,
-      uid,
-      randomUUID(),
-    ]
+    [organizationId, itemId, designRevision.rows[0]!.id, uid, randomUUID()]
   )
   return itemId
 }
@@ -871,6 +865,68 @@ describe("commercial revisions and corrections", () => {
     ).rejects.toThrow("ordered internal product")
   })
 
+  test("hands off product stages through inactive nested snapshots and stores shared paths once", async () => {
+    const leafId = await createItem(`LEAF-${randomUUID()}`, "List")
+    const assemblyId = await createItem(`ASM-${randomUUID()}`, "Assembly")
+    const packageId = await createItem(`PKG-${randomUUID()}`, "Package")
+    const leaf = await createQuote({
+      itemId: leafId,
+      itemType: "List",
+      processBase: 10,
+      profitPercent: 0,
+      total: 10,
+    })
+    const assembly = await createQuote({
+      itemId: assemblyId,
+      itemType: "Assembly",
+      processBase: 2,
+      profitPercent: 0,
+      total: 12,
+      child: { itemId: leafId, quoteItemId: leaf, total: 10 },
+    })
+    const root = await createQuote({
+      itemId: packageId,
+      itemType: "Package",
+      customerPartCode: `ROOT-${randomUUID()}`,
+      processBase: 1,
+      profitPercent: 0,
+      total: 13,
+      child: { itemId: assemblyId, quoteItemId: assembly, total: 12 },
+    })
+    await pool.query(
+      "UPDATE sales.quote_items SET is_active = false WHERE id = ANY($1::uuid[])",
+      [[leaf, assembly]]
+    )
+    const revision = await repository.createBulkPriceRevision({
+      organizationId,
+      effectiveOn: "2026-09-08",
+      reason: "Nested snapshot handoff",
+      revisionRoute: "Product Parameter Bulk Revision",
+    })
+    await repository.stageBulkPriceRevisionChange({
+      bulkPriceRevisionId: revision.id,
+      fieldName: "rejection_percent",
+      newValue: 0.01,
+      selectedProductIds: [leafId, assemblyId],
+    })
+    await expect(
+      repository.completeBulkPriceRevision({ bulkPriceRevisionId: revision.id })
+    ).resolves.toMatchObject({
+      status: "Pending Customer Costing",
+      revisedQuoteCount: 0,
+    })
+    const stored = await pool.query<{ final_quote_item_ids_json: string[] }>(
+      "SELECT final_quote_item_ids_json FROM sales.bulk_price_revision_changes WHERE bulk_price_revision_id = $1",
+      [revision.id]
+    )
+    expect(
+      stored.rows.filter((row) => row.final_quote_item_ids_json.length)
+    ).toHaveLength(1)
+    expect(
+      new Set(stored.rows.flatMap((row) => row.final_quote_item_ids_json))
+    ).toEqual(new Set([root, assembly, leaf]))
+  })
+
   test("revises a child and every active nested parent without rewriting history", async () => {
     const leafId = await createItem(`M${Date.now()}1`, "List")
     const assemblyId = await createItem(`A-${randomUUID()}`, "Assembly")
@@ -1615,7 +1671,10 @@ describe("commercial revisions and corrections", () => {
     })
     await repository.completeEngineeringChangeDesign({
       engineeringChangeNoteId: ecn.id,
-      itemPatch: { description: `Decision revision ${suffix}`, weight100Pcs: 1 },
+      itemPatch: {
+        description: `Decision revision ${suffix}`,
+        weight100Pcs: 1,
+      },
     })
     await repository.applyEngineeringChangeDesignReview({
       actorUserId: designHodUserId,

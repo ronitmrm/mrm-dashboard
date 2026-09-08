@@ -12,6 +12,18 @@ const formatter = new Intl.NumberFormat("en-IN", {
   maximumFractionDigits: 4,
 })
 
+export function formatCustomerParameter(
+  value: CustomerRevisionParameters[keyof CustomerRevisionParameters],
+  format: (typeof customerRevisionParameterColumns)[number]["format"]
+): string {
+  if (value === null || value === "") return "—"
+  if (format === "text") return String(value)
+  if (!Number.isFinite(Number(value))) return "—"
+  return format === "percent"
+    ? `${formatter.format(Number(value) * 100)}%`
+    : formatter.format(Number(value))
+}
+
 export function CustomerParameterHeaders() {
   return customerRevisionParameterColumns.map(({ label }) => (
     <TableHead key={label}>{label}</TableHead>
@@ -25,16 +37,7 @@ export function CustomerParameterCells({
 }) {
   return customerRevisionParameterColumns.map(({ label, format }) => {
     const value = values[label]
-    const display =
-      value === null || value === ""
-        ? "—"
-        : format === "text"
-          ? value
-          : Number.isFinite(Number(value))
-            ? format === "percent"
-              ? `${formatter.format(Number(value) * 100)}%`
-              : formatter.format(Number(value))
-            : "—"
+    const display = formatCustomerParameter(value, format)
     return (
       <TableCell
         className="max-w-64 min-w-32 break-words whitespace-normal tabular-nums"

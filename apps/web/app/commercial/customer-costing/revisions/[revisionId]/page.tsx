@@ -1,38 +1,25 @@
 import Link from "next/link"
-import { CustomerParameterCells, CustomerParameterHeaders, customerParameterColumnCount } from "../../../revisions/customer-parameter-columns"
+import { formatCustomerParameter } from "../../../revisions/customer-parameter-columns"
+import { CustomerCostingPriceTable } from "./customer-costing-price-table"
 
-import { createCommercialRevisionsRepository } from "@workspace/db"
+import {
+  createCommercialRevisionsRepository,
+  customerRevisionParameterColumns,
+} from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
- SectionCard,
+  SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
-import { Input } from "@workspace/ui/components/input"
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@workspace/ui/components/native-select"
-import {
- OperationalTable,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@workspace/ui/components/table"
-
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
 
-import {
-  applyProductBulkRevisionPriceDecisionAction,
-  completeBulkPriceRevisionAction,
-} from "../../../revisions/actions"
+import { completeBulkPriceRevisionAction } from "../../../revisions/actions"
 
 export const dynamic = "force-dynamic"
 
@@ -78,7 +65,7 @@ export default async function ProductRevisionCustomerCostingPage({
 
   if (!work) {
     return (
- <SectionCard>
+      <SectionCard>
         <CardHeader>
           <CardTitle>Product Revision Customer Costing Not Available</CardTitle>
           <CardDescription>
@@ -92,7 +79,7 @@ export default async function ProductRevisionCustomerCostingPage({
             </Link>
           </Button>
         </CardContent>
- </SectionCard>
+      </SectionCard>
     )
   }
 
@@ -108,15 +95,16 @@ export default async function ProductRevisionCustomerCostingPage({
         </Button>
       </div>
 
- <SectionCard>
+      <SectionCard>
         <CardHeader>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <CardTitle>Affected Customer Prices</CardTitle>
               <CardDescription>
-                Scroll horizontally for current product and customer costing parameters.
-                Saved quote inputs take precedence over Product master values;
-                Revise Price and Keep Price Same show the proposed outcomes.
+                Scroll horizontally for current product and customer costing
+                parameters. Saved quote inputs take precedence over Product
+                master values; Revise Price and Keep Price Same show the
+                proposed outcomes.
               </CardDescription>
             </div>
             <Badge variant="outline">
@@ -125,104 +113,44 @@ export default async function ProductRevisionCustomerCostingPage({
           </div>
         </CardHeader>
         <CardContent className="grid gap-6">
-          <div className="h-[calc(100svh-18rem)] min-h-[34rem] overflow-auto rounded-md border">
- <OperationalTable excelFilters>
-              <TableHeader className="sticky top-0 z-10 bg-background">
-                <TableRow>
-                  <TableHead>Customer</TableHead>
-                  <TableHead>Customer Part</TableHead>
-                  <TableHead>UID</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead>Category</TableHead>
-                  <TableHead>Subcategory</TableHead>
-                  <TableHead>Current</TableHead>
-                  <TableHead>Revise Price</TableHead>
-                  <TableHead>Keep Price Same</TableHead>
-                  <TableHead>Decision</TableHead>
-                  <CustomerParameterHeaders />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {work.rows.map((price) => (
-                  <TableRow key={price.quoteItemId}>
-                    <TableCell>{price.companyName}</TableCell>
-                    <TableCell className="font-mono">
-                      {price.customerPartCode ?? "—"}
-                    </TableCell>
-                    <TableCell className="font-mono whitespace-nowrap">
-                      {price.uid}
-                    </TableCell>
-                    <TableCell className="min-w-64 max-w-64 whitespace-normal break-words">
-                      {price.description}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap">
-                      {price.category ?? "—"}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap">
-                      {price.subcategory ?? "—"}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap tabular-nums">
-                      <span>$ {money(price.approvedPriceUsd)}</span>
-                      <span className="block text-xs text-muted-foreground">
-                        Profit {percent(price.currentProfitPercent)}
-                      </span>
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap tabular-nums">
-                      <span>$ {money(price.revisePriceUsd)}</span>
-                      <span className="block text-xs text-muted-foreground">
-                        Profit {percent(price.reviseProfitPercent)}
-                      </span>
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap tabular-nums">
-                      <span>$ {money(price.keepSamePriceUsd)}</span>
-                      <span className="block text-xs text-muted-foreground">
-                        Profit {percent(price.keepSameProfitPercent)}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      {price.decision ? (
-                        <Badge>{price.decision}</Badge>
-                      ) : (
-                        <form
-                          action={applyProductBulkRevisionPriceDecisionAction}
-                          className="flex min-w-72 gap-2"
-                        >
-                          <input
-                            name="bulk_price_revision_id"
-                            type="hidden"
-                            value={work.revision.id}
-                          />
-                          <input
-                            name="source_quote_item_id"
-                            type="hidden"
-                            value={price.quoteItemId}
-                          />
-                          <NativeSelect name="decision" required>
-                            <NativeSelectOption value="Revise Price">
-                              Revise Price
-                            </NativeSelectOption>
-                            <NativeSelectOption value="Keep Price Same">
-                              Keep Price Same
-                            </NativeSelectOption>
-                          </NativeSelect>
-                          <Input name="notes" placeholder="Note" />
-                          <Button type="submit">Record</Button>
-                        </form>
-                      )}
-                    </TableCell>
-                    <CustomerParameterCells values={price.parameters} />
-                  </TableRow>
-                ))}
-                {!work.rows.length ? (
-                  <TableRow>
-                    <TableCell className="h-24 text-center" colSpan={10 + customerParameterColumnCount}>
-                      No Affected Prices Are In Scope.
-                    </TableCell>
-                  </TableRow>
-                ) : null}
-              </TableBody>
- </OperationalTable>
-          </div>
+          <CustomerCostingPriceTable
+            revisionId={work.revision.id}
+            storageKey={`customer-costing-revision:${work.revision.id}`}
+            columns={[
+              "Customer",
+              "Customer Part",
+              "UID",
+              "Description",
+              "Category",
+              "Subcategory",
+              "Current",
+              "Revise Price",
+              "Keep Price Same",
+              "Decision",
+              ...customerRevisionParameterColumns.map((column) => column.label),
+            ]}
+            rows={work.rows.map((price) => ({
+              ...price,
+              values: [
+                price.companyName,
+                price.customerPartCode ?? "�",
+                price.uid,
+                price.description,
+                price.category ?? "�",
+                price.subcategory ?? "�",
+                `$ ${money(price.approvedPriceUsd)} Profit ${percent(price.currentProfitPercent)}`,
+                `$ ${money(price.revisePriceUsd)} Profit ${percent(price.reviseProfitPercent)}`,
+                `$ ${money(price.keepSamePriceUsd)} Profit ${percent(price.keepSameProfitPercent)}`,
+                price.decision ?? "Pending",
+                ...customerRevisionParameterColumns.map((column) =>
+                  formatCustomerParameter(
+                    price.parameters[column.label],
+                    column.format
+                  )
+                ),
+              ],
+            }))}
+          />
 
           <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-muted-foreground">
@@ -246,7 +174,7 @@ export default async function ProductRevisionCustomerCostingPage({
             </form>
           </div>
         </CardContent>
- </SectionCard>
+      </SectionCard>
     </div>
   )
 }
