@@ -77,3 +77,21 @@ Sol/high role; UI work may use Astra/medium; independent read-only research uses
 Terra/xhigh. Each handoff states owned files, acceptance criteria, evidence, and
 remaining uncertainties. The coordinating engineer reviews every slice before
 integrating it. No deployment or merge is authorized by this document.
+
+## Reviewed query results
+
+Fresh before/after samples on the unchanged local two-CPU fixture (five warmups,
+thirty samples) preserve complete canonical DTOs and public correction results.
+
+| Operation | Before p95 | After p95 |
+| --- | ---: | ---: |
+| Canonical reader, 10k source rows | 14.91 ms | 16.62 ms |
+| Canonical reader, 100k source rows | 96.88 ms | 38.88 ms |
+| Canonical reader, 300k source rows | 460.27 ms | 203.12 ms |
+| Correction candidates | 433.66 ms | 45.43 ms |
+
+Correction input falls from 50,000 rows / 31.06 MB to 4,000 rows / 2.43 MB;
+the same 200 candidates are returned. Exact canonical coverage counts remain.
+The small-fixture result did not improve; larger histories show the material gain.
+These synthetic local results do not establish production latency. Existing source,
+correction/reversal, and floor tests pass 40/40; DB types and lint pass.
