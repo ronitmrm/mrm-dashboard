@@ -2287,7 +2287,7 @@ async function preparedProductRevision(
       }
     }
   }
-  if (!productOverridesById.size || !affectedQuoteIds.size) {
+  if (!productOverridesById.size) {
     throw new Error("Prepared Product parameters were not found.")
   }
   return {
@@ -3437,10 +3437,13 @@ export function createCommercialRevisionsRepository(
               AND quote_tree.depth < 20
               AND NOT component.child_quote_item_id = ANY(quote_tree.quote_path)
           ), products AS (
-            SELECT item_id,
-              count(DISTINCT root_quote_item_id)::text AS affected_price_count
-            FROM quote_tree
-            GROUP BY item_id
+            SELECT item.id AS item_id,
+              count(DISTINCT quote_tree.root_quote_item_id)::text AS affected_price_count
+            FROM catalog.items item
+            JOIN revision ON revision.organization_id = item.organization_id
+            LEFT JOIN quote_tree ON quote_tree.item_id = item.id
+            WHERE item.lifecycle_status = 'P' OR quote_tree.item_id IS NOT NULL
+            GROUP BY item.id
           ), filtered AS (
             SELECT item.id, item.uid, item.description, item.item_type,
               COALESCE(
@@ -3575,7 +3578,7 @@ export function createCommercialRevisionsRepository(
           newPrice: number
           oldPrice: number
           productItemId?: string
-          quoteItemId: string
+          quoteItemId: string | null
         }>
         skipped_rows: Array<{
           itemId: string
@@ -4565,7 +4568,11 @@ export function createCommercialRevisionsRepository(
         }
         const selectedQuoteItemIds = input.selectedQuoteItemIds ?? []
         const selectedProductIds = input.selectedProductIds ?? []
-        const valid: Array<{ id: string; itemId: string; price: string }> = []
+        const valid: Array<{
+          id: string | null
+          itemId: string
+          price: string
+        }> = []
         const stageProducts = new Map<string, ProductRow>()
         const componentCosts = new Map<string, number>()
         if (isProductStage) {
@@ -4584,7 +4591,9 @@ export function createCommercialRevisionsRepository(
           if (!productIds.length) {
             throw new Error("Select at least one product.")
           }
-          const products = await client.query<ProductRow>(
+          const products = await client.query<
+            ProductRow & { lifecycle_status: string }
+          >(
             `
               SELECT *
               FROM catalog.items
@@ -4644,9 +4653,13 @@ export function createCommercialRevisionsRepository(
           for (const product of products.rows) {
             stageProducts.set(product.id, product)
             const quoteId = quoteByProduct.get(product.id)
-            if (!quoteId) continue
+            if (!quoteId && product.lifecycle_status !== "P") {
+              throw new Error(
+                "Select permanent products or products with active customer prices."
+              )
+            }
             valid.push({
-              id: quoteId,
+              id: quoteId ?? null,
               itemId: product.id,
               price: product.product_cost_inr,
             })
@@ -4695,11 +4708,12 @@ export function createCommercialRevisionsRepository(
             !lockedBulkProcessFields.has(input.fieldName) ||
             (isProductStage
               ? productAllowsBulkProcessField(product, input.fieldName)
-              : await quoteAllowsBulkProcessField(
+              : candidate.id !== null &&
+                (await quoteAllowsBulkProcessField(
                   client,
                   candidate.id,
                   input.fieldName
-                ))
+                )))
           if (applicable) {
             eligible.push(candidate)
           } else {
@@ -4757,7 +4771,9 @@ export function createCommercialRevisionsRepository(
                         eligibleProductIds: eligible.map(
                           (entry) => entry.itemId
                         ),
-                        eligibleQuoteItemIds: eligible.map((entry) => entry.id),
+                        eligibleQuoteItemIds: eligible.flatMap((entry) =>
+                          entry.id ? [entry.id] : []
+                        ),
                         productItemId: quote.itemId,
                         skippedRows,
                       }
@@ -4805,6 +4821,8 @@ export function createCommercialRevisionsRepository(
           }
         }
         for (const quote of eligible) {
+          if (!quote.id)
+            throw new Error("A customer change requires an active price.")
           const product = await getProduct(client, quote.itemId)
           const override = new Map<string, number>([
             [input.fieldName, input.newValue],
@@ -5019,7 +5037,7 @@ export function createCommercialRevisionsRepository(
           id: string
           new_value: string
           old_price: string
-          prior_quote_item_id: string
+          prior_quote_item_id: string | null
           final_quote_item_ids_json: unknown
           source_payload: Record<string, unknown>
           stage_group_id: string
@@ -5047,8 +5065,16 @@ export function createCommercialRevisionsRepository(
           stageGroups.set(change.stage_group_id, group)
         }
 
-        async function requireActivePrices(quoteIds: string[]) {
-          const uniqueIds = [...new Set(quoteIds)]
+        async function requireActivePrices(quoteIds: Array<string | null>) {
+          const uniqueIds = [
+            ...new Set(
+              quoteIds.map((id) => {
+                if (!id)
+                  throw new Error("A customer change requires an active price.")
+                return id
+              })
+            ),
+          ]
           const active = await client.query<{ id: string }>(
             `
               SELECT id

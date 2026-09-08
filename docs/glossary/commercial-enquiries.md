@@ -211,7 +211,10 @@ not be copied from a customer workbook formula result.
 **Product Parameter Bulk Revision**: Product-owned costing work created from
 Product Bulk Revision and completed from Product Parameter Costing on a dedicated
 revision page. The candidate list contains each Product UID once, irrespective of
-how many Customers or active Quotes use it. A staged Product process change shows
+how many Customers or active Quotes use it. Permanent Products without active
+Quotes are included with zero affected customer prices. They follow the same
+staging and publication steps; no customer decision or Quote is created when
+there are no affected prices. A staged Product process change shows
 an INR-per-piece Product Base preview from Product-owned inputs only; it does not
 change Product Master or the Pricing Register. Every active Quote path containing
 the changed Product is handed to Customer Parameter Costing, where the staged

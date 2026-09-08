@@ -393,6 +393,76 @@ describe("commercial revisions and corrections", () => {
     ).rejects.toThrow("not found")
   })
 
+  test("publishes rejection changes for permanent products without customer quotes", async () => {
+    const uid = `M-NO-QUOTE-${randomUUID()}`
+    const itemId = await createItem(uid, "List")
+    await pool.query(
+      "UPDATE catalog.items SET rejection_percent = 0.02 WHERE id = $1",
+      [itemId]
+    )
+    const revision = await repository.createBulkPriceRevision({
+      effectiveOn: "2026-09-08",
+      organizationId,
+      reason: "Correct quote-free product rejection",
+      revisionRoute: "Product Parameter Bulk Revision",
+    })
+    const candidates =
+      await repository.listProductBulkRevisionActivePricesBounded(revision.id, {
+        query: uid,
+      })
+    expect(candidates.rows).toContainEqual(
+      expect.objectContaining({ id: itemId, affectedPriceCount: 0 })
+    )
+    const staged = await repository.stageBulkPriceRevisionChange({
+      bulkPriceRevisionId: revision.id,
+      fieldName: "rejection_percent",
+      newValue: 0.01,
+      selectedProductIds: [itemId],
+    })
+    expect(staged.selectedCount).toBe(1)
+    expect(
+      await repository.listBulkPriceRevisionStages(revision.id)
+    ).toHaveLength(1)
+    await repository.completeBulkPriceRevision({
+      bulkPriceRevisionId: revision.id,
+    })
+    expect(
+      Number(
+        (
+          await pool.query<{ rejection_percent: string }>(
+            "SELECT rejection_percent FROM catalog.items WHERE id = $1",
+            [itemId]
+          )
+        ).rows[0]!.rejection_percent
+      )
+    ).toBe(0.02)
+    const work = await repository.getProductBulkRevisionCustomerCosting(
+      revision.id
+    )
+    expect(work).toMatchObject({ affectedPriceCount: 0, decidedPriceCount: 0 })
+    await expect(
+      repository.completeBulkPriceRevision({ bulkPriceRevisionId: revision.id })
+    ).resolves.toMatchObject({ status: "Completed", revisedQuoteCount: 0 })
+    expect(
+      Number(
+        (
+          await pool.query(
+            "SELECT rejection_percent FROM catalog.items WHERE id = $1",
+            [itemId]
+          )
+        ).rows[0].rejection_percent
+      )
+    ).toBe(0.01)
+    expect(
+      (
+        await pool.query(
+          "SELECT id FROM sales.quote_items WHERE item_id = $1",
+          [itemId]
+        )
+      ).rows
+    ).toHaveLength(0)
+  })
+
   test("hands a product bulk revision to customer costing before revising every active customer price", async () => {
     const suffix = randomUUID()
     const sharedItemId = await createItem(`M-PBR-${suffix}`, "List")
@@ -453,7 +523,9 @@ describe("commercial revisions and corrections", () => {
       })
     )
     const productPrices =
-      await repository.listProductBulkRevisionActivePricesBounded(revision.id)
+      await repository.listProductBulkRevisionActivePricesBounded(revision.id, {
+        query: `M-PBR-${suffix}`,
+      })
     expect(productPrices.rows).toEqual([
       expect.objectContaining({
         affectedPriceCount: 2,
@@ -2275,5 +2347,63 @@ describe("commercial revisions and corrections", () => {
       shippingCostPerPiece: 0.06,
       totalA: 11.66,
     })
+  })
+  test("requires customer decisions when quoted and quote-free products are revised together", async () => {
+    const suffix = randomUUID()
+    const quotedId = await createItem(`M-MIXED-QUOTED-${suffix}`, "List")
+    const quoteFreeId = await createItem(`M-MIXED-FREE-${suffix}`, "List")
+    const quoteId = await createQuote({
+      itemId: quotedId,
+      itemType: "List",
+      customerPartCode: suffix,
+      processBase: 10,
+      profitPercent: 0.2,
+      total: 12,
+    })
+    const revision = await repository.createBulkPriceRevision({
+      organizationId,
+      effectiveOn: "2026-09-08",
+      reason: "Mixed product selection",
+      revisionRoute: "Product Parameter Bulk Revision",
+    })
+    const stage = await repository.stageBulkPriceRevisionChange({
+      bulkPriceRevisionId: revision.id,
+      fieldName: "rejection_percent",
+      newValue: 0.01,
+      selectedProductIds: [quotedId, quoteFreeId],
+    })
+    expect(stage.selectedCount).toBe(2)
+    await repository.completeBulkPriceRevision({
+      bulkPriceRevisionId: revision.id,
+    })
+    expect(
+      await repository.getProductBulkRevisionCustomerCosting(revision.id)
+    ).toMatchObject({ affectedPriceCount: 1, decidedPriceCount: 0 })
+    await expect(
+      repository.completeBulkPriceRevision({ bulkPriceRevisionId: revision.id })
+    ).rejects.toThrow("Record a customer price decision")
+    await repository.applyProductBulkRevisionPriceDecision({
+      bulkPriceRevisionId: revision.id,
+      decision: "Revise Price",
+      sourceQuoteItemId: quoteId,
+    })
+    await expect(
+      repository.completeBulkPriceRevision({ bulkPriceRevisionId: revision.id })
+    ).resolves.toMatchObject({ status: "Completed", revisedQuoteCount: 1 })
+    const products = await pool.query<{ rejection_percent: string }>(
+      "SELECT rejection_percent FROM catalog.items WHERE id = ANY($1::uuid[])",
+      [[quotedId, quoteFreeId]]
+    )
+    expect(products.rows.map((row) => Number(row.rejection_percent))).toEqual([
+      0.01, 0.01,
+    ])
+    expect(
+      (
+        await pool.query(
+          "SELECT id FROM sales.quote_items WHERE item_id = $1",
+          [quoteFreeId]
+        )
+      ).rows
+    ).toHaveLength(0)
   })
 })
