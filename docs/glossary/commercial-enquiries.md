@@ -240,6 +240,10 @@ Legacy original values are shown only when saved evidence exists; current master
 values must never be presented as historical inputs. Completed history cannot be edited.
 
 **Customer Parameter Bulk Revision**: Customer-specific commercial recalculation.
+Customer Bulk Revision owns request creation and completed read-only history only.
+Pending requests appear in Customer Parameter Costing; each opens a dedicated
+Customer revision page there for selecting prices, staging/removing parameter
+changes, and completing the revision.
 Its Customer selector contains only Customers with an active Sent or Accepted
 Quote. It does not contain Product-origin work. Customer inputs are staged against
 the selected Customer''s applicable active prices and produce immutable Quote

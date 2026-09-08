@@ -32,7 +32,7 @@ export function customerCostingTaskHref(task: CustomerCostingTaskRoute) {
     return `/commercial/customer-costing/revisions/${encodeURIComponent(task.taskId)}`
   }
   if (task.taskType === "Bulk Price Revision") {
-    return `/commercial/customer-bulk-revision?revision=${encodeURIComponent(task.taskId)}#customer-bulk-workbench`
+    return `/commercial/customer-costing/customer-revisions/${encodeURIComponent(task.taskId)}`
   }
   if (task.taskType === "ECN Price Review") {
     return ecnHref(task.taskId)

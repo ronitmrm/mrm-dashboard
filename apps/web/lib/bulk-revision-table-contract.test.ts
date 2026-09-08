@@ -9,7 +9,7 @@ function source(path: string) {
 
 const revisionPages = [
   "app/commercial/product-costing/revisions/[revisionId]/page.tsx",
-  "app/commercial/customer-bulk-revision/page.tsx",
+  "app/commercial/customer-costing/customer-revisions/[revisionId]/page.tsx",
   "app/commercial/customer-costing/revisions/[revisionId]/page.tsx",
 ]
 
@@ -46,6 +46,8 @@ describe("Bulk revision product tables", () => {
 
     const repository = source("../../packages/db/src/commercial-revisions.ts")
     expect(repository).toContain("const bulkRevisionTableLimit = 10_000")
-    expect(repository.match(/bulkRevisionTableLimit/g)!.length).toBeGreaterThanOrEqual(4)
+    expect(
+      repository.match(/bulkRevisionTableLimit/g)!.length
+    ).toBeGreaterThanOrEqual(4)
   })
 })
