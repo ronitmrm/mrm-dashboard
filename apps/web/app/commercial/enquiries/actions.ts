@@ -781,22 +781,6 @@ export async function requestDesignClarificationAction(formData: FormData) {
   revalidatePath("/commercial/technical-review")
 }
 
-export async function prepareCostingAction(formData: FormData) {
-  const enquiryId = requiredText(formData, "enquiry_id")
-  await withWorkflow(
-    commercialTaskCapabilities.prepareCosting,
-    `${enquiriesPath}/${enquiryId}`,
-    (workflow, actorUserId) =>
-      workflow.prepareCostingFromDesign(
-        requiredText(formData, "enquiry_item_id"),
-        actorUserId
-      )
-  )
-  revalidatePath(`${enquiriesPath}/${enquiryId}`)
-  revalidatePath("/commercial/pricing")
-  revalidatePath("/commercial/product-costing")
-}
-
 export async function importEnquiryLinesAction(formData: FormData) {
   const enquiryId = requiredText(formData, "enquiry_id")
   const organizationId = requiredText(formData, "organization_id")

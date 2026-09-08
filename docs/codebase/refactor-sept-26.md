@@ -31,9 +31,10 @@ not change production rules or merely accept new snapshots to make tests pass.
 4. Replace overview-register loading with equivalent metrics and scope feature
    data to its consumer. Acceptance: metric values and access decisions match the
    existing implementation, including stock and date edge cases.
-5. Decouple refresh computation from locks needed by writes. Acceptance: no lost
-   refresh across concurrent writes, crash/retry, multiple workers, or Redis
-   failure; consistent snapshots and previous-assignment continuity remain.
+5. Assess refresh lock contention. The protocol rewrite is deferred: discarding
+   dirty builds risks starvation, while durable claims require leases, fencing,
+   crash recovery, and successor handoff. Optimize build queries within the
+   existing transaction; do not claim that write blocking is eliminated.
 6. Reduce shared table filtering work. Acceptance: faceting, natural sorting,
    empty cells, persisted filters, and filtered selection remain equivalent;
    browser checks cover repeated input, recovery, and narrow/light/dark views.

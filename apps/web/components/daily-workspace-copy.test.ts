@@ -56,7 +56,6 @@ describe("daily workspace copy", () => {
       "../app/hr/page.tsx",
       "../app/masters/page.tsx",
       "../app/operational-entry/page.tsx",
-      "./commercial/costing-calculator.tsx",
       "./commercial/commercial-shell.tsx",
       "./hr/approved-posts-table.tsx",
       "./hr/candidate-assignment-panel.tsx",
