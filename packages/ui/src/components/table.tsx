@@ -101,6 +101,20 @@ function syncSecondaryPlaceholderVisibility(cell: HTMLTableCellElement) {
 }
 
 function tableSnapshot(table: HTMLTableElement) {
+  // Reuse parsed cell values only within this refresh; the DOM may change next time.
+  const cellValues = new Map<
+    HTMLTableCellElement | null,
+    ReturnType<typeof cellFilterValues>
+  >()
+  const valuesForColumn = (row: HTMLTableRowElement, columnIndex: number) => {
+    const cell = row.cells.item(columnIndex)
+    let values = cellValues.get(cell)
+    if (values === undefined) {
+      values = cellFilterValues(cell)
+      cellValues.set(cell, values)
+    }
+    return values
+  }
   const headerRows = table.tHead?.rows
   const firstHeaderRow = headerRows?.item(0)
   const secondHeaderRow = headerRows?.item(1)
@@ -121,7 +135,7 @@ function tableSnapshot(table: HTMLTableElement) {
     hasExcelFilterRow ||
     ((headerRows?.length ?? 0) > 1 && !hasLegacyFilterRow)
   ) {
-    return { columns: [], rows: [] }
+    return { columns: [], rows: [], valuesForColumn }
   }
 
   const headerCells = Array.from(firstHeaderRow.cells)
@@ -133,7 +147,7 @@ function tableSnapshot(table: HTMLTableElement) {
   const columns = headerCells.flatMap((cell, index) => {
     const label = headerLabel(cell)
     const cells = rows.map((row) => row.cells.item(index))
-    const filterValues = cells.flatMap(cellFilterValues)
+    const filterValues = rows.flatMap((row) => valuesForColumn(row, index))
     const forceFilter = cell.dataset.filterable === "true"
     const isActionColumn =
       rows.length > 0 &&
@@ -161,7 +175,7 @@ function tableSnapshot(table: HTMLTableElement) {
     ]
   })
 
-  return { columns, rows }
+  return { columns, rows, valuesForColumn }
 }
 
 function sameColumns(left: TableFilterColumn[], right: TableFilterColumn[]) {
@@ -297,8 +311,7 @@ function OperationalTable({
         : nextFilterHosts
     })
 
-    const valuesForColumn = (row: HTMLTableRowElement, columnIndex: number) =>
-      cellFilterValues(row.cells.item(columnIndex))
+    const { valuesForColumn } = snapshot
     const facetedColumns = snapshot.columns.map((column) => ({
       ...column,
       options: filterOptionsForTableColumn(
