@@ -22,16 +22,19 @@ import { AttachmentViewerLink } from "../attachment-viewer-link"
 
 export function CandidateOfferLetterRegister({
   letters,
+  context = "candidate",
 }: {
   letters: RecruitmentEmploymentLetterRow[]
+  context?: "candidate" | "job"
 }) {
   return (
     <SectionCard>
       <CardHeader>
         <CardTitle>Offer Letter History</CardTitle>
         <CardDescription>
-          Generated Offer Letters Retained Across This Candidate&apos;s Job
-          Applications.
+          {context === "job"
+            ? "Offer Letters Issued For This Job Post."
+            : "Generated Offer Letters Retained Across This Candidate's Job Applications."}
         </CardDescription>
       </CardHeader>
       <CardContent className="overflow-x-auto">
@@ -39,6 +42,7 @@ export function CandidateOfferLetterRegister({
           <TableHeader>
             <TableRow>
               <TableHead>Reference</TableHead>
+              {context === "job" ? <TableHead>Candidate</TableHead> : null}
               <TableHead>Issued</TableHead>
               <TableHead>Designation</TableHead>
               <TableHead>Department</TableHead>
@@ -52,6 +56,9 @@ export function CandidateOfferLetterRegister({
                 <TableCell className="font-mono">
                   {letter.referenceNumber}
                 </TableCell>
+                {context === "job" ? (
+                  <TableCell>{letter.employeeName}</TableCell>
+                ) : null}
                 <TableCell>{letter.issuedOn}</TableCell>
                 <TableCell>{letter.designation}</TableCell>
                 <TableCell>{letter.department || "—"}</TableCell>
@@ -78,7 +85,7 @@ export function CandidateOfferLetterRegister({
               <TableRow>
                 <TableCell
                   className="py-10 text-center text-muted-foreground"
-                  colSpan={6}
+                  colSpan={context === "job" ? 7 : 6}
                 >
                   No Offer Letters Have Been Generated.
                 </TableCell>

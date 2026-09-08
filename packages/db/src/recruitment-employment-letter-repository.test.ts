@@ -4,6 +4,21 @@ import { describe, expect, it, vi } from "vitest"
 import { createRecruitmentEmploymentLetterRepository } from "./recruitment-employment-letter-repository"
 
 describe("recruitment employment letter repository", () => {
+  it("lists offer letters for the selected job within the organization", async () => {
+    const query = vi.fn().mockResolvedValue({ rows: [] })
+    const repository = createRecruitmentEmploymentLetterRepository({
+      pool: { query } as unknown as Pool,
+    })
+    await expect(
+      repository.listForJob("organization-1", "job-1")
+    ).resolves.toEqual([])
+    expect(query).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /letter\.organization_id = \$1[\s\S]*application\.job_post_id = \$2[\s\S]*letter\.letter_type = 'offer'/
+      ),
+      ["organization-1", "job-1"]
+    )
+  })
   it("lists only offer letters linked to the selected candidate", async () => {
     const query = vi.fn().mockResolvedValue({
       rows: [
