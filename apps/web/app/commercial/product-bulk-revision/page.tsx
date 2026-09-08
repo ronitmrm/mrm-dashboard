@@ -3,7 +3,7 @@ import Link from "next/link"
 import { createCommercialRevisionsRepository } from "@workspace/db"
 import { Button } from "@workspace/ui/components/button"
 import {
- SectionCard,
+  SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -19,6 +19,7 @@ import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
 
 import { createBulkPriceRevisionAction } from "../revisions/actions"
+import { BulkRevisionHistory } from "../revisions/bulk-revision-history"
 
 export const dynamic = "force-dynamic"
 
@@ -30,7 +31,12 @@ function localDate() {
   return `${year}-${month}-${day}`
 }
 
-export default async function ProductBulkRevisionPage() {
+export default async function ProductBulkRevisionPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ historyPage?: string }>
+}) {
+  const params = await searchParams
   await requireCapability(
     commercialCapabilities.revisions.read,
     "/commercial/product-bulk-revision"
@@ -64,21 +70,24 @@ export default async function ProductBulkRevisionPage() {
       </section>
 
       <section className="grid gap-3 sm:grid-cols-3">
-        <MetricCard tone="information"
+        <MetricCard
+          tone="information"
           label="Product Revision Requests"
           value={summary.openRevisionCount}
         />
-        <MetricCard tone="accent"
+        <MetricCard
+          tone="accent"
           label="Product Changes Staged"
           value={summary.stagedChangeCount}
         />
-        <MetricCard tone="brand"
+        <MetricCard
+          tone="brand"
           label="Customer Prices Affected"
           value={summary.activePriceCount}
         />
       </section>
 
- <SectionCard>
+      <SectionCard>
         <CardHeader>
           <CardTitle>Start A Product Revision</CardTitle>
           <CardDescription>
@@ -134,7 +143,11 @@ export default async function ProductBulkRevisionPage() {
             </p>
           )}
         </CardContent>
- </SectionCard>
+      </SectionCard>
+      <BulkRevisionHistory
+        origin="product"
+        page={Number(params.historyPage) || 1}
+      />
     </div>
   )
 }
