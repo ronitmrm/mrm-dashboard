@@ -1,5 +1,22 @@
 # Recruitment
 
+## Did Not Join
+
+An accepted candidate appointment that did not result in joining. HR records
+the non-joining date and a required reason against the Candidate Application.
+The date must be on or after the agreed joining date and cannot be in the future.
+
+Only posts still reserved as Appointed for that exact application may be
+released. Joined employees, replaced assignments, and unrelated posts cannot
+be cleared by this action. All posts reserved for the same application,
+including combined-role posts, return to Vacant in one transaction.
+
+The application becomes Did Not Join and the same job reopens, retaining its
+original requirement. Original appointment terms, interviews and generated
+Offer Letter remain historical evidence; the cancellation reason and date are
+recorded in candidate history and the audit log. Repeating the action cannot
+release another vacancy. A future application is a new application cycle.
+
 ## Employment Letter
 
 An immutable, generated PDF retained against one employment lifecycle record.

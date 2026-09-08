@@ -162,6 +162,9 @@ export type RecruitmentInterviewRow = {
 }
 
 export type RecruitmentJobApplicationRow = {
+  canRecordDidNotJoin: boolean
+  didNotJoinOn: string | null
+  didNotJoinReason: string | null
   allRoundsApproved: boolean
   candidateEmail: string | null
   candidateId: string
@@ -1496,6 +1499,9 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             candidate_id: string
             candidate_name: string
             candidate_phone: string
+            can_record_did_not_join: boolean
+            did_not_join_on: string | null
+            did_not_join_reason: string | null
             current_company: string | null
             experience: string | null
             id: string
@@ -1516,6 +1522,19 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
                 candidate.email AS candidate_email,
                 candidate.current_company, candidate.experience,
                 application.status, application.interview_at::text,
+                application.did_not_join_on::text, application.did_not_join_reason,
+                (application.status = 'Approved' AND application.willing_to_join = true
+                  AND EXISTS (SELECT 1 FROM recruitment.posts reserved
+                    JOIN recruitment.job_posts opening ON opening.post_id = reserved.id
+                    WHERE opening.id = application.job_post_id
+                      AND reserved.organization_id = application.organization_id
+                      AND reserved.appointed_application_id = application.id
+                      AND reserved.status = 'Appointed')
+                  AND NOT EXISTS (SELECT 1 FROM recruitment.posts assigned
+                    WHERE assigned.appointed_application_id = application.id
+                      AND assigned.organization_id = application.organization_id
+                      AND (assigned.status <> 'Appointed' OR NULLIF(btrim(assigned.employee_code), '') IS NOT NULL))
+                ) AS can_record_did_not_join,
                 application.planned_round, application.joining_date::text,
                 application.willing_to_join,
                 application.salary_before_probation,
@@ -1604,6 +1623,9 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             : null
           return {
             allRoundsApproved,
+            canRecordDidNotJoin: row.can_record_did_not_join,
+            didNotJoinOn: row.did_not_join_on,
+            didNotJoinReason: row.did_not_join_reason,
             candidateEmail: row.candidate_email,
             candidateId: row.candidate_id,
             candidateName: row.candidate_name,
@@ -3621,6 +3643,108 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           terms,
         })
       )
+    },
+
+    async recordCandidateDidNotJoin(
+      input: MutationContext & { applicationId: string; didNotJoinOn: string; reason: string }
+    ) {
+      const reason = required(input.reason, "Non-joining reason")
+      const didNotJoinOn = required(input.didNotJoinOn, "Non-joining date")
+      const date = new Date(`${didNotJoinOn}T00:00:00Z`)
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(didNotJoinOn) || Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== didNotJoinOn) {
+        throw new Error("Enter a valid non-joining date.")
+      }
+      return transaction(pool, async (client) => {
+        const applicationResult = await client.query<{
+          id: string; candidate_id: string; candidate_name: string; job_id: string;
+          post_id: string | null; status: string; willing_to_join: boolean | null;
+          joining_date: string | null; job_status: string; today: string;
+        }>(
+          `SELECT application.id, application.candidate_id, candidate.name AS candidate_name,
+             application.status, application.willing_to_join, application.joining_date::text,
+             job.id AS job_id, job.post_id, job.status AS job_status,
+             to_char(current_timestamp AT TIME ZONE 'Asia/Kolkata', 'YYYY-MM-DD') AS today
+           FROM recruitment.applications application
+           JOIN recruitment.candidates candidate ON candidate.id = application.candidate_id
+           JOIN recruitment.job_posts job ON job.id = application.job_post_id
+           WHERE application.id = $1 AND application.organization_id = $2
+             AND job.organization_id = $2
+           FOR UPDATE OF application, job`,
+          [required(input.applicationId, "Candidate application"), input.organizationId]
+        )
+        const application = applicationResult.rows[0]
+        if (!application) throw new Error("Candidate application was not found.")
+        if (application.status === "Did Not Join") throw new Error("Non-joining was already recorded for this application.")
+        if (application.status !== "Approved" || application.willing_to_join !== true || !application.joining_date) {
+          throw new Error("Only an accepted pending appointment can be marked Did Not Join.")
+        }
+        if (didNotJoinOn < application.joining_date) throw new Error("Non-joining date cannot precede the agreed joining date.")
+        if (didNotJoinOn > application.today) throw new Error("Non-joining date cannot be in the future.")
+        const posts = await client.query<{
+          id: string; status: string; employee_name: string | null; employee_code: string | null;
+          joining_date: string | null; appointed_application_id: string | null;
+        }>(
+          `SELECT post.id, post.status, post.employee_name, post.employee_code,
+             post.joining_date::text, post.appointed_application_id
+           FROM recruitment.posts post WHERE post.organization_id = $2 AND (
+             post.appointed_application_id = $1 OR post.id = $3::uuid OR post.id IN (
+               SELECT link.post_id FROM recruitment.combined_role_posts link
+               JOIN recruitment.posts primary_post ON primary_post.combined_role_id = link.combined_role_id
+               WHERE primary_post.id = $3::uuid AND primary_post.organization_id = $2
+             )
+           ) ORDER BY post.id FOR UPDATE OF post`, [application.id, input.organizationId, application.post_id]
+        )
+        if (posts.rows.some((post) => post.status === "Occupied" || optional(post.employee_code))) {
+          throw new Error("This employee has already joined; use the employee departure workflow.")
+        }
+        if (!posts.rows.length || !posts.rows.some((post) => post.id === application.post_id) || posts.rows.some((post) => post.status !== "Appointed" || post.appointed_application_id !== application.id)) {
+          throw new Error("The original appointment is no longer reserved for this application. No posts were changed.")
+        }
+        const postIds = posts.rows.map((post) => post.id)
+        await client.query(
+          `UPDATE recruitment.posts SET status = 'Vacant', employee_name = NULL, employee_code = NULL,
+             joining_date = NULL, last_working_date = NULL, appointed_application_id = NULL,
+             updated_by_user_id = $1, updated_at = now(), row_version = row_version + 1
+           WHERE id = ANY($2::uuid[]) AND organization_id = $3`,
+          [input.actorUserId ?? null, postIds, input.organizationId]
+        )
+        await client.query(
+          `UPDATE recruitment.applications SET status = 'Did Not Join', did_not_join_on = $1::date,
+             did_not_join_reason = $2, interview_at = NULL, planned_round = NULL,
+             updated_by_user_id = $3, updated_at = now(), row_version = row_version + 1
+           WHERE id = $4 AND organization_id = $5`,
+          [didNotJoinOn, reason, input.actorUserId ?? null, application.id, input.organizationId]
+        )
+        await client.query(
+          `UPDATE recruitment.job_posts SET status = 'Open', closed_on = NULL,
+             updated_by_user_id = $1, updated_at = now(), row_version = row_version + 1
+           WHERE id = $2 AND organization_id = $3`,
+          [input.actorUserId ?? null, application.job_id, input.organizationId]
+        )
+        await client.query(
+          `INSERT INTO recruitment.candidate_events (
+             organization_id, candidate_id, job_post_id, application_id, event_type, title,
+             notes, occurred_at, actor_user_id, source_system, source_table, source_id
+           ) VALUES ($1,$2,$3,$4,'Did Not Join',$5,$6,
+             ($7::date::timestamp AT TIME ZONE 'Asia/Kolkata'),$8,'mrm-dashboard','application-non-joining',$9)`,
+          [input.organizationId, application.candidate_id, application.job_id, application.id,
+            `${application.candidate_name} did not join; job reopened`, reason, didNotJoinOn,
+            input.actorUserId ?? null, randomUUID()]
+        )
+        await audit(client, {
+          ...input, eventType: "recruitment.application.did_not_join",
+          beforeState: { application, posts: posts.rows },
+          afterState: { status: "Did Not Join", didNotJoinOn, reason, releasedPostIds: postIds, jobStatus: "Open" },
+          targetId: application.id, targetTable: "applications",
+        })
+        await audit(client, {
+          ...input, eventType: "recruitment.job.reopened",
+          beforeState: { status: application.job_status }, afterState: { status: "Open" },
+          metadata: { applicationId: application.id, didNotJoinOn, reason, releasedPostIds: postIds },
+          targetId: application.job_id, targetTable: "job_posts",
+        })
+        return { id: application.id, jobId: application.job_id, releasedPostCount: postIds.length }
+      })
     },
 
     async withdrawCandidateApplication(
