@@ -43,6 +43,13 @@ existing dashboard cards; do not duplicate them.
 
 Filters persist in browser storage. Pass a descriptive `filterStorageKey` for important or conditionally mounted tables. Otherwise the table derives a page-scoped key. Keep `filterMode="external"` only when a feature's shared table adapter owns filtering and persistence.
 
+Multi-row selection tables must expose **Select All (matching count)**. Use
+`filteredSelection.checkboxName` for native row checkboxes and provide
+`filteredSelection.onSelect` when React owns their selection state. Disabled
+and filtered-out rows are excluded. External filter adapters must select from
+the complete filtered dataset, including rows on other pages. Single-record
+pickers and editable boolean fields are not bulk row selection.
+
 Express cell meaning with semantic state data and `StatusBadge`; do not hard-code palette utility classes. Totals belong in `TableFooter`. Put inputs inside cells only for genuine spreadsheet workflows.
 
 ## Semantic tones
