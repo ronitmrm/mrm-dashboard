@@ -44,6 +44,7 @@ type OperationalTableProps = React.ComponentProps<"table"> & {
   filteredSelection?: {
     checkboxName: string
     label?: string
+    onSelect?: (value: string) => void
   }
   filterMode?: "dom" | "external"
   filterStorageKey?: string
@@ -516,9 +517,14 @@ function OperationalTable({
               }
               onClick={() => {
                 const changed = selectAllFilteredTableRows(
-                  filteredSelectionRowsRef.current
+                  filteredSelectionRowsRef.current,
+                  filteredSelection.onSelect
+                    ? (checkbox) => filteredSelection.onSelect?.(checkbox.value)
+                    : undefined
                 )
-                for (const checkbox of changed) {
+                for (const checkbox of filteredSelection.onSelect
+                  ? []
+                  : changed) {
                   checkbox.dispatchEvent(new Event("change", { bubbles: true }))
                 }
                 syncFilteredSelectionState()

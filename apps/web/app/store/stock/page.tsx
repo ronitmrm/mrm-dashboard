@@ -5,7 +5,7 @@ import { createStoreRepository } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
- SectionCard,
+  SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -17,7 +17,7 @@ import {
   NativeSelectOption,
 } from "@workspace/ui/components/native-select"
 import {
- OperationalTable,
+  OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -96,7 +96,7 @@ export default async function StoreStockPage({
           {
             label: "Asset Codes",
             value: data.items.length,
-            tone: "information"
+            tone: "information",
           },
           {
             label: "Available Units",
@@ -105,7 +105,7 @@ export default async function StoreStockPage({
               0
             ),
             description: "Non Consumable physical units",
-            tone: "positive"
+            tone: "positive",
           },
           {
             label: "Out of Stock",
@@ -115,12 +115,12 @@ export default async function StoreStockPage({
                 : Number(item.availableStock) <= 0
             ).length,
             description: "Asset codes without available stock",
-            tone: "warning"
-          }
+            tone: "warning",
+          },
         ]}
       />
 
- <SectionCard>
+      <SectionCard>
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -172,7 +172,16 @@ export default async function StoreStockPage({
             </form>
           ) : null}
 
- <OperationalTable>
+          <OperationalTable
+            filteredSelection={
+              mode === "view"
+                ? undefined
+                : {
+                    checkboxName:
+                      mode === "request" ? "itemTypeId" : "item_type_id",
+                  }
+            }
+          >
             <TableHeader>
               <TableRow>
                 {mode !== "view" ? <TableHead>Select</TableHead> : null}
@@ -343,7 +352,7 @@ export default async function StoreStockPage({
                 </TableRow>
               ) : null}
             </TableBody>
- </OperationalTable>
+          </OperationalTable>
 
           {mode === "request" ? (
             <Button className="w-fit" form={actionFormId} type="submit">
@@ -371,7 +380,7 @@ export default async function StoreStockPage({
             .
           </p>
         </CardContent>
- </SectionCard>
+      </SectionCard>
     </div>
   )
 }

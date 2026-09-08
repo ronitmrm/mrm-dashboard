@@ -25,13 +25,17 @@ export function filteredTableSelectionState(rows: FilteredTableSelectionRow[]) {
 
 export function selectAllFilteredTableRows<
   Checkbox extends FilteredTableSelectionCheckbox,
->(rows: FilteredTableSelectionRow<Checkbox>[]) {
+>(
+  rows: FilteredTableSelectionRow<Checkbox>[],
+  onSelect?: (checkbox: Checkbox) => void
+) {
   const changed: Checkbox[] = []
   for (const row of rows) {
     const checkbox = row.checkbox
     if (row.hidden || !checkbox || checkbox.disabled || checkbox.checked)
       continue
-    checkbox.checked = true
+    if (onSelect) onSelect(checkbox)
+    else checkbox.checked = true
     changed.push(checkbox)
   }
   return changed

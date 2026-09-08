@@ -1,7 +1,7 @@
 "use client"
 
 import {
- OperationalTable,
+  OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -27,7 +27,13 @@ export function CombinedPostPicker({
   selectedPostIds: Set<string>
 }) {
   return (
- <OperationalTable containerClassName="max-h-80 rounded-md border">
+    <OperationalTable
+      containerClassName="max-h-80 rounded-md border"
+      filteredSelection={{
+        checkboxName: `${idPrefix}-post-selection`,
+        onSelect: (postId) => onPostSelected(postId, true),
+      }}
+    >
       <TableHeader className="sticky top-0 z-10 bg-muted/95">
         <TableRow>
           <TableHead className="w-14">Select</TableHead>
@@ -49,6 +55,8 @@ export function CombinedPostPicker({
                   checked={selected}
                   className="size-4 accent-primary"
                   id={checkboxId}
+                  name={`${idPrefix}-post-selection`}
+                  value={post.id}
                   onChange={(event) =>
                     onPostSelected(post.id, event.target.checked)
                   }
@@ -86,6 +94,6 @@ export function CombinedPostPicker({
           </TableRow>
         ) : null}
       </TableBody>
- </OperationalTable>
+    </OperationalTable>
   )
 }
