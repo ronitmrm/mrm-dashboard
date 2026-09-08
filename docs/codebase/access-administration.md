@@ -1,6 +1,6 @@
 # Access Administration
 
-## Independent master capabilities (rollout pending)
+## Independent master capabilities
 
 The 69 scoped masters are defined in `lib/auth/master-capabilities.ts`: 41
 Universal entries and seven per production unit. Each row owns its supported
@@ -18,19 +18,26 @@ operations authorize stored subtype/unit and replacement records before changing
 references. Machine and holiday writes reject cross-unit collisions against
 their existing globally unique identities.
 
-**Do not deploy before the permission registry/backfill is approved and
-implemented.** Automatic approval review blocked the proposed migration because
-deriving new grants from broad legacy permissions could expand role access. No
-registry/backfill migration or live permission change has occurred. The
-2026-09-08 read-only impact check found Administrator: 69 masters/286 action keys;
-Design Team: Customers and Website Product Data, View only (two keys); Sales &
-Marketing: 20 masters/26 keys; five other roles receive none. No user overrides
-exist. Recheck these conditions at activation; do not silently grant new access
-if the source state changes.
+Migration `0118_independent_master_capabilities.sql` registers 286 action keys
+and copies each role's existing master rights through an explicit old-to-new
+mapping. It preserves legacy permissions, role assignments and business records;
+new master grants never create legacy umbrella grants. Setup Checklist definition
+Save and Import map from `quality.parameters.manage`, not checklist execution.
 
-The migration must preserve actual existing rights without deriving legacy
-umbrella grants from new leaves. Commercial workbook customer upserts require
-both Customer Import and Edit; customer CSV creation alone requires Import.
+The migration fails before changing permissions if master keys already exist,
+a source permission is missing, a mapped user override requires an individual
+migration, or a workbook importer lacks the existing Customer Create and Edit
+rights needed for customer upserts. It checks the resulting role grants against
+the planned mapping in the same transaction. The normal migration runner owns
+the transaction and checksum ledger. Apply and verify this migration before
+releasing the application that enforces the new keys.
+
+The approved 2026-09-08 cutover mapping covers Administrator: 69 masters/286 action
+keys; Design Team: Customers and Website Product Data, View only (two keys);
+Sales & Marketing: 20 masters/26 keys; five other roles receive none. These counts
+describe that cutover, not permanent role defaults. Recheck source access before
+applying the migration. Commercial workbook customer upserts require both
+Customer Import and Edit; customer CSV creation alone requires Import.
 
 ## Workspace tabs
 
@@ -134,28 +141,22 @@ disable repeat deletion and dismissal. Success refreshes the originating tab.
 
 ## Architecture
 
-### Master separation preparation (2026-09-08)
+### Master catalogue and permission rows
 
 `lib/auth/master-capabilities.ts` derives independent master-and-scope permission
-options from the software master catalogue. The permission selector can render
-these as individual rows when their keys exist in the persisted registry. This
-is preparatory code: no registry migration or server enforcement switch has
-been applied, so current roles still use the existing permission model.
-
-Do not activate the catalogue until reads, mutations, imports, exports and
-record-scope checks have been migrated together. New master keys must not
-implicitly grant shared legacy permissions. Existing role grants and deny
-overrides need an explicit, tested migration that does not broaden access.
+options from the software master catalogue. Migration 0118 persists the matching
+registry keys; `permissionAccessRows()` renders each master with only its
+supported actions. Master selection and server authorization use those same
+keys. The catalogue's legacy mapping supports the initial migration and UI
+adapters; it is not an authorization fallback.
 
 Setup Checklist, Maintenance Checklist and Maintenance Master are confirmed
 company-wide definitions. Master Selection lists each under Universal and their
 payloads omit production-floor scope; existing records remain shared. The
 catalogue has 69 entries: 41 Universal and seven in each of four units.
 
-Access Administration exposes an expandable Included masters inventory with
-scope, category and individual master columns. It explicitly states that these
-are inventory rows, not activated independent permissions. The existing grouped
-editor is unchanged pending server enforcement and registry migration.
+Access Administration includes all 69 masters directly in Capabilities. The
+separate Included masters table and replaced grouped master rows are removed.
 
 The No Access preset removes all keys owned by its row. It must not fall through
 to the View Only preset.
@@ -167,10 +168,10 @@ in `apps/web/lib/auth/task-capabilities.ts` and
 permission registry in `identity.permissions`. Display labels remain separate
 from stable permission keys.
 
-Master task labels identify Commercial / Pricing or the affected HR records.
-HR Add and Rename cover departments and designations; HR Delete also covers
-job templates. These are shared task grants across the named master types,
-not independent grants per master page. Labels do not change permission scope.
+Master row labels identify the individual master and scope. Department,
+Designation and Job Templates have their own supported action keys. Legacy
+master task keys are omitted where the individual master rows replace them;
+operational task grants remain available for their separate workflows.
 
 `permissionAccessRows()` reconciles those sources into the five visible
 columns: Main Module, Sub Module, Type, Page / Task, and Access. Each row owns
@@ -196,14 +197,16 @@ the corresponding control is hidden in the UI.
 
 Candidate profiles expose their generated Offer Letter History only when the
 signed-in user also has the Employee Master page capability
-(`hr.employees.read`). The PDF download route enforces the same capability, so
+(`masters.universal.employee_assignments.read`). The PDF download route enforces
+the same capability, so
 Access Administration controls both register visibility and file access.
 
 ## Coverage inventory
 
-The live item-level inventory is the Access Administration table. With the
-managed staging catalogue at migration 0113 it contains 268 independently
-adjustable rows: 91 Pages and 177 Tasks from 314 registered permissions.
+The item-level inventory is the Access Administration table, derived from the
+current catalogues and persisted registry. Migration 0118 adds the 69 independent
+master rows below; replaced grouped master rows are excluded. Use the selector's
+configured row count rather than a raw count of registered permission keys.
 
 | Main Module           | Sub Module                                                                                                                  | Type                | Page / Task                                                                 | Applicable actions                                                                     | Route                                                  | Backend/API handler                                             | Existing permission                                                | Stable permission source                            | Status  |
 | --------------------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------- | --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------ | --------------------------------------------------------------- | ------------------------------------------------------------------ | --------------------------------------------------- | ------- |
@@ -212,7 +215,7 @@ adjustable rows: 91 Pages and 177 Tasks from 314 registered permissions.
 | HR & Recruitment      | Existing HR navigation labels                                                                                               | 5 Pages / 10 Tasks  | Recruitment pages, interviews, jobs and exact workflow buttons              | View, create, edit, delete, assign, schedule, record, close and withdraw where present | `/hr`, `/hr/**`                                        | `app/hr/actions.ts`, approved-post export route                 | `hr.*`                                                             | HR page/task catalogues                             | Covered |
 | Machines              | Machines                                                                                                                    | 1 Page              | Machines                                                                    | View                                                                                   | production dashboard route/tab                         | dashboard API boundary                                          | operations machine capability                                      | production page catalogue                           | Covered |
 | Maintenance           | Requests and trade worklists                                                                                                | 1 Page / 7 Tasks    | Requests, approval and trade tasks                                          | View, approve and complete where present                                               | `/maintenance/**`                                      | maintenance server actions                                      | `maintenance.*`                                                    | maintenance navigation plus registered task keys    | Covered |
-| Master Data           | Master Selection, Master Tables                                                                                             | 11 Pages / 23 Tasks | Commercial, HR, Store and Production master pages/tasks                     | View, create, edit, delete, rename and import where present                            | `/masters`, `/commercial/**`, `/hr`, dashboard tabs    | domain server actions and dashboard API boundary                | scoped `pricing.*`, `hr.*`, `store.*`, `operations.*`, `quality.*` | page/task catalogues and exact registered task keys | Covered |
+| Master Data           | Master Selection, Master Tables                                                                                             | 69 master rows     | Individual Universal and production-unit masters                           | View, save, create, edit, delete, rename and import where supported                    | `/masters`, `/commercial/**`, `/hr`, dashboard tabs    | domain server actions, `/api/masters/state`, lifecycle guards    | `masters.<scope>.<master>.<action>`                              | master catalogue and migration 0118                 | Covered |
 | Operational Entry     | Entry Selection, Entry Tables                                                                                               | 4 Pages / 21 Tasks  | Enquiries, purchase orders, attendance, training and production entry       | View plus exact entry/workflow actions                                                 | `/operational-entry`, `/commercial/**`, dashboard tabs | commercial actions and dashboard API boundary                   | scoped pricing and operations keys                                 | page/task catalogues and exact registered task keys | Covered |
 | PPAC Conventional-01  | Existing PPAC tabs                                                                                                          | 11 Pages / 17 Tasks | Floor pages and production commands                                         | View plus each exact production command                                                | dashboard floor tabs                                   | `app/api/[...path]/route.ts` and dashboard events               | floor-scoped operations keys plus migrated server gates            | floor page/task catalogues                          | Covered |
 | PPAC Conventional-02  | Existing PPAC tabs                                                                                                          | 11 Pages / 17 Tasks | Floor pages and production commands                                         | View plus each exact production command                                                | dashboard floor tabs                                   | `app/api/[...path]/route.ts` and dashboard events               | floor-scoped operations keys plus migrated server gates            | floor page/task catalogues                          | Covered |
@@ -228,7 +231,9 @@ HR recruitment/employee writers, Production dashboard/tab readers, broad
 Commercial writers, and broad Store managers/writers. They remain temporary
 server dependencies only where an existing backend boundary still requires a
 legacy gate; selecting a granular row adds only that gate and never sibling
-rows. Unknown keys are not referenced by navigation or a backend boundary and
+rows. Independent master rows are the exception to these older compatibility
+adapters: they persist only their own master keys and require no legacy gate.
+Unknown keys are not referenced by navigation or a backend boundary and
 therefore grant no application access.
 
 ## Employee dropdown selection
