@@ -9,7 +9,7 @@ import {
   createCommercialRevisionsRepository,
 } from "@workspace/db"
 import { revalidatePath } from "next/cache"
-import { redirect } from "next/navigation"
+import { redirect, unstable_rethrow } from "next/navigation"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
@@ -296,6 +296,32 @@ export async function completeBulkPriceRevisionAction(formData: FormData) {
   ) {
     redirect(customerCostingPath)
   }
+}
+
+export async function publishProductBulkRevisionAction(
+  _previous: { error: string | null },
+  formData: FormData
+): Promise<{ error: string | null }> {
+  // Let completion finish before navigating; failures must remain visible beside the button.
+  const publication = new FormData()
+  publication.set(
+    "bulk_price_revision_id",
+    requiredText(formData, "bulk_price_revision_id")
+  )
+  try {
+    await completeBulkPriceRevisionAction(publication)
+  } catch (error) {
+    unstable_rethrow(error)
+    return {
+      error:
+        error instanceof Error && error.message.includes("lock timeout")
+          ? "This revision is already being processed. Refresh shortly to check its status."
+          : error instanceof Error
+            ? error.message
+            : "Unable to publish this revision. Please retry.",
+    }
+  }
+  redirect(customerCostingPath)
 }
 
 export async function applyProductBulkRevisionPriceDecisionAction(

@@ -19,7 +19,7 @@ import { readAuthEnvironment } from "@/lib/auth/auth"
 import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
 
-import { completeBulkPriceRevisionAction } from "../../../revisions/actions"
+import { PublishRevisionForm } from "./publish-revision-form"
 
 export const dynamic = "force-dynamic"
 
@@ -157,21 +157,10 @@ export default async function ProductRevisionCustomerCostingPage({
               Product Master and the Pricing Register publish only after every
               affected price has a decision and this revision completes.
             </p>
-            <form action={completeBulkPriceRevisionAction}>
-              <input
-                name="bulk_price_revision_id"
-                type="hidden"
-                value={work.revision.id}
-              />
-              <input
-                name="return_to_customer_costing"
-                type="hidden"
-                value="true"
-              />
-              <Button disabled={!allPricesDecided} type="submit">
-                Complete And Publish Revision
-              </Button>
-            </form>
+            <PublishRevisionForm
+              revisionId={work.revision.id}
+              disabled={!allPricesDecided}
+            />
           </div>
         </CardContent>
       </SectionCard>
