@@ -123,10 +123,7 @@ export function BulkProductSelectionTable({
         />
       ))}
       <div className="flex min-w-0 flex-wrap items-center gap-3">
-        <span role="status" className="text-xs text-muted-foreground">
-          {filtered.length} matching products · {submitted.length} selected
-        </span>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             type="button"
             size="sm"
@@ -155,19 +152,23 @@ export function BulkProductSelectionTable({
           >
             Clear Selection
           </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={!Object.values(filters).some(Array.isArray)}
-            onClick={() => {
-              setFilters({})
-              setPage(0)
-            }}
-          >
-            Clear All Filters
-          </Button>
         </div>
+        <span role="status" className="text-xs text-muted-foreground">
+          {filtered.length} matching products · {submitted.length} selected
+        </span>
+        <Button
+          className="ml-auto"
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={!Object.values(filters).some(Array.isArray)}
+          onClick={() => {
+            setFilters({})
+            setPage(0)
+          }}
+        >
+          Clear All Filters
+        </Button>
       </div>
       <OperationalTable
         excelFilters
