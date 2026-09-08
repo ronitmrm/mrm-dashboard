@@ -315,6 +315,15 @@ export function permissionAccessLevelForKeys(
   return "custom"
 }
 
+export function configuredPermissionCount(
+  rows: readonly PermissionAccessRow[],
+  permissionKeys: readonly string[]
+) {
+  return rows.filter(
+    (row) => permissionAccessLevelForKeys(row, permissionKeys) !== "none"
+  ).length
+}
+
 export function permissionAccessSummary(
   row: PermissionAccessRow,
   permissionKeys: readonly string[]

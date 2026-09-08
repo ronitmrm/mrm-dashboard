@@ -114,6 +114,11 @@ columns: Main Module, Sub Module, Type, Page / Task, and Access. Each row owns
 only its own action keys. The Access chip derives No Access, View Only, Full
 Access, and Custom; presets are never persisted.
 
+The Application Roles capability count and editor configured count both count
+visible page/task rows with any assigned access, using `configuredPermissionCount`.
+They do not count raw permission keys: one key can cover multiple pages, and
+hidden compatibility gates are not additional configurable capabilities.
+
 The selector fieldset must allow shrinking (`min-w-0`). Its bounded table wraps
 module/page labels and keeps the Access column pinned on the right. On narrow
 screens only the table scrolls horizontally; the surrounding card must not clip

@@ -31,6 +31,7 @@ import {
   type PermissionAccessAction,
   type PermissionAccessRow,
   type PermissionOption,
+  configuredPermissionCount,
   normalizePermissionKeys,
   permissionAccessLevelForKeys,
   permissionAccessRows,
@@ -64,9 +65,7 @@ export function PermissionSelector({
       )
   )
   const selectedPermissionKeys = normalizePermissionKeys(permissionKeys)
-  const configuredCount = rows.filter(
-    (row) => permissionAccessLevelForKeys(row, permissionKeys) !== "none"
-  ).length
+  const configuredCount = configuredPermissionCount(rows, permissionKeys)
 
   function setAccess(id: string, level: PermissionAccessLevel) {
     const row = rows.find((candidate) => candidate.id === id)

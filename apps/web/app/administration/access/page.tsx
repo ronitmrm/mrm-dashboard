@@ -31,6 +31,7 @@ import { MetricSummary } from "@/components/ui/golden-patterns"
 
 import { createRoleAction, updateRolePermissionsAction } from "./actions"
 import { PermissionSelector } from "./permission-selector"
+import { configuredPermissionCount, permissionAccessRows } from "./permission-access"
 import { AccessWorkspaceTabs } from "./access-workspace-tabs"
 import { RoleDeleteControl } from "./role-delete-control"
 import { StaffAccessRegister } from "./staff-access-register"
@@ -94,6 +95,7 @@ export default async function AccessAdministrationPage({
   const snapshot = await access
     .getSnapshot({ actorUserId: session.user.id })
     .finally(() => access.close())
+  const permissionRows = permissionAccessRows(snapshot.permissions)
   const unlinkedEmployees = snapshot.employees.filter(
     (employee) => !employee.linkedUserId
   )
@@ -293,7 +295,9 @@ export default async function AccessAdministrationPage({
                       <TableCell className="text-muted-foreground">
                         {role.description || "—"}
                       </TableCell>
-                      <TableCell>{role.permissionKeys.length}</TableCell>
+                      <TableCell>
+                        {configuredPermissionCount(permissionRows, role.permissionKeys)}
+                      </TableCell>
                       <TableCell>
                         <Badge
                           variant={role.isSystem ? "secondary" : "outline"}
