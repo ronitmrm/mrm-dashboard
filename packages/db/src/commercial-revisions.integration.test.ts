@@ -951,6 +951,32 @@ describe("commercial revisions and corrections", () => {
     expect(
       new Set(stored.rows.flatMap((row) => row.final_quote_item_ids_json))
     ).toEqual(new Set([root, assembly, leaf]))
+    await repository.applyProductBulkRevisionPriceDecisions({
+      bulkPriceRevisionId: revision.id,
+      decision: "Revise Price",
+      sourceQuoteItemIds: [root],
+    })
+    await expect(
+      repository.completeBulkPriceRevision({ bulkPriceRevisionId: revision.id })
+    ).resolves.toEqual({ status: "Completed", revisedQuoteCount: 3 })
+    const links = await pool.query<{
+      prior_quote_item_id: string
+      replacement_quote_item_id: string
+      final_quote_item_ids_json: string[]
+    }>(
+      "SELECT prior_quote_item_id,replacement_quote_item_id,final_quote_item_ids_json FROM sales.bulk_price_revision_changes WHERE bulk_price_revision_id=$1",
+      [revision.id]
+    )
+    expect(new Set(links.rows.map((row) => row.prior_quote_item_id))).toEqual(
+      new Set([root, assembly, leaf])
+    )
+    expect(
+      links.rows.every(
+        (row) =>
+          row.final_quote_item_ids_json.length === 1 &&
+          row.final_quote_item_ids_json[0] === row.replacement_quote_item_id
+      )
+    ).toBe(true)
   })
 
   test("revises a child and every active nested parent without rewriting history", async () => {
