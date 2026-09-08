@@ -6,7 +6,7 @@ import {
 } from "@workspace/db"
 import { Button } from "@workspace/ui/components/button"
 import {
- SectionCard,
+  SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -18,14 +18,7 @@ import {
   NativeSelect,
   NativeSelectOption,
 } from "@workspace/ui/components/native-select"
-import {
- OperationalTable,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@workspace/ui/components/table"
+import { BulkProductSelectionTable } from "./bulk-product-selection-table"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
@@ -102,7 +95,7 @@ export default async function ProductRevisionCostingPage({
 
   if (!revision) {
     return (
- <SectionCard>
+      <SectionCard>
         <CardHeader>
           <CardTitle>Product Revision Not Available</CardTitle>
           <CardDescription>
@@ -117,7 +110,7 @@ export default async function ProductRevisionCostingPage({
             </Link>
           </Button>
         </CardContent>
- </SectionCard>
+      </SectionCard>
     )
   }
 
@@ -131,7 +124,7 @@ export default async function ProductRevisionCostingPage({
         </Button>
       </div>
 
- <SectionCard>
+      <SectionCard>
         <CardHeader>
           <CardTitle>Products In Scope</CardTitle>
           <CardDescription>
@@ -146,144 +139,97 @@ export default async function ProductRevisionCostingPage({
               type="hidden"
               value={revision.id}
             />
- <OperationalTable
-              className="tabular-nums"
-              containerClassName="h-[calc(100svh-24rem)] min-h-[34rem] rounded-md border"
-              excelFilters
-              filteredSelection={{ checkboxName: "selected_product_ids" }}
-            >
-              <TableHeader className="sticky top-0 z-10 bg-background">
-                <TableRow>
-                  <TableHead>Select</TableHead>
-                  <TableHead>UID</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead>Grade</TableHead>
-                  <TableHead>Size</TableHead>
-                  <TableHead>Category</TableHead>
-                  <TableHead>Subcategory</TableHead>
-                  <TableHead>Rejection %</TableHead>
-                  <TableHead>List / Package</TableHead>
-                  <TableHead>Product Type</TableHead>
-                  <TableHead>Production Type</TableHead>
-                  <TableHead>UID Kind</TableHead>
-                  <TableHead>Product Status</TableHead>
-                  <TableHead>Rod Size</TableHead>
-                  <TableHead>Rod Type</TableHead>
-                  <TableHead>Die Code</TableHead>
-                  <TableHead>Pricing Method</TableHead>
-                  <TableHead>Affected Prices</TableHead>
-                  <TableHead>Current Product Base (₹/pc)</TableHead>
-                  <TableHead>Pcs/Kg</TableHead>
-                  <TableHead>1 Piece Weight (gm)</TableHead>
-                  <TableHead>Blank Piece Weight (gm)</TableHead>
-                  <TableHead>Burning Loss %</TableHead>
-                  <TableHead>Direct Purchase (INR/kg)</TableHead>
-                  <TableHead>Direct Purchase (INR/pc)</TableHead>
-                  <TableHead>Alloy Premium (INR/kg)</TableHead>
-                  <TableHead>Extrusion (INR/kg)</TableHead>
-                  <TableHead>Forging (INR/kg)</TableHead>
-                  <TableHead>M/C (INR/kg)</TableHead>
-                  <TableHead>M/C (INR/pc)</TableHead>
-                  <TableHead>Washing (INR/kg)</TableHead>
-                  <TableHead>Checking (INR/kg)</TableHead>
-                  <TableHead>Marking (INR/kg)</TableHead>
-                  <TableHead>Plating (INR/kg)</TableHead>
-                  <TableHead>Annealing (INR/kg)</TableHead>
-                  <TableHead>Deburring (INR/kg)</TableHead>
-                  <TableHead>Buffing (INR/kg)</TableHead>
-                  <TableHead>Sealant (INR/kg)</TableHead>
-                  <TableHead>Assembly (INR/kg)</TableHead>
-                  <TableHead>Overhead (INR/kg)</TableHead>
-                  <TableHead>Remarks</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {products.rows.map((product) => (
-                  <TableRow key={product.id}>
-                    <TableCell>
-                      <input
-                        aria-label={`Select ${product.uid}`}
-                        name="selected_product_ids"
-                        type="checkbox"
-                        value={product.id}
-                      />
-                    </TableCell>
-                    <TableCell className="font-mono whitespace-nowrap">
-                      {product.uid}
-                    </TableCell>
-                    <TableCell className="min-w-64 max-w-64 whitespace-normal break-words">
-                      {product.description}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap">
-                      {product.grade ?? "—"}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap">
-                      {product.productSize ?? "—"}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap">
-                      {product.category ?? "—"}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap">
-                      {product.subcategory ?? "—"}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap">
-                      {money(product.rejectionPercent * 100)}%
-                    </TableCell>
-                    {[
-                      product.itemType,
-                      product.productionType ?? "—",
-                      product.machineType ?? "—",
-                      product.uidKind,
-                      product.lifecycleStatus,
-                      product.rodSize ?? "—",
-                      product.rodType ?? "—",
-                      product.dieCode ?? "—",
-                      product.pricingMethod,
-                      product.affectedPriceCount,
-                      money(product.productCostInr),
-                      money(product.piecesPerKg),
-                      money(product.weight100Pcs),
-                      money(product.casting),
-                      `${money(product.burningLossPercent * 100)}%`,
-                      money(product.directPurchasePricePerKg),
-                      money(product.directPurchasePricePerPiece),
-                      money(product.alloyPremium),
-                      money(product.extCost),
-                      money(product.forgingCost),
-                      money(product.machiningCost),
-                      money(product.machiningPricePerPiece),
-                      money(product.washing),
-                      money(product.checking),
-                      money(product.marking),
-                      money(product.plating),
-                      money(product.annealing),
-                      money(product.deburring),
-                      money(product.buffing),
-                      money(product.sealant),
-                      money(product.assemblyOperationCost),
-                      money(product.overheadCost),
-                    ].map((value, index) => (
-                      <TableCell
-                        className="whitespace-nowrap"
-                        key={`${product.id}-${index}`}
-                      >
-                        {value}
-                      </TableCell>
-                    ))}
-                    <TableCell className="min-w-64 max-w-64 whitespace-normal break-words">
-                      {product.remarks || "—"}
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {!products.rows.length ? (
-                  <TableRow>
-                    <TableCell className="h-24 text-center" colSpan={41}>
-                      No Products Are In Scope.
-                    </TableCell>
-                  </TableRow>
-                ) : null}
-              </TableBody>
- </OperationalTable>
+            <BulkProductSelectionTable
+              storageKey={`mrmpl:product-revision:${revision.id}:filters`}
+              columns={[
+                "UID",
+                "Description",
+                "Grade",
+                "Size",
+                "Category",
+                "Subcategory",
+                "Rejection %",
+                "List / Package",
+                "Product Type",
+                "Production Type",
+                "UID Kind",
+                "Product Status",
+                "Rod Size",
+                "Rod Type",
+                "Die Code",
+                "Pricing Method",
+                "Affected Prices",
+                "Current Product Base (₹/pc)",
+                "Pcs/Kg",
+                "1 Piece Weight (gm)",
+                "Blank Piece Weight (gm)",
+                "Burning Loss %",
+                "Direct Purchase (INR/kg)",
+                "Direct Purchase (INR/pc)",
+                "Alloy Premium (INR/kg)",
+                "Extrusion (INR/kg)",
+                "Forging (INR/kg)",
+                "M/C (INR/kg)",
+                "M/C (INR/pc)",
+                "Washing (INR/kg)",
+                "Checking (INR/kg)",
+                "Marking (INR/kg)",
+                "Plating (INR/kg)",
+                "Annealing (INR/kg)",
+                "Deburring (INR/kg)",
+                "Buffing (INR/kg)",
+                "Sealant (INR/kg)",
+                "Assembly (INR/kg)",
+                "Overhead (INR/kg)",
+                "Remarks",
+              ]}
+              rows={products.rows.map((product) => ({
+                id: product.id,
+                uid: product.uid,
+                values: [
+                  product.uid,
+                  product.description,
+                  product.grade ?? "—",
+                  product.productSize ?? "—",
+                  product.category ?? "—",
+                  product.subcategory ?? "—",
+                  `${money(product.rejectionPercent * 100)}%`,
+                  product.itemType,
+                  product.productionType ?? "—",
+                  product.machineType ?? "—",
+                  product.uidKind,
+                  product.lifecycleStatus,
+                  product.rodSize ?? "—",
+                  product.rodType ?? "—",
+                  product.dieCode ?? "—",
+                  product.pricingMethod,
+                  product.affectedPriceCount,
+                  money(product.productCostInr),
+                  money(product.piecesPerKg),
+                  money(product.weight100Pcs),
+                  money(product.casting),
+                  `${money(product.burningLossPercent * 100)}%`,
+                  money(product.directPurchasePricePerKg),
+                  money(product.directPurchasePricePerPiece),
+                  money(product.alloyPremium),
+                  money(product.extCost),
+                  money(product.forgingCost),
+                  money(product.machiningCost),
+                  money(product.machiningPricePerPiece),
+                  money(product.washing),
+                  money(product.checking),
+                  money(product.marking),
+                  money(product.plating),
+                  money(product.annealing),
+                  money(product.deburring),
+                  money(product.buffing),
+                  money(product.sealant),
+                  money(product.assemblyOperationCost),
+                  money(product.overheadCost),
+                  product.remarks || "—",
+                ].map(String),
+              }))}
+            />
 
             <div className="grid gap-3 md:grid-cols-[1fr_1fr_2fr_auto] md:items-end">
               <Field>
@@ -365,7 +311,10 @@ export default async function ProductRevisionCostingPage({
                       <p className="mt-1 text-sm">{stage.notes}</p>
                     ) : null}
                     {stage.skippedRows.map((skipped) => (
-                      <p className="mt-1 text-xs text-destructive" key={skipped.itemId}>
+                      <p
+                        className="mt-1 text-xs text-destructive"
+                        key={skipped.itemId}
+                      >
                         Skipped {skipped.uid}: {skipped.reason}
                       </p>
                     ))}
@@ -406,7 +355,7 @@ export default async function ProductRevisionCostingPage({
             ) : null}
           </section>
         </CardContent>
- </SectionCard>
+      </SectionCard>
     </div>
   )
 }

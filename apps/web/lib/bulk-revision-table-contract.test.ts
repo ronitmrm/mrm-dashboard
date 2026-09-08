@@ -18,13 +18,20 @@ describe("Bulk revision product tables", () => {
     for (const path of revisionPages) {
       const page = source(path)
 
-      expect(page).toMatch(/<OperationalTable[^>]*\bexcelFilters\b[^>]*>/)
+      const table = path.includes("product-costing/revisions/")
+        ? source(
+            "app/commercial/product-costing/revisions/[revisionId]/bulk-product-selection-table.tsx"
+          )
+        : page
+      expect(table).toMatch(/<OperationalTable[^>]*\bexcelFilters\b[^>]*>/)
       for (const label of ["UID", "Description", "Category", "Subcategory"]) {
         expect(page).toMatch(
           new RegExp(`(<TableHead[^>]*>${label}</TableHead>|"${label}",)`)
         )
       }
-      expect(page).not.toMatch(/aria-label="Search (products|affected prices|active customer prices)"/)
+      expect(page).not.toMatch(
+        /aria-label="Search (products|affected prices|active customer prices)"/
+      )
     }
   })
 
@@ -33,9 +40,7 @@ describe("Bulk revision product tables", () => {
       expect(source(path)).toContain("limit: bulkRevisionTableLimit")
     }
 
-    const repository = source(
-      "../../packages/db/src/commercial-revisions.ts"
-    )
+    const repository = source("../../packages/db/src/commercial-revisions.ts")
     expect(repository).toContain("const bulkRevisionTableLimit = 10_000")
     expect(repository.match(/bulkRevisionTableLimit/g)).toHaveLength(4)
   })
