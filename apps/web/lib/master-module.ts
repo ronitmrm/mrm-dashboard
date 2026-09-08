@@ -60,24 +60,6 @@ const unitMasterDefinitions = [
     scope: "unit",
   },
   {
-    id: "setup_checklist_master",
-    label: "Setup Checklist",
-    access: "operations",
-    scope: "unit",
-  },
-  {
-    id: "maintenance_checklist_master",
-    label: "Maintenance Checklist",
-    access: "operations",
-    scope: "unit",
-  },
-  {
-    id: "maintenance_master",
-    label: "Maintenance Master",
-    access: "operations",
-    scope: "unit",
-  },
-  {
     id: "quality_parameter_master",
     label: "Quality Inspection Parameter",
     access: "operations",
@@ -88,6 +70,27 @@ const unitMasterDefinitions = [
     label: "Planning Holiday",
     access: "operations",
     scope: "unit",
+  },
+] as const satisfies readonly MasterDefinition[]
+
+export const sharedOperationalMasterDefinitions = [
+  {
+    id: "setup_checklist_master",
+    label: "Setup Checklist",
+    access: "operations",
+    scope: "universal",
+  },
+  {
+    id: "maintenance_checklist_master",
+    label: "Maintenance Checklist",
+    access: "operations",
+    scope: "universal",
+  },
+  {
+    id: "maintenance_master",
+    label: "Maintenance Master",
+    access: "operations",
+    scope: "universal",
   },
 ] as const satisfies readonly MasterDefinition[]
 
@@ -145,6 +148,7 @@ const websiteProductSubMasters = [
 ] as const satisfies readonly SubMasterDefinition[]
 
 const universalMasterDefinitions = [
+  ...sharedOperationalMasterDefinitions,
   {
     id: "rejection",
     label: "Rejection",
@@ -372,6 +376,9 @@ export function masterFormHref(
   const params = new URLSearchParams()
   if (
     unitMasterDefinitions.some(({ id }) => id === selection.main) ||
+    sharedOperationalMasterDefinitions.some(
+      ({ id }) => id === selection.main
+    ) ||
     selection.main === "rejection"
   ) {
     params.set("tab", view === "dataEntry" ? "dataEntryTab" : "masterTablesTab")

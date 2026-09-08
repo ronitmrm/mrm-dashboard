@@ -47,6 +47,12 @@ applicable actions to be selected individually. A modifying action requires
 View when that row has a View action. Removing View removes its dependent
 actions.
 
+**Shared Master Scope**: Setup Checklist, Maintenance Checklist and Maintenance
+Master are company-wide definitions under Universal, shared unchanged across all
+production units. They remain three distinct masters. Universal is a data scope,
+not a permission granting every master. The complete master inventory has 41
+Universal entries and seven entries per production unit (69 across four units).
+
 **Access Module Name**: The module shown in Access Administration uses the same
 business-facing name as the left sidebar. Internal permission namespaces such
 as `pricing`, `operations`, and `hr` are never displayed as module names.

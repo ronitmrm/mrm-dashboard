@@ -1,5 +1,8 @@
 import { productionFloors } from "@workspace/db/production-floors"
-import { masterDefinitions } from "../master-module"
+import {
+  masterDefinitions,
+  sharedOperationalMasterDefinitions,
+} from "../master-module"
 
 export type MasterAction = "read" | "save" | "import" | "rename" | "delete"
 
@@ -41,8 +44,12 @@ export function supportedMasterActions(
     master.main === "commercial_pricing_masters" ||
     (master.main === "commercial_website_products" &&
       master.master !== master.main)
+  const sharedOperational = sharedOperationalMasterDefinitions.some(
+    ({ id }) => id === master.master
+  )
   if (
     master.unit !== "universal" ||
+    sharedOperational ||
     master.main === "rejection" ||
     commercialReference
   )
@@ -55,6 +62,7 @@ export function supportedMasterActions(
   if (
     commercialReference ||
     master.unit !== "universal" ||
+    sharedOperational ||
     ["rejection", "store_masters"].includes(master.main) ||
     ["department", "designation", "approved_posts", "job_templates"].includes(
       master.master

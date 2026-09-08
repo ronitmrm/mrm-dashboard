@@ -41,6 +41,9 @@ describe("master data navigation", () => {
 
   it("marks software-wide masters as not applicable to one Production Unit", () => {
     expect(companyWideMasterEntryTypes).toEqual([
+      "setup_checklist_master",
+      "maintenance_checklist_master",
+      "maintenance_master",
       "rejection_type_master",
       "rejection_remark_master",
       "rejection_reason_master",
