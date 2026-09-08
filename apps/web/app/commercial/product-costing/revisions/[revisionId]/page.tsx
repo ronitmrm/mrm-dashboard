@@ -299,7 +299,11 @@ export default async function ProductRevisionCostingPage({
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <p className="font-medium">
-                      {stage.fieldLabel} → {money(stage.newValue)}
+                      {stage.fieldLabel} →{" "}
+                      {productFields.find(([name]) => name === stage.fieldName)?.[1]
+                        .valueType === "percent"
+                        ? `${money(stage.newValue * 100)}%`
+                        : money(stage.newValue)}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {stage.selectedCount} Product(s)
@@ -339,7 +343,7 @@ export default async function ProductRevisionCostingPage({
                   {stage.previewRows.map((preview) => (
                     <span
                       className="rounded-full border px-2 py-1 tabular-nums"
-                      key={preview.quoteItemId}
+                      key={`${preview.quoteItemId}:${preview.productItemId}`}
                     >
                       Product Base ₹ {money(preview.oldPrice)} → ₹{" "}
                       {money(preview.newPrice)}
