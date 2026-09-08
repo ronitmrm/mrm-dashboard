@@ -113,7 +113,7 @@ export function BulkProductSelectionTable({
   const submitted = filtered.filter((row) => selected.has(row.id))
 
   return (
-    <div className="grid min-w-0 gap-2">
+    <div className="grid min-w-0 grid-cols-1 gap-2">
       {submitted.map((row) => (
         <input
           key={row.id}
@@ -122,7 +122,7 @@ export function BulkProductSelectionTable({
           value={row.id}
         />
       ))}
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex min-w-0 flex-wrap items-center gap-3">
         <span role="status" className="text-xs text-muted-foreground">
           {filtered.length} matching products · {submitted.length} selected
         </span>
