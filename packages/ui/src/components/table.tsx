@@ -508,7 +508,8 @@ function OperationalTable({
         <div className="flex justify-end gap-2 pb-2">
           {filteredSelection ? (
             <Button
-              aria-label={filteredSelection.label ?? "Select all filtered rows"}
+              aria-label={`${filteredSelection.label ?? "Select All"} (${selectionState.selectableCount})`}
+              title="Select every row matching the current filters"
               disabled={
                 selectionState.selectableCount === 0 ||
                 selectionState.selectedCount === selectionState.selectableCount
@@ -526,9 +527,18 @@ function OperationalTable({
               type="button"
               variant="outline"
             >
-              {filteredSelection.label ?? "Select All Filtered"} (
+              {filteredSelection.label ?? "Select All"} (
               {selectionState.selectableCount})
             </Button>
+          ) : null}
+          {filteredSelection ? (
+            <span
+              role="status"
+              className="self-center text-xs text-muted-foreground"
+            >
+              {selectionState.selectableCount} matching ·{" "}
+              {selectionState.selectedCount} selected
+            </span>
           ) : null}
           <Button
             aria-label="Clear all table filters"
