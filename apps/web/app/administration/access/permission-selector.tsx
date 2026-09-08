@@ -88,8 +88,10 @@ export function PermissionSelector({
         <div>
           <FieldLegend>Capabilities</FieldLegend>
           <FieldDescription>
-            Set a preset or open Custom to choose only the actions this role
-            needs. Modifying actions keep View selected when available.
+            Page access controls opening a screen. Task access controls actions
+            such as Save or Delete. Custom selects individual actions when more
+            than one is available. Modifying actions keep View selected when
+            available.
           </FieldDescription>
         </div>
         <Badge variant="secondary">{configuredCount} configured</Badge>
@@ -129,7 +131,9 @@ export function PermissionSelector({
               <TableHead className="w-[18%]">Sub Module</TableHead>
               <TableHead className="w-20">Type</TableHead>
               <TableHead>Page / Task</TableHead>
-              <TableHead className="sticky right-0 w-48 bg-muted">Access</TableHead>
+              <TableHead className="sticky right-0 w-48 bg-muted">
+                Access
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -139,7 +143,9 @@ export function PermissionSelector({
                   <TableCell className="wrap-anywhere whitespace-normal text-muted-foreground capitalize">
                     {row.module}
                   </TableCell>
-                  <TableCell className="wrap-anywhere whitespace-normal">{row.submodule}</TableCell>
+                  <TableCell className="wrap-anywhere whitespace-normal">
+                    {row.submodule}
+                  </TableCell>
                   <TableCell>
                     <Badge
                       variant={row.kind === "page" ? "default" : "outline"}
@@ -149,11 +155,6 @@ export function PermissionSelector({
                   </TableCell>
                   <TableCell className="wrap-anywhere whitespace-normal">
                     <span className="font-medium">{row.label}</span>
-                    {row.href ? (
-                      <span className="block text-xs text-muted-foreground">
-                        {row.href}
-                      </span>
-                    ) : null}
                   </TableCell>
                   <TableCell className="sticky right-0 bg-card">
                     <AccessChip
@@ -218,6 +219,13 @@ function AccessChip({
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-80 gap-3 p-3">
+        <p className="text-xs text-muted-foreground">
+          {row.actions.length === 1
+            ? row.readPermissionKeys.length > 0
+              ? "This entry has View access only. Save, Delete and other actions are controlled by their task permissions."
+              : "This task has one action. Use No Access to deny it or Full Access to allow it. View Only does not apply."
+            : "View Only allows reading where available. Full Access allows every listed action. Custom lets you choose individual actions below."}
+        </p>
         <div className="grid grid-cols-2 gap-1.5">
           {presets.map(([preset, label]) => (
             <Button
