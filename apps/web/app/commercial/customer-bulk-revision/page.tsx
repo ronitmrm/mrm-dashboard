@@ -1,5 +1,10 @@
 import Link from "next/link"
-import { CustomerParameterCells, CustomerParameterHeaders, customerParameterColumnCount } from "../revisions/customer-parameter-columns"
+import { BulkRevisionHistory } from "../revisions/bulk-revision-history"
+import {
+  CustomerParameterCells,
+  CustomerParameterHeaders,
+  customerParameterColumnCount,
+} from "../revisions/customer-parameter-columns"
 
 import {
   bulkRevisionFields,
@@ -8,7 +13,7 @@ import {
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
- SectionCard,
+  SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -22,7 +27,7 @@ import {
   NativeSelectOption,
 } from "@workspace/ui/components/native-select"
 import {
- OperationalTable,
+  OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -94,6 +99,7 @@ export default async function CustomerBulkRevisionPage({
 }: {
   searchParams: Promise<{
     revision?: string
+    historyPage?: string
   }>
 }) {
   await requireCapability(
@@ -166,22 +172,25 @@ export default async function CustomerBulkRevisionPage({
       </section>
 
       <section className="grid gap-3 sm:grid-cols-3">
-        <MetricCard tone="information"
+        <MetricCard
+          tone="information"
           label="Customer Revision Requests"
           value={summary.openRevisionCount}
         />
-        <MetricCard tone="accent"
+        <MetricCard
+          tone="accent"
           label="Commercial-Only Revision"
           value={summary.commercialOnlyRevision}
         />
-        <MetricCard tone="brand"
+        <MetricCard
+          tone="brand"
           label="Customer Prices In Scope"
           value={summary.activePriceCount}
         />
       </section>
 
       <div className="grid gap-6">
- <SectionCard>
+        <SectionCard>
           <CardHeader>
             <CardTitle>Start A Customer Revision</CardTitle>
             <CardDescription>
@@ -255,15 +264,15 @@ export default async function CustomerBulkRevisionPage({
               </p>
             )}
           </CardContent>
- </SectionCard>
+        </SectionCard>
 
- <SectionCard>
+        <SectionCard>
           <CardHeader>
             <CardTitle>Customer Revision Queue</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="max-h-[34rem] overflow-auto rounded-md border">
- <OperationalTable excelFilters>
+              <OperationalTable excelFilters>
                 <TableHeader className="sticky top-0 z-10 bg-background">
                   <TableRow>
                     <TableHead data-filterable="true">Request</TableHead>
@@ -316,18 +325,19 @@ export default async function CustomerBulkRevisionPage({
                     </TableRow>
                   ) : null}
                 </TableBody>
- </OperationalTable>
+              </OperationalTable>
             </div>
           </CardContent>
- </SectionCard>
+        </SectionCard>
       </div>
 
- <SectionCard hidden={!selectedRevisionId} id="customer-bulk-workbench">
+      <SectionCard hidden={!selectedRevisionId} id="customer-bulk-workbench">
         <CardHeader>
           <CardTitle>Customer Revision Workbench</CardTitle>
           <CardDescription>
-            Filter any column. Scroll horizontally for current product and customer
-            costing parameters; saved quote inputs take precedence over Product master values.
+            Filter any column. Scroll horizontally for current product and
+            customer costing parameters; saved quote inputs take precedence over
+            Product master values.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-6">
@@ -375,7 +385,7 @@ export default async function CustomerBulkRevisionPage({
                     type="hidden"
                     value={selectedRevision.id}
                   />
- <OperationalTable
+                  <OperationalTable
                     className="w-full caption-bottom text-sm"
                     containerClassName="h-[calc(100svh-24rem)] min-h-[34rem] rounded-md border"
                     excelFilters
@@ -419,7 +429,7 @@ export default async function CustomerBulkRevisionPage({
                           <TableCell className="p-3 align-middle font-mono whitespace-nowrap">
                             {price.uid}
                           </TableCell>
-                          <TableCell className="min-w-64 max-w-64 p-3 align-middle whitespace-normal break-words">
+                          <TableCell className="max-w-64 min-w-64 p-3 align-middle break-words whitespace-normal">
                             {price.description}
                           </TableCell>
                           <TableCell className="p-3 align-middle whitespace-nowrap">
@@ -436,13 +446,19 @@ export default async function CustomerBulkRevisionPage({
                       ))}
                       {!prices.rows.length ? (
                         <TableRow>
-                          <TableCell className="h-24 text-center" colSpan={activePriceHeadings.length + customerParameterColumnCount}>
+                          <TableCell
+                            className="h-24 text-center"
+                            colSpan={
+                              activePriceHeadings.length +
+                              customerParameterColumnCount
+                            }
+                          >
                             No Active Prices Are In Scope.
                           </TableCell>
                         </TableRow>
                       ) : null}
                     </TableBody>
- </OperationalTable>
+                  </OperationalTable>
 
                   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                     <Field>
@@ -536,7 +552,10 @@ export default async function CustomerBulkRevisionPage({
                           <p className="mt-1 text-sm">{stage.notes}</p>
                         ) : null}
                         {stage.skippedRows.map((skipped) => (
-                          <p className="mt-1 text-xs text-destructive" key={skipped.itemId}>
+                          <p
+                            className="mt-1 text-xs text-destructive"
+                            key={skipped.itemId}
+                          >
                             Skipped {skipped.uid}: {skipped.reason}
                           </p>
                         ))}
@@ -606,7 +625,11 @@ export default async function CustomerBulkRevisionPage({
             </p>
           )}
         </CardContent>
- </SectionCard>
+      </SectionCard>
+      <BulkRevisionHistory
+        origin="customer"
+        page={Number(params.historyPage) || 1}
+      />
     </div>
   )
 }

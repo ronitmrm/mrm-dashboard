@@ -230,6 +230,15 @@ every canonical Package or Assembly ancestor in child-before-parent order, and
 creates the immutable replacement Quote revisions. Product selection never
 depends on Customer identity.
 
+Completed bulk revisions remain in read-only history on their initiating page:
+Product Bulk Revision for Product-origin requests (including completion in Customer
+Parameter Costing), and Customer Bulk Revision for Customer-origin requests.
+History retains the reason, effective/completion dates, requested parameter values,
+affected products/prices and publication results. New stages preserve the original
+parameter value separately from the Product Base or customer price preview.
+Legacy original values are shown only when saved evidence exists; current master
+values must never be presented as historical inputs. Completed history cannot be edited.
+
 **Customer Parameter Bulk Revision**: Customer-specific commercial recalculation.
 Its Customer selector contains only Customers with an active Sent or Accepted
 Quote. It does not contain Product-origin work. Customer inputs are staged against

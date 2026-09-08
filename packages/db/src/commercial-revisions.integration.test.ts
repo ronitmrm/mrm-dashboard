@@ -406,6 +406,13 @@ describe("commercial revisions and corrections", () => {
       reason: "Correct quote-free product rejection",
       revisionRoute: "Product Parameter Bulk Revision",
     })
+    expect(
+      await repository.getCompletedBulkRevisionHistory(
+        organizationCode,
+        "product",
+        revision.id
+      )
+    ).toBeNull()
     const candidates =
       await repository.listProductBulkRevisionActivePricesBounded(revision.id, {
         query: uid,
@@ -443,6 +450,46 @@ describe("commercial revisions and corrections", () => {
     await expect(
       repository.completeBulkPriceRevision({ bulkPriceRevisionId: revision.id })
     ).resolves.toMatchObject({ status: "Completed", revisedQuoteCount: 0 })
+    const history = await repository.getCompletedBulkRevisionHistory(
+      organizationCode,
+      "product",
+      revision.id
+    )
+    expect(history?.changes.rows).toContainEqual(
+      expect.objectContaining({
+        uid,
+        oldParameterValue: "0.02",
+        newValue: "0.01000000",
+      })
+    )
+    expect(
+      await repository.getCompletedBulkRevisionHistory(
+        organizationCode,
+        "customer",
+        revision.id
+      )
+    ).toBeNull()
+    expect(
+      await repository.getCompletedBulkRevisionHistory(
+        "NOT-THIS-ORG",
+        "product",
+        revision.id
+      )
+    ).toBeNull()
+    expect(
+      (
+        await repository.listCompletedBulkRevisionHistory(
+          organizationCode,
+          "product"
+        )
+      ).rows
+    ).toContainEqual(expect.objectContaining({ id: revision.id }))
+    await expect(
+      pool.query(
+        "UPDATE sales.bulk_price_revision_changes SET preview_json = preview_json - 'oldParameterValue' WHERE bulk_price_revision_id = $1",
+        [revision.id]
+      )
+    ).rejects.toThrow("Completed bulk revision changes are immutable")
     expect(
       Number(
         (
@@ -2429,6 +2476,34 @@ describe("commercial revisions and corrections", () => {
         (row) => row.profitPercent === 0.25 && !quoteIds.includes(row.id)
       )
     ).toBe(true)
+    const history = await repository.getCompletedBulkRevisionHistory(
+      organizationCode,
+      "customer",
+      revision.id
+    )
+    expect(history?.stages).toContainEqual(
+      expect.objectContaining({
+        fieldName: "profit_percent",
+        oldValues: ["0.2"],
+        selectedCount: 2,
+      })
+    )
+    expect(history?.changes.total).toBe(2)
+    expect(
+      await repository.getCompletedBulkRevisionHistory(
+        organizationCode,
+        "product",
+        revision.id
+      )
+    ).toBeNull()
+    expect(
+      (
+        await repository.listCompletedBulkRevisionHistory(
+          organizationCode,
+          "customer"
+        )
+      ).rows
+    ).toContainEqual(expect.objectContaining({ id: revision.id }))
   })
 
   test("requires customer decisions when quoted and quote-free products are revised together", async () => {

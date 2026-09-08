@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto"
 import type { PoolClient } from "pg"
 
 import { selectorSearchTerm } from "./commercial-bounds"
+import { bulkRevisionHistoryReader } from "./commercial-revision-history"
 import {
   customerRevisionParametersSql,
   customerRevisionParameterJoins,
@@ -273,7 +274,9 @@ const customerFields = new Set<BulkRevisionFieldName>([
   "conversion_rate",
 ])
 
-const productColumnByField: Partial<Record<BulkRevisionFieldName, string>> = {
+const productColumnByField: Partial<
+  Record<BulkRevisionFieldName, keyof ProductRow>
+> = {
   alloy_premium: "alloy_premium",
   annealing: "annealing",
   assembly_operation_cost: "assembly_operation_cost",
@@ -2519,6 +2522,8 @@ export function createCommercialRevisionsRepository(
   return {
     close,
 
+    ...bulkRevisionHistoryReader(pool),
+
     async listBulkPriceRevisions(organizationCode: string) {
       const result = await pool.query<{
         change_count: string
@@ -4742,6 +4747,8 @@ export function createCommercialRevisionsRepository(
             : (input.notes ?? null)
         const createdIds: string[] = []
         if (isProductStage) {
+          const productColumn = productColumnByField[input.fieldName]
+          if (!productColumn) throw new Error("Unsupported product parameter.")
           const override = new Map([[input.fieldName, input.newValue]])
           const prepared = await Promise.all(
             eligible.map(async (quote, index) => {
@@ -4758,6 +4765,8 @@ export function createCommercialRevisionsRepository(
                 old_price: asNumber(quote.price),
                 new_price: newPrice,
                 preview: {
+                  oldParameterValue: asNumber(product[productColumn]),
+                  productUid: product.uid,
                   newPrice,
                   oldPrice: asNumber(quote.price),
                   productItemId: quote.itemId,
@@ -4824,6 +4833,7 @@ export function createCommercialRevisionsRepository(
           if (!quote.id)
             throw new Error("A customer change requires an active price.")
           const product = await getProduct(client, quote.itemId)
+          const sourceQuote = await getQuote(client, quote.id)
           const override = new Map<string, number>([
             [input.fieldName, input.newValue],
           ])
@@ -4835,13 +4845,15 @@ export function createCommercialRevisionsRepository(
                 ),
               }
             : revisedCalculation(
-                await getQuote(client, quote.id),
+                sourceQuote,
                 product,
                 await getComponents(client, quote.id),
                 new Map(),
                 override
               )
           const previewJson = {
+            oldParameterValue: asNumber(record(sourceQuote)[input.fieldName]),
+            productUid: product.uid,
             newPrice: preview.totalRateUsd,
             oldPrice: asNumber(quote.price),
             productItemId: quote.itemId,
