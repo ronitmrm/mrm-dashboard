@@ -131,7 +131,12 @@ export function BulkProductSelectionTable({
             type="button"
             size="sm"
             variant="outline"
-            disabled={!hydrated || !filtered.length}
+            disabled={
+              !hydrated ||
+              !filtered.length ||
+              submitted.length === filtered.length
+            }
+            title="Select every filtered product across all pages"
             onClick={() =>
               setSelected(
                 (current) =>
@@ -139,7 +144,7 @@ export function BulkProductSelectionTable({
               )
             }
           >
-            Select All Matching
+            Select All ({filtered.length})
           </Button>
           <Button
             type="button"
