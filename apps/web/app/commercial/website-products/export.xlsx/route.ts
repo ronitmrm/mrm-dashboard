@@ -16,7 +16,7 @@ export const dynamic = "force-dynamic"
 
 export async function GET() {
   await requireCapability(
-    "pricing.website_products.read",
+    "masters.universal.commercial_website_products.read",
     "/commercial/website-products"
   )
   const connectionString = readAuthEnvironment().connectionString

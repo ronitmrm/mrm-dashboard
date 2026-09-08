@@ -9,6 +9,8 @@ import { validConfirmedPrioritySetupNumbers } from "@workspace/db/planning-rules
 import { NextResponse, type NextRequest } from "next/server"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
+import { productionMasterCapability } from "../../../lib/auth/production-master-access"
+import { masterRecordCapability } from "../../../lib/auth/master-record-access"
 import { hasProductionFloorTaskCapability } from "../../../lib/auth/production-floor-task-capabilities"
 import { istDateValue } from "../../../lib/date-time"
 import { planningProductionFloorPayload } from "../../../lib/planning-production-floor"
@@ -365,6 +367,21 @@ async function preauthorizeDashboardMutation(
   path: string,
   body: Record<string, unknown>
 ) {
+  if (path === "master-delete") {
+    const capability = productionMasterCapability(String(body.kind || ""), "delete", body.productionFloorCode)
+    if (!capability) throw new RouteError(400, "This endpoint only deletes production masters.")
+    await authorizedDashboardSession(request, capability)
+    return
+  }
+  if (path === "data-entry" || path === "data-import") {
+    const entry = String(body.entryType || "")
+    const payload = plainRecord(body.payload)
+    const capability = productionMasterCapability(entry, path === "data-import" ? "import" : "save", payload.productionFloorCode ?? body.productionFloorCode)
+    if (capability) {
+      await authorizedDashboardSession(request, capability)
+      return
+    }
+  }
   const capabilities = dashboardMutationCapabilities(path)
   if (!capabilities) throw new RouteError(404, "Not found")
   const authorizationTelemetry = authorizationRequestTelemetryForCurrentScope({
@@ -1084,6 +1101,8 @@ async function post(request: NextRequest, context: RouteContext) {
     if (path === "master-delete") {
       try {
         const kind = text(body.kind)
+        const deleteCapability = productionMasterCapability(kind, "delete", body.productionFloorCode)
+        if (!deleteCapability) throw new RouteError(400, "This endpoint only deletes production masters.")
         if (!isMasterDataKind(kind)) {
           throw new RouteError(400, "This master does not support deletion.")
         }
@@ -1091,13 +1110,15 @@ async function post(request: NextRequest, context: RouteContext) {
           request,
           ({ actorUserId, organizationId, repository }) =>
             repository.deleteMaster({
+              authorize: (record) => authorizedDashboardSession(request, masterRecordCapability(record, "delete")),
               actorUserId,
               kind,
               organizationId,
               reason: requiredDashboardText(body.reason, "Deletion reason"),
               recordId: requiredDashboardText(body.recordId, "Master record"),
               replacementRecordId: optionalText(body.replacementRecordId),
-            })
+            }),
+          deleteCapability
         )
         return json(
           await withPlanningRefresh(path, body, {
@@ -1494,7 +1515,7 @@ async function post(request: NextRequest, context: RouteContext) {
             : productionFloorPayload(rawPayload, body.productionFloorCode)
         const result = await withPlanningRepository(
           request,
-          "operations.shop_floor.write",
+          productionMasterCapability(entryType, "save", payload.productionFloorCode) ?? "operations.shop_floor.write",
           (planningContext) =>
             savePlanningMasterEntry(planningContext, entryType, payload)
         )
@@ -1533,8 +1554,12 @@ async function post(request: NextRequest, context: RouteContext) {
         if (!importPolicy.ok) {
           throw new RouteError(importPolicy.status, importPolicy.error)
         }
+        for (const payload of importedRows) {
+          const capability = productionMasterCapability(entryType, "import", payload.productionFloorCode)
+          if (capability) await authorizedDashboardSession(request, capability)
+        }
         await importAutoCodedMasterRows(entryType, importedRows, (payload) =>
-          executePostgresOperationalEntry(request, entryType, payload)
+          executePostgresOperationalEntry(request, entryType, payload, "import")
         )
         return json({
           inserted: importedRows.length,
@@ -1566,9 +1591,13 @@ async function post(request: NextRequest, context: RouteContext) {
         if (!importPolicy.ok) {
           throw new RouteError(importPolicy.status, importPolicy.error)
         }
+        for (const payload of importedRows) {
+          const capability = productionMasterCapability(entryType, "import", payload.productionFloorCode)
+          if (capability) await authorizedDashboardSession(request, capability)
+        }
         const inserted = await withPlanningRepository(
           request,
-          "operations.shop_floor.write",
+          productionMasterCapability(entryType, "import", importedRows[0]?.productionFloorCode ?? body.productionFloorCode) ?? "operations.shop_floor.write",
           async (planningContext) => {
             if (
               ["route", "cycle", "tooling", "work_order"].includes(entryType)
@@ -1700,11 +1729,12 @@ async function withMasterDataLifecycleRepository<T>(
     actorUserId: string
     organizationId: string
     repository: ReturnType<typeof createMasterDataLifecycleRepository>
-  }) => Promise<T>
+  }) => Promise<T>,
+  capability = "operations.corrections.write"
 ) {
   const { connectionString, session } = await authorizedDashboardSession(
     request,
-    "operations.corrections.write"
+    capability
   )
   const repository = createMasterDataLifecycleRepository({ connectionString })
   try {

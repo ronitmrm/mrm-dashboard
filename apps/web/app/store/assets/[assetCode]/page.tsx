@@ -43,6 +43,7 @@ import {
   requireCapability,
 } from "@/lib/auth/require-capability"
 import { listGrantedStoreActions } from "@/lib/auth/store-action-access"
+import { masterCapability } from "@/lib/auth/master-capabilities"
 
 import {
   completeStoreAssetMaintenanceAction,
@@ -71,14 +72,10 @@ export default async function StoreAssetWorkspacePage({
   const canRepair = capabilities.has("store.asset_repair.write")
   const canManageLifecycle = capabilities.has("store.asset_lifecycle.write")
   const canManage = canMove || canMaintain || canRepair
-  const canManageMasters = Boolean(
-    (
-      await listGrantedCapabilities(session.user.id, [
-        "store.masters.write",
-        "store.manage",
-      ])
-    ).length
-  )
+  const masterGrants = await listGrantedCapabilities(session.user.id, [
+    masterCapability("ITEM_TYPE", "save"),
+    masterCapability("SUPPLIER_PRICE", "save"),
+  ])
   const repository = createStoreRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
@@ -114,7 +111,8 @@ export default async function StoreAssetWorkspacePage({
   if (data.kind === "item") {
     return (
       <StoreItemWorkspace
-        canManage={canManageMasters}
+        canUploadDrawing={masterGrants.includes(masterCapability("ITEM_TYPE", "save"))}
+        canUploadQuote={masterGrants.includes(masterCapability("SUPPLIER_PRICE", "save"))}
         workspace={data.workspace}
       />
     )
@@ -903,10 +901,12 @@ type StoreItemWorkspaceData = NonNullable<
 >
 
 function StoreItemWorkspace({
-  canManage,
+  canUploadDrawing,
+  canUploadQuote,
   workspace,
 }: {
-  canManage: boolean
+  canUploadDrawing: boolean
+  canUploadQuote: boolean
   workspace: StoreItemWorkspaceData
 }) {
   const { assets, drawing, item, supplierPrices } = workspace
@@ -1042,7 +1042,7 @@ function StoreItemWorkspace({
                   No drawing uploaded for this Asset Code.
                 </p>
               )}
-              {canManage ? (
+              {canUploadDrawing ? (
                 <form
                   action={uploadStoreItemDrawingAction}
                   className="grid max-w-xl gap-3 sm:grid-cols-[1fr_auto] sm:items-end"
@@ -1130,7 +1130,7 @@ function StoreItemWorkspace({
                               Not uploaded
                             </span>
                           )}
-                          {canManage ? (
+                          {canUploadQuote ? (
                             <form
                               action={uploadStoreSupplierQuoteAction}
                               className="flex gap-2"

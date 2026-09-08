@@ -1,4 +1,5 @@
 import { cache } from "react"
+import { masterPermissionOptions } from "./master-capabilities"
 
 import { commercialNavigationAccess } from "./commercial-capabilities"
 import { storeNavigationAccess } from "./store-capabilities"
@@ -19,6 +20,7 @@ const administrationCapability = "administration.access.read"
 const artifactCapability = "artifacts.read"
 
 export type UnifiedNavigationAccess = {
+  masterReadKeys?: string[]
   administration: boolean
   artifacts?: boolean
   commercialHrefs: string[]
@@ -35,6 +37,7 @@ async function readUnifiedNavigationAccess(
   userId: string
 ): Promise<UnifiedNavigationAccess> {
   const capabilities = [
+    ...masterPermissionOptions.filter(({ key }) => key.endsWith(".read")).map(({ key }) => key),
     operationsCapability,
     "hr.recruitment.read",
     administrationCapability,
@@ -94,6 +97,7 @@ async function readUnifiedNavigationAccess(
   )
 
   return {
+    masterReadKeys: [...grantedCapabilities].filter((key) => key.startsWith("masters.") && key.endsWith(".read")),
     administration: grantedCapabilities.has(administrationCapability),
     artifacts: grantedCapabilities.has(artifactCapability),
     commercialHrefs: commercialNavigationAccess

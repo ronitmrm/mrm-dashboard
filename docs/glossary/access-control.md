@@ -53,6 +53,20 @@ production units. They remain three distinct masters. Universal is a data scope,
 not a permission granting every master. The complete master inventory has 41
 Universal entries and seven entries per production unit (69 across four units).
 
+**Independent Master Access**: Each named master and scope is one Capabilities
+row. View opens that master's entry/table workspace; changing actions apply only
+to that master. CNC Tooling access does not grant Forging Tooling, another CNC
+master, or the Store Item Type master. Universal entries are also independent:
+an HR master never grants Store or Commercial Pricing masters. Forms may show
+the reference names required to select a related record; that does not grant
+maintenance access to the referenced master. Operational workspaces retain
+their own permissions for the records and reference data used by their workflow.
+
+Existing globally unique machine numbers and holiday date/type identities remain
+unchanged. A unit grant cannot move or overwrite a record belonging to another
+unit. A conflicting identity is rejected; independent duplicate identities would
+require a separate storage change.
+
 **Access Module Name**: The module shown in Access Administration uses the same
 business-facing name as the left sidebar. Internal permission namespaces such
 as `pricing`, `operations`, and `hr` are never displayed as module names.

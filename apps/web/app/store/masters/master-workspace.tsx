@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useMasterAccess } from "@/components/master-access-provider"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { Pencil, Trash2 } from "lucide-react"
@@ -185,6 +186,8 @@ export function StoreMasterWorkspace({
   const selectedMaster = normalizeStoreMasterKey(
     searchParams.get("storeMaster")
   )
+  const canUseMaster = useMasterAccess()
+  const canDelete = canUseMaster("store_masters", "delete", undefined, selectedMaster)
   const [editRow, setEditRow] = useState<StoreMasterRow | null>(null)
   const [deleteRow, setDeleteRow] = useState<StoreMasterRow | null>(null)
   const selectedLabel =
@@ -195,7 +198,7 @@ export function StoreMasterWorkspace({
   function selectMaster(master: StoreMasterKey) {
     const url = new URL(window.location.href)
     url.searchParams.set("storeMaster", master)
-    window.history.replaceState(null, "", url)
+    window.location.assign(url)
   }
 
   return (
@@ -215,7 +218,7 @@ export function StoreMasterWorkspace({
                 }
                 value={selectedMaster}
               >
-                {storeMasterOptions.map(([value, label]) => (
+                {storeMasterOptions.filter(([value]) => canUseMaster("store_masters", "read", undefined, value)).map(([value, label]) => (
                   <NativeSelectOption key={value} value={value}>
                     {label}
                   </NativeSelectOption>
@@ -265,7 +268,7 @@ export function StoreMasterWorkspace({
                     <TableHead>Identification</TableHead>
                     <TableHead>Drawing</TableHead>
                     <TableHead>Unit</TableHead>
-                    {canManage ? (
+                    {canManage || canDelete ? (
                       <TableHead className="text-right">Actions</TableHead>
                     ) : null}
                   </TableRow>
@@ -311,26 +314,26 @@ export function StoreMasterWorkspace({
                           )}
                         </TableCell>
                         <TableCell>{item.unit}</TableCell>
-                        {canManage ? (
+                        {canManage || canDelete ? (
                           <TableCell>
                             <div>
                               <div className="flex justify-end gap-1">
-                                <Button
+                                {canManage ? <Button
                                   onClick={() => setEditRow(row)}
                                   size="sm"
                                   type="button"
                                   variant="outline"
                                 >
                                   <Pencil className="size-3.5" /> Edit
-                                </Button>
-                                <Button
+                                </Button> : null}
+                                {canDelete ? <Button
                                   onClick={() => setDeleteRow(row)}
                                   size="sm"
                                   type="button"
                                   variant="outline"
                                 >
                                   <Trash2 className="size-3.5" /> Delete
-                                </Button>
+                                </Button> : null}
                               </div>
                             </div>
                           </TableCell>
@@ -347,7 +350,7 @@ export function StoreMasterWorkspace({
                     {showsCode ? <TableHead>Code</TableHead> : null}
                     <TableHead>Name</TableHead>
                     <TableHead>Details</TableHead>
-                    {canManage ? (
+                    {canManage || canDelete ? (
                       <TableHead className="text-right">Actions</TableHead>
                     ) : null}
                   </TableRow>
@@ -362,10 +365,10 @@ export function StoreMasterWorkspace({
                       ) : null}
                       <TableCell>{row.name}</TableCell>
                       <TableCell>{row.details}</TableCell>
-                      {canManage ? (
+                      {canManage || canDelete ? (
                         <TableCell>
                           <div className="flex justify-end gap-1">
-                            {row.editable ? (
+                            {canManage && row.editable ? (
                               <Button
                                 onClick={() => setEditRow(row)}
                                 size="sm"
@@ -375,14 +378,14 @@ export function StoreMasterWorkspace({
                                 <Pencil className="size-3.5" /> Edit
                               </Button>
                             ) : null}
-                            <Button
+                            {canDelete ? <Button
                               onClick={() => setDeleteRow(row)}
                               size="sm"
                               type="button"
                               variant="outline"
                             >
                               <Trash2 className="size-3.5" /> Delete
-                            </Button>
+                            </Button> : null}
                           </div>
                         </TableCell>
                       ) : null}
@@ -392,7 +395,7 @@ export function StoreMasterWorkspace({
                     <TableRow>
                       <TableCell
                         className="h-24 text-center text-muted-foreground"
-                        colSpan={(showsCode ? 3 : 2) + (canManage ? 1 : 0)}
+                        colSpan={(showsCode ? 3 : 2) + (canManage || canDelete ? 1 : 0)}
                       >
                         No saved records for this master.
                       </TableCell>

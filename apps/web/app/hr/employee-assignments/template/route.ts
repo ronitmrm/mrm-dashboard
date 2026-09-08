@@ -8,7 +8,7 @@ import { xlsxResponse } from "@/lib/xlsx-response"
 export const dynamic = "force-dynamic"
 
 export async function GET() {
-  await requireCapability("hr.employees.read", "/hr?panel=employeeMasterPanel")
+  await requireCapability("masters.universal.employee_assignments.read", "/hr?panel=employeeMasterPanel")
   const repository = createRecruitmentRepository({
     connectionString: readAuthEnvironment().connectionString,
   })

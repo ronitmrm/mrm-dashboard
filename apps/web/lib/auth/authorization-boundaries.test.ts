@@ -67,7 +67,7 @@ describe("protected server boundaries", () => {
       },
       {
         markers: [
-          "hrTaskCapabilities.assignEmployee",
+          'masterCapability("employee_assignments", "save")',
           "hrTaskCapabilities.recordInterview",
         ],
         path: "hr/actions.ts",

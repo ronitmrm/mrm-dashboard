@@ -7,7 +7,7 @@ import { masterCsvResponse } from "@/lib/master-data-csv"
 export const dynamic = "force-dynamic"
 
 export async function GET() {
-  await requireCapability("pricing.customers.read", "/commercial/customers")
+  await requireCapability("masters.universal.commercial_customers.read", "/commercial/customers")
   const repository = createCustomerRepository({
     connectionString: readAuthEnvironment().connectionString,
   })

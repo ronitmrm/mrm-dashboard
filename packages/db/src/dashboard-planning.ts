@@ -15,6 +15,7 @@ import {
 import { plannerInterruptionRequirement } from "./planner-interruption-settlement"
 import {
   normalizeProductionFloorCode,
+  productionFloorCodeForRecord,
   productionFloors,
   type ProductionFloorCode,
 } from "./production-floors"
@@ -679,17 +680,20 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
         await businessKeyLock(
           client,
           "catalog.machine",
-          machineNumber
+          `${input.organizationId}:${machineNumber}`
         )
-        const existing = await client.query<{ id: string }>(
+        const existing = await client.query<{ id: string; production_floor_id: string }>(
           `
-            SELECT machine.id FROM catalog.machines machine
+            SELECT machine.id, machine.production_floor_id FROM catalog.machines machine
             WHERE machine.organization_id = $1
               AND lower(machine.machine_number) = lower($2)
             FOR UPDATE
           `,
           [input.organizationId, machineNumber]
         )
+        if (existing.rows[0] && existing.rows[0].production_floor_id !== productionFloorId) {
+          throw new Error("This machine belongs to another Production Unit. Edit it in its existing unit.")
+        }
         const sourcePayload = input.sourcePayload ?? input
         const result = existing.rows[0]
           ? await client.query<{ id: string }>(
@@ -1315,11 +1319,11 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
         await businessKeyLock(
           client,
           "manufacturing.calendar",
-          `${date}:${exceptionType}`
+          `${input.organizationId}:${date}:${exceptionType}`
         )
-        const existing = await client.query<{ id: string }>(
+        const existing = await client.query<{ id: string; source_payload: unknown }>(
           `
-            SELECT id FROM manufacturing.planning_calendar_exceptions
+            SELECT id, source_payload FROM manufacturing.planning_calendar_exceptions
             WHERE organization_id = $1
               AND exception_date = migration.try_date($2)
               AND lower(exception_type) = lower($3)
@@ -1328,6 +1332,13 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           [input.organizationId, date, exceptionType]
         )
         const sourcePayload = input.sourcePayload ?? input
+        if (
+          existing.rows[0] &&
+          productionFloorCodeForRecord({ sourcePayload: existing.rows[0].source_payload }) !==
+            productionFloorCodeForRecord({ sourcePayload })
+        ) {
+          throw new Error("A holiday for this date and scope already belongs to another Production Unit. Edit it in its existing unit.")
+        }
         const result = existing.rows[0]
           ? await client.query<{ id: string }>(
               `

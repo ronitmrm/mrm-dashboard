@@ -96,12 +96,12 @@ export default async function JobWorkspacePage({
   const session = await requireHrPage("hr.jobs.read", returnPath)
   const grants = await listGrantedCapabilities(session.user.id, [
     ...Object.values(hrTaskCapabilities),
-    "hr.employees.read",
+    "masters.universal.employee_assignments.read",
   ])
   const canWrite = Object.values(hrTaskCapabilities).some((capability) =>
     grants.includes(capability)
   )
-  const canViewOfferLetters = grants.includes("hr.employees.read")
+  const canViewOfferLetters = grants.includes("masters.universal.employee_assignments.read")
   const canCloseJob = grants.includes(hrTaskCapabilities.closeJob)
   const canDeleteJob = grants.includes(hrTaskCapabilities.deleteJob)
   const repository = createRecruitmentRepository({

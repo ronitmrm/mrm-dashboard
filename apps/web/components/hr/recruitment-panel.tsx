@@ -1,4 +1,5 @@
 import Link from "next/link"
+import type { hrMasterControls } from "@/app/hr/master-access"
 
 import {
   nextRecruitmentTemplateCode,
@@ -89,6 +90,9 @@ import {
 } from "@/lib/recruitment-master-navigation"
 
 type RecruitmentPanelProps = {
+  masterControls: ReturnType<typeof hrMasterControls>
+  canCreateJob: boolean
+  canLogCandidateEvent: boolean
   canManageEmployees: boolean
   canWrite: boolean
   candidateEvents: RecruitmentCandidateEventRow[]
@@ -191,12 +195,13 @@ function EmptyRow({ columns, label }: { columns: number; label: string }) {
 
 function MastersPanel({
   canWrite,
+  masterControls,
   masterKind = "department",
   masterView,
   masters,
 }: Pick<
   RecruitmentPanelProps,
-  "canWrite" | "masterKind" | "masterView" | "masters"
+  "canWrite" | "masterControls" | "masterKind" | "masterView" | "masters"
 >) {
   const activeMasterKind =
     masterKind === "designation" ? "designation" : "department"
@@ -267,7 +272,8 @@ function MastersPanel({
       ) : null}
       {showMasterTables ? (
         <MasterTables
-          canWrite={canWrite}
+          canWrite={masterControls.update}
+          canDelete={masterControls.delete}
           kind={activeMasterKind}
           masterView={activeView}
           masters={masters}
@@ -279,6 +285,7 @@ function MastersPanel({
 
 function TemplatePanel({
   canWrite,
+  masterControls,
   combinedRoles,
   masterView,
   masters,
@@ -287,6 +294,7 @@ function TemplatePanel({
 }: Pick<
   RecruitmentPanelProps,
   | "canWrite"
+  | "masterControls"
   | "combinedRoles"
   | "masterView"
   | "masters"
@@ -412,7 +420,8 @@ function TemplatePanel({
       ) : null}
       {showMasterTables ? (
         <JobTemplatesTable
-          canWrite={canWrite}
+          canWrite={masterControls.update}
+          canDelete={masterControls.delete}
           combinedRoles={combinedRoles}
           initialTemplateCode={selectedTemplateCode}
           masterView={activeView}
@@ -426,6 +435,8 @@ function TemplatePanel({
 
 function ApprovedPostPanel({
   canWrite,
+  masterControls,
+  canCreateJob,
   jobs,
   masters,
   masterView,
@@ -433,7 +444,7 @@ function ApprovedPostPanel({
   templates,
 }: Pick<
   RecruitmentPanelProps,
-  "canWrite" | "jobs" | "masters" | "masterView" | "posts" | "templates"
+  "canWrite" | "masterControls" | "canCreateJob" | "jobs" | "masters" | "masterView" | "posts" | "templates"
 >) {
   const activeView = masterView ?? "dataEntry"
   const showDataEntry = activeView === "dataEntry"
@@ -495,7 +506,9 @@ function ApprovedPostPanel({
       ) : null}
       {showMasterTables ? (
         <ApprovedPostsTable
-          canWrite={canWrite}
+          canWrite={masterControls.update}
+          canDelete={masterControls.delete}
+          canCreateJob={canCreateJob}
           jobs={jobs}
           masterView={activeView}
           posts={posts}
@@ -508,13 +521,14 @@ function ApprovedPostPanel({
 
 function CombinedRolePanel({
   canWrite,
+  masterControls,
   combinedRoles,
   masterView,
   posts,
   templates,
 }: Pick<
   RecruitmentPanelProps,
-  "canWrite" | "combinedRoles" | "masterView" | "posts" | "templates"
+  "canWrite" | "masterControls" | "combinedRoles" | "masterView" | "posts" | "templates"
 >) {
   const activeCombinedPostCodes = new Set(
     combinedRoles
@@ -591,7 +605,7 @@ function CombinedRolePanel({
       ) : null}
       {showMasterTables ? (
         <EditableCombinedRolesTable
-          canWrite={canWrite}
+          canWrite={masterControls.update}
           combinedRoles={combinedRoles}
           masterView={activeView}
           posts={posts}
@@ -604,7 +618,7 @@ function CombinedRolePanel({
 
 function EmployeePanel({
   canManageEmployees,
-  canWrite,
+  masterControls,
   combinedRoles,
   employmentLetters,
   jobs,
@@ -614,7 +628,7 @@ function EmployeePanel({
 }: Pick<
   RecruitmentPanelProps,
   | "canManageEmployees"
-  | "canWrite"
+  | "masterControls"
   | "combinedRoles"
   | "employmentLetters"
   | "jobs"
@@ -637,7 +651,7 @@ function EmployeePanel({
             <MasterDataCsvDownloadButton href="/hr/employee-assignments/template.csv" />
           }
           csvImportAction={
-            canManageEmployees ? (
+            masterControls.import ? (
               <MasterDataCsvImportButton
                 action={importEmployeeAssignmentsCsvAction}
                 fields={{
@@ -652,14 +666,14 @@ function EmployeePanel({
             "dataEntry",
             "employee-assignment"
           )}
-          exportAction={<DataDownloadButton href="/hr/approved-posts/export" />}
+          exportAction={<DataDownloadButton href="/hr/employee-assignments/template" />}
           masterTablesHref={recruitmentMasterHref(
             "masterTables",
             "employee-assignment"
           )}
         />
       )}
-      {showDataEntry && canManageEmployees ? (
+      {showDataEntry && masterControls.import ? (
  <SectionCard>
           <CardHeader>
             <CardTitle>Bulk Employee Assignment</CardTitle>
@@ -671,7 +685,7 @@ function EmployeePanel({
       ) : null}
       {showMasterTables ? (
         <ApprovedPostsTable
-          canWrite={canWrite}
+          employeeView
           combinedRoles={combinedRoles}
           employeeManagement={canManageEmployees}
           employmentLetters={employmentLetters}
@@ -788,12 +802,13 @@ function JobsPanel({
 
 function LogCandidatePanel({
   canWrite,
+  canLogCandidateEvent,
   candidates,
   masters,
   masterView,
 }: Pick<
   RecruitmentPanelProps,
-  "canWrite" | "candidates" | "masters" | "masterView"
+  "canWrite" | "canLogCandidateEvent" | "candidates" | "masters" | "masterView"
 >) {
   const activeView = masterView ?? "dataEntry"
   const showDataEntry = activeView === "dataEntry"
@@ -939,7 +954,7 @@ function LogCandidatePanel({
       ) : null}
       {showMasterTables ? (
         <CandidatesTable
-          canWrite={canWrite}
+          canWrite={canLogCandidateEvent}
           candidates={candidates}
           masterView={activeView}
         />
@@ -997,6 +1012,7 @@ export function RecruitmentPanel(props: RecruitmentPanelProps) {
     case "postMasterPanel":
       return (
         <TemplatePanel
+          masterControls={props.masterControls}
           canWrite={props.canWrite}
           combinedRoles={props.combinedRoles}
           masterView={props.masterView}
@@ -1008,6 +1024,8 @@ export function RecruitmentPanel(props: RecruitmentPanelProps) {
     case "approvedPostPanel":
       return (
         <ApprovedPostPanel
+          masterControls={props.masterControls}
+          canCreateJob={props.canCreateJob}
           canWrite={props.canWrite}
           jobs={props.jobs}
           masters={props.masters}
@@ -1019,6 +1037,7 @@ export function RecruitmentPanel(props: RecruitmentPanelProps) {
     case "combinedRolesPanel":
       return (
         <CombinedRolePanel
+          masterControls={props.masterControls}
           canWrite={props.canWrite}
           combinedRoles={props.combinedRoles}
           masterView={props.masterView}
@@ -1030,7 +1049,7 @@ export function RecruitmentPanel(props: RecruitmentPanelProps) {
       return (
         <EmployeePanel
           canManageEmployees={props.canManageEmployees}
-          canWrite={props.canWrite}
+          masterControls={props.masterControls}
           combinedRoles={props.combinedRoles}
           employmentLetters={props.employmentLetters}
           jobs={props.jobs}
@@ -1052,6 +1071,7 @@ export function RecruitmentPanel(props: RecruitmentPanelProps) {
       return (
         <LogCandidatePanel
           canWrite={props.canWrite}
+          canLogCandidateEvent={props.canLogCandidateEvent}
           candidates={props.candidates}
           masters={props.masters}
           masterView={props.masterView}
@@ -1090,6 +1110,7 @@ export function RecruitmentPanel(props: RecruitmentPanelProps) {
     default:
       return (
         <MastersPanel
+          masterControls={props.masterControls}
           canWrite={props.canWrite}
           masterKind={props.masterKind}
           masterView={props.masterView}

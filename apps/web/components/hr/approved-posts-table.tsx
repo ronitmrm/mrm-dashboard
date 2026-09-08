@@ -82,8 +82,11 @@ function PostStatusBadge({ status }: { status: string }) {
 
 export function ApprovedPostsTable({
   canWrite = false,
+  canDelete = false,
+  canCreateJob = false,
   combinedRoles = [],
   employeeManagement = false,
+  employeeView = employeeManagement,
   employmentLetters = [],
   jobs = [],
   masterView,
@@ -91,8 +94,11 @@ export function ApprovedPostsTable({
   templates = [],
 }: {
   canWrite?: boolean
+  canDelete?: boolean
+  canCreateJob?: boolean
   combinedRoles?: RecruitmentCombinedRoleRow[]
   employeeManagement?: boolean
+  employeeView?: boolean
   employmentLetters?: RecruitmentEmploymentLetterRow[]
   jobs?: RecruitmentJobRow[]
   masterView?: "dataEntry" | "masterTables"
@@ -110,7 +116,7 @@ export function ApprovedPostsTable({
       .filter((job) => job.status === "Open" && job.postCode)
       .map((job) => job.postCode)
   )
-  const showActions = canWrite || employeeManagement
+  const showActions = canWrite || canDelete || canCreateJob || employeeManagement
   const columnCount = 10 + (employeeManagement ? 1 : 0) + (showActions ? 1 : 0)
   const table = useExcelTable({
     rows: posts,
@@ -185,7 +191,7 @@ export function ApprovedPostsTable({
           <CardHeader>
             <div className="space-y-1.5">
               <CardTitle>
-                {employeeManagement ? "Employee Master" : "Approved Posts"}
+                {employeeView ? "Employee Master" : "Approved Posts"}
               </CardTitle>
               <CardDescription>
                 {hasFilters
@@ -308,9 +314,9 @@ export function ApprovedPostsTable({
                                     : "Employee"}
                                 </Button>
                               ) : null}
-                              {canWrite ? (
+                              {canWrite || canDelete || canCreateJob ? (
                                 <>
-                                  {(row.status === "Vacant" ||
+                                  {canCreateJob && (row.status === "Vacant" ||
                                     row.status === "Resigned") &&
                                   (!row.combinedRoleId ||
                                     row.isPrimaryCombinedPost) &&
@@ -339,7 +345,7 @@ export function ApprovedPostsTable({
                                       </Button>
                                     </form>
                                   ) : null}
-                                  <Button
+                                  {canWrite ? <Button
                                     aria-label={`Edit ${row.postCode}`}
                                     onClick={() => setEditingPost(row)}
                                     size="sm"
@@ -348,8 +354,8 @@ export function ApprovedPostsTable({
                                   >
                                     <Pencil data-icon="inline-start" />
                                     Edit
-                                  </Button>
-                                  <form
+                                  </Button> : null}
+                                  {canDelete ? <form
                                     action={deletePostAction}
                                     onSubmit={(event) => {
                                       if (
@@ -386,7 +392,7 @@ export function ApprovedPostsTable({
                                       <Trash2 data-icon="inline-start" />
                                       Delete
                                     </Button>
-                                  </form>
+                                  </form> : null}
                                 </>
                               ) : null}
                             </div>
@@ -412,7 +418,7 @@ export function ApprovedPostsTable({
           </CardContent>
  </SectionCard>
 
-        {employeeManagement ? (
+        {employeeView ? (
  <SectionCard>
             <CardHeader>
               <CardTitle>Employee Letter Register</CardTitle>

@@ -54,11 +54,15 @@ function kindLabel(kind: string) {
 
 export function CommercialMasterTable({
   canWrite,
+  canDelete = canWrite,
+  canRename = canWrite,
   initialKind,
   rows,
   selectionLocked = false,
 }: {
   canWrite: boolean
+  canDelete?: boolean
+  canRename?: boolean
   initialKind: string
   rows: CommercialMasterRow[]
   selectionLocked?: boolean
@@ -119,7 +123,7 @@ export function CommercialMasterTable({
                 {canWrite ? (
                   <TableCell>
                     <div className="flex justify-end gap-1">
-                      {row.kind !== "commercial_material_rate" ? (
+                      {canRename && row.kind !== "commercial_material_rate" ? (
                         <Button
                           onClick={() => setEditing(row)}
                           size="sm"
@@ -129,14 +133,14 @@ export function CommercialMasterTable({
                           <Pencil className="size-3.5" /> Edit
                         </Button>
                       ) : null}
-                      <Button
+                      {canDelete ? <Button
                         onClick={() => setDeleting(row)}
                         size="sm"
                         type="button"
                         variant="outline"
                       >
                         <Trash2 className="size-3.5" /> Delete
-                      </Button>
+                      </Button> : null}
                     </div>
                   </TableCell>
                 ) : null}

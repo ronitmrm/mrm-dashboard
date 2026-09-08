@@ -5,7 +5,6 @@ import { revalidatePath } from "next/cache"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
-import { commercialTaskCapabilities } from "@/lib/auth/task-capabilities"
 import {
   csvValue,
   readMasterCsv,
@@ -57,7 +56,7 @@ async function withCustomers<T>(
 
 export async function createCustomerAction(formData: FormData) {
   await withCustomers(
-    commercialTaskCapabilities.createCustomer,
+    "masters.universal.commercial_customers.create",
     (repository, actorUserId, organizationId) =>
       repository.createManaged({
         actorUserId,
@@ -84,7 +83,7 @@ export async function createCustomerAction(formData: FormData) {
 export async function importCustomersCsvAction(formData: FormData) {
   const rows = await readMasterCsv(formData.get("master_csv_file"))
   await withCustomers(
-    commercialTaskCapabilities.createCustomer,
+    "masters.universal.commercial_customers.import",
     async (repository, actorUserId, organizationId) => {
       for (const [index, row] of rows.entries()) {
         await repository.createManaged({
@@ -139,7 +138,7 @@ export async function importCustomersCsvAction(formData: FormData) {
 }
 export async function updateCustomerAction(formData: FormData) {
   await withCustomers(
-    commercialTaskCapabilities.updateCustomer,
+    "masters.universal.commercial_customers.update",
     (repository, actorUserId, organizationId) =>
       repository.updateManaged({
         actorUserId,

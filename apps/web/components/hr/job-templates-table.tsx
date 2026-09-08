@@ -183,6 +183,7 @@ function JobTemplateEditor({
 
 export function JobTemplatesTable({
   canWrite,
+  canDelete = false,
   combinedRoles,
   initialTemplateCode,
   masterView,
@@ -190,6 +191,7 @@ export function JobTemplatesTable({
   templates,
 }: {
   canWrite: boolean
+  canDelete?: boolean
   combinedRoles: RecruitmentCombinedRoleRow[]
   initialTemplateCode?: string
   masterView?: "dataEntry" | "masterTables"
@@ -264,7 +266,7 @@ export function JobTemplatesTable({
                 {filterKeys.map(({ key, label }) => (
                   <TableHead key={key}>{label}</TableHead>
                 ))}
-                {canWrite ? (
+                {canDelete ? (
                   <TableHead className="text-right">Actions</TableHead>
                 ) : null}
               </TableRow>
@@ -277,7 +279,7 @@ export function JobTemplatesTable({
                     />
                   </TableHead>
                 ))}
-                {canWrite ? <TableHead /> : null}
+                {canDelete ? <TableHead /> : null}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -306,7 +308,7 @@ export function JobTemplatesTable({
                   <TableCell>{row.designation}</TableCell>
                   <TableCell>{row.education ?? "—"}</TableCell>
                   <TableCell>{row.experienceRequirement ?? "—"}</TableCell>
-                  {canWrite ? (
+                  {canDelete ? (
                     <TableCell className="text-right">
                       <Button
                         onClick={() => setDeletingTemplate(row)}
@@ -324,7 +326,7 @@ export function JobTemplatesTable({
                 <TableRow>
                   <TableCell
                     className="py-10 text-center text-muted-foreground"
-                    colSpan={canWrite ? 7 : 6}
+                    colSpan={canDelete ? 7 : 6}
                   >
                     No Job Templates Match The Selected Filters.
                   </TableCell>

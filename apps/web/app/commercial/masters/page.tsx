@@ -14,7 +14,8 @@ import {
 } from "@workspace/ui/components/card"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
-import { commercialTaskCapabilities } from "@/lib/auth/task-capabilities"
+import { masterCapability, masterPermissionOptions } from "@/lib/auth/master-capabilities"
+import { commercialMasterFormOptions } from "@/lib/auth/commercial-master-access"
 import {
   listGrantedCapabilities,
   requireCapability,
@@ -33,7 +34,6 @@ import {
   commercialMasterTemplateHref,
   commercialMasterViewHref,
   commercialMasterWorkspaceKind,
-  isCustomerDefaultCommercialMaster,
 } from "@/lib/commercial-master-workspace"
 import { CommercialMasterTable } from "./commercial-master-table"
 import { MetricSummary } from "@/components/ui/golden-patterns"
@@ -53,40 +53,22 @@ export default async function MastersPage({
     success?: string
   }>
 }) {
-  const session = await requireCapability(
-    "pricing.masters.read",
-    "/commercial/masters"
-  )
-  const [grantedCapabilityList, feedback] = await Promise.all([
-    listGrantedCapabilities(session.user.id, [
-      commercialTaskCapabilities.deleteMaster,
-      commercialTaskCapabilities.importMasters,
-      commercialTaskCapabilities.renameMaster,
-      commercialTaskCapabilities.updateCustomerDefaultTerm,
-      commercialTaskCapabilities.updateMaster,
-    ]),
-    searchParams,
-  ])
-  const grantedCapabilities = new Set(grantedCapabilityList)
-  const activeView =
-    feedback.masterView === "masterTables" ? "masterTables" : "dataEntry"
+  const feedback = await searchParams
   const selection = commercialMasterSelection(feedback.kind)
   const selectionKind = commercialMasterWorkspaceKind(selection)
-  const canUpdate =
-    grantedCapabilities.has(commercialTaskCapabilities.updateMaster) ||
-    (isCustomerDefaultCommercialMaster(selection) &&
-      grantedCapabilities.has(
-        commercialTaskCapabilities.updateCustomerDefaultTerm
-      ))
-  const canImport = grantedCapabilities.has(
-    commercialTaskCapabilities.importMasters
+  const session = await requireCapability(
+    masterCapability(selectionKind, "read"),
+    "/commercial/masters"
   )
-  const canModifyLifecycle =
-    grantedCapabilities.has(commercialTaskCapabilities.deleteMaster) ||
-    grantedCapabilities.has(commercialTaskCapabilities.renameMaster)
-  const selectionLocked = Boolean(
-    feedback.masterUnit && feedback.masterMain && feedback.masterSub
-  )
+  const grantedCapabilityList = await listGrantedCapabilities(session.user.id, masterPermissionOptions.map(({ key }) => key))
+  const grantedCapabilities = new Set(grantedCapabilityList)
+  const canUpdate = grantedCapabilities.has(masterCapability(selectionKind, "save"))
+  const canImport = grantedCapabilities.has(masterCapability(selectionKind, "import"))
+  const activeView =
+    feedback.masterView === "masterTables" || (!canUpdate && !canImport) ? "masterTables" : "dataEntry"
+  const canDelete = grantedCapabilities.has(masterCapability(selectionKind, "delete"))
+  const canRename = selectionKind !== "materialRate" && grantedCapabilities.has(masterCapability(selectionKind, "rename"))
+  const selectionLocked = true
   const showDataEntry = activeView === "dataEntry"
   const showMasterTables = activeView === "masterTables"
   let snapshot: CommercialMasterSnapshot | null = null
@@ -175,7 +157,7 @@ export default async function MastersPage({
                     "termType" in selection ? selection.termType : undefined
                   }
                   key={selectionKind}
-                  snapshot={snapshot}
+                  options={commercialMasterFormOptions(snapshot, selection.entryKind)}
                   selectionLocked={selectionLocked}
                 />
               </CardContent>
@@ -206,7 +188,9 @@ export default async function MastersPage({
           </CardHeader>
           <CardContent>
             <CommercialMasterTable
-              canWrite={canModifyLifecycle}
+              canWrite={canDelete || canRename}
+              canDelete={canDelete}
+              canRename={canRename}
               initialKind={selectionKind}
               key={selectionKind}
               rows={editableRows}

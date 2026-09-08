@@ -1,9 +1,7 @@
 "use client"
 
-import type {
-  CommercialMasterSnapshot,
-  CommercialTermType,
-} from "@workspace/db"
+import type { CommercialTermType } from "@workspace/db"
+import type { commercialMasterFormOptions } from "@/lib/auth/commercial-master-access"
 import { Button } from "@workspace/ui/components/button"
 import { Field, FieldGroup, FieldLabel } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
@@ -60,12 +58,12 @@ export function MasterMaintenanceForm({
   initialKind,
   initialTermType,
   selectionLocked = false,
-  snapshot,
+  options,
 }: {
   initialKind: CommercialMasterEntryKind
   initialTermType?: CommercialTermType
   selectionLocked?: boolean
-  snapshot: CommercialMasterSnapshot
+  options: ReturnType<typeof commercialMasterFormOptions>
 }) {
   const router = useRouter()
   const [kind, setKind] = useState<CommercialMasterEntryKind>(initialKind)
@@ -151,7 +149,7 @@ export function MasterMaintenanceForm({
                 <NativeSelectOption value="">
                   Select Category
                 </NativeSelectOption>
-                {snapshot.categories.map((category) => (
+                {options.categories.map((category) => (
                   <NativeSelectOption key={category.name} value={category.name}>
                     {category.name}
                   </NativeSelectOption>
@@ -213,7 +211,7 @@ export function MasterMaintenanceForm({
                 required
               >
                 <NativeSelectOption value="">Select Grade</NativeSelectOption>
-                {snapshot.materialGrades.map((grade) => (
+                {options.materialGrades.map((grade) => (
                   <NativeSelectOption key={grade.name} value={grade.name}>
                     {grade.name}
                   </NativeSelectOption>
@@ -231,7 +229,7 @@ export function MasterMaintenanceForm({
                 <NativeSelectOption value="">
                   Select Rod Type
                 </NativeSelectOption>
-                {snapshot.rodTypes.map((rodType) => (
+                {options.rodTypes.map((rodType) => (
                   <NativeSelectOption key={rodType.name} value={rodType.name}>
                     {rodType.name}
                   </NativeSelectOption>

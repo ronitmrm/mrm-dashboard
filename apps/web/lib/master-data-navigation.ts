@@ -117,6 +117,7 @@ export function masterDataNavigationLinks(
   }
 ): MasterDataFallbackLink[] {
   void _context
+  if (access.masterReadKeys?.length) return [{ destination: "/masters?view=masterTables", id: "masterTablesTab", title: "Master Tables" }]
   if (!access.operations) return masterDataFallbackLinks(access)
 
   const links: MasterDataFallbackLink[] = [

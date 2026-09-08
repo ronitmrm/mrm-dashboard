@@ -12,6 +12,7 @@ import { readAuthEnvironment } from "@/lib/auth/auth"
 import {
   listGrantedCapabilities,
   requireAuthenticatedSession,
+  requireCapability,
 } from "@/lib/auth/require-capability"
 import { getUnifiedNavigationAccess } from "@/lib/auth/unified-navigation-access"
 import { productionModuleIsEnabled } from "@/lib/production-module"
@@ -30,6 +31,14 @@ import {
 import { productionCapabilityForTab } from "@/lib/auth/production-capabilities"
 import { isProductionFloorTab } from "@/lib/auth/production-floor-capabilities"
 import { requireProductionPage } from "@/lib/auth/require-production-page"
+import {
+  masterCapability,
+  masterPermissionOptions,
+} from "@/lib/auth/master-capabilities"
+import { productionMasterCapability } from "@/lib/auth/production-master-access"
+import { normalizeStoreMasterKey } from "@/lib/store-master-selection"
+import { MasterAccessProvider } from "@/components/master-access-provider"
+import { selectedStoreMasterData } from "@/lib/auth/store-master-access"
 
 export default async function Page({
   searchParams,
@@ -41,6 +50,7 @@ export default async function Page({
     operationalSub?: string | string[]
     operationalUnit?: string | string[]
     tab?: string | string[]
+    storeMaster?: string | string[]
   }>
 }) {
   if (!productionModuleIsEnabled()) redirect("/commercial")
@@ -52,6 +62,28 @@ export default async function Page({
   const value = (input: string | string[] | undefined) =>
     Array.isArray(input) ? input[0] : input
   const requestedTab = value(query.tab)
+  const requestedFloorForMaster = normalizeProductionFloorCode(
+    value(query.floor)
+  )
+  const selectedStoreMaster = normalizeStoreMasterKey(value(query.storeMaster))
+  const masterEntry =
+    value(query.entry) ?? legacyMasterEntryForDashboardTab(requestedTab)
+  const isMasterPage =
+    requestedTab === "dataEntryTab" ||
+    requestedTab === "masterTablesTab" ||
+    Boolean(legacyMasterEntryForDashboardTab(requestedTab))
+  if (isMasterPage) {
+    const readKey =
+      masterEntry === "store_masters"
+        ? masterCapability(selectedStoreMaster, "read")
+        : productionMasterCapability(
+            masterEntry ?? "",
+            "read",
+            requestedFloorForMaster
+          )
+    if (!readKey) redirect("/masters")
+    await requireCapability(readKey, "/masters")
+  }
   if (
     requestedTab === "operationalEntryTab" ||
     requestedTab === "operationalTablesTab"
@@ -97,51 +129,90 @@ export default async function Page({
       "operations.corrections.write",
       "store.masters.read",
       "store.masters.write",
+      ...masterPermissionOptions.map(({ key }) => key),
     ])
   )
-  const storeMasterData = capabilities.has("store.masters.read")
-    ? await (async () => {
-        const connectionString = readAuthEnvironment().connectionString
-        const repository = createStoreRepository({ connectionString })
-        const workflow = createCommercialWorkflowRepository({
-          connectionString,
-        })
-        try {
-          const organizationId = await repository.organizationIdForCode("MRMPL")
-          const [
-            items,
-            locations,
-            suppliers,
-            supplierPrices,
-            vendors,
-            masters,
-            itemDrawings,
-            portfolioProducts,
-          ] = await Promise.all([
-            repository.listItemTypes(organizationId),
-            repository.listLocations(organizationId),
-            repository.listSuppliers(organizationId),
-            repository.listSupplierPrices(organizationId),
-            repository.listVendors(organizationId),
-            repository.listAssetClassificationMasters(organizationId),
-            repository.listItemTypeDrawings(organizationId),
-            workflow.listDesignPortfolioProducts("MRMPL"),
-          ])
-          return {
-            itemDrawings,
-            items,
-            locations,
-            masters,
-            portfolioProducts,
-            supplierPrices,
-            suppliers,
-            vendors,
+  if (isMasterPage && requestedTab !== "masterTablesTab") {
+    const writeKeys =
+      masterEntry === "store_masters"
+        ? [
+            masterCapability(selectedStoreMaster, "save"),
+            masterCapability(selectedStoreMaster, "import"),
+          ]
+        : [
+            productionMasterCapability(
+              masterEntry ?? "",
+              "save",
+              requestedFloorForMaster
+            ),
+            productionMasterCapability(
+              masterEntry ?? "",
+              "import",
+              requestedFloorForMaster
+            ),
+          ]
+    if (!writeKeys.some((key) => key && capabilities.has(key))) {
+      const params = new URLSearchParams(
+        Object.entries(query).flatMap(([key, input]) =>
+          input === undefined ? [] : [[key, value(input) ?? ""]]
+        )
+      )
+      params.set("tab", "masterTablesTab")
+      if (masterEntry) params.set("entry", masterEntry)
+      redirect(`/?${params}`)
+    }
+  }
+  const storeMasterData =
+    isMasterPage &&
+    masterEntry === "store_masters" &&
+    capabilities.has(masterCapability(selectedStoreMaster, "read"))
+      ? await (async () => {
+          const connectionString = readAuthEnvironment().connectionString
+          const repository = createStoreRepository({ connectionString })
+          const workflow = createCommercialWorkflowRepository({
+            connectionString,
+          })
+          try {
+            const organizationId =
+              await repository.organizationIdForCode("MRMPL")
+            const [
+              items,
+              locations,
+              suppliers,
+              supplierPrices,
+              vendors,
+              masters,
+              itemDrawings,
+              portfolioProducts,
+            ] = await Promise.all([
+              repository.listItemTypes(organizationId),
+              repository.listLocations(organizationId),
+              repository.listSuppliers(organizationId),
+              repository.listSupplierPrices(organizationId),
+              repository.listVendors(organizationId),
+              repository.listAssetClassificationMasters(organizationId),
+              repository.listItemTypeDrawings(organizationId),
+              workflow.listDesignPortfolioProducts("MRMPL"),
+            ])
+            return selectedStoreMasterData(
+              {
+                itemDrawings,
+                items,
+                locations,
+                masters,
+                portfolioProducts,
+                supplierPrices,
+                suppliers,
+                vendors,
+              },
+              selectedStoreMaster,
+              capabilities.has(masterCapability(selectedStoreMaster, "save"))
+            )
+          } finally {
+            await Promise.all([repository.close(), workflow.close()])
           }
-        } finally {
-          await Promise.all([repository.close(), workflow.close()])
-        }
-      })()
-    : null
+        })()
+      : null
   const legacyMasterEntry = legacyMasterEntryForDashboardTab(requestedTab)
   const requestedFloor = normalizeProductionFloorCode(
     value(query.floor) ?? defaultProductionFloorCode
@@ -156,16 +227,16 @@ export default async function Page({
   const allowedDashboardTabs = isProductionFloorTab(requestedDashboardTab)
     ? requestedFloorTabs
     : navigationAccess.productionTabIds
-  const initialDashboardTab = allowedDashboardTabs?.includes(
-    requestedDashboardTab
-  )
+  const initialDashboardTab = isMasterPage
     ? requestedDashboardTab
-    : (allowedDashboardTabs?.[0] ?? requestedDashboardTab)
+    : allowedDashboardTabs?.includes(requestedDashboardTab)
+      ? requestedDashboardTab
+      : (allowedDashboardTabs?.[0] ?? requestedDashboardTab)
   const pageCapability = productionCapabilityForTab(
     initialDashboardTab,
     requestedFloor
   )
-  if (pageCapability) {
+  if (pageCapability && !isMasterPage) {
     await requireProductionPage(pageCapability, "/")
   }
   const requestedEntryFromQuery = Array.isArray(query.entry)
@@ -174,15 +245,42 @@ export default async function Page({
   const requestedEntry = requestedEntryFromQuery ?? legacyMasterEntry
 
   return (
-    <MrmplDashboard
-      initialDashboardTab={initialDashboardTab}
-      initialDataEntryType={requestedEntry}
-      initialProductionFloor={requestedFloor}
-      navigationAccess={navigationAccess}
-      canDeleteMasters={capabilities.has("operations.corrections.write")}
-      canManageStoreMasters={capabilities.has("store.masters.write")}
-      storeMasterData={storeMasterData}
-      user={{ email: session.user.email, name: session.user.name }}
-    />
+    <MasterAccessProvider
+      permissions={isMasterPage ? [...capabilities] : null}
+      stateUrl={
+        isMasterPage
+          ? `/api/masters/state?${new URLSearchParams({ entry: masterEntry ?? "", floor: requestedFloorForMaster, storeMaster: selectedStoreMaster })}`
+          : undefined
+      }
+    >
+      <MrmplDashboard
+        initialDashboardTab={initialDashboardTab}
+        initialDataEntryType={requestedEntry}
+        initialProductionFloor={requestedFloor}
+        navigationAccess={navigationAccess}
+        canDeleteMasters={
+          isMasterPage &&
+          Boolean(
+            productionMasterCapability(
+              masterEntry ?? "",
+              "delete",
+              requestedFloorForMaster
+            ) &&
+            capabilities.has(
+              productionMasterCapability(
+                masterEntry ?? "",
+                "delete",
+                requestedFloorForMaster
+              )!
+            )
+          )
+        }
+        canManageStoreMasters={capabilities.has(
+          masterCapability(selectedStoreMaster, "save")
+        )}
+        storeMasterData={storeMasterData}
+        user={{ email: session.user.email, name: session.user.name }}
+      />
+    </MasterAccessProvider>
   )
 }

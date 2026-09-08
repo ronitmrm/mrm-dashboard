@@ -106,9 +106,9 @@ describe("HR master workspace", () => {
     )
     expect(approvedPostsTableSource).toContain("allowIdentityCorrection")
     expect(approvedPostsTableSource).toContain(
-      'employeeManagement ? "Employee Master" : "Approved Posts"'
+      'employeeView ? "Employee Master" : "Approved Posts"'
     )
-    expect(panelSource).toContain("showDataEntry && canManageEmployees")
+    expect(panelSource).toContain("showDataEntry && masterControls.import")
     expect(panelSource).toContain("showMasterTables ? (")
     expect(tablesSource).toMatch(
       /const rows =\s+kind === "department" \? masters\.departments : masters\.designations/

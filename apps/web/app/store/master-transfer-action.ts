@@ -8,6 +8,8 @@ import {
   type MasterCsvRow,
 } from "@/lib/master-data-csv"
 import { normalizeStoreMasterKey } from "@/lib/store-master-selection"
+import { masterCapability } from "@/lib/auth/master-capabilities"
+import { requireCapability } from "@/lib/auth/require-capability"
 
 import {
   createStoreAssetCategoryAction,
@@ -30,6 +32,7 @@ function form(row: MasterCsvRow, fields: Record<string, string[]>) {
 
 export async function importStoreMasterCsvAction(formData: FormData) {
   const master = normalizeStoreMasterKey(formData.get("store_master"))
+  await requireCapability(masterCapability(master, "import"), "/masters")
   const rows = await readMasterCsv(formData.get("master_csv_file"))
   for (const row of rows) {
     switch (master) {

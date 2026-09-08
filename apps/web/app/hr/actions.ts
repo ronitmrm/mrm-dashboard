@@ -19,6 +19,7 @@ import * as XLSX from "xlsx"
 import { parseEmployeeAssignmentWorkbook } from "@/app/hr/employee-assignment-workbook"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
+import { masterCapability } from "@/lib/auth/master-capabilities"
 import { hrTaskCapabilities } from "@/lib/auth/task-capabilities"
 import { hrReturnPath } from "@/lib/hr-return-path"
 import { buildEmploymentLetterPdf } from "@/lib/hr/employment-letter-pdf"
@@ -64,7 +65,7 @@ function interviewAtValue(formData: FormData) {
 
 async function mutate(
   formData: FormData,
-  capability: (typeof hrTaskCapabilities)[keyof typeof hrTaskCapabilities],
+  capability: string,
   operation: (
     repository: ReturnType<typeof createRecruitmentRepository>,
     context: { actorUserId: string; organizationId: string }
@@ -107,7 +108,7 @@ async function mutate(
 export async function saveMasterAction(formData: FormData) {
   await mutate(
     formData,
-    hrTaskCapabilities.saveRecruitmentMaster,
+    masterCapability(value(formData, "kind") === "designation" ? "designation" : "department", "save"),
     (repository, context) =>
       repository.upsertMaster({
         ...context,
@@ -127,7 +128,7 @@ export async function renameRecruitmentMasterAction(formData: FormData) {
       : "department"
   await mutate(
     formData,
-    hrTaskCapabilities.renameRecruitmentMaster,
+    masterCapability(kind, "rename"),
     (repository, context) =>
       kind === "designation"
         ? repository.renameDesignationMaster({
@@ -148,7 +149,7 @@ export async function renameRecruitmentMasterAction(formData: FormData) {
 export async function deleteRecruitmentMasterAction(formData: FormData) {
   const path = hrReturnPath(formData)
   const session = await requireCapability(
-    hrTaskCapabilities.deleteRecruitmentMaster,
+    masterCapability(value(formData, "master_kind") === "designation" ? "designation" : value(formData, "master_kind") === "job_template" ? "job_templates" : "department", "delete"),
     path
   )
   const connectionString = readAuthEnvironment().connectionString
@@ -189,7 +190,7 @@ export async function deleteRecruitmentMasterAction(formData: FormData) {
 export async function saveTemplateAction(formData: FormData) {
   await mutate(
     formData,
-    hrTaskCapabilities.saveTemplate,
+    masterCapability("job_templates", "save"),
     (repository, context) =>
       repository.upsertTemplate({
         ...context,
@@ -209,7 +210,7 @@ export async function saveTemplateAction(formData: FormData) {
 }
 
 export async function savePostAction(formData: FormData) {
-  await mutate(formData, hrTaskCapabilities.savePost, (repository, context) =>
+  await mutate(formData, masterCapability("approved_posts", "create"), (repository, context) =>
     repository.upsertPost({
       ...context,
       departmentCode: value(formData, "department_code"),
@@ -222,7 +223,7 @@ export async function savePostAction(formData: FormData) {
 export async function updatePostAction(formData: FormData) {
   await mutate(
     formData,
-    hrTaskCapabilities.updatePost,
+    masterCapability("approved_posts", "update"),
     (repository, context) =>
       repository.updatePost({
         ...context,
@@ -236,7 +237,7 @@ export async function updatePostAction(formData: FormData) {
 export async function deletePostAction(formData: FormData) {
   await mutate(
     formData,
-    hrTaskCapabilities.deletePost,
+    masterCapability("approved_posts", "delete"),
     (repository, context) =>
       repository.deletePost({
         ...context,
@@ -249,7 +250,7 @@ export async function deletePostAction(formData: FormData) {
 export async function createCombinedRoleAction(formData: FormData) {
   await mutate(
     formData,
-    hrTaskCapabilities.createCombinedRole,
+    masterCapability("combined_approved_posts", "create"),
     (repository, context) =>
       repository.createCombinedRole({
         ...context,
@@ -263,7 +264,7 @@ export async function createCombinedRoleAction(formData: FormData) {
 export async function updateCombinedRoleAction(formData: FormData) {
   await mutate(
     formData,
-    hrTaskCapabilities.updateCombinedRole,
+    masterCapability("combined_approved_posts", "update"),
     (repository, context) =>
       repository.updateCombinedRole({
         ...context,
@@ -280,7 +281,7 @@ export async function updateCombinedRoleAction(formData: FormData) {
 export async function assignEmployeeAction(formData: FormData) {
   await mutate(
     formData,
-    hrTaskCapabilities.assignEmployee,
+    masterCapability("employee_assignments", "save"),
     (repository, context) =>
       repository.assignEmployee({
         ...context,
@@ -297,7 +298,7 @@ export async function assignEmployeeAction(formData: FormData) {
 export async function bulkAssignEmployeesAction(formData: FormData) {
   const path = hrReturnPath(formData)
   const session = await requireCapability(
-    hrTaskCapabilities.bulkAssignEmployees,
+    masterCapability("employee_assignments", "import"),
     path
   )
   const file = formData.get("employee_assignments_file")
@@ -387,7 +388,7 @@ export async function deleteJobAction(formData: FormData) {
 export async function saveCandidateAction(formData: FormData) {
   const returnTo = hrReturnPath(formData)
   const session = await requireCapability(
-    hrTaskCapabilities.saveCandidate,
+    masterCapability("candidates", "save"),
     returnTo
   )
   const repository = createRecruitmentRepository({
@@ -574,7 +575,7 @@ export async function completeCandidateAppointmentAction(formData: FormData) {
 export async function generateEmploymentLetterAction(formData: FormData) {
   const path = hrReturnPath(formData)
   const session = await requireCapability(
-    hrTaskCapabilities.assignEmployee,
+    masterCapability("employee_assignments", "save"),
     path
   )
   const connectionString = readAuthEnvironment().connectionString

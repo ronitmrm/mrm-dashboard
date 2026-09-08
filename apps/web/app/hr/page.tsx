@@ -20,11 +20,13 @@ import { PinDashboardMetricButton } from "@/components/dashboard/pin-dashboard-m
 
 import { RecruitmentPanel } from "@/components/hr/recruitment-panel"
 import { readAuthEnvironment } from "@/lib/auth/auth"
-import { listGrantedCapabilities } from "@/lib/auth/require-capability"
+import { listGrantedCapabilities, requireCapability } from "@/lib/auth/require-capability"
+import { hrMasterForPanel, masterCapability, masterComponentActions, masterPermissionOptions, previousMasterCapabilities, scopedMasters, supportedMasterActions } from "@/lib/auth/master-capabilities"
 import { requireHrPage } from "@/lib/auth/require-hr-page"
 import { hrTaskCapabilities } from "@/lib/auth/task-capabilities"
 import { hrMasterNavigation, hrNavigation } from "@/lib/unified-navigation"
 import { normalizeRecruitmentMasterKind } from "@/lib/recruitment-master-navigation"
+import { hrMasterControls } from "./master-access"
 
 export const dynamic = "force-dynamic"
 
@@ -51,18 +53,20 @@ export default async function HrRecruitmentPage({
   const activeItem = requestedItem ?? hrNavigation[0]
   if (!activeItem) redirect("/unauthorized")
 
-  const session = await requireHrPage(
+  const selectedMaster = hrMasterForPanel(activeItem.panelId, feedback.kind)
+  const session = selectedMaster ? await requireCapability(masterCapability(selectedMaster, "read"), activeItem.href) : await requireHrPage(
     activeItem.requiredCapability,
     activeItem.href
   )
-  const grants = await listGrantedCapabilities(
+  const rawGrants = await listGrantedCapabilities(
     session.user.id,
-    Object.values(hrTaskCapabilities)
+    [...Object.values(hrTaskCapabilities), ...masterPermissionOptions.map(({ key }) => key)]
   )
-  const canManageEmployees =
-    grants.includes(hrTaskCapabilities.assignEmployee) ||
-    grants.includes(hrTaskCapabilities.bulkAssignEmployees)
-  const canWrite = grants.some(
+  const replacedActions = new Set(scopedMasters.filter(({ main }) => main === "hr_masters").flatMap((master) => supportedMasterActions(master).filter((action) => action !== "read").flatMap((action) => previousMasterCapabilities(master, action))))
+  const grants = [...rawGrants.filter((key) => !replacedActions.has(key) && !key.startsWith("masters.")), ...(selectedMaster ? masterComponentActions(selectedMaster, rawGrants) : [])]
+  const masterControls = hrMasterControls(selectedMaster, rawGrants)
+  const canManageEmployees = masterControls.assign
+  const canWrite = selectedMaster ? masterControls.create : grants.some(
     (capability) =>
       capability !== hrTaskCapabilities.assignEmployee &&
       capability !== hrTaskCapabilities.bulkAssignEmployees
@@ -275,6 +279,9 @@ export default async function HrRecruitmentPage({
       ) : null}
 
       <RecruitmentPanel
+        masterControls={masterControls}
+        canCreateJob={grants.includes(hrTaskCapabilities.createJob)}
+        canLogCandidateEvent={grants.includes(hrTaskCapabilities.logCandidateEvent)}
         canManageEmployees={canManageEmployees}
         canWrite={canWrite}
         candidates={candidates}
@@ -287,7 +294,7 @@ export default async function HrRecruitmentPage({
         masters={masters}
         masterKind={normalizeRecruitmentMasterKind(feedback.kind)}
         masterView={
-          feedback.masterView === "dataEntry" ||
+          selectedMaster && !canWrite && !masterControls.import ? "masterTables" : feedback.masterView === "dataEntry" ||
           feedback.masterView === "masterTables"
             ? feedback.masterView
             : undefined

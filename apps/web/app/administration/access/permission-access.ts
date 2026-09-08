@@ -89,12 +89,15 @@ export function permissionAccessRows(
         label: {
           read: "View",
           save: "Add / Edit",
+          create: "Add",
+          update: "Edit",
           import: "Import",
           rename: "Rename",
           delete: "Delete",
         }[action],
         permissionKeys: [
           masterPermissionKey(master.unit, master.master, action),
+          ...(master.main === "store_masters" && action === "import" ? [masterPermissionKey(master.unit, master.master, "save")] : []),
         ],
       }))
     if (!actions.length) return []
@@ -123,6 +126,7 @@ export function permissionAccessRows(
     if (!hasRead && !hasWrite) return []
     pagePermissionKeys.add(page.readPermissionKey)
     if (page.writePermissionKey) pagePermissionKeys.add(page.writePermissionKey)
+    if (masterRows.length && page.module === "Master Data") return []
     const readPermissionKeys = hasRead ? [page.readPermissionKey] : []
     const fullPermissionKeys = [
       ...readPermissionKeys,
@@ -214,6 +218,10 @@ export function permissionAccessRows(
 
   for (const permission of permissions) {
     if (
+      (masterRows.length > 0 && (
+        /^(pricing\.masters\.|hr\.masters\.|store\.masters\.)/.test(permission.key) ||
+        ["pricing.customers.create", "pricing.customers.update", "pricing.website_products.update", "pricing.customer_default_terms.update", "hr.approved_posts.create", "hr.approved_posts.update", "hr.approved_posts.delete", "hr.combined_roles.create", "hr.combined_roles.update", "hr.candidates.save", "hr.employees.assign", "hr.employees.bulk_assign", "hr.job_templates.save"].includes(permission.key)
+      )) ||
       pagePermissionKeys.has(permission.key) ||
       permission.key.startsWith("masters.") ||
       legacyPermissionKeys.has(permission.key) ||
@@ -413,6 +421,13 @@ export function permissionKeysForActionToggle(
   if (selected) {
     const removedKeys = isView ? row.fullPermissionKeys : action.permissionKeys
     for (const key of removedKeys) next.delete(key)
+    if (!isView) {
+      for (const dependent of row.actions) {
+        if (dependent.permissionKeys.some((key) => removedKeys.includes(key))) {
+          for (const key of dependent.permissionKeys) next.delete(key)
+        }
+      }
+    }
   } else {
     for (const key of row.readPermissionKeys) next.add(key)
     for (const key of action.permissionKeys) next.add(key)

@@ -17,6 +17,7 @@ import { withPostgresRepository } from "@/lib/postgres-repository-lifecycle"
 import { authorizationRequestTelemetryForCurrentScope } from "./auth/authorization-request-telemetry"
 import { telemetryRequestId } from "./request-telemetry"
 import { productionCapabilityForTab } from "./auth/production-capabilities"
+import { productionMasterCapability } from "./auth/production-master-access"
 
 const operationalEntryTypes = new Set([
   "attendance",
@@ -182,11 +183,12 @@ export async function readPostgresEmployeeMaster(request: NextRequest) {
 export async function executePostgresOperationalEntry(
   request: NextRequest,
   entryType: string,
-  payload: Record<string, unknown>
+  payload: Record<string, unknown>,
+  masterAction: "save" | "import" = "save"
 ) {
   const plan = operationalEntryPlan(entryType, payload)
   if (!plan) return null
-  const actor = await authorizedActor(request, plan.capability)
+  const actor = await authorizedActor(request, productionMasterCapability(entryType, masterAction, payload.productionFloorCode) ?? plan.capability)
 
   if (plan.family === "workforce") {
     return withPostgresRepository(

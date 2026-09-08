@@ -9,7 +9,6 @@ import { redirect } from "next/navigation"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
-import { commercialTaskCapabilities } from "@/lib/auth/task-capabilities"
 import { externalMasterViewHref } from "@/lib/external-master-workspace"
 import { csvValue, readMasterCsv } from "@/lib/master-data-csv"
 
@@ -17,7 +16,7 @@ const websiteProductsPath = "/commercial/website-products"
 
 export async function importWebsiteProductsCsvAction(formData: FormData) {
   const session = await requireCapability(
-    commercialTaskCapabilities.updateWebsiteProduct,
+    "masters.universal.commercial_website_products.save",
     websiteProductsPath
   )
   const rows = await readMasterCsv(formData.get("master_csv_file"))
