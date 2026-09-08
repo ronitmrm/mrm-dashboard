@@ -20,6 +20,7 @@ import { requireCapability } from "@/lib/auth/require-capability"
 
 import { createBulkPriceRevisionAction } from "../revisions/actions"
 import { BulkRevisionHistory } from "../revisions/bulk-revision-history"
+import { BulkRevisionRequestStatus } from "../revisions/bulk-revision-request-status"
 
 export const dynamic = "force-dynamic"
 
@@ -144,6 +145,7 @@ export default async function ProductBulkRevisionPage({
           )}
         </CardContent>
       </SectionCard>
+      <BulkRevisionRequestStatus origin="product" />
       <BulkRevisionHistory
         origin="product"
         page={Number(params.historyPage) || 1}
