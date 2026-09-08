@@ -10,5 +10,6 @@ Use this index before changing domain behavior or implementation conventions.
 - [Access Administration](./codebase/access-administration.md): granular permission catalogue, coverage, enforcement, and exceptions.
 - [ADRs](./adr/): durable architectural decisions.
 - [Specs](./specs/): scoped delivery specifications.
+- [September performance refactor](./codebase/refactor-sept-26.md): fixed contracts, delivery slices, and verification checklist.
 
 Update glossary definitions before consumers when business semantics change. Keep agent-only working notes in `memory/`, not here.
