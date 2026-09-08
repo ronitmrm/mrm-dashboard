@@ -2,6 +2,11 @@
 
 ## Workspace tabs
 
+- Permission rows show software Page/Task names without internal URL/query
+  strings. Internal routes, capability mappings and grants are unchanged.
+  Preset help distinguishes page viewing from task actions and explains that
+  Custom is useful for selecting a subset of multiple applicable actions.
+
 - Header metrics use the full Employee Master snapshot and shared MetricSummary:
   employees with/without login and with/without at least one direct or inherited
   role. Non-employee identities are excluded, and employees without login also
