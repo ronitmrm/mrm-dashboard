@@ -9,6 +9,8 @@ import {
 import { Pool } from "pg"
 import { afterAll, beforeAll, expect, test } from "vitest"
 
+import { resetTestDatabase } from "../../../scripts/test-database-safety"
+
 import { migrateDatabase } from "./migrate"
 import { instrumentPostgresPool } from "./postgres-telemetry"
 
@@ -18,20 +20,6 @@ const connectionString =
 const pool = instrumentPostgresPool(new Pool({ connectionString }))
 const controlledLatencyGate = process.env.CONTROLLED_SEARCH_GATE === "1"
 let ownsDisposableDatabase = false
-const disposableSchemas = [
-  "audit",
-  "catalog",
-  "core",
-  "derived",
-  "identity",
-  "maintenance",
-  "manufacturing",
-  "migration",
-  "quality",
-  "recruitment",
-  "sales",
-  "workforce",
-] as const
 
 async function withControlledSearchTelemetry<Result>(
   operation: string,
@@ -188,12 +176,6 @@ function assertDisposableLocalDatabase(value: string) {
   }
 }
 
-async function resetDisposableDatabase() {
-  for (const schema of disposableSchemas) {
-    await pool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`)
-  }
-}
-
 async function expectIndexedPlanAndP95({
   expectedIndexes,
   label,
@@ -256,12 +238,12 @@ async function expectIndexedPlanAndP95({
 beforeAll(async () => {
   assertDisposableLocalDatabase(connectionString)
   ownsDisposableDatabase = true
-  await resetDisposableDatabase()
+  await resetTestDatabase(pool, connectionString)
   await migrateDatabase({ connectionString })
 })
 
 afterAll(async () => {
-  if (ownsDisposableDatabase) await resetDisposableDatabase()
+  if (ownsDisposableDatabase) await resetTestDatabase(pool, connectionString)
   await pool.end()
 })
 

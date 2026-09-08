@@ -30,11 +30,13 @@ function databaseUrl(value: string) {
   }
 }
 
-export function assertSafeTestDatabase() {
-  const url = databaseUrl(
-    process.env.TEST_DATABASE_URL ??
-      "postgresql://mrmpl:mrmpl@127.0.0.1:5434/mrmpl_test"
-  )
+const defaultTestDatabaseUrl =
+  "postgresql://mrmpl:mrmpl@127.0.0.1:5434/mrmpl_test"
+
+export function assertSafeTestDatabase(
+  connectionString = process.env.TEST_DATABASE_URL ?? defaultTestDatabaseUrl
+) {
+  const url = databaseUrl(connectionString)
   if (!/^\/mrmpl_test(?:_[a-z0-9_]+)?$/.test(url.pathname)) {
     throw new Error("Unsafe test database: use a dedicated mrmpl_test database")
   }
@@ -81,5 +83,45 @@ export function assertSafeTestDatabase() {
         )
       }
     }
+  }
+}
+
+type TestDatabaseClient = {
+  query<Row extends Record<string, unknown> = Record<string, unknown>>(
+    sql: string
+  ): Promise<{ rows: Row[] }>
+  release(): void
+}
+
+type TestDatabasePool = {
+  connect(): Promise<TestDatabaseClient>
+}
+
+export async function resetTestDatabase(
+  pool: TestDatabasePool,
+  connectionString = process.env.TEST_DATABASE_URL ?? defaultTestDatabaseUrl
+) {
+  assertSafeTestDatabase(connectionString)
+  const client = await pool.connect()
+
+  try {
+    await client.query("BEGIN")
+    const schemas = await client.query<{ schema_name: string }>(`
+      SELECT nspname AS schema_name
+      FROM pg_namespace
+      WHERE nspname NOT LIKE 'pg\\_%' ESCAPE '\\'
+        AND nspname NOT IN ('information_schema', 'public')
+      ORDER BY nspname
+    `)
+    for (const { schema_name: schema } of schemas.rows) {
+      const identifier = `"${schema.replaceAll('"', '""')}"`
+      await client.query(`DROP SCHEMA ${identifier} CASCADE`)
+    }
+    await client.query("COMMIT")
+  } catch (error) {
+    await client.query("ROLLBACK")
+    throw error
+  } finally {
+    client.release()
   }
 }

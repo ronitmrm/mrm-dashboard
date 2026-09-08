@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto"
 import { Client, Pool, type Notification } from "pg"
 import { afterAll, beforeAll, expect, test } from "vitest"
 
+import { resetTestDatabase } from "../../../scripts/test-database-safety"
+
 import publishedChecksums from "../migrations/published-checksums.json"
 
 import { createCatalogMasterRepository } from "./catalog-masters"
@@ -292,15 +294,9 @@ async function representativeUpgradeFingerprint() {
   return result.rows[0]!.fingerprint
 }
 
-async function resetDisposableDatabase() {
-  for (const schema of expectedSchemas) {
-    await pool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`)
-  }
-}
-
 beforeAll(async () => {
   assertDisposableLocalDatabase(connectionString)
-  await resetDisposableDatabase()
+  await resetTestDatabase(pool, connectionString)
 })
 
 afterAll(async () => {
@@ -502,7 +498,7 @@ test("a representative managed 0038 database upgrades with runtime access and ca
 test("dashboard floor migration queues one refresh per organization", async () => {
   const organizationId = "00000000-0000-4000-8000-000000000059"
 
-  await resetDisposableDatabase()
+  await resetTestDatabase(pool, connectionString)
   await migrateDatabase({
     connectionString,
     through: "0058_dashboard_route_master_projection.sql",
@@ -565,7 +561,7 @@ test("dashboard floor migration queues one refresh per organization", async () =
 }, 20_000)
 
 test("an empty database migrates into the MRMPL bounded contexts", async () => {
-  await resetDisposableDatabase()
+  await resetTestDatabase(pool, connectionString)
   await migrateDatabase({ connectionString })
 
   const result = await pool.query<{ schema_name: string }>(
