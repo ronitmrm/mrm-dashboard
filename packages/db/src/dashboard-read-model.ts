@@ -33,12 +33,15 @@ type DataEntrySourceRow = SourceRow & {
   inferred_entry_type: string
 }
 
-type GroupedSourceRow = SourceRow & {
-  available: number
+type SelectedSourceRow = SourceRow & {
   entry_type: string | null
   production_floor_code: ProductionFloorCode
   source_kind: "correction" | "data_entry" | "physical"
   source_group: string
+}
+
+type GroupedSourceRow = SelectedSourceRow & {
+  available: number
 }
 
 type PreviousPlanningRow = {
@@ -63,6 +66,19 @@ export type CanonicalDashboardSource = {
   sourceCoverageByFloor: SourceCoverageByFloor
   trainingRecords: JsonRecord[]
 }
+
+export type CorrectionCandidateSource = Pick<
+  CanonicalDashboardSource,
+  | "allDataEntries"
+  | "corrections"
+  | "routeSelections"
+  | "plannerPriorities"
+  | "machineConstraints"
+  | "planOverrides"
+  | "routeChanges"
+  | "dispatchApprovals"
+  | "setupCompletions"
+>
 
 const legacyEntryTypes = [
   "machine_master",
@@ -137,7 +153,7 @@ const dataEntrySourceBudgets: Record<string, number> = {
   work_order: 5000,
 }
 
-const physicalSourceBudgets: Record<string, number> = {
+const physicalSourceBudgets = {
   attendanceRecords: 5000,
   dispatchApprovals: 2000,
   machineConstraints: 2000,
@@ -148,7 +164,17 @@ const physicalSourceBudgets: Record<string, number> = {
   routeSelections: 2500,
   setupCompletions: 5000,
   trainingRecords: 2500,
-}
+} satisfies Record<string, number>
+
+const correctionPhysicalSourceBudgets = {
+  dispatchApprovals: physicalSourceBudgets.dispatchApprovals,
+  machineConstraints: physicalSourceBudgets.machineConstraints,
+  planOverrides: physicalSourceBudgets.planOverrides,
+  plannerPriorities: physicalSourceBudgets.plannerPriorities,
+  routeChanges: physicalSourceBudgets.routeChanges,
+  routeSelections: physicalSourceBudgets.routeSelections,
+  setupCompletions: physicalSourceBudgets.setupCompletions,
+} satisfies Record<string, number>
 
 function floorSourceBudgets(budgets: Record<string, number>) {
   return productionFloors.flatMap((floor) =>
@@ -343,6 +369,44 @@ function jsonRecord(value: unknown): JsonRecord {
     : {}
 }
 
+function mapSelectedSourceRows(rows: SelectedSourceRow[]) {
+  const byKind = <Kind extends SelectedSourceRow["source_kind"]>(kind: Kind) =>
+    rows
+      .filter((row) => row.source_kind === kind)
+      .sort((left, right) => {
+        const time = timestamp(left.changed_at).localeCompare(
+          timestamp(right.changed_at)
+        )
+        return time || left.source_id.localeCompare(right.source_id)
+      })
+  const dataEntryRows = byKind("data_entry")
+  const physicalRows = byKind("physical")
+  const correctionRows = byKind("correction")
+  const physicalGroups = new Map<string, JsonRecord[]>()
+  for (const row of physicalRows) {
+    const group = physicalGroups.get(row.source_group) ?? []
+    group.push(sourceRecord(row))
+    physicalGroups.set(row.source_group, group)
+  }
+
+  return {
+    allDataEntries: dataEntryRows
+      .map((row) =>
+        dataEntryRecord({
+          ...row,
+          inferred_entry_type: row.entry_type ?? "",
+        })
+      )
+      .filter(
+        (row) =>
+          typeof row.entryType === "string" &&
+          snapshotEntryTypes.has(row.entryType)
+      ),
+    corrections: correctionRows.map(sourceRecord),
+    physicalGroups,
+  }
+}
+
 export async function readCanonicalDashboardSource(
   client: DashboardQueryClient,
   organizationId: string
@@ -352,12 +416,19 @@ export async function readCanonicalDashboardSource(
       WITH data_entries AS (
         SELECT source.source_id, source.source_payload, source.changed_at,
           source.source_kind, source.source_group, source.entry_type,
-          budget.floor_code AS production_floor_code, source.available
+          budget.floor_code AS production_floor_code, counts.available
         FROM jsonb_to_recordset($2::jsonb)
           budget(category text, floor_code text, row_limit integer)
         CROSS JOIN LATERAL (
+          SELECT count(*)::integer AS available
+          FROM derived.dashboard_source_records
+          WHERE organization_id = $1 AND source_kind = 'data_entry'
+            AND entry_type = budget.category
+            AND production_floor_code = budget.floor_code
+        ) counts
+        CROSS JOIN LATERAL (
           SELECT source_id, source_payload, changed_at, source_kind,
-            source_group, entry_type, (count(*) OVER ())::integer AS available
+            source_group, entry_type
           FROM derived.dashboard_source_records
           WHERE organization_id = $1 AND source_kind = 'data_entry'
             AND entry_type = budget.category
@@ -368,12 +439,19 @@ export async function readCanonicalDashboardSource(
       ), physical_rows AS (
         SELECT source.source_id, source.source_payload, source.changed_at,
           source.source_kind, source.source_group, source.entry_type,
-          budget.floor_code AS production_floor_code, source.available
+          budget.floor_code AS production_floor_code, counts.available
         FROM jsonb_to_recordset($3::jsonb)
           budget(category text, floor_code text, row_limit integer)
         CROSS JOIN LATERAL (
+          SELECT count(*)::integer AS available
+          FROM derived.dashboard_source_records
+          WHERE organization_id = $1 AND source_kind = 'physical'
+            AND source_group = budget.category
+            AND production_floor_code = budget.floor_code
+        ) counts
+        CROSS JOIN LATERAL (
           SELECT source_id, source_payload, changed_at, source_kind,
-            source_group, entry_type, (count(*) OVER ())::integer AS available
+            source_group, entry_type
           FROM derived.dashboard_source_records
           WHERE organization_id = $1 AND source_kind = 'physical'
             AND source_group = budget.category
@@ -384,11 +462,17 @@ export async function readCanonicalDashboardSource(
       ), correction_rows AS (
         SELECT source.source_id, source.source_payload, source.changed_at,
           source.source_kind, source.source_group, source.entry_type,
-          floor.code AS production_floor_code, source.available
+          floor.code AS production_floor_code, counts.available
         FROM jsonb_array_elements_text($4::jsonb) floor(code)
         CROSS JOIN LATERAL (
+          SELECT count(*)::integer AS available
+          FROM derived.dashboard_source_records
+          WHERE organization_id = $1 AND source_kind = 'correction'
+            AND production_floor_code = floor.code
+        ) counts
+        CROSS JOIN LATERAL (
           SELECT source_id, source_payload, changed_at, source_kind,
-            source_group, entry_type, (count(*) OVER ())::integer AS available
+            source_group, entry_type
           FROM derived.dashboard_source_records
           WHERE organization_id = $1 AND source_kind = 'correction'
             AND production_floor_code = floor.code
@@ -408,43 +492,13 @@ export async function readCanonicalDashboardSource(
     ]
   )
 
-  const byKind = <Kind extends GroupedSourceRow["source_kind"]>(kind: Kind) =>
-    result.rows
-      .filter((row) => row.source_kind === kind)
-      .sort((left, right) => {
-        const time = timestamp(left.changed_at).localeCompare(
-          timestamp(right.changed_at)
-        )
-        return time || left.source_id.localeCompare(right.source_id)
-      })
-  const dataEntryRows = byKind("data_entry")
-  const physicalRows = byKind("physical")
-  const correctionRows = byKind("correction")
+  const selected = mapSelectedSourceRows(result.rows)
   const coverageByFloor = sourceCoverageByFloor(result.rows)
-
-  const grouped = new Map<string, JsonRecord[]>()
-  for (const row of physicalRows) {
-    const rows = grouped.get(row.source_group) ?? []
-    rows.push(sourceRecord(row))
-    grouped.set(row.source_group, rows)
-  }
-
-  const group = (name: string) => grouped.get(name) ?? []
+  const group = (name: string) => selected.physicalGroups.get(name) ?? []
   return {
-    allDataEntries: dataEntryRows
-      .map((row) =>
-        dataEntryRecord({
-          ...row,
-          inferred_entry_type: row.entry_type ?? "",
-        })
-      )
-      .filter(
-        (row) =>
-          typeof row.entryType === "string" &&
-          snapshotEntryTypes.has(row.entryType)
-      ),
+    allDataEntries: selected.allDataEntries,
     attendanceRecords: group("attendanceRecords"),
-    corrections: correctionRows.map(sourceRecord),
+    corrections: selected.corrections,
     dispatchApprovals: group("dispatchApprovals"),
     machineConstraints: group("machineConstraints"),
     planOverrides: group("planOverrides"),
@@ -456,6 +510,85 @@ export async function readCanonicalDashboardSource(
     sourceCoverage: coverageByFloor[defaultProductionFloorCode],
     sourceCoverageByFloor: coverageByFloor,
     trainingRecords: group("trainingRecords"),
+  }
+}
+
+export async function readCorrectionCandidateSource(
+  client: DashboardQueryClient,
+  organizationId: string
+): Promise<CorrectionCandidateSource> {
+  const result = await client.query<SelectedSourceRow>(
+    `
+      WITH data_entries AS (
+        SELECT source.source_id, source.source_payload, source.changed_at,
+          source.source_kind, source.source_group, source.entry_type,
+          budget.floor_code AS production_floor_code
+        FROM jsonb_to_recordset($2::jsonb)
+          budget(category text, floor_code text, row_limit integer)
+        CROSS JOIN LATERAL (
+          SELECT source_id, source_payload, changed_at, source_kind,
+            source_group, entry_type
+          FROM derived.dashboard_source_records
+          WHERE organization_id = $1 AND source_kind = 'data_entry'
+            AND entry_type = budget.category
+            AND production_floor_code = budget.floor_code
+          ORDER BY changed_at DESC, source_id DESC
+          LIMIT budget.row_limit
+        ) source
+      ), physical_rows AS (
+        SELECT source.source_id, source.source_payload, source.changed_at,
+          source.source_kind, source.source_group, source.entry_type,
+          budget.floor_code AS production_floor_code
+        FROM jsonb_to_recordset($3::jsonb)
+          budget(category text, floor_code text, row_limit integer)
+        CROSS JOIN LATERAL (
+          SELECT source_id, source_payload, changed_at, source_kind,
+            source_group, entry_type
+          FROM derived.dashboard_source_records
+          WHERE organization_id = $1 AND source_kind = 'physical'
+            AND source_group = budget.category
+            AND production_floor_code = budget.floor_code
+          ORDER BY changed_at DESC, source_id DESC
+          LIMIT budget.row_limit
+        ) source
+      ), correction_rows AS (
+        SELECT source.source_id, source.source_payload, source.changed_at,
+          source.source_kind, source.source_group, source.entry_type,
+          floor.code AS production_floor_code
+        FROM jsonb_array_elements_text($4::jsonb) floor(code)
+        CROSS JOIN LATERAL (
+          SELECT source_id, source_payload, changed_at, source_kind,
+            source_group, entry_type
+          FROM derived.dashboard_source_records
+          WHERE organization_id = $1 AND source_kind = 'correction'
+            AND production_floor_code = floor.code
+          ORDER BY changed_at DESC, source_id DESC
+          LIMIT 5000
+        ) source
+      )
+      SELECT * FROM data_entries
+      UNION ALL SELECT * FROM physical_rows
+      UNION ALL SELECT * FROM correction_rows
+    `,
+    [
+      organizationId,
+      JSON.stringify(floorSourceBudgets(dataEntrySourceBudgets)),
+      JSON.stringify(floorSourceBudgets(correctionPhysicalSourceBudgets)),
+      JSON.stringify(productionFloors.map((floor) => floor.code)),
+    ]
+  )
+  const selected = mapSelectedSourceRows(result.rows)
+  const group = (name: string) => selected.physicalGroups.get(name) ?? []
+  return {
+    allDataEntries: selected.allDataEntries,
+    corrections: selected.corrections,
+    dispatchApprovals: group("dispatchApprovals"),
+    machineConstraints: group("machineConstraints"),
+    planOverrides: group("planOverrides"),
+    plannerPriorities: group("plannerPriorities"),
+    routeChanges: group("routeChanges"),
+    routeSelections: group("routeSelections"),
+    setupCompletions: group("setupCompletions"),
   }
 }
 

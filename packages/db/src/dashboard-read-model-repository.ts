@@ -9,7 +9,10 @@ import {
 } from "./dashboard-corrections"
 import { normalizeSourceCoverage } from "./dashboard-coverage"
 import { queueDashboardRefresh } from "./dashboard-refresh-queue"
-import { readCanonicalDashboardSource } from "./dashboard-read-model"
+import {
+  readCorrectionCandidateSource,
+  type CorrectionCandidateSource,
+} from "./dashboard-read-model"
 import {
   repositoryPool,
   withTransaction as transaction,
@@ -73,9 +76,7 @@ function correctionCandidate(table: string, row: JsonRecord) {
   }
 }
 
-function activeCorrectionCandidates(
-  source: Awaited<ReturnType<typeof readCanonicalDashboardSource>>
-) {
+function activeCorrectionCandidates(source: CorrectionCandidateSource) {
   const corrections = source.corrections as CorrectionTargetRow[]
   const directTargets = activeCorrectionTargetKeys(corrections)
   const dataEntryTargets = dataEntryCorrectionTargetsWithWorkflowCascade(
@@ -391,7 +392,7 @@ export function createDashboardReadModelRepository(options: RepositoryPoolOption
           "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
           [`${input.organizationId}:${correctionKind}:${recordId}`]
         )
-        const source = await readCanonicalDashboardSource(
+        const source = await readCorrectionCandidateSource(
           client,
           input.organizationId
         )
@@ -441,7 +442,7 @@ export function createDashboardReadModelRepository(options: RepositoryPoolOption
     async correctionCandidates(organizationId: string, limit = 200) {
       const client = await pool.connect()
       try {
-        const source = await readCanonicalDashboardSource(
+        const source = await readCorrectionCandidateSource(
           client,
           organizationId
         )
