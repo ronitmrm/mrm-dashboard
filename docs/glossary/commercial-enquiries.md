@@ -218,7 +218,10 @@ the changed Product is handed to Customer Parameter Costing, where the staged
 Product values remain unpublished. Customer Parameter Costing shows only the
 affected active root prices. Each price requires one decision: revise it from the
 new Product cost, or keep the current price by deriving the balancing Customer
-profit. Product-origin work never enters Customer Bulk Revision. Final revision
+profit. A shared decision may be recorded for selected pending prices; Select All
+includes every pending price matching the current filters across all pages.
+Bulk recording is atomic and never overwrites an existing decision or publishes
+prices. Product-origin work never enters Customer Bulk Revision. Final revision
 completion atomically publishes the Product inputs, re-derives that Product and
 every canonical Package or Assembly ancestor in child-before-parent order, and
 creates the immutable replacement Quote revisions. Product selection never

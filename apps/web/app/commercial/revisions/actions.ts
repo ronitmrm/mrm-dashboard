@@ -321,6 +321,50 @@ export async function applyProductBulkRevisionPriceDecisionAction(
   revalidatePath(`${customerCostingPath}/revisions/${bulkPriceRevisionId}`)
 }
 
+export async function applyProductBulkRevisionPriceDecisionsAction(
+  formData: FormData
+) {
+  const bulkPriceRevisionId = requiredText(formData, "bulk_price_revision_id")
+  const decision = requiredText(formData, "decision")
+  if (decision !== "Keep Price Same" && decision !== "Revise Price") {
+    return {
+      success: false as const,
+      error: "Choose Revise Price or Keep Price Same.",
+    }
+  }
+  const result = await withRevisions(
+    async (repository, actorUserId) => {
+      try {
+        const recorded =
+          await repository.applyProductBulkRevisionPriceDecisions({
+            actorUserId,
+            bulkPriceRevisionId,
+            decision,
+            notes: optionalText(formData, "notes"),
+            sourceQuoteItemIds: selectedValues(
+              formData,
+              "source_quote_item_ids"
+            ),
+          })
+        return { success: true as const, recordedCount: recorded.recordedCount }
+      } catch (error) {
+        return {
+          success: false as const,
+          error:
+            error instanceof Error
+              ? error.message
+              : "Unable to record decisions.",
+        }
+      }
+    },
+    commercialTaskCapabilities.stageBulkPriceRevision,
+    customerCostingPath
+  )
+  revalidatePath(customerCostingPath)
+  revalidatePath(`${customerCostingPath}/revisions/${bulkPriceRevisionId}`)
+  return result
+}
+
 export async function createEngineeringChangeNoteAction(formData: FormData) {
   const created = await withRevisions(
     (repository, actorUserId) =>
@@ -366,7 +410,9 @@ export async function completeEngineeringChangeDesignAction(
     drawingRequirement === "Required" &&
     !drawingFileId
   ) {
-    throw new Error("A drawing file is required for a Required drawing revision.")
+    throw new Error(
+      "A drawing file is required for a Required drawing revision."
+    )
   }
   const designDetails = {
     bomLines,
