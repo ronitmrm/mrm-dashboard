@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { masterPermissionOptions } from "../../../lib/auth/master-capabilities"
 
 import {
   configuredPermissionCount,
@@ -10,6 +11,30 @@ import {
   permissionKeysForSelections,
   permissionSelectionsForKeys,
 } from "./permission-access"
+
+it("separates Universal masters and keeps CNC Tooling grants out of other units", () => {
+  const rows = permissionAccessRows(masterPermissionOptions)
+  expect(rows).toHaveLength(78)
+  const tooling = rows.find((row) => row.id === "master:cnc:tooling")!
+  const grants = permissionKeysForSelections(rows, { [tooling.id]: "full" })
+  expect(permissionAccessLevelForKeys(tooling, grants)).toBe("full")
+  for (const id of [
+    "master:forging:tooling",
+    "master:cnc:setup_checklist_master",
+    "master:universal:department",
+    "master:universal:designation",
+  ]) {
+    expect(
+      permissionAccessLevelForKeys(rows.find((row) => row.id === id)!, grants)
+    ).toBe("none")
+  }
+  expect(
+    permissionAccessLevelForKeys(
+      tooling,
+      permissionKeysForPreset(tooling, grants, "none")
+    )
+  ).toBe("none")
+})
 
 it("counts configured pages consistently when pages share a saved capability", () => {
   const rows = permissionAccessRows([

@@ -226,7 +226,7 @@ const universalMasterDefinitions = [
   },
 ] as const satisfies readonly MasterDefinition[]
 
-const masterDefinitions: readonly MasterDefinition[] = [
+export const masterDefinitions: readonly MasterDefinition[] = [
   ...unitMasterDefinitions,
   ...universalMasterDefinitions,
 ]

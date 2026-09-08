@@ -102,6 +102,28 @@ disable repeat deletion and dismissal. Success refreshes the originating tab.
 
 ## Architecture
 
+### Master separation preparation (2026-09-08)
+
+`lib/auth/master-capabilities.ts` derives independent master-and-scope permission
+options from the software master catalogue. The permission selector can render
+these as individual rows when their keys exist in the persisted registry. This
+is preparatory code: no registry migration or server enforcement switch has
+been applied, so current roles still use the existing permission model.
+
+Do not activate the catalogue until reads, mutations, imports, exports and
+record-scope checks have been migrated together. New master keys must not
+implicitly grant shared legacy permissions. Existing role grants and deny
+overrides need an explicit, tested migration that does not broaden access.
+
+The UI places Setup Checklist, Maintenance Checklist and Maintenance Master
+under units, but their repositories currently identify definitions without a
+production floor (`quality.ts` and `maintenance.ts`). Their shared stored-record
+scope must be resolved before promising independent unit editing. The candidate
+catalogue has 78 entries; this count depends on that scope decision.
+
+The No Access preset removes all keys owned by its row. It must not fall through
+to the View Only preset.
+
 Access Administration derives its item-level inventory from the typed page
 catalogue in `apps/web/lib/auth/page-access-catalog.ts`, typed task catalogues
 in `apps/web/lib/auth/task-capabilities.ts` and
