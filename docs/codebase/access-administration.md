@@ -104,6 +104,11 @@ in `apps/web/lib/auth/task-capabilities.ts` and
 permission registry in `identity.permissions`. Display labels remain separate
 from stable permission keys.
 
+Master task labels identify Commercial / Pricing or the affected HR records.
+HR Add and Rename cover departments and designations; HR Delete also covers
+job templates. These are shared task grants across the named master types,
+not independent grants per master page. Labels do not change permission scope.
+
 `permissionAccessRows()` reconciles those sources into the five visible
 columns: Main Module, Sub Module, Type, Page / Task, and Access. Each row owns
 only its own action keys. The Access chip derives No Access, View Only, Full
