@@ -44,6 +44,9 @@ existing dashboard cards; do not duplicate them.
 Filters persist in browser storage. Pass a descriptive `filterStorageKey` for important or conditionally mounted tables. Otherwise the table derives a page-scoped key. Keep `filterMode="external"` only when a feature's shared table adapter owns filtering and persistence.
 
 Multi-row selection tables must expose **Select All (matching count)**. Use
+the top-left toolbar position above the Select column for the selection action;
+keep **Clear All Filters** at the table's top-right edge. Keep these controls
+outside the horizontal scrolling area so wide tables cannot hide them. Use
 `filteredSelection.checkboxName` for native row checkboxes and provide
 `filteredSelection.onSelect` when React owns their selection state. Disabled
 and filtered-out rows are excluded. External filter adapters must select from
