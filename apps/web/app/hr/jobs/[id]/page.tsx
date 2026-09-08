@@ -32,7 +32,7 @@ import { InterviewOutcomeForm } from "@/components/hr/interview-outcome-form"
 import { InterviewRoundEditDialog } from "@/components/hr/interview-round-edit-dialog"
 import { JobInterviewScheduleForm } from "@/components/hr/interview-schedule-form"
 import { CandidateApplicationActions } from "@/components/hr/candidate-application-actions"
-import { CandidateOfferLetterRegister } from "@/components/hr/candidate-offer-letter-register"
+import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
 import { JobLifecycleActions } from "@/components/hr/job-lifecycle-actions"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { formatIstDateTime as formatDateTime } from "@/lib/date-time"
@@ -263,6 +263,9 @@ export default async function JobWorkspacePage({
               <TableHeader>
                 <TableRow>
                   <TableHead>Candidate</TableHead>
+                  {canViewOfferLetters ? (
+                    <TableHead>Offer Letter</TableHead>
+                  ) : null}
                   <TableHead>Contact</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Next Interview</TableHead>
@@ -289,6 +292,32 @@ export default async function JobWorkspacePage({
                           {application.currentCompany ?? "No Current Company"}
                         </p>
                       </TableCell>
+                      {canViewOfferLetters ? (
+                        <TableCell>
+                          {offerLetters
+                            .filter(
+                              (letter) =>
+                                letter.applicationId === application.id &&
+                                letter.fileAvailable
+                            )
+                            .map((letter) => (
+                              <Button
+                                asChild
+                                size="sm"
+                                variant="outline"
+                                key={letter.id}
+                              >
+                                <AttachmentViewerLink
+                                  fileName={`${letter.referenceNumber}-offer-letter.pdf`}
+                                  href={`/hr/employment-letters/${letter.id}/download`}
+                                  mediaType="application/pdf"
+                                >
+                                  {letter.referenceNumber}
+                                </AttachmentViewerLink>
+                              </Button>
+                            ))}
+                        </TableCell>
+                      ) : null}
                       <TableCell>
                         <p>{application.candidatePhone}</p>
                         <p className="text-xs text-muted-foreground">
@@ -351,7 +380,9 @@ export default async function JobWorkspacePage({
                   <TableRow>
                     <TableCell
                       className="py-10 text-center text-muted-foreground"
-                      colSpan={canWrite ? 11 : 10}
+                      colSpan={
+                        10 + Number(canWrite) + Number(canViewOfferLetters)
+                      }
                     >
                       Search And Assign The First Candidate To This Job.
                     </TableCell>
@@ -440,9 +471,6 @@ export default async function JobWorkspacePage({
           </div>
         </CardContent>
       </SectionCard>
-      {canViewOfferLetters ? (
-        <CandidateOfferLetterRegister context="job" letters={offerLetters} />
-      ) : null}
     </div>
   )
 }
