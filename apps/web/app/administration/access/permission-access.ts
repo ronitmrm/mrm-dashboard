@@ -1,4 +1,9 @@
 import { productionFloors } from "@workspace/db/production-floors"
+import {
+  masterPermissionKey,
+  scopedMasters,
+  supportedMasterActions,
+} from "../../../lib/auth/master-capabilities"
 
 import {
   legacyPermissionKeys,
@@ -73,6 +78,43 @@ export function permissionAccessRows(
 ): PermissionAccessRow[] {
   const permissionKeys = new Set(permissions.map(({ key }) => key))
   const pagePermissionKeys = new Set<string>()
+  const masterRows: PermissionAccessRow[] = scopedMasters.flatMap((master) => {
+    const actions = supportedMasterActions(master)
+      .filter((action) =>
+        permissionKeys.has(
+          masterPermissionKey(master.unit, master.master, action)
+        )
+      )
+      .map((action) => ({
+        label: {
+          read: "View",
+          save: "Add / Edit",
+          import: "Import",
+          rename: "Rename",
+          delete: "Delete",
+        }[action],
+        permissionKeys: [
+          masterPermissionKey(master.unit, master.master, action),
+        ],
+      }))
+    if (!actions.length) return []
+    return [
+      {
+        id: `master:${master.unit}:${master.master}`,
+        label: master.label,
+        module: "Master Data",
+        submodule: `${master.scopeLabel} / ${master.category}`,
+        kind: "page",
+        href: null,
+        actions,
+        readPermissionKeys: [
+          masterPermissionKey(master.unit, master.master, "read"),
+        ],
+        fullPermissionKeys: actions.flatMap((action) => action.permissionKeys),
+        supportedLevels: ["none", "view", "full", "custom"],
+      },
+    ]
+  })
   const pageRows = pageAccessCatalog.flatMap((page) => {
     const hasRead = permissionKeys.has(page.readPermissionKey)
     const hasWrite = page.writePermissionKey
@@ -173,6 +215,7 @@ export function permissionAccessRows(
   for (const permission of permissions) {
     if (
       pagePermissionKeys.has(permission.key) ||
+      permission.key.startsWith("masters.") ||
       legacyPermissionKeys.has(permission.key) ||
       floorTaskPermissionKeys.has(permission.key) ||
       productionFloorLegacyTaskCapabilities.has(permission.key)
@@ -227,7 +270,7 @@ export function permissionAccessRows(
       supportedLevels,
     }
   })
-  return [...pageRows, ...floorTaskRows, ...taskRows].sort(
+  return [...masterRows, ...pageRows, ...floorTaskRows, ...taskRows].sort(
     (left, right) =>
       left.module.localeCompare(right.module) ||
       left.submodule.localeCompare(right.submodule) ||
@@ -348,7 +391,11 @@ export function permissionKeysForPreset(
   if (level === "custom") return [...next].sort()
   for (const key of row.fullPermissionKeys) next.delete(key)
   const granted =
-    level === "full" ? row.fullPermissionKeys : row.readPermissionKeys
+    level === "full"
+      ? row.fullPermissionKeys
+      : level === "view"
+        ? row.readPermissionKeys
+        : []
   for (const key of granted) next.add(key)
   return [...next].sort()
 }
