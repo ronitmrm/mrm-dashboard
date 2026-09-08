@@ -2091,6 +2091,111 @@ export function createCommercialRevisionsRepository(
 ) {
   const { close, pool } = repositoryPool(options)
 
+  async function recordProductPriceDecisions(input: {
+    actorUserId?: string | null
+    bulkPriceRevisionId: string
+    decision: "Keep Price Same" | "Revise Price"
+    notes?: string | null
+    sourceQuoteItemIds: string[]
+  }) {
+    const ids = [...new Set(input.sourceQuoteItemIds)]
+    if (!ids.length) throw new Error("Select at least one pending price.")
+    if (ids.length > bulkRevisionTableLimit) throw new Error("Too many selected prices.")
+    if (input.decision !== "Keep Price Same" && input.decision !== "Revise Price") {
+      throw new Error("Choose Revise Price or Keep Price Same.")
+    }
+    return transaction(pool, async (client) => {
+      const revision = await client.query<{ organization_id: string; status: string }>(
+        `SELECT organization_id, status FROM sales.bulk_price_revisions
+         WHERE id = $1 AND revision_route = 'Product Parameter Bulk Revision' FOR UPDATE`,
+        [input.bulkPriceRevisionId]
+      )
+      const row = revision.rows[0]
+      if (!row || row.status !== "Pending Customer Costing") {
+        throw new Error("Pending Product revision Customer Costing was not found.")
+      }
+      const prepared = await preparedProductRevision(client, input.bulkPriceRevisionId)
+      const affected = new Set(prepared.rootQuoteItemIds)
+      if (ids.some((id) => !affected.has(id))) {
+        throw new Error("A selected price is outside the Product revision affected set.")
+      }
+      const existing = await client.query(
+        `SELECT id FROM sales.bulk_price_revision_changes
+         WHERE bulk_price_revision_id = $1 AND prior_quote_item_id = ANY($2::uuid[])
+           AND field_name = $3 LIMIT 1`,
+        [input.bulkPriceRevisionId, ids, productBulkPriceDecisionField]
+      )
+      if (existing.rows.length) {
+        throw new Error("A selected affected price already has a decision. Refresh and select the remaining prices.")
+      }
+      const preview = await preparedProductRevisionPreview(client, input.bulkPriceRevisionId, ids)
+      const decisions = ids.map((id) => {
+        const source = preview.graph.quotesById.get(id)
+        if (!source) throw new Error("An affected price was not found.")
+        const oldPrice = asNumber(source.approved_price_usd)
+        const revised = previewPreparedProductRevisionPrice(
+          preview, id, input.decision === "Keep Price Same" ? oldPrice : undefined
+        )
+        return {
+          quote_id: id,
+          old_price: oldPrice,
+          new_price: revised.newPrice,
+          new_profit: revised.newProfitPercent,
+          stage_group_id: randomUUID(),
+          source_id: randomUUID(),
+          selection: [id],
+          preview: {
+            newPrice: revised.newPrice,
+            newProfitPercent: revised.newProfitPercent,
+            oldPrice,
+            oldProfitPercent: asNumber(source.profit_percent),
+            quoteItemId: id,
+          },
+          payload: {
+            customerDecision: input.decision,
+            sourceQuoteItemId: id,
+            targetProfitPercent: revised.newProfitPercent,
+          },
+        }
+      })
+      await client.query(
+        `INSERT INTO sales.bulk_price_revision_changes (
+           organization_id, bulk_price_revision_id, prior_quote_item_id,
+           old_price, new_price, field_name, field_label, new_value,
+           selection_json, selected_count, skipped_count, stage_group_id,
+           preview_json, notes, created_by_user_id, source_system,
+           source_table, source_id, source_payload
+         )
+         SELECT $1, $2, entry.quote_id, entry.old_price, entry.new_price,
+           $3, 'Customer Price Decision', entry.new_profit, entry.selection,
+           1, 0, entry.stage_group_id, entry.preview, $4, $5, 'mrm-dashboard',
+           'bulk_price_revision_changes', entry.source_id, entry.payload
+         FROM jsonb_to_recordset($6::jsonb) AS entry(
+           quote_id uuid, old_price numeric, new_price numeric, new_profit numeric,
+           stage_group_id uuid, source_id text, selection jsonb, preview jsonb, payload jsonb
+         )`,
+        [row.organization_id, input.bulkPriceRevisionId, productBulkPriceDecisionField,
+          input.notes ?? null, input.actorUserId ?? null, JSON.stringify(decisions)]
+      )
+      await writeAuditEvent(client, {
+        actorUserId: input.actorUserId,
+        eventType: "bulk_price_revision.customer_price_decided",
+        metadata: ids.length === 1
+          ? { decision: input.decision, sourceQuoteItemId: ids[0] }
+          : { decision: input.decision, sourceQuoteItemIds: ids, recordedCount: ids.length },
+        organizationId: row.organization_id,
+        targetId: input.bulkPriceRevisionId,
+        targetTable: "bulk_price_revisions",
+      })
+      return decisions.map((entry) => ({
+        decision: input.decision,
+        newPriceUsd: entry.new_price,
+        newProfitPercent: entry.new_profit,
+        sourceQuoteItemId: entry.quote_id,
+      }))
+    })
+  }
+
   return {
     close,
 
@@ -2913,125 +3018,22 @@ export function createCommercialRevisionsRepository(
       notes?: string | null
       sourceQuoteItemId: string
     }) {
-      return transaction(pool, async (client) => {
-        const revision = await client.query<{
-          organization_id: string
-          status: string
-        }>(
-          `
-            SELECT organization_id, status
-            FROM sales.bulk_price_revisions
-            WHERE id = $1
-              AND revision_route = 'Product Parameter Bulk Revision'
-            FOR UPDATE
-          `,
-          [input.bulkPriceRevisionId]
-        )
-        const row = revision.rows[0]
-        if (!row || row.status !== "Pending Customer Costing") {
-          throw new Error(
-            "Pending Product revision Customer Costing was not found."
-          )
-        }
-        const prepared = await preparedProductRevision(
-          client,
-          input.bulkPriceRevisionId
-        )
-        if (!prepared.rootQuoteItemIds.includes(input.sourceQuoteItemId)) {
-          throw new Error(
-            "This price is outside the Product revision affected set."
-          )
-        }
-        const existing = await client.query(
-          `
-            SELECT id
-            FROM sales.bulk_price_revision_changes
-            WHERE bulk_price_revision_id = $1
-              AND prior_quote_item_id = $2
-              AND field_name = $3
-          `,
-          [
-            input.bulkPriceRevisionId,
-            input.sourceQuoteItemId,
-            productBulkPriceDecisionField,
-          ]
-        )
-        if (existing.rows[0]) {
-          throw new Error("This affected price already has a decision.")
-        }
-        const source = await getQuote(client, input.sourceQuoteItemId)
-        const preview = await preparedProductRevisionPreview(
-          client,
-          input.bulkPriceRevisionId,
-          [input.sourceQuoteItemId]
-        )
-        const approvedPriceUsd = asNumber(source.approved_price_usd)
-        const revised = previewPreparedProductRevisionPrice(
-          preview,
-          input.sourceQuoteItemId,
-          input.decision === "Keep Price Same" ? approvedPriceUsd : undefined
-        )
-        const stageGroupId = randomUUID()
-        await client.query(
-          `
-            INSERT INTO sales.bulk_price_revision_changes (
-              organization_id, bulk_price_revision_id, prior_quote_item_id,
-              old_price, new_price, field_name, field_label, new_value,
-              selection_json, selected_count, skipped_count, stage_group_id,
-              preview_json, notes, created_by_user_id, source_system,
-              source_table, source_id, source_payload
-            )
-            VALUES (
-              $1, $2, $3, $4, $5, $6, 'Customer Price Decision', $7,
-              $8, 1, 0, $9, $10, $11, $12, 'mrm-dashboard',
-              'bulk_price_revision_changes', $13, $14
-            )
-          `,
-          [
-            row.organization_id,
-            input.bulkPriceRevisionId,
-            input.sourceQuoteItemId,
-            approvedPriceUsd,
-            revised.newPrice,
-            productBulkPriceDecisionField,
-            revised.newProfitPercent,
-            JSON.stringify([input.sourceQuoteItemId]),
-            stageGroupId,
-            {
-              newPrice: revised.newPrice,
-              newProfitPercent: revised.newProfitPercent,
-              oldPrice: approvedPriceUsd,
-              oldProfitPercent: asNumber(source.profit_percent),
-              quoteItemId: input.sourceQuoteItemId,
-            },
-            input.notes ?? null,
-            input.actorUserId ?? null,
-            randomUUID(),
-            {
-              customerDecision: input.decision,
-              sourceQuoteItemId: input.sourceQuoteItemId,
-              targetProfitPercent: revised.newProfitPercent,
-            },
-          ]
-        )
-        await writeAuditEvent(client, {
-          actorUserId: input.actorUserId,
-          eventType: "bulk_price_revision.customer_price_decided",
-          metadata: {
-            decision: input.decision,
-            sourceQuoteItemId: input.sourceQuoteItemId,
-          },
-          organizationId: row.organization_id,
-          targetId: input.bulkPriceRevisionId,
-          targetTable: "bulk_price_revisions",
-        })
-        return {
-          decision: input.decision,
-          newPriceUsd: revised.newPrice,
-          newProfitPercent: revised.newProfitPercent,
-          sourceQuoteItemId: input.sourceQuoteItemId,
-        }
+      const decisions = await recordProductPriceDecisions({
+        ...input,
+        sourceQuoteItemIds: [input.sourceQuoteItemId],
       })
+      return decisions[0]!
+    },
+
+    async applyProductBulkRevisionPriceDecisions(input: {
+      actorUserId?: string | null
+      bulkPriceRevisionId: string
+      decision: "Keep Price Same" | "Revise Price"
+      notes?: string | null
+      sourceQuoteItemIds: string[]
+    }) {
+      const decisions = await recordProductPriceDecisions(input)
+      return { decision: input.decision, recordedCount: decisions.length }
     },
 
     async listProductBulkRevisionActivePricesBounded(

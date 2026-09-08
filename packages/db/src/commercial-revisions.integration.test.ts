@@ -784,13 +784,39 @@ describe("commercial revisions and corrections", () => {
       revision.id
     )
     expect(work?.coverage.total).toBe(2)
-    for (const price of work?.rows ?? []) {
-      await repository.applyProductBulkRevisionPriceDecision({
+    const selectedQuoteIds = work!.rows.map((price) => price.quoteItemId)
+    await expect(
+      repository.applyProductBulkRevisionPriceDecisions({
         bulkPriceRevisionId: revision.id,
         decision: "Revise Price",
-        sourceQuoteItemId: price.quoteItemId,
+        sourceQuoteItemIds: [...selectedQuoteIds, randomUUID()],
       })
-    }
+    ).rejects.toThrow("outside")
+    expect(
+      (await repository.getProductBulkRevisionCustomerCosting(revision.id))
+        ?.decidedPriceCount
+    ).toBe(0)
+    await expect(
+      repository.applyProductBulkRevisionPriceDecisions({
+        bulkPriceRevisionId: revision.id,
+        decision: "Revise Price",
+        sourceQuoteItemIds: [...selectedQuoteIds, selectedQuoteIds[0]!],
+      })
+    ).resolves.toMatchObject({ recordedCount: 2 })
+    const decided = await repository.getProductBulkRevisionCustomerCosting(
+      revision.id
+    )
+    expect(decided?.decidedPriceCount).toBe(2)
+    expect(
+      decided?.rows.every((price) => price.decision === "Revise Price")
+    ).toBe(true)
+    await expect(
+      repository.applyProductBulkRevisionPriceDecisions({
+        bulkPriceRevisionId: revision.id,
+        decision: "Keep Price Same",
+        sourceQuoteItemIds: selectedQuoteIds,
+      })
+    ).rejects.toThrow("already has a decision")
 
     await expect(
       repository.completeBulkPriceRevision({

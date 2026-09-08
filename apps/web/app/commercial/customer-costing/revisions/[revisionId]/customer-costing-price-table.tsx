@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useActionState, useEffect, useMemo, useState } from "react"
 import { Button } from "@workspace/ui/components/button"
 import { ExcelColumnFilter } from "@workspace/ui/components/excel-column-filter"
 import {
@@ -28,7 +28,10 @@ import {
   NativeSelect,
   NativeSelectOption,
 } from "@workspace/ui/components/native-select"
-import { applyProductBulkRevisionPriceDecisionAction } from "../../../revisions/actions"
+import {
+  applyProductBulkRevisionPriceDecisionAction,
+  applyProductBulkRevisionPriceDecisionsAction,
+} from "../../../revisions/actions"
 type Work = NonNullable<
   Awaited<
     ReturnType<
@@ -64,6 +67,20 @@ export function CustomerCostingPriceTable({
   const [sort, setSort] = useState<TableSort | null>(null)
   const [page, setPage] = useState(0)
   const [hydrated, setHydrated] = useState(false)
+  const [selected, setSelected] = useState<Set<string>>(() => new Set())
+  const [result, recordSelected, recording] = useActionState(
+    async (
+      _previous: { error: string | null; recordedCount: number },
+      formData: FormData
+    ) => {
+      const result =
+        await applyProductBulkRevisionPriceDecisionsAction(formData)
+      if (!result.success) return { error: result.error, recordedCount: 0 }
+      setSelected(new Set())
+      return { error: null, recordedCount: result.recordedCount }
+    },
+    { error: null, recordedCount: 0 }
+  )
   const tableColumns = useMemo(
     () =>
       columns.map((label, index) => ({
@@ -132,13 +149,52 @@ export function CustomerCostingPriceTable({
     currentPage * pageSize,
     (currentPage + 1) * pageSize
   )
+  const selectable = filtered.filter((price) => !price.decision)
+  const submitted = selectable.filter((price) =>
+    selected.has(price.quoteItemId)
+  )
   return (
     <div className="grid min-w-0 grid-cols-1 gap-2">
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-xs text-muted-foreground">
-          {filtered.length} matching prices
+      <div className="flex min-w-0 flex-wrap items-center gap-3">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={
+            !hydrated ||
+            recording ||
+            !selectable.length ||
+            submitted.length === selectable.length
+          }
+          title="Select every filtered pending price across all pages"
+          onClick={() =>
+            setSelected(
+              (current) =>
+                new Set([
+                  ...current,
+                  ...selectable.map((price) => price.quoteItemId),
+                ])
+            )
+          }
+        >
+          Select All ({selectable.length})
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={recording || !selected.size}
+          onClick={() => setSelected(new Set())}
+        >
+          Clear Selection
+        </Button>
+        <span role="status" className="text-xs text-muted-foreground">
+          {filtered.length} matching prices · {selectable.length} pending ·{" "}
+          {submitted.length} selected
         </span>
         <Button
+          className="ml-auto"
+          disabled={recording}
           type="button"
           size="sm"
           variant="outline"
@@ -150,6 +206,56 @@ export function CustomerCostingPriceTable({
           Clear All Filters
         </Button>
       </div>
+      <form
+        action={recordSelected}
+        className="flex flex-wrap items-center gap-2"
+      >
+        <input type="hidden" name="bulk_price_revision_id" value={revisionId} />
+        {submitted.map((price) => (
+          <input
+            key={price.quoteItemId}
+            type="hidden"
+            name="source_quote_item_ids"
+            value={price.quoteItemId}
+          />
+        ))}
+        <NativeSelect
+          name="decision"
+          aria-label="Decision for selected prices"
+          required
+          disabled={recording}
+        >
+          <NativeSelectOption value="Revise Price">
+            Revise Price
+          </NativeSelectOption>
+          <NativeSelectOption value="Keep Price Same">
+            Keep Price Same
+          </NativeSelectOption>
+        </NativeSelect>
+        <Input
+          name="notes"
+          aria-label="Note for selected prices"
+          placeholder="Note for selected prices"
+          className="w-64"
+          disabled={recording}
+        />
+        <Button type="submit" disabled={recording || !submitted.length}>
+          {recording
+            ? "Recording Decisions…"
+            : `Record Decision (${submitted.length})`}
+        </Button>
+      </form>
+      {result.error ? (
+        <p role="alert" className="text-sm text-destructive">
+          {result.error}
+        </p>
+      ) : null}
+      {result.recordedCount ? (
+        <p role="status" className="text-sm">
+          Recorded {result.recordedCount} decisions. Prices remain unpublished
+          until this revision is completed.
+        </p>
+      ) : null}
       <OperationalTable
         excelFilters
         filterMode="external"
@@ -157,6 +263,7 @@ export function CustomerCostingPriceTable({
       >
         <TableHeader>
           <TableRow>
+            <TableHead>Select</TableHead>
             {facets.map((column) => (
               <TableHead key={column.label}>
                 {column.label}
@@ -189,7 +296,31 @@ export function CustomerCostingPriceTable({
         </TableHeader>
         <TableBody>
           {visible.map((price) => (
-            <TableRow key={price.quoteItemId}>
+            <TableRow
+              key={price.quoteItemId}
+              data-state={
+                !price.decision && selected.has(price.quoteItemId)
+                  ? "selected"
+                  : undefined
+              }
+            >
+              <TableCell>
+                <input
+                  type="checkbox"
+                  aria-label={`Select ${price.companyName} ${price.uid} ${price.customerPartCode ?? ""}`}
+                  disabled={recording || Boolean(price.decision)}
+                  checked={!price.decision && selected.has(price.quoteItemId)}
+                  onChange={(event) => {
+                    const checked = event.target.checked
+                    setSelected((current) => {
+                      const next = new Set(current)
+                      if (checked) next.add(price.quoteItemId)
+                      else next.delete(price.quoteItemId)
+                      return next
+                    })
+                  }}
+                />
+              </TableCell>
               <TableCell>{price.companyName}</TableCell>
               <TableCell className="font-mono">
                 {price.customerPartCode ?? "—"}
@@ -256,7 +387,10 @@ export function CustomerCostingPriceTable({
                 )}
               </TableCell>
               {price.values.slice(10).map((value, index) => (
-                <TableCell className="max-w-64 min-w-32 break-words whitespace-normal tabular-nums" key={columns[index + 10]}>
+                <TableCell
+                  className="max-w-64 min-w-32 break-words whitespace-normal tabular-nums"
+                  key={columns[index + 10]}
+                >
                   {value}
                 </TableCell>
               ))}
@@ -264,7 +398,7 @@ export function CustomerCostingPriceTable({
           ))}
           {!visible.length && (
             <TableRow>
-              <TableCell colSpan={columns.length}>
+              <TableCell colSpan={columns.length + 1}>
                 No Affected Prices Match These Filters.
               </TableCell>
             </TableRow>
