@@ -209,6 +209,7 @@ export async function createBulkPriceRevisionAction(formData: FormData) {
   if (revisionRoute === "Product Parameter Bulk Revision") {
     redirect(productCostingPath)
   }
+  redirect(customerCostingPath)
 }
 
 export async function stageBulkPriceRevisionAction(formData: FormData) {
@@ -242,6 +243,9 @@ export async function stageBulkPriceRevisionAction(formData: FormData) {
   revalidatePath(productBulkRevisionPath)
   revalidatePath(productCostingPath)
   revalidatePath(`${productCostingPath}/revisions/${bulkPriceRevisionId}`)
+  revalidatePath(
+    `${customerCostingPath}/customer-revisions/${bulkPriceRevisionId}`
+  )
 }
 
 export async function deleteBulkPriceRevisionStageAction(formData: FormData) {
@@ -260,6 +264,9 @@ export async function deleteBulkPriceRevisionStageAction(formData: FormData) {
   revalidatePath(productBulkRevisionPath)
   revalidatePath(productCostingPath)
   revalidatePath(`${productCostingPath}/revisions/${bulkPriceRevisionId}`)
+  revalidatePath(
+    `${customerCostingPath}/customer-revisions/${bulkPriceRevisionId}`
+  )
   revalidatePath(customerCostingPath)
   revalidatePath(`${customerCostingPath}/revisions/${bulkPriceRevisionId}`)
 }
@@ -279,6 +286,9 @@ export async function completeBulkPriceRevisionAction(formData: FormData) {
   revalidatePath(productBulkRevisionPath)
   revalidatePath(productCostingPath)
   revalidatePath(`${productCostingPath}/revisions/${bulkPriceRevisionId}`)
+  revalidatePath(
+    `${customerCostingPath}/customer-revisions/${bulkPriceRevisionId}`
+  )
   revalidatePath(customerCostingPath)
   revalidatePath(`${customerCostingPath}/revisions/${bulkPriceRevisionId}`)
   revalidatePath("/commercial/quotes")
