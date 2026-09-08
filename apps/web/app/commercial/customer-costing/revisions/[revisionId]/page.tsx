@@ -154,8 +154,9 @@ export default async function ProductRevisionCustomerCostingPage({
 
           <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-muted-foreground">
-              Product Master and the Pricing Register publish only after every
-              affected price has a decision and this revision completes.
+              {work.affectedPriceCount === 0
+                ? "No customer prices are affected. Publish to update the Product Master and Pricing Register."
+                : "Product Master and the Pricing Register publish only after every affected price has a decision and this revision completes."}
             </p>
             <PublishRevisionForm
               revisionId={work.revision.id}
