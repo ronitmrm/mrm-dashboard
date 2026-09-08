@@ -23,6 +23,7 @@ import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { createBulkPriceRevisionAction } from "../revisions/actions"
 import { BulkRevisionHistory } from "../revisions/bulk-revision-history"
+import { BulkRevisionRequestStatus } from "../revisions/bulk-revision-request-status"
 export const dynamic = "force-dynamic"
 function localDate() {
   const now = new Date()
@@ -167,6 +168,7 @@ export default async function CustomerBulkRevisionPage({
           </CardContent>
         </SectionCard>
       </div>
+      <BulkRevisionRequestStatus origin="customer" />
       <BulkRevisionHistory
         origin="customer"
         page={Number(params.historyPage) || 1}
