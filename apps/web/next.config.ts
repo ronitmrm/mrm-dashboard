@@ -2,7 +2,10 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import type { NextConfig } from "next"
 
-import { browserSecurityHeaders } from "./lib/security-headers.ts"
+import {
+  browserSecurityHeaders,
+  privateDocumentSecurityHeaders,
+} from "./lib/security-headers.ts"
 import { maxDashboardProxyRequestBytes } from "./lib/dashboard-route-policy.ts"
 import { commercialAttachmentRequestLimitBytes } from "./lib/commercial-attachment.ts"
 
@@ -20,7 +23,15 @@ const nextConfig: NextConfig = {
     },
   },
   async headers() {
-    return [{ headers: [...browserSecurityHeaders], source: "/(.*)" }]
+    return [
+      { headers: [...browserSecurityHeaders], source: "/(.*)" },
+      {
+        headers: Object.entries(privateDocumentSecurityHeaders).map(
+          ([key, value]) => ({ key, value })
+        ),
+        source: "/hr/employment-letters/:id/download",
+      },
+    ]
   },
   outputFileTracingRoot: workspaceRoot,
   turbopack: {

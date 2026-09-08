@@ -3,6 +3,7 @@ import { notFound } from "next/navigation"
 
 import {
   createRecruitmentRepository,
+  createRecruitmentEmploymentLetterRepository,
   isActiveRecruitmentApplicationStatus,
 } from "@workspace/db"
 import { recruitmentInterviewRound } from "@workspace/db/recruitment-interview-workflow"
@@ -10,7 +11,7 @@ import { Alert, AlertDescription } from "@workspace/ui/components/alert"
 import { StatusBadge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
- SectionCard,
+  SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -18,7 +19,7 @@ import {
   MetricCard,
 } from "@workspace/ui/components/card"
 import {
- OperationalTable,
+  OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -31,6 +32,7 @@ import { InterviewOutcomeForm } from "@/components/hr/interview-outcome-form"
 import { InterviewRoundEditDialog } from "@/components/hr/interview-round-edit-dialog"
 import { JobInterviewScheduleForm } from "@/components/hr/interview-schedule-form"
 import { CandidateApplicationActions } from "@/components/hr/candidate-application-actions"
+import { CandidateOfferLetterRegister } from "@/components/hr/candidate-offer-letter-register"
 import { JobLifecycleActions } from "@/components/hr/job-lifecycle-actions"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { formatIstDateTime as formatDateTime } from "@/lib/date-time"
@@ -92,26 +94,35 @@ export default async function JobWorkspacePage({
   const feedback = await searchParams
   const returnPath = `/hr/jobs/${id}`
   const session = await requireHrPage("hr.jobs.read", returnPath)
-  const grants = await listGrantedCapabilities(
-    session.user.id,
-    Object.values(hrTaskCapabilities)
+  const grants = await listGrantedCapabilities(session.user.id, [
+    ...Object.values(hrTaskCapabilities),
+    "hr.employees.read",
+  ])
+  const canWrite = Object.values(hrTaskCapabilities).some((capability) =>
+    grants.includes(capability)
   )
-  const canWrite = grants.length > 0
+  const canViewOfferLetters = grants.includes("hr.employees.read")
   const canCloseJob = grants.includes(hrTaskCapabilities.closeJob)
   const canDeleteJob = grants.includes(hrTaskCapabilities.deleteJob)
   const repository = createRecruitmentRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
-  const { posts, workspace } = await (async () => {
+  const letterRepository = canViewOfferLetters
+    ? createRecruitmentEmploymentLetterRepository({
+        connectionString: readAuthEnvironment().connectionString,
+      })
+    : null
+  const { posts, workspace, offerLetters } = await (async () => {
     try {
       const organizationId = await repository.organizationIdForCode("MRMPL")
-      const [workspace, posts] = await Promise.all([
+      const [workspace, posts, offerLetters] = await Promise.all([
         repository.getJobWorkspace(organizationId, id),
         repository.listPosts(organizationId),
+        letterRepository?.listForJob(organizationId, id) ?? [],
       ])
-      return { posts, workspace }
+      return { posts, workspace, offerLetters }
     } finally {
-      await repository.close()
+      await Promise.all([repository.close(), letterRepository?.close()])
     }
   })()
   if (!workspace) notFound()
@@ -176,19 +187,33 @@ export default async function JobWorkspacePage({
       ) : null}
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {([
-          { label: "Applicants", value: applications.length.toLocaleString("en-IN"), tone: "information" },
-          { label: "Interview Records", value: interviews.length.toLocaleString("en-IN"), tone: "brand" },
-          { label: "Posted", value: job.postDate, tone: "accent" },
-          { label: "Target", value: job.targetDate ?? "Not Set", tone: job.targetDate ? "information" : "warning" },
-        ] as const).map(({ label, value, tone }) => (
+        {(
+          [
+            {
+              label: "Applicants",
+              value: applications.length.toLocaleString("en-IN"),
+              tone: "information",
+            },
+            {
+              label: "Interview Records",
+              value: interviews.length.toLocaleString("en-IN"),
+              tone: "brand",
+            },
+            { label: "Posted", value: job.postDate, tone: "accent" },
+            {
+              label: "Target",
+              value: job.targetDate ?? "Not Set",
+              tone: job.targetDate ? "information" : "warning",
+            },
+          ] as const
+        ).map(({ label, value, tone }) => (
           <MetricCard key={label} label={label} tone={tone} value={value} />
         ))}
       </section>
 
       {canWrite && job.status === "Open" ? (
         <section className="grid gap-6 xl:grid-cols-2">
- <SectionCard>
+          <SectionCard>
             <CardHeader>
               <CardTitle>Schedule Interview</CardTitle>
               <CardDescription>
@@ -199,9 +224,9 @@ export default async function JobWorkspacePage({
             <CardContent>
               <JobInterviewScheduleForm applications={applications} job={job} />
             </CardContent>
- </SectionCard>
+          </SectionCard>
 
- <SectionCard>
+          <SectionCard>
             <CardHeader>
               <CardTitle>Record Interview Outcome</CardTitle>
               <CardDescription>
@@ -220,11 +245,11 @@ export default async function JobWorkspacePage({
                 returnJobId={job.id}
               />
             </CardContent>
- </SectionCard>
+          </SectionCard>
         </section>
       ) : null}
 
- <SectionCard>
+      <SectionCard>
         <CardHeader>
           <CardTitle>Applicants For This Job</CardTitle>
           <CardDescription>
@@ -234,7 +259,7 @@ export default async function JobWorkspacePage({
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto rounded-2xl border">
- <OperationalTable>
+            <OperationalTable>
               <TableHeader>
                 <TableRow>
                   <TableHead>Candidate</TableHead>
@@ -333,18 +358,18 @@ export default async function JobWorkspacePage({
                   </TableRow>
                 )}
               </TableBody>
- </OperationalTable>
+            </OperationalTable>
           </div>
         </CardContent>
- </SectionCard>
+      </SectionCard>
 
- <SectionCard>
+      <SectionCard>
         <CardHeader>
           <CardTitle>Complete Interview History</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto rounded-2xl border">
- <OperationalTable>
+            <OperationalTable>
               <TableHeader>
                 <TableRow>
                   <TableHead>Candidate</TableHead>
@@ -411,10 +436,13 @@ export default async function JobWorkspacePage({
                   </TableRow>
                 )}
               </TableBody>
- </OperationalTable>
+            </OperationalTable>
           </div>
         </CardContent>
- </SectionCard>
+      </SectionCard>
+      {canViewOfferLetters ? (
+        <CandidateOfferLetterRegister context="job" letters={offerLetters} />
+      ) : null}
     </div>
   )
 }
