@@ -62,49 +62,49 @@ async function loadCommercialMetrics(): Promise<
   const reporting = createCommercialReportingRepository({ connectionString })
   try {
     const organizationId = await customers.organizationIdForCode("MRMPL")
-    const dashboard = await reporting.dashboard({ organizationId })
+    const stats = await reporting.dashboardStats({ organizationId })
     return [
       "commercial-overview",
       [
         {
           label: "Pending Costing",
           metricId: "commercial.pending-costing",
-          value: dashboard.stats.pendingCosting,
+          value: stats.pendingCosting,
         },
         {
           label: "Follow-Ups Due",
           metricId: "commercial.followups-due",
-          value: dashboard.stats.pendingFollowups,
+          value: stats.pendingFollowups,
         },
         {
           label: "Ordered",
           metricId: "commercial.ordered",
-          value: dashboard.stats.ordered,
+          value: stats.ordered,
         },
         {
           label: "Customers",
           metricId: "commercial.customers",
-          value: dashboard.stats.customers,
+          value: stats.customers,
         },
         {
           label: "Enquiries",
           metricId: "commercial.enquiries",
-          value: dashboard.stats.enquiries,
+          value: stats.enquiries,
         },
         {
           label: "Quoted This Month",
           metricId: "commercial.quoted-this-month",
-          value: dashboard.stats.monthlyQuoted,
+          value: stats.monthlyQuoted,
         },
         {
           label: "Q Prices",
           metricId: "commercial.active-quotes",
-          value: dashboard.stats.quoted,
+          value: stats.quoted,
         },
         {
           label: "Active P Prices",
           metricId: "commercial.active-production-prices",
-          value: dashboard.stats.pPrices,
+          value: stats.pPrices,
         },
       ],
     ]
@@ -171,50 +171,42 @@ async function loadStoreMetrics(): Promise<
   })
   try {
     const organizationId = await repository.organizationIdForCode("MRMPL")
-    const [items, requests, assets, locations] = await Promise.all([
-      repository.listItemTypes(organizationId),
-      repository.listRequisitions({ organizationId }),
-      repository.listAssets({ organizationId }),
-      repository.listLocations(organizationId),
-    ])
+    const metrics = await repository.overviewMetrics({
+      istToday: istDateValue(),
+      organizationId,
+    })
     return [
       "store-overview",
       [
         {
           label: "Open Requests",
           metricId: "store.open-requests",
-          value: requests.rows.filter(({ status }) =>
-            ["Pending", "Partially Issued"].includes(status)
-          ).length,
+          value: metrics.openRequests,
         },
         {
           label: "Low Stock",
           metricId: "store.low-stock",
-          value: items.filter(
-            (item) => Number(item.availableStock) <= Number(item.minimumStock)
-          ).length,
+          value: metrics.lowStock,
         },
         {
           label: "Maintenance Due",
           metricId: "store.due-maintenance",
-          value: assets.filter(
-            (asset) => asset.nextDueOn && asset.nextDueOn <= istDateValue()
-          ).length,
+          value: metrics.maintenanceDue,
         },
         {
           label: "Store Locations",
           metricId: "store.locations",
-          value: locations.length,
+          value: metrics.locations,
         },
         {
           label: "Item Types",
           metricId: "store.item-types",
-          value: items.length,
+          value: metrics.itemTypes,
         },
         {
           label: "Physical Assets",
           metricId: "store.physical-assets",
-          value: assets.length,
+          value: metrics.physicalAssets,
         },
       ],
     ]

@@ -176,10 +176,22 @@ export default async function Page({
     capabilities.has(masterCapability(selectedStoreMaster, "read"))
       ? await (async () => {
           const connectionString = readAuthEnvironment().connectionString
+          const canSave = capabilities.has(
+            masterCapability(selectedStoreMaster, "save")
+          )
+          const itemReferences =
+            selectedStoreMaster === "SUPPLIER_PRICE" && canSave
+          const classifications =
+            selectedStoreMaster === "ITEM_TYPE" && canSave
+          const classificationMasters =
+            classifications ||
+            ["CATEGORY", "SUBCATEGORY", "ASSET_NAME"].includes(
+              selectedStoreMaster
+            )
           const repository = createStoreRepository({ connectionString })
-          const workflow = createCommercialWorkflowRepository({
-            connectionString,
-          })
+          const workflow = classifications
+            ? createCommercialWorkflowRepository({ connectionString })
+            : null
           try {
             const organizationId =
               await repository.organizationIdForCode("MRMPL")
@@ -193,14 +205,34 @@ export default async function Page({
               itemDrawings,
               portfolioProducts,
             ] = await Promise.all([
-              repository.listItemTypes(organizationId),
-              repository.listLocations(organizationId),
-              repository.listSuppliers(organizationId),
-              repository.listSupplierPrices(organizationId),
-              repository.listVendors(organizationId),
-              repository.listAssetClassificationMasters(organizationId),
-              repository.listItemTypeDrawings(organizationId),
-              workflow.listDesignPortfolioProducts("MRMPL"),
+              selectedStoreMaster === "ITEM_TYPE" || itemReferences
+                ? repository.listItemTypes(organizationId)
+                : Promise.resolve([]),
+              selectedStoreMaster === "LOCATION"
+                ? repository.listLocations(organizationId)
+                : Promise.resolve([]),
+              selectedStoreMaster === "SUPPLIER" || itemReferences
+                ? repository.listSuppliers(organizationId)
+                : Promise.resolve([]),
+              selectedStoreMaster === "SUPPLIER_PRICE"
+                ? repository.listSupplierPrices(organizationId)
+                : Promise.resolve([]),
+              selectedStoreMaster === "VENDOR"
+                ? repository.listVendors(organizationId)
+                : Promise.resolve([]),
+              classificationMasters
+                ? repository.listAssetClassificationMasters(organizationId)
+                : Promise.resolve({
+                    assetNames: [],
+                    categories: [],
+                    subcategories: [],
+                  }),
+              selectedStoreMaster === "ITEM_TYPE"
+                ? repository.listItemTypeDrawings(organizationId)
+                : Promise.resolve([]),
+              workflow
+                ? workflow.listDesignPortfolioProducts("MRMPL")
+                : Promise.resolve([]),
             ])
             return selectedStoreMasterData(
               {
@@ -214,10 +246,10 @@ export default async function Page({
                 vendors,
               },
               selectedStoreMaster,
-              capabilities.has(masterCapability(selectedStoreMaster, "save"))
+              canSave
             )
           } finally {
-            await Promise.all([repository.close(), workflow.close()])
+            await Promise.all([repository.close(), workflow?.close()])
           }
         })()
       : null

@@ -644,6 +644,72 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       return result.rows[0].id
     },
 
+    async overviewMetrics(input: {
+      istToday: string
+      organizationId: string
+    }) {
+      const result = await pool.query<{
+        item_types: string
+        locations: string
+        low_stock: string
+        maintenance_due: string
+        open_requests: string
+        physical_assets: string
+      }>(
+        `
+          SELECT
+            (SELECT count(*)
+              FROM store.requisitions request
+              JOIN store.requisition_headers header
+                ON header.id = request.request_header_id
+              JOIN store.item_types item ON item.id = request.item_type_id
+              JOIN store.locations location ON location.id = request.location_id
+              WHERE request.organization_id = $1
+                AND request.status IN ('Pending', 'Partially Issued'))
+              AS open_requests,
+            (SELECT count(*)
+              FROM store.item_types item
+              WHERE item.organization_id = $1 AND item.active
+                AND (CASE WHEN item.tracking_mode = 'SERIALIZED'
+                  THEN (SELECT count(*)::numeric FROM store.assets asset
+                    WHERE asset.item_type_id = item.id
+                      AND asset.status = 'AVAILABLE')
+                  ELSE (SELECT COALESCE(sum(movement.quantity), 0)
+                    FROM store.stock_movements movement
+                    WHERE movement.item_type_id = item.id)
+                END)::double precision <= item.minimum_stock::double precision)
+              AS low_stock,
+            (SELECT count(*)
+              FROM store.assets asset
+              JOIN store.item_types item ON item.id = asset.item_type_id
+              WHERE asset.organization_id = $1
+                AND (SELECT min(schedule.next_due_on)::text
+                  FROM store.asset_maintenance_schedules schedule
+                  WHERE schedule.asset_id = asset.id AND schedule.active)
+                    <= $2::text)
+              AS maintenance_due,
+            (SELECT count(*) FROM store.locations
+              WHERE organization_id = $1 AND active) AS locations,
+            (SELECT count(*) FROM store.item_types
+              WHERE organization_id = $1 AND active) AS item_types,
+            (SELECT count(*)
+              FROM store.assets asset
+              JOIN store.item_types item ON item.id = asset.item_type_id
+              WHERE asset.organization_id = $1) AS physical_assets
+        `,
+        [input.organizationId, input.istToday]
+      )
+      const metrics = result.rows[0]!
+      return {
+        itemTypes: Number(metrics.item_types),
+        locations: Number(metrics.locations),
+        lowStock: Number(metrics.low_stock),
+        maintenanceDue: Number(metrics.maintenance_due),
+        openRequests: Number(metrics.open_requests),
+        physicalAssets: Number(metrics.physical_assets),
+      }
+    },
+
     async requisitionRequestContext(input: {
       organizationId: string
       userId: string
