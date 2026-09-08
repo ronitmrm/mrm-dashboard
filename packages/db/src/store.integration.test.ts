@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto"
 import { Pool } from "pg"
 import { afterAll, beforeAll, describe, expect, test } from "vitest"
 
+import { resetTestDatabase } from "../../../scripts/test-database-safety"
 import {
   createArtifactService,
   type ArtifactStorageProvider,
@@ -81,6 +82,7 @@ const storeIssuedPdf: Parameters<
 }
 
 beforeAll(async () => {
+  await resetTestDatabase(pool, connectionString)
   await migrateDatabase({
     connectionString,
     through: "0068_store_module.sql",
@@ -1246,6 +1248,32 @@ describe("Store requests", () => {
       fileName: "gauge-drawing.pdf",
       publicUrl: null,
       storageKey: `store/drawings/${suffix}-gauge.pdf`,
+    })
+  })
+
+  test("returns overview metrics equivalent to the existing Store lists", async () => {
+    const istToday = "9999-12-31"
+    const [items, requests, assets, locations, metrics] = await Promise.all([
+      store.listItemTypes(organizationId),
+      store.listRequisitions({ organizationId }),
+      store.listAssets({ organizationId }),
+      store.listLocations(organizationId),
+      store.overviewMetrics({ istToday, organizationId }),
+    ])
+
+    expect(metrics).toEqual({
+      itemTypes: items.length,
+      locations: locations.length,
+      lowStock: items.filter(
+        (item) => Number(item.availableStock) <= Number(item.minimumStock)
+      ).length,
+      maintenanceDue: assets.filter(
+        (asset) => asset.nextDueOn && asset.nextDueOn <= istToday
+      ).length,
+      openRequests: requests.rows.filter(({ status }) =>
+        ["Pending", "Partially Issued"].includes(status)
+      ).length,
+      physicalAssets: assets.length,
     })
   })
 })
