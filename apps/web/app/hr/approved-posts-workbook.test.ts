@@ -99,6 +99,14 @@ const combinedRoles = [
 ]
 
 describe("approved posts workbook", () => {
+  it("omits combined-job records and membership when that separate master is denied", () => {
+    const workbook = buildApprovedPostsWorkbook({ combinedRoles, posts, templates, includeCombinedJobs: false })
+    expect(workbook.SheetNames).toEqual([approvedPostsSheetName])
+    const rows = XLSX.utils.sheet_to_json<Record<string, string>>(workbook.Sheets[approvedPostsSheetName]!)
+    expect(rows).toHaveLength(2)
+    expect(rows[0]?.["Combined Job Name"]).toBe("")
+    expect(rows[0]?.["Combined Member Posts"]).toBe("")
+  })
   it("lists every post with its job template and combined-job membership", () => {
     const workbook = buildApprovedPostsWorkbook({
       combinedRoles,

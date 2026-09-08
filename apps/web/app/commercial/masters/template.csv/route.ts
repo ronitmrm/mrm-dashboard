@@ -2,16 +2,19 @@ import { commercialTermTypes, type CommercialTermType } from "@workspace/db"
 import * as XLSX from "xlsx"
 
 import { requireCapability } from "@/lib/auth/require-capability"
+import { commercialTemplateReadCapabilities } from "@/lib/auth/commercial-master-access"
 
 import { buildMastersWorkbook, masterTemplateFilename } from "../workbook"
 
 export const dynamic = "force-dynamic"
 
 export async function GET(request: Request) {
-  await requireCapability("pricing.masters.read", "/commercial/masters")
   const searchParams = new URL(request.url).searchParams
   const selectedKey = searchParams.get("master")?.trim() || undefined
   const selectedTermType = searchParams.get("termType")?.trim()
+  for (const capability of commercialTemplateReadCapabilities(selectedKey, selectedTermType)) {
+    await requireCapability(capability, "/commercial/masters")
+  }
   const workbook = buildMastersWorkbook(undefined, selectedKey)
   const sheetName = workbook.SheetNames[0]
   const sheet = sheetName ? workbook.Sheets[sheetName] : undefined

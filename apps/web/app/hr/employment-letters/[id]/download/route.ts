@@ -5,13 +5,13 @@ import {
 
 import { attachmentContentDisposition } from "@/lib/attachment-viewer"
 import { readAuthEnvironment } from "@/lib/auth/auth"
-import { requireHrPage } from "@/lib/auth/require-hr-page"
+import { requireCapability } from "@/lib/auth/require-capability"
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  await requireHrPage("hr.employees.read", "/hr?panel=employeeMasterPanel")
+  await requireCapability("masters.universal.employee_assignments.read", "/hr?panel=employeeMasterPanel")
   const { id } = await params
   const connectionString = readAuthEnvironment().connectionString
   const recruitment = createRecruitmentRepository({ connectionString })

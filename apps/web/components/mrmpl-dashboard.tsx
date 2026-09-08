@@ -139,6 +139,7 @@ import {
   masterDataDashboardHref,
 } from "@/lib/master-data-navigation"
 import { masterSelectionFromContext } from "@/lib/master-module"
+import { useMasterAccess, useMasterStateUrl } from "@/components/master-access-provider"
 import {
   immutableMasterFields,
   masterDataEntryTypes,
@@ -246,6 +247,7 @@ import {
   dashboardNavigation as navItems,
   dashboardTabHref,
   dashboardNavigationDestination,
+  legacyMasterEntryForDashboardTab,
   type DashboardTabId,
   jobCardWorkspaceHref,
 } from "@/lib/unified-navigation"
@@ -1827,6 +1829,7 @@ function DashboardShell({
 }) {
   const [activeTab, setActiveTab] =
     useState<DashboardTabId>(initialDashboardTab)
+  const masterStateUrl = useMasterStateUrl()
   const [activeProductionFloor] = useState<ProductionFloorCode>(
     initialProductionFloor
   )
@@ -1905,6 +1908,7 @@ function DashboardShell({
   }, [])
 
   useEffect(() => {
+    if (masterStateUrl) return
     const dashboardRecord = asRecord(dashboardPayload)
     if (!shouldRefreshStalePlanningSnapshot(dashboardRecord)) return
     if (isPlanningRefreshLockActive || dashboardRefreshStatus?.isRefreshing)
@@ -1927,6 +1931,7 @@ function DashboardShell({
     isPlanningRefreshLockActive,
     markDashboardRefreshFailed,
     markDashboardRefreshRequested,
+    masterStateUrl,
   ])
 
   async function refreshDashboardSnapshot(force = true) {
@@ -2040,6 +2045,10 @@ function DashboardShell({
     entryType: string,
     defaults: Record<string, unknown> = {}
   ) {
+    if (!masterStateUrl && dataEntryDestination(entryType) === "dataEntryTab") {
+      window.location.assign(`/?${new URLSearchParams({ tab: "dataEntryTab", entry: entryType, floor: activeProductionFloor })}`)
+      return
+    }
     setPreferredDataEntryType(entryType)
     setPreferredDataEntryDefaults({
       productionFloorCode: activeProductionFloor,
@@ -2049,6 +2058,10 @@ function DashboardShell({
   }
 
   function openMasterReadiness() {
+    if (masterStateUrl) {
+      window.location.assign(dashboardTabHref("masterGapsTab", activeProductionFloor))
+      return
+    }
     setActiveTab("masterGapsTab")
   }
 
@@ -2072,7 +2085,7 @@ function DashboardShell({
     productionFloorCode: ProductionFloorCode
   ) {
     const destination = dashboardNavigationDestination(tab, productionFloorCode)
-    if (destination.interaction === "route") {
+    if (destination.interaction === "route" || masterStateUrl || ["dataEntryTab", "masterTablesTab"].includes(tab) || legacyMasterEntryForDashboardTab(tab)) {
       window.location.assign(destination.href)
       return
     }
@@ -2245,6 +2258,7 @@ function DashboardShell({
           </div>
 
           <HeaderActions
+            showPlanningRefresh={!masterStateUrl}
             canRefreshSnapshot={hasDashboardData}
             isRefreshingSnapshot={isSnapshotRefreshActive}
             onRefreshSnapshot={() => void refreshDashboardSnapshot(true)}
@@ -2462,10 +2476,12 @@ function HeaderActions({
   canRefreshSnapshot,
   isRefreshingSnapshot,
   onRefreshSnapshot,
+  showPlanningRefresh = true,
 }: {
   canRefreshSnapshot: boolean
   isRefreshingSnapshot: boolean
   onRefreshSnapshot: () => void
+  showPlanningRefresh?: boolean
 }) {
   const { resolvedTheme, setTheme } = useTheme()
   const mounted = useSyncExternalStore(
@@ -2477,7 +2493,7 @@ function HeaderActions({
 
   return (
     <div className="flex shrink-0 items-center gap-2">
-      <Button
+      {showPlanningRefresh ? <Button
         type="button"
         variant="outline"
         size="sm"
@@ -2491,7 +2507,7 @@ function HeaderActions({
         <span className="hidden sm:inline">
           {isRefreshingSnapshot ? "Recalculating" : "Recalculate Planning"}
         </span>
-      </Button>
+      </Button> : null}
       <Button
         type="button"
         variant="outline"
@@ -10833,13 +10849,15 @@ function DataEntryPanel({
   title?: string
   externalOptions?: ExternalMasterDataOption[]
 }) {
+  const canUseMaster = useMasterAccess()
+  const masterStateUrl = useMasterStateUrl()
   const dataEntry = asRecord(payload.dataEntry)
   const productionControl = asRecord(payload.productionControl)
   const searchParams = useSearchParams()
   const operationalSelection =
     operationalEntrySelectionFromContext(searchParams)
   const selectionLocked = Boolean(
-    masterSelectionFromContext(searchParams) || operationalSelection
+    masterSelectionFromContext(searchParams) || operationalSelection || masterStateUrl
   )
   const availableSpecs = useMemo(
     () =>
@@ -10848,8 +10866,8 @@ function DataEntryPanel({
             allowedEntryTypes.includes(spec.entryType)
           )
         : dataEntrySpecs
-      ).filter((spec) => spec.entryType !== "store_masters" || storeMasterData),
-    [allowedEntryTypes, storeMasterData]
+      ).filter((spec) => (spec.entryType !== "store_masters" || storeMasterData) && canUseMaster(spec.entryType, "read", productionFloorCode, searchParams.get("storeMaster") ?? "ITEM_TYPE")),
+    [allowedEntryTypes, storeMasterData, canUseMaster, productionFloorCode, searchParams]
   )
   const initialEntryType = availableSpecs.some(
     (spec) => spec.entryType === preferredEntryType
@@ -10893,7 +10911,7 @@ function DataEntryPanel({
     }
   }
 
-  const csvImportAction =
+  const csvImportAction = !canUseMaster(bulkEntryType, "import", productionFloorCode, searchParams.get("storeMaster") ?? "ITEM_TYPE") ? null :
     bulkEntryType === "store_masters" ? (
       <MasterDataCsvImportButton
         action={importStoreMasterCsvAction}
@@ -11019,7 +11037,7 @@ function DataEntryPanel({
           data={storeMasterData}
           mode="entry"
         />
-      ) : selectedSpec ? (
+      ) : selectedSpec && canUseMaster(selectedSpec.entryType, "save", productionFloorCode) ? (
         <DataEntryForm
           key={selectedSpec.entryType}
           spec={selectedSpec}
@@ -11302,7 +11320,6 @@ function OperationalTablesPanel({
 }
 
 function MasterTablesPanel({
-  canDeleteMasters,
   canManageStoreMasters,
   payload,
   productionControl,
@@ -11326,12 +11343,14 @@ function MasterTablesPanel({
   productionFloorCode: ProductionFloorCode
   storeMasterData?: StoreMasterData | null
 }) {
+  const canUseMaster = useMasterAccess()
+  const searchParams = useSearchParams()
   const specs = useMemo(
     () =>
       masterTableSpecs().filter(
-        (spec) => spec.entryType !== "store_masters" || storeMasterData
+        (spec) => (spec.entryType !== "store_masters" || storeMasterData) && canUseMaster(spec.entryType, "read", productionFloorCode, searchParams.get("storeMaster") ?? "ITEM_TYPE")
       ),
-    [storeMasterData]
+    [storeMasterData, canUseMaster, productionFloorCode, searchParams]
   )
   const selectedSpec =
     specs.find((spec) => spec.entryType === preferredEntryType) ?? specs[0]
@@ -11369,6 +11388,7 @@ function MasterTablesPanel({
           kind: selectedSpec.entryType,
           reason: deleteReason.trim(),
           recordId: deleteRecordId,
+          productionFloorCode,
           replacementRecordId: replacementRecordId || undefined,
           returnTab: "masterTablesTab",
         },
@@ -11498,7 +11518,7 @@ function MasterTablesPanel({
                         ))}
                         <TableCell className="px-2 py-1.5 align-top">
                           <div className="flex justify-end gap-1">
-                            <Button
+                            {canUseMaster(selectedSpec.entryType, "save", productionFloorCode) ? <Button
                               onClick={() =>
                                 openDataEntry(
                                   selectedSpec.entryType,
@@ -11514,8 +11534,8 @@ function MasterTablesPanel({
                             >
                               <Pencil className="size-3.5" />
                               Edit
-                            </Button>
-                            {canDeleteMasters ? (
+                            </Button> : null}
+                            {canUseMaster(selectedSpec.entryType, "delete", productionFloorCode) ? (
                               <Button
                                 aria-label={`Delete ${masterTableRowLabel(row, columns)}`}
                                 disabled={!masterTableRecordId(row)}
@@ -11544,7 +11564,7 @@ function MasterTablesPanel({
         </SectionCard>
       )}
       <Dialog
-        open={canDeleteMasters && Boolean(deleteRow)}
+        open={canUseMaster(selectedSpec.entryType, "delete", productionFloorCode) && Boolean(deleteRow)}
         onOpenChange={(open) => {
           if (!open && !isDeleting) setDeleteRow(null)
         }}
@@ -13272,8 +13292,9 @@ function DataEntryForm({
   const resolvedDefaults = generatedCode
     ? { ...defaults, code: generatedCode }
     : defaults
-  const toolingAssetCodes =
-    storeMasterData?.items.map((item) => item.typeCode) ?? []
+  const toolingAssetCodes = Array.isArray(productionControl.toolingAssetCodes)
+    ? productionControl.toolingAssetCodes.filter((value): value is string => typeof value === "string")
+    : storeMasterData?.items.map((item) => item.typeCode) ?? []
   const setupNames = setupNameOptions([
     ...dataEntryRowsForProductionMaster("setup_name_master", dataEntry ?? {}),
     ...asArray(productionControl.setupNameMasterRows),
@@ -13562,8 +13583,9 @@ function QualityParameterMasterForm({
   masterRows: DashboardPayload[]
   productionControl: DashboardPayload
 }) {
+  const masterStateUrl = useMasterStateUrl()
   const hourlyQualityPageData = usePostgresOperationalPage(
-    "/api/hourly-quality",
+    masterStateUrl ? null : "/api/hourly-quality",
     5_000
   ).data
   const hourlyQualityPageRecord = asRecord(hourlyQualityPageData)

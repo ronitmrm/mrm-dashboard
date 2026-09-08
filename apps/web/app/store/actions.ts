@@ -19,11 +19,11 @@ import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
+import { masterCapability } from "@/lib/auth/master-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
 import {
   isStoreActionCapability,
   requireStoreAction,
-  type StoreActionCapability,
 } from "@/lib/auth/store-action-access"
 import {
   resolveStoreRequestDepartment,
@@ -78,7 +78,7 @@ function holderType(formData: FormData) {
 }
 
 async function withStore<T>(
-  capability: StoreActionCapability | "store.masters.write",
+  capability: string,
   operation: (
     repository: ReturnType<typeof createStoreRepository>,
     actorUserId: string,
@@ -176,7 +176,7 @@ function storeIssuedPurchaseOrderPdf(
 
 export async function createStoreLocationAction(formData: FormData) {
   await withStore(
-    "store.masters.write",
+    masterCapability("LOCATION", "save"),
     (repository, actorUserId, organizationId) => {
       const masterId = optionalText(formData, "master_id")
       return masterId
@@ -207,7 +207,7 @@ export async function createStoreLocationAction(formData: FormData) {
 
 export async function createStoreSupplierAction(formData: FormData) {
   await withStore(
-    "store.masters.write",
+    masterCapability("SUPPLIER", "save"),
     (repository, actorUserId, organizationId) => {
       const masterId = optionalText(formData, "master_id")
       return masterId
@@ -291,9 +291,10 @@ async function storeSupplierQuoteArtifact(input: {
 }
 
 export async function createStoreSupplierPriceAction(formData: FormData) {
+  await requireCapability(masterCapability("SUPPLIER_PRICE", "save"), storePath)
   const savedQuote = await saveSupplierQuote(formData.get("supplier_quote"))
   await withStore(
-    "store.masters.write",
+    masterCapability("SUPPLIER_PRICE", "save"),
     async (repository, actorUserId, organizationId) => {
       const price = await repository.createSupplierPrice({
         actorUserId,
@@ -318,10 +319,11 @@ export async function createStoreSupplierPriceAction(formData: FormData) {
 }
 
 export async function uploadStoreSupplierQuoteAction(formData: FormData) {
+  await requireCapability(masterCapability("SUPPLIER_PRICE", "save"), storePath)
   const savedQuote = await saveSupplierQuote(formData.get("supplier_quote"))
   if (!savedQuote) throw new Error("Select a Supplier quote PDF to upload.")
   await withStore(
-    "store.masters.write",
+    masterCapability("SUPPLIER_PRICE", "save"),
     (_repository, actorUserId, organizationId) =>
       storeSupplierQuoteArtifact({
         ...savedQuote,
@@ -336,7 +338,7 @@ export async function uploadStoreSupplierQuoteAction(formData: FormData) {
 
 export async function createStoreVendorAction(formData: FormData) {
   await withStore(
-    "store.masters.write",
+    masterCapability("VENDOR", "save"),
     (repository, actorUserId, organizationId) => {
       const masterId = optionalText(formData, "master_id")
       return masterId
@@ -361,7 +363,7 @@ export async function createStoreVendorAction(formData: FormData) {
 
 export async function createStoreAssetCategoryAction(formData: FormData) {
   await withStore(
-    "store.masters.write",
+    masterCapability("CATEGORY", "save"),
     (repository, actorUserId, organizationId) => {
       const masterId = optionalText(formData, "master_id")
       return masterId
@@ -383,7 +385,7 @@ export async function createStoreAssetCategoryAction(formData: FormData) {
 
 export async function createStoreAssetSubcategoryAction(formData: FormData) {
   await withStore(
-    "store.masters.write",
+    masterCapability("SUBCATEGORY", "save"),
     (repository, actorUserId, organizationId) => {
       const masterId = optionalText(formData, "master_id")
       return masterId
@@ -407,7 +409,7 @@ export async function createStoreAssetSubcategoryAction(formData: FormData) {
 
 export async function createStoreAssetNameAction(formData: FormData) {
   await withStore(
-    "store.masters.write",
+    masterCapability("ASSET_NAME", "save"),
     (repository, actorUserId, organizationId) => {
       const masterId = optionalText(formData, "master_id")
       return masterId
@@ -430,9 +432,10 @@ export async function createStoreAssetNameAction(formData: FormData) {
 }
 
 export async function createStoreItemTypeAction(formData: FormData) {
+  await requireCapability(masterCapability("ITEM_TYPE", "save"), storePath)
   const savedDrawing = await saveAssetDrawing(formData.get("asset_drawing"))
   await withStore(
-    "store.masters.write",
+    masterCapability("ITEM_TYPE", "save"),
     async (repository, actorUserId, organizationId) => {
       const masterId = optionalText(formData, "master_id")
       const input = {
@@ -523,10 +526,11 @@ async function storeItemDrawingArtifact(input: {
 }
 
 export async function uploadStoreItemDrawingAction(formData: FormData) {
+  await requireCapability(masterCapability("ITEM_TYPE", "save"), storePath)
   const savedDrawing = await saveAssetDrawing(formData.get("asset_drawing"))
   if (!savedDrawing) throw new Error("Select an Asset drawing to upload.")
   await withStore(
-    "store.masters.write",
+    masterCapability("ITEM_TYPE", "save"),
     (_repository, actorUserId, organizationId) =>
       storeItemDrawingArtifact({
         ...savedDrawing,
@@ -552,7 +556,7 @@ const storeMasterKinds = new Set<MasterDataKind>([
 export async function deleteStoreMasterAction(formData: FormData) {
   const kind = requiredText(formData, "master_kind") as MasterDataKind
   if (!storeMasterKinds.has(kind)) throw new Error("Store master is invalid.")
-  const session = await requireCapability("store.masters.write", storePath)
+  const session = await requireCapability(masterCapability(kind.slice("store_".length).toUpperCase(), "delete"), storePath)
   const connectionString = readAuthEnvironment().connectionString
   const store = createStoreRepository({ connectionString })
   const lifecycle = createMasterDataLifecycleRepository({ connectionString })

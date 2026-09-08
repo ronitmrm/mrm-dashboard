@@ -53,9 +53,11 @@ describe("master module selection", () => {
     }
   })
   it("hides units that contain no permitted masters", () => {
-    const noAccess = Object.fromEntries(
-      Object.keys(fullAccess).map((key) => [key, false])
-    ) as MasterModuleAccess
+    const noAccess: MasterModuleAccess = {
+      commercialCustomers: false, commercialPricing: false, commercialWebsiteProducts: false,
+      hrApprovedPosts: false, hrCandidates: false, hrEmployees: false, hrJobTemplates: false,
+      hrMasters: false, operations: false, storeMasters: false,
+    }
 
     expect(availableMasterUnits(noAccess)).toEqual([])
     expect(

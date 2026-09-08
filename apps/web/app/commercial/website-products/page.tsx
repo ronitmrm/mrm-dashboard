@@ -40,7 +40,7 @@ import {
   MasterDataCsvDownloadButton,
   MasterDataCsvImportButton,
 } from "@/components/master-data-csv-import-button"
-import { requireCapability } from "@/lib/auth/require-capability"
+import { requireCapability, listGrantedCapabilities } from "@/lib/auth/require-capability"
 import {
   externalMasterAllMastersHref,
   externalMasterView,
@@ -234,9 +234,10 @@ export default async function WebsiteProductsPage({
     status?: string
   }>
 }) {
-  await requireCapability("pricing.website_products.read", websiteProductsPath)
+  const session = await requireCapability("masters.universal.commercial_website_products.read", websiteProductsPath)
+  const canSave = (await listGrantedCapabilities(session.user.id, ["masters.universal.commercial_website_products.save"])).length > 0
   const filters = await searchParams
-  const activeView = externalMasterView(filters.masterView)
+  const activeView = canSave ? externalMasterView(filters.masterView) : "masterTables"
   const showDataEntry = activeView === "dataEntry"
   const showMasterTables = activeView === "masterTables"
   const connectionString = readAuthEnvironment().connectionString
@@ -316,7 +317,7 @@ export default async function WebsiteProductsPage({
           />
         }
         csvImportAction={
-          <MasterDataCsvImportButton action={importWebsiteProductsCsvAction} />
+          canSave ? <MasterDataCsvImportButton action={importWebsiteProductsCsvAction} /> : null
         }
         dataEntryHref={externalMasterViewHref(
           websiteProductsPath,
@@ -709,7 +710,7 @@ export default async function WebsiteProductsPage({
                     rows.map((row) => (
                       <TableRow key={row.profileId}>
                         <TableCell className="sticky left-0 bg-background">
-                          <Button asChild size="sm" variant="ghost">
+                          {canSave ? <Button asChild size="sm" variant="ghost">
                             <Link
                               href={externalMasterViewHref(
                                 websiteProductsPath,
@@ -719,7 +720,7 @@ export default async function WebsiteProductsPage({
                             >
                               <Pencil /> Edit
                             </Link>
-                          </Button>
+                          </Button> : null}
                         </TableCell>
                         {columns.map((column) => (
                           <TableCell

@@ -2,6 +2,7 @@ import { createRecruitmentRepository } from "@workspace/db"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
+import { masterCapability } from "@/lib/auth/master-capabilities"
 import { masterCsvResponse } from "@/lib/master-data-csv"
 
 export const dynamic = "force-dynamic"
@@ -10,7 +11,7 @@ export async function GET(request: Request) {
   const kind = new URL(request.url).searchParams.get("kind")
   const templates = kind === "job_template"
   await requireCapability(
-    templates ? "hr.job_templates.read" : "hr.masters.read",
+    masterCapability(templates ? "job_templates" : kind === "designation" ? "designation" : "department", "read"),
     "/hr"
   )
   const repository = createRecruitmentRepository({

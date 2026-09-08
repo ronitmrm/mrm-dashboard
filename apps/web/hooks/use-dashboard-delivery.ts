@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useReducer, useRef } from "react"
+import { useMasterStateUrl } from "@/components/master-access-provider"
 
 import {
   dashboardCanonicalRequestUrl,
@@ -29,6 +30,7 @@ export function useDashboardDelivery({
   floor,
   onData,
 }: UseDashboardDeliveryOptions) {
+  const masterStateUrl = useMasterStateUrl()
   const [state, reactDispatch] = useReducer(
     (
       current: DashboardDeliveryState<DashboardRecord>,
@@ -75,7 +77,7 @@ export function useDashboardDelivery({
     }
 
     try {
-      const response = await fetch(dashboardCanonicalRequestUrl(request), {
+      const response = await fetch(masterStateUrl ?? dashboardCanonicalRequestUrl(request), {
         cache: "no-store",
         credentials: "same-origin",
         signal: controller.signal,
@@ -137,7 +139,7 @@ export function useDashboardDelivery({
         queueMicrotask(() => requestCanonicalStateRef.current())
       }
     }
-  }, [dispatch])
+  }, [dispatch, masterStateUrl])
 
   useEffect(() => {
     requestCanonicalStateRef.current = () => void requestCanonicalState()
@@ -169,6 +171,7 @@ export function useDashboardDelivery({
   }, [dispatch])
 
   useEffect(() => {
+    if (masterStateUrl) return
     const events = new EventSource("/api/dashboard-events")
     const handleOpen = () => dispatch({ type: "connection.opened" })
     const handleError = () => dispatch({ type: "connection.lost" })
@@ -182,7 +185,7 @@ export function useDashboardDelivery({
       events.removeEventListener("dashboard-version", handleHint)
       events.close()
     }
-  }, [dispatch])
+  }, [dispatch, masterStateUrl])
 
   useEffect(() => {
     const nowMs = Date.now()

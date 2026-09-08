@@ -29,7 +29,6 @@ import {
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { MetricSummary } from "@/components/ui/golden-patterns"
-import { commercialTaskCapabilities } from "@/lib/auth/task-capabilities"
 import { CompanyWideMasterScope } from "@/components/company-wide-master-scope"
 import { DataDownloadButton } from "@/components/data-download-button"
 import { MasterDataViewTabs } from "@/components/master-data-view-tabs"
@@ -113,24 +112,30 @@ export default async function CustomersPage({
   }>
 }) {
   const params = await searchParams
-  const activeView = externalMasterView(params.masterView)
-  const showDataEntry = activeView === "dataEntry"
-  const showMasterTables = activeView === "masterTables"
   const bounds = pageBounds(params.page, 15)
   const session = await requireCapability(
-    "pricing.customers.read",
+    "masters.universal.commercial_customers.read",
     "/commercial/customers"
   )
   const grantedCapabilities = await listGrantedCapabilities(session.user.id, [
-    commercialTaskCapabilities.createCustomer,
-    commercialTaskCapabilities.updateCustomer,
+    "masters.universal.commercial_customers.create",
+    "masters.universal.commercial_customers.update",
+    "masters.universal.commercial_customers.import",
   ])
   const canCreateCustomers = grantedCapabilities.includes(
-    commercialTaskCapabilities.createCustomer
+    "masters.universal.commercial_customers.create"
   )
   const canUpdateCustomers = grantedCapabilities.includes(
-    commercialTaskCapabilities.updateCustomer
+    "masters.universal.commercial_customers.update"
   )
+  const canImportCustomers = grantedCapabilities.includes(
+    "masters.universal.commercial_customers.import"
+  )
+  const activeView = canCreateCustomers || canImportCustomers
+    ? externalMasterView(params.masterView)
+    : "masterTables"
+  const showDataEntry = activeView === "dataEntry"
+  const showMasterTables = activeView === "masterTables"
 
   const repository = createCustomerRepository({
     connectionString: readAuthEnvironment().connectionString,
@@ -183,7 +188,7 @@ export default async function CustomersPage({
           />
         }
         csvImportAction={
-          canCreateCustomers ? (
+          canImportCustomers ? (
             <MasterDataCsvImportButton action={importCustomersCsvAction} />
           ) : null
         }

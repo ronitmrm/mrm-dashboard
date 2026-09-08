@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto"
 import type { PoolClient } from "pg"
 
 import { queueDashboardRefresh } from "./dashboard-refresh-queue"
+import { productionFloorCodeForRecord } from "./production-floors"
 import {
   repositoryPool,
   withTransaction,
@@ -81,6 +82,50 @@ const renamableMasterColumns: Partial<
 }
 
 export type MasterDataKind = keyof typeof masterTargets
+
+export type MasterRecordAccess = {
+  kind: MasterDataKind
+  productionFloorCode: string | null
+  termType: string | null
+}
+
+async function authorizeMasterRecord(
+  client: PoolClient,
+  kind: MasterDataKind,
+  snapshot: unknown,
+  authorize?: (record: MasterRecordAccess) => Promise<unknown>
+) {
+  if (!authorize) return
+  const record = snapshot && typeof snapshot === "object" ? snapshot as Record<string, unknown> : {}
+  let productionFloorCode: string | null = null
+  if (kind === "planning_holiday") {
+    productionFloorCode = productionFloorCodeForRecord({ sourcePayload: record.source_payload })
+  } else {
+    const floor = typeof record.production_floor_id === "string"
+      ? await client.query<{ code: string }>(
+          "SELECT code FROM manufacturing.production_floors WHERE id = $1",
+          [record.production_floor_id]
+        )
+      : typeof record.route_option_id === "string"
+        ? await client.query<{ code: string }>(
+            `SELECT floor.code FROM manufacturing.route_options route
+             JOIN manufacturing.production_floors floor ON floor.id = route.production_floor_id
+             WHERE route.id = $1`,
+            [record.route_option_id]
+          )
+        : typeof record.operation_setup_id === "string"
+          ? await client.query<{ code: string }>(
+              `SELECT floor.code FROM manufacturing.operation_setups setup
+               JOIN manufacturing.route_options route ON route.id = setup.route_option_id
+               JOIN manufacturing.production_floors floor ON floor.id = route.production_floor_id
+               WHERE setup.id = $1`,
+              [record.operation_setup_id]
+            )
+          : null
+    productionFloorCode = floor?.rows[0]?.code ?? null
+  }
+  await authorize({ kind, productionFloorCode, termType: typeof record.term_type === "string" ? record.term_type : null })
+}
 
 export function isMasterDataKind(value: string): value is MasterDataKind {
   return value in masterTargets
@@ -228,6 +273,7 @@ export function createMasterDataLifecycleRepository(
     },
 
     async renameMaster(input: {
+      authorize?: (record: MasterRecordAccess) => Promise<unknown>
       actorUserId?: string | null
       kind: MasterDataKind
       name: string
@@ -248,6 +294,7 @@ export function createMasterDataLifecycleRepository(
           recordId
         )
         if (!source) throw new Error("Master record was not found.")
+        await authorizeMasterRecord(client, input.kind, source.snapshot, input.authorize)
         const [schemaName, tableName] = target
         await client.query(
           `UPDATE ${qualifiedTable(schemaName, tableName)}
@@ -286,6 +333,7 @@ export function createMasterDataLifecycleRepository(
     },
 
     async deleteMaster(input: {
+      authorize?: (record: MasterRecordAccess) => Promise<unknown>
       actorUserId?: string | null
       kind: MasterDataKind
       organizationId: string
@@ -304,6 +352,7 @@ export function createMasterDataLifecycleRepository(
           recordId
         )
         if (!source) throw new Error("Master record was not found.")
+        await authorizeMasterRecord(client, input.kind, source.snapshot, input.authorize)
 
         const replacementRecordId = input.replacementRecordId?.trim() || null
         if (replacementRecordId === recordId) {
@@ -320,6 +369,7 @@ export function createMasterDataLifecycleRepository(
         if (replacementRecordId && !replacement) {
           throw new Error("Replacement master was not found.")
         }
+        if (replacement) await authorizeMasterRecord(client, input.kind, replacement.snapshot, input.authorize)
 
         const [schemaName, tableName] = target
         const references = await referenceColumns(client, schemaName, tableName)

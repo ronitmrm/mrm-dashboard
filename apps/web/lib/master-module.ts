@@ -17,6 +17,7 @@ export type MasterUnit = ProductionFloorCode | typeof universalMasterUnit
 export type MasterModuleView = "dataEntry" | "masterTables"
 
 export type MasterModuleAccess = {
+  scopedReadKeys?: readonly string[]
   commercialCustomers: boolean
   commercialPricing: boolean
   commercialWebsiteProducts: boolean
@@ -32,8 +33,8 @@ export type MasterModuleAccess = {
 export type MasterOption = { id: string; label: string }
 
 type MasterAccessRule =
-  | keyof MasterModuleAccess
-  | readonly (keyof MasterModuleAccess)[]
+  | Exclude<keyof MasterModuleAccess, "scopedReadKeys">
+  | readonly Exclude<keyof MasterModuleAccess, "scopedReadKeys">[]
 
 type SubMasterDefinition = MasterOption & { access?: MasterAccessRule }
 
@@ -246,6 +247,7 @@ export function masterModuleAccess(
   directAccess: { storeMasters?: boolean } = {}
 ): MasterModuleAccess {
   return {
+    scopedReadKeys: navigationAccess.masterReadKeys,
     commercialCustomers: navigationAccess.commercialHrefs.includes(
       "/commercial/customers"
     ),
@@ -309,7 +311,9 @@ export function availableMainMasters(
   return masterDefinitions
     .filter(
       (definition) =>
-        definition.scope === scope && hasMasterAccess(definition.access, access)
+        definition.scope === scope && (access.scopedReadKeys
+          ? (definition.subMasters ?? [definition]).some(({ id }) => access.scopedReadKeys!.includes(`masters.${unit}.${id}.read`))
+          : hasMasterAccess(definition.access, access))
     )
     .map(({ id, label }) => ({ id, label }))
 }
@@ -320,13 +324,15 @@ export function subMastersFor(
 ): { fallback: boolean; options: MasterOption[] } | null {
   const definition = masterDefinitions.find(
     (candidate) =>
-      candidate.id === main && hasMasterAccess(candidate.access, access)
+      candidate.id === main && (access.scopedReadKeys ? true : hasMasterAccess(candidate.access, access))
   )
   if (!definition) return null
   const options =
     definition.subMasters
       ?.filter(
-        (option) => !option.access || hasMasterAccess(option.access, access)
+        (option) => access.scopedReadKeys
+          ? access.scopedReadKeys.some((key) => key.endsWith(`.${option.id}.read`))
+          : !option.access || hasMasterAccess(option.access, access)
       )
       .map(({ id, label }) => ({ id, label })) ?? []
   return options.length

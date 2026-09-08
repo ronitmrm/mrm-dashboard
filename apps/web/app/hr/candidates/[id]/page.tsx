@@ -38,7 +38,7 @@ import { saveCandidateAction } from "@/app/hr/actions"
 import { CandidateOfferLetterRegister } from "@/components/hr/candidate-offer-letter-register"
 import { ConversationLogsTable } from "@/components/hr/conversation-logs-table"
 import { readAuthEnvironment } from "@/lib/auth/auth"
-import { listGrantedCapabilities } from "@/lib/auth/require-capability"
+import { listGrantedCapabilities, requireAuthenticatedSession } from "@/lib/auth/require-capability"
 import { requireHrPage } from "@/lib/auth/require-hr-page"
 import { hrTaskCapabilities } from "@/lib/auth/task-capabilities"
 import { candidateSourceOptions } from "@/lib/recruitment-candidate-sources"
@@ -54,20 +54,23 @@ export default async function CandidateWorkspacePage({
 }) {
   const { id } = await params
   const feedback = await searchParams
-  const session = await requireHrPage(
-    "hr.candidate_search.read",
-    "/hr?panel=candidatesPanel"
-  )
+  const session = await requireAuthenticatedSession("/hr?panel=candidatesPanel")
+  const readGrants = await listGrantedCapabilities(session.user.id, ["masters.universal.candidates.read"])
+  if (!readGrants.includes("masters.universal.candidates.read")) {
+    await requireHrPage("hr.candidate_search.read", "/hr?panel=candidatesPanel")
+  }
   const taskCapabilities = Object.values(hrTaskCapabilities)
   const grantedCapabilities = await listGrantedCapabilities(session.user.id, [
     ...taskCapabilities,
-    "hr.employees.read",
+    "masters.universal.employee_assignments.read",
+    "masters.universal.candidates.save",
   ])
   const taskCapabilitySet = new Set<string>(taskCapabilities)
   const canWrite = grantedCapabilities.some((capability) =>
     taskCapabilitySet.has(capability)
   )
-  const canViewOfferLetters = grantedCapabilities.includes("hr.employees.read")
+  const canViewOfferLetters = grantedCapabilities.includes("masters.universal.employee_assignments.read")
+  const canEditCandidate = grantedCapabilities.includes("masters.universal.candidates.save")
   const connectionString = readAuthEnvironment().connectionString
   const repository = createRecruitmentRepository({
     connectionString,
@@ -157,7 +160,7 @@ export default async function CandidateWorkspacePage({
         <CandidateOfferLetterRegister letters={offerLetters} />
       ) : null}
 
-      {canWrite ? (
+      {canEditCandidate ? (
         <SectionCard>
           <CardHeader>
             <CardTitle>Edit Candidate</CardTitle>

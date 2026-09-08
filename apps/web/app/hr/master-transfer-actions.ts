@@ -6,7 +6,7 @@ import { redirect } from "next/navigation"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
-import { hrTaskCapabilities } from "@/lib/auth/task-capabilities"
+import { masterCapability } from "@/lib/auth/master-capabilities"
 import { approvedPostInputFromCsvRow } from "@/lib/approved-post-import"
 import { candidateInputFromCsvRow } from "@/lib/candidate-import"
 import {
@@ -43,7 +43,7 @@ export async function importApprovedPostsCsvAction(formData: FormData) {
     const inputs = rows.map((row, index) =>
       approvedPostInputFromCsvRow(row, index + 2)
     )
-    context = await repositoryContext(hrTaskCapabilities.savePost)
+    context = await repositoryContext(masterCapability("approved_posts", "create"))
     for (const input of inputs) {
       await context.repository.upsertPost({
         ...input,
@@ -75,7 +75,7 @@ export async function importRecruitmentMastersCsvAction(formData: FormData) {
       : "department"
   const rows = await readMasterCsv(formData.get("master_csv_file"))
   const context = await repositoryContext(
-    hrTaskCapabilities.saveRecruitmentMaster
+    masterCapability(kind, "save")
   )
   try {
     for (const [index, row] of rows.entries()) {
@@ -97,7 +97,7 @@ export async function importRecruitmentMastersCsvAction(formData: FormData) {
 
 export async function importJobTemplatesCsvAction(formData: FormData) {
   const rows = await readMasterCsv(formData.get("master_csv_file"))
-  const context = await repositoryContext(hrTaskCapabilities.saveTemplate)
+  const context = await repositoryContext(masterCapability("job_templates", "save"))
   try {
     for (const [index, row] of rows.entries()) {
       const templateCode = csvValue(row, "template_code")
@@ -151,7 +151,7 @@ export async function importCandidatesCsvAction(formData: FormData) {
     const inputs = rows.map((row, index) =>
       candidateInputFromCsvRow(row, index + 2)
     )
-    context = await repositoryContext(hrTaskCapabilities.saveCandidate)
+    context = await repositoryContext(masterCapability("candidates", "save"))
     for (const input of inputs) {
       await context.repository.upsertCandidate({
         ...input,
@@ -196,7 +196,7 @@ export async function importCombinedRolesCsvAction(formData: FormData) {
     const inputs = rows.map((row, index) =>
       combinedRoleInputFromCsvRow(row, index + 2)
     )
-    context = await repositoryContext(hrTaskCapabilities.createCombinedRole)
+    context = await repositoryContext(masterCapability("combined_approved_posts", "create"))
     const posts = await context.repository.listPosts(context.organizationId)
     const postIdByCode = new Map(
       posts.map((post) => [post.postCode.toUpperCase(), post.id])
@@ -267,7 +267,7 @@ export async function importEmployeeAssignmentsCsvAction(formData: FormData) {
       const assignment = employeeAssignmentInputFromCsvRow(row, index + 2)
       return assignment ? [assignment] : []
     })
-    context = await repositoryContext(hrTaskCapabilities.bulkAssignEmployees)
+    context = await repositoryContext(masterCapability("employee_assignments", "import"))
     const result = await context.repository.bulkAssignEmployees({
       actorUserId: context.actorUserId,
       assignments,

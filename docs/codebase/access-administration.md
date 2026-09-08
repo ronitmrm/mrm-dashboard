@@ -1,5 +1,37 @@
 # Access Administration
 
+## Independent master capabilities (rollout pending)
+
+The 69 scoped masters are defined in `lib/auth/master-capabilities.ts`: 41
+Universal entries and seven per production unit. Each row owns its supported
+actions through `masters.<scope>.<master>.<action>` keys. The separate Included
+Masters inventory is removed; Capabilities renders these rows from the persisted
+permission registry. Store imports also require the same master's Save grant.
+
+Master selection, direct pages, actions, exports and attachments use leaf grants.
+Production master pages fetch `/api/masters/state`, with selected records and
+minimal form references only. Shared operational dashboard guards remain intact;
+operational workflows retain their authorized reference data. Commercial and
+Store forms serialize only the selected master's records/reference labels. HR
+controls check individual actions instead of a shared write boolean. Lifecycle
+operations authorize stored subtype/unit and replacement records before changing
+references. Machine and holiday writes reject cross-unit collisions against
+their existing globally unique identities.
+
+**Do not deploy before the permission registry/backfill is approved and
+implemented.** Automatic approval review blocked the proposed migration because
+deriving new grants from broad legacy permissions could expand role access. No
+registry/backfill migration or live permission change has occurred. The
+2026-09-08 read-only impact check found Administrator: 69 masters/286 action keys;
+Design Team: Customers and Website Product Data, View only (two keys); Sales &
+Marketing: 20 masters/26 keys; five other roles receive none. No user overrides
+exist. Recheck these conditions at activation; do not silently grant new access
+if the source state changes.
+
+The migration must preserve actual existing rights without deriving legacy
+umbrella grants from new leaves. Commercial workbook customer upserts require
+both Customer Import and Edit; customer CSV creation alone requires Import.
+
 ## Workspace tabs
 
 - Permission rows show software Page/Task names without internal URL/query

@@ -2,6 +2,7 @@ import { createRecruitmentRepository } from "@workspace/db"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireHrPage } from "@/lib/auth/require-hr-page"
+import { listGrantedCapabilities, requireAuthenticatedSession } from "@/lib/auth/require-capability"
 import { userAttachmentResponseHeaders } from "@/lib/user-attachment-security"
 import { readUserAttachment } from "@/lib/user-attachment-storage"
 
@@ -9,10 +10,11 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  await requireHrPage(
-    "hr.candidate_search.read",
-    "/hr?panel=candidateSearchPanel"
-  )
+  const session = await requireAuthenticatedSession("/hr?panel=candidatesPanel")
+  const granted = await listGrantedCapabilities(session.user.id, ["masters.universal.candidates.read"])
+  if (!granted.includes("masters.universal.candidates.read")) {
+    await requireHrPage("hr.candidate_search.read", "/hr?panel=candidateSearchPanel")
+  }
   const { id } = await params
   const repository = createRecruitmentRepository({
     connectionString: readAuthEnvironment().connectionString,

@@ -2,6 +2,7 @@ import { createStoreRepository } from "@workspace/db"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
+import { masterCapability } from "@/lib/auth/master-capabilities"
 import { userAttachmentDownloadHeaders } from "@/lib/user-attachment-security"
 import { readUserAttachment } from "@/lib/user-attachment-storage"
 
@@ -10,7 +11,7 @@ export async function GET(
   { params }: { params: Promise<{ documentId: string; itemTypeId: string }> }
 ) {
   const { documentId, itemTypeId } = await params
-  await requireCapability("store.masters.read", "/store/items")
+  await requireCapability(masterCapability("ITEM_TYPE", "read"), "/store/items")
   const repository = createStoreRepository({
     connectionString: readAuthEnvironment().connectionString,
   })

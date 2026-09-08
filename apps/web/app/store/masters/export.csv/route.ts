@@ -4,14 +4,15 @@ import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { masterCsvResponse } from "@/lib/master-data-csv"
 import { normalizeStoreMasterKey } from "@/lib/store-master-selection"
+import { masterCapability } from "@/lib/auth/master-capabilities"
 
 export const dynamic = "force-dynamic"
 
 export async function GET(request: Request) {
-  await requireCapability("store.masters.read", "/store/masters")
   const master = normalizeStoreMasterKey(
     new URL(request.url).searchParams.get("storeMaster")
   )
+  await requireCapability(masterCapability(master, "read"), "/store/masters")
   const repository = createStoreRepository({
     connectionString: readAuthEnvironment().connectionString,
   })

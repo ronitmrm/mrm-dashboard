@@ -45,12 +45,14 @@ import { ExcelColumnFilter } from "@workspace/ui/components/excel-column-filter"
 
 function MasterTable({
   canWrite,
+  canDelete,
   kind,
   masterView,
   rows,
   title,
 }: {
   canWrite: boolean
+  canDelete: boolean
   kind: "department" | "designation"
   masterView?: "dataEntry" | "masterTables"
   rows: RecruitmentMasterSnapshot["departments"]
@@ -62,7 +64,7 @@ function MasterTable({
   const [deletingRow, setDeletingRow] = useState<(typeof rows)[number] | null>(
     null
   )
-  const canEdit = canWrite
+  const canEdit = canWrite || canDelete
   const table = useExcelTable({
     rows,
     columns: [
@@ -134,7 +136,7 @@ function MasterTable({
                   <TableCell>{row.name}</TableCell>
                   {canEdit ? (
                     <TableCell className="text-right">
-                      <Button
+                      {canWrite ? <Button
                         aria-label={`Edit ${row.name}`}
                         onClick={() => {
                           setEditingRow(row)
@@ -145,8 +147,8 @@ function MasterTable({
                       >
                         <Pencil data-icon="inline-start" />
                         Edit
-                      </Button>
-                      <Button
+                      </Button> : null}
+                      {canDelete ? <Button
                         aria-label={`Delete ${row.name}`}
                         className="ml-1"
                         onClick={() => setDeletingRow(row)}
@@ -156,7 +158,7 @@ function MasterTable({
                       >
                         <Trash2 data-icon="inline-start" />
                         Delete
-                      </Button>
+                      </Button> : null}
                     </TableCell>
                   ) : null}
                 </TableRow>
@@ -300,11 +302,13 @@ function MasterTable({
 
 export function MasterTables({
   canWrite = false,
+  canDelete = false,
   kind,
   masterView,
   masters,
 }: {
   canWrite?: boolean
+  canDelete?: boolean
   kind: "department" | "designation"
   masterView?: "dataEntry" | "masterTables"
   masters: RecruitmentMasterSnapshot
@@ -314,6 +318,7 @@ export function MasterTables({
   return (
     <MasterTable
       canWrite={canWrite}
+      canDelete={canDelete}
       kind={kind}
       masterView={masterView}
       rows={rows}

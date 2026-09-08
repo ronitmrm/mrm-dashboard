@@ -20,6 +20,7 @@ export function buildApprovedPostsWorkbook(input: {
   combinedRoles: RecruitmentCombinedRoleRow[]
   posts: RecruitmentPostRow[]
   templates: RecruitmentTemplateRow[]
+  includeCombinedJobs?: boolean
 }) {
   const workbook = XLSX.utils.book_new()
   const postByCode = new Map(input.posts.map((post) => [post.postCode, post]))
@@ -28,7 +29,8 @@ export function buildApprovedPostsWorkbook(input: {
   )
   const rolesByPostCode = new Map<string, RecruitmentCombinedRoleRow[]>()
 
-  for (const role of input.combinedRoles) {
+  const combinedRoles = input.includeCombinedJobs === false ? [] : input.combinedRoles
+  for (const role of combinedRoles) {
     for (const postCode of role.postCodes) {
       const roles = rolesByPostCode.get(postCode) ?? []
       roles.push(role)
@@ -62,7 +64,7 @@ export function buildApprovedPostsWorkbook(input: {
     ]
   })
 
-  const combinedJobRows = input.combinedRoles.map((role) => {
+  const combinedJobRows = combinedRoles.map((role) => {
     const primaryPost = postByCode.get(
       role.primaryPostCode ?? role.postCodes[0] ?? ""
     )
@@ -110,7 +112,7 @@ export function buildApprovedPostsWorkbook(input: {
     ),
     approvedPostsSheetName
   )
-  XLSX.utils.book_append_sheet(
+  if (input.includeCombinedJobs !== false) XLSX.utils.book_append_sheet(
     workbook,
     worksheet(
       [

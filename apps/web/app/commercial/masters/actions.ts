@@ -18,12 +18,13 @@ import {
   requireAuthenticatedSession,
   requireCapability,
 } from "@/lib/auth/require-capability"
-import { commercialTaskCapabilities } from "@/lib/auth/task-capabilities"
+import { masterRecordCapability } from "@/lib/auth/master-record-access"
+import { masterCapability } from "@/lib/auth/master-capabilities"
+import { commercialImportCapabilities } from "@/lib/auth/commercial-master-access"
 import {
   commercialMasterSelection,
   commercialMasterViewHref,
   commercialMasterWorkspaceKind,
-  isCustomerDefaultCommercialTerm,
 } from "@/lib/commercial-master-workspace"
 
 import { parseMastersWorkbook } from "./workbook"
@@ -127,12 +128,7 @@ export async function upsertMasterAction(formData: FormData) {
   const termType =
     kind === "commercialTerm" ? required(formData, "term_type") : null
   await withMasters(
-    termType && isCustomerDefaultCommercialTerm(termType)
-      ? [
-          commercialTaskCapabilities.updateCustomerDefaultTerm,
-          commercialTaskCapabilities.updateMaster,
-        ]
-      : commercialTaskCapabilities.updateMaster,
+    masterCapability(termType ?? kind, "save"),
     async (repository, actorUserId, organizationId) => {
       const context = { actorUserId, organizationId }
       switch (kind) {
@@ -223,7 +219,6 @@ export async function upsertMasterAction(formData: FormData) {
 }
 
 async function commercialLifecycleAction(
-  capability: string,
   formData: FormData,
   operation: (
     repository: ReturnType<typeof createMasterDataLifecycleRepository>,
@@ -233,7 +228,7 @@ async function commercialLifecycleAction(
   success: string
 ) {
   const returnPath = mastersReturnPath(formData)
-  const session = await requireCapability(capability, returnPath)
+  const session = await requireAuthenticatedSession(returnPath)
   const connectionString = readAuthEnvironment().connectionString
   const customers = createCustomerRepository({ connectionString })
   const lifecycle = createMasterDataLifecycleRepository({ connectionString })
@@ -265,10 +260,10 @@ export async function renameCommercialMasterAction(formData: FormData) {
     throw new Error("Commercial master is invalid.")
   }
   await commercialLifecycleAction(
-    commercialTaskCapabilities.renameMaster,
     formData,
     (repository, actorUserId, organizationId) =>
       repository.renameMaster({
+        authorize: (record) => requireCapability(masterRecordCapability(record, "rename"), mastersPath),
         actorUserId,
         kind,
         name: required(formData, "name"),
@@ -285,10 +280,10 @@ export async function deleteCommercialMasterAction(formData: FormData) {
     throw new Error("Commercial master is invalid.")
   }
   await commercialLifecycleAction(
-    commercialTaskCapabilities.deleteMaster,
     formData,
     (repository, actorUserId, organizationId) =>
       repository.deleteMaster({
+        authorize: (record) => requireCapability(masterRecordCapability(record, "delete"), mastersPath),
         actorUserId,
         kind,
         organizationId,
@@ -331,14 +326,18 @@ export async function importMastersWorkbookAction(formData: FormData) {
         workbook.Sheets = { [target]: sheet }
       }
     }
+    const snapshot = parseMastersWorkbook(workbook)
+    const requiredCapabilities = commercialImportCapabilities(snapshot)
+    if (!requiredCapabilities.length) throw new Error("The workbook has no master records to import.")
+    for (const capability of requiredCapabilities) await requireCapability(capability, mastersPath)
     const result = await withMasters(
-      commercialTaskCapabilities.importMasters,
+      requiredCapabilities[0]!,
 
       (repository, actorUserId, organizationId) =>
         repository.importSnapshot({
           actorUserId,
           organizationId,
-          snapshot: parseMastersWorkbook(workbook),
+          snapshot,
         })
     )
     outcome = `Imported ${result.created} new and updated ${result.updated} master rows`
