@@ -22,7 +22,11 @@ describe("Bulk revision product tables", () => {
         ? source(
             "app/commercial/product-costing/revisions/[revisionId]/bulk-product-selection-table.tsx"
           )
-        : page
+        : path.includes("customer-costing/revisions/")
+          ? source(
+              "app/commercial/customer-costing/revisions/[revisionId]/customer-costing-price-table.tsx"
+            )
+          : page
       expect(table).toMatch(/<OperationalTable[^>]*\bexcelFilters\b[^>]*>/)
       for (const label of ["UID", "Description", "Category", "Subcategory"]) {
         expect(page).toMatch(

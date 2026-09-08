@@ -455,6 +455,7 @@ async function topLevelAffectedQuoteIds(
   const ids = [...affectedQuoteIds]
   if (!ids.length) return []
   const nested = await client.query<{ child_id: string }>(
+    // Snapshot components stay nested even when their immediate parent is no longer active.
     `
       SELECT DISTINCT component.child_quote_item_id AS child_id
       FROM sales.quote_package_components component
@@ -463,7 +464,6 @@ async function topLevelAffectedQuoteIds(
       JOIN sales.quote_items parent ON parent.id = snapshot.quote_item_id
       WHERE component.child_quote_item_id = ANY($1::uuid[])
         AND parent.id = ANY($1::uuid[])
-        AND parent.is_active AND parent.status IN ('Sent', 'Accepted')
     `,
     [ids]
   )
@@ -2025,6 +2025,18 @@ async function preparedProductRevisionPreview(
 ) {
   const prepared = await preparedProductRevision(client, bulkPriceRevisionId)
   const graph = await loadQuoteGraph(client, rootQuoteItemIds)
+  const componentCosts = await client.query<{ item_id: string; component_cost: string }>(
+    `SELECT line.parent_item_id AS item_id, COALESCE(sum(
+       line.quantity * CASE WHEN child.pricing_method = 'Direct Purchase'
+         THEN child.direct_purchase_price_per_piece ELSE child.product_cost_inr END
+       ), 0)::text AS component_cost
+     FROM catalog.bom_lines line
+     JOIN catalog.items child ON child.id = line.component_item_id
+     WHERE line.parent_item_id = ANY($1::uuid[])
+     GROUP BY line.parent_item_id`,
+    [[...prepared.productOverridesById.keys()]]
+  )
+  const componentCostByProduct = new Map(componentCosts.rows.map((row) => [row.item_id, asNumber(row.component_cost)]))
   const productOverridesById = new Map<string, QuoteOverride>()
   for (const [
     productItemId,
@@ -2037,7 +2049,8 @@ async function preparedProductRevisionPreview(
       "__product_cost_inr",
       await calculatedProductBase(
         client,
-        productWithOverrides(product, stagedOverrides)
+        productWithOverrides(product, stagedOverrides),
+        componentCostByProduct.get(productItemId) ?? 0
       )
     )
     productOverridesById.set(productItemId, overrides)
@@ -4816,7 +4829,8 @@ export function createCommercialRevisionsRepository(
             await client.query(
               `
                 UPDATE sales.bulk_price_revision_changes
-                SET applied_at = now(), final_quote_item_ids_json = $1
+                SET applied_at = now(), final_quote_item_ids_json =
+                  CASE WHEN id = $4::uuid THEN $1::jsonb ELSE '[]'::jsonb END
                 WHERE bulk_price_revision_id = $2 AND stage_group_id = $3
                   AND replacement_quote_item_id IS NULL
               `,
@@ -4824,6 +4838,7 @@ export function createCommercialRevisionsRepository(
                 JSON.stringify(affectedQuoteIds),
                 input.bulkPriceRevisionId,
                 stageGroupId,
+                group[0]!.id,
               ]
             )
           }
