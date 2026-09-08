@@ -326,6 +326,12 @@ export default async function JobWorkspacePage({
                       </TableCell>
                       <TableCell>
                         <StatusBadge value={application.status} />
+                        {application.didNotJoinOn ? (
+                          <div className="mt-1 min-w-48 text-xs whitespace-normal text-muted-foreground">
+                            <p>{application.didNotJoinOn}</p>
+                            <p>{application.didNotJoinReason}</p>
+                          </div>
+                        ) : null}
                       </TableCell>
                       <TableCell>
                         {formatDateTime(application.interviewAt)}
@@ -361,6 +367,12 @@ export default async function JobWorkspacePage({
                           <CandidateApplicationActions
                             applicationId={application.id}
                             candidateName={application.candidateName}
+                            canRecordDidNotJoin={
+                              application.canRecordDidNotJoin &&
+                              grants.includes(
+                                hrTaskCapabilities.completeCandidateAppointment
+                              )
+                            }
                             canCompleteAppointment={
                               application.status === "Approved" &&
                               application.allRoundsApproved &&

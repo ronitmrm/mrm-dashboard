@@ -679,6 +679,25 @@ export async function withdrawCandidateApplicationAction(formData: FormData) {
   )
 }
 
+export async function recordCandidateDidNotJoinAction(formData: FormData) {
+  await mutate(
+    formData,
+    hrTaskCapabilities.completeCandidateAppointment,
+    async (repository, context) => {
+      const applicationId = value(formData, "application_id")
+      const result = await repository.recordCandidateDidNotJoin({
+        ...context,
+        applicationId,
+        didNotJoinOn: value(formData, "did_not_join_on"),
+        reason: value(formData, "reason"),
+      })
+      revalidatePath(`/hr/jobs/${result.jobId}`)
+      revalidatePath("/hr/candidates", "layout")
+    },
+    "Did Not Join recorded. The reserved vacancy is available and the same job has reopened."
+  )
+}
+
 export async function logCandidateEventAction(formData: FormData) {
   await mutate(
     formData,
