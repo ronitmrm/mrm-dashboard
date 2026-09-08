@@ -2348,6 +2348,89 @@ describe("commercial revisions and corrections", () => {
       totalA: 11.66,
     })
   })
+  test("customer bulk revisions include every selected customer price and persist all changes", async () => {
+    const suffix = randomUUID()
+    const customer = await pool.query<{ id: string }>(
+      `INSERT INTO sales.customers (organization_id, customer_uid, company_name, status, source_system, source_table, source_id)
+       VALUES ($1, $2, $2, 'Active', 'test', 'customers', $3) RETURNING id`,
+      [organizationId, `CBR-COVERAGE-${suffix}`, suffix]
+    )
+    const scopedCustomerId = customer.rows[0]!.id
+    const itemId = await createItem(`M-CBR-SHARED-${suffix}`, "List")
+    await createItem(`M-CBR-NO-QUOTE-${suffix}`, "List")
+    const quoteIds: string[] = []
+    for (const part of ["A", "B"]) {
+      quoteIds.push(
+        await createQuote({
+          customerId: scopedCustomerId,
+          customerPartCode: `${part}-${suffix}`,
+          itemId,
+          itemType: "List",
+          processBase: 10,
+          profitPercent: 0.2,
+          total: 12,
+        })
+      )
+    }
+    const otherCustomerQuote = await createQuote({
+      customerPartCode: `OTHER-${suffix}`,
+      itemId,
+      itemType: "List",
+      processBase: 10,
+      profitPercent: 0.2,
+      total: 12,
+    })
+    const revision = await repository.createBulkPriceRevision({
+      organizationId,
+      customerId: scopedCustomerId,
+      effectiveOn: "2026-09-08",
+      reason: "Verify complete customer price coverage",
+      revisionRoute: "Customer Parameter Bulk Revision",
+    })
+    const candidates =
+      await repository.listBulkPriceRevisionActivePricesBounded(revision.id, {
+        limit: 10000,
+      })
+    expect(candidates.coverage).toMatchObject({
+      total: 2,
+      returned: 2,
+      truncated: false,
+    })
+    expect(new Set(candidates.rows.map((row) => row.id))).toEqual(
+      new Set(quoteIds)
+    )
+    await expect(
+      repository.stageBulkPriceRevisionChange({
+        bulkPriceRevisionId: revision.id,
+        fieldName: "profit_percent",
+        newValue: 0.25,
+        selectedQuoteItemIds: [...quoteIds, otherCustomerQuote],
+      })
+    ).rejects.toThrow("One or more selected prices are no longer active")
+    expect(
+      await repository.listBulkPriceRevisionStages(revision.id)
+    ).toHaveLength(0)
+    const staged = await repository.stageBulkPriceRevisionChange({
+      bulkPriceRevisionId: revision.id,
+      fieldName: "profit_percent",
+      newValue: 0.25,
+      selectedQuoteItemIds: candidates.rows.map((row) => row.id),
+    })
+    expect(staged.selectedCount).toBe(2)
+    await expect(
+      repository.completeBulkPriceRevision({ bulkPriceRevisionId: revision.id })
+    ).resolves.toMatchObject({ status: "Completed", revisedQuoteCount: 2 })
+    const published = await repository.listBulkPriceRevisionActivePricesBounded(
+      revision.id
+    )
+    expect(published.rows).toHaveLength(2)
+    expect(
+      published.rows.every(
+        (row) => row.profitPercent === 0.25 && !quoteIds.includes(row.id)
+      )
+    ).toBe(true)
+  })
+
   test("requires customer decisions when quoted and quote-free products are revised together", async () => {
     const suffix = randomUUID()
     const quotedId = await createItem(`M-MIXED-QUOTED-${suffix}`, "List")
