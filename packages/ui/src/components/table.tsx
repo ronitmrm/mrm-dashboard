@@ -472,7 +472,7 @@ function OperationalTable({
 
   return (
     <div
-      className="w-full"
+      className="min-w-0 w-full"
       data-filter-storage-key={filterStorageKey ?? "automatic"}
       data-slot="operational-table"
     >
