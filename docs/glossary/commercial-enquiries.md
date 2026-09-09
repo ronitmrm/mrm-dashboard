@@ -26,6 +26,13 @@ downstream team queues remain shared; when downstream work is returned to
 Sales, it returns to the same Originating Salesperson.
 _Avoid_: Reassigning ownership when another team reviews or updates the Enquiry.
 
+**Commercial Requote**: Sales selects an existing matched Product for a new
+commercial price without a technical change. The Enquiry line retains that Product
+link and is marked Duplicate / Existing Product; Technical Review and Design are
+not required. It proceeds directly to Customer Parameter Costing using the existing
+Product cost. This applies to CSV Import Review and Sales clarification decisions.
+New lines and Technical Revision decisions still require Technical Review.
+
 **Technical Review Release**: A Technical Review decision that marks one line
 Feasible or Duplicate / Existing Product and makes it available in the Design
 queue. Saving the decision stays within Technical Review; it does not start

@@ -6199,6 +6199,22 @@ export function createCommercialWorkflowRepository(
             }
             await client.query(
               `
+                UPDATE sales.enquiry_items
+                SET technical_review_status = 'Duplicate / Existing Product',
+                  item_id = $1,
+                  link_type = 'Matched Quote - Commercial Requote',
+                  updated_by_user_id = $2, updated_at = now(),
+                  row_version = row_version + 1
+                WHERE id = $3
+              `,
+              [
+                importRow.matched_product_id,
+                input.actorUserId ?? null,
+                created.id,
+              ]
+            )
+            await client.query(
+              `
                 INSERT INTO sales.design_tasks (
                   organization_id, enquiry_item_id, status,
                   portfolio_match_status, matched_product_id, design_status,
