@@ -373,6 +373,11 @@ on weekends or before the day's publication). Missing metal rates block a new
 PDF rather than substituting cash prices or blanks. Stored issued PDFs retain
 their original date, rates and contents.
 
+An explicitly requested correction may replace an issued PDF with a new Artifact
+version. Retain the previous bytes as history; do not change the underlying Sent
+Quote prices or status. The enquiry PDF action opens the current corrected
+version inside the authenticated viewer, with a separate explicit download.
+
 **Sent PI document set**: The exact Proforma Invoice PDF and XLSX Artifacts
 stored and linked as one required set before the PI becomes `Sent`. Draft PI
 previews remain live and create no Artifact. If either file fails, neither

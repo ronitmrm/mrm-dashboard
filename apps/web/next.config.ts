@@ -31,6 +31,12 @@ const nextConfig: NextConfig = {
         ),
         source: "/hr/employment-letters/:id/download",
       },
+      {
+        headers: Object.entries(privateDocumentSecurityHeaders).map(
+          ([key, value]) => ({ key, value })
+        ),
+        source: "/commercial/quotes/enquiry/:id/pdf",
+      },
     ]
   },
   outputFileTracingRoot: workspaceRoot,

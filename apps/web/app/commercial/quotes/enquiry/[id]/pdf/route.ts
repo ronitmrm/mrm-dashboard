@@ -4,6 +4,7 @@ import { attachmentContentDisposition } from "@/lib/attachment-viewer"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
+import { privateDocumentSecurityHeaders } from "@/lib/security-headers"
 import {
   buildQuotePdf,
   loadQuoteMarketContext,
@@ -31,7 +32,24 @@ export async function GET(
       if (!artifact.available) {
         return new Response("Quote PDF is unavailable.", { status: 410 })
       }
-      return Response.redirect(artifact.publicUrl, 307)
+      const stored = await fetch(artifact.publicUrl, {
+        cache: "no-store",
+        signal: AbortSignal.timeout(15_000),
+      })
+      if (!stored.ok) {
+        return new Response("Quote PDF could not be loaded. Please try again.", { status: 502 })
+      }
+      const bytes = await stored.arrayBuffer()
+      return new Response(bytes, {
+        headers: {
+          ...privateDocumentSecurityHeaders,
+          "Cache-Control": "private, no-store",
+          "Content-Disposition": attachmentContentDisposition(request.url, artifact.fileName),
+          "Content-Length": String(bytes.byteLength),
+          "Content-Type": "application/pdf",
+          "X-Content-Type-Options": "nosniff",
+        },
+      })
     }
     if (!(await repository.hasHistoricalQuote(id, scope))) {
       return new Response("Sent Quote PDF was not found.", { status: 404 })
@@ -54,6 +72,8 @@ export async function GET(
       ) as ArrayBuffer,
       {
         headers: {
+          ...privateDocumentSecurityHeaders,
+          "Cache-Control": "private, no-store",
           "Content-Disposition": attachmentContentDisposition(
             request.url,
             fileName
