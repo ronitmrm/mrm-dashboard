@@ -1,5 +1,16 @@
 # Access Administration
 
+## Administrative full access
+
+Migration 0125 grants every registered capability to the assignable
+`administrative` role. Authorization also includes future registered permissions
+for this role, subject to explicit user denials and active employee eligibility.
+`identity.has_administrative_access` recognizes direct and active post-inherited
+assignments. Commercial Workflow and Costing use it alongside the originating
+salesperson check for reads, mutations, exports and quote documents. Actor IDs
+are retained for audit; enquiry ownership never changes. Other role grants and
+the protected Administrator identity are unchanged.
+
 ## Independent master capabilities
 
 The 70 scoped masters are defined in `lib/auth/master-capabilities.ts`: 42

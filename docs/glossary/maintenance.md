@@ -16,7 +16,8 @@ This does not grant manager decisions, trade work, or access to unrelated Depart
 The protected System Administrator identity may submit for any active Department
 in the Organization without an Employee Master link. The requester remains the
 signed-in administrator. An assignable Administrative Role alone does not grant
-this exception; manager decisions and trade work retain their own permissions.
+this requester-identity exception. Administrative receives all manager and trade
+permissions through its full-access role.
 
 ## Maintenance Category
 

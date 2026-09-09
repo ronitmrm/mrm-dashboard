@@ -21,7 +21,8 @@ _Avoid_: Combined enquiry, Technical Review, and Design workspace.
 
 **Originating Salesperson**: The authenticated Sales user who first creates an
 Enquiry. The Enquiry and every Sales task derived from it remain visible and
-actionable only to that user. Technical Review, Design, Costing, and other
+actionable only to that user or staff with the Administrative role. Administrative
+access does not change the originating salesperson. Technical Review, Design, Costing, and other
 downstream team queues remain shared; when downstream work is returned to
 Sales, it returns to the same Originating Salesperson.
 _Avoid_: Reassigning ownership when another team reviews or updates the Enquiry.

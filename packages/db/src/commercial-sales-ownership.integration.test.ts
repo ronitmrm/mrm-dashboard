@@ -4,6 +4,7 @@ import { Pool } from "pg"
 import { afterAll, beforeAll, describe, expect, test } from "vitest"
 
 import { createCommercialWorkflowRepository } from "./commercial-workflow"
+import { createAuthorizationRepository } from "./authorization"
 import { migrateDatabase } from "./migrate"
 
 const connectionString =
@@ -68,6 +69,102 @@ afterAll(async () => {
 })
 
 describe("originating salesperson ownership", () => {
+  test("Administrative can access another salesperson's enquiries with full permissions", async () => {
+    const authorization = createAuthorizationRepository({ pool })
+    const enquiry = await repository.createEnquiry({
+      actorUserId: salespersonAId,
+      customerId,
+      organizationId,
+      receivedOn: "2026-09-09",
+    })
+    const roleKey = "administrative"
+    await pool.query(
+      `INSERT INTO identity.user_roles (user_id, role_id)
+         SELECT $1, id FROM identity.roles WHERE key = $2`,
+      [technicalUserId, roleKey]
+    )
+    try {
+      await expect(
+        authorization.hasCapability(technicalUserId, "pricing.enquiries.read")
+      ).resolves.toBe(true)
+      const scope = { originatingSalespersonUserId: technicalUserId }
+      await expect(
+        repository.getEnquiry(enquiry.id, scope)
+      ).resolves.toMatchObject({ enquiry: { id: enquiry.id } })
+      const register = await repository.listEnquiriesBounded(
+        organizationCode,
+        200,
+        scope
+      )
+      expect(register.rows.map(({ id }) => id)).toContain(enquiry.id)
+      await expect(
+        repository.addEnquiryItem({
+          actorUserId: technicalUserId,
+          customerPartCode: `ADMIN-${roleKey}`,
+          description: "Administrative entry on another salesperson's enquiry",
+          enquiryId: enquiry.id,
+          organizationId,
+          quantity: 1,
+        })
+      ).resolves.toHaveProperty("id")
+      await expect(
+        repository.getEnquiry(enquiry.id, {
+          originatingSalespersonUserId: salespersonAId,
+        })
+      ).resolves.toMatchObject({ enquiry: { id: enquiry.id } })
+    } finally {
+      await pool.query(
+        `DELETE FROM identity.user_roles USING identity.roles
+           WHERE user_roles.role_id = roles.id AND user_roles.user_id = $1
+             AND roles.key = $2`,
+        [technicalUserId, roleKey]
+      )
+    }
+    await expect(
+      repository.getEnquiry(enquiry.id, {
+        originatingSalespersonUserId: technicalUserId,
+      })
+    ).rejects.toThrow("ENQ was not found")
+    await repository.deleteEnquiry(enquiry.id, salespersonAId)
+  })
+
+  test("Administrative receives future capabilities while explicit denials remain effective", async () => {
+    const authorization = createAuthorizationRepository({ pool })
+    const permissionKey = `test.administrative.${randomUUID()}`
+    await pool.query(
+      `INSERT INTO identity.permissions (key, module, name) VALUES ($1, 'test', 'Future capability')`,
+      [permissionKey]
+    )
+    await pool.query(
+      `INSERT INTO identity.user_roles (user_id, role_id)
+       SELECT $1, id FROM identity.roles WHERE key = 'administrative'`,
+      [technicalUserId]
+    )
+    try {
+      await expect(
+        authorization.hasCapability(technicalUserId, permissionKey)
+      ).resolves.toBe(true)
+      await pool.query(
+        `INSERT INTO identity.user_permission_overrides (user_id, permission_id, effect)
+         SELECT $1, id, 'deny' FROM identity.permissions WHERE key = $2`,
+        [technicalUserId, permissionKey]
+      )
+      await expect(
+        authorization.hasCapability(technicalUserId, permissionKey)
+      ).resolves.toBe(false)
+    } finally {
+      await pool.query(`DELETE FROM identity.permissions WHERE key = $1`, [
+        permissionKey,
+      ])
+      await pool.query(
+        `DELETE FROM identity.user_roles USING identity.roles
+         WHERE user_roles.role_id = roles.id AND user_roles.user_id = $1
+           AND roles.key = 'administrative'`,
+        [technicalUserId]
+      )
+    }
+  })
+
   test("isolates Sales work while Technical Review remains shared", async () => {
     const createOwnedEnquiry = async (actorUserId: string, part: string) => {
       const enquiry = await repository.createEnquiry({

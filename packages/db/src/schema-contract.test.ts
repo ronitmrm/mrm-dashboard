@@ -1577,13 +1577,13 @@ test("authorization seeds every unified application module and correction author
   expect(correctionCapability.rows[0]?.administrator).toBe(true)
 })
 
-test("authorization seeds an assignable Administrative role with administration access", async () => {
+test("authorization seeds an assignable Administrative role with full access", async () => {
   await migrateDatabase({ connectionString })
 
   const result = await pool.query<{
     assignable: boolean
     permission_count: number
-    administration_permission_count: number
+    registered_permission_count: number
     non_administration_permission_count: number
   }>(`
     SELECT
@@ -1595,8 +1595,7 @@ test("authorization seeds an assignable Administrative role with administration 
       (
         SELECT count(*)::integer
         FROM identity.permissions
-        WHERE module = 'administration'
-      ) AS administration_permission_count
+      ) AS registered_permission_count
     FROM identity.roles AS roles
     LEFT JOIN identity.role_permissions AS role_permissions
       ON role_permissions.role_id = roles.id
@@ -1609,9 +1608,9 @@ test("authorization seeds an assignable Administrative role with administration 
   expect(result.rows).toHaveLength(1)
   expect(result.rows[0]?.assignable).toBe(true)
   expect(result.rows[0]?.permission_count).toBeGreaterThan(0)
-  expect(result.rows[0]?.non_administration_permission_count).toBe(0)
+  expect(result.rows[0]?.non_administration_permission_count).toBeGreaterThan(0)
   expect(result.rows[0]?.permission_count).toBe(
-    result.rows[0]?.administration_permission_count
+    result.rows[0]?.registered_permission_count
   )
 })
 

@@ -14,7 +14,8 @@ Photos use the existing Artifact service and UploadThing provider. Links target 
   being rejected as an invalid profile. A single Department remains automatic.
   Submission re-resolves assignments and validates the selection inside the
   transaction; forged or no-longer-assigned Departments are rejected. The
-  Administrative Role does not imply manager or trade access.
+  Administrative Role now grants all manager and trade capabilities; requester
+  Department selection still records the employee's assigned Department.
 - The protected Better Auth `admin` identity may choose any active Department
   in the current Organization without an employee link. The repository resolves
   this from `identity.users.role`, never a client flag, and rechecks it within

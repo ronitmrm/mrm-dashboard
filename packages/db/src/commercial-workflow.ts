@@ -1278,7 +1278,7 @@ async function followupsForExport(
           ON organization.id = followup.organization_id
         LEFT JOIN sales.quote_items quote ON quote.id = followup.quote_item_id
         WHERE lower(organization.code) = lower($1)
-          AND ($6::uuid IS NULL OR enquiry.created_by_user_id = $6)
+          AND ($6::uuid IS NULL OR enquiry.created_by_user_id = $6 OR (SELECT identity.has_administrative_access($6)))
           AND (
             $2::date IS NULL
             OR (followup.due_on, followup.created_at, followup.id)
@@ -1363,7 +1363,7 @@ async function sentQuotesForExport(
           LEFT JOIN sales.followups followup
             ON followup.enquiry_id = enquiry.id
           WHERE lower(organization.code) = lower($1)
-            AND ($6::uuid IS NULL OR enquiry.created_by_user_id = $6)
+            AND ($6::uuid IS NULL OR enquiry.created_by_user_id = $6 OR (SELECT identity.has_administrative_access($6)))
           GROUP BY enquiry.id, customer.customer_uid, customer.company_name
         )
         SELECT *
@@ -1577,7 +1577,7 @@ async function addEnquiryItemWithClient(
       SELECT organization_id
       FROM sales.enquiries
       WHERE id = $1
-        AND ($2::uuid IS NULL OR created_by_user_id = $2)
+        AND ($2::uuid IS NULL OR created_by_user_id = $2 OR (SELECT identity.has_administrative_access($2)))
       FOR UPDATE
     `,
     [input.enquiryId, input.actorUserId ?? null]
@@ -1739,7 +1739,7 @@ async function getImportReviewWithClient(
       FROM sales.enquiry_import_reviews review
       JOIN sales.enquiries enquiry ON enquiry.id = review.enquiry_id
       WHERE review.id = $1
-        AND ($2::uuid IS NULL OR enquiry.created_by_user_id = $2)
+        AND ($2::uuid IS NULL OR enquiry.created_by_user_id = $2 OR (SELECT identity.has_administrative_access($2)))
     `,
     [reviewId, scope?.originatingSalespersonUserId ?? null]
   )
@@ -1831,7 +1831,7 @@ export async function authorizeImportReviewArtifactTarget(
       WHERE review.id = $1 AND review.enquiry_id = $2
         AND review.organization_id = $3 AND enquiry.organization_id = $3
         AND ($4::boolean = false OR review.status = 'Pending')
-        AND ($5::uuid IS NULL OR enquiry.created_by_user_id = $5)
+        AND ($5::uuid IS NULL OR enquiry.created_by_user_id = $5 OR (SELECT identity.has_administrative_access($5)))
       FOR UPDATE OF review, enquiry
     `,
     [
@@ -1864,7 +1864,7 @@ async function createImportReviewWithClient(
     `
       SELECT id, customer_id FROM sales.enquiries
       WHERE id = $1 AND organization_id = $2
-        AND ($3::uuid IS NULL OR created_by_user_id = $3)
+        AND ($3::uuid IS NULL OR created_by_user_id = $3 OR (SELECT identity.has_administrative_access($3)))
     `,
     [input.enquiryId, input.organizationId, input.actorUserId ?? null]
   )
@@ -2039,7 +2039,7 @@ export async function authorizeCommercialAttachmentTarget(
             clarification.target_stage = 'Sales'
             AND clarification.status = 'Open'
           ))
-          AND ($6::uuid IS NULL OR enquiry.created_by_user_id = $6)
+          AND ($6::uuid IS NULL OR enquiry.created_by_user_id = $6 OR (SELECT identity.has_administrative_access($6)))
         FOR UPDATE OF clarification, enquiry_item, enquiry
       `,
       [
@@ -2107,7 +2107,7 @@ export async function authorizeCommercialAttachmentTarget(
       WHERE enquiry_item.id = $1
         AND enquiry_item.enquiry_id = $2
         AND enquiry_item.organization_id = $3
-        AND ($4::uuid IS NULL OR enquiry.created_by_user_id = $4)
+        AND ($4::uuid IS NULL OR enquiry.created_by_user_id = $4 OR (SELECT identity.has_administrative_access($4)))
       FOR UPDATE OF enquiry_item, enquiry
     `,
     [
@@ -2301,7 +2301,7 @@ export function createCommercialWorkflowRepository(
                 SELECT id FROM sales.enquiries
                 WHERE organization_id = $1
                   AND lower(btrim(enquiry_number)) = lower(btrim($2))
-                  AND ($3::uuid IS NULL OR created_by_user_id = $3)
+                  AND ($3::uuid IS NULL OR created_by_user_id = $3 OR (SELECT identity.has_administrative_access($3)))
                 FOR UPDATE
               `,
               [
@@ -2556,7 +2556,7 @@ export function createCommercialWorkflowRepository(
               ) AS open_sales_clarification_count
             FROM sales.enquiries enquiry
             WHERE enquiry.id = $1 AND enquiry.organization_id = $2
-              AND ($3::uuid IS NULL OR enquiry.created_by_user_id = $3)
+              AND ($3::uuid IS NULL OR enquiry.created_by_user_id = $3 OR (SELECT identity.has_administrative_access($3)))
             FOR UPDATE
           `,
           [input.enquiryId, input.organizationId, input.actorUserId ?? null]
@@ -2678,7 +2678,7 @@ export function createCommercialWorkflowRepository(
               ) AS design_task_count
             FROM sales.enquiries enquiry
             WHERE enquiry.id = $1
-              AND ($2::uuid IS NULL OR enquiry.created_by_user_id = $2)
+              AND ($2::uuid IS NULL OR enquiry.created_by_user_id = $2 OR (SELECT identity.has_administrative_access($2)))
             FOR UPDATE
           `,
           [enquiryId, actorUserId ?? null]
@@ -2778,7 +2778,7 @@ export function createCommercialWorkflowRepository(
             FROM sales.enquiry_items enquiry_item
             JOIN sales.enquiries enquiry ON enquiry.id = enquiry_item.enquiry_id
             WHERE enquiry_item.id = $1
-              AND ($2::uuid IS NULL OR enquiry.created_by_user_id = $2)
+              AND ($2::uuid IS NULL OR enquiry.created_by_user_id = $2 OR (SELECT identity.has_administrative_access($2)))
             FOR UPDATE OF enquiry_item
           `,
           [input.enquiryItemId, input.actorUserId ?? null]
@@ -2923,7 +2923,7 @@ export function createCommercialWorkflowRepository(
               packaging_terms, currency, conversion_rate::text
             FROM sales.enquiries
             WHERE id = $1
-              AND ($2::uuid IS NULL OR created_by_user_id = $2)
+              AND ($2::uuid IS NULL OR created_by_user_id = $2 OR (SELECT identity.has_administrative_access($2)))
             FOR UPDATE
           `,
           [enquiryId, actorUserId ?? null]
@@ -3154,7 +3154,7 @@ export function createCommercialWorkflowRepository(
             ON enquiry_item.enquiry_id = enquiry.id
           WHERE organization.code = $1
             AND enquiry.technical_handover_status <> 'Handed Over'
-            AND ($3::uuid IS NULL OR enquiry.created_by_user_id = $3)
+            AND ($3::uuid IS NULL OR enquiry.created_by_user_id = $3 OR (SELECT identity.has_administrative_access($3)))
           GROUP BY enquiry.id, customer.customer_uid, customer.company_name
           ORDER BY enquiry.created_at DESC, enquiry.id DESC
           LIMIT $2
@@ -3219,7 +3219,7 @@ export function createCommercialWorkflowRepository(
             ON quote.enquiry_item_id = item.id
             AND quote.status IN ('Ready', 'Sent', 'Accepted', 'Ordered')
           WHERE organization.code = $1
-            AND ($3::uuid IS NULL OR enquiry.created_by_user_id = $3)
+            AND ($3::uuid IS NULL OR enquiry.created_by_user_id = $3 OR (SELECT identity.has_administrative_access($3)))
             AND EXISTS (
               SELECT 1 FROM sales.quote_items ready_quote
               WHERE ready_quote.enquiry_id = enquiry.id
@@ -3305,7 +3305,7 @@ export function createCommercialWorkflowRepository(
           LEFT JOIN sales.followups followup
             ON followup.enquiry_id = enquiry.id
           WHERE organization.code = $1
-            AND ($3::uuid IS NULL OR enquiry.created_by_user_id = $3)
+            AND ($3::uuid IS NULL OR enquiry.created_by_user_id = $3 OR (SELECT identity.has_administrative_access($3)))
           GROUP BY enquiry.id, customer.customer_uid, customer.company_name
           ORDER BY latest_sent_at DESC, enquiry.created_at DESC,
             enquiry.id DESC
@@ -3375,7 +3375,7 @@ export function createCommercialWorkflowRepository(
           JOIN core.organizations organization
             ON organization.id = enquiry.organization_id
           WHERE organization.code = $1
-            AND ($3::uuid IS NULL OR enquiry.created_by_user_id = $3)
+            AND ($3::uuid IS NULL OR enquiry.created_by_user_id = $3 OR (SELECT identity.has_administrative_access($3)))
             AND clarification.target_stage = 'Sales'
             AND clarification.status = 'Open'
           ORDER BY clarification.created_at, clarification.id
@@ -4168,7 +4168,7 @@ export function createCommercialWorkflowRepository(
               AND clarification.enquiry_item_id = $2
               AND clarification.target_stage = 'Sales'
               AND clarification.status = 'Open'
-              AND ($3::uuid IS NULL OR enquiry.created_by_user_id = $3)
+              AND ($3::uuid IS NULL OR enquiry.created_by_user_id = $3 OR (SELECT identity.has_administrative_access($3)))
             FOR UPDATE OF clarification, enquiry_item
           `,
           [
@@ -4338,7 +4338,7 @@ export function createCommercialWorkflowRepository(
           `
             SELECT id FROM sales.enquiries
             WHERE id = $1 AND organization_id = $2
-              AND ($3::uuid IS NULL OR created_by_user_id = $3)
+              AND ($3::uuid IS NULL OR created_by_user_id = $3 OR (SELECT identity.has_administrative_access($3)))
           `,
           [input.enquiryId, input.organizationId, input.actorUserId ?? null]
         )
@@ -4416,7 +4416,7 @@ export function createCommercialWorkflowRepository(
             FROM sales.followups followup
             JOIN sales.enquiries enquiry ON enquiry.id = followup.enquiry_id
             WHERE followup.id = $1
-              AND ($2::uuid IS NULL OR enquiry.created_by_user_id = $2)
+              AND ($2::uuid IS NULL OR enquiry.created_by_user_id = $2 OR (SELECT identity.has_administrative_access($2)))
             FOR UPDATE OF followup
           `,
           [input.followupId, input.actorUserId ?? null]
@@ -4520,7 +4520,7 @@ export function createCommercialWorkflowRepository(
           LEFT JOIN sales.quote_items quote
             ON quote.id = followup.quote_item_id
           WHERE organization.code = $1
-            AND ($3::uuid IS NULL OR enquiry.created_by_user_id = $3)
+            AND ($3::uuid IS NULL OR enquiry.created_by_user_id = $3 OR (SELECT identity.has_administrative_access($3)))
           ORDER BY followup.due_on, followup.created_at, followup.id
           LIMIT $2
         `,
@@ -5991,7 +5991,7 @@ export function createCommercialWorkflowRepository(
             FROM sales.enquiry_import_reviews review
             JOIN sales.enquiries enquiry ON enquiry.id = review.enquiry_id
             WHERE review.id = $1
-              AND ($2::uuid IS NULL OR enquiry.created_by_user_id = $2)
+              AND ($2::uuid IS NULL OR enquiry.created_by_user_id = $2 OR (SELECT identity.has_administrative_access($2)))
             FOR UPDATE OF review
           `,
           [input.reviewId, input.actorUserId ?? null]
@@ -6306,7 +6306,7 @@ export function createCommercialWorkflowRepository(
             FROM sales.enquiries enquiry
             JOIN sales.customers customer ON customer.id = enquiry.customer_id
             WHERE enquiry.id = $1
-              AND ($2::uuid IS NULL OR enquiry.created_by_user_id = $2)
+              AND ($2::uuid IS NULL OR enquiry.created_by_user_id = $2 OR (SELECT identity.has_administrative_access($2)))
           `,
           [enquiryId, scope?.originatingSalespersonUserId ?? null]
         )
@@ -6581,7 +6581,7 @@ export function createCommercialWorkflowRepository(
           JOIN sales.customers customer ON customer.id = enquiry.customer_id
           LEFT JOIN sales.enquiry_items item ON item.enquiry_id = enquiry.id
           WHERE lower(organization.code) = lower($1)
-            AND ($3::uuid IS NULL OR enquiry.created_by_user_id = $3)
+            AND ($3::uuid IS NULL OR enquiry.created_by_user_id = $3 OR (SELECT identity.has_administrative_access($3)))
           GROUP BY enquiry.id, customer.customer_uid, customer.company_name
           ORDER BY enquiry.created_at DESC
           LIMIT $2
@@ -6651,7 +6651,7 @@ export function createCommercialWorkflowRepository(
             ON organization.id = enquiry.organization_id
           JOIN sales.customers customer ON customer.id = enquiry.customer_id
           WHERE lower(organization.code) = lower($1)
-            AND ($3::uuid IS NULL OR enquiry.created_by_user_id = $3)
+            AND ($3::uuid IS NULL OR enquiry.created_by_user_id = $3 OR (SELECT identity.has_administrative_access($3)))
           ORDER BY enquiry.created_at DESC, enquiry.id DESC
           LIMIT $2
         `,
@@ -6807,7 +6807,7 @@ export function createCommercialWorkflowRepository(
             LIMIT 1
           ) drawing ON true
           WHERE lower(organization.code) = lower($1)
-            AND ($3::uuid IS NULL OR enquiry.created_by_user_id = $3)
+            AND ($3::uuid IS NULL OR enquiry.created_by_user_id = $3 OR (SELECT identity.has_administrative_access($3)))
             AND enquiry_item.linked_enquiry_item_id IS NULL
           ORDER BY enquiry.created_at DESC, enquiry.id DESC,
             enquiry_item.line_number, enquiry_item.id
@@ -7457,7 +7457,7 @@ export function createCommercialWorkflowRepository(
               JOIN sales.customers customer
                 ON customer.id = enquiry.customer_id
               WHERE lower(organization.code) = lower($1)
-                AND ($5::uuid IS NULL OR enquiry.created_by_user_id = $5)
+                AND ($5::uuid IS NULL OR enquiry.created_by_user_id = $5 OR (SELECT identity.has_administrative_access($5)))
                 AND (
                   $2::timestamptz IS NULL
                   OR (enquiry.created_at, enquiry.id)
@@ -7507,7 +7507,7 @@ export function createCommercialWorkflowRepository(
             FROM sales.enquiries enquiry
             JOIN sales.customers customer ON customer.id = enquiry.customer_id
             WHERE enquiry.id = $1
-              AND ($2::uuid IS NULL OR enquiry.created_by_user_id = $2)
+              AND ($2::uuid IS NULL OR enquiry.created_by_user_id = $2 OR (SELECT identity.has_administrative_access($2)))
           `,
           [enquiryId, scope?.originatingSalespersonUserId ?? null]
         )
