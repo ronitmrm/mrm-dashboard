@@ -60,7 +60,7 @@ export function ProductPortfolioTable({
   selection,
 }: {
   rows: ProductPortfolioRow[]
-  selection?: { lineIndex: number; returnTo: string }
+  selection?: { lineIndex?: number; returnTo: string }
 }) {
   const [filters, setFilters] = useState<TableColumnFilters>({})
   const [filtersHydrated, setFiltersHydrated] = useState(false)
