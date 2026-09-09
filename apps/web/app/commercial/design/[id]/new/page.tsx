@@ -373,7 +373,6 @@ export default async function NewDesignWorkspacePage({
                 initialSection={
                   incompleteFields.length ? "controls" : savedSection
                 }
-                portfolioDecisionLocked
                 portfolioSelection={portfolioSelection}
                 initial={{
                   bomLines: selectedItem.bomLines,

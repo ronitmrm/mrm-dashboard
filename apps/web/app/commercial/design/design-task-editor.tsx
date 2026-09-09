@@ -894,7 +894,6 @@ export function DesignTaskEditor({
   initialSection = "product",
   portfolioSelection,
   products,
-  portfolioDecisionLocked = false,
 }: {
   attachments?: DesignAttachment[]
   designOptions: DesignOptions
@@ -903,11 +902,7 @@ export function DesignTaskEditor({
   initialSection?: DesignSection
   portfolioSelection?: { lineIndex: number; productUid: string }
   products: ProductOption[]
-  portfolioDecisionLocked?: boolean
 }) {
-  const [portfolioDecision, setPortfolioDecision] = useState(
-    portfolioDecisionLocked ? "New Quoted Part" : initial.portfolioMatchStatus
-  )
   const [itemType, setItemType] = useState(initial.itemType)
   const [toolingRequired, setToolingRequired] = useState(
     initial.toolingRequired
@@ -956,7 +951,6 @@ export function DesignTaskEditor({
       (row, index) => ({ key: `bom-${index}`, row })
     )
   )
-  const isNewDesign = portfolioDecision === "New Quoted Part"
   const visibleRows = itemType === "List" ? rows.slice(0, 1) : rows
   const subcategoryOptions = designOptions.subcategories
     .filter((option) => option.category === internalPartCategory)
@@ -1036,61 +1030,13 @@ export function DesignTaskEditor({
         role="tabpanel"
       >
         <FieldSet className="gap-4 rounded-xl border bg-muted/20 p-4">
-          <FieldLegend>
-            {portfolioDecisionLocked
-              ? "New Product Design"
-              : "Portfolio Decision"}
-          </FieldLegend>
+          <FieldLegend>New Product Design</FieldLegend>
           <FieldDescription>
-            {portfolioDecisionLocked
-              ? "The portfolio review confirmed that a new controlled product is required."
-              : "Match an ordered internal product, or create a controlled quoted part."}{" "}
+            The portfolio review confirmed that a new controlled product is required.{" "}
             Q, C, and nested A identifiers are allocated atomically on save.
           </FieldDescription>
           <div className="grid gap-4 md:grid-cols-2">
-            {portfolioDecisionLocked ? (
-              <input
-                name="portfolio_match_status"
-                type="hidden"
-                value="New Quoted Part"
-              />
-            ) : (
-              <ChoiceField
-                defaultValue={initial.portfolioMatchStatus}
-                label="Decision"
-                name="portfolio_match_status"
-                onChange={setPortfolioDecision}
-                options={[
-                  "Pending",
-                  "New Quoted Part",
-                  "Matches Existing Portfolio",
-                ]}
-              />
-            )}
-            {portfolioDecision === "Matches Existing Portfolio" ? (
-              <Field className="min-w-0">
-                <FieldLabel className={fieldLabelClassName}>
-                  Ordered Portfolio Product
-                  <NativeSelect
-                    autoComplete="off"
-                    className="w-full"
-                    defaultValue={initial.matchedProductId ?? ""}
-                    name="matched_product_id"
-                    required
-                  >
-                    <NativeSelectOption value="">
-                      Select product
-                    </NativeSelectOption>
-                    {products.map((product) => (
-                      <NativeSelectOption key={product.id} value={product.id}>
-                        {product.uid} · {product.description}
-                      </NativeSelectOption>
-                    ))}
-                  </NativeSelect>
-                </FieldLabel>
-              </Field>
-            ) : null}
-            {isNewDesign ? (
+            <input name="portfolio_match_status" type="hidden" value="New Quoted Part" />
               <>
                 <ChoiceField
                   defaultValue={initial.itemType}
@@ -1107,12 +1053,10 @@ export function DesignTaskEditor({
                   readOnly
                 />
               </>
-            ) : null}
           </div>
         </FieldSet>
       </div>
 
-      {isNewDesign ? (
         <>
           <div
             hidden={
@@ -1698,7 +1642,6 @@ export function DesignTaskEditor({
             </FieldSet>
           </div>
         </>
-      ) : null}
 
       {editable ? (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-muted/20 p-4">
