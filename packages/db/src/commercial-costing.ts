@@ -783,6 +783,8 @@ async function getQuoteDocumentWithClient(
     customer_contact: string | null
     customer_address: string | null
     customer_reference: string | null
+    buyer_name: string | null
+    delivery_terms: string | null
     conversion_rate: string
     currency: string
     customer_uid: string
@@ -796,9 +798,9 @@ async function getQuoteDocumentWithClient(
       SELECT enquiry.enquiry_number, enquiry.currency,
         enquiry.conversion_rate::text, enquiry.incoterms,
         enquiry.payment_terms, enquiry.shipment_mode,
-        enquiry.packaging_terms, customer.customer_uid,
+        enquiry.packaging_terms, enquiry.delivery_terms, enquiry.buyer_name, customer.customer_uid,
         customer.company_name,
-        COALESCE(enquiry.buyer_name, customer.contact_name) AS customer_contact,
+        customer.contact_name AS customer_contact,
         customer.country AS customer_address, enquiry.customer_reference
       FROM sales.enquiries enquiry
       JOIN sales.customers customer ON customer.id = enquiry.customer_id
@@ -814,7 +816,6 @@ async function getQuoteDocumentWithClient(
     quote_item_id: string | null
     customer_part_code: string | null
     product_code: string | null
-    prepared_by: string | null
     description: string
     line_number: number
     price: string | null
@@ -834,8 +835,7 @@ async function getQuoteDocumentWithClient(
           THEN 'Cannot Quote' ELSE selected.status END AS status,
         selected.sent_at, CASE WHEN enquiry_item.technical_review_status = 'NotFeasible'
           THEN NULL ELSE selected.unit_price::text END AS price,
-        COALESCE(snapshot.item_uid, product.uid) AS product_code,
-        preparer.name AS prepared_by
+        COALESCE(snapshot.item_uid, product.uid) AS product_code
       FROM sales.enquiry_items enquiry_item
       LEFT JOIN LATERAL (
         SELECT quote.id, quote.item_id, quote.updated_by_user_id,
@@ -864,46 +864,29 @@ async function getQuoteDocumentWithClient(
       ) selected ON true
       LEFT JOIN catalog.items product ON product.id = selected.item_id
       LEFT JOIN sales.quote_product_snapshots snapshot ON snapshot.quote_item_id = selected.id
-      LEFT JOIN identity.users preparer ON preparer.id = selected.updated_by_user_id
       WHERE enquiry_item.enquiry_id = $1
         AND enquiry_item.linked_enquiry_item_id IS NULL
       ORDER BY enquiry_item.line_number
     `,
     [enquiryId, options.issuedQuoteItemId ?? null]
   )
-  const organization = await queryable.query<{ organization_id: string }>(
-    "SELECT organization_id FROM sales.enquiries WHERE id = $1",
-    [enquiryId]
-  )
-  const terms = await queryable.query<{
-    label: string
-    sort_order: number
-    value: string
-  }>(
-    `
-      SELECT label, value, sort_order
-      FROM sales.quote_term_templates
-      WHERE organization_id = $1 AND active
-      ORDER BY sort_order, label
-    `,
-    [organization.rows[0]!.organization_id]
-  )
   const row = header.rows[0]
   const includedLines = options.issuedQuoteItemId
     ? lines.rows.filter(line => line.status === "Cannot Quote" || (line.sent_at !== null &&
         ["Sent", "Accepted", "Ordered", "Superseded"].includes(line.status ?? "")))
     : lines.rows
-  const latestSent = [...includedLines].sort((a, b) =>
-    (b.sent_at?.getTime() ?? 0) - (a.sent_at?.getTime() ?? 0))[0]
   const issuedLine = includedLines.find(line => line.quote_item_id === options.issuedQuoteItemId)
   return {
     companyName: row.company_name,
     customerContact: row.customer_contact,
     customerAddress: row.customer_address,
     customerReference: row.customer_reference,
-    documentDate: latestSent?.sent_at ?? new Date(),
-    quotationNumber: issuedLine?.quote_number ?? latestSent?.quote_number ?? row.enquiry_number,
-    preparedBy: latestSent?.prepared_by ?? null,
+    buyerName: row.buyer_name,
+    deliveryTerms: row.delivery_terms,
+    documentDate: new Date(),
+    quotationNumber: `QTN-${row.enquiry_number}`,
+    preparedBy: "Ankit Khattar",
+    preparedByTitle: "Engineering Lead",
     totalEnquiryLines: lines.rows.length,
     conversionRate: asNumber(row.conversion_rate, 1),
     currency: row.currency,
@@ -926,11 +909,7 @@ async function getQuoteDocumentWithClient(
     paymentTerms: row.payment_terms,
     revision: issuedLine?.revision ?? Math.max(0, ...includedLines.map((line) => line.revision ?? 0)),
     shipmentMode: row.shipment_mode,
-    terms: terms.rows.map((term) => ({
-      label: term.label,
-      sortOrder: term.sort_order,
-      value: term.value,
-    })),
+    terms: [],
   }
 }
 

@@ -201,6 +201,47 @@ afterAll(async () => {
   await pool.end()
 })
 
+test("builds quotation fields from the enquiry and customer records", async () => {
+  const context = await createReadyQuote("Document sources")
+  await pool.query(
+    `UPDATE sales.customers SET contact_name = 'Customer Contact', country = 'India'
+     WHERE id = $1`, [context.customerId]
+  )
+  await pool.query(
+    `UPDATE sales.enquiries SET enquiry_number = 'ENQ-SOURCE-100',
+       buyer_name = 'Enquiry Buyer', customer_reference = 'RFQ-CUSTOMER-987',
+       conversion_rate = 86.75, payment_terms = '50% advance',
+       delivery_terms = 'Eight weeks', incoterms = 'FOB Mundra',
+       shipment_mode = 'Sea', packaging_terms = 'Export pallets'
+     WHERE id = $1`, [context.enquiryId]
+  )
+  await pool.query(
+    `INSERT INTO sales.quote_term_templates (organization_id, term_key, label, value, sort_order, active,
+       source_system, source_table, source_id)
+     VALUES ($1, 'unrelated', 'Unrelated template', 'Must not appear', 1, true,
+       'test', 'quote_terms', $1::uuid::text)`,
+    [context.organizationId]
+  )
+  const repository = createCommercialCostingRepository({ connectionString })
+  const before = Date.now()
+  try {
+    const document = await repository.getQuoteDocument(context.enquiryId)
+    expect(document).toMatchObject({
+      companyName: 'Document sources Customer', customerContact: 'Customer Contact',
+      customerAddress: 'India', buyerName: 'Enquiry Buyer',
+      customerReference: 'RFQ-CUSTOMER-987', quotationNumber: 'QTN-ENQ-SOURCE-100',
+      conversionRate: 86.75, paymentTerms: '50% advance', deliveryTerms: 'Eight weeks',
+      incoterms: 'FOB Mundra', shipmentMode: 'Sea', packagingTerms: 'Export pallets',
+      preparedBy: 'Ankit Khattar', preparedByTitle: 'Engineering Lead', terms: [],
+      lines: [expect.objectContaining({ description: 'Document sources Part', quantity: 100 })],
+    })
+    expect(document.documentDate.getTime()).toBeGreaterThanOrEqual(before)
+    expect(document.documentDate.getTime()).toBeLessThanOrEqual(Date.now())
+  } finally {
+    await repository.close()
+  }
+})
+
 test("waits for every enquiry line and issues all completed lines together", async () => {
   const context = await createReadyQuote("Full enquiry")
   const siblings = await pool.query<{ id: string }>(

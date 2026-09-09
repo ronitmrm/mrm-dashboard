@@ -6,6 +6,8 @@ export type QuoteDocument = {
   customerContact?: string | null
   customerAddress?: string | null
   customerReference?: string | null
+  buyerName?: string | null
+  deliveryTerms?: string | null
   documentDate?: Date | null
   preparedBy?: string | null
   preparedByTitle?: string | null
@@ -35,19 +37,14 @@ export type QuoteDocument = {
 }
 
 export type QuoteRateAdapters = {
-  fetchJson(url: string): Promise<unknown>
   fetchText(url: string): Promise<string>
 }
 
 const liveAdapters: QuoteRateAdapters = {
-  async fetchJson(url) {
-    const response = await fetch(url, { cache: "no-store" })
-    if (!response.ok) throw new Error("Rate request failed.")
-    return response.json()
-  },
   async fetchText(url) {
     const response = await fetch(url, {
       cache: "no-store",
+      signal: AbortSignal.timeout(15_000),
       headers: { "user-agent": "Mozilla/5.0" },
     })
     if (!response.ok) throw new Error("Metal request failed.")
@@ -55,52 +52,49 @@ const liveAdapters: QuoteRateAdapters = {
   },
 }
 
-function parseLmeValue(html: string, metal: "Copper" | "Zinc") {
-  const section =
-    html.match(/Official LME-Prices[\s\S]*?LME Stocks/i)?.[0] ?? html
-  const row = section.match(new RegExp(metal + "[\\s\\S]{0,700}", "i"))
-  const prices = row?.[0].match(/\d{1,3}(?:,\d{3})*\.\d{2}/g)
-  return prices?.[1] ?? prices?.[0] ?? "-"
-}
-
 export async function loadQuoteMarketContext(
-  input: { currency: string; fallbackRate: number },
+  input: { currency: string; conversionRate: number },
   adapters: QuoteRateAdapters = liveAdapters
-) {
+): Promise<{
+  copper: string
+  zinc: string
+  publishedOn?: string
+  forex: { label: string; value: string }
+}> {
   const currency = input.currency.trim().toUpperCase() || "USD"
-  const [lme, forex] = await Promise.all([
-    adapters
-      .fetchText("https://www.westmetall.com/en/markdaten.php")
-      .then((html) => ({
-        copper: parseLmeValue(html, "Copper"),
-        zinc: parseLmeValue(html, "Zinc"),
-      }))
-      .catch(() => ({ copper: "-", zinc: "-" })),
-    currency === "INR"
-      ? Promise.resolve({ label: "Inr Exchange Rate", value: "1.00" })
-      : adapters
-          .fetchJson(
-            "https://api.frankfurter.app/latest?from=" +
-              encodeURIComponent(currency) +
-              "&to=INR"
-          )
-          .then((payload) => {
-            const candidate = payload as { rates?: { INR?: number } }
-            const rate = Number(candidate.rates?.INR)
-            if (!Number.isFinite(rate) || rate <= 0) {
-              throw new Error("Forex rate missing.")
-            }
-            return {
-              label: currency + "/INR Forex Rate",
-              value: rate.toFixed(2),
-            }
-          })
-          .catch(() => ({
-            label: currency + "/INR Forex Rate",
-            value: Number(input.fallbackRate || 1).toFixed(2),
-          })),
-  ])
-  return { ...lme, forex }
+  if (!Number.isFinite(input.conversionRate) || input.conversionRate <= 0) {
+    throw new Error("Save a valid exchange rate on the enquiry before generating the PDF.")
+  }
+  const html = await adapters.fetchText("https://www.westmetall.com/en/markdaten.php")
+    .catch(() => { throw new Error("Westmetall prices are unavailable. Please try generating the PDF again.") })
+  const table = html.match(/<table\b[\s\S]*?<\/table>/gi)
+    ?.find(value => /Official LME-Prices/i.test(value))
+  const rows = [...(table ?? "").matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)]
+    .map(row => [...row[1]!.matchAll(/<t[dh]\b[^>]*>([\s\S]*?)<\/t[dh]>/gi)]
+      .map(cell => cell[1]!.replace(/<[^>]*>/g, " ")
+        .replace(/&nbsp;|&#160;/g, " ").replace(/\s+/g, " ").trim()))
+  const publishedOn = rows[0]?.[1]
+  const threeMonthColumn = rows.find(row => row.includes("3 months"))?.indexOf("3 months")
+  const price = (metal: string) => {
+    const value = threeMonthColumn === undefined ? undefined
+      : rows.find(row => row[0] === metal)?.[threeMonthColumn]
+    if (!value || !/^(?:\d{1,3}(?:,\d{3})*|\d+)\.\d{2}$/.test(value)) {
+      throw new Error(`Westmetall three-month ${metal} price is unavailable. Please try generating the PDF again.`)
+    }
+    return value
+  }
+  if (!publishedOn || !/^\d{1,2}\.\s+[A-Za-z]+\s+\d{4}$/.test(publishedOn)) {
+    throw new Error("Westmetall price date is unavailable. Please try generating the PDF again.")
+  }
+  return {
+    copper: price("Copper"), zinc: price("Zinc"), publishedOn,
+    forex: {
+      label: `${currency}/INR Exchange Rate`,
+      value: new Intl.NumberFormat("en-US", {
+        useGrouping: false, minimumFractionDigits: 2, maximumFractionDigits: 8,
+      }).format(input.conversionRate),
+    },
+  }
 }
 
 function ascii(value: unknown) {
@@ -253,19 +247,13 @@ export async function buildQuotePdf(
   text("To:", recipientX, y, 12, true, green)
   y -= 18
   const detailsTop = y
-  const sentDates = document.lines.flatMap((line) =>
-    line.sentAt ? [new Date(line.sentAt).getTime()] : []
-  )
-  const date =
-    document.documentDate ??
-    (sentDates.length ? new Date(Math.max(...sentDates)) : new Date())
+  const date = document.documentDate ?? new Date()
   const quoteNumber =
     document.quotationNumber ??
-    document.lines.find((line) => line.quoteNumber)?.quoteNumber ??
-    document.enquiryNumber
+    `QTN-${document.enquiryNumber}`
   const details = [
     ["Quotation No:", `${quoteNumber} / Rev ${document.revision}`],
-    ["RFQ No:", document.customerReference || document.enquiryNumber],
+    ["RFQ No:", document.customerReference || "-"],
     [
       "Date:",
       new Intl.DateTimeFormat("en-GB", {
@@ -275,8 +263,9 @@ export async function buildQuotePdf(
         timeZone: "Asia/Kolkata",
       }).format(new Date(date)),
     ],
-    ["Copper LME: ($ / MT)", context.copper],
-    ["Zinc LME: ($ / MT)", context.zinc],
+    ["Copper LME 3 months: ($ / MT)", context.copper],
+    ["Zinc LME 3 months: ($ / MT)", context.zinc],
+    ...(context.publishedOn ? [["LME price date:", context.publishedOn]] : []),
     [context.forex.label + ":", context.forex.value],
   ]
   for (const [label, value] of details) {
@@ -291,6 +280,7 @@ export async function buildQuotePdf(
     document.companyName,
     document.customerContact,
     document.customerAddress,
+    document.buyerName ? `Buyer: ${document.buyerName}` : null,
   ].entries()) {
     if (!value) continue
     for (const row of wrap(value, right - recipientX, 9.5, index === 0)) {
@@ -378,18 +368,17 @@ export async function buildQuotePdf(
   room(70)
   text("Prepared by", left, y, 12, true, green)
   y -= 25
-  text(document.preparedBy || "MRMPL Commercial Team", left, y, 10, true)
-  if (document.preparedByTitle) {
-    y -= 15
-    text(document.preparedByTitle, left, y)
-  }
+  text("Ankit Khattar", left, y, 10, true)
+  y -= 15
+  text("Engineering Lead", left, y)
   y -= 38
   room(65)
   text("Terms & Conditions", left, y, 12, true, green)
   y -= 11
   const terms = [
     ["Payment", document.paymentTerms ?? "-"],
-    ["Delivery", document.incoterms ?? "-"],
+    ["Delivery", document.deliveryTerms ?? "-"],
+    ["Incoterms", document.incoterms ?? "-"],
     ["Shipment Mode", document.shipmentMode ?? "-"],
     ["Packaging", document.packagingTerms ?? "-"],
     ...[...document.terms]

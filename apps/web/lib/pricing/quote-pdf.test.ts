@@ -33,49 +33,40 @@ const document: QuoteDocument = {
   terms: [{ label: "Reports", sortOrder: 1, value: "MTC on request." }],
 }
 
-describe("historical quote PDF", () => {
-  test("preserves parsed live rates through injected adapters", async () => {
+describe("quotation PDF rates", () => {
+  test("uses Westmetall three-month prices and the enquiry exchange rate", async () => {
     const context = await loadQuoteMarketContext(
-      { currency: "USD", fallbackRate: 83.25 },
+      { currency: "USD", conversionRate: 83.251234 },
       {
-        async fetchJson() {
-          return { rates: { INR: 84.123 } }
-        },
         async fetchText() {
           return [
-            "Official LME-Prices",
-            "Copper 9,100.00 9,200.00",
-            "Zinc 2,700.00 2,800.00",
-            "LME Stocks",
+            '<table><tr><th>Official LME-Prices in US Dollar</th><th>08. September 2026</th></tr>',
+            '<tr><td>USD per ton</td><td>Settlement Kasse</td><td>3 months</td></tr>',
+            '<tr><td>Copper</td><td>9,100.00</td><td><a>9,200.00</a></td></tr>',
+            '<tr><td>Zinc</td><td>2,700.00</td><td><a>2,800.00</a></td></tr></table>',
+            '<table><tr><td>LME Stocks</td></tr><tr><td>Copper</td><td>999,999.00</td></tr></table>',
           ].join("\n")
         },
       }
     )
     expect(context).toEqual({
       copper: "9,200.00",
-      forex: { label: "USD/INR Forex Rate", value: "84.12" },
+      publishedOn: "08. September 2026",
+      forex: { label: "USD/INR Exchange Rate", value: "83.251234" },
       zinc: "2,800.00",
     })
+    const bytes = await buildQuotePdf(document, context)
+    expect(Buffer.from(bytes).subarray(0, 4).toString()).toBe("%PDF")
   })
 
-  test("falls back without blocking PDF generation", async () => {
-    const context = await loadQuoteMarketContext(
-      { currency: "USD", fallbackRate: 83.25 },
+  test("blocks generation when Westmetall is unavailable", async () => {
+    await expect(loadQuoteMarketContext(
+      { currency: "USD", conversionRate: 83.25 },
       {
-        async fetchJson() {
-          throw new Error("offline")
-        },
         async fetchText() {
           throw new Error("offline")
         },
       }
-    )
-    expect(context).toEqual({
-      copper: "-",
-      forex: { label: "USD/INR Forex Rate", value: "83.25" },
-      zinc: "-",
-    })
-    const bytes = await buildQuotePdf(document, context)
-    expect(Buffer.from(bytes).subarray(0, 4).toString()).toBe("%PDF")
+    )).rejects.toThrow("Westmetall prices are unavailable")
   })
 })
