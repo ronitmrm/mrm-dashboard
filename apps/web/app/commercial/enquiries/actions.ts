@@ -340,6 +340,7 @@ export async function handOverEnquiryAction(formData: FormData) {
   )
   revalidatePath(enquiriesPath)
   revalidatePath(`${enquiriesPath}/${enquiryId}`)
+  redirect(`${enquiriesPath}?operationalView=masterTables`)
 }
 
 export async function updateTechnicalReviewAction(formData: FormData) {

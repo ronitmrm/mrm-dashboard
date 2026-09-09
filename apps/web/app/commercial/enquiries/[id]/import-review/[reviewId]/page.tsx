@@ -123,7 +123,7 @@ export default async function EnquiryImportReviewPage({
  <OperationalTable>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Row</TableHead>
+                      <TableHead>Serial No.</TableHead>
                       <TableHead>Part</TableHead>
                       <TableHead>Description</TableHead>
                       <TableHead>Classification</TableHead>
@@ -132,7 +132,7 @@ export default async function EnquiryImportReviewPage({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {review.rows.map((row) => {
+                    {review.rows.map((row, index) => {
                       const options = decisions(row)
                       const suggested = options.includes(
                         row.suggestedAction ?? ""
@@ -141,7 +141,7 @@ export default async function EnquiryImportReviewPage({
                         : options[0]!
                       return (
                         <TableRow key={row.rowNumber}>
-                          <TableCell>{row.rowNumber}</TableCell>
+                          <TableCell>{index + 1}</TableCell>
                           <TableCell>
                             {String(row.rawValues.part ?? "") || "—"}
                           </TableCell>
@@ -160,7 +160,7 @@ export default async function EnquiryImportReviewPage({
                                 className="sr-only"
                                 htmlFor={`decision-${row.rowNumber}`}
                               >
-                                Decision For Row {row.rowNumber}
+                                Decision For Serial No. {index + 1}
                               </FieldLabel>
                               <NativeSelect
                                 id={`decision-${row.rowNumber}`}
