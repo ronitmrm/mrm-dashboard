@@ -756,7 +756,7 @@ export async function authorizeQuoteArtifactTarget(
           NOT $3::boolean
           OR quote.status = 'Ready'
         )
-        AND ($4::uuid IS NULL OR enquiry.created_by_user_id = $4)
+        AND ($4::uuid IS NULL OR enquiry.created_by_user_id = $4 OR (SELECT identity.has_administrative_access($4)))
     `,
     [
       input.quoteItemId,
@@ -795,7 +795,7 @@ async function getQuoteDocumentWithClient(
       FROM sales.enquiries enquiry
       JOIN sales.customers customer ON customer.id = enquiry.customer_id
       WHERE enquiry.id = $1
-        AND ($2::uuid IS NULL OR enquiry.created_by_user_id = $2)
+        AND ($2::uuid IS NULL OR enquiry.created_by_user_id = $2 OR (SELECT identity.has_administrative_access($2)))
     `,
     [enquiryId, scope?.originatingSalespersonUserId ?? null]
   )
@@ -953,7 +953,7 @@ async function transitionQuoteToSent(
       LEFT JOIN sales.enquiries enquiry
         ON enquiry.id = coalesce(quote.enquiry_id, enquiry_item.enquiry_id)
       WHERE quote.id = $1
-        AND ($2::uuid IS NULL OR enquiry.created_by_user_id = $2)
+        AND ($2::uuid IS NULL OR enquiry.created_by_user_id = $2 OR (SELECT identity.has_administrative_access($2)))
       FOR UPDATE OF quote
     `,
     [input.quoteItemId, input.actorUserId ?? null]
@@ -2900,7 +2900,7 @@ export function createCommercialCostingRepository(
             LEFT JOIN sales.enquiries enquiry
               ON enquiry.id = coalesce(quote.enquiry_id, enquiry_item.enquiry_id)
             WHERE quote.id = $1
-              AND ($2::uuid IS NULL OR enquiry.created_by_user_id = $2)
+              AND ($2::uuid IS NULL OR enquiry.created_by_user_id = $2 OR (SELECT identity.has_administrative_access($2)))
           `,
           [quoteItemId, scope?.originatingSalespersonUserId ?? null]
         )
@@ -3413,7 +3413,7 @@ export function createCommercialCostingRepository(
             ON enquiry.id = coalesce(quote.enquiry_id, enquiry_item.enquiry_id)
           WHERE coalesce(quote.enquiry_id, enquiry_item.enquiry_id) = $1
             AND quote.sent_at IS NOT NULL
-            AND ($3::uuid IS NULL OR enquiry.created_by_user_id = $3)
+            AND ($3::uuid IS NULL OR enquiry.created_by_user_id = $3 OR (SELECT identity.has_administrative_access($3)))
           ORDER BY quote.sent_at DESC, link.version DESC,
             file.created_at DESC, file.id DESC
           LIMIT 1
@@ -3450,7 +3450,7 @@ export function createCommercialCostingRepository(
               ON enquiry.id = coalesce(quote.enquiry_id, enquiry_item.enquiry_id)
             WHERE enquiry.id = $1
               AND quote.sent_at IS NOT NULL
-              AND ($2::uuid IS NULL OR enquiry.created_by_user_id = $2)
+              AND ($2::uuid IS NULL OR enquiry.created_by_user_id = $2 OR (SELECT identity.has_administrative_access($2)))
           ) AS exists
         `,
         [enquiryId, scope?.originatingSalespersonUserId ?? null]
@@ -3781,7 +3781,7 @@ export function createCommercialCostingRepository(
           LEFT JOIN sales.enquiries enquiry
             ON enquiry.id = coalesce(quote.enquiry_id, enquiry_item.enquiry_id)
           WHERE lower(organization.code) = lower($1)
-            AND ($3::uuid IS NULL OR enquiry.created_by_user_id = $3)
+            AND ($3::uuid IS NULL OR enquiry.created_by_user_id = $3 OR (SELECT identity.has_administrative_access($3)))
             AND NOT EXISTS (
               SELECT 1
               FROM sales.quote_package_components component

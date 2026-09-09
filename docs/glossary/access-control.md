@@ -29,10 +29,13 @@ confirmation. Staff Accounts, Employee Master, Approved Posts, user overrides,
 other roles, and historical audit evidence remain intact. System roles cannot
 be deleted. This is not removal of just one staff member's assignment.
 
-**Administrative Role**: The assignable, non-system Application Role for staff
-who manage application access and administration. It remains separate from the
-protected System Administrator identity so it can be assigned to Staff Accounts
-and Approved Posts without granting unrelated operational capabilities.
+**Administrative Role**: The assignable, non-system full-access Application Role.
+Administrative receives every registered permission, including future
+capabilities, and may view and act on enquiries
+logged by any salesperson. Ownership still records the originating salesperson;
+administrative work does not transfer it. Explicit user permission denials,
+employee eligibility, organization boundaries, workflow validation and
+immutable-history rules still apply.
 
 **Sales & Marketing Role**: The assignable Application Role for the sales team.
 It can read Commercial Pricing Masters and add or update the Buyer, Incoterms,

@@ -84,6 +84,7 @@ export function createAuthorizationRepository(
          AND (
            COALESCE(active_overrides.allowed, false)
            OR role_grants.permission_id IS NOT NULL
+           OR (SELECT identity.has_administrative_access($1::uuid))
          )`,
       capabilities ? [userId, capabilities] : [userId]
     )
