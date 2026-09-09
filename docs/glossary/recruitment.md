@@ -1,5 +1,13 @@
 # Recruitment
 
+## Candidate Assignment
+
+Search Candidate shows candidate profiles before a job is selected. HR may select
+candidates first and then an Open job, or select the job first. Choosing or changing
+the job retains eligible selections; candidates with an active application for
+that job are excluded, and the form reports any removed selections. Assignment
+requires both an Open job and at least one selected candidate.
+
 ## Did Not Join
 
 An accepted candidate appointment that did not result in joining. HR records

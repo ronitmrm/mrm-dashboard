@@ -92,6 +92,7 @@ export function CandidateAssignmentForm({
         : ""
   )
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<string[]>([])
+  const [excludedCandidateCount, setExcludedCandidateCount] = useState(0)
   const selectedCandidateSet = useMemo(
     () => new Set(selectedCandidateIds),
     [selectedCandidateIds]
@@ -132,14 +133,26 @@ export function CandidateAssignmentForm({
   const visibleCandidates = table.visibleRows
   const eligibleVisibleCandidateIds = visibleCandidates
     .filter(
-      ({ candidate }) =>
-        jobId && !candidate.activeApplicationJobIds.includes(jobId)
+      ({ candidate }) => !candidate.activeApplicationJobIds.includes(jobId)
     )
     .map(({ candidate }) => candidate.id)
 
   function changeJob(nextJobId: string) {
+    const assignedCandidateIds = new Set(
+      candidates
+        .filter((candidate) =>
+          candidate.activeApplicationJobIds.includes(nextJobId)
+        )
+        .map((candidate) => candidate.id)
+    )
+    const eligibleSelection = selectedCandidateIds.filter(
+      (candidateId) => !assignedCandidateIds.has(candidateId)
+    )
     setJobId(nextJobId)
-    setSelectedCandidateIds([])
+    setSelectedCandidateIds(eligibleSelection)
+    setExcludedCandidateCount(
+      selectedCandidateIds.length - eligibleSelection.length
+    )
   }
 
   return (
@@ -190,11 +203,14 @@ export function CandidateAssignmentForm({
           )}
         </Field>
 
+        <p className="text-sm text-muted-foreground" role="status">
+          {selectedCandidateIds.length} Selected. Select Candidates And An Open
+          Job In Either Order, Then Assign Them Together.
+          {excludedCandidateCount > 0
+            ? ` ${excludedCandidateCount} ${excludedCandidateCount === 1 ? "Candidate Removed" : "Candidates Removed"} From Selection Because Already Assigned To This Job.`
+            : null}
+        </p>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm text-muted-foreground">
-            {selectedCandidateIds.length} Selected. Filter Any Column, Tick The
-            Candidates, Then Assign Them Together To This Job.
-          </p>
           <div className="flex gap-2">
             <Button
               disabled={!eligibleVisibleCandidateIds.length}
@@ -218,16 +234,16 @@ export function CandidateAssignmentForm({
             >
               Clear Selection
             </Button>
-            <Button
-              disabled={!table.hasFilters}
-              onClick={table.clearFilters}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              Clear All Filters
-            </Button>
           </div>
+          <Button
+            disabled={!table.hasFilters}
+            onClick={table.clearFilters}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            Clear All Filters
+          </Button>
         </div>
 
         <div className="max-h-[32rem] overflow-auto rounded-xl border">
@@ -252,16 +268,7 @@ export function CandidateAssignmentForm({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {!jobId ? (
-                <TableRow>
-                  <TableCell
-                    className="py-10 text-center text-muted-foreground"
-                    colSpan={9}
-                  >
-                    Select An Open Job To Choose Candidates.
-                  </TableCell>
-                </TableRow>
-              ) : visibleCandidates.length ? (
+              {visibleCandidates.length ? (
                 visibleCandidates.map((row) => {
                   const alreadyAssigned =
                     row.candidate.activeApplicationJobIds.includes(jobId)
