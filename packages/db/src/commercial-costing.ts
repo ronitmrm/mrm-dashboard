@@ -773,10 +773,14 @@ export async function authorizeQuoteArtifactTarget(
 async function getQuoteDocumentWithClient(
   queryable: Pool | PoolClient,
   enquiryId: string,
-  scope?: SalesWorkScope
+  scope?: SalesWorkScope,
+  options: { issuedQuoteItemId?: string } = {}
 ) {
   const header = await queryable.query<{
     company_name: string
+    customer_contact: string | null
+    customer_address: string | null
+    customer_reference: string | null
     conversion_rate: string
     currency: string
     customer_uid: string
@@ -791,7 +795,9 @@ async function getQuoteDocumentWithClient(
         enquiry.conversion_rate::text, enquiry.incoterms,
         enquiry.payment_terms, enquiry.shipment_mode,
         enquiry.packaging_terms, customer.customer_uid,
-        customer.company_name
+        customer.company_name,
+        COALESCE(enquiry.buyer_name, customer.contact_name) AS customer_contact,
+        customer.country AS customer_address, enquiry.customer_reference
       FROM sales.enquiries enquiry
       JOIN sales.customers customer ON customer.id = enquiry.customer_id
       WHERE enquiry.id = $1
@@ -803,7 +809,10 @@ async function getQuoteDocumentWithClient(
     throw new Error("Enquiry was not found.")
   }
   const lines = await queryable.query<{
+    quote_item_id: string | null
     customer_part_code: string | null
+    product_code: string | null
+    prepared_by: string | null
     description: string
     line_number: number
     price: string | null
@@ -818,16 +827,19 @@ async function getQuoteDocumentWithClient(
         COALESCE(selected.customer_part_code,
           enquiry_item.customer_part_code) AS customer_part_code,
         enquiry_item.description, enquiry_item.quantity::text,
-        selected.quote_number, selected.revision, selected.status,
-        selected.sent_at, selected.unit_price::text AS price
+        selected.id AS quote_item_id, selected.quote_number, selected.revision, selected.status,
+        selected.sent_at, selected.unit_price::text AS price,
+        COALESCE(snapshot.item_uid, product.uid) AS product_code,
+        preparer.name AS prepared_by
       FROM sales.enquiry_items enquiry_item
       LEFT JOIN LATERAL (
-        SELECT quote.customer_part_code, quote.quote_number,
+        SELECT quote.id, quote.item_id, quote.updated_by_user_id,
+          quote.customer_part_code, quote.quote_number,
           quote.revision, quote.status, quote.sent_at, quote.unit_price,
           quote.created_at, quote.updated_at
         FROM sales.quote_items quote
         WHERE quote.enquiry_item_id = enquiry_item.id
-        ORDER BY CASE
+        ORDER BY CASE WHEN quote.id = $2::uuid THEN 0 ELSE 1 END, CASE
             WHEN quote.sent_at IS NOT NULL
               AND quote.created_at <= quote.sent_at THEN 0
             WHEN quote.sent_at IS NULL
@@ -845,10 +857,13 @@ async function getQuoteDocumentWithClient(
           quote.created_at DESC, quote.id DESC
         LIMIT 1
       ) selected ON true
+      LEFT JOIN catalog.items product ON product.id = selected.item_id
+      LEFT JOIN sales.quote_product_snapshots snapshot ON snapshot.quote_item_id = selected.id
+      LEFT JOIN identity.users preparer ON preparer.id = selected.updated_by_user_id
       WHERE enquiry_item.enquiry_id = $1
       ORDER BY enquiry_item.line_number
     `,
-    [enquiryId]
+    [enquiryId, options.issuedQuoteItemId ?? null]
   )
   const organization = await queryable.query<{ organization_id: string }>(
     "SELECT organization_id FROM sales.enquiries WHERE id = $1",
@@ -868,15 +883,30 @@ async function getQuoteDocumentWithClient(
     [organization.rows[0]!.organization_id]
   )
   const row = header.rows[0]
+  const includedLines = options.issuedQuoteItemId
+    ? lines.rows.filter(line => line.sent_at !== null &&
+        ["Sent", "Accepted", "Ordered", "Superseded"].includes(line.status ?? ""))
+    : lines.rows
+  const latestSent = [...includedLines].sort((a, b) =>
+    (b.sent_at?.getTime() ?? 0) - (a.sent_at?.getTime() ?? 0))[0]
+  const issuedLine = includedLines.find(line => line.quote_item_id === options.issuedQuoteItemId)
   return {
     companyName: row.company_name,
+    customerContact: row.customer_contact,
+    customerAddress: row.customer_address,
+    customerReference: row.customer_reference,
+    documentDate: latestSent?.sent_at ?? new Date(),
+    quotationNumber: issuedLine?.quote_number ?? latestSent?.quote_number ?? row.enquiry_number,
+    preparedBy: latestSent?.prepared_by ?? null,
+    totalEnquiryLines: lines.rows.length,
     conversionRate: asNumber(row.conversion_rate, 1),
     currency: row.currency,
     customerUid: row.customer_uid,
     enquiryNumber: row.enquiry_number,
     incoterms: row.incoterms,
-    lines: lines.rows.map((line) => ({
+    lines: includedLines.map((line) => ({
       customerPartCode: line.customer_part_code,
+      productCode: line.product_code,
       description: line.description,
       lineNumber: line.line_number,
       price: line.price === null ? null : asNumber(line.price),
@@ -888,7 +918,7 @@ async function getQuoteDocumentWithClient(
     })),
     packagingTerms: row.packaging_terms,
     paymentTerms: row.payment_terms,
-    revision: Math.max(0, ...lines.rows.map((line) => line.revision ?? 0)),
+    revision: issuedLine?.revision ?? Math.max(0, ...includedLines.map((line) => line.revision ?? 0)),
     shipmentMode: row.shipment_mode,
     terms: terms.rows.map((term) => ({
       label: term.label,
@@ -1078,7 +1108,8 @@ async function transitionQuoteToSent(
           enquiryId,
           input.actorUserId
             ? { originatingSalespersonUserId: input.actorUserId }
-            : undefined
+            : undefined,
+          { issuedQuoteItemId: input.quoteItemId }
         ),
         organizationId: root.rows[0].organization_id,
         quoteItemId: input.quoteItemId,

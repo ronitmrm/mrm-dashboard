@@ -352,6 +352,18 @@ Organization, pricing, market, or term values.
 _Avoid_: Regenerated historical Quote PDF, persisted draft preview, Sent without
 an issued PDF Artifact.
 
+**Partial Enquiry Quotation**: Sales may issue a line after that line's Customer
+Parameter Costing is complete; other Enquiry lines need not be complete. The
+issued enquiry PDF includes the line being sent and previously sent lines, never
+Draft, Ready-but-unsent, or uncosted siblings. Completing or sending one line
+does not mark other lines Sent. Later partial issues store a new cumulative PDF;
+each previously issued PDF remains immutable.
+
+Quote PDFs use the approved Mayank Raw Mint letterhead, green quotation banner,
+details/customer blocks, Product and Customer codes, item prices, prepared-by
+section, commercial terms, and contact footer. Terms and recipient details come
+from saved records; example customer data from a template is never reused.
+
 **Sent PI document set**: The exact Proforma Invoice PDF and XLSX Artifacts
 stored and linked as one required set before the PI becomes `Sent`. Draft PI
 previews remain live and create no Artifact. If either file fails, neither
