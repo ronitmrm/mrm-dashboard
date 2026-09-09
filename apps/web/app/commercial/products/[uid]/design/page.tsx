@@ -216,7 +216,6 @@ export default async function CurrentProductDesignTaskPage({
               toolingApproxCost: selectedItem?.toolingApproxCost ?? 0,
               toolingRequired: selectedItem?.toolingRequired ?? "No",
             }}
-            portfolioDecisionLocked
             products={canonicalProducts}
           />
         </CardContent>
