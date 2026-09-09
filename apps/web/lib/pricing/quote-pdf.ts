@@ -1,4 +1,7 @@
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib"
+import { readFile } from "node:fs/promises"
+import path from "node:path"
+import fontkit from "@pdf-lib/fontkit"
+import { PDFDocument, rgb } from "pdf-lib"
 
 export type QuoteDocument = {
   companyName: string
@@ -108,47 +111,51 @@ export async function buildQuotePdf(
   context: Awaited<ReturnType<typeof loadQuoteMarketContext>>
 ) {
   const pdf = await PDFDocument.create()
-  pdf.setTitle(
-    document.enquiryNumber + " Rev " + String(document.revision) + " Quote"
-  )
+  pdf.setTitle(document.quotationNumber ?? `QTN-${document.enquiryNumber}`)
   pdf.setCreator("MRM Dashboard")
   pdf.setProducer("MRM Dashboard")
-  const regular = await pdf.embedFont(StandardFonts.Helvetica)
-  const bold = await pdf.embedFont(StandardFonts.HelveticaBold)
+  pdf.registerFontkit(fontkit)
+  const asset = (name: string) => readFile(path.join(process.cwd(), "lib/pricing/assets", name))
+  const embed = async (weight: string) =>
+    pdf.embedFont(await asset(`Outfit-${weight}.ttf`), { subset: true })
+  const [regular, medium, semibold, bold, letterhead, preparer] = await Promise.all([
+    embed("Regular"), embed("Medium"), embed("SemiBold"), embed("Bold"),
+    asset("quotation-letterhead.png").then((bytes) => pdf.embedPng(bytes)),
+    asset("quotation-preparer.png").then((bytes) => pdf.embedPng(bytes)),
+  ])
   const green = rgb(0, 0.416, 0.286)
-  const ink = rgb(0.06, 0.07, 0.065)
-  const pale = rgb(0.966, 0.966, 0.951)
-  const border = rgb(0.82, 0.83, 0.82)
-  const width = 595.28
-  const height = 841.89
-  const left = 58
+  const ink = rgb(0, 0, 0)
+  const pale = rgb(0.9686, 0.9686, 0.949)
+  const border = rgb(0.85, 0.85, 0.85)
+  const width = 595.5
+  const height = 842.25
+  const left = 59.55
   const right = width - left
-  const bottom = 117
-  const leading = 13
+  const bottom = 115
+  const leading = 13.5
   let page = pdf.addPage([width, height])
   let y = 0
   const text = (
     value: unknown,
     x: number,
     baseline: number,
-    size = 9.5,
-    strong = false,
+    size = 10,
+    font = regular,
     color = ink
   ) =>
     page.drawText(ascii(value), {
       x,
       y: baseline,
       size,
-      font: strong ? bold : regular,
+      font,
       color,
     })
   const wrap = (
     value: unknown,
     available: number,
-    size = 9.5,
-    strong = false
+    size = 10,
+    font = regular
   ) => {
-    const font = strong ? bold : regular
     const result: string[] = []
     for (const paragraph of String(value ?? "-").split(/\r?\n/)) {
       let current = ""
@@ -181,32 +188,9 @@ export async function buildQuotePdf(
     return result
   }
   const brand = () => {
-    const scale = 0.31
-    const top = height - 34
-    for (const path of [
-      "M158.62,0H17.62C7.89,0,0,8.69,0,19.41v88.16h176.25V19.41c0-10.72-7.89-19.41-17.62-19.41Z",
-      "M0,158.25c0,9.95,7.89,18.01,17.62,18.01h141c9.73,0,17.62-8.06,17.62-18.01v-17.24H0v17.24Z",
-    ])
-      page.drawSvgPath(path, { x: left, y: top, scale, color: green })
-    const x = left + 67
-    text(
-      "MAYANK RAW MINT",
-      x,
-      top - 27,
-      33,
-      true,
-      green
-    )
-    text(
-      "Precision Brass Fittings & Metal Components",
-      x,
-      top - 53,
-      15.3,
-      false,
-      green
-    )
-    const bandTop = 721
-    const bandHeight = 63
+    page.drawImage(letterhead, { x: 56.5, y: height - 96, width: 490, height: 68 })
+    const bandTop = 721.34
+    const bandHeight = 63.76
     page.drawRectangle({
       x: 0,
       y: bandTop - bandHeight,
@@ -215,15 +199,12 @@ export async function buildQuotePdf(
       color: green,
     })
     const title = "QUOTATION"
-    const size = 31
-    page.drawText(title, {
-      x: (width - bold.widthOfTextAtSize(title, size)) / 2,
-      y: bandTop - bandHeight / 2 - size * 0.35,
-      font: bold,
-      size,
-      color: rgb(1, 1, 1),
-    })
-    y = bandTop - bandHeight - 29
+    // Retain the reference's title kerning; pdf-lib otherwise uses unkerned advances.
+    const titleOffsets = [0, 26.211, 48.678, 73.29, 90.956, 111.502, 131.953, 141.33, 167.125]
+    titleOffsets.forEach((offset, index) =>
+      text(title[index]!, 202.367 + offset, 678.575, 32.007, bold, rgb(1, 1, 1))
+    )
+    y = 618.22
   }
   const nextPage = () => {
     page = pdf.addPage([width, height])
@@ -233,17 +214,17 @@ export async function buildQuotePdf(
     if (y - needed < bottom) nextPage()
   }
   brand()
-  text("Details", left, y, 12, true, green)
-  const recipientX = 350
-  text("To:", recipientX, y, 12, true, green)
-  y -= 18
+  text("Details", left, y, 12, semibold, green)
+  const recipientX = 350.83
+  text("To:", recipientX, y, 12, semibold, green)
+  y -= 15.784
   const detailsTop = y
   const date = document.documentDate ?? new Date()
   const quoteNumber =
     document.quotationNumber ??
     `QTN-${document.enquiryNumber}`
   const details = [
-    ["Quotation No:", `${quoteNumber} / Rev ${document.revision}`],
+    ["Quotation No:", quoteNumber],
     ["RFQ No:", document.customerReference || "-"],
     [
       "Date:",
@@ -254,17 +235,19 @@ export async function buildQuotePdf(
         timeZone: "Asia/Kolkata",
       }).format(new Date(date)),
     ],
-    ["Copper LME 3 months: ($ / MT)", context.copper],
-    ["Zinc LME 3 months: ($ / MT)", context.zinc],
-    ...(context.publishedOn ? [["LME price date:", context.publishedOn]] : []),
-    [context.forex.label + ":", context.forex.value],
+    ["Copper LME: ($ / MT)", context.copper],
+    ["Zinc LME: ($ / MT)", context.zinc],
+    [`${document.currency} Exchange Rate:`, context.forex.value],
   ]
+  pdf.setSubject(`LME 3 months; published ${context.publishedOn ?? "not supplied"}; enquiry ${document.enquiryNumber}`)
   for (const [label, value] of details) {
-    const rows = wrap(`${label} ${value}`, 269, 9.3)
-    for (const row of rows) {
-      text(row, left, y, 9.3)
-      y -= 14
-    }
+    const labelText = `${label} `
+    const labelWidth = bold.widthOfTextAtSize(labelText, 10)
+    text(labelText, left, y, 10, bold)
+    wrap(value, 278 - labelWidth, 10).forEach((row, index) => {
+      text(row, index === 0 ? left + labelWidth : left, y, 10)
+      y -= 14.255
+    })
   }
   let recipientY = detailsTop
   for (const [index, value] of [
@@ -274,15 +257,16 @@ export async function buildQuotePdf(
     document.buyerName ? `Buyer: ${document.buyerName}` : null,
   ].entries()) {
     if (!value) continue
-    for (const row of wrap(value, right - recipientX, 9.5, index === 0)) {
-      text(row, recipientX, recipientY, 9.5, index === 0)
-      recipientY -= 14
+    for (const row of wrap(value, right - recipientX, 10, index === 0 ? medium : regular)) {
+      text(row, recipientX, recipientY, 10, index === 0 ? medium : regular)
+      recipientY -= 14.255
     }
   }
-  y = Math.min(y, recipientY) - 26
-  text("Items", left, y, 12, true, green)
-  y -= 12
-  const columns = [39, 99, 115, 159, right - left - 412]
+  y = Math.min(y, recipientY) - 29.56
+  text("Items", left, y, 12, semibold, green)
+  y -= 11.62
+  const tableLeft = 57.84
+  const columns = [42.89, 99.19, 120.78, 156.56, 60.77]
   const headers = [
     "Sr. No.",
     "MRM Product Code",
@@ -291,24 +275,24 @@ export async function buildQuotePdf(
     `${document.currency} / Unit`,
   ]
   const tableHeader = () => {
-    let x = left
+    let x = tableLeft
     columns.forEach((cellWidth, index) => {
       page.drawRectangle({
         x,
-        y: y - 30,
+        y: y - 27,
         width: cellWidth,
-        height: 30,
+        height: 27,
         color: pale,
         borderColor: border,
         borderWidth: 0.6,
       })
-      wrap(headers[index], cellWidth - 10, 8.5, true).forEach((row, n) =>
-        text(row, x + (cellWidth - bold.widthOfTextAtSize(row, 8.5)) / 2,
-          y - 12 - n * 10, 8.5, true)
+      wrap(headers[index], cellWidth - 10, 10, medium).forEach((row, n) =>
+        text(row, x + (cellWidth - medium.widthOfTextAtSize(row, 10)) / 2,
+          y - 16.5 - n * leading, 10, medium)
       )
       x += cellWidth
     })
-    y -= 30
+    y -= 27
   }
   room(65)
   tableHeader()
@@ -319,7 +303,7 @@ export async function buildQuotePdf(
       line.customerPartCode ?? "-",
       line.description,
       line.status === "Cannot Quote" ? "Cannot Quote" : line.price === null ? "-" : line.price.toFixed(4),
-    ].map((value, index) => wrap(value, columns[index]! - 12, 9))
+    ].map((value, index) => wrap(value, columns[index]! - 12, 10))
     const count = Math.max(...cells.map((cell) => cell.length))
     let offset = 0
     while (offset < count) {
@@ -332,7 +316,7 @@ export async function buildQuotePdf(
         Math.floor((y - bottom - 12) / leading)
       )
       const rowHeight = Math.max(27, take * leading + 12)
-      let x = left
+      let x = tableLeft
       cells.forEach((cell, index) => {
         const cellWidth = columns[index]!
         page.drawRectangle({
@@ -344,8 +328,8 @@ export async function buildQuotePdf(
           borderWidth: 0.6,
         })
         cell.slice(offset, offset + take).forEach((row, n) => {
-          const tx = x + (cellWidth - regular.widthOfTextAtSize(row, 9)) / 2
-          text(row, tx, y - 16 - n * leading, 9)
+          const tx = x + (cellWidth - regular.widthOfTextAtSize(row, 10)) / 2
+          text(row, tx, y - 16.5 - n * leading, 10)
         })
         x += cellWidth
       })
@@ -353,21 +337,21 @@ export async function buildQuotePdf(
       offset += take
     }
   }
-  y -= 30
-  room(70)
-  text("Prepared by", left, y, 12, true, green)
-  y -= 25
-  text("Ankit Khattar", left, y, 10, true)
-  y -= 15
+  y -= 40.84
+  room(90)
+  text("Prepared by", left, y, 12, semibold, green)
+  page.drawImage(preparer, { x: 58, y: y - 32.635, width: 103, height: 19 })
+  y -= 41.84
+  text("Ankit Khattar", left, y, 10, medium)
+  y -= 14.255
   text("Engineering Lead", left, y)
-  y -= 38
+  y -= 38.44
   room(65)
-  text("Terms & Conditions", left, y, 12, true, green)
-  y -= 11
+  text("Terms & Conditions", left, y, 12, semibold, green)
+  y -= 8.09
   const terms = [
     ["Payment", document.paymentTerms ?? "-"],
-    ["Delivery", document.deliveryTerms ?? "-"],
-    ["Incoterms", document.incoterms ?? "-"],
+    ["Delivery", document.deliveryTerms || document.incoterms || "-"],
     ["Shipment Mode", document.shipmentMode ?? "-"],
     ["Packaging", document.packagingTerms ?? "-"],
     ...[...document.terms]
@@ -375,34 +359,34 @@ export async function buildQuotePdf(
       .map((term) => [term.label, term.value]),
   ]
   for (const [label, value] of terms) {
-    const labelRows = wrap(label, 93, 9, true)
-    const valueRows = wrap(value, right - left - 119, 9.3)
+    const labelRows = wrap(label, 98, 10, medium)
+    const valueRows = wrap(value, 371, 10)
     const count = Math.max(labelRows.length, valueRows.length)
     let offset = 0
     while (offset < count) {
-      if (y - 27 < bottom) {
+      if (y - 18.26 < bottom) {
         nextPage()
-        text("Terms & Conditions - Continued", left, y, 12, true, green)
+        text("Terms & Conditions - Continued", left, y, 12, semibold, green)
         y -= 12
       }
       const take = Math.min(
         count - offset,
-        Math.floor((y - bottom - 10) / leading)
+        Math.floor((y - bottom - 4.76) / leading)
       )
-      const rowHeight = Math.max(23, take * leading + 10)
+      const rowHeight = Math.max(18.26, take * leading + 4.76)
       page.drawRectangle({
-        x: left,
+        x: tableLeft,
         y: y - rowHeight,
-        width: 103,
+        width: 102.91,
         height: rowHeight,
         color: pale,
       })
       labelRows
         .slice(offset, offset + take)
-        .forEach((row, n) => text(row, left + 5, y - 15 - n * leading, 9, true))
+        .forEach((row, n) => text(row, 62.689, y - 11.617 - n * leading, 10, medium))
       valueRows
         .slice(offset, offset + take)
-        .forEach((row, n) => text(row, left + 112, y - 15 - n * leading, 9.3))
+        .forEach((row, n) => text(row, 166.024, y - 11.617 - n * leading, 10))
       y -= rowHeight
       offset += take
     }
@@ -410,28 +394,23 @@ export async function buildQuotePdf(
   pdf.getPages().forEach((footerPage, index, pages) => {
     page = footerPage
     page.drawLine({
-      start: { x: 39, y: 95 },
-      end: { x: width - 39, y: 95 },
-      thickness: 2,
+      start: { x: 39.78, y: 94.67 },
+      end: { x: 555.73, y: 94.67 },
+      thickness: 3,
       color: green,
     })
     text(
       "For any further queries or concerns, please reach out to:",
       left,
-      73,
-      10.5,
-      true,
+      64.282,
+      12,
+      semibold,
       green
     )
-    text(
-      "Keyur Khattar    +91 78787 87819    keyur@mayankrawmint.com",
-      left,
-      56,
-      10.2,
-      false,
-      green
-    )
-    text(`${index + 1} / ${pages.length}`, right - 25, 27, 8, false, green)
+    text("Keyur Khattar", left, 47.437, 12, medium, green)
+    text("+91 78787 87819", 156.014, 47.437, 12, medium, green)
+    text("keyur@mayankrawmint.com", 259.367, 47.437, 12, medium, green)
+    text(`${index + 1} / ${pages.length}`, right - 25, 20, 8, regular, green)
   })
   return pdf.save()
 }

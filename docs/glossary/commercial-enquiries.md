@@ -368,16 +368,18 @@ rate. Brass Material Specs, Reports, and Taxes and Duties each have a commercial
 master. Sales selects their values on the Enquiry; the PDF uses those saved
 values, so later master edits do not rewrite an enquiry. Unselected terms are
 omitted. Generic Quote Term Templates are not appended. Quote numbers are generated
-as `QTN-<Enquiry number>` with the revision shown separately; the date is the PDF
+as `QTN-<Enquiry number>` without displaying the internal pricing revision; the date is the PDF
 generation date in India time. Prepared by is always Ankit Khattar, Engineering
 Lead. Westmetall's Official LME USD/ton **3 months** Copper and Zinc column is
-fetched when generating the PDF, with its published date shown (latest available
+fetched when generating the PDF, with its published date retained in PDF metadata (latest available
 on weekends or before the day's publication). Missing metal rates block a new
 PDF rather than substituting cash prices or blanks. Stored issued PDFs retain
 their original date, rates and contents.
 
 Every page uses the same letterhead and quotation banner. Item-table headings
-and values are horizontally centred. The Customer master stores a multiline
+and values are horizontally centred. Typography uses the supplied reference's
+Outfit fonts and sizes. Delivery appears once, using saved delivery terms with
+incoterms as fallback. The Customer master stores a multiline
 address separately from country; both are included under To when saved.
 
 An explicitly requested correction may replace an issued PDF with a new Artifact
