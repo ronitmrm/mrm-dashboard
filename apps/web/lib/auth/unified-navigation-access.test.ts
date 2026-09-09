@@ -15,6 +15,39 @@ beforeEach(() => {
   authorization.granted = []
 })
 
+it("does not advertise unit pages through legacy production grants", async () => {
+  authorization.granted = [
+    "operations.dashboard.read",
+    "planning.planner_actions.read",
+  ]
+  const access = await getUnifiedNavigationAccess("legacy-floor-user")
+  expect(Object.values(access.productionFloorTabIds ?? {}).flat()).toEqual([])
+  expect(access.operations).toBe(false)
+})
+
+it("uses the current master grants for commercial and HR destinations", async () => {
+  authorization.granted = [
+    "pricing.customers.read",
+    "pricing.website_products.read",
+    "hr.employees.read",
+    "hr.recruitment.read",
+  ]
+  const legacy = await getUnifiedNavigationAccess("legacy-master-user")
+  expect(legacy.commercialHrefs).not.toContain("/commercial/customers")
+  expect(legacy.commercialHrefs).not.toContain("/commercial/website-products")
+  expect(legacy.hrHrefs).not.toContain("/hr?panel=employeeMasterPanel")
+  expect(legacy.hrHrefs).not.toContain("/hr?panel=approvedPostPanel")
+  expect(legacy.hrHrefs).toContain("/hr?panel=jobsPanel")
+
+  authorization.granted = [
+    "masters.universal.commercial_customers.read",
+    "masters.universal.employee_assignments.read",
+  ]
+  const scoped = await getUnifiedNavigationAccess("scoped-master-user")
+  expect(scoped.commercialHrefs).toContain("/commercial/customers")
+  expect(scoped.hrHrefs).toEqual(["/hr?panel=employeeMasterPanel"])
+})
+
 it("opens operational navigation only for independent scoped entry reads", async () => {
   authorization.granted = [
     "operations.operational_entry.read",

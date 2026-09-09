@@ -59,17 +59,20 @@ describe("commercial Better Auth capability contract", () => {
   test("maps current commercial destinations to their narrow read capability", () => {
     expect(commercialNavigationAccess).toEqual([
       ["/commercial", "pricing.dashboard.read"],
-      ["/commercial/customers", "pricing.customers.read"],
+      ["/commercial/customers", "masters.universal.commercial_customers.read"],
       ["/commercial/enquiries", "pricing.enquiries.read"],
       ["/commercial/enquiries/excel-view", "pricing.enquiries.read"],
       ["/commercial/sales", "pricing.sales.read"],
       ["/commercial/technical-review", "pricing.technical_review.read"],
       ["/commercial/design", "pricing.design.read"],
-      ["/commercial/masters", "pricing.masters.read"],
+      ["/commercial/masters", "masters.universal.materialGrade.read"],
       ["/commercial/products", "pricing.products.read"],
       ["/commercial/assemblies", "pricing.assemblies.read"],
       ["/commercial/drawing-history", "pricing.drawing_history.read"],
-      ["/commercial/website-products", "pricing.website_products.read"],
+      [
+        "/commercial/website-products",
+        "masters.universal.commercial_website_products.read",
+      ],
       ["/commercial/product-costing", "pricing.costing.read"],
       ["/commercial/customer-costing", "pricing.costing.read"],
       ["/commercial/quotes", "pricing.quotes.read"],
