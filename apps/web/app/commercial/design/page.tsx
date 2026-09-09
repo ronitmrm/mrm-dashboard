@@ -5,14 +5,14 @@ import { designTaskHref } from "@workspace/db/commercial-design-domain"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
- SectionCard,
+  SectionCard,
   CardContent,
   CardHeader,
   CardTitle,
   MetricCard,
 } from "@workspace/ui/components/card"
 import {
- OperationalTable,
+  OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -60,9 +60,21 @@ export default async function DesignPage({
       </section>
 
       <section className="grid gap-3 sm:grid-cols-3">
-        <MetricCard tone="warning" label="Pending Design" value={summary.pendingDesign} />
-        <MetricCard tone="brand" label="In Progress" value={summary.inProgress} />
-        <MetricCard tone="information" label="Open Design Tasks" value={summary.openTasks} />
+        <MetricCard
+          tone="warning"
+          label="Pending Design"
+          value={summary.pendingDesign}
+        />
+        <MetricCard
+          tone="brand"
+          label="In Progress"
+          value={summary.inProgress}
+        />
+        <MetricCard
+          tone="information"
+          label="Open Design Tasks"
+          value={summary.openTasks}
+        />
       </section>
 
       <nav aria-label="Design task views" className="flex flex-wrap gap-2">
@@ -103,7 +115,7 @@ export default async function DesignPage({
         }
       />
 
- <SectionCard>
+      <SectionCard>
         <CardHeader>
           <CardTitle>
             {view === "completed"
@@ -113,7 +125,7 @@ export default async function DesignPage({
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto rounded-md border">
- <OperationalTable
+            <OperationalTable
               excelFilters
               filterStorageKey="mrmpl:commercial:design-queue:filters:v2"
             >
@@ -164,9 +176,21 @@ export default async function DesignPage({
                               : "default"
                           }
                         >
-                          <Link href={designTaskHref(item)}>
+                          <Link
+                            href={
+                              view === "completed" &&
+                              item.matchedProductUid &&
+                              item.portfolioMatchStatus ===
+                                "Matches Existing Portfolio"
+                                ? `/commercial/products/${encodeURIComponent(item.matchedProductUid)}/design`
+                                : designTaskHref(item)
+                            }
+                          >
                             {view === "completed"
-                              ? "Review Design"
+                              ? item.portfolioMatchStatus ===
+                                "Matches Existing Portfolio"
+                                ? "Review Matched Product"
+                                : "Review Design"
                               : item.portfolioMatchStatus === "New Quoted Part"
                                 ? "Open Design Form"
                                 : "Start Task"}
@@ -188,10 +212,10 @@ export default async function DesignPage({
                   </TableRow>
                 )}
               </TableBody>
- </OperationalTable>
+            </OperationalTable>
           </div>
         </CardContent>
- </SectionCard>
+      </SectionCard>
     </div>
   )
 }

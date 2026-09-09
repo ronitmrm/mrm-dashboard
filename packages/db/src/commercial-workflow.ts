@@ -7094,7 +7094,14 @@ export function createCommercialWorkflowRepository(
             )
             AND (
               ($3::text = 'completed'
-                AND design.design_status = 'Design Complete'
+                AND (
+                  design.design_status = 'Design Complete'
+                  OR (
+                    design.design_status = 'Not Required'
+                    AND design.portfolio_match_status = 'Matches Existing Portfolio'
+                    AND design.matched_product_id IS NOT NULL
+                  )
+                )
                 AND COALESCE(design.next_stage_status, 'Not Started') NOT IN (
                   'Not Started', 'Changes Required'
                 ))
