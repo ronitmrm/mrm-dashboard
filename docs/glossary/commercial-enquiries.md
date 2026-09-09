@@ -85,8 +85,10 @@ Product Size, package-context component duplicates.
 **Design Work Start**: The Design team's explicit choice to open the Design form
 for one released line. It changes Pending Design to In Progress and opens that
 line's separate new-Product Design workspace. Before Design is complete, Return
-to Portfolio Selection lets an authorized editor reconsider an accidental start
-and select an existing ordered Product. Opening selection does not change the
+to Portfolio Selection opens the Current Product Portfolio table so an authorized
+editor can filter each column and select an existing ordered Product. Selection
+returns that Product to the same task for confirmation; it never opens an inline
+search box or Product dropdown. Opening selection does not change the
 saved task; confirming the match replaces the new-design draft with that Product.
 Every tab saves only draft progress;
 no tab-level Save action completes the task, and a draft save returns to the tab

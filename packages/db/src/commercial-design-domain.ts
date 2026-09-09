@@ -182,18 +182,19 @@ export function designTaskSavedHref(
 export function designProductPortfolioHref(input: {
   customerUid: string
   enquiryItemId: string
-  lineIndex: number
+  lineIndex?: number
 }) {
   const params = new URLSearchParams({
     customer: input.customerUid.trim(),
     returnTo: `/commercial/design/${input.enquiryItemId}/new`,
-    selectLine: String(input.lineIndex),
   })
+  if (input.lineIndex === undefined) params.set("selectTask", "1")
+  else params.set("selectLine", String(input.lineIndex))
   return `/commercial/products?${params}`
 }
 
 export function designProductSelectionReturnHref(input: {
-  lineIndex: number
+  lineIndex?: number
   productUid: string
   returnTo: string
 }) {
@@ -202,9 +203,12 @@ export function designProductSelectionReturnHref(input: {
   }
   const params = new URLSearchParams({
     product: input.productUid.trim(),
-    selectedLine: String(input.lineIndex),
-    section: "bom",
   })
+  if (input.lineIndex === undefined) params.set("portfolio", "1")
+  else {
+    params.set("selectedLine", String(input.lineIndex))
+    params.set("section", "bom")
+  }
   return `${input.returnTo}?${params}`
 }
 

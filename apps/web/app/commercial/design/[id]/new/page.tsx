@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation"
 
 import { createCommercialWorkflowRepository } from "@workspace/db"
 import {
+  designProductPortfolioHref,
   designTaskIsEditable,
   designTaskIsOpen,
   designWorkspaceSection,
@@ -17,11 +18,6 @@ import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import { SectionCard, CardContent } from "@workspace/ui/components/card"
 import { Field, FieldGroup, FieldLabel } from "@workspace/ui/components/field"
-import { Input } from "@workspace/ui/components/input"
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@workspace/ui/components/native-select"
 import { Separator } from "@workspace/ui/components/separator"
 import { Textarea } from "@workspace/ui/components/textarea"
 
@@ -114,6 +110,14 @@ export default async function NewDesignWorkspacePage({
     editable && designTaskIsOpen(selectedItem.designStatus)
   const selectingPortfolio =
     canReturnToPortfolio && resolvedSearchParams.portfolio === "1"
+  const portfolioHref = designProductPortfolioHref({
+    customerUid: selectedItem.customerUid,
+    enquiryItemId: id,
+  })
+  const selectedPortfolioProduct = selectingPortfolio
+    ? productOptions.rows.find((product) => product.uid === productSearch)
+    : undefined
+  if (selectingPortfolio && !selectedPortfolioProduct) redirect(portfolioHref)
 
   return (
     <div className="flex min-h-[calc(100svh-4rem)] flex-col gap-6">
@@ -142,7 +146,7 @@ export default async function NewDesignWorkspacePage({
                 href={
                   selectingPortfolio
                     ? `/commercial/design/${id}/new`
-                    : `/commercial/design/${id}/new?portfolio=1`
+                    : portfolioHref
                 }
               >
                 {selectingPortfolio
@@ -300,37 +304,6 @@ export default async function NewDesignWorkspacePage({
             </section>
           </details>
 
-          {selectingPortfolio ? (
-            <form
-              action={`/commercial/design/${id}/new`}
-              className="grid gap-3"
-              method="get"
-            >
-              <input name="portfolio" type="hidden" value="1" />
-              <Field>
-                <FieldLabel htmlFor="portfolio-search">
-                  Search Portfolio Products
-                </FieldLabel>
-                <Input
-                  defaultValue={productSearch}
-                  id="portfolio-search"
-                  name="product"
-                  placeholder="Product UID or description"
-                />
-              </Field>
-              <Button className="w-fit" type="submit" variant="outline">
-                Search Portfolio
-              </Button>
-              <p className="text-sm text-muted-foreground">
-                {productOptions.coverage.truncated
-                  ? "Showing the first 50 matches. Narrow your search to find another product."
-                  : `${productOptions.rows.length} matching products.`}{" "}
-                Save any unsaved Design edits before leaving the Design form.
-                Confirming a match replaces the new-design draft with the
-                selected Product.
-              </p>
-            </form>
-          ) : null}
           <form action={saveDesignAction}>
             <input
               name="customer_uid"
@@ -364,29 +337,23 @@ export default async function NewDesignWorkspacePage({
                   type="hidden"
                   value="Matches Existing Portfolio"
                 />
-                <Field>
-                  <FieldLabel htmlFor="matched-product">
-                    Matched Portfolio Product
-                  </FieldLabel>
-                  <NativeSelect
-                    defaultValue=""
-                    id="matched-product"
-                    name="matched_product_id"
-                    required
-                  >
-                    <NativeSelectOption disabled value="">
-                      Select product
-                    </NativeSelectOption>
-                    {productOptions.rows.map((product) => (
-                      <NativeSelectOption key={product.id} value={product.id}>
-                        {product.uid} · {product.description}
-                      </NativeSelectOption>
-                    ))}
-                  </NativeSelect>
-                </Field>
+                <input
+                  name="matched_product_id"
+                  type="hidden"
+                  value={selectedPortfolioProduct?.id ?? ""}
+                />
+                <p className="text-sm">
+                  Selected Product:{" "}
+                  <strong>{selectedPortfolioProduct?.uid}</strong>
+                  {" · "}
+                  {selectedPortfolioProduct?.description}
+                </p>
+                <Button asChild className="w-fit" variant="outline">
+                  <Link href={portfolioHref}>Choose Another Product</Link>
+                </Button>
                 <Button
                   className="w-fit"
-                  disabled={!productOptions.rows.length}
+                  disabled={!selectedPortfolioProduct}
                   name="design_save_intent"
                   type="submit"
                   value="draft"

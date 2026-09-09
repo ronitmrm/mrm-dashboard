@@ -1,6 +1,6 @@
 import { createProductPortfolioRepository } from "@workspace/db"
 import {
- SectionCard,
+  SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -21,18 +21,21 @@ export async function ProductPortfolioPage({
     customer?: string
     returnTo?: string
     selectLine?: string
+    selectTask?: string
   }>
 }) {
   await requireCapability("pricing.products.read", portfolioPath)
-  const { customer, returnTo, selectLine } = await searchParams
-  const customerUid = customer?.trim() ?? ""
+  const { customer, returnTo, selectLine, selectTask } = await searchParams
+  // Root Design matches must be ordered internal Products, as enforced on save.
+  const customerUid = selectTask === "1" ? "" : (customer?.trim() ?? "")
   const lineIndex = Number(selectLine)
   const selection =
-    returnTo &&
-    /^\/commercial\/design\/[^/?#]+\/new$/.test(returnTo) &&
-    Number.isInteger(lineIndex) &&
-    lineIndex >= 0
-      ? { lineIndex, returnTo }
+    returnTo && /^\/commercial\/design\/[^/?#]+\/new$/.test(returnTo)
+      ? selectTask === "1"
+        ? { returnTo }
+        : Number.isInteger(lineIndex) && lineIndex >= 0
+          ? { lineIndex, returnTo }
+          : undefined
       : undefined
   const repository = createProductPortfolioRepository({
     connectionString: readAuthEnvironment().connectionString,
@@ -53,19 +56,21 @@ export async function ProductPortfolioPage({
         </p>
       </section>
 
- <SectionCard className="min-h-[70svh]">
+      <SectionCard className="min-h-[70svh]">
         <CardHeader>
           <CardTitle>Current Product Portfolio</CardTitle>
           <CardDescription>
             {selection
-              ? "Choose one Product to return it to the selected Design BOM line."
+              ? selection.lineIndex === undefined
+                ? "Filter the columns and select a Product for this Design task."
+                : "Choose one Product to return it to the selected Design BOM line."
               : "Read-Only Product Identity And Classification For Design Work."}
           </CardDescription>
         </CardHeader>
         <CardContent className="flex min-h-0 flex-1 flex-col">
           <ProductPortfolioTable rows={rows} selection={selection} />
         </CardContent>
- </SectionCard>
+      </SectionCard>
     </div>
   )
 }
