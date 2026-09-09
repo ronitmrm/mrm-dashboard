@@ -129,7 +129,12 @@ export default async function EnquiryExcelViewPage() {
                       )}
                     </TableCell>
                     <TableCell className="font-mono font-medium">
-                      {row.enquiryNumber}
+                      <Link
+                        className="font-medium text-primary underline-offset-4 hover:underline"
+                        href={`/commercial/enquiries/${row.enquiryId}`}
+                      >
+                        {row.enquiryNumber}
+                      </Link>
                     </TableCell>
                     <TableCell>
                       <Link

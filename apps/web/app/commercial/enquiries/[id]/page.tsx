@@ -170,6 +170,9 @@ export default async function EnquiryDetailPage({
           <Button asChild className="w-fit" size="sm" variant="ghost">
             <Link href="/commercial/enquiries">Back To Enquiries</Link>
           </Button>
+          <Button asChild className="w-fit" size="sm" variant="ghost">
+            <Link href="/commercial/enquiries/excel-view">Back To Excel View</Link>
+          </Button>
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-2xl font-semibold tracking-tight">
               {snapshot.enquiry.enquiryNumber}
