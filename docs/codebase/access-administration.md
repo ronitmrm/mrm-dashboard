@@ -213,6 +213,12 @@ in `apps/web/lib/auth/task-capabilities.ts` and
 permission registry in `identity.permissions`. Display labels remain separate
 from stable permission keys.
 
+The shared capability selector includes a separate Page column throughout Access
+Administration. Its standard column filter narrows both page and task rows to
+their page context (for example, Enquiries versus Purchase Orders). Tasks shared
+by multiple pages expose each page as a separate filter option. Page labels are
+also searchable; filtering never changes selected permission keys.
+
 Master row labels identify the individual master and scope. Department,
 Designation and Job Templates have their own supported action keys. Legacy
 master task keys are omitted where the individual master rows replace them;

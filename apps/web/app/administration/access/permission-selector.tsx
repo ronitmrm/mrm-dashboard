@@ -34,6 +34,7 @@ import {
   configuredPermissionCount,
   normalizePermissionKeys,
   permissionAccessLevelForKeys,
+  permissionAccessPageLabels,
   permissionAccessRows,
   permissionAccessSummary,
   permissionKeysForActionToggle,
@@ -48,7 +49,14 @@ export function PermissionSelector({
   permissions: readonly PermissionOption[]
 }) {
   const [query, setQuery] = useState("")
-  const rows = useMemo(() => permissionAccessRows(permissions), [permissions])
+  const rows = useMemo(
+    () =>
+      permissionAccessRows(permissions).map((row) => ({
+        ...row,
+        pages: permissionAccessPageLabels(row),
+      })),
+    [permissions]
+  )
   const [permissionKeys, setPermissionKeys] = useState<string[]>(() => {
     const assignable = new Set(rows.flatMap((row) => row.fullPermissionKeys))
     return initialPermissionKeys.filter((key) => assignable.has(key)).sort()
@@ -59,6 +67,7 @@ export function PermissionSelector({
       !normalizedQuery ||
       row.module.toLowerCase().includes(normalizedQuery) ||
       row.submodule.toLowerCase().includes(normalizedQuery) ||
+      row.pages.some((page) => page.toLowerCase().includes(normalizedQuery)) ||
       row.label.toLowerCase().includes(normalizedQuery) ||
       row.fullPermissionKeys.some((key) =>
         key.toLowerCase().includes(normalizedQuery)
@@ -121,14 +130,15 @@ export function PermissionSelector({
 
       <div className="min-w-0 rounded-lg border">
         <OperationalTable
-          className="min-w-[44rem] table-fixed"
+          className="min-w-[60rem] table-fixed"
           containerClassName="max-h-[min(34rem,calc(100svh-16rem))]"
           filterStorageKey="access-administration-permissions"
         >
           <TableHeader className="sticky top-0 z-10 bg-background">
             <TableRow>
-              <TableHead className="w-[18%]">Main Module</TableHead>
-              <TableHead className="w-[18%]">Sub Module</TableHead>
+              <TableHead className="w-[15%]">Main Module</TableHead>
+              <TableHead className="w-[17%]">Sub Module</TableHead>
+              <TableHead className="w-[20%]">Page</TableHead>
               <TableHead className="w-20">Type</TableHead>
               <TableHead>Page / Task</TableHead>
               <TableHead className="sticky right-0 w-48 bg-muted">
@@ -145,6 +155,12 @@ export function PermissionSelector({
                   </TableCell>
                   <TableCell className="wrap-anywhere whitespace-normal">
                     {row.submodule}
+                  </TableCell>
+                  <TableCell
+                    className="wrap-anywhere whitespace-normal"
+                    data-filter-values={JSON.stringify(row.pages)}
+                  >
+                    {row.pages.join(" / ")}
                   </TableCell>
                   <TableCell>
                     <Badge
@@ -170,7 +186,7 @@ export function PermissionSelector({
               <TableRow>
                 <TableCell
                   className="h-24 text-center text-muted-foreground"
-                  colSpan={5}
+                  colSpan={6}
                 >
                   No Pages Or Tasks Match This Search.
                 </TableCell>
