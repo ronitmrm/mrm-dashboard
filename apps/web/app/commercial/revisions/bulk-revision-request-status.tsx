@@ -49,8 +49,9 @@ export async function BulkRevisionRequestStatus({
         <CardTitle>Revision Request Status</CardTitle>
         <CardDescription>
           All requests initiated here, including requests handed over to costing
-          and completed requests. Open completed requests to view their read-only
-          revision details. Status is updated when this page is loaded.
+          and completed requests. Open incomplete requests in their current
+          costing queue, or view completed requests as read-only revision details.
+          Status is updated when this page is loaded.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -104,7 +105,19 @@ export async function BulkRevisionRequestStatus({
                       </Link>
                     </Button>
                   ) : (
-                    "—"
+                    <Button asChild variant="outline" size="sm">
+                      <Link
+                        href={
+                          origin === "customer"
+                            ? `/commercial/customer-costing/customer-revisions/${request.id}`
+                            : request.status === "Pending Customer Costing"
+                              ? `/commercial/customer-costing/revisions/${request.id}`
+                              : `/commercial/product-costing/revisions/${request.id}`
+                        }
+                      >
+                        Open {request.revisionNumber}
+                      </Link>
+                    </Button>
                   )}
                 </TableCell>
               </TableRow>

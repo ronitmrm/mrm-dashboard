@@ -231,7 +231,10 @@ creates the immutable replacement Quote revisions. Product selection never
 depends on Customer identity.
 
 All bulk revisions remain in the single Revision Request Status table on their
-initiating page. Completed rows link to read-only revision details:
+initiating page. Incomplete rows open the matching revision in its current costing
+queue: Customer Parameter Costing for Customer-origin requests and Product-origin
+requests handed over to Customer Costing, otherwise Product Parameter Costing.
+Completed rows link to read-only revision details:
 Product Bulk Revision for Product-origin requests (including completion in Customer
 Parameter Costing), and Customer Bulk Revision for Customer-origin requests.
 History retains the reason, effective/completion dates, requested parameter values,
