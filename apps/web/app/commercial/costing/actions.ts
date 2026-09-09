@@ -262,7 +262,7 @@ export async function sendQuoteAction(formData: FormData) {
     provider: createUploadThingArtifactProvider(),
   })
   try {
-    await costing.issueQuote({
+    const issued = await costing.issueQuote({
       actorUserId: session.user.id,
       followupDueOn,
       quoteItemId,
@@ -297,14 +297,15 @@ export async function sendQuoteAction(formData: FormData) {
         })
       },
     })
-    const requestIds =
-      await orders.listResolvableQuoteRevisionRequestIds(quoteItemId)
-    for (const quoteRevisionRequestId of requestIds) {
-      await orders.resolveQuoteRevisionRequest({
-        actorUserId: session.user.id,
-        quoteRevisionRequestId,
-        replacementQuoteItemId: quoteItemId,
-      })
+    for (const sentQuoteItemId of issued.sentQuoteItemIds) {
+      const requestIds = await orders.listResolvableQuoteRevisionRequestIds(sentQuoteItemId)
+      for (const quoteRevisionRequestId of requestIds) {
+        await orders.resolveQuoteRevisionRequest({
+          actorUserId: session.user.id,
+          quoteRevisionRequestId,
+          replacementQuoteItemId: sentQuoteItemId,
+        })
+      }
     }
   } finally {
     await Promise.all([artifacts.close(), costing.close(), orders.close()])

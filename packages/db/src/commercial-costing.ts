@@ -665,6 +665,7 @@ async function getQuoteWithClient(client: PoolClient, quoteItemId: string) {
     approved_price_usd: string
     company_name: string
     enquiry_item_id: string | null
+    enquiry_id: string | null
     id: string
     is_active: boolean
     quote_number: string
@@ -678,7 +679,7 @@ async function getQuoteWithClient(client: PoolClient, quoteItemId: string) {
     `
       SELECT quote.id, quote.quote_number, quote.revision, quote.status,
         quote.is_active, quote.rate_inr, quote.total_rate_inr,
-        quote.rate_usd, quote.approved_price_usd, quote.enquiry_item_id,
+        quote.rate_usd, quote.approved_price_usd, quote.enquiry_item_id, quote.enquiry_id,
         customer.company_name,
         item.uid
       FROM sales.quote_items quote
@@ -724,6 +725,7 @@ async function getQuoteWithClient(client: PoolClient, quoteItemId: string) {
       unitCost: asNumber(component.unit_cost),
     })),
     enquiryItemId: row.enquiry_item_id,
+    enquiryId: row.enquiry_id,
     id: row.id,
     isActive: row.is_active,
     quoteNumber: row.quote_number,
@@ -827,8 +829,11 @@ async function getQuoteDocumentWithClient(
         COALESCE(selected.customer_part_code,
           enquiry_item.customer_part_code) AS customer_part_code,
         enquiry_item.description, enquiry_item.quantity::text,
-        selected.id AS quote_item_id, selected.quote_number, selected.revision, selected.status,
-        selected.sent_at, selected.unit_price::text AS price,
+        selected.id AS quote_item_id, selected.quote_number, selected.revision,
+        CASE WHEN enquiry_item.technical_review_status = 'NotFeasible'
+          THEN 'Cannot Quote' ELSE selected.status END AS status,
+        selected.sent_at, CASE WHEN enquiry_item.technical_review_status = 'NotFeasible'
+          THEN NULL ELSE selected.unit_price::text END AS price,
         COALESCE(snapshot.item_uid, product.uid) AS product_code,
         preparer.name AS prepared_by
       FROM sales.enquiry_items enquiry_item
@@ -861,6 +866,7 @@ async function getQuoteDocumentWithClient(
       LEFT JOIN sales.quote_product_snapshots snapshot ON snapshot.quote_item_id = selected.id
       LEFT JOIN identity.users preparer ON preparer.id = selected.updated_by_user_id
       WHERE enquiry_item.enquiry_id = $1
+        AND enquiry_item.linked_enquiry_item_id IS NULL
       ORDER BY enquiry_item.line_number
     `,
     [enquiryId, options.issuedQuoteItemId ?? null]
@@ -884,8 +890,8 @@ async function getQuoteDocumentWithClient(
   )
   const row = header.rows[0]
   const includedLines = options.issuedQuoteItemId
-    ? lines.rows.filter(line => line.sent_at !== null &&
-        ["Sent", "Accepted", "Ordered", "Superseded"].includes(line.status ?? ""))
+    ? lines.rows.filter(line => line.status === "Cannot Quote" || (line.sent_at !== null &&
+        ["Sent", "Accepted", "Ordered", "Superseded"].includes(line.status ?? "")))
     : lines.rows
   const latestSent = [...includedLines].sort((a, b) =>
     (b.sent_at?.getTime() ?? 0) - (a.sent_at?.getTime() ?? 0))[0]
@@ -936,9 +942,13 @@ async function hasIssuedQuotePdf(client: PoolClient, quoteItemId: string) {
         FROM core.file_links link
         JOIN core.files file ON file.id = link.file_id
         JOIN core.file_objects object ON object.id = file.physical_object_id
+        JOIN sales.quote_items issued ON issued.id = link.target_id
+        JOIN sales.quote_items requested ON requested.id = $1
         WHERE link.target_schema = 'sales'
           AND link.target_table = 'quote_items'
-          AND link.target_id = $1
+          AND (issued.id = requested.id OR (
+            issued.enquiry_id = requested.enquiry_id
+            AND issued.sent_at = requested.sent_at))
           AND link.purpose = $2
           AND link.is_current
           AND file.lifecycle_state <> 'deleted'
@@ -948,6 +958,42 @@ async function hasIssuedQuotePdf(client: PoolClient, quoteItemId: string) {
     [quoteItemId, quotePdfArtifactPurpose]
   )
   return artifact.rows[0]!.exists
+}
+
+async function enquiryQuoteLines(
+  client: Pick<PoolClient, "query">,
+  enquiryIds: string[],
+  scope?: SalesWorkScope
+) {
+  const result = await client.query<{
+    enquiry_id: string
+    line_number: number
+    quote_item_id: string | null
+    status: string | null
+    cannot_quote: boolean
+  }>(
+    `SELECT line.enquiry_id, line.line_number, selected.id AS quote_item_id,
+       selected.status, line.technical_review_status = 'NotFeasible' AS cannot_quote
+     FROM sales.enquiry_items line
+     JOIN sales.enquiries enquiry ON enquiry.id = line.enquiry_id
+     LEFT JOIN LATERAL (
+       SELECT quote.id, quote.status FROM sales.quote_items quote
+       WHERE quote.enquiry_item_id = line.id AND quote.status <> 'Superseded'
+       ORDER BY quote.created_at DESC, quote.id DESC LIMIT 1
+     ) selected ON true
+     WHERE line.enquiry_id = ANY($1::uuid[])
+       AND line.linked_enquiry_item_id IS NULL
+       AND ($2::uuid IS NULL OR enquiry.created_by_user_id = $2
+         OR (SELECT identity.has_administrative_access($2)))
+     ORDER BY line.enquiry_id, line.line_number`,
+    [enquiryIds, scope?.originatingSalespersonUserId ?? null]
+  )
+  return result.rows
+}
+
+function pendingQuoteLines(lines: Awaited<ReturnType<typeof enquiryQuoteLines>>) {
+  return lines.filter(line => !line.cannot_quote &&
+    !["Ready", "Sent", "Accepted", "Ordered"].includes(line.status ?? ""))
 }
 
 type QuoteSendInput = {
@@ -984,12 +1030,30 @@ async function transitionQuoteToSent(
         ON enquiry.id = coalesce(quote.enquiry_id, enquiry_item.enquiry_id)
       WHERE quote.id = $1
         AND ($2::uuid IS NULL OR enquiry.created_by_user_id = $2 OR (SELECT identity.has_administrative_access($2)))
-      FOR UPDATE OF quote
     `,
     [input.quoteItemId, input.actorUserId ?? null]
   )
   if (!root.rows[0]) {
     throw new Error("Quote was not found.")
+  }
+  const enquiryId = root.rows[0].enquiry_id
+  if (!enquiryId) {
+    throw new Error("Quote must belong to an Enquiry before it can be sent.")
+  }
+  // Serialize the whole enquiry before locking any individual quote.
+  await client.query("SELECT id FROM sales.enquiries WHERE id = $1 FOR UPDATE", [enquiryId])
+  const current = await client.query<{ status: string }>(
+    "SELECT status FROM sales.quote_items WHERE id = $1 FOR UPDATE", [input.quoteItemId]
+  )
+  root.rows[0].status = current.rows[0]!.status
+  if (root.rows[0].status === "Sent" && await hasIssuedQuotePdf(client, input.quoteItemId)) {
+    const batch = await client.query<{ id: string }>(
+      `SELECT id FROM sales.quote_items WHERE enquiry_id = $1
+       AND sent_at = (SELECT sent_at FROM sales.quote_items WHERE id = $2)`,
+      [enquiryId, input.quoteItemId]
+    )
+    return { ...await getQuoteWithClient(client, input.quoteItemId),
+      sentQuoteItemIds: batch.rows.map(row => row.id) }
   }
   if (root.rows[0].status === "Draft") {
     throw new Error(
@@ -999,10 +1063,19 @@ async function transitionQuoteToSent(
   if (root.rows[0].status !== "Ready" && root.rows[0].status !== "Sent") {
     throw new Error("Only a ready quote can be sent.")
   }
+  const lines = await enquiryQuoteLines(client, [enquiryId])
+  const pending = pendingQuoteLines(lines)
+  if (pending.length) {
+    throw new Error(`Complete all enquiry lines before sending. Pending lines: ${pending.map(line => line.line_number).join(", ")}.`)
+  }
+  const quoteItemIds = lines.flatMap(line =>
+    !line.cannot_quote && line.quote_item_id && line.status === "Ready"
+      ? [line.quote_item_id] : [])
+  if (!quoteItemIds.includes(input.quoteItemId)) quoteItemIds.push(input.quoteItemId)
   const tree = await client.query<{ id: string; depth: number }>(
     `
       WITH RECURSIVE quote_tree AS (
-        SELECT $1::uuid AS id, 0 AS depth
+        SELECT unnest($1::uuid[]) AS id, 0 AS depth
         UNION ALL
         SELECT component.child_quote_item_id, quote_tree.depth + 1
         FROM quote_tree
@@ -1017,7 +1090,7 @@ async function transitionQuoteToSent(
       GROUP BY id
       ORDER BY depth DESC
     `,
-    [input.quoteItemId]
+    [quoteItemIds]
   )
   for (const member of tree.rows) {
     const quote = await client.query<{
@@ -1125,9 +1198,11 @@ async function transitionQuoteToSent(
         UPDATE sales.design_tasks
         SET next_stage_status = 'Quoted', updated_by_user_id = $1,
           updated_at = now(), row_version = row_version + 1
-        WHERE enquiry_item_id = $2
+        WHERE enquiry_item_id IN (
+          SELECT enquiry_item_id FROM sales.quote_items WHERE id = ANY($2::uuid[])
+        )
       `,
-      [input.actorUserId ?? null, root.rows[0].enquiry_item_id]
+      [input.actorUserId ?? null, quoteItemIds]
     )
   }
   if (root.rows[0].enquiry_id) {
@@ -1169,7 +1244,7 @@ async function transitionQuoteToSent(
     targetId: input.quoteItemId,
     targetTable: "quote_items",
   })
-  return getQuoteWithClient(client, input.quoteItemId)
+  return { ...await getQuoteWithClient(client, input.quoteItemId), sentQuoteItemIds: quoteItemIds }
 }
 
 async function persistQuote(
@@ -2915,6 +2990,14 @@ export function createCommercialCostingRepository(
         throw new Error("Follow-Up Date must use YYYY-MM-DD.")
       }
       return transaction(pool, (client) => transitionQuoteToSent(client, input))
+    },
+
+    async listEnquiryQuoteReadiness(enquiryIds: string[], scope?: SalesWorkScope) {
+      const lines = await enquiryQuoteLines(pool, enquiryIds, scope)
+      return Object.fromEntries(enquiryIds.map(id => [id,
+        pendingQuoteLines(lines.filter(line => line.enquiry_id === id))
+          .map(line => line.line_number),
+      ]))
     },
 
     async getQuote(quoteItemId: string, scope?: SalesWorkScope) {

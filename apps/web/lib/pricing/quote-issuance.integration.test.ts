@@ -201,9 +201,9 @@ afterAll(async () => {
   await pool.end()
 })
 
-test("issues a partial enquiry without including unfinished or unsent lines", async () => {
-  const context = await createReadyQuote("Partial enquiry")
-  await pool.query(
+test("waits for every enquiry line and issues all completed lines together", async () => {
+  const context = await createReadyQuote("Full enquiry")
+  const siblings = await pool.query<{ id: string }>(
     `WITH lines AS (
        INSERT INTO sales.enquiry_items (organization_id, enquiry_id, line_number,
          customer_part_code, description, quantity, item_id,
@@ -221,21 +221,51 @@ test("issues a partial enquiry without including unfinished or unsent lines", as
        CASE lines.line_number WHEN 2 THEN 'Draft' ELSE 'Ready' END,
        'test', 'partial_quote', $2 || lines.line_number
      FROM sales.quote_items quote, lines
-     WHERE quote.id = $1 AND lines.line_number < 4`,
+     WHERE quote.id = $1 AND lines.line_number < 4
+     RETURNING id`,
     [context.quoteItemId, randomUUID()]
   )
   const provider = new QuoteArtifactProvider()
+  await expect(issueQuote(context, provider)).rejects.toThrow(
+    "Complete all enquiry lines before sending. Pending lines: 2, 4."
+  )
+  expect(provider.uploads).toHaveLength(0)
+  await pool.query(
+    `UPDATE sales.quote_items SET status = 'Ready'
+     WHERE enquiry_id = $1 AND status = 'Draft'`,
+    [context.enquiryId]
+  )
+  await pool.query(
+    `UPDATE sales.enquiry_items SET technical_review_status = 'NotFeasible'
+     WHERE enquiry_id = $1 AND line_number = 4`,
+    [context.enquiryId]
+  )
+  await expect(issueQuote(context, new QuoteArtifactProvider({ failUpload: true })))
+    .rejects.toThrow("quote PDF upload failed")
+  const repository = createCommercialCostingRepository({ connectionString })
+  try {
+    for (const id of [context.quoteItemId, ...siblings.rows.map(row => row.id)]) {
+      await expect(repository.getQuote(id)).resolves.toMatchObject({ status: "Ready" })
+    }
+  } finally {
+    await repository.close()
+  }
   let issuedDocument: QuoteDocument | undefined
   await issueQuote(context, provider, (document) => {
-    expect(document.lines).toHaveLength(1)
+    expect(document.lines).toHaveLength(4)
     issuedDocument = document
   })
-  expect(issuedDocument?.lines).toHaveLength(1)
+  expect(issuedDocument?.lines.map(line => line.status)).toEqual([
+    "Sent", "Sent", "Sent", "Cannot Quote",
+  ])
   expect(issuedDocument?.lines[0]).toMatchObject({
     lineNumber: 1,
     status: "Sent",
     price: 12.5,
   })
+  expect(provider.uploads).toHaveLength(1)
+  await issueQuote(context, provider)
+  await issueQuote({ ...context, quoteItemId: siblings.rows[0]!.id }, provider)
   expect(provider.uploads).toHaveLength(1)
 })
 

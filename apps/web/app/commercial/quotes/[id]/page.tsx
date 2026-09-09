@@ -54,7 +54,10 @@ export default async function QuoteDetailPage({
       originatingSalespersonUserId: session.user.id,
     })
     .catch(() => null)
-    .finally(() => repository.close())
+  const readiness = await repository.listEnquiryQuoteReadiness(
+    quote?.enquiryId ? [quote.enquiryId] : [],
+    { originatingSalespersonUserId: session.user.id }
+  ).finally(() => repository.close())
   if (!quote) {
     notFound()
   }
@@ -101,7 +104,15 @@ export default async function QuoteDetailPage({
                       type="date"
                     />
                   </label>
-                  <Button type="submit">Send Quote</Button>
+                  <Button type="submit"
+                    disabled={!quote.enquiryId || Boolean(readiness[quote.enquiryId]?.length)}>
+                    Send Full Enquiry
+                  </Button>
+                  <p className="w-full text-xs text-muted-foreground">
+                    {quote.enquiryId && readiness[quote.enquiryId]?.length
+                      ? `Pending lines: ${readiness[quote.enquiryId]!.join(", ")}`
+                      : "All enquiry lines will be sent together."}
+                  </p>
                 </form>
               ) : quote.status === "Draft" && quote.enquiryItemId ? (
                 <Button asChild>

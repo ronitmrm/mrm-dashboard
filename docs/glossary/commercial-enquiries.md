@@ -352,12 +352,12 @@ Organization, pricing, market, or term values.
 _Avoid_: Regenerated historical Quote PDF, persisted draft preview, Sent without
 an issued PDF Artifact.
 
-**Partial Enquiry Quotation**: Sales may issue a line after that line's Customer
-Parameter Costing is complete; other Enquiry lines need not be complete. The
-issued enquiry PDF includes the line being sent and previously sent lines, never
-Draft, Ready-but-unsent, or uncosted siblings. Completing or sending one line
-does not mark other lines Sent. Later partial issues store a new cumulative PDF;
-each previously issued PDF remains immutable.
+**Full Enquiry Quotation**: Sales sends the whole Enquiry together, once every
+independent line has completed Customer Parameter Costing or is marked Cannot
+Quote. Draft or uncosted lines block sending. One action marks all Ready lines
+Sent and stores one combined PDF, including previously sent lines and explicit
+Cannot Quote outcomes. Linked duplicate lines follow their originating line.
+Previously issued PDFs remain immutable; retries reuse the issued document.
 
 Quote PDFs use the approved Mayank Raw Mint letterhead, green quotation banner,
 details/customer blocks, Product and Customer codes, item prices, prepared-by
