@@ -86,6 +86,29 @@ afterAll(async () => {
 })
 
 describe("PostgreSQL enquiry-to-design workflow", () => {
+  test("retains enquiry quotation terms through create and edit", async () => {
+    const enquiry = await repository.createEnquiry({
+      customerId, organizationId, receivedOn: "2026-09-09",
+      commercialTerms: {
+        brassMaterialSpecs: "C36000",
+        reports: "Material certificate",
+        taxesAndDuties: "Buyer responsibility",
+      },
+    })
+    expect((await repository.getEnquiry(enquiry.id)).enquiry).toMatchObject({
+      brassMaterialSpecs: "C36000", reports: "Material certificate",
+      taxesAndDuties: "Buyer responsibility",
+    })
+    await repository.updateEnquiry({
+      enquiryId: enquiry.id, customerId, organizationId,
+      commercialTerms: { reports: "Inspection report" },
+    })
+    expect((await repository.getEnquiry(enquiry.id)).enquiry).toMatchObject({
+      brassMaterialSpecs: "C36000", reports: "Inspection report",
+      taxesAndDuties: "Buyer responsibility",
+    })
+  })
+
   test("retains the original enquiry-line source on its Import Review", async () => {
     const enquiry = await repository.createEnquiry({
       customerId,

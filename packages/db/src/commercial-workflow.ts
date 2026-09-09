@@ -27,6 +27,9 @@ import {
 } from "./postgres-runtime"
 
 type CommercialTerms = {
+  brassMaterialSpecs?: string | null
+  reports?: string | null
+  taxesAndDuties?: string | null
   conversionRate?: number
   currency?: string
   incoterms?: string | null
@@ -2184,12 +2187,12 @@ export function createCommercialWorkflowRepository(
               shipment_mode, packaging_terms, remarks,
               technical_handover_status, source_system, source_table,
               source_id, source_payload, created_by_user_id,
-              updated_by_user_id
+              updated_by_user_id, brass_material_specs, reports, taxes_and_duties
             )
             VALUES (
               $1, $2, $3, $4, 'Logged', $5, $6, $7, $8, $9, $10,
               $11, $8, $12, $13, $14, 'Draft', 'mrm-dashboard',
-              'enquiries', $15, $16, $17, $17
+              'enquiries', $15, $16, $17, $17, $18, $19, $20
             )
             RETURNING id, enquiry_number, technical_handover_status
           `,
@@ -2221,6 +2224,9 @@ export function createCommercialWorkflowRepository(
             sourceId,
             input,
             input.actorUserId ?? null,
+            terms.brassMaterialSpecs ?? null,
+            terms.reports ?? null,
+            terms.taxesAndDuties ?? null,
           ]
         )
         const row = created.rows[0]!
@@ -2501,6 +2507,9 @@ export function createCommercialWorkflowRepository(
           currency: string
           incoterms: string | null
           packaging_terms: string | null
+          brass_material_specs: string | null
+          reports: string | null
+          taxes_and_duties: string | null
           payment_terms: string | null
           priority: string
           received_on: string
@@ -2518,6 +2527,7 @@ export function createCommercialWorkflowRepository(
           `
             SELECT enquiry.buyer_name, enquiry.conversion_rate::text,
               enquiry.currency, enquiry.incoterms, enquiry.packaging_terms,
+              enquiry.brass_material_specs, enquiry.reports, enquiry.taxes_and_duties,
               enquiry.payment_terms, enquiry.priority,
               enquiry.received_on::text, enquiry.remarks,
               enquiry.shipment_mode, enquiry.source, enquiry.status,
@@ -2594,6 +2604,7 @@ export function createCommercialWorkflowRepository(
               remarks = $7, incoterms = $8, delivery_terms = $8,
               payment_terms = $9, currency = $10, conversion_rate = $11,
               shipment_mode = $12, packaging_terms = $13,
+              brass_material_specs = $16, reports = $17, taxes_and_duties = $18,
               updated_by_user_id = $14, updated_at = now(),
               row_version = row_version + 1
             WHERE id = $15
@@ -2621,6 +2632,9 @@ export function createCommercialWorkflowRepository(
               : terms.packagingTerms,
             input.actorUserId ?? null,
             input.enquiryId,
+            terms?.brassMaterialSpecs === undefined ? row.brass_material_specs : terms.brassMaterialSpecs,
+            terms?.reports === undefined ? row.reports : terms.reports,
+            terms?.taxesAndDuties === undefined ? row.taxes_and_duties : terms.taxesAndDuties,
           ]
         )
         await writeAuditEvent(client, {
@@ -6284,6 +6298,9 @@ export function createCommercialWorkflowRepository(
           incoterms: string | null
           organization_id: string
           packaging_terms: string | null
+          brass_material_specs: string | null
+          reports: string | null
+          taxes_and_duties: string | null
           payment_terms: string | null
           priority: string
           received_on: string
@@ -6301,7 +6318,8 @@ export function createCommercialWorkflowRepository(
               enquiry.buyer_name, enquiry.remarks, enquiry.incoterms,
               enquiry.payment_terms, enquiry.currency,
               enquiry.conversion_rate::text, enquiry.shipment_mode,
-              enquiry.packaging_terms, customer.customer_uid,
+              enquiry.packaging_terms, enquiry.brass_material_specs, enquiry.reports,
+              enquiry.taxes_and_duties, customer.customer_uid,
               customer.company_name
             FROM sales.enquiries enquiry
             JOIN sales.customers customer ON customer.id = enquiry.customer_id
@@ -6418,6 +6436,9 @@ export function createCommercialWorkflowRepository(
             incoterms: enquiry.rows[0].incoterms,
             organizationId: enquiry.rows[0].organization_id,
             packagingTerms: enquiry.rows[0].packaging_terms,
+            brassMaterialSpecs: enquiry.rows[0].brass_material_specs,
+            reports: enquiry.rows[0].reports,
+            taxesAndDuties: enquiry.rows[0].taxes_and_duties,
             paymentTerms: enquiry.rows[0].payment_terms,
             priority: enquiry.rows[0].priority,
             receivedOn: enquiry.rows[0].received_on,

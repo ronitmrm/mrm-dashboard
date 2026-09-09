@@ -23,6 +23,9 @@ export const commercialTermTypes = [
   "payment_terms",
   "shipment_mode",
   "packaging_terms",
+  "brass_material_specs",
+  "reports",
+  "taxes_and_duties",
   "currency",
 ] as const
 
@@ -63,6 +66,7 @@ export type CommercialMasterSnapshot = {
   customers: Array<{
     companyName: string
     country: string | null
+    address?: string | null
     customerUid: string
     defaultBuyerName: string | null
     defaultCurrency: string | null
@@ -753,15 +757,16 @@ async function upsertCustomerClient(
         phone, country, default_buyer_name, default_incoterms,
         default_payment_terms, default_shipment_mode,
         default_packaging_terms, default_currency, created_by_user_id,
-        updated_by_user_id, source_system, source_table, source_id
+        updated_by_user_id, source_system, source_table, source_id, address
       )
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
-        $13, $14, $14, 'mrm-dashboard', 'customers', $15)
+        $13, $14, $14, 'mrm-dashboard', 'customers', $15, $16)
       ON CONFLICT (organization_id, lower(customer_uid)) DO UPDATE SET
         company_name = EXCLUDED.company_name,
         email = EXCLUDED.email,
         phone = EXCLUDED.phone,
         country = EXCLUDED.country,
+        address = COALESCE(EXCLUDED.address, sales.customers.address),
         default_buyer_name = COALESCE(
           EXCLUDED.default_buyer_name,
           sales.customers.default_buyer_name
@@ -807,6 +812,7 @@ async function upsertCustomerClient(
       optionalText(input.defaultCurrency),
       input.actorUserId ?? null,
       randomUUID(),
+      optionalText(input.address),
     ]
   )
   const row = result.rows[0]!
@@ -887,7 +893,7 @@ export function createCommercialMasterRepository(
         [organizationId]
       )
       const customers = await client.query(
-        `SELECT customer_uid, company_name, status, email, phone, country,
+        `SELECT customer_uid, company_name, status, email, phone, country, address,
           default_buyer_name, default_incoterms, default_payment_terms,
           default_shipment_mode, default_packaging_terms, default_currency
          FROM sales.customers
@@ -960,6 +966,7 @@ export function createCommercialMasterRepository(
         customers: customers.rows.map((row) => ({
           companyName: row.company_name,
           country: row.country,
+          address: row.address,
           customerUid: row.customer_uid,
           defaultBuyerName: row.default_buyer_name,
           defaultCurrency: row.default_currency,

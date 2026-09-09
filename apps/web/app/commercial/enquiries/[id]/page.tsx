@@ -65,11 +65,13 @@ function EnquiryTermSelect({
   label,
   name,
   options,
+  required = true,
 }: {
   defaultValue: string | null
   label: string
   name: string
   options: string[]
+  required?: boolean
 }) {
   const id = `edit-enquiry-${name.replaceAll("_", "-")}`
   const visibleOptions =
@@ -84,7 +86,7 @@ function EnquiryTermSelect({
         defaultValue={defaultValue ?? ""}
         id={id}
         name={name}
-        required
+        required={required}
       >
         <NativeSelectOption value="">Select {label}</NativeSelectOption>
         {visibleOptions.map((option) => (
@@ -286,6 +288,27 @@ export default async function EnquiryDetailPage({
                   label="Packaging"
                   name="packaging_terms"
                   options={termOptions.packaging_terms}
+                />
+                <EnquiryTermSelect
+                  defaultValue={snapshot.enquiry.brassMaterialSpecs}
+                  label="Brass Material Specs"
+                  name="brass_material_specs"
+                  options={termOptions.brass_material_specs}
+                  required={false}
+                />
+                <EnquiryTermSelect
+                  defaultValue={snapshot.enquiry.reports}
+                  label="Reports"
+                  name="reports"
+                  options={termOptions.reports}
+                  required={false}
+                />
+                <EnquiryTermSelect
+                  defaultValue={snapshot.enquiry.taxesAndDuties}
+                  label="Taxes and Duties"
+                  name="taxes_and_duties"
+                  options={termOptions.taxes_and_duties}
+                  required={false}
                 />
                 <EnquiryTermSelect
                   defaultValue={snapshot.enquiry.currency}

@@ -16,7 +16,7 @@ const connectionString =
 
 const pool = new Pool({ connectionString })
 const artifactReader = createArtifactService({ connectionString })
-const repository = createCommercialMasterRepository({ connectionString })
+const repository = createCommercialMasterRepository({ pool })
 let actorUserId: string
 let organizationId: string
 let roundTripOrganizationId: string
@@ -33,6 +33,7 @@ const fixture: CommercialMasterSnapshot = {
     {
       companyName: "Fixture Customer",
       country: "India",
+      address: "12 Industrial Road",
       customerUid: "CUST-900",
       defaultBuyerName: "Purchasing",
       defaultCurrency: "USD",

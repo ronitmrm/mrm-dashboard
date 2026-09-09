@@ -22,6 +22,7 @@ const sheetDefinitions: SheetDefinition[] = [
     placeholder: {
       company_name: "",
       country: "",
+      address: "",
       customer_uid: "",
       default_buyer_name: "",
       default_currency: "",
@@ -237,6 +238,7 @@ function snapshotRows(
       return snapshot.customers.map((row) => ({
         company_name: row.companyName,
         country: row.country ?? "",
+        address: row.address ?? "",
         customer_uid: row.customerUid,
         default_buyer_name: row.defaultBuyerName ?? "",
         default_currency: row.defaultCurrency ?? "",
@@ -388,6 +390,7 @@ export function parseMastersWorkbook(
     result.customers.push({
       companyName,
       country: optional(cell(row, "country")),
+      address: optional(cell(row, "address")),
       customerUid: cell(row, "customer_uid", "uid"),
       defaultBuyerName: optional(cell(row, "default_buyer_name", "buyer")),
       defaultCurrency: optional(cell(row, "default_currency", "currency")),

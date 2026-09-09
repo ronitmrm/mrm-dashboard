@@ -20,6 +20,7 @@ export async function GET() {
         Email: row.email,
         Phone: row.phone,
         Country: row.country,
+        Address: row.address,
         Status: row.status,
         "Default Buyer Name": row.defaultBuyerName,
         "Default Incoterms": row.defaultIncoterms,

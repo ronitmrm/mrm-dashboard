@@ -33,6 +33,9 @@ export type EnquiryCustomerOption = {
 }
 
 type CustomerDefaults = {
+  brass_material_specs: string
+  reports: string
+  taxes_and_duties: string
   buyer: string
   currency: string
   incoterms: string
@@ -43,6 +46,9 @@ type CustomerDefaults = {
 
 function defaultsFor(customer: EnquiryCustomerOption): CustomerDefaults {
   return {
+    brass_material_specs: "",
+    reports: "",
+    taxes_and_duties: "",
     buyer: customer.defaultBuyerName ?? "",
     currency: customer.defaultCurrency ?? "",
     incoterms: customer.defaultIncoterms ?? "",
@@ -72,6 +78,9 @@ export function EnquiryLogForm({
     customers[0]
       ? defaultsFor(customers[0])
       : {
+          brass_material_specs: "",
+          reports: "",
+          taxes_and_duties: "",
           buyer: "",
           currency: "",
           incoterms: "",
@@ -90,7 +99,8 @@ export function EnquiryLogForm({
   function commercialSelect(
     label: string,
     name: keyof CustomerDefaults,
-    termType: CommercialTermType
+    termType: CommercialTermType,
+    required = true
   ) {
     const id = `enquiry-${name.replaceAll("_", "-")}`
     return (
@@ -106,7 +116,7 @@ export function EnquiryLogForm({
               [name]: event.target.value,
             }))
           }
-          required
+          required={required}
           value={defaults[name]}
         >
           <NativeSelectOption value="">Select {label}</NativeSelectOption>
@@ -198,6 +208,9 @@ export function EnquiryLogForm({
           {commercialSelect("Payment Terms", "payment_terms", "payment_terms")}
           {commercialSelect("Shipment Mode", "shipment_mode", "shipment_mode")}
           {commercialSelect("Packaging", "packaging_terms", "packaging_terms")}
+          {commercialSelect("Brass Material Specs", "brass_material_specs", "brass_material_specs", false)}
+          {commercialSelect("Reports", "reports", "reports", false)}
+          {commercialSelect("Taxes and Duties", "taxes_and_duties", "taxes_and_duties", false)}
           {commercialSelect("Currency", "currency", "currency")}
           <Field>
             <FieldLabel htmlFor="enquiry-fx">Fx / Exchange Rate</FieldLabel>

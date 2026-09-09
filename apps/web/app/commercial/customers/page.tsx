@@ -15,6 +15,7 @@ import {
   CardTitle,
 } from "@workspace/ui/components/card"
 import { Field, FieldGroup, FieldLabel } from "@workspace/ui/components/field"
+import { Textarea } from "@workspace/ui/components/textarea"
 import { Input } from "@workspace/ui/components/input"
 import {
   NativeSelect,
@@ -176,6 +177,7 @@ export default async function CustomersPage({
             columns={[
               "company_name",
               "country",
+              "address",
               "default_buyer_name",
               "default_currency",
               "default_incoterms",
@@ -249,6 +251,10 @@ export default async function CustomersPage({
                 <Field>
                   <FieldLabel htmlFor="new-phone">Phone</FieldLabel>
                   <Input id="new-phone" name="phone" />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="new-address">Address</FieldLabel>
+                  <Textarea id="new-address" name="address" />
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="new-country">Country</FieldLabel>
@@ -368,6 +374,7 @@ export default async function CustomersPage({
                     <TableHead data-filterable="true">Company</TableHead>
                     <TableHead data-filterable="true">Email</TableHead>
                     <TableHead data-filterable="true">Phone</TableHead>
+                    <TableHead data-filterable="true">Address</TableHead>
                     <TableHead data-filterable="true">Country</TableHead>
                     <TableHead data-filterable="true">Buyer</TableHead>
                     <TableHead data-filterable="true">Incoterms</TableHead>
@@ -461,6 +468,16 @@ export default async function CustomersPage({
                             ) : (
                               customer.phone || "—"
                             )}
+                          </TableCell>
+                          <TableCell data-filter-value={customer.address ?? ""}>
+                            {canUpdateCustomers ? (
+                              <Textarea
+                                aria-label="Customer address"
+                                defaultValue={customer.address ?? ""}
+                                form={formId}
+                                name="address"
+                              />
+                            ) : <span className="whitespace-pre-line">{customer.address || "â€”"}</span>}
                           </TableCell>
                           <TableCell data-filter-value={customer.country ?? ""}>
                             {canUpdateCustomers ? (

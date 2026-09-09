@@ -100,6 +100,27 @@ export const commercialMasterKinds = [
     workspaceKind: "packaging_terms",
   },
   {
+    entryKind: "commercialTerm",
+    label: "Brass Material Specs",
+    tableKind: "commercial_commercial_term",
+    termType: "brass_material_specs",
+    workspaceKind: "brass_material_specs",
+  },
+  {
+    entryKind: "commercialTerm",
+    label: "Reports",
+    tableKind: "commercial_commercial_term",
+    termType: "reports",
+    workspaceKind: "reports",
+  },
+  {
+    entryKind: "commercialTerm",
+    label: "Taxes and Duties",
+    tableKind: "commercial_commercial_term",
+    termType: "taxes_and_duties",
+    workspaceKind: "taxes_and_duties",
+  },
+  {
     entryKind: "quoteTerm",
     label: "Quote PDF term",
     tableKind: "commercial_quote_term",

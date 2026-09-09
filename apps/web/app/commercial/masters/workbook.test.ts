@@ -18,6 +18,7 @@ const snapshot: CommercialMasterSnapshot = {
     {
       companyName: "Fixture Customer",
       country: "India",
+      address: "12 Industrial Road",
       customerUid: "CUST-900",
       defaultBuyerName: "Purchasing",
       defaultCurrency: "USD",
