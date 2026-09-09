@@ -81,97 +81,6 @@ function Pages({
   )
 }
 
-export async function BulkRevisionHistory({
-  origin,
-  page = 1,
-}: {
-  origin: Origin
-  page?: number
-}) {
-  const repository = createCommercialRevisionsRepository({
-    connectionString: readAuthEnvironment().connectionString,
-  })
-  const history = await repository
-    .listCompletedBulkRevisionHistory("MRMPL", origin, page)
-    .finally(() => repository.close())
-  return (
-    <SectionCard id="revision-history">
-      <CardHeader>
-        <CardTitle>Completed Revision History</CardTitle>
-        <CardDescription>
-          Read-only records of revisions initiated here, including completion in
-          Customer Parameter Costing. Filters apply to this page of history.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-4">
-        <OperationalTable
-          excelFilters
-          filterStorageKey={`${origin}-bulk-revision-history:${history.page}`}
-        >
-          <TableHeader>
-            <TableRow>
-              {[
-                "Revision",
-                "Customer",
-                "Reason",
-                "Effective",
-                "Completed",
-                "Parameter Changes",
-                "Published Prices",
-                "Details",
-              ].map((label) => (
-                <TableHead key={label}>{label}</TableHead>
-              ))}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {history.rows.map((row) => (
-              <TableRow key={row.id}>
-                <TableCell>{row.revisionNumber}</TableCell>
-                <TableCell>
-                  {row.companyName ??
-                    (origin === "product"
-                      ? "All affected customers"
-                      : "All customers")}
-                </TableCell>
-                <TableCell className="min-w-64 whitespace-normal">
-                  {row.reason}
-                </TableCell>
-                <TableCell>{row.effectiveOn}</TableCell>
-                <TableCell>{date(row.completedAt)}</TableCell>
-                <TableCell>{row.requestedChangeCount}</TableCell>
-                <TableCell>{row.revisedPriceCount}</TableCell>
-                <TableCell>
-                  <Button asChild variant="outline" size="sm">
-                    <Link href={`${basePath(origin)}/history/${row.id}`}>
-                      View {row.revisionNumber}
-                    </Link>
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
-            {history.rows.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={8} className="h-24 text-center">
-                  No completed revisions.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </OperationalTable>
-        <Pages
-          page={history.page}
-          total={history.total}
-          size={50}
-          href={(next) =>
-            `${basePath(origin)}?historyPage=${next}#revision-history`
-          }
-        />
-      </CardContent>
-    </SectionCard>
-  )
-}
-
 export async function BulkRevisionHistoryDetail({
   origin,
   revisionId,
@@ -212,10 +121,10 @@ export async function BulkRevisionHistoryDetail({
         description={revision.reason}
         actions={
           <Button asChild variant="outline">
-            <Link href={`${basePath(origin)}#revision-history`}>
+            <a href={`${basePath(origin)}#revision-request-status`}>
               Back To {origin === "product" ? "Product" : "Customer"} Bulk
               Revision
-            </Link>
+            </a>
           </Button>
         }
       />

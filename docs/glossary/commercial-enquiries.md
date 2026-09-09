@@ -230,7 +230,8 @@ every canonical Package or Assembly ancestor in child-before-parent order, and
 creates the immutable replacement Quote revisions. Product selection never
 depends on Customer identity.
 
-Completed bulk revisions remain in read-only history on their initiating page:
+All bulk revisions remain in the single Revision Request Status table on their
+initiating page. Completed rows link to read-only revision details:
 Product Bulk Revision for Product-origin requests (including completion in Customer
 Parameter Costing), and Customer Bulk Revision for Customer-origin requests.
 History retains the reason, effective/completion dates, requested parameter values,
@@ -240,7 +241,8 @@ Legacy original values are shown only when saved evidence exists; current master
 values must never be presented as historical inputs. Completed history cannot be edited.
 
 **Customer Parameter Bulk Revision**: Customer-specific commercial recalculation.
-Customer Bulk Revision owns request creation and completed read-only history only.
+Customer Bulk Revision owns request creation, request status and completed
+read-only revision details.
 Pending requests appear in Customer Parameter Costing; each opens a dedicated
 Customer revision page there for selecting prices, staging/removing parameter
 changes, and completing the revision.

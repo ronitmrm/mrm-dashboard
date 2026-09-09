@@ -19,7 +19,6 @@ import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
 
 import { createBulkPriceRevisionAction } from "../revisions/actions"
-import { BulkRevisionHistory } from "../revisions/bulk-revision-history"
 import { BulkRevisionRequestStatus } from "../revisions/bulk-revision-request-status"
 
 export const dynamic = "force-dynamic"
@@ -32,12 +31,7 @@ function localDate() {
   return `${year}-${month}-${day}`
 }
 
-export default async function ProductBulkRevisionPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ historyPage?: string }>
-}) {
-  const params = await searchParams
+export default async function ProductBulkRevisionPage() {
   await requireCapability(
     commercialCapabilities.revisions.read,
     "/commercial/product-bulk-revision"
@@ -146,10 +140,6 @@ export default async function ProductBulkRevisionPage({
         </CardContent>
       </SectionCard>
       <BulkRevisionRequestStatus origin="product" />
-      <BulkRevisionHistory
-        origin="product"
-        page={Number(params.historyPage) || 1}
-      />
     </div>
   )
 }
