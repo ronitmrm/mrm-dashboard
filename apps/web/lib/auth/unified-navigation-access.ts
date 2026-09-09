@@ -1,5 +1,6 @@
 import { cache } from "react"
 import { masterPermissionOptions } from "./master-capabilities"
+import { operationalEntryPermissionOptions } from "./operational-entry-capabilities"
 
 import { commercialNavigationAccess } from "./commercial-capabilities"
 import { storeNavigationAccess } from "./store-capabilities"
@@ -21,6 +22,7 @@ const artifactCapability = "artifacts.read"
 
 export type UnifiedNavigationAccess = {
   masterReadKeys?: string[]
+  operationalEntryReadKeys?: string[]
   administration: boolean
   artifacts?: boolean
   commercialHrefs: string[]
@@ -37,7 +39,12 @@ async function readUnifiedNavigationAccess(
   userId: string
 ): Promise<UnifiedNavigationAccess> {
   const capabilities = [
-    ...masterPermissionOptions.filter(({ key }) => key.endsWith(".read")).map(({ key }) => key),
+    ...masterPermissionOptions
+      .filter(({ key }) => key.endsWith(".read"))
+      .map(({ key }) => key),
+    ...operationalEntryPermissionOptions
+      .filter(({ key }) => key.endsWith(".read"))
+      .map(({ key }) => key),
     operationsCapability,
     "hr.recruitment.read",
     administrationCapability,
@@ -55,6 +62,9 @@ async function readUnifiedNavigationAccess(
     await listGrantedCapabilities(userId, [...new Set(capabilities)])
   )
   const universalProductionTabIds = Object.entries(productionPageCapabilities)
+    .filter(
+      ([tab]) => tab !== "operationalEntryTab" && tab !== "operationalTablesTab"
+    )
     .filter(([tab]) => !isProductionFloorTab(tab as DashboardTabId))
     .filter(([, capability]) => grantedCapabilities.has(capability))
     .map(([tab]) => tab as DashboardTabId)
@@ -89,6 +99,11 @@ async function readUnifiedNavigationAccess(
   const productionTabIds = [
     ...new Set([
       ...universalProductionTabIds,
+      ...(operationalEntryPermissionOptions.some(
+        ({ key }) => key.endsWith(".read") && grantedCapabilities.has(key)
+      )
+        ? (["operationalEntryTab", "operationalTablesTab"] as DashboardTabId[])
+        : []),
       ...Object.values(productionFloorTabIds).flatMap((tabs) => tabs ?? []),
     ]),
   ]
@@ -97,7 +112,12 @@ async function readUnifiedNavigationAccess(
   )
 
   return {
-    masterReadKeys: [...grantedCapabilities].filter((key) => key.startsWith("masters.") && key.endsWith(".read")),
+    masterReadKeys: [...grantedCapabilities].filter(
+      (key) => key.startsWith("masters.") && key.endsWith(".read")
+    ),
+    operationalEntryReadKeys: [...grantedCapabilities].filter(
+      (key) => key.startsWith("entries.") && key.endsWith(".read")
+    ),
     administration: grantedCapabilities.has(administrationCapability),
     artifacts: grantedCapabilities.has(artifactCapability),
     commercialHrefs: commercialNavigationAccess

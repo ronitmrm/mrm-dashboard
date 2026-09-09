@@ -6,7 +6,7 @@ import { ArrowRight, ListChecks } from "lucide-react"
 
 import { Button } from "@workspace/ui/components/button"
 import {
- SectionCard,
+  SectionCard,
   CardContent,
   CardHeader,
   CardTitle,
@@ -23,8 +23,8 @@ import {
 
 import {
   availableOperationalEntryMains,
+  availableOperationalEntryUnits,
   operationalEntryOpenHref,
-  operationalEntryUnitOptions,
   operationalSubEntriesFor,
   resolveOperationalEntrySelection,
   type OperationalEntryModuleAccess,
@@ -91,9 +91,10 @@ export function OperationalEntrySelection({
         : [],
     [access, selection.unit, view]
   )
-  const subEntries = selection.main
-    ? operationalSubEntriesFor(selection.main, access, view)
-    : []
+  const subEntries =
+    selection.unit && selection.main
+      ? operationalSubEntriesFor(selection.main, access, view, selection.unit)
+      : []
   const resolved = resolveOperationalEntrySelection(selection, access, view)
   const storageKey = "operational-entry-selection:" + view
 
@@ -112,7 +113,7 @@ export function OperationalEntrySelection({
   }
 
   return (
- <SectionCard className="w-full">
+    <SectionCard className="w-full">
       <CardHeader>
         <div className="flex items-center gap-3">
           <div className="rounded-lg border bg-muted p-2">
@@ -143,11 +144,13 @@ export function OperationalEntrySelection({
               value={selection.unit}
             >
               <NativeSelectOption value="">Select Unit</NativeSelectOption>
-              {operationalEntryUnitOptions.map(({ id, label }) => (
-                <NativeSelectOption key={id} value={id}>
-                  {label}
-                </NativeSelectOption>
-              ))}
+              {availableOperationalEntryUnits(access, view).map(
+                ({ id, label }) => (
+                  <NativeSelectOption key={id} value={id}>
+                    {label}
+                  </NativeSelectOption>
+                )
+              )}
             </NativeSelect>
           </Field>
 
@@ -217,6 +220,6 @@ export function OperationalEntrySelection({
           </Button>
         </div>
       </CardContent>
- </SectionCard>
+    </SectionCard>
   )
 }

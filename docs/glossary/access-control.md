@@ -50,8 +50,8 @@ actions.
 **Shared Master Scope**: Setup Checklist, Maintenance Checklist and Maintenance
 Master are company-wide definitions under Universal, shared unchanged across all
 production units. They remain three distinct masters. Universal is a data scope,
-not a permission granting every master. The complete master inventory has 41
-Universal entries and seven entries per production unit (69 across four units).
+not a permission granting every master. The complete master inventory has 42
+Universal entries and seven entries per production unit (70 across four units).
 
 **Independent Master Access**: Each named master and scope is one Capabilities
 row. View opens that master's entry/table workspace; changing actions apply only
@@ -66,6 +66,25 @@ Existing globally unique machine numbers and holiday date/type identities remain
 unchanged. A unit grant cannot move or overwrite a record belonging to another
 unit. A conflicting identity is rejected; independent duplicate identities would
 require a separate storage change.
+
+**Independent Operational Entry Access**: Each production entry and unit is
+one Capabilities row covering its entry form and Entry Table. Work Order, RM
+Inward and Software Production Output are independent in Conventional-01,
+Conventional-02, CNC-01 and Forging: 12 production rows. Enquiries and Purchase
+Orders retain their two Universal page rows and existing workflow permissions.
+Together with 21 existing task rows, Operational Entry has 35 capabilities.
+
+View opens the selected form/table and permits downloading its blank template.
+Save, Import and Export are separate actions on that row. View Only cannot save,
+import or export stored records. A CNC Work Order grant never grants Forging
+Work Orders, CNC RM Inward or production dashboards. Selection lists, direct
+URLs, record reads and mutations all respect the selected entry and unit.
+Existing production-module availability remains applicable.
+
+The cutover copies existing broad entry access into the corresponding independent
+grants without removing roles, assignments or legacy permissions. User override
+allow/deny decisions and their expiry dates remain effective. Subsequent edits
+change only the selected entry/unit/action; they do not recreate broad grants.
 
 **Access Module Name**: The module shown in Access Administration uses the same
 business-facing name as the left sidebar. Internal permission namespaces such

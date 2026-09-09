@@ -141,6 +141,10 @@ import {
 import { masterSelectionFromContext } from "@/lib/master-module"
 import { useMasterAccess, useMasterStateUrl } from "@/components/master-access-provider"
 import {
+  useOperationalEntryAccess,
+  useOperationalEntryStateUrl,
+} from "@/components/operational-entry-access-provider"
+import {
   immutableMasterFields,
   masterDataEntryTypes,
   masterEditDefaults,
@@ -1830,6 +1834,8 @@ function DashboardShell({
   const [activeTab, setActiveTab] =
     useState<DashboardTabId>(initialDashboardTab)
   const masterStateUrl = useMasterStateUrl()
+  const operationalEntryStateUrl = useOperationalEntryStateUrl()
+  const scopedStateUrl = operationalEntryStateUrl ?? masterStateUrl
   const [activeProductionFloor] = useState<ProductionFloorCode>(
     initialProductionFloor
   )
@@ -1908,7 +1914,7 @@ function DashboardShell({
   }, [])
 
   useEffect(() => {
-    if (masterStateUrl) return
+    if (scopedStateUrl) return
     const dashboardRecord = asRecord(dashboardPayload)
     if (!shouldRefreshStalePlanningSnapshot(dashboardRecord)) return
     if (isPlanningRefreshLockActive || dashboardRefreshStatus?.isRefreshing)
@@ -1931,7 +1937,7 @@ function DashboardShell({
     isPlanningRefreshLockActive,
     markDashboardRefreshFailed,
     markDashboardRefreshRequested,
-    masterStateUrl,
+    scopedStateUrl,
   ])
 
   async function refreshDashboardSnapshot(force = true) {
@@ -2025,6 +2031,7 @@ function DashboardShell({
         message: `${message} ${planningRefreshStatusMessage(queuePlanningRefresh, path, normalizedBody)}`,
       })
       if (queuePlanningRefresh) markDashboardRefreshRequested()
+      else if (operationalEntryStateUrl) retryDashboardDelivery()
       const returnTab = str(normalizedBody.returnTab) as DashboardTabId
       if (returnTab && navItems.some((item) => item.id === returnTab)) {
         setActiveTab(returnTab)
@@ -2045,6 +2052,14 @@ function DashboardShell({
     entryType: string,
     defaults: Record<string, unknown> = {}
   ) {
+    if (dataEntryDestination(entryType) === "operationalEntryTab") {
+      const params = new URLSearchParams(window.location.search)
+      params.set("tab", "operationalEntryTab")
+      params.set("entry", entryType)
+      params.set("floor", activeProductionFloor)
+      window.location.assign(`/?${params}`)
+      return
+    }
     if (!masterStateUrl && dataEntryDestination(entryType) === "dataEntryTab") {
       window.location.assign(`/?${new URLSearchParams({ tab: "dataEntryTab", entry: entryType, floor: activeProductionFloor })}`)
       return
@@ -2058,7 +2073,7 @@ function DashboardShell({
   }
 
   function openMasterReadiness() {
-    if (masterStateUrl) {
+    if (scopedStateUrl) {
       window.location.assign(dashboardTabHref("masterGapsTab", activeProductionFloor))
       return
     }
@@ -2085,7 +2100,7 @@ function DashboardShell({
     productionFloorCode: ProductionFloorCode
   ) {
     const destination = dashboardNavigationDestination(tab, productionFloorCode)
-    if (destination.interaction === "route" || masterStateUrl || ["dataEntryTab", "masterTablesTab"].includes(tab) || legacyMasterEntryForDashboardTab(tab)) {
+    if (destination.interaction === "route" || scopedStateUrl || ["dataEntryTab", "masterTablesTab", "operationalEntryTab", "operationalTablesTab"].includes(tab) || legacyMasterEntryForDashboardTab(tab)) {
       window.location.assign(destination.href)
       return
     }
@@ -2258,7 +2273,7 @@ function DashboardShell({
           </div>
 
           <HeaderActions
-            showPlanningRefresh={!masterStateUrl}
+            showPlanningRefresh={!scopedStateUrl}
             canRefreshSnapshot={hasDashboardData}
             isRefreshingSnapshot={isSnapshotRefreshActive}
             onRefreshSnapshot={() => void refreshDashboardSnapshot(true)}
@@ -10850,14 +10865,23 @@ function DataEntryPanel({
   externalOptions?: ExternalMasterDataOption[]
 }) {
   const canUseMaster = useMasterAccess()
+  const canUseOperationalEntry = useOperationalEntryAccess()
   const masterStateUrl = useMasterStateUrl()
+  const operationalEntryStateUrl = useOperationalEntryStateUrl()
   const dataEntry = asRecord(payload.dataEntry)
   const productionControl = asRecord(payload.productionControl)
   const searchParams = useSearchParams()
   const operationalSelection =
     operationalEntrySelectionFromContext(searchParams)
   const selectionLocked = Boolean(
-    masterSelectionFromContext(searchParams) || operationalSelection || masterStateUrl
+    masterSelectionFromContext(searchParams) || operationalSelection || masterStateUrl || operationalEntryStateUrl
+  )
+  const canUseEntry = useCallback(
+    (entry: string, action: "read" | "save" | "import") =>
+      operationalTabs
+        ? canUseOperationalEntry(entry, action, productionFloorCode)
+        : canUseMaster(entry, action, productionFloorCode, searchParams.get("storeMaster") ?? "ITEM_TYPE"),
+    [operationalTabs, canUseOperationalEntry, canUseMaster, productionFloorCode, searchParams]
   )
   const availableSpecs = useMemo(
     () =>
@@ -10866,8 +10890,8 @@ function DataEntryPanel({
             allowedEntryTypes.includes(spec.entryType)
           )
         : dataEntrySpecs
-      ).filter((spec) => (spec.entryType !== "store_masters" || storeMasterData) && canUseMaster(spec.entryType, "read", productionFloorCode, searchParams.get("storeMaster") ?? "ITEM_TYPE")),
-    [allowedEntryTypes, storeMasterData, canUseMaster, productionFloorCode, searchParams]
+      ).filter((spec) => (spec.entryType !== "store_masters" || storeMasterData) && canUseEntry(spec.entryType, "read")),
+    [allowedEntryTypes, storeMasterData, canUseEntry]
   )
   const initialEntryType = availableSpecs.some(
     (spec) => spec.entryType === preferredEntryType
@@ -10890,7 +10914,7 @@ function DataEntryPanel({
   )
 
   async function importEntryFile(file: File) {
-    if (isImporting || !file.name) return
+    if (isImporting || !file.name || !canUseEntry(bulkEntryType, "import")) return
     setIsImporting(true)
     try {
       const fileBase64 = await readFileAsDataUrl(file)
@@ -10911,7 +10935,7 @@ function DataEntryPanel({
     }
   }
 
-  const csvImportAction = !canUseMaster(bulkEntryType, "import", productionFloorCode, searchParams.get("storeMaster") ?? "ITEM_TYPE") ? null :
+  const csvImportAction = !canUseEntry(bulkEntryType, "import") ? null :
     bulkEntryType === "store_masters" ? (
       <MasterDataCsvImportButton
         action={importStoreMasterCsvAction}
@@ -10932,11 +10956,11 @@ function DataEntryPanel({
         operationalTabs ? (
           <OperationalWorkspaceTabs
             activeView="dataEntry"
-            csvDownloadAction={
+            csvDownloadAction={canUseEntry(bulkEntryType, "read") ? (
               <MasterDataCsvDownloadButton
-                href={`/api/data-template?entryType=${encodeURIComponent(bulkEntryType)}`}
+                href={`/api/data-template?${new URLSearchParams({ entryType: bulkEntryType, floor: productionFloorCode })}`}
               />
-            }
+            ) : null}
             csvImportAction={csvImportAction}
             dataEntryHref={operationalTabs.dataEntryHref}
             masterTablesHref={operationalTabs.masterTablesHref}
@@ -10981,7 +11005,9 @@ function DataEntryPanel({
                       )
                     }
                   >
-                    {productionFloors.map((floor) => (
+                    {productionFloors.filter((floor) =>
+                      !operationalTabs || canUseOperationalEntry(bulkEntryType, "read", floor.code)
+                    ).map((floor) => (
                       <option key={floor.code} value={floor.code}>
                         {floor.label}
                       </option>
@@ -11037,7 +11063,7 @@ function DataEntryPanel({
           data={storeMasterData}
           mode="entry"
         />
-      ) : selectedSpec && canUseMaster(selectedSpec.entryType, "save", productionFloorCode) ? (
+      ) : selectedSpec && canUseEntry(selectedSpec.entryType, "save") ? (
         <DataEntryForm
           key={selectedSpec.entryType}
           spec={selectedSpec}
@@ -11082,17 +11108,19 @@ function OperationalTablesPanel({
   externalOptions?: ExternalOperationalEntryOption[]
 }) {
   const searchParams = useSearchParams()
+  const canUseOperationalEntry = useOperationalEntryAccess()
+  const operationalEntryStateUrl = useOperationalEntryStateUrl()
   const selectionLocked = Boolean(
-    operationalEntrySelectionFromContext(searchParams)
+    operationalEntrySelectionFromContext(searchParams) || operationalEntryStateUrl
   )
   const specs = useMemo(
     () =>
       dataEntrySpecs.filter((spec) =>
         (operationalDataEntryTypes as readonly string[]).includes(
           spec.entryType
-        )
+        ) && canUseOperationalEntry(spec.entryType, "read", productionFloorCode)
       ),
-    []
+    [canUseOperationalEntry, productionFloorCode]
   )
   const [entryType, setEntryType] = useState(() =>
     specs.some((spec) => spec.entryType === preferredEntryType)
@@ -11129,7 +11157,7 @@ function OperationalTablesPanel({
     return (
       <SectionCard>
         <CardHeader>
-          <CardTitle>Master Tables</CardTitle>
+          <CardTitle>Entry Tables</CardTitle>
           <CardDescription>
             No Operational Entry Definitions Are Configured.
           </CardDescription>
@@ -11143,7 +11171,7 @@ function OperationalTablesPanel({
       <OperationalWorkspaceTabs
         activeView="masterTables"
         dataEntryHref={operationalTabs.dataEntryHref}
-        exportAction={
+        exportAction={canUseOperationalEntry(selectedSpec.entryType, "export", productionFloorCode) ? (
           <DataDownloadButton
             disabled={!rows.length || !columns.length}
             label="Download CSV"
@@ -11151,7 +11179,7 @@ function OperationalTablesPanel({
               downloadMasterTableCsv(selectedSpec, rows, columns, "all-rows")
             }
           />
-        }
+        ) : null}
         masterTablesHref={operationalTabs.masterTablesHref}
       />
       <MetricSummary
@@ -11183,7 +11211,9 @@ function OperationalTablesPanel({
                     )
                   }
                 >
-                  {productionFloors.map((floor) => (
+                  {productionFloors.filter((floor) =>
+                    canUseOperationalEntry(selectedSpec.entryType, "read", floor.code)
+                  ).map((floor) => (
                     <option key={floor.code} value={floor.code}>
                       {floor.label}
                     </option>
@@ -11245,13 +11275,13 @@ function OperationalTablesPanel({
               Clear Filters
             </Button>
 
-            <Button
+            {canUseOperationalEntry(selectedSpec.entryType, "save", productionFloorCode) ? <Button
               type="button"
               onClick={() => openDataEntry(selectedSpec.entryType)}
             >
               <Plus className="size-4" />
               Add Entry
-            </Button>
+            </Button> : null}
           </div>
         </CardContent>
       </SectionCard>

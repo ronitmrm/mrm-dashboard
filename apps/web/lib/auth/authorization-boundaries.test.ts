@@ -35,6 +35,7 @@ describe("protected server boundaries", () => {
       "requireProductionPage(",
       "authorizedDashboardSession(",
       "authorizePostgresDashboardEvents(",
+      "withDashboardReadRepository(",
     ]
     const authenticatedAccountOnlyBoundaries = new Map([
       ["home/actions.ts", "requireAuthenticatedSession("],

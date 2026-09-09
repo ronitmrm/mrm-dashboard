@@ -294,12 +294,10 @@ export function UnifiedSidebarNavigation({
   )
   const canSelectProductionEntry =
     navigationAccess.operations &&
-    (!navigationAccess.productionTabIds ||
-      navigationAccess.productionTabIds.includes("operationalEntryTab"))
+    (navigationAccess.operationalEntryReadKeys?.length ?? 0) > 0
   const canSelectProductionTable =
     navigationAccess.operations &&
-    (!navigationAccess.productionTabIds ||
-      navigationAccess.productionTabIds.includes("operationalTablesTab"))
+    (navigationAccess.operationalEntryReadKeys?.length ?? 0) > 0
   const canSelectCommercialEntry =
     visibleCommercialOperationalEntryNavigation.length > 0
   const canSelectCommercialTable =

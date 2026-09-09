@@ -4,12 +4,14 @@ import {
   createProductionShopFloorRepository,
   isMasterDataKind,
 } from "@workspace/db"
-import { parseProductionFloorCode } from "@workspace/db/production-floors"
+import { parseProductionFloorCode, ProductionUnitAccessError } from "@workspace/db/production-floors"
 import { validConfirmedPrioritySetupNumbers } from "@workspace/db/planning-rules"
 import { NextResponse, type NextRequest } from "next/server"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { productionMasterCapability } from "../../../lib/auth/production-master-access"
+import { isProductionOperationalEntry, operationalEntryWriteScope, OperationalEntryAccessError } from "../../../lib/auth/operational-entry-access"
+import { operationalEntryCapability } from "../../../lib/auth/operational-entry-capabilities"
 import { masterRecordCapability } from "../../../lib/auth/master-record-access"
 import { hasProductionFloorTaskCapability } from "../../../lib/auth/production-floor-task-capabilities"
 import { istDateValue } from "../../../lib/date-time"
@@ -61,6 +63,7 @@ import {
   readPostgresDashboardStatus,
   requestPostgresDashboardCorrection,
   requestPostgresDashboardRefresh,
+  withDashboardReadRepository,
 } from "@/lib/postgres-dashboard-read-server"
 import {
   executePostgresOperationalEntry,
@@ -105,6 +108,8 @@ function json(payload: unknown, status = 200) {
 function dashboardRouteError(err: unknown) {
   const status =
     err instanceof RouteError ||
+    err instanceof OperationalEntryAccessError ||
+    err instanceof ProductionUnitAccessError ||
     err instanceof OperationalEntryError ||
     err instanceof DashboardReadError ||
     err instanceof DashboardRequestPolicyError ||
@@ -260,6 +265,11 @@ async function dataTemplateResponse(entryType: string, request: NextRequest) {
   if (!fields) {
     throw new RouteError(400, `Unknown data template entry type: ${entryType}`)
   }
+  if (isProductionOperationalEntry(entryType)) {
+    const floor = parseProductionFloorCode(request.nextUrl.searchParams.get("floor"))
+    if (!floor) throw new RouteError(400, "A valid Production Unit is required.")
+    await authorizedDashboardSession(request, operationalEntryCapability(entryType, "read", floor))
+  }
   if (entryType === "rm_inward") {
     return rmInwardTemplateResponse(request, fields)
   }
@@ -273,7 +283,9 @@ async function rmInwardTemplateResponse(
   request: NextRequest,
   fields: string[]
 ) {
-  const snapshot = await readPostgresDashboard(request, {})
+  const floor = parseProductionFloorCode(request.nextUrl.searchParams.get("floor"))
+  if (!floor) throw new RouteError(400, "A valid Production Unit is required.")
+  const snapshot = await withDashboardReadRepository(request, ({ organizationId, repository }) => repository.latest(organizationId, {}, floor), operationalEntryCapability("rm_inward", "read", floor), floor)
   const productionControl = plainRecord(plainRecord(snapshot).productionControl)
   const workOrders = Array.isArray(productionControl.workOrders)
     ? productionControl.workOrders
@@ -376,6 +388,11 @@ async function preauthorizeDashboardMutation(
   if (path === "data-entry" || path === "data-import") {
     const entry = String(body.entryType || "")
     const payload = plainRecord(body.payload)
+    if (isProductionOperationalEntry(entry)) {
+      const scope = operationalEntryWriteScope(entry, path === "data-import" ? "import" : "save", body.productionFloorCode, payload)
+      await authorizedDashboardSession(request, scope.capability)
+      return
+    }
     const capability = productionMasterCapability(entry, path === "data-import" ? "import" : "save", payload.productionFloorCode ?? body.productionFloorCode)
     if (capability) {
       await authorizedDashboardSession(request, capability)
@@ -544,6 +561,7 @@ async function savePlanningMasterEntry(
   }
 
   if (entryType === "work_order") {
+    const { floor } = operationalEntryWriteScope(entryType, "save", payload.productionFloorCode, payload)
     return repository.upsertWorkOrder({
       actorUserId,
       dueDate: optionalText(payload.deliveryDate),
@@ -551,6 +569,7 @@ async function savePlanningMasterEntry(
       jobCardNumber: text(payload.jcNo),
       orderedQuantity: numeric(payload.orderPcs),
       organizationId,
+      requiredProductionFloorCode: floor,
       sourcePayload: payload,
       workOrderNumber: workOrderNumberForPayload(payload),
     })
@@ -1354,15 +1373,17 @@ async function post(request: NextRequest, context: RouteContext) {
         )
       }
       if (entryType === "rm_inward") {
+        const scope = operationalEntryWriteScope(entryType, "save", body.productionFloorCode, payload)
         const result = await withProductionRepository(
           request,
-          "operations.production.write",
+          scope.capability,
           ({ actorUserId, organizationId, repository }) =>
             repository.upsertRawMaterialReceipt({
               actorUserId,
               organizationId,
               payload,
               productionFloorCode: text(payload.productionFloorCode),
+              requiredProductionFloorCode: scope.floor,
               quantityKg: firstNumeric(payload.rmInwardKg),
               receiptNumber: text(payload.rmPoNo) || text(payload.jcNo),
               receivedOn: text(payload.rmInwardDate) || istDateValue(),
@@ -1401,9 +1422,10 @@ async function post(request: NextRequest, context: RouteContext) {
         )
       }
       if (entryType === "software_raw") {
+        const scope = operationalEntryWriteScope(entryType, "save", body.productionFloorCode, payload)
         const result = await withProductionRepository(
           request,
-          "operations.production.write",
+          scope.capability,
           ({ actorUserId, organizationId, repository }) =>
             repository.recordProductionEntry({
               actorUserId,
@@ -1414,6 +1436,7 @@ async function post(request: NextRequest, context: RouteContext) {
               organizationId,
               payload,
               productionFloorCode: text(payload.productionFloorCode),
+              requiredProductionFloorCode: scope.floor,
               productionDate: text(payload.prodDate) || istDateValue(),
               quantityGood: firstNumeric(payload.outputQty, payload.actualQty),
               quantityRejected: firstNumeric(payload.rejectQty),
@@ -1437,22 +1460,24 @@ async function post(request: NextRequest, context: RouteContext) {
       const entryType = String(body.entryType || "")
       const fileName = String(body.fileName || "")
       const fileBase64 = String(body.fileBase64 || "")
+      const scope = operationalEntryWriteScope(entryType, "import", body.productionFloorCode, {})
       const importBatch = parseTemplateUpload(
         entryType,
         fileName,
         fileBase64,
         dataEntryTemplateTypes
       )
-      const importedRows = importBatch.rows.map((payload) =>
-        productionFloorPayload(payload, body.productionFloorCode)
-      )
+      const importedRows = importBatch.rows.map((payload) => {
+        operationalEntryWriteScope(entryType, "import", scope.floor, payload)
+        return productionFloorPayload(payload, scope.floor)
+      })
       const importPolicy = browserImportPolicy(entryType, importedRows.length)
       if (!importPolicy.ok) {
         throw new RouteError(importPolicy.status, importPolicy.error)
       }
       const inserted = await withProductionRepository(
         request,
-        "operations.production.write",
+        scope.capability,
         async ({ actorUserId, organizationId, repository }) => {
           if (entryType === "rm_inward") {
             await repository.upsertRawMaterialReceipts(
@@ -1461,6 +1486,7 @@ async function post(request: NextRequest, context: RouteContext) {
                 organizationId,
                 payload,
                 productionFloorCode: text(payload.productionFloorCode),
+                requiredProductionFloorCode: scope.floor,
                 quantityKg: firstNumeric(payload.rmInwardKg),
                 receiptNumber: text(payload.rmPoNo) || text(payload.jcNo),
                 receivedOn: text(payload.rmInwardDate) || istDateValue(),
@@ -1479,6 +1505,7 @@ async function post(request: NextRequest, context: RouteContext) {
               organizationId,
               payload,
               productionFloorCode: text(payload.productionFloorCode),
+              requiredProductionFloorCode: scope.floor,
               productionDate: text(payload.prodDate) || istDateValue(),
               quantityGood: firstNumeric(payload.outputQty, payload.actualQty),
               quantityRejected: firstNumeric(payload.rejectQty),
@@ -1515,7 +1542,9 @@ async function post(request: NextRequest, context: RouteContext) {
             : productionFloorPayload(rawPayload, body.productionFloorCode)
         const result = await withPlanningRepository(
           request,
-          productionMasterCapability(entryType, "save", payload.productionFloorCode) ?? "operations.shop_floor.write",
+          entryType === "work_order"
+            ? operationalEntryWriteScope(entryType, "save", body.productionFloorCode, payload).capability
+            : productionMasterCapability(entryType, "save", payload.productionFloorCode) ?? "operations.shop_floor.write",
           (planningContext) =>
             savePlanningMasterEntry(planningContext, entryType, payload)
         )
@@ -1582,11 +1611,14 @@ async function post(request: NextRequest, context: RouteContext) {
           fileBase64,
           dataEntryTemplateTypes
         )
-        const importedRows = importBatch.rows.map((payload) =>
-          entryType === "machine_master"
+        const importedRows = importBatch.rows.map((payload) => {
+          if (entryType === "work_order") {
+            operationalEntryWriteScope(entryType, "import", body.productionFloorCode, payload)
+          }
+          return entryType === "machine_master"
             ? machineMasterImportPayload(payload, body.productionFloorCode)
             : productionFloorPayload(payload, body.productionFloorCode)
-        )
+        })
         const importPolicy = browserImportPolicy(entryType, importedRows.length)
         if (!importPolicy.ok) {
           throw new RouteError(importPolicy.status, importPolicy.error)
@@ -1597,7 +1629,9 @@ async function post(request: NextRequest, context: RouteContext) {
         }
         const inserted = await withPlanningRepository(
           request,
-          productionMasterCapability(entryType, "import", importedRows[0]?.productionFloorCode ?? body.productionFloorCode) ?? "operations.shop_floor.write",
+          entryType === "work_order"
+            ? operationalEntryWriteScope(entryType, "import", body.productionFloorCode, {}).capability
+            : productionMasterCapability(entryType, "import", importedRows[0]?.productionFloorCode ?? body.productionFloorCode) ?? "operations.shop_floor.write",
           async (planningContext) => {
             if (
               ["route", "cycle", "tooling", "work_order"].includes(entryType)

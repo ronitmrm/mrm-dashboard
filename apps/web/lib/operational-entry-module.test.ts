@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest"
+import { operationalEntryPermissionOptions } from "./auth/operational-entry-capabilities"
 
 import {
   availableOperationalEntryMains,
+  availableOperationalEntryUnits,
   operationalEntryFormHref,
   operationalEntryModuleAccess,
   operationalEntryOpenHref,
@@ -14,12 +16,34 @@ import {
 
 const fullAccess: OperationalEntryModuleAccess = {
   enquiries: true,
-  productionDataEntry: true,
-  productionTables: true,
+  productionReadKeys: operationalEntryPermissionOptions
+    .filter(({ key }) => key.endsWith(".read"))
+    .map(({ key }) => key),
   purchaseOrders: true,
 }
 
 describe("operational entry module selection", () => {
+  it("does not grant production entries through the legacy dashboard or entry pages", () => {
+    const access = operationalEntryModuleAccess({
+      administration: false,
+      commercialHrefs: [],
+      hrHrefs: [],
+      operations: true,
+      productionTabIds: ["operationalEntryTab", "operationalTablesTab"],
+      store: false,
+    })
+
+    for (const view of ["dataEntry", "masterTables"] as const) {
+      expect(
+        resolveOperationalEntrySelection(
+          { main: "production_entries", sub: "work_order", unit: "cnc" },
+          access,
+          view
+        )
+      ).toBeNull()
+    }
+  })
+
   it("separates production-unit entries from Universal commercial entries", () => {
     expect(
       availableOperationalEntryMains("cnc", fullAccess, "dataEntry")
@@ -29,12 +53,54 @@ describe("operational entry module selection", () => {
     ).toEqual([{ id: "commercial_entries", label: "Commercial Entries" }])
   })
 
+  it("offers only the granted unit and entry in both views", () => {
+    const access: OperationalEntryModuleAccess = {
+      enquiries: false,
+      purchaseOrders: false,
+      productionReadKeys: ["entries.cnc.work_order.read"],
+    }
+    for (const view of ["dataEntry", "masterTables"] as const) {
+      expect(availableOperationalEntryUnits(access, view)).toEqual([
+        { id: "cnc", label: "CNC-01" },
+      ])
+      expect(
+        operationalSubEntriesFor("production_entries", access, view, "cnc")
+      ).toEqual([{ id: "work_order", label: "Work Order" }])
+      expect(
+        resolveOperationalEntrySelection(
+          { main: "production_entries", sub: "work_order", unit: "cnc" },
+          access,
+          view
+        )
+      ).toEqual({ main: "production_entries", sub: "work_order", unit: "cnc" })
+      expect(
+        resolveOperationalEntrySelection(
+          { main: "production_entries", sub: "rm_inward", unit: "cnc" },
+          access,
+          view
+        )
+      ).toBeNull()
+      expect(
+        resolveOperationalEntrySelection(
+          { main: "production_entries", sub: "work_order", unit: "forging" },
+          access,
+          view
+        )
+      ).toBeNull()
+    }
+  })
+
   it("offers permitted entry forms for the selected view", () => {
     expect(
-      operationalSubEntriesFor("production_entries", fullAccess, "dataEntry")
+      operationalSubEntriesFor(
+        "production_entries",
+        fullAccess,
+        "dataEntry",
+        "cnc"
+      )
     ).toEqual([
       { id: "work_order", label: "Work Order" },
-      { id: "rm_inward", label: "Rm Inward" },
+      { id: "rm_inward", label: "RM Inward" },
       { id: "software_raw", label: "Software Production Output" },
     ])
     expect(
@@ -58,10 +124,21 @@ describe("operational entry module selection", () => {
         commercialHrefs: ["/commercial/enquiries", "/commercial/orders"],
         hrHrefs: [],
         operations: true,
+        operationalEntryReadKeys: fullAccess.productionReadKeys,
         productionTabIds: ["operationalEntryTab", "operationalTablesTab"],
         store: false,
       })
     ).toEqual(fullAccess)
+    expect(
+      operationalEntryModuleAccess({
+        administration: false,
+        commercialHrefs: [],
+        hrHrefs: [],
+        operations: false,
+        operationalEntryReadKeys: fullAccess.productionReadKeys,
+        store: false,
+      }).productionReadKeys
+    ).toEqual([])
   })
 
   it("rejects mismatched and unauthorized selections", () => {
