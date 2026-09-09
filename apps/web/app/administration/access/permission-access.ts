@@ -61,6 +61,48 @@ export type PermissionAccessRow = {
   supportedLevels: PermissionAccessLevel[]
 }
 
+/** Page context for display and filtering; never changes the granted keys. */
+export function permissionAccessPageLabels(row: PermissionAccessRow): string[] {
+  if (row.kind === "page") return [row.label]
+
+  const pageMappings: readonly (readonly [string, readonly string[]])[] = [
+    ["pricing.enquiries.", ["Enquiries"]],
+    ["pricing.purchase_orders.", ["Purchase Orders"]],
+    ["pricing.proforma_invoices.", ["Purchase Orders"]],
+    ["pricing.assemblies.", ["Assembly / BOM"]],
+    ["pricing.quotes.prepare", ["Customer Parameter Costing"]],
+    ["pricing.quotes.send", ["Quote Register"]],
+    ["pricing.customer_default_terms.", ["Customers"]],
+    ["pricing.customers.", ["Customers"]],
+    ["pricing.masters.", ["Pricing Masters"]],
+    ["pricing.website_products.", ["Website Products"]],
+    ["pricing.price_revisions.", ["Product Bulk Revision", "Customer Bulk Revision", "Price Revisions"]],
+    ["hr.approved_posts.", ["Approved Posts"]],
+    ["hr.combined_roles.", ["Combined Approved Posts"]],
+    ["hr.candidates.save", ["Candidates"]],
+    ["hr.candidates.assign", ["Candidates"]],
+    ["hr.employees.", ["Employee Master"]],
+    ["hr.job_templates.", ["Job Templates"]],
+    ["hr.masters.", ["Masters"]],
+    ["store.masters.", ["Store Masters"]],
+    ["store.asset_", ["Asset Movement & Maintenance History"]],
+    ["quality.parameters.", ["Quality Inspection Parameter"]],
+    ["operations.attendance.", ["Attendance"]],
+    ["operations.training.", ["Training"]],
+  ]
+  const labels = row.fullPermissionKeys.flatMap((key) =>
+    pageMappings.find(([prefix]) => key.startsWith(prefix))?.[1] ?? []
+  )
+  if (labels.length) return [...new Set(labels)]
+
+  // Use the catalogue's page title when a submodule has one owning page.
+  const pages = pageAccessCatalog.filter((page) =>
+    page.module === row.module &&
+    (page.submodule ?? sidebarSubmoduleForPermission(page.readPermissionKey, page.label)) === row.submodule
+  )
+  return pages.length === 1 ? [pages[0]!.label] : [row.submodule]
+}
+
 function permissionKind(key: string) {
   for (const kind of ["read", "write", "manage"] as const) {
     const suffix = `.${kind}`
