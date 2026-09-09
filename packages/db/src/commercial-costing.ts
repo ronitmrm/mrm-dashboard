@@ -782,6 +782,9 @@ async function getQuoteDocumentWithClient(
     company_name: string
     customer_contact: string | null
     customer_address: string | null
+    brass_material_specs: string | null
+    reports: string | null
+    taxes_and_duties: string | null
     customer_reference: string | null
     buyer_name: string | null
     delivery_terms: string | null
@@ -801,7 +804,10 @@ async function getQuoteDocumentWithClient(
         enquiry.packaging_terms, enquiry.delivery_terms, enquiry.buyer_name, customer.customer_uid,
         customer.company_name,
         customer.contact_name AS customer_contact,
-        customer.country AS customer_address, enquiry.customer_reference
+        nullif(concat_ws(E'\n', nullif(btrim(customer.address), ''),
+          nullif(btrim(customer.country), '')), '') AS customer_address,
+        enquiry.customer_reference, enquiry.brass_material_specs,
+        enquiry.reports, enquiry.taxes_and_duties
       FROM sales.enquiries enquiry
       JOIN sales.customers customer ON customer.id = enquiry.customer_id
       WHERE enquiry.id = $1
@@ -909,7 +915,11 @@ async function getQuoteDocumentWithClient(
     paymentTerms: row.payment_terms,
     revision: issuedLine?.revision ?? Math.max(0, ...includedLines.map((line) => line.revision ?? 0)),
     shipmentMode: row.shipment_mode,
-    terms: [],
+    terms: [
+      { label: "Brass Material Specs", value: row.brass_material_specs, sortOrder: 1 },
+      { label: "Reports", value: row.reports, sortOrder: 2 },
+      { label: "Taxes and Duties", value: row.taxes_and_duties, sortOrder: 3 },
+    ].flatMap((term) => term.value?.trim() ? [{ ...term, value: term.value }] : []),
   }
 }
 

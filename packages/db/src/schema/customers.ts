@@ -19,6 +19,7 @@ export const customers = sales.table("customers", {
   email: text("email"),
   phone: text("phone"),
   country: text("country"),
+  address: text("address"),
   defaultBuyerName: text("default_buyer_name"),
   defaultIncoterms: text("default_incoterms"),
   defaultPaymentTerms: text("default_payment_terms"),

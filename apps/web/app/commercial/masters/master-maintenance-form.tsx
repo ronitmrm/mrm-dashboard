@@ -30,6 +30,9 @@ const commercialTermTypes = [
   "payment_terms",
   "shipment_mode",
   "packaging_terms",
+  "brass_material_specs",
+  "reports",
+  "taxes_and_duties",
 ] as const satisfies readonly CommercialTermType[]
 
 function NumberInput({ label, name }: { label: string; name: string }) {

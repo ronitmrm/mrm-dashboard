@@ -27,7 +27,7 @@ describe("Costing module Excel filters", () => {
         `<TableHead data-filterable="true">${label}</TableHead>`
       )
     }
-    expect(customers.match(/data-filter-value=/g)).toHaveLength(12)
+    expect(customers.match(/data-filter-value=/g)).toHaveLength(13)
     expect(quotes).toContain(
       '<TableHead data-filterable="true">Quote</TableHead>'
     )

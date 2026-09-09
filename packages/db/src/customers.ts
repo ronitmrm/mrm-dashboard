@@ -29,6 +29,7 @@ type CreateCustomer = {
   companyName: string
   contactName?: string | null
   country?: string | null
+  address?: string | null
   customerUid: string
   email?: string | null
   notes?: string | null
@@ -43,6 +44,7 @@ type CreateManagedCustomer = {
   actorUserId?: string | null
   companyName: string
   country?: string | null
+  address?: string | null
   defaultBuyerName?: string | null
   defaultCurrency?: string | null
   defaultIncoterms?: string | null
@@ -59,6 +61,7 @@ type UpdateManagedCustomer = {
   actorUserId?: string | null
   companyName: string
   country?: string | null
+  address?: string | null
   customerId: string
   defaultBuyerName?: string | null
   defaultCurrency?: string | null
@@ -102,6 +105,7 @@ export function createCustomerRepository(options: RepositoryPoolOptions) {
           companyName,
           contactName: input.contactName ?? null,
           country: input.country ?? null,
+          address: optionalText(input.address),
           customerUid,
           email: input.email ?? null,
           notes: input.notes ?? null,
@@ -181,11 +185,11 @@ export function createCustomerRepository(options: RepositoryPoolOptions) {
               default_buyer_name, default_incoterms, default_payment_terms,
               default_shipment_mode, default_packaging_terms, default_currency,
               created_by_user_id, updated_by_user_id, source_system,
-              source_table, source_id
+              source_table, source_id, address
             )
             VALUES (
               $1, $2, $3, $4, NULL, $5, $6, $7, NULL, $8, $9, $10,
-              $11, $12, $13, $14, $14, 'mrm-dashboard', 'customers', $15
+              $11, $12, $13, $14, $14, 'mrm-dashboard', 'customers', $15, $16
             )
             RETURNING id
           `,
@@ -205,6 +209,7 @@ export function createCustomerRepository(options: RepositoryPoolOptions) {
             optionalText(input.defaultCurrency),
             input.actorUserId ?? null,
             randomUUID(),
+            optionalText(input.address),
           ]
         )
         const id = created.rows[0]!.id
@@ -249,6 +254,7 @@ export function createCustomerRepository(options: RepositoryPoolOptions) {
       const after = {
         companyName,
         country: optionalText(input.country),
+        address: optionalText(input.address),
         defaultBuyerName: optionalText(input.defaultBuyerName),
         defaultCurrency: optionalText(input.defaultCurrency),
         defaultIncoterms: optionalText(input.defaultIncoterms),
@@ -264,6 +270,7 @@ export function createCustomerRepository(options: RepositoryPoolOptions) {
         const current = await client.query<{
           company_name: string
           country: string | null
+          address: string | null
           default_buyer_name: string | null
           default_currency: string | null
           default_incoterms: string | null
@@ -275,7 +282,7 @@ export function createCustomerRepository(options: RepositoryPoolOptions) {
           status: string
         }>(
           `
-            SELECT company_name, status, email, phone, country,
+            SELECT company_name, status, email, phone, country, address,
               default_buyer_name, default_incoterms, default_payment_terms,
               default_shipment_mode, default_packaging_terms, default_currency
             FROM sales.customers
@@ -288,6 +295,7 @@ export function createCustomerRepository(options: RepositoryPoolOptions) {
         if (!existing) {
           throw new Error("Customer was not found.")
         }
+        if (input.address === undefined) after.address = existing.address
 
         await client.query(
           `
@@ -297,6 +305,7 @@ export function createCustomerRepository(options: RepositoryPoolOptions) {
               email = $3,
               phone = $4,
               country = $5,
+              address = CASE WHEN $16 THEN $15 ELSE address END,
               default_buyer_name = $6,
               default_incoterms = $7,
               default_payment_terms = $8,
@@ -323,6 +332,8 @@ export function createCustomerRepository(options: RepositoryPoolOptions) {
             input.actorUserId ?? null,
             input.customerId,
             input.organizationId,
+            after.address,
+            input.address !== undefined,
           ]
         )
         await client.query(
@@ -346,6 +357,7 @@ export function createCustomerRepository(options: RepositoryPoolOptions) {
               before: {
                 companyName: existing.company_name,
                 country: existing.country,
+                address: existing.address,
                 defaultBuyerName: existing.default_buyer_name,
                 defaultCurrency: existing.default_currency,
                 defaultIncoterms: existing.default_incoterms,

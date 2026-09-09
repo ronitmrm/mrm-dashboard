@@ -364,7 +364,10 @@ details/customer blocks, Product and Customer codes, item prices, prepared-by
 section, commercial terms, and contact footer. The customer record supplies To
 (company, contact, available address); the Enquiry supplies Buyer, RFQ/customer
 reference, items, payment/delivery/incoterms, shipment, packaging and exchange
-rate. Generic Quote Term Templates are not appended. Quote numbers are generated
+rate. Brass Material Specs, Reports, and Taxes and Duties each have a commercial
+master. Sales selects their values on the Enquiry; the PDF uses those saved
+values, so later master edits do not rewrite an enquiry. Unselected terms are
+omitted. Generic Quote Term Templates are not appended. Quote numbers are generated
 as `QTN-<Enquiry number>` with the revision shown separately; the date is the PDF
 generation date in India time. Prepared by is always Ankit Khattar, Engineering
 Lead. Westmetall's Official LME USD/ton **3 months** Copper and Zinc column is
@@ -372,6 +375,10 @@ fetched when generating the PDF, with its published date shown (latest available
 on weekends or before the day's publication). Missing metal rates block a new
 PDF rather than substituting cash prices or blanks. Stored issued PDFs retain
 their original date, rates and contents.
+
+Every page uses the same letterhead and quotation banner. Item-table headings
+and values are horizontally centred. The Customer master stores a multiline
+address separately from country; both are included under To when saved.
 
 An explicitly requested correction may replace an issued PDF with a new Artifact
 version. Retain the previous bytes as history; do not change the underlying Sent

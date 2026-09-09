@@ -204,7 +204,8 @@ afterAll(async () => {
 test("builds quotation fields from the enquiry and customer records", async () => {
   const context = await createReadyQuote("Document sources")
   await pool.query(
-    `UPDATE sales.customers SET contact_name = 'Customer Contact', country = 'India'
+    `UPDATE sales.customers SET contact_name = 'Customer Contact', country = 'India',
+       address = '12 Industrial Road, Jamnagar 361004'
      WHERE id = $1`, [context.customerId]
   )
   await pool.query(
@@ -212,7 +213,9 @@ test("builds quotation fields from the enquiry and customer records", async () =
        buyer_name = 'Enquiry Buyer', customer_reference = 'RFQ-CUSTOMER-987',
        conversion_rate = 86.75, payment_terms = '50% advance',
        delivery_terms = 'Eight weeks', incoterms = 'FOB Mundra',
-       shipment_mode = 'Sea', packaging_terms = 'Export pallets'
+       shipment_mode = 'Sea', packaging_terms = 'Export pallets',
+       brass_material_specs = 'C36000', reports = 'Material certificate',
+       taxes_and_duties = 'Buyer responsibility'
      WHERE id = $1`, [context.enquiryId]
   )
   await pool.query(
@@ -228,11 +231,15 @@ test("builds quotation fields from the enquiry and customer records", async () =
     const document = await repository.getQuoteDocument(context.enquiryId)
     expect(document).toMatchObject({
       companyName: 'Document sources Customer', customerContact: 'Customer Contact',
-      customerAddress: 'India', buyerName: 'Enquiry Buyer',
+      customerAddress: '12 Industrial Road, Jamnagar 361004\nIndia', buyerName: 'Enquiry Buyer',
       customerReference: 'RFQ-CUSTOMER-987', quotationNumber: 'QTN-ENQ-SOURCE-100',
       conversionRate: 86.75, paymentTerms: '50% advance', deliveryTerms: 'Eight weeks',
       incoterms: 'FOB Mundra', shipmentMode: 'Sea', packagingTerms: 'Export pallets',
-      preparedBy: 'Ankit Khattar', preparedByTitle: 'Engineering Lead', terms: [],
+      preparedBy: 'Ankit Khattar', preparedByTitle: 'Engineering Lead', terms: [
+        { label: 'Brass Material Specs', value: 'C36000', sortOrder: 1 },
+        { label: 'Reports', value: 'Material certificate', sortOrder: 2 },
+        { label: 'Taxes and Duties', value: 'Buyer responsibility', sortOrder: 3 },
+      ],
       lines: [expect.objectContaining({ description: 'Document sources Part', quantity: 100 })],
     })
     expect(document.documentDate.getTime()).toBeGreaterThanOrEqual(before)

@@ -14,6 +14,9 @@ describe("Enquiry Log form", () => {
         organizationId: "organization-1",
         termOptions: {
           buyer: [],
+          brass_material_specs: [],
+          reports: [],
+          taxes_and_duties: [],
           currency: [],
           incoterms: [],
           packaging_terms: [],

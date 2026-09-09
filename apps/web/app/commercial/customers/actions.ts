@@ -66,6 +66,7 @@ export async function createCustomerAction(formData: FormData) {
           actorUserId,
           companyName: requiredText(formData, "company_name"),
           country: optionalText(formData, "country"),
+          address: optionalText(formData, "address"),
           defaultBuyerName: requiredText(formData, "default_buyer_name"),
           defaultCurrency: requiredText(formData, "default_currency"),
           defaultIncoterms: requiredText(formData, "default_incoterms"),
@@ -96,6 +97,7 @@ export async function importCustomersCsvAction(formData: FormData) {
           actorUserId,
           companyName: requiredCsv(row, index + 2, "company_name", "company"),
           country: csvValue(row, "country") || null,
+          address: csvValue(row, "address") || null,
           defaultBuyerName: requiredCsv(
             row,
             index + 2,
@@ -150,6 +152,7 @@ export async function updateCustomerAction(formData: FormData) {
         actorUserId,
         companyName: requiredText(formData, "company_name"),
         country: optionalText(formData, "country"),
+          address: optionalText(formData, "address"),
         customerId: requiredText(formData, "customer_id"),
         defaultBuyerName: requiredText(formData, "default_buyer_name"),
         defaultCurrency: requiredText(formData, "default_currency"),

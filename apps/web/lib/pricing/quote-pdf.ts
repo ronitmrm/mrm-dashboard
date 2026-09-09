@@ -180,33 +180,33 @@ export async function buildQuotePdf(
     }
     return result
   }
-  const brand = (first: boolean) => {
-    const scale = first ? 0.31 : 0.2
+  const brand = () => {
+    const scale = 0.31
     const top = height - 34
     for (const path of [
       "M158.62,0H17.62C7.89,0,0,8.69,0,19.41v88.16h176.25V19.41c0-10.72-7.89-19.41-17.62-19.41Z",
       "M0,158.25c0,9.95,7.89,18.01,17.62,18.01h141c9.73,0,17.62-8.06,17.62-18.01v-17.24H0v17.24Z",
     ])
       page.drawSvgPath(path, { x: left, y: top, scale, color: green })
-    const x = left + (first ? 67 : 46)
+    const x = left + 67
     text(
       "MAYANK RAW MINT",
       x,
-      top - (first ? 27 : 20),
-      first ? 33 : 25,
+      top - 27,
+      33,
       true,
       green
     )
     text(
       "Precision Brass Fittings & Metal Components",
       x,
-      top - (first ? 53 : 37),
-      first ? 15.3 : 11.2,
+      top - 53,
+      15.3,
       false,
       green
     )
-    const bandTop = first ? 721 : 751
-    const bandHeight = first ? 63 : 36
+    const bandTop = 721
+    const bandHeight = 63
     page.drawRectangle({
       x: 0,
       y: bandTop - bandHeight,
@@ -214,8 +214,8 @@ export async function buildQuotePdf(
       height: bandHeight,
       color: green,
     })
-    const title = first ? "QUOTATION" : "QUOTATION - CONTINUED"
-    const size = first ? 31 : 16
+    const title = "QUOTATION"
+    const size = 31
     page.drawText(title, {
       x: (width - bold.widthOfTextAtSize(title, size)) / 2,
       y: bandTop - bandHeight / 2 - size * 0.35,
@@ -224,24 +224,15 @@ export async function buildQuotePdf(
       color: rgb(1, 1, 1),
     })
     y = bandTop - bandHeight - 29
-    if (!first) {
-      text(
-        `${document.enquiryNumber}  |  Rev ${document.revision}`,
-        left,
-        y,
-        8.5
-      )
-      y -= 26
-    }
   }
   const nextPage = () => {
     page = pdf.addPage([width, height])
-    brand(false)
+    brand()
   }
   const room = (needed: number) => {
     if (y - needed < bottom) nextPage()
   }
-  brand(true)
+  brand()
   text("Details", left, y, 12, true, green)
   const recipientX = 350
   text("To:", recipientX, y, 12, true, green)
@@ -312,7 +303,8 @@ export async function buildQuotePdf(
         borderWidth: 0.6,
       })
       wrap(headers[index], cellWidth - 10, 8.5, true).forEach((row, n) =>
-        text(row, x + 5, y - 12 - n * 10, 8.5, true)
+        text(row, x + (cellWidth - bold.widthOfTextAtSize(row, 8.5)) / 2,
+          y - 12 - n * 10, 8.5, true)
       )
       x += cellWidth
     })
@@ -352,10 +344,7 @@ export async function buildQuotePdf(
           borderWidth: 0.6,
         })
         cell.slice(offset, offset + take).forEach((row, n) => {
-          const tx =
-            index === 4
-              ? x + cellWidth - 6 - regular.widthOfTextAtSize(row, 9)
-              : x + 6
+          const tx = x + (cellWidth - regular.widthOfTextAtSize(row, 9)) / 2
           text(row, tx, y - 16 - n * leading, 9)
         })
         x += cellWidth

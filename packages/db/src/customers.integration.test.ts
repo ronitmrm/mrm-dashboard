@@ -206,6 +206,7 @@ describe("Pricing customer maintenance", () => {
         actor_user_id: actorUserId,
         metadata: {
           after: {
+            address: null,
             companyName: "Acme Brass Updated",
             country: "India",
             defaultBuyerName: "Senior Buyer",
@@ -219,6 +220,7 @@ describe("Pricing customer maintenance", () => {
             status: "Inactive",
           },
           before: {
+            address: null,
             companyName: "Acme Brass",
             country: null,
             defaultBuyerName: "Purchasing Team",
