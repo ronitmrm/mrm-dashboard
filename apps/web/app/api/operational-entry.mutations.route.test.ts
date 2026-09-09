@@ -10,7 +10,8 @@ const dependencies = vi.hoisted(() => ({
   upsertRawMaterialReceipts: vi.fn(),
 }))
 
-vi.mock("@workspace/db", () => ({
+vi.mock("@workspace/db", async (importOriginal) => ({
+  DuplicateMasterError: (await importOriginal<typeof import("@workspace/db")>()).DuplicateMasterError,
   createAuthorizationRepository: () => ({
     listAllGrantedCapabilities: dependencies.listAllGrantedCapabilities,
   }),

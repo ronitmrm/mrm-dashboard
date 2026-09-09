@@ -1,3 +1,4 @@
+import { rejectDuplicateMaster } from "./master-duplicate"
 import { randomUUID } from "node:crypto"
 
 import type { PoolClient } from "pg"
@@ -620,6 +621,111 @@ function priorityPosition(priority: string) {
   return positions[priority.trim().toLowerCase()] ?? 2
 }
 
+type ToolingMasterInput = {
+  rejectDuplicates?: boolean
+  actorUserId?: string | null
+  description?: string | null
+  itemUid: string
+  organizationId: string
+  productionFloorCode?: string
+  quantity?: number
+  routeCode: string
+  setupNumber: number
+  sourcePayload?: unknown
+  toolCode: string
+}
+
+async function upsertToolingClient(
+  client: PoolClient,
+  input: ToolingMasterInput
+) {
+  const operationSetupId = await setupFor(
+    client,
+    input.organizationId,
+    input.itemUid,
+    input.routeCode,
+    input.setupNumber,
+    normalizeProductionFloorCode(input.productionFloorCode)
+  )
+  const requestedToolCode = requiredText(input.toolCode, "Asset code")
+  const toolingAsset = await client.query<{ type_code: string }>(
+    `
+            SELECT type_code
+            FROM store.item_types
+            WHERE organization_id = $1
+              AND lower(type_code) = lower($2)
+              AND active
+          `,
+    [input.organizationId, requestedToolCode]
+  )
+  if (!toolingAsset.rows[0]) {
+    throw new Error(
+      "Create the tooling Asset Code in Store first, then reference it in Tooling Master."
+    )
+  }
+  const toolCode = toolingAsset.rows[0].type_code
+  const quantity = input.quantity ?? 1
+  if (!(quantity > 0)) throw new Error("Tool quantity must be positive.")
+  await businessKeyLock(
+    client,
+    "manufacturing.tooling",
+    `${operationSetupId}:${toolCode}`
+  )
+  const existing = await client.query<{ id: string }>(
+    `
+            SELECT id FROM manufacturing.operation_tooling
+            WHERE operation_setup_id = $1 AND lower(tool_code) = lower($2)
+            FOR UPDATE
+          `,
+    [operationSetupId, toolCode]
+  )
+  const sourcePayload = input.sourcePayload ?? input
+  rejectDuplicateMaster(input.rejectDuplicates, !!existing.rows[0])
+  const result = existing.rows[0]
+    ? await client.query<{ id: string }>(
+        `
+                UPDATE manufacturing.operation_tooling
+                SET description = $1, quantity = $2, active = true,
+                  updated_by_user_id = $3, source_payload = $4,
+                  updated_at = now(),
+                  row_version = row_version + 1
+                WHERE id = $5 RETURNING id
+              `,
+        [
+          input.description?.trim() || null,
+          quantity,
+          input.actorUserId ?? null,
+          sourcePayload,
+          existing.rows[0].id,
+        ]
+      )
+    : await client.query<{ id: string }>(
+        `
+                INSERT INTO manufacturing.operation_tooling (
+                  organization_id, operation_setup_id, tool_code,
+                  description, quantity, active, created_by_user_id,
+                  updated_by_user_id, source_system, source_table, source_id,
+                  source_payload
+                )
+                VALUES ($1, $2, $3, $4, $5, true, $6, $6,
+                  'mrm-dashboard', 'tooling', $7, $8)
+                RETURNING id
+              `,
+        [
+          input.organizationId,
+          operationSetupId,
+          toolCode,
+          input.description?.trim() || null,
+          quantity,
+          input.actorUserId ?? null,
+          randomUUID(),
+          sourcePayload,
+        ]
+      )
+  await queueDashboardRefresh(client, input.organizationId)
+  return result.rows[0]!
+}
+
 export function createDashboardPlanningRepository(options: RepositoryPoolOptions) {
   const { close, pool } = repositoryPool(options)
 
@@ -658,6 +764,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
     },
 
     async upsertMachine(input: {
+      rejectDuplicates?: boolean
       actorUserId?: string | null
       machineNumber: string
       name?: string | null
@@ -696,6 +803,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           throw new Error("This machine belongs to another Production Unit. Edit it in its existing unit.")
         }
         const sourcePayload = input.sourcePayload ?? input
+        rejectDuplicateMaster(input.rejectDuplicates, !!existing.rows[0])
         const result = existing.rows[0]
           ? await client.query<{ id: string }>(
               `
@@ -864,6 +972,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
     },
 
     async upsertRouteOption(input: {
+      rejectDuplicates?: boolean
       actorUserId?: string | null
       itemUid: string
       organizationId: string
@@ -995,6 +1104,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
             `,
             [routeOptionId, setup.setupNumber]
           )
+          rejectDuplicateMaster(input.rejectDuplicates, !!current.rows[0])
           if (current.rows[0]) {
             await client.query(
               `
@@ -1066,6 +1176,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
     },
 
     async upsertSetupName(input: {
+      rejectDuplicates?: boolean
       actorUserId?: string | null
       name: string
       organizationId: string
@@ -1100,6 +1211,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           productionFloorCode,
           setupName: name,
         }
+        rejectDuplicateMaster(input.rejectDuplicates, !!existing.rows[0])
         const result = existing.rows[0]
           ? await client.query<{ id: string }>(
               `UPDATE manufacturing.setup_names
@@ -1132,6 +1244,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
     },
 
     async upsertCycleStandard(input: {
+      rejectDuplicates?: boolean
       actorUserId?: string | null
       cycleTimeSeconds: number
       itemUid: string
@@ -1173,6 +1286,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           input.setupTimeMinutes ?? 0,
           input.actorUserId ?? null,
         ]
+        rejectDuplicateMaster(input.rejectDuplicates, !!existing.rows[0])
         const result = existing.rows[0]
           ? await client.query<{ id: string }>(
               `
@@ -1210,107 +1324,20 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
       })
     },
 
-    async upsertTooling(input: {
-      actorUserId?: string | null
-      description?: string | null
-      itemUid: string
-      organizationId: string
-      productionFloorCode?: string
-      quantity?: number
-      routeCode: string
-      setupNumber: number
-      sourcePayload?: unknown
-      toolCode: string
-    }) {
-      return transaction(pool, async (client) => {
-        const operationSetupId = await setupFor(
-          client,
-          input.organizationId,
-          input.itemUid,
-          input.routeCode,
-          input.setupNumber,
-          normalizeProductionFloorCode(input.productionFloorCode)
-        )
-        const requestedToolCode = requiredText(input.toolCode, "Asset code")
-        const toolingAsset = await client.query<{ type_code: string }>(
-          `
-            SELECT type_code
-            FROM store.item_types
-            WHERE organization_id = $1
-              AND lower(type_code) = lower($2)
-              AND active
-          `,
-          [input.organizationId, requestedToolCode]
-        )
-        if (!toolingAsset.rows[0]) {
-          throw new Error(
-            "Create the tooling Asset Code in Store first, then reference it in Tooling Master."
-          )
-        }
-        const toolCode = toolingAsset.rows[0].type_code
-        const quantity = input.quantity ?? 1
-        if (!(quantity > 0)) throw new Error("Tool quantity must be positive.")
-        await businessKeyLock(
-          client,
-          "manufacturing.tooling",
-          `${operationSetupId}:${toolCode}`
-        )
-        const existing = await client.query<{ id: string }>(
-          `
-            SELECT id FROM manufacturing.operation_tooling
-            WHERE operation_setup_id = $1 AND lower(tool_code) = lower($2)
-            FOR UPDATE
-          `,
-          [operationSetupId, toolCode]
-        )
-        const sourcePayload = input.sourcePayload ?? input
-        const result = existing.rows[0]
-          ? await client.query<{ id: string }>(
-              `
-                UPDATE manufacturing.operation_tooling
-                SET description = $1, quantity = $2, active = true,
-                  updated_by_user_id = $3, source_payload = $4,
-                  updated_at = now(),
-                  row_version = row_version + 1
-                WHERE id = $5 RETURNING id
-              `,
-              [
-                input.description?.trim() || null,
-                quantity,
-                input.actorUserId ?? null,
-                sourcePayload,
-                existing.rows[0].id,
-              ]
-            )
-          : await client.query<{ id: string }>(
-              `
-                INSERT INTO manufacturing.operation_tooling (
-                  organization_id, operation_setup_id, tool_code,
-                  description, quantity, active, created_by_user_id,
-                  updated_by_user_id, source_system, source_table, source_id,
-                  source_payload
-                )
-                VALUES ($1, $2, $3, $4, $5, true, $6, $6,
-                  'mrm-dashboard', 'tooling', $7, $8)
-                RETURNING id
-              `,
-              [
-                input.organizationId,
-                operationSetupId,
-                toolCode,
-                input.description?.trim() || null,
-                quantity,
-                input.actorUserId ?? null,
-                randomUUID(),
-                sourcePayload,
-              ]
-            )
-        await queueDashboardRefresh(client, input.organizationId)
-        return result.rows[0]!
+    async upsertTooling(input: ToolingMasterInput) {
+      return transaction(pool, client => upsertToolingClient(client, input))
+    },
+
+    async upsertToolingBatch(inputs: ToolingMasterInput[]) {
+      return transaction(pool, async client => {
+        const results = []
+        for (const input of inputs) results.push(await upsertToolingClient(client, input))
+        return results
       })
     },
 
     async upsertPlanningCalendarException(input: {
+      rejectDuplicates?: boolean
       actorUserId?: string | null
       exceptionDate: string
       exceptionType: string
@@ -1348,6 +1375,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
         ) {
           throw new Error("A holiday for this date and scope already belongs to another Production Unit. Edit it in its existing unit.")
         }
+        rejectDuplicateMaster(input.rejectDuplicates, !!existing.rows[0])
         const result = existing.rows[0]
           ? await client.query<{ id: string }>(
               `

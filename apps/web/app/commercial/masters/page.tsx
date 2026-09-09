@@ -145,9 +145,9 @@ export default async function MastersPage({
           {canUpdate && snapshot ? (
  <SectionCard>
               <CardHeader>
-                <CardTitle>Add Or Update A Master</CardTitle>
+                <CardTitle>Add A Master</CardTitle>
                 <CardDescription>
-                  Natural Source Keys Make Repeated Submissions Idempotent.
+                  Add a new entry. To change an existing entry, use Master Table.
                 </CardDescription>
               </CardHeader>
               <CardContent>

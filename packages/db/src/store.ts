@@ -1,3 +1,4 @@
+import { rejectDuplicateMaster, assertMasterAvailable } from "./master-duplicate"
 import { createHash } from "node:crypto"
 
 import type { PoolClient } from "pg"
@@ -771,34 +772,38 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
     },
 
     async createLocation(input: {
+      rejectDuplicates?: boolean
       actorUserId?: string | null
       code: string
       locationType?: "DEPARTMENT" | "STORE" | "UNIT"
       name: string
       organizationId: string
     }) {
-      const result = await pool.query<{ id: string }>(
-        `
-          INSERT INTO store.locations (
-            organization_id, code, name, location_type,
-            created_by_user_id, updated_by_user_id
-          ) VALUES ($1, $2, $3, $4, $5, $5)
-          ON CONFLICT (organization_id, lower(code))
-          DO UPDATE SET name = EXCLUDED.name,
-            location_type = EXCLUDED.location_type,
-            active = true, updated_at = now(),
-            updated_by_user_id = EXCLUDED.updated_by_user_id
-          RETURNING id
-        `,
-        [
-          input.organizationId,
-          requiredText(input.code, "Location code"),
-          requiredText(input.name, "Location name"),
-          input.locationType ?? "STORE",
-          input.actorUserId ?? null,
-        ]
-      )
-      return result.rows[0]!
+      return withTransaction(pool, async (client) => {
+        const result = await client.query<{ id: string; inserted: boolean }>(
+          `
+            INSERT INTO store.locations (
+              organization_id, code, name, location_type,
+              created_by_user_id, updated_by_user_id
+            ) VALUES ($1, $2, $3, $4, $5, $5)
+            ON CONFLICT (organization_id, lower(code))
+            DO UPDATE SET name = EXCLUDED.name,
+              location_type = EXCLUDED.location_type,
+              active = true, updated_at = now(),
+              updated_by_user_id = EXCLUDED.updated_by_user_id
+            RETURNING id, (xmax = 0) AS inserted
+          `,
+          [
+            input.organizationId,
+            requiredText(input.code, "Location code"),
+            requiredText(input.name, "Location name"),
+            input.locationType ?? "STORE",
+            input.actorUserId ?? null,
+          ]
+        )
+        rejectDuplicateMaster(input.rejectDuplicates, result.rows[0]?.inserted === false)
+        return result.rows[0]!
+      })
     },
 
     async updateLocation(input: {
@@ -845,27 +850,31 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
     },
 
     async createAssetCategory(input: {
+      rejectDuplicates?: boolean
       actorUserId?: string | null
       name: string
       organizationId: string
     }) {
-      const result = await pool.query<{ id: string }>(
-        `
-          INSERT INTO store.asset_categories (
-            organization_id, name, created_by_user_id, updated_by_user_id
-          ) VALUES ($1, $2, $3, $3)
-          ON CONFLICT (organization_id, lower(name))
-          DO UPDATE SET active = true, updated_at = now(),
-            updated_by_user_id = EXCLUDED.updated_by_user_id
-          RETURNING id
-        `,
-        [
-          input.organizationId,
-          requiredText(input.name, "Asset category"),
-          input.actorUserId ?? null,
-        ]
-      )
-      return result.rows[0]!
+      return withTransaction(pool, async (client) => {
+        const result = await client.query<{ id: string; inserted: boolean }>(
+          `
+            INSERT INTO store.asset_categories (
+              organization_id, name, created_by_user_id, updated_by_user_id
+            ) VALUES ($1, $2, $3, $3)
+            ON CONFLICT (organization_id, lower(name))
+            DO UPDATE SET active = true, updated_at = now(),
+              updated_by_user_id = EXCLUDED.updated_by_user_id
+            RETURNING id, (xmax = 0) AS inserted
+          `,
+          [
+            input.organizationId,
+            requiredText(input.name, "Asset category"),
+            input.actorUserId ?? null,
+          ]
+        )
+        rejectDuplicateMaster(input.rejectDuplicates, result.rows[0]?.inserted === false)
+        return result.rows[0]!
+      })
     },
 
     async updateAssetCategory(input: {
@@ -894,35 +903,39 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
     },
 
     async createAssetSubcategory(input: {
+      rejectDuplicates?: boolean
       actorUserId?: string | null
       categoryId: string
       name: string
       organizationId: string
     }) {
-      const result = await pool.query<{ id: string }>(
-        `
-          INSERT INTO store.asset_subcategories (
-            organization_id, category_id, name,
-            created_by_user_id, updated_by_user_id
-          )
-          SELECT $1, category.id, $2, $3, $3
-          FROM store.asset_categories category
-          WHERE category.id = $4 AND category.organization_id = $1
-            AND category.active
-          ON CONFLICT (organization_id, category_id, lower(name))
-          DO UPDATE SET active = true, updated_at = now(),
-            updated_by_user_id = EXCLUDED.updated_by_user_id
-          RETURNING id
-        `,
-        [
-          input.organizationId,
-          requiredText(input.name, "Asset subcategory"),
-          input.actorUserId ?? null,
-          input.categoryId,
-        ]
-      )
-      if (!result.rows[0]) throw new Error("Store Category was not found.")
-      return result.rows[0]
+      return withTransaction(pool, async (client) => {
+        const result = await client.query<{ id: string; inserted: boolean }>(
+          `
+            INSERT INTO store.asset_subcategories (
+              organization_id, category_id, name,
+              created_by_user_id, updated_by_user_id
+            )
+            SELECT $1, category.id, $2, $3, $3
+            FROM store.asset_categories category
+            WHERE category.id = $4 AND category.organization_id = $1
+              AND category.active
+            ON CONFLICT (organization_id, category_id, lower(name))
+            DO UPDATE SET active = true, updated_at = now(),
+              updated_by_user_id = EXCLUDED.updated_by_user_id
+            RETURNING id, (xmax = 0) AS inserted
+          `,
+          [
+            input.organizationId,
+            requiredText(input.name, "Asset subcategory"),
+            input.actorUserId ?? null,
+            input.categoryId,
+          ]
+        )
+        if (!result.rows[0]) throw new Error("Store Category was not found.")
+        rejectDuplicateMaster(input.rejectDuplicates, result.rows[0]?.inserted === false)
+        return result.rows[0]
+      })
     },
 
     async updateAssetSubcategory(input: {
@@ -970,35 +983,39 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
     },
 
     async createAssetName(input: {
+      rejectDuplicates?: boolean
       actorUserId?: string | null
       name: string
       organizationId: string
       subcategoryId: string
     }) {
-      const result = await pool.query<{ id: string }>(
-        `
-          INSERT INTO store.asset_names (
-            organization_id, subcategory_id, name,
-            created_by_user_id, updated_by_user_id
-          )
-          SELECT $1, subcategory.id, $2, $3, $3
-          FROM store.asset_subcategories subcategory
-          WHERE subcategory.id = $4 AND subcategory.organization_id = $1
-            AND subcategory.active
-          ON CONFLICT (organization_id, subcategory_id, lower(name))
-          DO UPDATE SET active = true, updated_at = now(),
-            updated_by_user_id = EXCLUDED.updated_by_user_id
-          RETURNING id
-        `,
-        [
-          input.organizationId,
-          requiredText(input.name, "Asset name"),
-          input.actorUserId ?? null,
-          input.subcategoryId,
-        ]
-      )
-      if (!result.rows[0]) throw new Error("Store Subcategory was not found.")
-      return result.rows[0]
+      return withTransaction(pool, async (client) => {
+        const result = await client.query<{ id: string; inserted: boolean }>(
+          `
+            INSERT INTO store.asset_names (
+              organization_id, subcategory_id, name,
+              created_by_user_id, updated_by_user_id
+            )
+            SELECT $1, subcategory.id, $2, $3, $3
+            FROM store.asset_subcategories subcategory
+            WHERE subcategory.id = $4 AND subcategory.organization_id = $1
+              AND subcategory.active
+            ON CONFLICT (organization_id, subcategory_id, lower(name))
+            DO UPDATE SET active = true, updated_at = now(),
+              updated_by_user_id = EXCLUDED.updated_by_user_id
+            RETURNING id, (xmax = 0) AS inserted
+          `,
+          [
+            input.organizationId,
+            requiredText(input.name, "Asset name"),
+            input.actorUserId ?? null,
+            input.subcategoryId,
+          ]
+        )
+        if (!result.rows[0]) throw new Error("Store Subcategory was not found.")
+        rejectDuplicateMaster(input.rejectDuplicates, result.rows[0]?.inserted === false)
+        return result.rows[0]
+      })
     },
 
     async updateAssetName(input: {
@@ -1209,6 +1226,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
     },
 
     async createSupplierPrice(input: {
+      rejectDuplicates?: boolean
       actorUserId?: string | null
       itemTypeId: string
       organizationId: string
@@ -1222,6 +1240,13 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         throw new Error("Unit price must be zero or greater.")
       }
       return withTransaction(pool, async (client) => {
+        await assertMasterAvailable(
+          client,
+          input,
+          "store.supplier_prices",
+          "supplier_id = $2 AND item_type_id = $3 AND valid_from = COALESCE(NULLIF($4, '')::date, CURRENT_DATE) AND unit_price = $5::numeric",
+          [input.supplierId, input.itemTypeId, input.validFrom ?? null, unitPrice]
+        )
         await client.query(
           "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
           [
@@ -1273,34 +1298,38 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
     },
 
     async createVendor(input: {
+      rejectDuplicates?: boolean
       actorUserId?: string | null
       code: string
       contactDetails?: string | null
       name: string
       organizationId: string
     }) {
-      const result = await pool.query<{ id: string }>(
-        `
-          INSERT INTO store.vendors (
-            organization_id, code, name, contact_details,
-            created_by_user_id, updated_by_user_id
-          ) VALUES ($1, $2, $3, $4, $5, $5)
-          ON CONFLICT (organization_id, lower(code))
-          DO UPDATE SET name = EXCLUDED.name,
-            contact_details = EXCLUDED.contact_details,
-            active = true, updated_at = now(),
-            updated_by_user_id = EXCLUDED.updated_by_user_id
-          RETURNING id
-        `,
-        [
-          input.organizationId,
-          requiredText(input.code, "Vendor code"),
-          requiredText(input.name, "Vendor name"),
-          input.contactDetails?.trim() || null,
-          input.actorUserId ?? null,
-        ]
-      )
-      return result.rows[0]!
+      return withTransaction(pool, async (client) => {
+        const result = await client.query<{ id: string; inserted: boolean }>(
+          `
+            INSERT INTO store.vendors (
+              organization_id, code, name, contact_details,
+              created_by_user_id, updated_by_user_id
+            ) VALUES ($1, $2, $3, $4, $5, $5)
+            ON CONFLICT (organization_id, lower(code))
+            DO UPDATE SET name = EXCLUDED.name,
+              contact_details = EXCLUDED.contact_details,
+              active = true, updated_at = now(),
+              updated_by_user_id = EXCLUDED.updated_by_user_id
+            RETURNING id, (xmax = 0) AS inserted
+          `,
+          [
+            input.organizationId,
+            requiredText(input.code, "Vendor code"),
+            requiredText(input.name, "Vendor name"),
+            input.contactDetails?.trim() || null,
+            input.actorUserId ?? null,
+          ]
+        )
+        rejectDuplicateMaster(input.rejectDuplicates, result.rows[0]?.inserted === false)
+        return result.rows[0]!
+      })
     },
 
     async updateVendor(input: {
@@ -2083,6 +2112,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
     },
 
     async createItemType(input: {
+      rejectDuplicates?: boolean
       actorUserId?: string | null
       assetCategoryId: string
       assetNameId: string
@@ -2129,6 +2159,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             input.assetNameId,
           ]
         )
+        rejectDuplicateMaster(input.rejectDuplicates, !!existing.rows[0])
         if (existing.rows[0]) return existing.rows[0]
         const typeCode = await nextStoreTypeCode(
           client,

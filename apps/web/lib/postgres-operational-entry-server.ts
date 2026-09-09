@@ -230,6 +230,7 @@ export async function executePostgresOperationalEntry(
         const organizationId = await repository.organizationIdForCode("MRMPL")
         if (plan.operation === "rejection-type") {
           return await repository.upsertRejectionType({
+            rejectDuplicates: masterAction === "save",
             ...plan.input,
             actorUserId: actor.actorUserId,
             organizationId,
@@ -237,6 +238,7 @@ export async function executePostgresOperationalEntry(
         }
         if (plan.operation === "rejection-reason") {
           return await repository.upsertRejectionReason({
+            rejectDuplicates: masterAction === "save",
             ...plan.input,
             actorUserId: actor.actorUserId,
             organizationId,
@@ -244,6 +246,7 @@ export async function executePostgresOperationalEntry(
         }
         if (plan.operation === "rejection-remark") {
           return await repository.upsertRejectionRemark({
+            rejectDuplicates: masterAction === "save",
             ...plan.input,
             actorUserId: actor.actorUserId,
             organizationId,
@@ -251,6 +254,7 @@ export async function executePostgresOperationalEntry(
         }
         if (plan.operation === "parameter") {
           return await repository.upsertParameterDefinition({
+            rejectDuplicates: masterAction === "save",
             ...plan.input,
             actorUserId: actor.actorUserId,
             organizationId,
@@ -272,6 +276,7 @@ export async function executePostgresOperationalEntry(
         }
         if (plan.operation === "setup-template") {
           return await repository.upsertSetupChecklistTemplate({
+            rejectDuplicates: masterAction === "save",
             ...plan.input,
             actorUserId: actor.actorUserId,
             items: plan.input.items.map((item) => ({ ...item })),
@@ -339,6 +344,7 @@ export async function executePostgresOperationalEntry(
       const organizationId = await repository.organizationIdForCode("MRMPL")
       if (plan.operation === "definition") {
         return await repository.upsertDefinition({
+          rejectDuplicates: masterAction === "save",
           ...plan.input,
           actorUserId: actor.actorUserId,
           items: [],
@@ -347,6 +353,7 @@ export async function executePostgresOperationalEntry(
       }
       if (plan.operation === "checklist-item") {
         return await repository.upsertChecklistItem({
+          rejectDuplicates: masterAction === "save",
           ...plan.input,
           actorUserId: actor.actorUserId,
           organizationId,

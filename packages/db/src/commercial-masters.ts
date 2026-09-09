@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto"
+import { rejectDuplicateMaster, assertMasterAvailable } from "./master-duplicate"
 
 import type { PoolClient } from "pg"
 
@@ -134,6 +135,7 @@ type ActiveKind =
   | "shippingTerm"
 
 type MutationContext = {
+  rejectDuplicates?: boolean
   actorUserId?: string | null
   organizationId: string
 }
@@ -293,6 +295,13 @@ async function upsertNamedClient(
     if (!input.fieldType || !websiteFieldTypes.includes(input.fieldType)) {
       throw new Error("Website field master is invalid.")
     }
+    await assertMasterAvailable(
+      client,
+      input,
+      "catalog.website_field_options",
+      "field_key = $2 AND lower(btrim(option_value)) = lower(btrim($3))",
+      [input.fieldType, name]
+    )
     const sortOrder =
       input.sortOrder && input.sortOrder > 0
         ? input.sortOrder
@@ -377,6 +386,7 @@ async function upsertNamedClient(
   }
 
   const row = result.rows[0]!
+  rejectDuplicateMaster(input.rejectDuplicates, !row.inserted)
   await audit(client, {
     ...input,
     action: row.inserted ? "created" : "ignored",
@@ -441,6 +451,7 @@ async function upsertSubcategoryClient(
     ]
   )
   const row = result.rows[0]!
+  rejectDuplicateMaster(input.rejectDuplicates, !row.inserted)
   await audit(client, {
     ...input,
     action: row.inserted ? "created" : "updated",
@@ -537,6 +548,7 @@ async function upsertMaterialRateClient(
     ]
   )
   const row = result.rows[0]!
+  rejectDuplicateMaster(input.rejectDuplicates, !row.inserted)
   await audit(client, {
     ...input,
     action: row.inserted ? "created" : "updated",
@@ -591,6 +603,7 @@ async function upsertCostOptionClient(
     ]
   )
   const row = result.rows[0]!
+  rejectDuplicateMaster(input.rejectDuplicates, !row.inserted)
   await audit(client, {
     ...input,
     action: row.inserted ? "created" : "updated",
@@ -641,6 +654,7 @@ async function upsertCommercialTermClient(
     ]
   )
   const row = result.rows[0]!
+  rejectDuplicateMaster(input.rejectDuplicates, !row.inserted)
   await audit(client, {
     ...input,
     action: row.inserted ? "created" : "updated",
@@ -696,6 +710,7 @@ async function upsertQuoteTermClient(
     ]
   )
   const row = result.rows[0]!
+  rejectDuplicateMaster(input.rejectDuplicates, !row.inserted)
   await audit(client, {
     ...input,
     action: row.inserted ? "created" : "updated",
@@ -795,6 +810,7 @@ async function upsertCustomerClient(
     ]
   )
   const row = result.rows[0]!
+  rejectDuplicateMaster(input.rejectDuplicates, !row.inserted)
   await audit(client, {
     ...input,
     action: row.inserted ? "created" : "updated",
