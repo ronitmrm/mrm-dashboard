@@ -60,6 +60,7 @@ const snapshot: CommercialMasterSnapshot = {
     },
   ],
   rodTypes: [{ name: "SOLID" }],
+  rodSizes: [{ name: "14 Hex" }],
   shippingTerms: [{ active: true, name: "Air", shippingCost: 7.5 }],
   subcategories: [
     {
@@ -80,6 +81,7 @@ describe("Pricing masters workbook", () => {
       "Machine Types",
       "Grades",
       "Rod Types",
+      "Rod Sizes",
       "Categories",
       "Sub Categories",
       "Processes",

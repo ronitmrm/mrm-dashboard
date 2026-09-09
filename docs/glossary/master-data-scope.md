@@ -68,6 +68,15 @@ Master Selection. Commercial Pricing and Design workflows reuse those same
 company-wide records without listing a second copy under Commercial Pricing
 Masters.
 
+**Rod Size Master**: The company-wide list under Commercial Pricing Masters
+that supplies Rod Size choices in Design. Its initial values are all nonblank
+Rod Sizes in the permanent internal Product Portfolio, including products with
+no customer code or customer price. Values are trimmed and deduplicated without
+regard to letter case; distinct measurements and descriptions remain distinct.
+Products and design/quote records retain their captured Rod Size text. Renaming
+or removing a choice changes future selections, not saved product specifications
+or historical evidence; existing values remain visible in their records.
+
 **Production-unit Master**: A master whose records differ by Production Unit.
 Its Data Entry and CSV import require one of the recognized Production Units.
 Quality Inspection Parameter Master is production-unit-scoped even though the

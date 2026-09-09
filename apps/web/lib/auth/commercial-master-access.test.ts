@@ -25,6 +25,7 @@ describe("commercial master access", () => {
   })
 
   it("authorizes the actual template and commercial term subtype", () => {
+    expect(commercialTemplateReadCapabilities("rod-sizes")).toEqual(["masters.universal.rodSize.read"])
     expect(commercialTemplateReadCapabilities("rod-types")).toEqual(["masters.universal.rodType.read"])
     expect(commercialTemplateReadCapabilities("commercials", "payment_terms")).toEqual(["masters.universal.payment_terms.read"])
     expect(commercialTemplateReadCapabilities("website-pressure")).toEqual(["masters.universal.websiteField.read"])
@@ -34,6 +35,7 @@ describe("commercial master access", () => {
 
   it("limits exports to allowed masters and checks every populated import sheet", () => {
     const snapshot: CommercialMasterSnapshot = {
+      rodSizes: [{ name: "14 Hex" }],
       applications: [], categories: [], certifications: [], customers: [],
       machineTypes: [], materialGrades: [], materialRates: [], packagingOptions: [],
       processes: [], quoteTerms: [], shippingTerms: [], subcategories: [], websiteFields: [],
@@ -45,11 +47,14 @@ describe("commercial master access", () => {
     }
     const allowed = readableCommercialSnapshot(snapshot, ["masters.universal.payment_terms.read"])
     expect(allowed.rodTypes).toEqual([])
+    expect(allowed.rodSizes).toEqual([])
+    expect(readableCommercialSnapshot(snapshot, ["masters.universal.rodSize.read"]).rodSizes).toEqual([{ name: "14 Hex" }])
     expect(allowed.commercialTerms).toEqual([{ active: true, name: "Net 30", termType: "payment_terms" }])
     expect(snapshot.rodTypes).toEqual([{ name: "Solid" }])
     expect(commercialImportCapabilities(snapshot).sort()).toEqual([
       "masters.universal.incoterms.import",
       "masters.universal.payment_terms.import",
+      "masters.universal.rodSize.import",
       "masters.universal.rodType.import",
     ])
     snapshot.customers = [{

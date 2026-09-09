@@ -42,6 +42,7 @@ const csvSheetNameByEntryKind = {
   process: "Processes",
   quoteTerm: "Quote PDF Terms",
   rodType: "Rod Types",
+  rodSize: "Rod Sizes",
   shippingTerm: "Shipping",
   subcategory: "Sub Categories",
   websiteField: "Website Fields",
@@ -150,6 +151,7 @@ export async function upsertMasterAction(formData: FormData) {
         case "materialGrade":
         case "process":
         case "rodType":
+        case "rodSize":
           return repository.upsertNamed({
             ...context,
             kind,
