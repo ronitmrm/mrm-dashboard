@@ -16,7 +16,7 @@ import { buildQuotePdf, type QuoteDocument } from "./quote-pdf"
 const connectionString =
   process.env.TEST_DATABASE_URL ??
   "postgresql://mrmpl:mrmpl@127.0.0.1:5434/mrmpl_test"
-const pool = new Pool({ connectionString })
+const pool = new Pool({ connectionString, max: 1, idleTimeoutMillis: 100 })
 
 class QuoteArtifactProvider implements ArtifactStorageProvider {
   readonly bytesByUrl = new Map<string, Buffer>()
@@ -155,7 +155,8 @@ const fixedMarket = {
 
 async function issueQuote(
   context: Awaited<ReturnType<typeof createReadyQuote>>,
-  provider: QuoteArtifactProvider
+  provider: QuoteArtifactProvider,
+  inspectDocument?: (document: QuoteDocument) => void
 ) {
   const repository = createCommercialCostingRepository({ connectionString })
   const artifacts = createArtifactService({ connectionString, provider })
@@ -164,6 +165,7 @@ async function issueQuote(
       followupDueOn: "2026-09-30",
       quoteItemId: context.quoteItemId,
       storeIssuedPdf: async ({ document, organizationId, quoteItemId }) => {
+        inspectDocument?.(document)
         const bytes = Buffer.from(
           await buildQuotePdf(document as QuoteDocument, fixedMarket)
         )
@@ -197,6 +199,44 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await pool.end()
+})
+
+test("issues a partial enquiry without including unfinished or unsent lines", async () => {
+  const context = await createReadyQuote("Partial enquiry")
+  await pool.query(
+    `WITH lines AS (
+       INSERT INTO sales.enquiry_items (organization_id, enquiry_id, line_number,
+         customer_part_code, description, quantity, item_id,
+         source_system, source_table, source_id)
+       SELECT organization_id, enquiry_id, number, 'PENDING-' || number,
+         'Unsent sibling', 100, item_id, 'test', 'partial_quote', $2 || number
+       FROM sales.quote_items, generate_series(2,4) number WHERE id = $1
+       RETURNING id, line_number
+     ) INSERT INTO sales.quote_items (organization_id, quote_number, enquiry_id,
+       enquiry_item_id, customer_id, item_id, lineage_item_id, customer_part_code,
+       quantity, unit_price, status, source_system, source_table, source_id)
+     SELECT quote.organization_id, quote.quote_number || '-' || lines.line_number,
+       quote.enquiry_id, lines.id, quote.customer_id, quote.item_id, quote.item_id,
+       'PENDING-' || lines.line_number, 100, 99,
+       CASE lines.line_number WHEN 2 THEN 'Draft' ELSE 'Ready' END,
+       'test', 'partial_quote', $2 || lines.line_number
+     FROM sales.quote_items quote, lines
+     WHERE quote.id = $1 AND lines.line_number < 4`,
+    [context.quoteItemId, randomUUID()]
+  )
+  const provider = new QuoteArtifactProvider()
+  let issuedDocument: QuoteDocument | undefined
+  await issueQuote(context, provider, (document) => {
+    expect(document.lines).toHaveLength(1)
+    issuedDocument = document
+  })
+  expect(issuedDocument?.lines).toHaveLength(1)
+  expect(issuedDocument?.lines[0]).toMatchObject({
+    lineNumber: 1,
+    status: "Sent",
+    price: 12.5,
+  })
+  expect(provider.uploads).toHaveLength(1)
 })
 
 describe("sent Quote PDF issuance", () => {
