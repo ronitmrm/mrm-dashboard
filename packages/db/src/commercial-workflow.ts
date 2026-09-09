@@ -7102,6 +7102,15 @@ export function createCommercialWorkflowRepository(
                     AND design.matched_product_id IS NOT NULL
                   )
                 )
+                AND EXISTS (
+                  SELECT 1 FROM audit.events design_save
+                  WHERE design_save.organization_id = design.organization_id
+                    AND design_save.target_schema = 'sales'
+                    AND design_save.target_table = 'design_tasks'
+                    AND design_save.target_id = design.id
+                    AND design_save.event_type = 'design.saved'
+                    AND design_save.metadata->>'designStatus' = design.design_status
+                )
                 AND COALESCE(design.next_stage_status, 'Not Started') NOT IN (
                   'Not Started', 'Changes Required'
                 ))
