@@ -5,6 +5,7 @@ import { notFound, redirect } from "next/navigation"
 import { createCommercialWorkflowRepository } from "@workspace/db"
 import {
   designTaskIsEditable,
+  designTaskIsOpen,
   designWorkspaceSection,
 } from "@workspace/db/commercial-design-domain"
 import {
@@ -16,11 +17,20 @@ import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import { SectionCard, CardContent } from "@workspace/ui/components/card"
 import { Field, FieldGroup, FieldLabel } from "@workspace/ui/components/field"
+import { Input } from "@workspace/ui/components/input"
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "@workspace/ui/components/native-select"
 import { Separator } from "@workspace/ui/components/separator"
 import { Textarea } from "@workspace/ui/components/textarea"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
-import { requireCapability } from "@/lib/auth/require-capability"
+import {
+  listGrantedCapabilities,
+  requireCapability,
+} from "@/lib/auth/require-capability"
+import { commercialTaskCapabilities } from "@/lib/auth/task-capabilities"
 import { technicalReviewChecklist } from "@/lib/pricing/technical-review"
 
 import {
@@ -42,6 +52,7 @@ export default async function NewDesignWorkspacePage({
   params: Promise<{ id: string }>
   searchParams: Promise<{
     incomplete?: string
+    portfolio?: string
     product?: string
     saved?: string
     selectedLine?: string
@@ -49,7 +60,14 @@ export default async function NewDesignWorkspacePage({
   }>
 }) {
   const { id } = await params
-  await requireCapability("pricing.design.read", `/commercial/design/${id}/new`)
+  const session = await requireCapability(
+    "pricing.design.read",
+    `/commercial/design/${id}/new`
+  )
+  const granted = await listGrantedCapabilities(session.user.id, [
+    commercialTaskCapabilities.saveDesign,
+  ])
+  const canSave = granted.includes(commercialTaskCapabilities.saveDesign)
   const resolvedSearchParams = await searchParams
   const incompleteFields =
     resolvedSearchParams.incomplete?.split("|").filter(Boolean) ?? []
@@ -67,10 +85,12 @@ export default async function NewDesignWorkspacePage({
     try {
       const selectedItem = await workflow.getDesignTask("MRMPL", id)
       if (!selectedItem) return null
-      const editable = designTaskIsEditable({
-        designStatus: selectedItem.designStatus,
-        nextStageStatus: selectedItem.nextStageStatus,
-      })
+      const editable =
+        canSave &&
+        designTaskIsEditable({
+          designStatus: selectedItem.designStatus,
+          nextStageStatus: selectedItem.nextStageStatus,
+        })
       const [designOptions, productOptions] = await Promise.all([
         workflow.getDesignWorkspaceOptions("MRMPL"),
         editable
@@ -90,6 +110,10 @@ export default async function NewDesignWorkspacePage({
     redirect(`/commercial/design/${id}`)
   }
   const { designOptions, editable, productOptions, selectedItem } = data
+  const canReturnToPortfolio =
+    editable && designTaskIsOpen(selectedItem.designStatus)
+  const selectingPortfolio =
+    canReturnToPortfolio && resolvedSearchParams.portfolio === "1"
 
   return (
     <div className="flex min-h-[calc(100svh-4rem)] flex-col gap-6">
@@ -112,6 +136,21 @@ export default async function NewDesignWorkspacePage({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {canReturnToPortfolio ? (
+            <Button asChild size="sm" variant="outline">
+              <Link
+                href={
+                  selectingPortfolio
+                    ? `/commercial/design/${id}/new`
+                    : `/commercial/design/${id}/new?portfolio=1`
+                }
+              >
+                {selectingPortfolio
+                  ? "Return To Design Form"
+                  : "Return to Portfolio Selection"}
+              </Link>
+            </Button>
+          ) : null}
           <Button asChild size="sm" variant="outline">
             <Link href={`/commercial/enquiries/${selectedItem.enquiryId}`}>
               Open Enquiry
@@ -120,7 +159,7 @@ export default async function NewDesignWorkspacePage({
         </div>
       </section>
 
- <SectionCard className="flex-1 overflow-hidden">
+      <SectionCard className="flex-1 overflow-hidden">
         <CardContent className="flex h-full flex-col gap-6 p-4 lg:p-6">
           {incompleteFields.length ? (
             <Alert id="design-completion-remark" variant="destructive">
@@ -261,6 +300,37 @@ export default async function NewDesignWorkspacePage({
             </section>
           </details>
 
+          {selectingPortfolio ? (
+            <form
+              action={`/commercial/design/${id}/new`}
+              className="grid gap-3"
+              method="get"
+            >
+              <input name="portfolio" type="hidden" value="1" />
+              <Field>
+                <FieldLabel htmlFor="portfolio-search">
+                  Search Portfolio Products
+                </FieldLabel>
+                <Input
+                  defaultValue={productSearch}
+                  id="portfolio-search"
+                  name="product"
+                  placeholder="Product UID or description"
+                />
+              </Field>
+              <Button className="w-fit" type="submit" variant="outline">
+                Search Portfolio
+              </Button>
+              <p className="text-sm text-muted-foreground">
+                {productOptions.coverage.truncated
+                  ? "Showing the first 50 matches. Narrow your search to find another product."
+                  : `${productOptions.rows.length} matching products.`}{" "}
+                Save any unsaved Design edits before leaving the Design form.
+                Confirming a match replaces the new-design draft with the
+                selected Product.
+              </p>
+            </form>
+          ) : null}
           <form action={saveDesignAction}>
             <input
               name="customer_uid"
@@ -287,47 +357,86 @@ export default async function NewDesignWorkspacePage({
               type="hidden"
               value={selectedItem.organizationId}
             />
-            <DesignTaskEditor
-              attachments={selectedItem.attachments.map((attachment) => ({
-                fileName: attachment.fileName,
-                href: `/commercial/design/${selectedItem.designId}/file/${attachment.purpose}`,
-                purpose: attachment.purpose,
-              }))}
-              designOptions={designOptions}
-              editable={editable}
-              initialSection={
-                incompleteFields.length ? "controls" : savedSection
-              }
-              portfolioDecisionLocked
-              portfolioSelection={portfolioSelection}
-              initial={{
-                bomLines: selectedItem.bomLines,
-                checkedBy: selectedItem.checkedBy,
-                componentsRequired: selectedItem.componentsRequired,
-                designBomCompleted: selectedItem.designBomCompleted,
-                designRemarks: selectedItem.designRemarks,
-                drawingRequirement: selectedItem.drawingRequirement,
-                designerName: selectedItem.designerName,
-                fixtureApproxCost: selectedItem.fixtureApproxCost,
-                fixtureRequired: selectedItem.fixtureRequired,
-                gaugesRequired: selectedItem.gaugesRequired,
-                inspectionApproxCost: selectedItem.inspectionApproxCost,
-                internalPartCategory: selectedItem.internalPartCategory,
-                internalPartSize: selectedItem.internalPartSize,
-                internalPartSubCategory: selectedItem.internalPartSubCategory,
-                itemType: selectedItem.itemType,
-                manufacturingProcess: selectedItem.manufacturingProcess,
-                matchedProductId: selectedItem.matchedProductId,
-                operationNotes: selectedItem.operationNotes,
-                packageProcessRequired: selectedItem.packageProcessRequired,
-                portfolioMatchStatus: selectedItem.portfolioMatchStatus,
-                quotedPartUid: selectedItem.quotedPartUid,
-                targetCompletionDate: selectedItem.targetCompletionDate,
-                toolingApproxCost: selectedItem.toolingApproxCost,
-                toolingRequired: selectedItem.toolingRequired,
-              }}
-              products={productOptions.rows}
-            />
+            {selectingPortfolio ? (
+              <div className="grid gap-4">
+                <input
+                  name="portfolio_match_status"
+                  type="hidden"
+                  value="Matches Existing Portfolio"
+                />
+                <Field>
+                  <FieldLabel htmlFor="matched-product">
+                    Matched Portfolio Product
+                  </FieldLabel>
+                  <NativeSelect
+                    defaultValue=""
+                    id="matched-product"
+                    name="matched_product_id"
+                    required
+                  >
+                    <NativeSelectOption disabled value="">
+                      Select product
+                    </NativeSelectOption>
+                    {productOptions.rows.map((product) => (
+                      <NativeSelectOption key={product.id} value={product.id}>
+                        {product.uid} · {product.description}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                </Field>
+                <Button
+                  className="w-fit"
+                  disabled={!productOptions.rows.length}
+                  name="design_save_intent"
+                  type="submit"
+                  value="draft"
+                >
+                  Confirm Portfolio Match
+                </Button>
+              </div>
+            ) : (
+              <DesignTaskEditor
+                attachments={selectedItem.attachments.map((attachment) => ({
+                  fileName: attachment.fileName,
+                  href: `/commercial/design/${selectedItem.designId}/file/${attachment.purpose}`,
+                  purpose: attachment.purpose,
+                }))}
+                designOptions={designOptions}
+                editable={editable}
+                initialSection={
+                  incompleteFields.length ? "controls" : savedSection
+                }
+                portfolioDecisionLocked
+                portfolioSelection={portfolioSelection}
+                initial={{
+                  bomLines: selectedItem.bomLines,
+                  checkedBy: selectedItem.checkedBy,
+                  componentsRequired: selectedItem.componentsRequired,
+                  designBomCompleted: selectedItem.designBomCompleted,
+                  designRemarks: selectedItem.designRemarks,
+                  drawingRequirement: selectedItem.drawingRequirement,
+                  designerName: selectedItem.designerName,
+                  fixtureApproxCost: selectedItem.fixtureApproxCost,
+                  fixtureRequired: selectedItem.fixtureRequired,
+                  gaugesRequired: selectedItem.gaugesRequired,
+                  inspectionApproxCost: selectedItem.inspectionApproxCost,
+                  internalPartCategory: selectedItem.internalPartCategory,
+                  internalPartSize: selectedItem.internalPartSize,
+                  internalPartSubCategory: selectedItem.internalPartSubCategory,
+                  itemType: selectedItem.itemType,
+                  manufacturingProcess: selectedItem.manufacturingProcess,
+                  matchedProductId: selectedItem.matchedProductId,
+                  operationNotes: selectedItem.operationNotes,
+                  packageProcessRequired: selectedItem.packageProcessRequired,
+                  portfolioMatchStatus: selectedItem.portfolioMatchStatus,
+                  quotedPartUid: selectedItem.quotedPartUid,
+                  targetCompletionDate: selectedItem.targetCompletionDate,
+                  toolingApproxCost: selectedItem.toolingApproxCost,
+                  toolingRequired: selectedItem.toolingRequired,
+                }}
+                products={productOptions.rows}
+              />
+            )}
           </form>
 
           <Separator className="mt-auto" />
@@ -362,7 +471,7 @@ export default async function NewDesignWorkspacePage({
             </form>
           </div>
         </CardContent>
- </SectionCard>
+      </SectionCard>
     </div>
   )
 }

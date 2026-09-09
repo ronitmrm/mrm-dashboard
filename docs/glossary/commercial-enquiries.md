@@ -83,7 +83,11 @@ Product Size, package-context component duplicates.
 
 **Design Work Start**: The Design team's explicit choice to open the Design form
 for one released line. It changes Pending Design to In Progress and opens that
-line's separate new-Product Design workspace. Every tab saves only draft progress;
+line's separate new-Product Design workspace. Before Design is complete, Return
+to Portfolio Selection lets an authorized editor reconsider an accidental start
+and select an existing ordered Product. Opening selection does not change the
+saved task; confirming the match replaces the new-design draft with that Product.
+Every tab saves only draft progress;
 no tab-level Save action completes the task, and a draft save returns to the tab
 from which it was submitted. The workspace order is Product
 Details, BOM, Files, then Design Controls. Design Complete is an explicit final
