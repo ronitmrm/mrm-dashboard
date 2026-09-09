@@ -2,11 +2,18 @@
 
 ## Independent master capabilities
 
-The 69 scoped masters are defined in `lib/auth/master-capabilities.ts`: 41
+The 70 scoped masters are defined in `lib/auth/master-capabilities.ts`: 42
 Universal entries and seven per production unit. Each row owns its supported
 actions through `masters.<scope>.<master>.<action>` keys. The separate Included
 Masters inventory is removed; Capabilities renders these rows from the persisted
 permission registry. Store imports also require the same master's Save grant.
+
+Rod Size is a Universal Commercial Pricing Master. Migration 0119 registers
+its five independent actions and grants them only to the system Administrator;
+other roles are configured through Access Administration. Migration 0120 seeds
+permanent internal portfolio values without a customer-code filter. Migration
+0121 adds Rod Size to the existing master deletion allowlist. Design consumes
+these master choices while retaining saved text values in existing records.
 
 Master selection, direct pages, actions, exports and attachments use leaf grants.
 Production master pages fetch `/api/masters/state`, with selected records and
@@ -153,9 +160,9 @@ adapters; it is not an authorization fallback.
 Setup Checklist, Maintenance Checklist and Maintenance Master are confirmed
 company-wide definitions. Master Selection lists each under Universal and their
 payloads omit production-floor scope; existing records remain shared. The
-catalogue has 69 entries: 41 Universal and seven in each of four units.
+catalogue has 70 entries: 42 Universal and seven in each of four units.
 
-Access Administration includes all 69 masters directly in Capabilities. The
+Access Administration includes all 70 masters directly in Capabilities. The
 separate Included masters table and replaced grouped master rows are removed.
 
 The No Access preset removes all keys owned by its row. It must not fall through
@@ -215,7 +222,7 @@ configured row count rather than a raw count of registered permission keys.
 | HR & Recruitment      | Existing HR navigation labels                                                                                               | 5 Pages / 10 Tasks  | Recruitment pages, interviews, jobs and exact workflow buttons              | View, create, edit, delete, assign, schedule, record, close and withdraw where present | `/hr`, `/hr/**`                                        | `app/hr/actions.ts`, approved-post export route                 | `hr.*`                                                             | HR page/task catalogues                             | Covered |
 | Machines              | Machines                                                                                                                    | 1 Page              | Machines                                                                    | View                                                                                   | production dashboard route/tab                         | dashboard API boundary                                          | operations machine capability                                      | production page catalogue                           | Covered |
 | Maintenance           | Requests and trade worklists                                                                                                | 1 Page / 7 Tasks    | Requests, approval and trade tasks                                          | View, approve and complete where present                                               | `/maintenance/**`                                      | maintenance server actions                                      | `maintenance.*`                                                    | maintenance navigation plus registered task keys    | Covered |
-| Master Data           | Master Selection, Master Tables                                                                                             | 69 master rows     | Individual Universal and production-unit masters                           | View, save, create, edit, delete, rename and import where supported                    | `/masters`, `/commercial/**`, `/hr`, dashboard tabs    | domain server actions, `/api/masters/state`, lifecycle guards    | `masters.<scope>.<master>.<action>`                              | master catalogue and migration 0118                 | Covered |
+| Master Data           | Master Selection, Master Tables                                                                                             | 70 master rows     | Individual Universal and production-unit masters                           | View, save, create, edit, delete, rename and import where supported                    | `/masters`, `/commercial/**`, `/hr`, dashboard tabs    | domain server actions, `/api/masters/state`, lifecycle guards    | `masters.<scope>.<master>.<action>`                              | master catalogue and migration 0118                 | Covered |
 | Operational Entry     | Entry Selection, Entry Tables                                                                                               | 4 Pages / 21 Tasks  | Enquiries, purchase orders, attendance, training and production entry       | View plus exact entry/workflow actions                                                 | `/operational-entry`, `/commercial/**`, dashboard tabs | commercial actions and dashboard API boundary                   | scoped pricing and operations keys                                 | page/task catalogues and exact registered task keys | Covered |
 | PPAC Conventional-01  | Existing PPAC tabs                                                                                                          | 11 Pages / 17 Tasks | Floor pages and production commands                                         | View plus each exact production command                                                | dashboard floor tabs                                   | `app/api/[...path]/route.ts` and dashboard events               | floor-scoped operations keys plus migrated server gates            | floor page/task catalogues                          | Covered |
 | PPAC Conventional-02  | Existing PPAC tabs                                                                                                          | 11 Pages / 17 Tasks | Floor pages and production commands                                         | View plus each exact production command                                                | dashboard floor tabs                                   | `app/api/[...path]/route.ts` and dashboard events               | floor-scoped operations keys plus migrated server gates            | floor page/task catalogues                          | Covered |

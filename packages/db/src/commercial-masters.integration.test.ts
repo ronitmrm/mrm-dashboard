@@ -75,6 +75,7 @@ const fixture: CommercialMasterSnapshot = {
     },
   ],
   rodTypes: [{ name: "SOLID" }],
+  rodSizes: [],
   shippingTerms: [{ active: true, name: "Air", shippingCost: 7.5 }],
   subcategories: [
     {
@@ -261,6 +262,7 @@ describe("Pricing commercial master maintenance", () => {
       processes: [],
       quoteTerms: [],
       rodTypes: [],
+      rodSizes: [],
       shippingTerms: [],
       subcategories: [],
       websiteFields: [],

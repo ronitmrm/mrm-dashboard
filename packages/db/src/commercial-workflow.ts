@@ -3864,14 +3864,12 @@ export function createCommercialWorkflowRepository(
         ),
         pool.query<{ name: string }>(
           `
-              SELECT DISTINCT btrim(item.rod_size) AS name
-              FROM catalog.items item
+              SELECT size.name
+              FROM catalog.rod_sizes size
               JOIN core.organizations organization
-                ON organization.id = item.organization_id
+                ON organization.id = size.organization_id
               WHERE lower(organization.code) = lower($1)
-                AND item.lifecycle_status = 'P'
-                AND nullif(btrim(item.rod_size), '') IS NOT NULL
-              ORDER BY name
+              ORDER BY lower(size.name)
             `,
           [organizationCode.trim()]
         ),

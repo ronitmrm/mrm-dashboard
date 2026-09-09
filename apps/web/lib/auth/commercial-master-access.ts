@@ -18,6 +18,7 @@ const templateMasters = {
   machines: "machineType",
   grades: "materialGrade",
   "rod-types": "rodType",
+  "rod-sizes": "rodSize",
   categories: "category",
   subcategories: "subcategory",
   processes: "process",
@@ -50,6 +51,7 @@ export const commercialSnapshotMasters = {
   customers: "commercial_customers", machineTypes: "machineType", materialGrades: "materialGrade",
   materialRates: "materialRate", packagingOptions: "packagingOption", processes: "process",
   quoteTerms: "quoteTerm", rodTypes: "rodType", shippingTerms: "shippingTerm",
+  rodSizes: "rodSize",
   subcategories: "subcategory", websiteFields: "websiteField",
 } as const satisfies Record<Exclude<keyof CommercialMasterSnapshot, "commercialTerms">, string>
 

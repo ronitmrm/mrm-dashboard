@@ -40,6 +40,7 @@ export const editableCommercialMasterKinds = [
   "commercial_process",
   "commercial_quote_term",
   "commercial_rod_type",
+  "commercial_rod_size",
   "commercial_shipping",
   "commercial_subcategory",
   "commercial_website_field",
@@ -96,6 +97,7 @@ export type CommercialMasterSnapshot = {
     value: string
   }>
   rodTypes: Array<{ name: string }>
+  rodSizes: Array<{ name: string }>
   shippingTerms: Array<
     ActiveNamedValue & {
       shippingCost: number
@@ -121,6 +123,7 @@ type NamedKind =
   | "materialGrade"
   | "process"
   | "rodType"
+  | "rodSize"
   | "websiteField"
 
 type ActiveKind =
@@ -342,6 +345,10 @@ async function upsertNamedClient(
       rodType: {
         sourceTable: "product_rod_types",
         table: "catalog.rod_types",
+      },
+      rodSize: {
+        sourceTable: "product_rod_sizes",
+        table: "catalog.rod_sizes",
       },
     } as const
     const spec = specs[input.kind]
@@ -832,6 +839,8 @@ export function createCommercialMasterRepository(
       "SELECT id, 'commercial_quote_term' kind, label FROM sales.quote_term_templates WHERE organization_id = $1",
     commercial_rod_type:
       "SELECT id, 'commercial_rod_type' kind, name label FROM catalog.rod_types WHERE organization_id = $1",
+    commercial_rod_size:
+      "SELECT id, 'commercial_rod_size' kind, name label FROM catalog.rod_sizes WHERE organization_id = $1",
     commercial_shipping:
       "SELECT id, 'commercial_shipping' kind, name label FROM sales.shipping_terms WHERE organization_id = $1",
     commercial_subcategory:
@@ -896,6 +905,10 @@ export function createCommercialMasterRepository(
       )
       const rodTypes = await client.query(
         `SELECT name FROM catalog.rod_types WHERE organization_id = $1 ORDER BY lower(name)`,
+        [organizationId]
+      )
+      const rodSizes = await client.query<{ name: string }>(
+        `SELECT name FROM catalog.rod_sizes WHERE organization_id = $1 ORDER BY lower(name)`,
         [organizationId]
       )
       const shippingTerms = await client.query(
@@ -967,6 +980,7 @@ export function createCommercialMasterRepository(
           value: row.value,
         })),
         rodTypes: rodTypes.rows.map((row) => ({ name: row.name })),
+        rodSizes: rodSizes.rows.map((row) => ({ name: row.name })),
         shippingTerms: shippingTerms.rows.map((row) => ({
           active: row.active,
           name: row.name,
@@ -1044,6 +1058,14 @@ export function createCommercialMasterRepository(
               ...input,
               ...row,
               kind: "materialGrade",
+            })
+          )
+        for (const row of input.snapshot.rodSizes)
+          record(
+            await upsertNamedClient(client, {
+              ...input,
+              ...row,
+              kind: "rodSize",
             })
           )
         for (const row of input.snapshot.rodTypes)
@@ -1154,6 +1176,7 @@ export function createCommercialMasterRepository(
          UNION ALL SELECT id, 'commercial_material_grade', name FROM catalog.material_grades WHERE organization_id = $1
          UNION ALL SELECT id, 'commercial_process', name FROM catalog.design_processes WHERE organization_id = $1
          UNION ALL SELECT id, 'commercial_rod_type', name FROM catalog.rod_types WHERE organization_id = $1
+         UNION ALL SELECT id, 'commercial_rod_size', name FROM catalog.rod_sizes WHERE organization_id = $1
          UNION ALL SELECT id, 'commercial_subcategory', name FROM catalog.item_subcategories WHERE organization_id = $1
          UNION ALL SELECT id, 'commercial_website_field', option_value FROM catalog.website_field_options WHERE organization_id = $1
          UNION ALL SELECT id, 'commercial_commercial_term', name FROM sales.commercial_terms WHERE organization_id = $1

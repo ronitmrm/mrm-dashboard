@@ -78,6 +78,7 @@ export function MasterMaintenanceForm({
   const isSimple = [
     "materialGrade",
     "rodType",
+    "rodSize",
     "machineType",
     "process",
   ].includes(kind)

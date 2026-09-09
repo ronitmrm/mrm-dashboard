@@ -10,6 +10,11 @@ export const commercialMasterKinds = [
     tableKind: "commercial_rod_type",
   },
   {
+    entryKind: "rodSize",
+    label: "Rod Size",
+    tableKind: "commercial_rod_size",
+  },
+  {
     entryKind: "machineType",
     label: "Machine type",
     tableKind: "commercial_machine_type",
@@ -149,6 +154,7 @@ const templateKeys = {
   process: "processes",
   quoteTerm: "quote-terms",
   rodType: "rod-types",
+  rodSize: "rod-sizes",
   shippingTerm: "shipping",
   subcategory: "subcategories",
   websiteField: "website-material",

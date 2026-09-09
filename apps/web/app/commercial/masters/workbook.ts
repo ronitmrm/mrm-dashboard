@@ -53,6 +53,12 @@ const sheetDefinitions: SheetDefinition[] = [
     widths: [32],
   },
   {
+    key: "rod-sizes",
+    name: "Rod Sizes",
+    placeholder: { name: "" },
+    widths: [32],
+  },
+  {
     key: "categories",
     name: "Categories",
     placeholder: { category: "", category_code: "" },
@@ -248,6 +254,8 @@ function snapshotRows(
       return snapshot.materialGrades
     case "rod-types":
       return snapshot.rodTypes
+    case "rod-sizes":
+      return snapshot.rodSizes
     case "categories":
       return snapshot.categories.map((row) => ({
         category: row.name,
@@ -368,6 +376,7 @@ export function parseMastersWorkbook(
     processes: [],
     quoteTerms: [],
     rodTypes: [],
+    rodSizes: [],
     shippingTerms: [],
     subcategories: [],
     websiteFields: [],
@@ -408,6 +417,10 @@ export function parseMastersWorkbook(
   for (const row of rows(workbook.Sheets["Rod Types"])) {
     const name = cell(row, "name", "rod_type")
     if (name) result.rodTypes.push({ name })
+  }
+  for (const row of rows(workbook.Sheets["Rod Sizes"])) {
+    const name = cell(row, "name", "rod_size")
+    if (name) result.rodSizes.push({ name })
   }
   for (const row of rows(workbook.Sheets["Categories"])) {
     const name = cell(row, "category", "category_name", "name")
