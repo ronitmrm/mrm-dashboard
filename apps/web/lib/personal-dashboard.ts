@@ -1,4 +1,6 @@
 import type { UnifiedNavigationAccess } from "./auth/unified-navigation-access"
+import type { DashboardTabId } from "./unified-navigation"
+import { isProductionFloorTab } from "./auth/production-floor-capabilities"
 
 export type PersonalDashboardWidgetId =
   | "access-administration"
@@ -399,30 +401,75 @@ const widgetCatalog: readonly PersonalDashboardWidget[] = [
   },
 ]
 
+const productionWidgetTabs: Partial<
+  Record<PersonalDashboardWidgetId, DashboardTabId>
+> = {
+  "production-dashboard": "productionDashboardTab",
+  "production-sessions": "productionSessionsTab",
+  "planner-actions": "productionControlTab",
+  "planning-control": "planningControlTab",
+  "production-job-cards": "jobCardStatusTab",
+  "part-readiness": "masterGapsTab",
+  machines: "machineMasterTab",
+  "mechanical-maintenance": "maintenanceTab",
+}
+
 export function availablePersonalDashboardWidgets(
   access: UnifiedNavigationAccess
 ) {
-  return widgetCatalog.filter((widget) => {
-    if (widget.scope === "administration") return access.administration
-    if (widget.scope === "operations") return access.operations
-    if (widget.scope === "store") {
-      return access.storeHrefs
-        ? Boolean(
-            widget.requiredHref &&
-            access.storeHrefs.includes(widget.requiredHref)
+  return widgetCatalog
+    .filter((widget) => {
+      if (widget.scope === "administration") return access.administration
+      if (widget.scope === "operations") {
+        if (widget.id === "master-data")
+          return Boolean(access.masterReadKeys?.length)
+        if (widget.id === "operational-entry") {
+          return (
+            Boolean(access.operationalEntryReadKeys?.length) ||
+            access.commercialHrefs.some((href) =>
+              ["/commercial/enquiries", "/commercial/orders"].includes(href)
+            )
           )
-        : access.store
-    }
-    if (widget.scope === "commercial") {
+        }
+        if (!access.operations) return false
+        const tab = productionWidgetTabs[widget.id]
+        if (!tab) return false
+        if (isProductionFloorTab(tab)) {
+          return Object.values(access.productionFloorTabIds ?? {}).some(
+            (tabs) => tabs?.includes(tab)
+          )
+        }
+        return access.productionTabIds?.includes(tab) ?? false
+      }
+      if (widget.scope === "store") {
+        return access.storeHrefs
+          ? Boolean(
+              widget.requiredHref &&
+              access.storeHrefs.includes(widget.requiredHref)
+            )
+          : access.store
+      }
+      if (widget.scope === "commercial") {
+        return Boolean(
+          widget.requiredHref &&
+          access.commercialHrefs.includes(widget.requiredHref)
+        )
+      }
       return Boolean(
-        widget.requiredHref &&
-        access.commercialHrefs.includes(widget.requiredHref)
+        widget.requiredHref && access.hrHrefs.includes(widget.requiredHref)
       )
-    }
-    return Boolean(
-      widget.requiredHref && access.hrHrefs.includes(widget.requiredHref)
-    )
-  })
+    })
+    .map((widget) => {
+      const tab = productionWidgetTabs[widget.id]
+      if (!tab || !isProductionFloorTab(tab)) return widget
+      const floor = Object.entries(access.productionFloorTabIds ?? {}).find(
+        ([, tabs]) => tabs?.includes(tab)
+      )?.[0]
+      const [pathname, query] = widget.href.split("?")
+      const params = new URLSearchParams(query)
+      if (floor) params.set("floor", floor)
+      return { ...widget, href: `${pathname}?${params}` }
+    })
 }
 
 const defaultWidgetIds: readonly PersonalDashboardWidgetId[] = [

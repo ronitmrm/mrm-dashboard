@@ -15,6 +15,22 @@ const noAccess: UnifiedNavigationAccess = {
 }
 
 describe("personal dashboard", () => {
+  it("shows only granted production cards and links to an authorized unit", () => {
+    const widgets = availablePersonalDashboardWidgets({
+      ...noAccess,
+      operations: true,
+      productionTabIds: ["productionSessionsTab"],
+      productionFloorTabIds: { cnc: ["productionSessionsTab"] },
+      operationalEntryReadKeys: [],
+      masterReadKeys: [],
+    })
+    expect(widgets.map(({ id, href }) => ({ id, href }))).toEqual([
+      {
+        id: "production-sessions",
+        href: "/dashboard/production-sessions?floor=cnc",
+      },
+    ])
+  })
   it("offers only information the signed-in user may open", () => {
     const widgets = availablePersonalDashboardWidgets({
       ...noAccess,
@@ -32,6 +48,7 @@ describe("personal dashboard", () => {
       "store-new-item-requests",
       "store-purchase-register",
       "store-stock",
+      "operational-entry",
     ])
   })
 
@@ -40,6 +57,7 @@ describe("personal dashboard", () => {
       ...noAccess,
       operations: true,
       store: true,
+      productionTabIds: ["productionDashboardTab"],
     })
 
     expect(
@@ -65,6 +83,7 @@ describe("personal dashboard", () => {
       ...noAccess,
       operations: true,
       store: true,
+      productionTabIds: ["productionDashboardTab"],
     })
 
     expect(resolvePersonalDashboardSelection([], available)).toEqual([])
@@ -78,6 +97,7 @@ describe("personal dashboard", () => {
       ...noAccess,
       commercialHrefs: ["/commercial/customers", "/commercial/enquiries"],
       operations: true,
+      masterReadKeys: ["masters.universal.commercial_customers.read"],
     })
     const modules = Object.fromEntries(
       widgets.map((widget) => [widget.id, widget.module])

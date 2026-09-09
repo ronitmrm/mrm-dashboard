@@ -1,5 +1,10 @@
 import type { PageAccessDefinition } from "./page-access-types"
 import { sidebarModuleLabels } from "../sidebar-module-labels"
+import { masterCapability } from "./master-capabilities"
+import {
+  commercialMasterSelection,
+  commercialMasterWorkspaceKind,
+} from "../commercial-master-workspace"
 
 export const commercialCapabilities = {
   corrections: {
@@ -200,7 +205,20 @@ export const commercialPageAccess = [
 ] satisfies readonly PageAccessDefinition[]
 
 export const commercialNavigationAccess = commercialPageAccess.map(
-  ({ href, readPermissionKey }) => [href, readPermissionKey] as const
+  ({ href, readPermissionKey }) => {
+    const master =
+      href === "/commercial/customers"
+        ? "commercial_customers"
+        : href === "/commercial/website-products"
+          ? "commercial_website_products"
+          : href === "/commercial/masters"
+            ? commercialMasterWorkspaceKind(commercialMasterSelection())
+            : null
+    return [
+      href,
+      master ? masterCapability(master, "read") : readPermissionKey,
+    ] as const
+  }
 )
 
 function page(

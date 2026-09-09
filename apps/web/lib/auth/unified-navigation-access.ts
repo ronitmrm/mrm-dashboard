@@ -1,5 +1,9 @@
 import { cache } from "react"
-import { masterPermissionOptions } from "./master-capabilities"
+import {
+  hrMasterForPanel,
+  masterCapability,
+  masterPermissionOptions,
+} from "./master-capabilities"
 import { operationalEntryPermissionOptions } from "./operational-entry-capabilities"
 
 import { commercialNavigationAccess } from "./commercial-capabilities"
@@ -68,30 +72,12 @@ async function readUnifiedNavigationAccess(
     .filter(([tab]) => !isProductionFloorTab(tab as DashboardTabId))
     .filter(([, capability]) => grantedCapabilities.has(capability))
     .map(([tab]) => tab as DashboardTabId)
-  const legacyFloorTabIds = Object.entries(productionPageCapabilities)
-    .filter(
-      ([tab, capability]) =>
-        isProductionFloorTab(tab as DashboardTabId) &&
-        grantedCapabilities.has(capability)
-    )
-    .map(([tab]) => tab as DashboardTabId)
-  const hasFloorSpecificGrant = Object.values(
-    productionFloorPageCapabilities
-  ).some((capabilities) =>
-    Object.values(capabilities).some((key) => grantedCapabilities.has(key))
-  )
   const productionFloorTabIds = Object.fromEntries(
     Object.entries(productionFloorPageCapabilities).map(
       ([floor, floorCapabilities]) => {
-        let tabs = Object.entries(floorCapabilities)
+        const tabs = Object.entries(floorCapabilities)
           .filter(([, capability]) => grantedCapabilities.has(capability))
           .map(([tab]) => tab as DashboardTabId)
-        if (!hasFloorSpecificGrant) {
-          tabs = legacyFloorTabIds
-          if (!tabs.length && grantedCapabilities.has(operationsCapability)) {
-            tabs = Object.keys(floorCapabilities) as DashboardTabId[]
-          }
-        }
         return [floor, tabs]
       }
     )
@@ -108,7 +94,9 @@ async function readUnifiedNavigationAccess(
     ]),
   ]
   const hasGranularHrAccess = [...hrMasterNavigation, ...hrNavigation].some(
-    ({ requiredCapability }) => grantedCapabilities.has(requiredCapability)
+    ({ requiredCapability }) =>
+      requiredCapability !== "hr.employees.read" &&
+      grantedCapabilities.has(requiredCapability)
   )
 
   return {
@@ -124,13 +112,17 @@ async function readUnifiedNavigationAccess(
       .filter(([, capability]) => grantedCapabilities.has(capability))
       .map(([href]) => href),
     hrHrefs: [...hrMasterNavigation, ...hrNavigation]
-      .filter(
-        ({ requiredCapability }) =>
+      .filter(({ panelId, requiredCapability }) => {
+        const master = hrMasterForPanel(panelId)
+        if (master)
+          return grantedCapabilities.has(masterCapability(master, "read"))
+        return (
           grantedCapabilities.has(requiredCapability) ||
           (!hasGranularHrAccess &&
             requiredCapability !== "hr.employees.read" &&
             grantedCapabilities.has("hr.recruitment.read"))
-      )
+        )
+      })
       .map(({ href }) => href),
     maintenanceHrefs: [
       "/maintenance/requests",

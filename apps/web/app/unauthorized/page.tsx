@@ -2,7 +2,7 @@ import Link from "next/link"
 
 import { Button } from "@workspace/ui/components/button"
 import {
- SectionCard,
+  SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -12,7 +12,7 @@ import {
 export default function UnauthorizedPage() {
   return (
     <main className="grid min-h-svh place-items-center bg-muted/30 p-6">
- <SectionCard className="w-full max-w-lg">
+      <SectionCard className="w-full max-w-lg">
         <CardHeader>
           <CardTitle>Access Not Assigned</CardTitle>
           <CardDescription>
@@ -22,10 +22,10 @@ export default function UnauthorizedPage() {
         </CardHeader>
         <CardContent>
           <Button asChild variant="outline">
-            <Link href="/">Return To Operations</Link>
+            <Link href="/home">Return To Home</Link>
           </Button>
         </CardContent>
- </SectionCard>
+      </SectionCard>
     </main>
   )
 }
