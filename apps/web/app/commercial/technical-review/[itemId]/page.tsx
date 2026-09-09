@@ -5,7 +5,7 @@ import { createCommercialWorkflowRepository } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
- SectionCard,
+  SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -13,7 +13,11 @@ import {
 } from "@workspace/ui/components/card"
 import { TechnicalReviewForm } from "@/components/technical-review-form"
 import { readAuthEnvironment } from "@/lib/auth/auth"
-import { requireCapability } from "@/lib/auth/require-capability"
+import {
+  listGrantedCapabilities,
+  requireCapability,
+} from "@/lib/auth/require-capability"
+import { commercialTaskCapabilities } from "@/lib/auth/task-capabilities"
 
 export const dynamic = "force-dynamic"
 
@@ -23,9 +27,15 @@ export default async function TechnicalReviewItemPage({
   params: Promise<{ itemId: string }>
 }) {
   const { itemId } = await params
-  await requireCapability(
+  const session = await requireCapability(
     "pricing.technical_review.read",
     `/commercial/technical-review/${itemId}`
+  )
+  const granted = await listGrantedCapabilities(session.user.id, [
+    commercialTaskCapabilities.updateTechnicalReview,
+  ])
+  const canEdit = granted.includes(
+    commercialTaskCapabilities.updateTechnicalReview
   )
   const workflow = createCommercialWorkflowRepository({
     connectionString: readAuthEnvironment().connectionString,
@@ -61,7 +71,7 @@ export default async function TechnicalReviewItemPage({
         </div>
       </section>
 
- <SectionCard>
+      <SectionCard>
         <CardHeader>
           <CardTitle>Focused Technical Review</CardTitle>
           <CardDescription>
@@ -71,9 +81,9 @@ export default async function TechnicalReviewItemPage({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <TechnicalReviewForm item={item} />
+          <TechnicalReviewForm item={item} canEdit={canEdit} />
         </CardContent>
- </SectionCard>
+      </SectionCard>
     </div>
   )
 }
