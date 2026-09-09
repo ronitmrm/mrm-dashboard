@@ -30,7 +30,7 @@ export const enquiryExcelViewColumns = [
     "From design / matched product",
     "mono",
   ],
-  ["quotePdfStatus", "Quote PDF", "From sent quote", "status"],
+  ["quotePdfStatus", "PDF Status", "From sent quote", "status"],
   ["quotePdfSentAt", "PDF Sent At", "From sent quote", undefined],
-  ["receivedOn", "Received", "From enquiry", undefined],
+  ["receivedOn", "Enquiry Received On", "From enquiry", undefined],
 ] as const

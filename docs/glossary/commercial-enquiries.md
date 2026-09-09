@@ -334,6 +334,14 @@ Sales. An In-Progress Quote remains `Draft` and editable; a `Ready` Quote is
 locked for Costing and may be sent by Sales. Sending makes its saved calculation
 and recursive Product snapshots immutable.
 
+**Enquiry Line Current Status**: The workflow position of this Enquiry line.
+Completed Customer Parameter Costing is Ready To Send; Sales issuance is Quote
+Sent. Ordered requires acceptance/order evidence on this line's Quote. A Product
+already having permanent P status does not mean this Enquiry has been ordered.
+Quotes explicitly attached to another line must not supply this line's status.
+Quote PDF status describes issuance only (Not Sent or PDF Sent); PDF Sent At is
+the Quote issuance timestamp. Received is the Enquiry received date.
+
 **Sent Quote PDF**: The exact generated PDF Artifact stored and linked during
 Quote issuance before the Quote becomes `Sent`. Draft preview generation remains
 live and creates no Artifact. Failed upload or Artifact metadata storage leaves

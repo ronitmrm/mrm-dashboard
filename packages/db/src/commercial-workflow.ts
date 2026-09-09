@@ -6696,8 +6696,8 @@ export function createCommercialWorkflowRepository(
                   AND clarification.status = 'Open'
                   AND clarification.target_stage = 'Sales'
               ) THEN 'With Sales'
-              WHEN selected_quote.product_lifecycle_status = 'P'
-                OR selected_quote.status = 'Ordered' THEN 'Ordered / P'
+              WHEN selected_quote.status IN ('Accepted', 'Ordered')
+                OR selected_quote.ordered_at IS NOT NULL THEN 'Ordered / P'
               WHEN selected_quote.status = 'Superseded'
                 OR selected_quote.superseded_by_quote_item_id IS NOT NULL
                 THEN 'Revision Given'
@@ -6727,8 +6727,6 @@ export function createCommercialWorkflowRepository(
             ) AS design_part_no,
             CASE
               WHEN selected_quote.sent_at IS NOT NULL THEN 'PDF Sent'
-              WHEN selected_quote.product_lifecycle_status = 'P'
-                OR selected_quote.status = 'Ordered' THEN 'Order Received'
               ELSE 'Not Sent'
             END AS quote_pdf_status,
             selected_quote.sent_at AS quote_pdf_sent_at
@@ -6764,9 +6762,8 @@ export function createCommercialWorkflowRepository(
           ) designed_product ON true
           LEFT JOIN LATERAL (
             SELECT quote.id, quote.status,
-              quote.superseded_by_quote_item_id, quote.sent_at,
-              product.uid AS item_uid,
-              product.lifecycle_status AS product_lifecycle_status
+              quote.superseded_by_quote_item_id, quote.sent_at, quote.ordered_at,
+              product.uid AS item_uid
             FROM sales.quote_items quote
             JOIN catalog.items product ON product.id = quote.item_id
             WHERE quote.organization_id = enquiry.organization_id
@@ -6775,6 +6772,7 @@ export function createCommercialWorkflowRepository(
                 quote.enquiry_item_id = enquiry_item.id
                 OR (
                   quote.enquiry_id = enquiry.id
+                  AND quote.enquiry_item_id IS NULL
                   AND quote.item_id = COALESCE(
                     design.matched_product_id, designed_product.id,
                     enquiry_item.item_id
@@ -6784,8 +6782,8 @@ export function createCommercialWorkflowRepository(
             ORDER BY
               CASE WHEN quote.enquiry_item_id = enquiry_item.id THEN 0 ELSE 1 END,
               CASE
-                WHEN product.lifecycle_status = 'P'
-                  OR quote.status = 'Ordered' THEN 0
+                WHEN quote.status IN ('Accepted', 'Ordered')
+                  OR quote.ordered_at IS NOT NULL THEN 0
                 WHEN quote.is_active THEN 1
                 WHEN quote.sent_at IS NOT NULL THEN 2
                 ELSE 3

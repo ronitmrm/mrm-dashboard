@@ -394,7 +394,7 @@ describe("bounded enquiry repositories", () => {
     expect(statusByEnquiry).toMatchObject({
       "STATUS-0001": "With Sales",
       "STATUS-0002": "With Sales",
-      "STATUS-0003": "Ordered / P",
+      "STATUS-0003": "Quote Costing",
       "STATUS-0004": "Revision Given",
       "STATUS-0005": "Quote Sent",
       "STATUS-0006": "Ready To Send",
@@ -407,7 +407,7 @@ describe("bounded enquiry repositories", () => {
       result.rows.find((row) => row.enquiryNumber === "STATUS-0003")
     ).toMatchObject({
       designPartNumber: "STATUS-P-3",
-      quotePdfStatus: "Order Received",
+      quotePdfStatus: "Not Sent",
     })
     expect(
       result.rows.find((row) => row.enquiryNumber === "STATUS-0005")

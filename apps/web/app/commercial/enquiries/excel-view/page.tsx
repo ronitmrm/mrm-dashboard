@@ -94,7 +94,7 @@ export default async function EnquiryExcelViewPage() {
               <TableHeader className="sticky top-0 z-20 bg-background">
                 <TableRow>
                   <TableHead className="sticky left-0 z-30 bg-background">
-                    Quote PDF
+                    Sent Quote PDF
                   </TableHead>
                   {enquiryExcelViewColumns.map(([, label, source]) => (
                     <TableHead
