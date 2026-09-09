@@ -1,5 +1,7 @@
+import Link from "next/link"
 import { createCommercialRevisionsRepository } from "@workspace/db"
 import { StatusBadge } from "@workspace/ui/components/badge"
+import { Button } from "@workspace/ui/components/button"
 import {
   SectionCard,
   CardContent,
@@ -47,7 +49,8 @@ export async function BulkRevisionRequestStatus({
         <CardTitle>Revision Request Status</CardTitle>
         <CardDescription>
           All requests initiated here, including requests handed over to costing
-          and completed requests. Status is updated when this page is loaded.
+          and completed requests. Open completed requests to view their read-only
+          revision details. Status is updated when this page is loaded.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -63,6 +66,7 @@ export async function BulkRevisionRequestStatus({
               <TableHead>Effective Date</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Current Stage</TableHead>
+              <TableHead>Details</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -90,11 +94,24 @@ export async function BulkRevisionRequestStatus({
                       ? "Customer Parameter Costing"
                       : "Product Parameter Costing"}
                 </TableCell>
+                <TableCell>
+                  {request.status === "Completed" ? (
+                    <Button asChild variant="outline" size="sm">
+                      <Link
+                        href={`/commercial/${origin}-bulk-revision/history/${request.id}`}
+                      >
+                        View {request.revisionNumber}
+                      </Link>
+                    </Button>
+                  ) : (
+                    "—"
+                  )}
+                </TableCell>
               </TableRow>
             ))}
             {!requests.length && (
               <TableRow>
-                <TableCell colSpan={6} className="text-muted-foreground">
+                <TableCell colSpan={7} className="text-muted-foreground">
                   No revision requests have been initiated here.
                 </TableCell>
               </TableRow>
