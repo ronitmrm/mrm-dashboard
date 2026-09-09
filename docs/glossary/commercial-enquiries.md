@@ -361,8 +361,17 @@ Previously issued PDFs remain immutable; retries reuse the issued document.
 
 Quote PDFs use the approved Mayank Raw Mint letterhead, green quotation banner,
 details/customer blocks, Product and Customer codes, item prices, prepared-by
-section, commercial terms, and contact footer. Terms and recipient details come
-from saved records; example customer data from a template is never reused.
+section, commercial terms, and contact footer. The customer record supplies To
+(company, contact, available address); the Enquiry supplies Buyer, RFQ/customer
+reference, items, payment/delivery/incoterms, shipment, packaging and exchange
+rate. Generic Quote Term Templates are not appended. Quote numbers are generated
+as `QTN-<Enquiry number>` with the revision shown separately; the date is the PDF
+generation date in India time. Prepared by is always Ankit Khattar, Engineering
+Lead. Westmetall's Official LME USD/ton **3 months** Copper and Zinc column is
+fetched when generating the PDF, with its published date shown (latest available
+on weekends or before the day's publication). Missing metal rates block a new
+PDF rather than substituting cash prices or blanks. Stored issued PDFs retain
+their original date, rates and contents.
 
 **Sent PI document set**: The exact Proforma Invoice PDF and XLSX Artifacts
 stored and linked as one required set before the PI becomes `Sent`. Draft PI

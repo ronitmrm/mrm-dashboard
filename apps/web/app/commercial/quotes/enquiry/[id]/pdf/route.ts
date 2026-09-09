@@ -42,7 +42,7 @@ export async function GET(
     )) as QuoteDocument
     const market = await loadQuoteMarketContext({
       currency: document.currency,
-      fallbackRate: document.conversionRate,
+      conversionRate: document.conversionRate,
     })
     const bytes = await buildQuotePdf(document, market)
     const safeName = document.enquiryNumber.replace(/[\r\n"]/g, "_")

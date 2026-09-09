@@ -269,7 +269,7 @@ export async function sendQuoteAction(formData: FormData) {
       storeIssuedPdf: async ({ document, organizationId }) => {
         const market = await loadQuoteMarketContext({
           currency: document.currency,
-          fallbackRate: document.conversionRate,
+          conversionRate: document.conversionRate,
         })
         const bytes = Buffer.from(await buildQuotePdf(document, market))
         const safeEnquiryNumber = document.enquiryNumber
