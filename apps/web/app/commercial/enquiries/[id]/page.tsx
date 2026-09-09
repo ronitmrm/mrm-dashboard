@@ -461,7 +461,7 @@ export default async function EnquiryDetailPage({
                       )}
                     />
                     <FieldGroup>
-                      {review.rows.map((row) => {
+                      {review.rows.map((row, index) => {
                         const rawPart = String(row.rawValues.part ?? "")
                         const rawDescription = String(
                           row.rawValues.description ?? ""
@@ -482,7 +482,7 @@ export default async function EnquiryDetailPage({
                           >
                             <div className="flex flex-wrap items-start justify-between gap-3">
                               <div className="grid gap-1">
-                                <FieldLegend>Row {row.rowNumber}</FieldLegend>
+                                <FieldLegend>Serial No. {index + 1}</FieldLegend>
                                 <FieldDescription>
                                   {rawPart || "Missing part"} ·{" "}
                                   {rawDescription || "Missing description"}
