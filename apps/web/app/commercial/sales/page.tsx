@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { X } from "lucide-react"
 
 import { createCommercialWorkflowRepository } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
@@ -6,6 +7,7 @@ import { Button } from "@workspace/ui/components/button"
 import {
  SectionCard,
   CardContent,
+  CardAction,
   CardDescription,
   CardHeader,
   CardTitle,
@@ -582,6 +584,25 @@ export default async function SalesPage({
  <SectionCard>
             <CardHeader>
               <CardTitle>Complete Follow-Up</CardTitle>
+              <CardAction>
+                <Button asChild size="sm" variant="ghost">
+                  <Link
+                    aria-label="Close Complete Follow-Up"
+                    href={{
+                      pathname: "/commercial/sales",
+                      query: {
+                        view: "tasks",
+                        candidate: params.candidate,
+                        candidate_item: params.candidate_item,
+                      },
+                    }}
+                    scroll={false}
+                  >
+                    <X className="size-4" />
+                    Close
+                  </Link>
+                </Button>
+              </CardAction>
               <CardDescription>
                 {selectedFollowup.enquiryNumber} ·{" "}
                 {selectedFollowup.companyName}
