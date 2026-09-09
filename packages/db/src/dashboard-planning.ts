@@ -15,6 +15,7 @@ import {
 import { plannerInterruptionRequirement } from "./planner-interruption-settlement"
 import {
   normalizeProductionFloorCode,
+  ProductionUnitAccessError,
   productionFloorCodeForRecord,
   productionFloors,
   type ProductionFloorCode,
@@ -747,6 +748,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
       jobCardNumber: string
       orderedQuantity: number
       organizationId: string
+      requiredProductionFloorCode?: ProductionFloorCode
       sourcePayload?: unknown
       workOrderNumber: string
     }) {
@@ -769,16 +771,23 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
         const existing = await client.query<{
           id: string
           item_id: string
+          source_payload: unknown
           work_order_number: string
         }>(
           `
-            SELECT id, item_id, work_order_number
+            SELECT id, item_id, work_order_number, source_payload
             FROM manufacturing.work_orders
             WHERE organization_id = $1 AND lower(job_card_number) = lower($2)
             FOR UPDATE
           `,
           [input.organizationId, jobCardNumber]
         )
+        if (
+          existing.rows[0] && input.requiredProductionFloorCode &&
+          productionFloorCodeForRecord({ sourcePayload: existing.rows[0].source_payload }) !== input.requiredProductionFloorCode
+        ) {
+          throw new ProductionUnitAccessError("This Job Card belongs to another Production Unit.")
+        }
         if (
           existing.rows[0] &&
           !workOrderIdentityMatches(

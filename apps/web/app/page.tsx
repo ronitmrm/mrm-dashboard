@@ -38,6 +38,8 @@ import {
 import { productionMasterCapability } from "@/lib/auth/production-master-access"
 import { normalizeStoreMasterKey } from "@/lib/store-master-selection"
 import { MasterAccessProvider } from "@/components/master-access-provider"
+import { OperationalEntryAccessProvider } from "@/components/operational-entry-access-provider"
+import { operationalEntryCapability, operationalEntryPermissionOptions } from "@/lib/auth/operational-entry-capabilities"
 import { selectedStoreMasterData } from "@/lib/auth/store-master-access"
 
 export default async function Page({
@@ -72,6 +74,7 @@ export default async function Page({
     requestedTab === "dataEntryTab" ||
     requestedTab === "masterTablesTab" ||
     Boolean(legacyMasterEntryForDashboardTab(requestedTab))
+  const isOperationalPage = requestedTab === "operationalEntryTab" || requestedTab === "operationalTablesTab"
   if (isMasterPage) {
     const readKey =
       masterEntry === "store_masters"
@@ -84,10 +87,7 @@ export default async function Page({
     if (!readKey) redirect("/masters")
     await requireCapability(readKey, "/masters")
   }
-  if (
-    requestedTab === "operationalEntryTab" ||
-    requestedTab === "operationalTablesTab"
-  ) {
+  if (isOperationalPage) {
     const view: OperationalEntryView =
       requestedTab === "operationalTablesTab" ? "masterTables" : "dataEntry"
     const access = operationalEntryModuleAccess(navigationAccess)
@@ -123,6 +123,7 @@ export default async function Page({
       )
       redirect(selectionHref)
     }
+    await requireCapability(operationalEntryCapability(selection.sub, "read", selection.unit), "/operational-entry")
   }
   const capabilities = new Set(
     await listGrantedCapabilities(session.user.id, [
@@ -130,8 +131,15 @@ export default async function Page({
       "store.masters.read",
       "store.masters.write",
       ...masterPermissionOptions.map(({ key }) => key),
+      ...operationalEntryPermissionOptions.map(({ key }) => key),
     ])
   )
+  if (requestedTab === "operationalEntryTab" &&
+    !(["save", "import"] as const).some((action) => capabilities.has(operationalEntryCapability(value(query.entry) ?? "", action, requestedFloorForMaster)))) {
+    const params = new URLSearchParams(Object.entries(query).flatMap(([key, input]) => input === undefined ? [] : [[key, value(input) ?? ""]]))
+    params.set("tab", "operationalTablesTab")
+    redirect(`/?${params}`)
+  }
   if (isMasterPage && requestedTab !== "masterTablesTab") {
     const writeKeys =
       masterEntry === "store_masters"
@@ -227,7 +235,7 @@ export default async function Page({
   const allowedDashboardTabs = isProductionFloorTab(requestedDashboardTab)
     ? requestedFloorTabs
     : navigationAccess.productionTabIds
-  const initialDashboardTab = isMasterPage
+  const initialDashboardTab = isMasterPage || isOperationalPage
     ? requestedDashboardTab
     : allowedDashboardTabs?.includes(requestedDashboardTab)
       ? requestedDashboardTab
@@ -236,7 +244,7 @@ export default async function Page({
     initialDashboardTab,
     requestedFloor
   )
-  if (pageCapability && !isMasterPage) {
+  if (pageCapability && !isMasterPage && !isOperationalPage) {
     await requireProductionPage(pageCapability, "/")
   }
   const requestedEntryFromQuery = Array.isArray(query.entry)
@@ -253,6 +261,10 @@ export default async function Page({
           : undefined
       }
     >
+      <OperationalEntryAccessProvider
+        permissions={isOperationalPage ? [...capabilities].filter((key) => key.startsWith("entries.")) : null}
+        stateUrl={isOperationalPage ? `/api/operational-entry/state?${new URLSearchParams({ entry: requestedEntry ?? "", floor: requestedFloor })}` : undefined}
+      >
       <MrmplDashboard
         initialDashboardTab={initialDashboardTab}
         initialDataEntryType={requestedEntry}
@@ -281,6 +293,7 @@ export default async function Page({
         storeMasterData={storeMasterData}
         user={{ email: session.user.email, name: session.user.name }}
       />
+      </OperationalEntryAccessProvider>
     </MasterAccessProvider>
   )
 }

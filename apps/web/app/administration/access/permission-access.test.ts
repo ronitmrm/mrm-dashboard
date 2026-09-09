@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { masterPermissionOptions } from "../../../lib/auth/master-capabilities"
+import { operationalEntryPermissionOptions } from "../../../lib/auth/operational-entry-capabilities"
 
 import {
   configuredPermissionCount,
@@ -11,6 +12,48 @@ import {
   permissionKeysForSelections,
   permissionSelectionsForKeys,
 } from "./permission-access"
+
+it("groups an entry's actions into one unit capability and removes shared entry pages", () => {
+  expect(permissionAccessRows(operationalEntryPermissionOptions)).toHaveLength(
+    12
+  )
+  const rows = permissionAccessRows([
+    {
+      key: "operations.operational_entry.read",
+      module: "operations",
+      name: "View Operational Entry",
+    },
+    ...["read", "save", "import", "export"].map((action) => ({
+      key: `entries.cnc.work_order.${action}`,
+      module: "entries",
+      name: `CNC-01 / Work Order / ${action}`,
+    })),
+  ])
+
+  expect(rows).toHaveLength(1)
+  expect(rows[0]).toMatchObject({
+    id: "entry:cnc:work_order",
+    kind: "page",
+    label: "Work Order",
+    module: "Operational Entry",
+    submodule: "CNC-01 / Production Entries",
+    readPermissionKeys: ["entries.cnc.work_order.read"],
+    actions: [
+      { label: "View", permissionKeys: ["entries.cnc.work_order.read"] },
+      { label: "Save", permissionKeys: ["entries.cnc.work_order.save"] },
+      { label: "Import", permissionKeys: ["entries.cnc.work_order.import"] },
+      { label: "Export", permissionKeys: ["entries.cnc.work_order.export"] },
+    ],
+  })
+  expect(
+    permissionKeysForSelections(rows, { "entry:cnc:work_order": "full" })
+  ).toEqual([
+    "entries.cnc.work_order.export",
+    "entries.cnc.work_order.import",
+    "entries.cnc.work_order.read",
+    "entries.cnc.work_order.save",
+  ])
+})
 
 it("separates Universal masters and keeps CNC Tooling grants out of other units", () => {
   const rows = permissionAccessRows(masterPermissionOptions)
@@ -429,18 +472,10 @@ describe("permission access table", () => {
     })
     expect(
       rows.find(({ id }) => id === "page:production.operationalEntryTab")
-    ).toMatchObject({
-      label: "Data Entry",
-      module: "Operational Entry",
-      submodule: "Entry Selection",
-    })
+    ).toBeUndefined()
     expect(
       rows.find(({ id }) => id === "page:production.operationalTablesTab")
-    ).toMatchObject({
-      label: "Entry Tables",
-      module: "Operational Entry",
-      submodule: "Entry Tables",
-    })
+    ).toBeUndefined()
   })
 
   it("maps internal commercial pages to exact Costing sidebar workflows", () => {

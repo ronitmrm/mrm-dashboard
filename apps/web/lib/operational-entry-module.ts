@@ -1,5 +1,9 @@
 import type { UnifiedNavigationAccess } from "./auth/unified-navigation-access"
 import {
+  operationalEntryPermissionKey,
+  productionOperationalEntries,
+} from "./auth/operational-entry-capabilities"
+import {
   masterUnitOptions,
   parseMasterUnit,
   universalMasterUnit,
@@ -10,8 +14,7 @@ export type OperationalEntryView = "dataEntry" | "masterTables"
 
 export type OperationalEntryModuleAccess = {
   enquiries: boolean
-  productionDataEntry: boolean
-  productionTables: boolean
+  productionReadKeys: string[]
   purchaseOrders: boolean
 }
 
@@ -36,11 +39,7 @@ const commercialMain = {
   label: "Commercial Entries",
 } as const
 
-const productionEntries: readonly OperationalEntryOption[] = [
-  { id: "work_order", label: "Work Order" },
-  { id: "rm_inward", label: "Rm Inward" },
-  { id: "software_raw", label: "Software Production Output" },
-]
+const productionEntries = productionOperationalEntries
 
 const commercialEntries: readonly (OperationalEntryOption & {
   access: "enquiries" | "purchaseOrders"
@@ -60,29 +59,14 @@ const commercialEntries: readonly (OperationalEntryOption & {
   },
 ]
 
-function productionAccessForView(
-  access: OperationalEntryModuleAccess,
-  view: OperationalEntryView
-) {
-  return view === "dataEntry"
-    ? access.productionDataEntry
-    : access.productionTables
-}
-
 export function operationalEntryModuleAccess(
   access: UnifiedNavigationAccess
 ): OperationalEntryModuleAccess {
-  const canOpenProductionTab = (
-    tab: "operationalEntryTab" | "operationalTablesTab"
-  ) =>
-    access.productionTabIds
-      ? access.productionTabIds.includes(tab)
-      : access.operations
-
   return {
     enquiries: access.commercialHrefs.includes("/commercial/enquiries"),
-    productionDataEntry: canOpenProductionTab("operationalEntryTab"),
-    productionTables: canOpenProductionTab("operationalTablesTab"),
+    productionReadKeys: access.operations
+      ? (access.operationalEntryReadKeys ?? [])
+      : [],
     purchaseOrders: access.commercialHrefs.includes("/commercial/orders"),
   }
 }
@@ -92,10 +76,15 @@ export const operationalEntryUnitOptions = masterUnitOptions
 export function operationalSubEntriesFor(
   main: string,
   access: OperationalEntryModuleAccess,
-  view: OperationalEntryView
+  view: OperationalEntryView,
+  unit: MasterUnit = universalMasterUnit
 ): OperationalEntryOption[] {
   if (main === productionMain.id) {
-    return productionAccessForView(access, view) ? [...productionEntries] : []
+    return productionEntries.filter((entry) =>
+      access.productionReadKeys.includes(
+        operationalEntryPermissionKey(unit, entry.id, "read")
+      )
+    )
   }
   if (main === commercialMain.id) {
     return commercialEntries
@@ -115,7 +104,21 @@ export function availableOperationalEntryMains(
       ? [commercialMain]
       : []
   }
-  return productionAccessForView(access, view) ? [productionMain] : []
+  return operationalSubEntriesFor(productionMain.id, access, view, unit).length
+    ? [productionMain]
+    : []
+}
+
+export function availableOperationalEntryUnits(
+  access: OperationalEntryModuleAccess,
+  view: OperationalEntryView
+) {
+  return operationalEntryUnitOptions.flatMap(({ id, label }) => {
+    const unit = parseMasterUnit(id)
+    return unit && availableOperationalEntryMains(unit, access, view).length > 0
+      ? [{ id: unit, label }]
+      : []
+  })
 }
 
 export function resolveOperationalEntrySelection(
@@ -131,7 +134,7 @@ export function resolveOperationalEntrySelection(
     !availableOperationalEntryMains(unit, access, view).some(
       (entry) => entry.id === main
     ) ||
-    !operationalSubEntriesFor(main, access, view).some(
+    !operationalSubEntriesFor(main, access, view, unit).some(
       (entry) => entry.id === sub
     )
   ) {

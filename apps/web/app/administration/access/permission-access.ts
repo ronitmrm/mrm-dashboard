@@ -4,6 +4,11 @@ import {
   scopedMasters,
   supportedMasterActions,
 } from "../../../lib/auth/master-capabilities"
+import {
+  operationalEntryActions,
+  operationalEntryPermissionKey,
+  scopedOperationalEntries,
+} from "../../../lib/auth/operational-entry-capabilities"
 
 import {
   legacyPermissionKeys,
@@ -78,6 +83,44 @@ export function permissionAccessRows(
 ): PermissionAccessRow[] {
   const permissionKeys = new Set(permissions.map(({ key }) => key))
   const pagePermissionKeys = new Set<string>()
+  const entryRows: PermissionAccessRow[] = scopedOperationalEntries.flatMap(
+    (entry) => {
+      const actions = operationalEntryActions
+        .filter((action) =>
+          permissionKeys.has(
+            operationalEntryPermissionKey(entry.unit, entry.entry, action)
+          )
+        )
+        .map((action) => ({
+          label: {
+            read: "View",
+            save: "Save",
+            import: "Import",
+            export: "Export",
+          }[action],
+          permissionKeys: [
+            operationalEntryPermissionKey(entry.unit, entry.entry, action),
+          ],
+        }))
+      if (!actions.length) return []
+      return [
+        {
+          id: `entry:${entry.unit}:${entry.entry}`,
+          label: entry.label,
+          module: "Operational Entry",
+          submodule: `${entry.scopeLabel} / Production Entries`,
+          kind: "page",
+          href: null,
+          actions,
+          readPermissionKeys: [
+            operationalEntryPermissionKey(entry.unit, entry.entry, "read"),
+          ],
+          fullPermissionKeys: actions.flatMap((action) => action.permissionKeys),
+          supportedLevels: ["none", "view", "full", "custom"],
+        },
+      ]
+    }
+  )
   const masterRows: PermissionAccessRow[] = scopedMasters.flatMap((master) => {
     const actions = supportedMasterActions(master)
       .filter((action) =>
@@ -126,6 +169,9 @@ export function permissionAccessRows(
     if (!hasRead && !hasWrite) return []
     pagePermissionKeys.add(page.readPermissionKey)
     if (page.writePermissionKey) pagePermissionKeys.add(page.writePermissionKey)
+    if (page.readPermissionKey === "operations.operational_entry.read") {
+      return []
+    }
     if (masterRows.length && page.module === "Master Data") return []
     const readPermissionKeys = hasRead ? [page.readPermissionKey] : []
     const fullPermissionKeys = [
@@ -224,6 +270,7 @@ export function permissionAccessRows(
       )) ||
       pagePermissionKeys.has(permission.key) ||
       permission.key.startsWith("masters.") ||
+      permission.key.startsWith("entries.") ||
       legacyPermissionKeys.has(permission.key) ||
       floorTaskPermissionKeys.has(permission.key) ||
       productionFloorLegacyTaskCapabilities.has(permission.key)
@@ -278,7 +325,13 @@ export function permissionAccessRows(
       supportedLevels,
     }
   })
-  return [...masterRows, ...pageRows, ...floorTaskRows, ...taskRows].sort(
+  return [
+    ...masterRows,
+    ...entryRows,
+    ...pageRows,
+    ...floorTaskRows,
+    ...taskRows,
+  ].sort(
     (left, right) =>
       left.module.localeCompare(right.module) ||
       left.submodule.localeCompare(right.submodule) ||

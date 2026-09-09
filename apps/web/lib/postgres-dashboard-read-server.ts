@@ -20,7 +20,7 @@ export class DashboardReadError extends Error {
   }
 }
 
-async function withDashboardReadRepository<T>(
+export async function withDashboardReadRepository<T>(
   request: NextRequest,
   operation: (context: {
     actorUserId: string

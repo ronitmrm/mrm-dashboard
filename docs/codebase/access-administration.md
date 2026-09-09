@@ -46,6 +46,44 @@ describe that cutover, not permanent role defaults. Recheck source access before
 applying the migration. Commercial workbook customer upserts require both
 Customer Import and Edit; customer CSV creation alone requires Import.
 
+## Independent operational entry capabilities
+
+`lib/auth/operational-entry-capabilities.ts` defines three production entries in
+each of four units: Work Order, RM Inward and Software Production Output. Its 12
+rows replace the two shared production Entry Selection/Entry Tables rows. The
+two existing Universal pages, Enquiries and Purchase Orders, and all 21 existing
+task rows remain: 14 pages plus 21 tasks = 35 Operational Entry capabilities.
+
+Each production row owns four keys, `entries.<unit>.<entry>.<action>`: `read`,
+`save`, `import` and `export` (48 keys). The same View grant opens the form and
+table; blank CSV templates require View. Stored-record exports require Export.
+There are no invented edit/delete actions. Presets operate only on that row's
+keys, and Custom action selection retains View as its dependency.
+
+Unified navigation and both selectors use scoped read grants without falling
+back to `operations.operational_entry.read` or dashboard access. Existing
+production-module availability still applies. Direct dashboard entry URLs and
+`/api/operational-entry/state` require the selected unit/entry Read key. The state
+response contains only matching saved records and the selected entry's production
+projection. Unrelated entry, unit, employee and dashboard data are omitted. Save
+and Import authorize their exact unit/entry/action, including submitted row scope.
+
+Migration `0122_scoped_operational_entry_access.sql` registers the 48 keys and
+copies existing role grants and user overrides through this source mapping:
+
+| New action | Existing source |
+| --- | --- |
+| Read / Export, every production entry | `operations.operational_entry.read` |
+| Save / Import, Work Order | `operations.shop_floor.write` |
+| Save / Import, RM Inward and Software Production Output | `operations.production.write` |
+
+The old sources were company-wide for these entries, so each source maps to the
+same action in all four units. Legacy permissions, role assignments and records
+remain unchanged. Override effect, expiry, reason and attribution are copied
+unchanged; new leaf grants never imply legacy keys. The migration fails if leaf
+entry permissions already exist or a source is missing. Apply and verify the
+migration before releasing the application that enforces the new keys.
+
 ## Workspace tabs
 
 - Permission rows show software Page/Task names without internal URL/query
@@ -223,7 +261,7 @@ configured row count rather than a raw count of registered permission keys.
 | Machines              | Machines                                                                                                                    | 1 Page              | Machines                                                                    | View                                                                                   | production dashboard route/tab                         | dashboard API boundary                                          | operations machine capability                                      | production page catalogue                           | Covered |
 | Maintenance           | Requests and trade worklists                                                                                                | 1 Page / 7 Tasks    | Requests, approval and trade tasks                                          | View, approve and complete where present                                               | `/maintenance/**`                                      | maintenance server actions                                      | `maintenance.*`                                                    | maintenance navigation plus registered task keys    | Covered |
 | Master Data           | Master Selection, Master Tables                                                                                             | 70 master rows     | Individual Universal and production-unit masters                           | View, save, create, edit, delete, rename and import where supported                    | `/masters`, `/commercial/**`, `/hr`, dashboard tabs    | domain server actions, `/api/masters/state`, lifecycle guards    | `masters.<scope>.<master>.<action>`                              | master catalogue and migration 0118                 | Covered |
-| Operational Entry     | Entry Selection, Entry Tables                                                                                               | 4 Pages / 21 Tasks  | Enquiries, purchase orders, attendance, training and production entry       | View plus exact entry/workflow actions                                                 | `/operational-entry`, `/commercial/**`, dashboard tabs | commercial actions and dashboard API boundary                   | scoped pricing and operations keys                                 | page/task catalogues and exact registered task keys | Covered |
+| Operational Entry     | Unit / Production Entries; Entry Selection, Entry Tables                                                                    | 14 Pages / 21 Tasks | 12 production unit/entry rows; Universal Enquiries and Purchase Orders; existing tasks | View, Save, Import, Export for production entries; existing commercial workflow actions | `/operational-entry`, `/commercial/**`, dashboard tabs | `/api/operational-entry/state`, commercial actions, dashboard API | `entries.<unit>.<entry>.<action>` and existing commercial/task keys | operational entry catalogue, migration 0122, existing task catalogues | Covered |
 | PPAC Conventional-01  | Existing PPAC tabs                                                                                                          | 11 Pages / 17 Tasks | Floor pages and production commands                                         | View plus each exact production command                                                | dashboard floor tabs                                   | `app/api/[...path]/route.ts` and dashboard events               | floor-scoped operations keys plus migrated server gates            | floor page/task catalogues                          | Covered |
 | PPAC Conventional-02  | Existing PPAC tabs                                                                                                          | 11 Pages / 17 Tasks | Floor pages and production commands                                         | View plus each exact production command                                                | dashboard floor tabs                                   | `app/api/[...path]/route.ts` and dashboard events               | floor-scoped operations keys plus migrated server gates            | floor page/task catalogues                          | Covered |
 | PPAC CNC-01           | Existing PPAC tabs                                                                                                          | 11 Pages / 17 Tasks | Floor pages and production commands                                         | View plus each exact production command                                                | dashboard floor tabs                                   | `app/api/[...path]/route.ts` and dashboard events               | floor-scoped operations keys plus migrated server gates            | floor page/task catalogues                          | Covered |
@@ -238,8 +276,9 @@ HR recruitment/employee writers, Production dashboard/tab readers, broad
 Commercial writers, and broad Store managers/writers. They remain temporary
 server dependencies only where an existing backend boundary still requires a
 legacy gate; selecting a granular row adds only that gate and never sibling
-rows. Independent master rows are the exception to these older compatibility
-adapters: they persist only their own master keys and require no legacy gate.
+rows. Independent master and production entry rows are exceptions to these older
+compatibility adapters: they persist only their own leaf keys and require no
+legacy gate.
 Unknown keys are not referenced by navigation or a backend boundary and
 therefore grant no application access.
 

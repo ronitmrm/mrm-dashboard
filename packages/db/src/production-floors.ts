@@ -23,6 +23,10 @@ export const productionFloors = [
 
 export type ProductionFloorCode = (typeof productionFloors)[number]["code"]
 
+export class ProductionUnitAccessError extends Error {
+  readonly status = 403
+}
+
 export const defaultProductionFloorCode: ProductionFloorCode = "conventional"
 
 function record(value: unknown): Record<string, unknown> {

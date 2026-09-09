@@ -6,6 +6,7 @@ import { requireAuthenticatedSession } from "@/lib/auth/require-capability"
 import { getUnifiedNavigationAccess } from "@/lib/auth/unified-navigation-access"
 import {
   availableOperationalEntryMains,
+  availableOperationalEntryUnits,
   operationalEntryModuleAccess,
   operationalSubEntriesFor,
 } from "@/lib/operational-entry-module"
@@ -32,7 +33,11 @@ export default async function OperationalEntrySelectionPage({
     Array.isArray(input) ? (input[0] ?? "") : (input ?? "")
   const view =
     value(query.view) === "masterTables" ? "masterTables" : "dataEntry"
-  const unit = parseMasterUnit(value(query.unit)) ?? ""
+  const requestedUnit = parseMasterUnit(value(query.unit))
+  const unit =
+    availableOperationalEntryUnits(access, view).find(
+      ({ id }) => id === requestedUnit
+    )?.id ?? ""
   const requestedMain = value(query.main)
   const main =
     unit &&
@@ -43,8 +48,9 @@ export default async function OperationalEntrySelectionPage({
       : ""
   const requestedSub = value(query.sub)
   const sub =
+    unit &&
     main &&
-    operationalSubEntriesFor(main, access, view).some(
+    operationalSubEntriesFor(main, access, view, unit).some(
       ({ id }) => id === requestedSub
     )
       ? requestedSub

@@ -10,6 +10,8 @@ import {
 } from "./postgres-runtime"
 import {
   normalizeProductionFloorCode,
+  productionFloorCodeForRecord,
+  ProductionUnitAccessError,
   type ProductionFloorCode,
 } from "./production-floors"
 import {
@@ -36,6 +38,7 @@ type RawMaterialReceiptInput = {
   organizationId: string
   payload: Record<string, unknown>
   productionFloorCode?: string
+  requiredProductionFloorCode?: ProductionFloorCode
   quantityKg: number
   receiptNumber: string
   receivedOn: string
@@ -45,12 +48,14 @@ type RawMaterialWorkOrder = {
   job_card_number: string
   part_code: string
   rm_po_number: string
+  source_payload: unknown
 }
 
 type WorkOrderContext = {
   item_id: string
   route_option_id: string | null
   work_order_id: string
+  source_payload: unknown
 }
 
 type ProductionSessionEndReason =
@@ -215,7 +220,7 @@ async function writeRawMaterialReceipt(
 
   const workOrderResult = await client.query<RawMaterialWorkOrder>(
     `
-      SELECT work_order.job_card_number, item.uid AS part_code,
+      SELECT work_order.job_card_number, work_order.source_payload, item.uid AS part_code,
         COALESCE(
           NULLIF(btrim(work_order.source_payload->>'rmPoNo'), ''),
           NULLIF(btrim(work_order.source_payload->>'RM PO NO.'), ''),
@@ -234,6 +239,9 @@ async function writeRawMaterialReceipt(
     throw new Error(
       `RM receipt rejected: Job Card "${requestedJobCard}" was not found in Work Orders.`
     )
+  }
+  if (input.requiredProductionFloorCode && productionFloorCodeForRecord({ sourcePayload: workOrder.source_payload }) !== input.requiredProductionFloorCode) {
+    throw new ProductionUnitAccessError("This Job Card belongs to another Production Unit.")
   }
   if (!workOrder.rm_po_number) {
     throw new Error(
@@ -268,15 +276,18 @@ async function writeRawMaterialReceipt(
     "SELECT pg_advisory_xact_lock(hashtext('production.raw-material'), hashtext(lower($1) || '|' || lower($2)))",
     [receiptNumber, workOrder.job_card_number]
   )
-  const existing = await client.query<{ id: string }>(
+  const existing = await client.query<{ id: string; source_payload: unknown }>(
     `
-      SELECT id FROM manufacturing.raw_material_receipts
+      SELECT id, source_payload FROM manufacturing.raw_material_receipts
       WHERE organization_id = $1 AND lower(receipt_number) = lower($2)
         AND lower(job_card_number) = lower($3)
       FOR UPDATE
     `,
     [input.organizationId, receiptNumber, workOrder.job_card_number]
   )
+  if (existing.rows[0] && input.requiredProductionFloorCode && productionFloorCodeForRecord({ sourcePayload: existing.rows[0].source_payload }) !== input.requiredProductionFloorCode) {
+    throw new ProductionUnitAccessError("This raw-material receipt belongs to another Production Unit.")
+  }
   return existing.rows[0]
     ? (
         await client.query<{ id: string }>(
@@ -333,7 +344,7 @@ async function workOrderContext(
 ) {
   const result = await client.query<WorkOrderContext>(
     `
-      SELECT work_order.id AS work_order_id, work_order.item_id,
+      SELECT work_order.id AS work_order_id, work_order.item_id, work_order.source_payload,
         COALESCE(selection.route_option_id, automatic_route.route_option_id)
           AS route_option_id
       FROM manufacturing.work_orders work_order
@@ -2733,6 +2744,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
       organizationId: string
       payload: Record<string, unknown>
       productionFloorCode?: string
+      requiredProductionFloorCode?: ProductionFloorCode
       productionDate: string
       quantityGood: number
       quantityRejected: number
@@ -2749,6 +2761,9 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           input.jobCardNumber,
           input.productionFloorCode
         )
+        if (input.requiredProductionFloorCode && productionFloorCodeForRecord({ sourcePayload: workOrder.source_payload }) !== input.requiredProductionFloorCode) {
+          throw new ProductionUnitAccessError("This Job Card belongs to another Production Unit.")
+        }
         const setupId = await operationSetupForCode(
           client,
           workOrder.route_option_id,
