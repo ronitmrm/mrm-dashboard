@@ -2016,6 +2016,23 @@ export function createCommercialOrdersRepository(options: RepositoryPoolOptions)
             organizationId: invoice.organization_id,
             quoteItemId: line.quote_item_id,
           })
+          // Only the customer-facing PI line becomes ordered, never its BOM children.
+          await client.query(
+            `
+              INSERT INTO sales.customer_part_order_status (
+                organization_id, customer_id, item_id, customer_part_code,
+                status, source_kind, source_reference
+              )
+              SELECT organization_id, customer_id, item_id,
+                lower(btrim(customer_part_code)), 'P', 'pi_approval', $2
+              FROM sales.quote_items
+              WHERE id = $1 AND nullif(btrim(customer_part_code), '') IS NOT NULL
+              ON CONFLICT (organization_id, customer_id, item_id, customer_part_code)
+              DO UPDATE SET status = 'P', source_kind = 'pi_approval',
+                source_reference = EXCLUDED.source_reference, updated_at = now()
+            `,
+            [line.quote_item_id, invoice.id]
+          )
         }
         const approved = await client.query<ProformaInvoiceRow>(
           `

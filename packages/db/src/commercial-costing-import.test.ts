@@ -7,21 +7,42 @@ import {
 } from "./commercial-costing"
 
 describe("WORKING workbook pricing fallback", () => {
-  test("uses the customer-specific Costing Type for migrated quote rows", () => {
+  test("uses the customer mapping, independently of catalog and quote revisions", () => {
     expect(
       resolvePricingLifecycleStatus({
-        catalogLifecycleStatus: "P",
-        importedCostingType: "Q",
-        rootSourceSystem: "working_xlsx",
+        componentDepth: 0,
+        customerPartCode: "123456",
+        customerOrderStatus: "Q",
       })
     ).toBe("Q")
     expect(
       resolvePricingLifecycleStatus({
-        catalogLifecycleStatus: "P",
-        importedCostingType: "Q",
-        rootSourceSystem: "mrm-dashboard",
+        componentDepth: 0,
+        customerPartCode: "123456",
+        customerOrderStatus: "P",
       })
     ).toBe("P")
+    expect(
+      resolvePricingLifecycleStatus({
+        componentDepth: 1,
+        customerPartCode: "123456",
+        customerOrderStatus: "P",
+      })
+    ).toBe("-")
+    expect(
+      resolvePricingLifecycleStatus({
+        componentDepth: 0,
+        customerPartCode: null,
+        customerOrderStatus: "P",
+      })
+    ).toBe("-")
+    expect(
+      resolvePricingLifecycleStatus({
+        componentDepth: 0,
+        customerPartCode: "new-code",
+        customerOrderStatus: null,
+      })
+    ).toBe("Q")
   })
 
   test("fills missing Costing formulas while preserving corrected calculations", () => {

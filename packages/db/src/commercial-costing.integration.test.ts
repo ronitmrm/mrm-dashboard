@@ -936,7 +936,7 @@ describe("PostgreSQL product-costing and quote workflow", () => {
       customerPartCode: null,
       customerUid: "",
       itemType: "Package",
-      lifecycleStatus: "P",
+      lifecycleStatus: "-",
       product: {
         description: "Unquoted product base price",
         productCostInr: 16.2957,

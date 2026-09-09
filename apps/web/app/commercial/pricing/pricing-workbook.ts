@@ -202,7 +202,12 @@ export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
   const isCustomerPrice = Boolean(row.quoteNumber)
   const isPackageOrAssemblyRow = isPackageOrAssembly(row)
   const isPackageSummary = isCustomerPackageSummary(row)
-  const quoteStatus = row.lifecycleStatus === "P" ? "P" : "Q"
+  const quoteStatus =
+    isCustomerPrice && row.componentDepth === 0 && row.customerPartCode?.trim()
+      ? row.lifecycleStatus === "P"
+        ? "P"
+        : "Q"
+      : "-"
   const conversionRate = Number(inputs.conversionRate)
   const totalPackagePriceInr = Number(calculation.totalRateInr)
   const rateInCurrency =
