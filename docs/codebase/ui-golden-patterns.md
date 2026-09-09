@@ -95,6 +95,12 @@ surfaces remain owned by `packages/ui/src/components/card.tsx` in both themes.
 
 Use `StandardState` for empty, loading, and error states. Give recovery actions to error states when available. Loading content announces with `role="status"`; errors use `role="alert"`.
 
+Manual master creation forms use `MasterEntryForm` from
+`apps/web/components/master-entry-form.tsx` with `withMasterSaveFeedback` on the
+server action. Duplicate saves show `StandardState`, preserve entered values,
+and disable resubmission while pending. Existing redirect-based HR forms and
+dashboard API forms retain their own feedback paths.
+
 Preserve keyboard operation, visible focus, labelled controls, sufficient contrast, and touch-friendly controls. Tables remain horizontally scrollable at narrow widths. Dialogs and drawers require a title and use the standard content wrappers when the workflow is simple.
 
 User-facing PDF actions open the authenticated in-app attachment viewer through

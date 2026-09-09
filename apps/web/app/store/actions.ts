@@ -1,5 +1,7 @@
 "use server"
 
+import { withMasterSaveFeedback } from "@/lib/master-save-feedback"
+
 import { createHash } from "node:crypto"
 
 import {
@@ -175,65 +177,71 @@ function storeIssuedPurchaseOrderPdf(
 }
 
 export async function createStoreLocationAction(formData: FormData) {
-  await withStore(
-    masterCapability("LOCATION", "save"),
-    (repository, actorUserId, organizationId) => {
-      const masterId = optionalText(formData, "master_id")
-      return masterId
-        ? repository.updateLocation({
-            actorUserId,
-            id: masterId,
-            locationType: requiredText(formData, "location_type") as
-              | "DEPARTMENT"
-              | "STORE"
-              | "UNIT",
-            name: requiredText(formData, "location_name"),
-            organizationId,
-          })
-        : repository.createLocation({
-            actorUserId,
-            code: requiredText(formData, "location_code"),
-            locationType: requiredText(formData, "location_type") as
-              | "DEPARTMENT"
-              | "STORE"
-              | "UNIT",
-            name: requiredText(formData, "location_name"),
-            organizationId,
-          })
-    }
-  )
-  revalidateStore()
+  return withMasterSaveFeedback(async () => {
+    await withStore(
+      masterCapability("LOCATION", "save"),
+      (repository, actorUserId, organizationId) => {
+        const masterId = optionalText(formData, "master_id")
+        return masterId
+          ? repository.updateLocation({
+              actorUserId,
+              id: masterId,
+              locationType: requiredText(formData, "location_type") as
+                | "DEPARTMENT"
+                | "STORE"
+                | "UNIT",
+              name: requiredText(formData, "location_name"),
+              organizationId,
+            })
+          : repository.createLocation({
+              rejectDuplicates: true,
+              actorUserId,
+              code: requiredText(formData, "location_code"),
+              locationType: requiredText(formData, "location_type") as
+                | "DEPARTMENT"
+                | "STORE"
+                | "UNIT",
+              name: requiredText(formData, "location_name"),
+              organizationId,
+            })
+      }
+    )
+    revalidateStore()
+  })
 }
 
 export async function createStoreSupplierAction(formData: FormData) {
-  await withStore(
-    masterCapability("SUPPLIER", "save"),
-    (repository, actorUserId, organizationId) => {
-      const masterId = optionalText(formData, "master_id")
-      return masterId
-        ? repository.updateSupplier({
-            actorUserId,
-            address: optionalText(formData, "supplier_address"),
-            contactDetails: optionalText(formData, "contact_details"),
-            email: optionalText(formData, "supplier_email"),
-            gstNumber: optionalText(formData, "gst_number"),
-            id: masterId,
-            name: requiredText(formData, "supplier_name"),
-            organizationId,
-          })
-        : repository.createSupplier({
-            actorUserId,
-            address: optionalText(formData, "supplier_address"),
-            contactDetails: optionalText(formData, "contact_details"),
-            email: optionalText(formData, "supplier_email"),
-            gstNumber: optionalText(formData, "gst_number"),
-            name: requiredText(formData, "supplier_name"),
-            organizationId,
-          })
-    }
-  )
-  revalidateStore()
+  return withMasterSaveFeedback(async () => {
+    await withStore(
+      masterCapability("SUPPLIER", "save"),
+      (repository, actorUserId, organizationId) => {
+        const masterId = optionalText(formData, "master_id")
+        return masterId
+          ? repository.updateSupplier({
+              actorUserId,
+              address: optionalText(formData, "supplier_address"),
+              contactDetails: optionalText(formData, "contact_details"),
+              email: optionalText(formData, "supplier_email"),
+              gstNumber: optionalText(formData, "gst_number"),
+              id: masterId,
+              name: requiredText(formData, "supplier_name"),
+              organizationId,
+            })
+          : repository.createSupplier({
+              actorUserId,
+              address: optionalText(formData, "supplier_address"),
+              contactDetails: optionalText(formData, "contact_details"),
+              email: optionalText(formData, "supplier_email"),
+              gstNumber: optionalText(formData, "gst_number"),
+              name: requiredText(formData, "supplier_name"),
+              organizationId,
+            })
+      }
+    )
+    revalidateStore()
+  })
 }
+
 
 async function saveSupplierQuote(upload: FormDataEntryValue | null) {
   if (!(upload instanceof File) || upload.size === 0) return null
@@ -291,32 +299,39 @@ async function storeSupplierQuoteArtifact(input: {
 }
 
 export async function createStoreSupplierPriceAction(formData: FormData) {
-  await requireCapability(masterCapability("SUPPLIER_PRICE", "save"), storePath)
-  const savedQuote = await saveSupplierQuote(formData.get("supplier_quote"))
-  await withStore(
-    masterCapability("SUPPLIER_PRICE", "save"),
-    async (repository, actorUserId, organizationId) => {
-      const price = await repository.createSupplierPrice({
-        actorUserId,
-        itemTypeId: requiredText(formData, "item_type_id"),
-        organizationId,
-        quoteReference: optionalText(formData, "quote_reference"),
-        supplierId: requiredText(formData, "supplier_id"),
-        unitPrice: requiredText(formData, "unit_price"),
-        validFrom: optionalText(formData, "valid_from"),
-      })
-      if (savedQuote) {
-        await storeSupplierQuoteArtifact({
-          ...savedQuote,
+  return withMasterSaveFeedback(async () => {
+    await requireCapability(
+      masterCapability("SUPPLIER_PRICE", "save"),
+      storePath
+    )
+    const savedQuote = await saveSupplierQuote(formData.get("supplier_quote"))
+    await withStore(
+      masterCapability("SUPPLIER_PRICE", "save"),
+      async (repository, actorUserId, organizationId) => {
+        const price = await repository.createSupplierPrice({
+          rejectDuplicates: true,
           actorUserId,
+          itemTypeId: requiredText(formData, "item_type_id"),
           organizationId,
-          supplierPriceId: price.id,
+          quoteReference: optionalText(formData, "quote_reference"),
+          supplierId: requiredText(formData, "supplier_id"),
+          unitPrice: requiredText(formData, "unit_price"),
+          validFrom: optionalText(formData, "valid_from"),
         })
+        if (savedQuote) {
+          await storeSupplierQuoteArtifact({
+            ...savedQuote,
+            actorUserId,
+            organizationId,
+            supplierPriceId: price.id,
+          })
+        }
       }
-    }
-  )
-  revalidateStore()
+    )
+    revalidateStore()
+  })
 }
+
 
 export async function uploadStoreSupplierQuoteAction(formData: FormData) {
   await requireCapability(masterCapability("SUPPLIER_PRICE", "save"), storePath)
@@ -337,134 +352,152 @@ export async function uploadStoreSupplierQuoteAction(formData: FormData) {
 }
 
 export async function createStoreVendorAction(formData: FormData) {
-  await withStore(
-    masterCapability("VENDOR", "save"),
-    (repository, actorUserId, organizationId) => {
-      const masterId = optionalText(formData, "master_id")
-      return masterId
-        ? repository.updateVendor({
-            actorUserId,
-            contactDetails: optionalText(formData, "contact_details"),
-            id: masterId,
-            name: requiredText(formData, "vendor_name"),
-            organizationId,
-          })
-        : repository.createVendor({
-            actorUserId,
-            code: requiredText(formData, "vendor_code"),
-            contactDetails: optionalText(formData, "contact_details"),
-            name: requiredText(formData, "vendor_name"),
-            organizationId,
-          })
-    }
-  )
-  revalidateStore()
+  return withMasterSaveFeedback(async () => {
+    await withStore(
+      masterCapability("VENDOR", "save"),
+      (repository, actorUserId, organizationId) => {
+        const masterId = optionalText(formData, "master_id")
+        return masterId
+          ? repository.updateVendor({
+              actorUserId,
+              contactDetails: optionalText(formData, "contact_details"),
+              id: masterId,
+              name: requiredText(formData, "vendor_name"),
+              organizationId,
+            })
+          : repository.createVendor({
+              rejectDuplicates: true,
+              actorUserId,
+              code: requiredText(formData, "vendor_code"),
+              contactDetails: optionalText(formData, "contact_details"),
+              name: requiredText(formData, "vendor_name"),
+              organizationId,
+            })
+      }
+    )
+    revalidateStore()
+  })
 }
 
 export async function createStoreAssetCategoryAction(formData: FormData) {
-  await withStore(
-    masterCapability("CATEGORY", "save"),
-    (repository, actorUserId, organizationId) => {
-      const masterId = optionalText(formData, "master_id")
-      return masterId
-        ? repository.updateAssetCategory({
-            actorUserId,
-            id: masterId,
-            name: requiredText(formData, "asset_category_name"),
-            organizationId,
-          })
-        : repository.createAssetCategory({
-            actorUserId,
-            name: requiredText(formData, "asset_category_name"),
-            organizationId,
-          })
-    }
-  )
-  revalidateStore()
+  return withMasterSaveFeedback(async () => {
+    await withStore(
+      masterCapability("CATEGORY", "save"),
+      (repository, actorUserId, organizationId) => {
+        const masterId = optionalText(formData, "master_id")
+        return masterId
+          ? repository.updateAssetCategory({
+              actorUserId,
+              id: masterId,
+              name: requiredText(formData, "asset_category_name"),
+              organizationId,
+            })
+          : repository.createAssetCategory({
+              rejectDuplicates: true,
+              actorUserId,
+              name: requiredText(formData, "asset_category_name"),
+              organizationId,
+            })
+      }
+    )
+    revalidateStore()
+  })
 }
 
 export async function createStoreAssetSubcategoryAction(formData: FormData) {
-  await withStore(
-    masterCapability("SUBCATEGORY", "save"),
-    (repository, actorUserId, organizationId) => {
-      const masterId = optionalText(formData, "master_id")
-      return masterId
-        ? repository.updateAssetSubcategory({
-            actorUserId,
-            categoryId: requiredText(formData, "asset_category_id"),
-            id: masterId,
-            name: requiredText(formData, "asset_subcategory_name"),
-            organizationId,
-          })
-        : repository.createAssetSubcategory({
-            actorUserId,
-            categoryId: requiredText(formData, "asset_category_id"),
-            name: requiredText(formData, "asset_subcategory_name"),
-            organizationId,
-          })
-    }
-  )
-  revalidateStore()
+  return withMasterSaveFeedback(async () => {
+    await withStore(
+      masterCapability("SUBCATEGORY", "save"),
+      (repository, actorUserId, organizationId) => {
+        const masterId = optionalText(formData, "master_id")
+        return masterId
+          ? repository.updateAssetSubcategory({
+              actorUserId,
+              categoryId: requiredText(formData, "asset_category_id"),
+              id: masterId,
+              name: requiredText(formData, "asset_subcategory_name"),
+              organizationId,
+            })
+          : repository.createAssetSubcategory({
+              rejectDuplicates: true,
+              actorUserId,
+              categoryId: requiredText(formData, "asset_category_id"),
+              name: requiredText(formData, "asset_subcategory_name"),
+              organizationId,
+            })
+      }
+    )
+    revalidateStore()
+  })
 }
 
 export async function createStoreAssetNameAction(formData: FormData) {
-  await withStore(
-    masterCapability("ASSET_NAME", "save"),
-    (repository, actorUserId, organizationId) => {
-      const masterId = optionalText(formData, "master_id")
-      return masterId
-        ? repository.updateAssetName({
-            actorUserId,
-            id: masterId,
-            name: requiredText(formData, "asset_name"),
-            organizationId,
-            subcategoryId: requiredText(formData, "asset_subcategory_id"),
-          })
-        : repository.createAssetName({
-            actorUserId,
-            name: requiredText(formData, "asset_name"),
-            organizationId,
-            subcategoryId: requiredText(formData, "asset_subcategory_id"),
-          })
-    }
-  )
-  revalidateStore()
+  return withMasterSaveFeedback(async () => {
+    await withStore(
+      masterCapability("ASSET_NAME", "save"),
+      (repository, actorUserId, organizationId) => {
+        const masterId = optionalText(formData, "master_id")
+        return masterId
+          ? repository.updateAssetName({
+              actorUserId,
+              id: masterId,
+              name: requiredText(formData, "asset_name"),
+              organizationId,
+              subcategoryId: requiredText(formData, "asset_subcategory_id"),
+            })
+          : repository.createAssetName({
+              rejectDuplicates: true,
+              actorUserId,
+              name: requiredText(formData, "asset_name"),
+              organizationId,
+              subcategoryId: requiredText(formData, "asset_subcategory_id"),
+            })
+      }
+    )
+    revalidateStore()
+  })
 }
 
 export async function createStoreItemTypeAction(formData: FormData) {
-  await requireCapability(masterCapability("ITEM_TYPE", "save"), storePath)
-  const savedDrawing = await saveAssetDrawing(formData.get("asset_drawing"))
-  await withStore(
-    masterCapability("ITEM_TYPE", "save"),
-    async (repository, actorUserId, organizationId) => {
-      const masterId = optionalText(formData, "master_id")
-      const input = {
-        actorUserId,
-        assetCategoryId: requiredText(formData, "asset_category_id"),
-        assetNameId: requiredText(formData, "asset_name_id"),
-        assetSubcategoryId: requiredText(formData, "asset_subcategory_id"),
-        assetType: assetType(formData),
-        applicableItemCode: optionalText(formData, "applicable_item_code"),
-        identificationName: requiredText(formData, "identification_name"),
-        minimumStock: Number(optionalText(formData, "minimum_stock") ?? 0),
-        organizationId,
-        unit: requiredText(formData, "unit"),
-      }
-      const item = masterId
-        ? await repository.updateItemType({ ...input, id: masterId })
-        : await repository.createItemType(input)
-      if (savedDrawing) {
-        await storeItemDrawingArtifact({
-          ...savedDrawing,
+  return withMasterSaveFeedback(async () => {
+    await requireCapability(masterCapability("ITEM_TYPE", "save"), storePath)
+    const savedDrawing = await saveAssetDrawing(formData.get("asset_drawing"))
+    await withStore(
+      masterCapability("ITEM_TYPE", "save"),
+      async (repository, actorUserId, organizationId) => {
+        const masterId = optionalText(formData, "master_id")
+        const input = {
           actorUserId,
-          itemTypeId: item.id,
+          assetCategoryId: requiredText(formData, "asset_category_id"),
+          assetNameId: requiredText(formData, "asset_name_id"),
+          assetSubcategoryId: requiredText(formData, "asset_subcategory_id"),
+          assetType: assetType(formData),
+          applicableItemCode: optionalText(formData, "applicable_item_code"),
+          identificationName: requiredText(formData, "identification_name"),
+          minimumStock: Number(optionalText(formData, "minimum_stock") ?? 0),
           organizationId,
-        })
+          unit: requiredText(formData, "unit"),
+        }
+        const item = masterId
+          ? await repository.updateItemType({ ...input, id: masterId })
+          : await repository.createItemType({
+              ...input,
+              rejectDuplicates: true,
+            })
+        if (savedDrawing) {
+          await storeItemDrawingArtifact({
+            ...savedDrawing,
+            actorUserId,
+            itemTypeId: item.id,
+            organizationId,
+          })
+        }
       }
-    }
-  )
-  revalidateStore()
+    )
+    revalidateStore()
+  })
 }
+
 
 async function saveAssetDrawing(upload: FormDataEntryValue | null) {
   if (!(upload instanceof File) || upload.size === 0) return null

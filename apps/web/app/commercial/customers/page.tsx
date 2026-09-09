@@ -1,3 +1,5 @@
+import { MasterEntryForm } from "@/components/master-entry-form"
+
 import {
   createCommercialMasterRepository,
   createCustomerRepository,
@@ -232,7 +234,7 @@ export default async function CustomersPage({
           </CardHeader>
           <CardContent className="grid gap-5">
             <CompanyWideMasterScope />
-            <form action={createCustomerAction}>
+            <MasterEntryForm action={createCustomerAction}>
               <FieldGroup className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <Field>
                   <FieldLabel htmlFor="new-company-name">
@@ -301,7 +303,7 @@ export default async function CustomersPage({
               <Button className="mt-6" type="submit">
                 Add Customer
               </Button>
-            </form>
+            </MasterEntryForm>
           </CardContent>
  </SectionCard>
       ) : null}

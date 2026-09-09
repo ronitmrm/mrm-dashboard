@@ -1,11 +1,14 @@
 "use client"
 
+import { MasterEntryForm } from "@/components/master-entry-form"
+
 import { useState } from "react"
 import { useMasterAccess } from "@/components/master-access-provider"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { Pencil, Trash2 } from "lucide-react"
 import { Button } from "@workspace/ui/components/button"
+import { StandardState } from "@workspace/ui/components/standard-state"
 import { MetricSummary } from "@/components/ui/golden-patterns"
 import {
  SectionCard,
@@ -630,7 +633,7 @@ function masterForm(
       return <StoreItemTypeForm data={data} defaults={defaults} />
     case "CATEGORY":
       return (
-        <form action={createStoreAssetCategoryAction}>
+        <MasterEntryForm action={createStoreAssetCategoryAction}>
           <input
             name="master_id"
             type="hidden"
@@ -645,11 +648,11 @@ function masterForm(
           <Button className="mt-5" type="submit">
             Save Category
           </Button>
-        </form>
+        </MasterEntryForm>
       )
     case "SUBCATEGORY":
       return (
-        <form action={createStoreAssetSubcategoryAction}>
+        <MasterEntryForm action={createStoreAssetSubcategoryAction}>
           <input
             name="master_id"
             type="hidden"
@@ -679,11 +682,11 @@ function masterForm(
           >
             Save Subcategory
           </Button>
-        </form>
+        </MasterEntryForm>
       )
     case "ASSET_NAME":
       return (
-        <form action={createStoreAssetNameAction}>
+        <MasterEntryForm action={createStoreAssetNameAction}>
           <input
             name="master_id"
             type="hidden"
@@ -713,11 +716,11 @@ function masterForm(
           >
             Save Asset Name
           </Button>
-        </form>
+        </MasterEntryForm>
       )
     case "LOCATION":
       return (
-        <form action={createStoreLocationAction}>
+        <MasterEntryForm action={createStoreLocationAction}>
           <input
             name="master_id"
             type="hidden"
@@ -751,11 +754,11 @@ function masterForm(
           <Button className="mt-5" type="submit">
             Save Location
           </Button>
-        </form>
+        </MasterEntryForm>
       )
     case "SUPPLIER":
       return (
-        <form action={createStoreSupplierAction}>
+        <MasterEntryForm action={createStoreSupplierAction}>
           <input
             name="master_id"
             type="hidden"
@@ -796,11 +799,11 @@ function masterForm(
           <Button className="mt-5" type="submit">
             Save Supplier
           </Button>
-        </form>
+        </MasterEntryForm>
       )
     case "SUPPLIER_PRICE":
       return (
-        <form
+        <MasterEntryForm
           action={createStoreSupplierPriceAction}
           encType="multipart/form-data"
         >
@@ -848,11 +851,11 @@ function masterForm(
           >
             Save Supplier Price
           </Button>
-        </form>
+        </MasterEntryForm>
       )
     case "VENDOR":
       return (
-        <form action={createStoreVendorAction}>
+        <MasterEntryForm action={createStoreVendorAction}>
           <input
             name="master_id"
             type="hidden"
@@ -881,7 +884,7 @@ function masterForm(
           <Button className="mt-5" type="submit">
             Save Vendor
           </Button>
-        </form>
+        </MasterEntryForm>
       )
   }
 }
@@ -974,7 +977,7 @@ function StoreItemTypeForm({
   }
 
   return (
-    <form action={createStoreItemTypeAction} encType="multipart/form-data">
+    <MasterEntryForm action={createStoreItemTypeAction} encType="multipart/form-data">
       <input name="master_id" type="hidden" value={defaults.master_id ?? ""} />
       <FieldGroup className="grid gap-4 md:grid-cols-2">
         {editing ? (
@@ -1085,15 +1088,12 @@ function StoreItemTypeForm({
         </Field>
       </FieldGroup>
       {!editing && existingItem ? (
- <div className="mt-5 rounded-md border border-[var(--color-positive)]/30 bg-[var(--color-positive-bg)] p-4 text-sm text-[var(--color-positive-text)] ">
-          <div className="font-semibold">
-            Existing Asset Code: {existingItem.typeCode}
-          </div>
-          <div>
-            {existingItem.identificationName}. This exact combination already
-            exists, so no new code will be generated.
-          </div>
-        </div>
+        <StandardState
+          className="mt-5"
+          variant="error"
+          title={`Existing Asset Code: ${existingItem.typeCode}`}
+          description="This entry already exists. Please edit the existing record."
+        />
       ) : null}
       <Button
         className="mt-5"
@@ -1106,7 +1106,7 @@ function StoreItemTypeForm({
             ? `Existing Code ${existingItem.typeCode}`
             : "Create & Generate Asset Code"}
       </Button>
-    </form>
+    </MasterEntryForm>
   )
 }
 

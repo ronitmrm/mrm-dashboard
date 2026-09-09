@@ -1,3 +1,4 @@
+import { assertMasterAvailable } from "./master-duplicate"
 import { randomUUID } from "node:crypto"
 
 import type { PoolClient } from "pg"
@@ -1029,6 +1030,7 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
     },
 
     async upsertRejectionType(input: {
+      rejectDuplicates?: boolean
       active?: boolean
       actorUserId?: string | null
       code: string
@@ -1037,6 +1039,13 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
       payload: Record<string, unknown>
     }) {
       return transaction(pool, async (client) => {
+        await assertMasterAvailable(
+          client,
+          input,
+          "quality.rejection_types",
+          "lower(btrim(name)) = lower(btrim($2)) OR ($3 <> '' AND lower(code) = lower($3))",
+          [input.name, input.code.trim()]
+        )
         const code = await generatedQualityMasterCode(
           client,
           input.organizationId,
@@ -1074,6 +1083,7 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
     },
 
     async upsertRejectionReason(input: {
+      rejectDuplicates?: boolean
       active?: boolean
       actorUserId?: string | null
       code: string
@@ -1082,6 +1092,13 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
       payload: Record<string, unknown>
     }) {
       return transaction(pool, async (client) => {
+        await assertMasterAvailable(
+          client,
+          input,
+          "quality.rejection_reasons",
+          "lower(btrim(name)) = lower(btrim($2)) OR ($3 <> '' AND lower(code) = lower($3))",
+          [input.name, input.code.trim()]
+        )
         const rejectionTypeId = await legacyRejectionTypeId(
           client,
           input.organizationId
@@ -1124,6 +1141,7 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
     },
 
     async upsertRejectionRemark(input: {
+      rejectDuplicates?: boolean
       active?: boolean
       actorUserId?: string | null
       code: string
@@ -1132,6 +1150,13 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
       remark: string
     }) {
       return transaction(pool, async (client) => {
+        await assertMasterAvailable(
+          client,
+          input,
+          "quality.rejection_remarks",
+          "lower(btrim(remark)) = lower(btrim($2)) OR ($3 <> '' AND lower(code) = lower($3))",
+          [input.remark, input.code.trim()]
+        )
         const rejectionReasonId = await legacyRejectionReasonId(
           client,
           input.organizationId
@@ -1174,6 +1199,7 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
     },
 
     async upsertParameterDefinition(input: {
+      rejectDuplicates?: boolean
       actorUserId?: string | null
       dataType: "boolean" | "numeric" | "text"
       inputType?: string | null
@@ -1235,6 +1261,18 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
             )
           }
         }
+        await assertMasterAvailable(
+          client,
+          input,
+          "quality.parameter_definitions",
+          "operation_setup_id = $2 AND (lower(parameter_code) = lower($3) OR (lower(btrim(name)) = lower(btrim($4)) AND lower(btrim(COALESCE(source_payload ->> 'specification', nominal_value::text, ''))) = lower(btrim($5))))",
+          [
+            context.operation_setup_id,
+            input.parameterCode.trim(),
+            input.name,
+            String(input.payload.specification ?? input.nominalValue ?? ""),
+          ]
+        )
         const result = await client.query<{ id: string }>(
           `
             INSERT INTO quality.parameter_definitions (
@@ -1497,6 +1535,7 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
     },
 
     async upsertSetupChecklistTemplate(input: {
+      rejectDuplicates?: boolean
       actorUserId?: string | null
       active?: boolean
       code: string
@@ -1513,6 +1552,18 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
           input.code,
           "setup-checklist",
           input.name
+        )
+        await assertMasterAvailable(
+          client,
+          input,
+          "quality.setup_checklist_template_items",
+          "template_id IN (SELECT id FROM quality.setup_checklist_templates WHERE organization_id = $1 AND code = $2 AND revision = $3) AND (sequence = ANY($4::integer[]) OR item_key = ANY($5::text[]))",
+          [
+            code,
+            input.revision,
+            input.items.map((item) => item.sequence),
+            input.items.map((item) => item.itemKey),
+          ]
         )
         const payload = {
           ...input.payload,

@@ -211,3 +211,4 @@ export {
 } from "./pricing-calculation"
 export { identitySchema } from "./schema"
 export { customerRevisionParameterColumns, type CustomerRevisionParameters } from "./commercial-revision-parameters"
+export { DuplicateMasterError } from "./master-duplicate"

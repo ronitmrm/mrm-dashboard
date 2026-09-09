@@ -1,3 +1,4 @@
+import { assertMasterAvailable } from "./master-duplicate"
 import { randomUUID } from "node:crypto"
 
 import type { Pool, PoolClient } from "pg"
@@ -2046,6 +2047,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
 
     async upsertTemplate(
       input: MutationContext & {
+        rejectDuplicates?: boolean
         combinedRoleId?: string | null
         departmentCode?: string | null
         designationCode: string
@@ -2060,6 +2062,13 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       }
     ) {
       return transaction(pool, async (client) => {
+        await assertMasterAvailable(
+          client,
+          input,
+          "recruitment.requirement_templates",
+          "lower(template_code) = lower($2) OR lower(btrim(name)) = lower(btrim($3))",
+          [input.templateCode.trim(), input.name]
+        )
         const departmentCode = optional(input.departmentCode)
         const combinedRoleId = optional(input.combinedRoleId)
         if ((departmentCode ? 1 : 0) + (combinedRoleId ? 1 : 0) !== 1) {

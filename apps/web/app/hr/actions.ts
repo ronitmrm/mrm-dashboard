@@ -193,6 +193,7 @@ export async function saveTemplateAction(formData: FormData) {
     masterCapability("job_templates", "save"),
     (repository, context) =>
       repository.upsertTemplate({
+        rejectDuplicates: true,
         ...context,
         combinedRoleId: value(formData, "combined_role_id"),
         departmentCode: value(formData, "department_code"),

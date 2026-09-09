@@ -91,6 +91,13 @@ cannot redefine its identity.
 master record. Editing its permitted details does not create a second master
 or change its identity.
 
+**Duplicate Master Entry**: Manual creation must reject an existing master
+identity with “This entry already exists. Please edit the existing record.”
+The rejected save leaves the existing record unchanged. Identity uses the
+master's existing company, Production Unit, parent, code, or combination scope;
+names ignore letter case and surrounding spaces where names define identity.
+Explicit edits and workbook imports retain their existing behavior.
+
 **Master Rename**: A correction to the name of an existing Master Identity.
 Current records linked to that identity use the corrected name everywhere.
 Finalized historical documents retain the values recorded when they were

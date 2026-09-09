@@ -1,5 +1,7 @@
 "use client"
 
+import { MasterEntryForm } from "@/components/master-entry-form"
+
 import type { CommercialTermType } from "@workspace/db"
 import type { commercialMasterFormOptions } from "@/lib/auth/commercial-master-access"
 import { Button } from "@workspace/ui/components/button"
@@ -84,7 +86,7 @@ export function MasterMaintenanceForm({
   ].includes(kind)
 
   return (
-    <form action={upsertMasterAction}>
+    <MasterEntryForm action={upsertMasterAction}>
       <input name="master_view" type="hidden" value="dataEntry" />
       <input name="kind" type="hidden" value={kind} />
       <input name="workspace_kind" type="hidden" value={workspaceKind} />
@@ -302,8 +304,8 @@ export function MasterMaintenanceForm({
         ) : null}
       </FieldGroup>
       <Button className="mt-6" type="submit">
-        Add Or Update {commercialMasterSelection(workspaceKind).label}
+        Add {commercialMasterSelection(workspaceKind).label}
       </Button>
-    </form>
+    </MasterEntryForm>
   )
 }

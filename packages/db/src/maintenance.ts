@@ -1,3 +1,4 @@
+import { assertMasterAvailable } from "./master-duplicate"
 import { randomUUID } from "node:crypto"
 
 import type { PoolClient } from "pg"
@@ -395,6 +396,7 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
     },
 
     async upsertDefinition(input: {
+      rejectDuplicates?: boolean
       actorUserId?: string | null
       active?: boolean
       checklistCode?: string | null
@@ -409,6 +411,13 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
       payload: Record<string, unknown>
     }) {
       return transaction(pool, async (client) => {
+        await assertMasterAvailable(
+          client,
+          input,
+          "maintenance.definitions",
+          "lower(code) = lower($2)",
+          [input.code.trim()]
+        )
         if (!(input.frequencyDays > 0)) {
           throw new Error("Maintenance frequency days must be positive.")
         }
@@ -462,6 +471,7 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
     },
 
     async upsertChecklistItem(input: {
+      rejectDuplicates?: boolean
       actorUserId?: string | null
       checklistCode: string
       checklistTitle: string
@@ -475,6 +485,13 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
           input.organizationId,
           input.checklistCode,
           input.checklistTitle
+        )
+        await assertMasterAvailable(
+          client,
+          input,
+          "maintenance.checklist_items",
+          "definition_id IN (SELECT id FROM maintenance.definitions WHERE organization_id = $1 AND lower(code) = lower($2)) AND sequence = $3",
+          [code, input.item.sequence]
         )
         const payload = { ...input.payload, checklistCode: code }
         const normalizedItem = { ...input.item, itemKey: `${code}|${input.item.sequence}` }

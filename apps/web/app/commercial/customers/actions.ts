@@ -1,5 +1,7 @@
 "use server"
 
+import { withMasterSaveFeedback } from "@/lib/master-save-feedback"
+
 import { createCustomerRepository } from "@workspace/db"
 import { revalidatePath } from "next/cache"
 
@@ -55,30 +57,34 @@ async function withCustomers<T>(
 }
 
 export async function createCustomerAction(formData: FormData) {
-  await withCustomers(
-    "masters.universal.commercial_customers.create",
-    (repository, actorUserId, organizationId) =>
-      repository.createManaged({
-        actorUserId,
-        companyName: requiredText(formData, "company_name"),
-        country: optionalText(formData, "country"),
-        defaultBuyerName: requiredText(formData, "default_buyer_name"),
-        defaultCurrency: requiredText(formData, "default_currency"),
-        defaultIncoterms: requiredText(formData, "default_incoterms"),
-        defaultPackagingTerms: requiredText(
-          formData,
-          "default_packaging_terms"
-        ),
-        defaultPaymentTerms: requiredText(formData, "default_payment_terms"),
-        defaultShipmentMode: requiredText(formData, "default_shipment_mode"),
-        email: optionalText(formData, "email"),
-        organizationId,
-        phone: optionalText(formData, "phone"),
-        status: optionalText(formData, "status"),
-      })
-  )
-  revalidatePath(customersPath)
+  return withMasterSaveFeedback(async () => {
+    await withCustomers(
+      "masters.universal.commercial_customers.create",
+      (repository, actorUserId, organizationId) =>
+        repository.createManaged({
+          rejectDuplicates: true,
+          actorUserId,
+          companyName: requiredText(formData, "company_name"),
+          country: optionalText(formData, "country"),
+          defaultBuyerName: requiredText(formData, "default_buyer_name"),
+          defaultCurrency: requiredText(formData, "default_currency"),
+          defaultIncoterms: requiredText(formData, "default_incoterms"),
+          defaultPackagingTerms: requiredText(
+            formData,
+            "default_packaging_terms"
+          ),
+          defaultPaymentTerms: requiredText(formData, "default_payment_terms"),
+          defaultShipmentMode: requiredText(formData, "default_shipment_mode"),
+          email: optionalText(formData, "email"),
+          organizationId,
+          phone: optionalText(formData, "phone"),
+          status: optionalText(formData, "status"),
+        })
+    )
+    revalidatePath(customersPath)
+  })
 }
+
 
 export async function importCustomersCsvAction(formData: FormData) {
   const rows = await readMasterCsv(formData.get("master_csv_file"))

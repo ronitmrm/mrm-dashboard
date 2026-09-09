@@ -1,3 +1,4 @@
+import { DuplicateMasterError } from "@workspace/db"
 import {
   createDashboardPlanningRepository,
   createMasterDataLifecycleRepository,
@@ -107,19 +108,22 @@ function json(payload: unknown, status = 200) {
 
 function dashboardRouteError(err: unknown) {
   const status =
-    err instanceof RouteError ||
-    err instanceof OperationalEntryAccessError ||
-    err instanceof ProductionUnitAccessError ||
-    err instanceof OperationalEntryError ||
-    err instanceof DashboardReadError ||
-    err instanceof DashboardRequestPolicyError ||
-    err instanceof TemplateUploadError
-      ? err.status
-      : 500
+    err instanceof DuplicateMasterError
+      ? 409
+      : err instanceof RouteError ||
+          err instanceof OperationalEntryAccessError ||
+          err instanceof ProductionUnitAccessError ||
+          err instanceof OperationalEntryError ||
+          err instanceof DashboardReadError ||
+          err instanceof DashboardRequestPolicyError ||
+          err instanceof TemplateUploadError
+        ? err.status
+        : 500
   if (status >= 500) console.error("Dashboard API request failed", err)
   const response = dashboardErrorResponse(err, status)
   return json({ error: response.error }, response.status)
 }
+
 
 const dataEntryTemplateFields: Record<string, string[]> = {
   setup_name_master: ["setupName"],
@@ -526,10 +530,12 @@ type PlanningContext = Awaited<ReturnType<typeof authenticatedPlanningContext>>
 async function savePlanningMasterEntry(
   { actorUserId, organizationId, repository }: PlanningContext,
   entryType: string,
-  payload: Record<string, unknown>
+  payload: Record<string, unknown>,
+  rejectDuplicates = false
 ) {
   if (entryType === "setup_name_master") {
     return repository.upsertSetupName({
+      rejectDuplicates,
       actorUserId,
       name: text(payload.setupName),
       organizationId,
@@ -551,6 +557,7 @@ async function savePlanningMasterEntry(
       throw new RouteError(400, "Machine location is required.")
     }
     return repository.upsertMachine({
+      rejectDuplicates,
       actorUserId,
       machineNumber: text(payload.machineNo),
       name: optionalText(payload.machineName),
@@ -561,7 +568,12 @@ async function savePlanningMasterEntry(
   }
 
   if (entryType === "work_order") {
-    const { floor } = operationalEntryWriteScope(entryType, "save", payload.productionFloorCode, payload)
+    const { floor } = operationalEntryWriteScope(
+      entryType,
+      "save",
+      payload.productionFloorCode,
+      payload
+    )
     return repository.upsertWorkOrder({
       actorUserId,
       dueDate: optionalText(payload.deliveryDate),
@@ -588,6 +600,7 @@ async function savePlanningMasterEntry(
       machineUsed: text(payload.machineFamily) || payload.machineUsed,
     }
     return repository.upsertRouteOption({
+      rejectDuplicates,
       actorUserId,
       itemUid,
       organizationId,
@@ -611,6 +624,7 @@ async function savePlanningMasterEntry(
   if (entryType === "cycle") {
     const cycleTime = numeric(payload.cycleTime)
     return repository.upsertCycleStandard({
+      rejectDuplicates,
       actorUserId,
       cycleTimeSeconds: cycleTime,
       itemUid,
@@ -641,32 +655,35 @@ async function savePlanningMasterEntry(
     if (!toolingRows.length) {
       throw new RouteError(400, "At least one fixture or tool is required.")
     }
-    const results = []
-    for (const row of toolingRows) {
-      try {
-        results.push(
-          await repository.upsertTooling({
-            actorUserId,
-            description: optionalText(payload.remarks) || row.type,
-            itemUid,
-            organizationId,
-            productionFloorCode: text(payload.productionFloorCode),
-            quantity: 1,
-            routeCode,
-            setupNumber: setupNumber!,
-            sourcePayload: payload,
-            toolCode: row.code,
-          })
-        )
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
-        if (
-          message.startsWith("Create the tooling Asset Code in Store first")
-        ) {
-          throw new RouteError(400, message)
-        }
-        throw error
+    const inputs = toolingRows.map((row) => ({
+      rejectDuplicates,
+      actorUserId,
+      description: optionalText(payload.remarks) || row.type,
+      itemUid,
+      organizationId,
+      productionFloorCode: text(payload.productionFloorCode),
+      quantity: 1,
+      routeCode,
+      setupNumber: setupNumber!,
+      sourcePayload: payload,
+      toolCode: row.code,
+    }))
+    let results
+    try {
+      if (rejectDuplicates) {
+        results = await repository.upsertToolingBatch(inputs)
+      } else {
+        results = []
+        for (const input of inputs)
+          results.push(await repository.upsertTooling(input))
       }
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message.startsWith("Create the tooling Asset Code in Store first")
+      )
+        throw new RouteError(400, error.message)
+      throw error
     }
     return { id: results[0]!.id, ids: results.map((result) => result.id) }
   }
@@ -681,6 +698,7 @@ async function savePlanningMasterEntry(
       .filter(Boolean)
       .join(":")
     return repository.upsertPlanningCalendarException({
+      rejectDuplicates,
       actorUserId,
       exceptionDate: text(payload.date),
       exceptionType,
@@ -696,6 +714,7 @@ async function savePlanningMasterEntry(
     `Unsupported PostgreSQL master entry type: ${entryType}`
   )
 }
+
 
 async function get(request: NextRequest, context: RouteContext) {
   if (!productionModuleIsEnabled()) {
@@ -1546,7 +1565,7 @@ async function post(request: NextRequest, context: RouteContext) {
             ? operationalEntryWriteScope(entryType, "save", body.productionFloorCode, payload).capability
             : productionMasterCapability(entryType, "save", payload.productionFloorCode) ?? "operations.shop_floor.write",
           (planningContext) =>
-            savePlanningMasterEntry(planningContext, entryType, payload)
+            savePlanningMasterEntry(planningContext, entryType, payload, true)
         )
         return json(
           await withPlanningRefresh(path, body, {

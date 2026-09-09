@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto"
+import { assertMasterAvailable } from "./master-duplicate"
 
 import { and, asc, eq, getTableColumns, ilike, or, sql } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/node-postgres"
@@ -38,6 +39,7 @@ type CreateCustomer = {
 }
 
 type CreateManagedCustomer = {
+  rejectDuplicates?: boolean
   actorUserId?: string | null
   companyName: string
   country?: string | null
@@ -127,6 +129,13 @@ export function createCustomerRepository(options: RepositoryPoolOptions) {
       }
 
       const customerId = await transaction(pool, async (client) => {
+        await assertMasterAvailable(
+          client,
+          input,
+          "sales.customers",
+          "lower(btrim(company_name)) = lower(btrim($2))",
+          [companyName]
+        )
         await client.query(
           "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
           [`sales.customer-uid:${input.organizationId}`]

@@ -1,5 +1,7 @@
 "use server"
 
+import { withMasterSaveFeedback } from "@/lib/master-save-feedback"
+
 import {
   createCommercialMasterRepository,
   createCustomerRepository,
@@ -125,100 +127,103 @@ async function withMasters<T>(
 }
 
 export async function upsertMasterAction(formData: FormData) {
-  const kind = required(formData, "kind")
-  const termType =
-    kind === "commercialTerm" ? required(formData, "term_type") : null
-  await withMasters(
-    masterCapability(termType ?? kind, "save"),
-    async (repository, actorUserId, organizationId) => {
-      const context = { actorUserId, organizationId }
-      switch (kind) {
-        case "category":
-          return repository.upsertNamed({
-            ...context,
-            code: optional(formData, "code"),
-            kind,
-            name: required(formData, "name"),
-          })
-        case "subcategory":
-          return repository.upsertSubcategory({
-            ...context,
-            category: required(formData, "category"),
-            combinationCode: optional(formData, "combination_code"),
-            name: required(formData, "name"),
-          })
-        case "machineType":
-        case "materialGrade":
-        case "process":
-        case "rodType":
-        case "rodSize":
-          return repository.upsertNamed({
-            ...context,
-            kind,
-            name: required(formData, "name"),
-          })
-        case "application":
-        case "certification":
-          return repository.upsertNamed({
-            ...context,
-            kind,
-            name: required(formData, "name"),
-            sortOrder: numeric(formData, "sort_order"),
-          })
-        case "websiteField":
-          return repository.upsertNamed({
-            ...context,
-            fieldType: required(formData, "field_type") as WebsiteFieldType,
-            kind,
-            name: required(formData, "name"),
-            sortOrder: numeric(formData, "sort_order"),
-          })
-        case "materialRate":
-          return repository.upsertMaterialRate({
-            ...context,
-            active: active(formData),
-            alloyPremium: optionalNumeric(formData, "alloy_premium"),
-            extrusionCost: numeric(formData, "ext_cost"),
-            grade: required(formData, "grade"),
-            rodType: required(formData, "rod_type"),
-          })
-        case "shippingTerm":
-          return repository.upsertShippingTerm({
-            ...context,
-            active: active(formData),
-            name: required(formData, "name"),
-            shippingCost: numeric(formData, "shipping_cost"),
-          })
-        case "packagingOption":
-          return repository.upsertPackagingOption({
-            ...context,
-            active: active(formData),
-            name: required(formData, "name"),
-            packingCost: numeric(formData, "packing_cost"),
-          })
-        case "commercialTerm":
-          return repository.upsertCommercialTerm({
-            ...context,
-            active: active(formData),
-            name: required(formData, "name"),
-            termType: termType as CommercialTermType,
-          })
-        case "quoteTerm":
-          return repository.upsertQuoteTerm({
-            ...context,
-            active: active(formData),
-            label: required(formData, "label"),
-            sortOrder: numeric(formData, "sort_order"),
-            termKey: required(formData, "term_key"),
-            value: required(formData, "value"),
-          })
-        default:
-          throw new Error("Unknown commercial master.")
+  return withMasterSaveFeedback(async () => {
+    const kind = required(formData, "kind")
+    const termType =
+      kind === "commercialTerm" ? required(formData, "term_type") : null
+    await withMasters(
+      masterCapability(termType ?? kind, "save"),
+      async (repository, actorUserId, organizationId) => {
+        const context = { actorUserId, organizationId, rejectDuplicates: true }
+        switch (kind) {
+          case "category":
+            return repository.upsertNamed({
+              ...context,
+              code: optional(formData, "code"),
+              kind,
+              name: required(formData, "name"),
+            })
+          case "subcategory":
+            return repository.upsertSubcategory({
+              ...context,
+              category: required(formData, "category"),
+              combinationCode: optional(formData, "combination_code"),
+              name: required(formData, "name"),
+            })
+          case "machineType":
+          case "materialGrade":
+          case "process":
+          case "rodType":
+          case "rodSize":
+            return repository.upsertNamed({
+              ...context,
+              kind,
+              name: required(formData, "name"),
+            })
+          case "application":
+          case "certification":
+            return repository.upsertNamed({
+              ...context,
+              kind,
+              name: required(formData, "name"),
+              sortOrder: numeric(formData, "sort_order"),
+            })
+          case "websiteField":
+            return repository.upsertNamed({
+              ...context,
+              fieldType: required(formData, "field_type") as WebsiteFieldType,
+              kind,
+              name: required(formData, "name"),
+              sortOrder: numeric(formData, "sort_order"),
+            })
+          case "materialRate":
+            return repository.upsertMaterialRate({
+              ...context,
+              active: active(formData),
+              alloyPremium: optionalNumeric(formData, "alloy_premium"),
+              extrusionCost: numeric(formData, "ext_cost"),
+              grade: required(formData, "grade"),
+              rodType: required(formData, "rod_type"),
+            })
+          case "shippingTerm":
+            return repository.upsertShippingTerm({
+              ...context,
+              active: active(formData),
+              name: required(formData, "name"),
+              shippingCost: numeric(formData, "shipping_cost"),
+            })
+          case "packagingOption":
+            return repository.upsertPackagingOption({
+              ...context,
+              active: active(formData),
+              name: required(formData, "name"),
+              packingCost: numeric(formData, "packing_cost"),
+            })
+          case "commercialTerm":
+            return repository.upsertCommercialTerm({
+              ...context,
+              active: active(formData),
+              name: required(formData, "name"),
+              termType: termType as CommercialTermType,
+            })
+          case "quoteTerm":
+            return repository.upsertQuoteTerm({
+              ...context,
+              active: active(formData),
+              label: required(formData, "label"),
+              sortOrder: numeric(formData, "sort_order"),
+              termKey: required(formData, "term_key"),
+              value: required(formData, "value"),
+            })
+          default:
+            throw new Error("Unknown commercial master.")
+        }
       }
-    }
-  )
-  revalidatePath(mastersPath)
+    )
+    revalidatePath(mastersPath)
+  })
 }
+
 
 async function commercialLifecycleAction(
   formData: FormData,
