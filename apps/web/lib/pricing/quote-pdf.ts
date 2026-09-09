@@ -300,17 +300,6 @@ export async function buildQuotePdf(
   }
   y = Math.min(y, recipientY) - 26
   text("Items", left, y, 12, true, green)
-  if (
-    document.totalEnquiryLines &&
-    document.totalEnquiryLines > document.lines.length
-  ) {
-    text(
-      `${document.lines.length} of ${document.totalEnquiryLines} enquiry lines quoted`,
-      319,
-      y,
-      8.5
-    )
-  }
   y -= 12
   const columns = [39, 99, 115, 159, right - left - 412]
   const headers = [
@@ -347,7 +336,7 @@ export async function buildQuotePdf(
       line.productCode ?? "-",
       line.customerPartCode ?? "-",
       line.description,
-      line.price === null ? "-" : line.price.toFixed(4),
+      line.status === "Cannot Quote" ? "Cannot Quote" : line.price === null ? "-" : line.price.toFixed(4),
     ].map((value, index) => wrap(value, columns[index]! - 12, 9))
     const count = Math.max(...cells.map((cell) => cell.length))
     let offset = 0

@@ -43,11 +43,19 @@ export default async function QuotesPage() {
   const repository = createCommercialCostingRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
-  const quotes = await repository
-    .listQuotes("MRMPL", 200, {
-      originatingSalespersonUserId: session.user.id,
-    })
-    .finally(() => repository.close())
+  const { quotes, pendingLines } = await (async () => {
+    try {
+      const scope = { originatingSalespersonUserId: session.user.id }
+      const quotes = await repository.listQuotes("MRMPL", 200, scope)
+      const pendingLines = await repository.listEnquiryQuoteReadiness(
+        [...new Set(quotes.flatMap(quote => quote.enquiryId ? [quote.enquiryId] : []))],
+        scope
+      )
+      return { quotes, pendingLines }
+    } finally {
+      await repository.close()
+    }
+  })()
   const today = istDateValue()
 
   return (
@@ -63,13 +71,16 @@ export default async function QuotesPage() {
         </div>
       </CardHeader>
       <CardContent>
+        <p className="mb-4 text-sm text-muted-foreground">
+          Send the full enquiry together once every line is costed or marked Cannot Quote.
+        </p>
         <MetricSummary
           className="mb-4"
           scope="Your latest 200 quote lines at most · before table filters"
           items={[
             { label: "Quote Lines", value: quotes.length, tone: "information" },
             {
-              label: "Ready to Send",
+              label: "Costing Complete",
               value: quotes.filter((row) => row.status === "Ready").length,
               tone: "warning"
             },
@@ -159,9 +170,15 @@ export default async function QuotesPage() {
                                 type="date"
                               />
                             </label>
-                            <Button size="sm" type="submit">
-                              Send Quote
+                            <Button size="sm" type="submit"
+                              disabled={!quote.enquiryId || Boolean(pendingLines[quote.enquiryId]?.length)}>
+                              Send Full Enquiry
                             </Button>
+                            {quote.enquiryId && pendingLines[quote.enquiryId]?.length ? (
+                              <span className="w-full text-xs text-muted-foreground">
+                                Pending lines: {pendingLines[quote.enquiryId]!.join(", ")}
+                              </span>
+                            ) : null}
                           </form>
                         ) : quote.status === "Draft" && quote.enquiryItemId ? (
                           <Button asChild size="sm" variant="outline">
