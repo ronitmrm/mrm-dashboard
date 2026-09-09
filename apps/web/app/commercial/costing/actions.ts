@@ -9,6 +9,7 @@ import {
   quotePdfArtifactPurpose,
 } from "@workspace/db"
 import { revalidatePath } from "next/cache"
+import { redirect } from "next/navigation"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
@@ -220,6 +221,9 @@ export async function saveQuoteAction(formData: FormData) {
   const enquiryItemId = requiredText(formData, "enquiry_item_id")
   revalidatePath(`${customerCostingPath}/${enquiryItemId}`)
   revalidatePath("/commercial/quotes")
+  if (optionalText(formData, "action") === "complete") {
+    redirect(customerCostingPath)
+  }
 }
 
 export async function sendQuoteBackToProductCostingAction(formData: FormData) {
