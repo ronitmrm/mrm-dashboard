@@ -40,6 +40,9 @@ const nextConfig: NextConfig = {
     ]
   },
   outputFileTracingRoot: workspaceRoot,
+  outputFileTracingIncludes: {
+    "/commercial/**": ["./lib/pricing/assets/**/*"],
+  },
   turbopack: {
     root: workspaceRoot,
   },
