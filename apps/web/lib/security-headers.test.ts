@@ -4,10 +4,13 @@ import nextConfig from "../next.config"
 import { browserSecurityHeaders } from "./security-headers"
 
 describe("browser security headers", () => {
-  it("overrides global framing restrictions only for private employment-letter PDFs", async () => {
+  it.each([
+    "/hr/employment-letters/:id/download",
+    "/commercial/quotes/enquiry/:id/pdf",
+  ])("allows the private document route %s inside the same-origin viewer", async (path) => {
     const rules = await nextConfig.headers!()
     const rule = rules.find(
-      ({ source }) => source === "/hr/employment-letters/:id/download"
+      ({ source }) => source === path
     )
     expect(rule).toBeDefined()
     const headers = Object.fromEntries(
