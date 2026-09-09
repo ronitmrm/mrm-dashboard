@@ -15,6 +15,7 @@ import {
   proformaInvoiceXlsxArtifactPurpose,
 } from "./commercial-orders"
 import { migrateDatabase } from "./migrate"
+import { createCommercialCostingRepository } from "./commercial-costing"
 
 const connectionString =
   process.env.TEST_DATABASE_URL ??
@@ -276,6 +277,14 @@ describe("commercial purchase orders and proforma invoices", () => {
       itemId,
       price: 12.5,
     })
+    const otherCode = `OTHER-${randomUUID()}`
+    await createSentQuote({ customerPartCode: otherCode, itemId, price: 12.5 })
+    const pricing = createCommercialCostingRepository({ connectionString })
+    const readStatus = async (partCode: string) => {
+      const result = await pricing.listPricingRegisterForExport("MRMPL", { query: partCode })
+      return result.find((row) => row.customerPartCode === partCode)?.lifecycleStatus
+    }
+    expect(await readStatus(code)).toBe("Q")
     const order = await repository.createPurchaseOrder({
       customerId,
       organizationId,
@@ -298,6 +307,7 @@ describe("commercial purchase orders and proforma invoices", () => {
     })
     expect(invoice).toMatchObject({ status: "Draft", totalAmount: 625 })
     await markProformaInvoiceSent(invoice.id)
+    expect(await readStatus(code)).toBe("Q")
     await expect(
       pool.query(
         "UPDATE sales.proforma_invoice_lines SET unit_price = unit_price + 1 WHERE proforma_invoice_id = $1",
@@ -309,6 +319,9 @@ describe("commercial purchase orders and proforma invoices", () => {
       proformaInvoiceId: invoice.id,
     })
     expect(approved.status).toBe("Approved")
+    expect(await readStatus(code)).toBe("P")
+    expect(await readStatus(otherCode)).toBe("Q")
+    await pricing.close()
 
     const state = await pool.query<{
       converted_from_quote_uid: string

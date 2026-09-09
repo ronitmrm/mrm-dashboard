@@ -137,6 +137,7 @@ const expectedCanonicalTables = [
   "sales.clarification_tasks",
   "sales.commercial_terms",
   "sales.customer_contacts",
+  "sales.customer_part_order_status",
   "sales.customers",
   "sales.design_bom_lines",
   "sales.design_tasks",

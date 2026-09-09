@@ -351,6 +351,16 @@ decimal places; sending that exact replacement resolves the PO revision.
 rows expose ordered Product Master costs even before a customer Quote exists;
 Customer Price rows come from active or editable root Quotes and their immutable
 recursive Product and calculation snapshots. Package / Assembly customer pricing
+uses **Q/P per Organization, Customer, Product and Customer Part Code**, independent
+of the Product's M/R UID or catalog lifecycle. Only root customer rows with a
+Customer Part Code display Q/P. BOM components at every depth and Product Base
+rows display `-`, even when that component is sold separately elsewhere.
+The migration workbook establishes each mapping's initial Q/P. Subsequently,
+only PI approval changes Q to P, atomically with approval. Quotes, PO imports,
+PI generation and marking a PI Sent do not change Q/P. Once P, the mapping stays
+P across subsequent quotes and price revisions; other customers and part codes
+remain independent. A separately sold component has its own customer mapping.
+Package / Assembly customer pricing
 displays each summary before its ordered BOM components. Every Package or Assembly,
 including an intermediate Assembly, uses the same summary rules: Total Rate / PCS
 In INR is only that summary's adjusted process price, BOM Component Cost is the sum

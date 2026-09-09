@@ -99,6 +99,7 @@ type PricingRegisterDatabaseRow = {
   currency: string
   customer_id: string
   customer_part_code: string | null
+  customer_order_status: string | null
   customer_uid: string
   enquiry_description: string
   enquiry_number: string | null
@@ -260,17 +261,12 @@ export function mergeWorkingWorkbookProductContext(input: {
   return { ...input.productContext, dieCode: String(workbookDieCode).trim() }
 }
 export function resolvePricingLifecycleStatus(input: {
-  catalogLifecycleStatus: string
-  importedCostingType: string | null
-  rootSourceSystem: string | null
+  componentDepth: number
+  customerPartCode: string | null
+  customerOrderStatus: string | null
 }) {
-  if (input.rootSourceSystem !== "working_xlsx") {
-    return input.catalogLifecycleStatus
-  }
-  const importedCostingType = input.importedCostingType?.trim().toUpperCase()
-  return importedCostingType === "P" || importedCostingType === "Q"
-    ? importedCostingType
-    : input.catalogLifecycleStatus
+  if (input.componentDepth > 0 || !input.customerPartCode?.trim()) return "-"
+  return input.customerOrderStatus === "P" ? "P" : "Q"
 }
 
 const pricingRegisterRow = (row: PricingRegisterDatabaseRow) => {
@@ -307,9 +303,9 @@ const pricingRegisterRow = (row: PricingRegisterDatabaseRow) => {
     isActive: row.is_active,
     itemType: row.item_type,
     lifecycleStatus: resolvePricingLifecycleStatus({
-      catalogLifecycleStatus: row.lifecycle_status,
-      importedCostingType: row.imported_costing_type,
-      rootSourceSystem: row.root_source_system,
+      componentDepth: row.component_depth,
+      customerPartCode: row.customer_part_code,
+      customerOrderStatus: row.customer_order_status,
     }),
     lineNumber: row.line_number,
     packaging:
@@ -1544,6 +1540,7 @@ export function createCommercialCostingRepository(
           root.source_payload -> 'originalRow' ->> 8
             AS imported_shipping_terms,
           root.source_payload ->> 'costingType' AS imported_costing_type,
+          order_status.status AS customer_order_status,
 
           CASE WHEN tree.component_depth = 0
             THEN root.customer_part_code ELSE NULL END
@@ -1609,6 +1606,11 @@ export function createCommercialCostingRepository(
             AS shipping_terms
         FROM quote_tree tree
         JOIN roots root ON root.id = tree.root_quote_item_id
+        LEFT JOIN sales.customer_part_order_status order_status
+          ON order_status.organization_id = root.organization_id
+          AND order_status.customer_id = root.customer_id
+          AND order_status.item_id = root.item_id
+          AND order_status.customer_part_code = lower(btrim(root.customer_part_code))
         LEFT JOIN sales.quote_items member ON member.id = tree.quote_item_id
         JOIN sales.customers customer ON customer.id = root.customer_id
         JOIN catalog.items item ON item.id = tree.item_id
@@ -1670,6 +1672,7 @@ export function createCommercialCostingRepository(
           NULL::text AS imported_packaging,
           NULL::text AS imported_shipping_terms,
           NULL::text AS imported_costing_type,
+          NULL::text AS customer_order_status,
           NULL::text AS customer_part_code,
           item.product_cost_inr::text AS unit_price,
           ''::text AS customer_id, ''::text AS customer_uid,
@@ -3513,6 +3516,7 @@ export function createCommercialCostingRepository(
             root.source_payload -> 'originalRow' ->> 8
               AS imported_shipping_terms,
             root.source_payload ->> 'costingType' AS imported_costing_type,
+            order_status.status AS customer_order_status,
 
             CASE WHEN tree.component_depth = 0
               THEN root.customer_part_code ELSE NULL END
@@ -3578,6 +3582,11 @@ export function createCommercialCostingRepository(
               AS shipping_terms
           FROM quote_tree tree
           JOIN roots root ON root.id = tree.root_quote_item_id
+          LEFT JOIN sales.customer_part_order_status order_status
+            ON order_status.organization_id = root.organization_id
+            AND order_status.customer_id = root.customer_id
+            AND order_status.item_id = root.item_id
+            AND order_status.customer_part_code = lower(btrim(root.customer_part_code))
           LEFT JOIN sales.quote_items member ON member.id = tree.quote_item_id
           JOIN sales.customers customer ON customer.id = root.customer_id
           JOIN catalog.items item ON item.id = tree.item_id
