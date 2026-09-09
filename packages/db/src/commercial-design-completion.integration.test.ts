@@ -71,6 +71,29 @@ test("a confirmed portfolio match stays in Design Complete and leaves Active Des
     checklist: {},
     status: "Feasible",
   })
+  const priorProductLine = await repository.addEnquiryItem({
+    organizationId,
+    enquiryId: enquiry.id,
+    customerPartCode: "ALREADY-KNOWN",
+    description: "Previously quoted or purchased product bypassing Design",
+    quantity: 1,
+  })
+  await repository.updateTechnicalReview({
+    enquiryItemId: priorProductLine.id,
+    checklist: {},
+    status: "Duplicate / Existing Product",
+  })
+  // Sales/import record costing readiness without performing a Design task.
+  await pool.query(
+    `INSERT INTO sales.design_tasks (
+       organization_id, enquiry_item_id, status, design_status,
+       portfolio_match_status, matched_product_id, next_stage_status,
+       source_system, source_table, source_id, source_payload
+     ) VALUES ($1, $2, 'Not Required', 'Not Required',
+       'Matches Existing Portfolio', $3, 'Product Costing Complete',
+       'mrm-dashboard', 'design_tasks', $4, '{"action":"Commercial Requote"}')`,
+    [organizationId, priorProductLine.id, productId, `import:${priorProductLine.id}`]
+  )
   await repository.saveDesign({
     enquiryItemId: line.id,
     designStatus: "Pending Design",

@@ -102,8 +102,11 @@ to Product Parameter Costing succeeds. A failed handoff or a Product Costing
 request for Design changes remains Active Design work, even if a prior save had
 already stored Design Complete; it does not appear as Product Costing-ready until
 Design completes the required correction and handoff.
-Confirmed matches to an existing ordered Portfolio Product also remain visible
-in Design Complete. Their stored Design status is `Not Required` because the
+Only tasks actually performed and completed by Design belong in Design Complete.
+Matches confirmed through a Design task also remain visible there; previously
+quoted or purchased Products that bypass Design do not. Costing readiness alone
+does not count as completion of work by Design.
+Matched tasks' stored Design status is `Not Required` because the
 existing Product definition is reused; Product Costing is already complete.
 They leave Active Design but retain their Enquiry line and matched Product
 reference. Review opens the matched Product's read-only Design dossier.
