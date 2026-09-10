@@ -53,6 +53,13 @@ async function fixture() {
 
 test("Sales requests pricing revision on selected lines of the same enquiry and cannot duplicate it", async () => {
   const f = await fixture()
+  const costing = createCommercialCostingRepository({ pool })
+  const quotes = await costing.listQuotes(f.code)
+  for (const quote of quotes) {
+    await workflow.createFollowup({ organizationId: f.organization_id,
+      enquiryId: f.enquiry_id, quoteItemId: quote.id, dueOn: "2026-12-01",
+      note: "Customer requested a callback" })
+  }
   await workflow.requestEnquiryRevision({
     enquiryId: f.enquiry_id,
     kind: "Pricing",
@@ -77,6 +84,12 @@ test("Sales requests pricing revision on selected lines of the same enquiry and 
     })
   ).rejects.toThrow(/already open/i)
   const revisions = await workflow.listEnquiryRevisions(f.enquiry_id)
+  const followups = await workflow.listFollowups(f.code)
+  expect(followups.filter(row => row.status === "Completed")).toHaveLength(1)
+  expect(followups.find(row => row.status === "Completed")?.note).toBe(
+    "Customer requested a callback\nRevision initiated."
+  )
+  expect(followups.filter(row => row.status === "Pending")).toHaveLength(1)
   expect(revisions).toHaveLength(1)
   expect(revisions[0]).toMatchObject({
     kind: "Pricing",
@@ -85,8 +98,27 @@ test("Sales requests pricing revision on selected lines of the same enquiry and 
   })
 })
 
+test("pricing-term edits close old follow-ups when they reopen customer costing", async () => {
+  const f = await fixture()
+  for (const quote of await createCommercialCostingRepository({ pool }).listQuotes(f.code)) {
+    await workflow.createFollowup({ organizationId: f.organization_id, enquiryId: f.enquiry_id,
+      quoteItemId: quote.id, dueOn: "2026-11-01" })
+  }
+  await workflow.updateEnquiry({ enquiryId: f.enquiry_id, organizationId: f.organization_id,
+    customerId: f.customer_id, commercialTerms: { currency: "EUR" } })
+  const followups = await workflow.listFollowups(f.code)
+  expect(followups.map(row => ({ status: row.status, note: row.note }))).toEqual([
+    { status: "Completed", note: "Revision initiated." },
+    { status: "Completed", note: "Revision initiated." },
+  ])
+})
+
 test("terms-only revision stays with Sales and republishes without recosting", async () => {
   const f = await fixture()
+  for (const quote of await createCommercialCostingRepository({ pool }).listQuotes(f.code)) {
+    await workflow.createFollowup({ organizationId: f.organization_id, enquiryId: f.enquiry_id,
+      quoteItemId: quote.id, dueOn: "2026-11-01" })
+  }
   await workflow.requestEnquiryRevision({
     enquiryId: f.enquiry_id,
     kind: "Terms",
@@ -115,6 +147,7 @@ test("terms-only revision stays with Sales and republishes without recosting", a
   ])
   const costing = createCommercialCostingRepository({ pool })
   const quotes = await costing.listQuotes(f.code)
+  expect((await workflow.listFollowups(f.code)).filter(row => row.status === "Pending")).toHaveLength(0)
   expect(quotes.map(q=>q.rateUsd)).toEqual([25,25,25,25])
   expect(quotes.filter((q) => q.status === "Sent")).toHaveLength(2)
   expect(
@@ -124,6 +157,9 @@ test("terms-only revision stays with Sales and republishes without recosting", a
     quoteItemId: quotes.find((q) => q.status === "Ready")!.id,
     followupDueOn: "2026-12-01",
   })
+  const followups = await workflow.listFollowups(f.code)
+  expect(followups.filter(row => row.status === "Completed")).toHaveLength(2)
+  expect(followups.filter(row => row.status === "Pending")).toHaveLength(2)
   expect((await workflow.listEnquiryRevisions(f.enquiry_id))[0]!.status).toBe(
     "Completed"
   )

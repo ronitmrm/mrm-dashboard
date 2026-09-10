@@ -27,7 +27,8 @@ export async function GET(
   })
   try {
     const scope = { originatingSalespersonUserId: session.user.id }
-    const artifact = await repository.getQuotePdfArtifact(id, scope)
+    const preview = new URL(request.url).searchParams.get("draft") === "true"
+    const artifact = preview ? null : await repository.getQuotePdfArtifact(id, scope)
     if (artifact) {
       if (!artifact.available) {
         return new Response("Quote PDF is unavailable.", { status: 410 })
@@ -51,12 +52,13 @@ export async function GET(
         },
       })
     }
-    if (!(await repository.hasHistoricalQuote(id, scope))) {
+    if (!preview && !(await repository.hasHistoricalQuote(id, scope))) {
       return new Response("Sent Quote PDF was not found.", { status: 404 })
     }
     const document = (await repository.getQuoteDocument(
       id,
-      scope
+      scope,
+      { preview }
     )) as QuoteDocument
     const market = await loadQuoteMarketContext({
       currency: document.currency,

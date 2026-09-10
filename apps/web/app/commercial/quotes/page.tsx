@@ -142,10 +142,10 @@ export default async function QuotesPage() {
                           <Button asChild size="sm" variant="outline">
                             <AttachmentViewerLink
                               fileName={`${quote.quoteNumber}.pdf`}
-                              href={`/commercial/quotes/enquiry/${quote.enquiryId}/pdf`}
+                              href={`/commercial/quotes/enquiry/${quote.enquiryId}/pdf${quote.status === "Ready" ? "?draft=true" : ""}`}
                               mediaType="application/pdf"
                             >
-                              Open PDF
+                              {quote.status === "Ready" ? "Preview PDF" : "Open PDF"}
                             </AttachmentViewerLink>
                           </Button>
                         ) : null}

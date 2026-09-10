@@ -233,7 +233,7 @@ test("builds quotation fields from the enquiry and customer records", async () =
       companyName: 'Document sources Customer', customerContact: 'Customer Contact',
       customerAddress: '12 Industrial Road, Jamnagar 361004\nIndia', buyerName: 'Enquiry Buyer',
       customerReference: 'RFQ-CUSTOMER-987', quotationNumber: 'QTN-ENQ-SOURCE-100',
-      conversionRate: 86.75, paymentTerms: '50% advance', deliveryTerms: 'Eight weeks',
+      conversionRate: 83.25, paymentTerms: '50% advance', deliveryTerms: 'Eight weeks',
       incoterms: 'FOB Mundra', shipmentMode: 'Sea', packagingTerms: 'Export pallets',
       preparedBy: 'Ankit Khattar', preparedByTitle: 'Engineering Lead', terms: [
         { label: 'Brass Material Specs', value: 'C36000', sortOrder: 1 },
@@ -458,6 +458,22 @@ describe("sent Quote PDF issuance", () => {
         originalBytes
       )
       expect(provider.uploads).toHaveLength(1)
+      await pool.query(`UPDATE sales.enquiries SET taxes_and_duties = 'Consignee pays duties',
+        reports = 'MTC included', brass_material_specs = 'C3604' WHERE id = $1`, [context.enquiryId])
+      await pool.query(`INSERT INTO sales.quote_items
+        SELECT (jsonb_populate_record(NULL::sales.quote_items, to_jsonb(q) ||
+          jsonb_build_object('id', gen_random_uuid(), 'status', 'Ready', 'sent_at', NULL,
+            'is_active', false, 'revision', q.revision + 1, 'unit_price', 15,
+            'created_at', now(), 'source_id', gen_random_uuid()::text))).*
+        FROM sales.quote_items q WHERE id = $1`, [context.quoteItemId])
+      const preview = await repository.getQuoteDocument(context.enquiryId, undefined, { preview: true })
+      expect(preview.lines[0]?.price).toBe(15)
+      expect(preview.terms).toEqual([
+        { label: 'Brass Material Specs', value: 'C3604', sortOrder: 1 },
+        { label: 'Reports', value: 'MTC included', sortOrder: 2 },
+        { label: 'Taxes and Duties', value: 'Consignee pays duties', sortOrder: 3 },
+      ])
+      expect(await repository.getQuotePdfArtifact(context.enquiryId)).toEqual(issued)
     } finally {
       await repository.close()
     }
