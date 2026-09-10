@@ -92,7 +92,6 @@ function EnquiryTermSelect({
           </NativeSelectOption>
         ))}
       </NativeSelect>
-      {historicalValue ? <FieldDescription>Previously saved: {historicalValue}. Select an active master value.</FieldDescription> : null}
     </Field>
   )
 }
@@ -176,9 +175,6 @@ export default async function EnquiryDetailPage({
               {snapshot.enquiry.enquiryNumber}
             </h2>
             <Badge variant="secondary">{snapshot.enquiry.currentStage}</Badge>
-            <Badge variant="outline">
-              {snapshot.enquiry.technicalHandoverStatus === "Handed Over" ? "Technical Review Handoff Complete" : snapshot.enquiry.technicalHandoverStatus}
-            </Badge>
           </div>
         </div>
         {snapshot.enquiry.technicalHandoverStatus !== "Handed Over" ? (
