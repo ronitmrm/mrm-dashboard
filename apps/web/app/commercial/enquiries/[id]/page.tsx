@@ -138,6 +138,8 @@ export default async function EnquiryDetailPage({
   })()
   const { selectedItem, snapshot } = loaded
   const canRequestRevision = (await listGrantedCapabilities(session.user.id,['pricing.enquiries.update'])).length > 0
+  const canEditIntake = canRequestRevision && snapshot.enquiry.intakeEditable
+  const canEditTerms = canRequestRevision && (canEditIntake || loaded.revisions.some(revision=>revision.status==='Open'))
   const drawingHistory = new Map(loaded.drawingHistoryEntries)
   const customerRepository = createCustomerRepository({ connectionString })
   const masterRepository = createCommercialMasterRepository({
@@ -198,12 +200,11 @@ export default async function EnquiryDetailPage({
         <CardHeader>
           <CardTitle>Enquiry Register Details</CardTitle>
           <CardDescription>
-            Corrections Remain Available Only While The Source Downstream-Work
-            Gate Permits Them.
+            {canEditTerms ? 'Update the enquiry details for the current work.' : 'Use Request Revision to make changes.'}
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-5">
-          <form action={updateEnquiryAction}>
+          {canEditTerms ? <form action={updateEnquiryAction}>
             <input type="hidden" name="enquiry_id" value={id} />
             <input
               type="hidden"
@@ -344,11 +345,20 @@ export default async function EnquiryDetailPage({
                 ) : null}
               </div>
             </FieldGroup>
-          </form>
+          </form> : <dl className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {[
+              ['Customer',snapshot.enquiry.companyName],['Received On',String(snapshot.enquiry.receivedOn).slice(0,10)],
+              ['Buyer',snapshot.enquiry.buyerName],['Source',snapshot.enquiry.source],['Priority',snapshot.enquiry.priority],
+              ['Incoterms',snapshot.enquiry.incoterms],['Payment Terms',snapshot.enquiry.paymentTerms],
+              ['Shipment Mode',snapshot.enquiry.shipmentMode],['Packaging',snapshot.enquiry.packagingTerms],
+              ['Brass Material Specs',snapshot.enquiry.brassMaterialSpecs],['Reports',snapshot.enquiry.reports],
+              ['Taxes and Duties',snapshot.enquiry.taxesAndDuties],['Currency',snapshot.enquiry.currency],['Remarks',snapshot.enquiry.remarks],
+            ].map(([label,value])=><div key={label}><dt className="text-xs text-muted-foreground">{label}</dt><dd className="mt-1 whitespace-pre-wrap text-sm">{value || '—'}</dd></div>)}
+          </dl>}
         </CardContent>
  </SectionCard>
 
- <SectionCard>
+ {canEditIntake ? <SectionCard>
         <CardHeader>
           <CardTitle>Add Line Item</CardTitle>
           <CardDescription>
@@ -440,7 +450,7 @@ export default async function EnquiryDetailPage({
             </FieldGroup>
           </form>
         </CardContent>
- </SectionCard>
+ </SectionCard> : null}
 
       {snapshot.importReviews.some((review) => review.status === "Pending") ? (
         <section className="grid gap-4">
@@ -659,6 +669,7 @@ export default async function EnquiryDetailPage({
             </CardHeader>
             <CardContent>
               <form action={updateEnquiryItemAction}>
+                <fieldset disabled={!canEditIntake}>
                 <input type="hidden" name="enquiry_id" value={id} />
                 <input
                   type="hidden"
@@ -776,7 +787,7 @@ export default async function EnquiryDetailPage({
                     </Field>
                   </div>
                   <div className="flex flex-wrap gap-3">
-                    <Button type="submit">Update Line</Button>
+                    {canEditIntake ? <Button type="submit">Update Line</Button> : null}
                     {selectedItem.drawingFileId ? (
                       <Button asChild type="button" variant="outline">
                         <AttachmentViewerLink
@@ -818,6 +829,7 @@ export default async function EnquiryDetailPage({
                     </div>
                   ) : null}
                 </FieldGroup>
+                </fieldset>
               </form>
             </CardContent>
  </SectionCard>

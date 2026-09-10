@@ -6469,6 +6469,10 @@ export function createCommercialWorkflowRepository(
             targetStage: row.target_stage,
           })),
           enquiry: {
+            intakeEditable: !items.rows.some(line => line.quote_status) &&
+              (enquiry.rows[0].technical_handover_status !== 'Handed Over' ||
+                items.rows.every(line => line.technical_review_status === 'Pending Review' && !line.design_status) ||
+                clarifications.rows.some(task => task.status === 'Open' && task.target_stage === 'Sales')),
             currentStage: items.rows.some(line => line.revision_stage === 'Design') ? 'Design' :
               items.rows.some(line => line.revision_stage === 'Product Costing') ? 'Product Costing' :
               items.rows.some(line => line.revision_stage === 'Sales') ? 'Sales — Terms Revision' :
