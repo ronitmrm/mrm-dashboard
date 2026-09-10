@@ -460,12 +460,12 @@ describe("sent Quote PDF issuance", () => {
       expect(provider.uploads).toHaveLength(1)
       await pool.query(`UPDATE sales.enquiries SET taxes_and_duties = 'Consignee pays duties',
         reports = 'MTC included', brass_material_specs = 'C3604' WHERE id = $1`, [context.enquiryId])
-      await pool.query(`INSERT INTO sales.quote_items
+      const replacement = await pool.query<{id:string}>(`INSERT INTO sales.quote_items
         SELECT (jsonb_populate_record(NULL::sales.quote_items, to_jsonb(q) ||
           jsonb_build_object('id', gen_random_uuid(), 'status', 'Ready', 'sent_at', NULL,
             'is_active', false, 'revision', q.revision + 1, 'unit_price', 15,
             'created_at', now(), 'source_id', gen_random_uuid()::text))).*
-        FROM sales.quote_items q WHERE id = $1`, [context.quoteItemId])
+        FROM sales.quote_items q WHERE id = $1 RETURNING id`, [context.quoteItemId])
       const preview = await repository.getQuoteDocument(context.enquiryId, undefined, { preview: true })
       expect(preview.lines[0]?.price).toBe(15)
       expect(preview.terms).toEqual([
@@ -474,10 +474,16 @@ describe("sent Quote PDF issuance", () => {
         { label: 'Taxes and Duties', value: 'Consignee pays duties', sortOrder: 3 },
       ])
       expect(await repository.getQuotePdfArtifact(context.enquiryId)).toEqual(issued)
+      await issueQuote({...context,quoteItemId:replacement.rows[0]!.id},provider)
+      expect(await repository.getQuotePdfArtifact(context.enquiryId,undefined,0)).toEqual(issued)
+      const revisedArtifact = await repository.getQuotePdfArtifact(context.enquiryId,undefined,1)
+      expect(revisedArtifact).not.toBeNull()
+      expect(revisedArtifact?.publicUrl).not.toBe(issued!.publicUrl)
+      expect((await repository.listQuotationVersions(context.enquiryId)).map(version=>version.revision)).toEqual([0,1])
     } finally {
       await repository.close()
     }
-  }, 30_000)
+  }, 60_000)
 
   test("returns an unavailable tombstone instead of regenerating a deleted sent Quote", async () => {
     const context = await createReadyQuote("Deleted immutable")

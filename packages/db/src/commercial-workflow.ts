@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto"
+import { ensureQuotationDraft, quotationVersionMethods } from "./quotation-versions"
 import { linkEnquiryCostMasters } from "./commercial-term-selection"
 import { completeRevisionFollowups, enquiryRevisionMethods, prepareTermsRevision } from "./enquiry-revisions"
 import path from "node:path"
@@ -102,6 +103,7 @@ type EnquirySpreadsheetDatabaseRow = {
   quantity: string
   quote_pdf_sent_at: Date | null
   quote_pdf_status: string
+  quote_revision: number
   received_on: string
   source: string
   target_price: string | null
@@ -127,6 +129,7 @@ function enquirySpreadsheetItemFromRow(row: EnquirySpreadsheetDatabaseRow) {
     quantity: Number(row.quantity),
     quotePdfSentAt: row.quote_pdf_sent_at,
     quotePdfStatus: row.quote_pdf_status,
+    quoteRevision: row.quote_revision ?? 0,
     receivedOn: row.received_on,
     source: row.source,
     targetPrice: row.target_price === null ? null : Number(row.target_price),
@@ -2134,6 +2137,7 @@ export function createCommercialWorkflowRepository(
 
   return {
     ...enquiryRevisionMethods(pool),
+    ...quotationVersionMethods(pool),
     close,
 
     async createEnquiry(input: {
@@ -2615,6 +2619,7 @@ export function createCommercialWorkflowRepository(
           JOIN sales.enquiry_items line ON line.id=link.enquiry_item_id
           WHERE request.enquiry_id=$1 AND request.status='Open' AND (line.revision_stage='Ready To Send' OR EXISTS (
             SELECT 1 FROM sales.quote_items q WHERE q.enquiry_item_id=line.id AND q.created_at >= request.created_at AND q.status='Draft')) LIMIT 1`, [input.enquiryId])).rowCount) throw new Error("Pricing has started for this revision. Complete it before changing pricing terms again.")
+        if (pricingTermsChanged && hasLockedCommercialWork) await ensureQuotationDraft(client, input.enquiryId)
         const updated = await client.query<{
           buyer_name: string | null
           id: string
@@ -3250,6 +3255,7 @@ export function createCommercialWorkflowRepository(
         enquiry_id: string
         enquiry_number: string
         latest_quote_at: Date | null
+        ready_quote_id: string
         not_quoted_lines: string
         quoted_lines: string
         total_lines: string
@@ -3262,7 +3268,9 @@ export function createCommercialWorkflowRepository(
             count(DISTINCT item.id) FILTER (
               WHERE item.technical_review_status = 'Not Feasible'
             )::text AS not_quoted_lines,
-            max(quote.updated_at) AS latest_quote_at
+            max(quote.updated_at) AS latest_quote_at,
+            (SELECT q.id FROM sales.quote_items q WHERE q.enquiry_id=enquiry.id AND q.status='Ready' AND q.sent_at IS NULL
+              ORDER BY q.created_at DESC,q.id DESC LIMIT 1) AS ready_quote_id
           FROM sales.enquiries enquiry
           JOIN sales.customers customer ON customer.id = enquiry.customer_id
           JOIN core.organizations organization
@@ -3313,6 +3321,7 @@ export function createCommercialWorkflowRepository(
         enquiryId: row.enquiry_id,
         enquiryNumber: row.enquiry_number,
         latestQuoteAt: row.latest_quote_at,
+        readyQuoteId: row.ready_quote_id,
         notQuotedLines: Number(row.not_quoted_lines),
         quotedLines: Number(row.quoted_lines),
         totalLines: Number(row.total_lines),
@@ -3325,6 +3334,7 @@ export function createCommercialWorkflowRepository(
       scope?: SalesWorkScope
     ) {
       const result = await pool.query<{
+        quote_revision: number
         company_name: string
         currency: string
         customer_uid: string
@@ -3339,10 +3349,11 @@ export function createCommercialWorkflowRepository(
         `
           SELECT enquiry.id AS enquiry_id, enquiry.enquiry_number,
             customer.customer_uid, customer.company_name,
-            enquiry.currency,
-            count(DISTINCT item.id)::text AS total_lines,
-            count(DISTINCT quote.id)::text AS sent_quote_items,
-            max(quote.sent_at) AS latest_sent_at,
+            COALESCE(version.terms_snapshot->>'currency', enquiry.currency) AS currency,
+            COALESCE(version.revision,0) AS quote_revision,
+            COALESCE(jsonb_array_length(version.lines_snapshot),count(DISTINCT item.id))::text AS total_lines,
+            COALESCE(jsonb_array_length(version.lines_snapshot),count(DISTINCT quote.id))::text AS sent_quote_items,
+            COALESCE(version.sent_at,max(quote.sent_at)) AS latest_sent_at,
             min(followup.due_on) FILTER (
               WHERE followup.status = 'Pending'
             )::text AS next_followup_due,
@@ -3357,11 +3368,14 @@ export function createCommercialWorkflowRepository(
           JOIN sales.quote_items quote ON quote.enquiry_id = enquiry.id
             AND quote.status <> 'Superseded'
             AND quote.sent_at IS NOT NULL
+          LEFT JOIN sales.quotation_versions version ON version.enquiry_id=enquiry.id AND version.status='Sent'
           LEFT JOIN sales.followups followup
             ON followup.enquiry_id = enquiry.id
+            AND (version.id IS NULL OR EXISTS (SELECT 1 FROM jsonb_array_elements(version.lines_snapshot) line
+              WHERE line->>'quoteItemId'=followup.quote_item_id::text))
           WHERE organization.code = $1
             AND ($3::uuid IS NULL OR enquiry.created_by_user_id = $3 OR (SELECT identity.has_administrative_access($3)))
-          GROUP BY enquiry.id, customer.customer_uid, customer.company_name
+          GROUP BY enquiry.id, customer.customer_uid, customer.company_name,version.id
           ORDER BY latest_sent_at DESC, enquiry.created_at DESC,
             enquiry.id DESC
           LIMIT $2
@@ -3376,6 +3390,7 @@ export function createCommercialWorkflowRepository(
         ]
       )
       return result.rows.map((row) => ({
+        quoteRevision: row.quote_revision,
         companyName: row.company_name,
         currency: row.currency,
         customerUid: row.customer_uid,
@@ -6812,7 +6827,8 @@ export function createCommercialWorkflowRepository(
               WHEN selected_quote.sent_at IS NOT NULL THEN 'PDF Sent'
               ELSE 'Not Sent'
             END AS quote_pdf_status,
-            selected_quote.sent_at AS quote_pdf_sent_at
+            selected_quote.sent_at AS quote_pdf_sent_at,
+            COALESCE((SELECT max(v.revision) FROM sales.quotation_versions v WHERE v.enquiry_id=enquiry.id),0) AS quote_revision
           FROM sales.enquiry_items enquiry_item
           JOIN sales.enquiries enquiry ON enquiry.id = enquiry_item.enquiry_id
           JOIN sales.customers customer ON customer.id = enquiry.customer_id

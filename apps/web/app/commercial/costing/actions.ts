@@ -314,4 +314,5 @@ export async function sendQuoteAction(formData: FormData) {
   revalidatePath("/commercial/quotes")
   revalidatePath(`/commercial/quotes/${quoteItemId}`)
   revalidatePath("/commercial/sales")
+  revalidatePath("/commercial/enquiries", "layout")
 }

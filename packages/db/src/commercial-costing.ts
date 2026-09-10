@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto"
 import { assertRevisionCanSend } from "./enquiry-revisions"
+import { captureQuotation, ensureQuotationDraft, quotationVersionMethods } from "./quotation-versions"
 import { readPriceMaster, productPriceDefaults } from "./price-master"
 import { enquiryMasterCosts } from "./commercial-term-selection"
 
@@ -790,6 +791,7 @@ async function getQuoteDocumentWithClient(
   const header = await queryable.query<{
     company_name: string
     customer_contact: string | null
+    quotation_revision: number
     customer_address: string | null
     brass_material_specs: string | null
     reports: string | null
@@ -808,6 +810,7 @@ async function getQuoteDocumentWithClient(
   }>(
     `
       SELECT enquiry.enquiry_number, enquiry.currency,
+        COALESCE((SELECT max(v.revision) FROM sales.quotation_versions v WHERE v.enquiry_id=enquiry.id),0) AS quotation_revision,
         COALESCE((SELECT quote.conversion_rate::text FROM sales.quote_items quote
           WHERE quote.enquiry_id = enquiry.id AND quote.status <> 'Superseded'
           ORDER BY CASE WHEN quote.id = $3::uuid THEN 0 ELSE 1 END, quote.created_at DESC LIMIT 1), enquiry.conversion_rate::text) AS conversion_rate, enquiry.incoterms,
@@ -893,7 +896,6 @@ async function getQuoteDocumentWithClient(
     ? lines.rows.filter(line => line.status === "Cannot Quote" || (options.preview && line.status === "Ready") || (line.sent_at !== null &&
         ["Sent", "Accepted", "Ordered", "Superseded"].includes(line.status ?? "")))
     : lines.rows
-  const issuedLine = includedLines.find(line => line.quote_item_id === options.issuedQuoteItemId)
   return {
     companyName: row.company_name,
     customerContact: row.customer_contact,
@@ -925,7 +927,7 @@ async function getQuoteDocumentWithClient(
     })),
     packagingTerms: row.packaging_terms,
     paymentTerms: row.payment_terms,
-    revision: issuedLine?.revision ?? Math.max(0, ...includedLines.map((line) => line.revision ?? 0)),
+    revision: row.quotation_revision,
     shipmentMode: row.shipment_mode,
     terms: [
       { label: "Brass Material Specs", value: row.brass_material_specs, sortOrder: 1 },
@@ -1077,6 +1079,7 @@ async function transitionQuoteToSent(
   const quoteItemIds = lines.flatMap(line =>
     !line.cannot_quote && line.quote_item_id && line.status === "Ready"
       ? [line.quote_item_id] : [])
+  const quotation = await ensureQuotationDraft(client, enquiryId)
   if (!quoteItemIds.includes(input.quoteItemId)) quoteItemIds.push(input.quoteItemId)
   const tree = await client.query<{ id: string; depth: number }>(
     `
@@ -1198,6 +1201,7 @@ async function transitionQuoteToSent(
       }
     }
   }
+  await captureQuotation(client, quotation.id, input.quoteItemId)
   if (root.rows[0].enquiry_item_id) {
     await client.query(
       `
@@ -1909,6 +1913,7 @@ export function createCommercialCostingRepository(
   }
 
   return {
+    ...quotationVersionMethods(pool),
     close,
 
     async listCustomerCostingTasksBounded(
@@ -3588,7 +3593,7 @@ export function createCommercialCostingRepository(
       return getQuoteDocumentWithClient(pool, enquiryId, scope, options)
     },
 
-    async getQuotePdfArtifact(enquiryId: string, scope?: SalesWorkScope) {
+    async getQuotePdfArtifact(enquiryId: string, scope?: SalesWorkScope, revision?: number) {
       const artifact = await pool.query<{
         byte_size: string
         file_name: string
@@ -3616,6 +3621,7 @@ export function createCommercialCostingRepository(
             ON enquiry.id = coalesce(quote.enquiry_id, enquiry_item.enquiry_id)
           WHERE coalesce(quote.enquiry_id, enquiry_item.enquiry_id) = $1
             AND quote.sent_at IS NOT NULL
+            AND ($4::integer IS NULL OR file.id=(SELECT v.file_id FROM sales.quotation_versions v WHERE v.enquiry_id=$1 AND v.revision=$4))
             AND ($3::uuid IS NULL OR enquiry.created_by_user_id = $3 OR (SELECT identity.has_administrative_access($3)))
           ORDER BY quote.sent_at DESC, link.version DESC,
             file.created_at DESC, file.id DESC
@@ -3625,6 +3631,7 @@ export function createCommercialCostingRepository(
           enquiryId,
           quotePdfArtifactPurpose,
           scope?.originatingSalespersonUserId ?? null,
+          revision ?? null,
         ]
       )
       const row = artifact.rows[0]

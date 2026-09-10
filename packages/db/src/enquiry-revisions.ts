@@ -2,6 +2,7 @@ import type { Pool, PoolClient } from "pg"
 import { randomUUID } from "node:crypto"
 import { withTransaction } from "./postgres-runtime"
 import { nextRevisionNumber } from "./commercial-revisions"
+import { ensureQuotationDraft } from "./quotation-versions"
 
 export type EnquiryRevisionKind = "Terms" | "Pricing" | "Technical"
 
@@ -184,6 +185,7 @@ export function enquiryRevisionMethods(pool: Pool) {
               )
           }
         }
+        await ensureQuotationDraft(client, input.enquiryId)
         const created = await client.query<{ id: string }>(
           `INSERT INTO sales.enquiry_revision_requests(organization_id,enquiry_id,kind,reason,terms_before,created_by_user_id)
           VALUES($1,$2,$3,$4,$5,$6) RETURNING id`,

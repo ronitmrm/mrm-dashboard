@@ -1,4 +1,6 @@
 import Link from "next/link"
+import { notFound } from "next/navigation"
+import { QuotationHistory, QuotationTabs } from "../quotation-history"
 
 import {
   createCommercialMasterRepository,
@@ -102,7 +104,7 @@ export default async function EnquiryDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ line?: string }>
+  searchParams: Promise<{ line?: string; revision?: string }>
 }) {
   const { id } = await params
   const selectorParams = await searchParams
@@ -119,6 +121,7 @@ export default async function EnquiryDetailPage({
         originatingSalespersonUserId: session.user.id,
       })
       const revisions = await workflow.listEnquiryRevisions(id,session.user.id)
+      const quotations = await workflow.listQuotationVersions(id,session.user.id)
       const selectedItem = selectedEnquiryLine(snapshot.items, selectedLineId)
       const drawingHistoryEntries = selectedItem
         ? [
@@ -131,13 +134,19 @@ export default async function EnquiryDetailPage({
             ] as const,
           ]
         : []
-      return { drawingHistoryEntries, selectedItem, snapshot, revisions }
+      return { drawingHistoryEntries, selectedItem, snapshot, revisions, quotations }
     } finally {
       await workflow.close()
     }
   })()
   const { selectedItem, snapshot } = loaded
   const canRequestRevision = (await listGrantedCapabilities(session.user.id,['pricing.enquiries.update'])).length > 0
+  const currentQuotation = loaded.quotations.at(-1)
+  const selectedQuotation = selectorParams.revision === undefined ? currentQuotation : loaded.quotations.find(version=>String(version.revision)===selectorParams.revision)
+  if (selectorParams.revision !== undefined && !selectedQuotation) notFound()
+  if (selectedQuotation?.status === 'Sent') return <QuotationHistory enquiryId={id} enquiryNumber={snapshot.enquiry.enquiryNumber}
+    versions={loaded.quotations} selected={selectedQuotation} action={canRequestRevision && selectedQuotation.id===currentQuotation?.id
+      ? <RequestRevision enquiryId={id} lines={snapshot.items} disabled={loaded.revisions.some(revision=>revision.status==='Open')}/> : null}/>
   const canEditIntake = canRequestRevision && snapshot.enquiry.intakeEditable
   const canEditTerms = canRequestRevision && (canEditIntake || loaded.revisions.some(revision=>revision.status==='Open'))
   const drawingHistory = new Map(loaded.drawingHistoryEntries)
@@ -167,6 +176,7 @@ export default async function EnquiryDetailPage({
 
   return (
     <div className="grid gap-6">
+      {currentQuotation ? <QuotationTabs enquiryId={id} versions={loaded.quotations} selected={currentQuotation.revision}/> : null}
       <section className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="grid gap-2">
           <Button asChild className="w-fit" size="sm" variant="ghost">

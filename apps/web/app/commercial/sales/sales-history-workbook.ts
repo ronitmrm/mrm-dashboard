@@ -12,6 +12,7 @@ type Followup = {
 }
 
 type SentQuote = {
+  quoteRevision?: number
   companyName: string
   currency: string
   customerUid: string
@@ -45,6 +46,7 @@ export function buildSentQuoteHistoryWorkbook(rows: SentQuote[]) {
   const sheet = XLSX.utils.json_to_sheet(
     rows.map((row) => ({
       ENQ: row.enquiryNumber,
+      "Quote Revision": row.quoteRevision ? `Revision ${row.quoteRevision}` : "Original",
       "Customer UID": row.customerUid,
       Customer: row.companyName,
       Currency: row.currency,
@@ -53,7 +55,7 @@ export function buildSentQuoteHistoryWorkbook(rows: SentQuote[]) {
       "PDF Sent At": row.latestSentAt.toISOString(),
       "Next Follow-up": row.nextFollowupDue ?? "",
       "Pending Follow-ups": row.pendingFollowups,
-      "PDF Link": `/commercial/quotes/enquiry/${row.enquiryId}/pdf`,
+      "PDF Link": `/commercial/quotes/enquiry/${row.enquiryId}/pdf?revision=${row.quoteRevision ?? 0}`,
     }))
   )
   XLSX.utils.book_append_sheet(workbook, sheet, "Sent Quote History")
@@ -80,7 +82,7 @@ export function buildSalesHistoryWorkbook(
       "Next Follow-up": row.nextFollowupDue ?? "",
       "Pending Follow-ups": row.pendingFollowups,
       Notes: "",
-      "PDF Link": `/commercial/quotes/enquiry/${row.enquiryId}/pdf`,
+      "PDF Link": `/commercial/quotes/enquiry/${row.enquiryId}/pdf?revision=${row.quoteRevision ?? 0}`,
     })),
     ...followups.map((row) => ({
       Type: "Follow-up",

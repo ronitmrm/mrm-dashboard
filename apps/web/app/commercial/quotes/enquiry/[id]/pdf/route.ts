@@ -27,8 +27,14 @@ export async function GET(
   })
   try {
     const scope = { originatingSalespersonUserId: session.user.id }
-    const preview = new URL(request.url).searchParams.get("draft") === "true"
-    const artifact = preview ? null : await repository.getQuotePdfArtifact(id, scope)
+    const query = new URL(request.url).searchParams
+    const requestedRevision = query.get("revision")
+    if (requestedRevision !== null && !/^\d+$/.test(requestedRevision)) return new Response("Invalid quote revision.", {status:400})
+    const versions = await repository.listQuotationVersions(id, session.user.id)
+    const version = requestedRevision === null ? versions.at(-1) : versions.find(row=>row.revision===Number(requestedRevision))
+    if (requestedRevision !== null && !version) return new Response("Quote revision was not found.", {status:404})
+    const preview = version?.status === "Draft" || (requestedRevision === null && query.get("draft") === "true")
+    const artifact = preview ? null : await repository.getQuotePdfArtifact(id, scope, version?.revision)
     if (artifact) {
       if (!artifact.available) {
         return new Response("Quote PDF is unavailable.", { status: 410 })
@@ -52,6 +58,7 @@ export async function GET(
         },
       })
     }
+    if (!preview && version) return new Response("Historical quote PDF is unavailable.", {status:410})
     if (!preview && !(await repository.hasHistoricalQuote(id, scope))) {
       return new Response("Sent Quote PDF was not found.", { status: 404 })
     }

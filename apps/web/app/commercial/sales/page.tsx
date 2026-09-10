@@ -2,6 +2,8 @@ import Link from "next/link"
 import { X } from "lucide-react"
 
 import { createCommercialWorkflowRepository } from "@workspace/db"
+import { sendQuoteAction } from "../costing/actions"
+import { istDateValue } from "@/lib/date-time"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
@@ -100,6 +102,7 @@ export default async function SalesPage({
     )
     const handoverTasks = handoverResults.rows
     const quoteReadyTasks = quoteReadyResults.rows
+    const readyQuoteByEnquiry = new Map(quoteReadyTasks.map(quote=>[quote.enquiryId,quote.readyQuoteId]))
     const sentQuoteTasks = sentQuoteResults.rows
     const selectedClarification = clarificationTasks.find(
       (task) => task.enquiryItemId === requestedCandidateItemId
@@ -152,7 +155,7 @@ export default async function SalesPage({
             activeView === "sent-quotes"
               ? [
                   {
-                    label: "Quoted Enquiries",
+                    label: "Issued Quotations",
                     value: sentQuoteTasks.length,
                     tone: "information"
                   },
@@ -263,11 +266,19 @@ export default async function SalesPage({
                                 </Button>
                               </form>
                             ) : task.action === "quote" ? (
-                              <Button asChild size="sm" variant="outline">
-                                <Link href="/commercial/quotes">
-                                  Open Quotes
-                                </Link>
-                              </Button>
+                              <div className="flex flex-wrap items-end gap-2">
+                                <Button asChild size="sm" variant="outline"><AttachmentViewerLink
+                                  fileName={`${task.enquiryNumber}-quote.pdf`}
+                                  href={`/commercial/quotes/enquiry/${task.enquiryId}/pdf?draft=true`}
+                                  mediaType="application/pdf">Preview PDF</AttachmentViewerLink></Button>
+                                {readyQuoteByEnquiry.get(task.enquiryId) ? <form action={sendQuoteAction} className="flex flex-wrap items-end gap-2">
+                                  <input type="hidden" name="quote_item_id" value={readyQuoteByEnquiry.get(task.enquiryId)} />
+                                  <label className="grid gap-1 text-xs">Follow-Up Date
+                                    <Input type="date" name="followup_due_on" min={istDateValue()} required aria-label={`Follow-Up Date For ${task.enquiryNumber}`} />
+                                  </label>
+                                  <Button type="submit" size="sm">Send Full Enquiry</Button>
+                                </form> : null}
+                              </div>
                             ) : (
                               <Button asChild size="sm" variant="outline">
                                 <Link
@@ -758,14 +769,15 @@ export default async function SalesPage({
                       <TableHead data-filterable="true">
                         Pending Follow-Ups
                       </TableHead>
+                      <TableHead>Quote Revision</TableHead>
                       <TableHead>Quote PDF</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {sentQuoteTasks.map((task) => (
-                      <TableRow key={task.enquiryId}>
+                      <TableRow key={`${task.enquiryId}:${task.quoteRevision}`}>
                         <TableCell>{task.latestSentAt.toISOString()}</TableCell>
-                        <TableCell>{task.enquiryNumber}</TableCell>
+                        <TableCell><Link className="text-primary underline-offset-4 hover:underline" href={`/commercial/enquiries/${task.enquiryId}?revision=${task.quoteRevision}`}>{task.enquiryNumber}</Link></TableCell>
                         <TableCell>{task.customerUid}</TableCell>
                         <TableCell>{task.companyName}</TableCell>
                         <TableCell>{task.currency}</TableCell>
@@ -773,11 +785,12 @@ export default async function SalesPage({
                         <TableCell>{task.sentQuoteItems}</TableCell>
                         <TableCell>{task.nextFollowupDue ?? "—"}</TableCell>
                         <TableCell>{task.pendingFollowups}</TableCell>
+                        <TableCell>{task.quoteRevision === 0 ? "Original" : `Revision ${task.quoteRevision}`}</TableCell>
                         <TableCell>
                           <Button asChild size="sm" variant="outline">
                             <AttachmentViewerLink
                               fileName={`${task.enquiryNumber}-quote.pdf`}
-                              href={`/commercial/quotes/enquiry/${task.enquiryId}/pdf`}
+                              href={`/commercial/quotes/enquiry/${task.enquiryId}/pdf?revision=${task.quoteRevision}`}
                               mediaType="application/pdf"
                             >
                               Open PDF
@@ -790,7 +803,7 @@ export default async function SalesPage({
                       <TableRow>
                         <TableCell
                           className="py-10 text-center text-muted-foreground"
-                          colSpan={10}
+                          colSpan={11}
                         >
                           No Sent Quotes Saved.
                         </TableCell>
