@@ -298,7 +298,7 @@ export async function buildEmploymentLetterPdf(
       second,
       1,
       "Compensation",
-      `You will receive a consolidated salary of ${money(letter.salary)} per ${letter.details.payPeriod}, subject to applicable statutory deductions.`
+      `During probation, your consolidated salary will be ${money(letter.salary)} per ${letter.details.payPeriod}. After probation, your salary range will be ${money(letter.details.salaryAfterProbationMinimum)} to ${money(letter.details.salaryAfterProbationMaximum)} per ${letter.details.payPeriod}, subject to applicable statutory deductions.`
     )
     clause(
       second,
@@ -322,7 +322,7 @@ export async function buildEmploymentLetterPdf(
       second,
       5,
       "Working Days and Hours",
-      "Working days are Saturday through Thursday. Duty hours are 08:30 to 20:00, subject to applicable labour laws and additional business requirements."
+      `Working days are Saturday through Thursday. Duty hours are ${letter.details.dutyStartTime} to ${letter.details.dutyEndTime}, subject to applicable labour laws and additional business requirements.`
     )
     clause(
       second,

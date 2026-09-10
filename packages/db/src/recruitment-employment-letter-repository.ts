@@ -41,7 +41,10 @@ type Context = {
 export type IssueEmploymentLetterInput =
   | (Context & {
       applicationId: string
-      details: OfferLetterDetails
+      details: Omit<
+        OfferLetterDetails,
+        "salaryAfterProbationMinimum" | "salaryAfterProbationMaximum"
+      >
       issuedOn: string
       type: "offer"
     })
@@ -312,12 +315,16 @@ export function createRecruitmentEmploymentLetterRepository(
             joining_date: string | null
             post_id: string | null
             salary_before_probation: string | null
+            salary_after_probation_minimum: string | null
+            salary_after_probation_maximum: string | null
             willing_to_join: boolean | null
           }>(
             `SELECT application.status AS application_status,
                application.willing_to_join,
                application.joining_date::text,
                application.salary_before_probation,
+               application.salary_after_probation_minimum,
+               application.salary_after_probation_maximum,
                candidate.name AS candidate_name, job.post_id,
                post.employee_code,
                designation.name AS designation,
@@ -351,7 +358,15 @@ export function createRecruitmentEmploymentLetterRepository(
           const currentReference = await existingReference(client, sourceId)
           request = {
             applicationStatus: row.application_status,
-            details: input.details,
+            details: {
+              ...input.details,
+              salaryAfterProbationMinimum: Number(
+                row.salary_after_probation_minimum
+              ),
+              salaryAfterProbationMaximum: Number(
+                row.salary_after_probation_maximum
+              ),
+            },
             identity: {
               department: row.department,
               designation: row.designation,

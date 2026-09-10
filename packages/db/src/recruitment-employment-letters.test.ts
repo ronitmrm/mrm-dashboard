@@ -15,6 +15,10 @@ describe("employment letter lifecycle", () => {
     const letter = prepareEmploymentLetter({
       applicationStatus: "Approved",
       details: {
+        dutyStartTime: "09:15",
+        dutyEndTime: "18:45",
+        salaryAfterProbationMinimum: 18000,
+        salaryAfterProbationMaximum: 22000,
         payPeriod: "month",
         postalAddress: "368-1, Elgan Society\nHapa, Jamnagar\nGujarat - 361120",
         probationLength: 2,
