@@ -272,7 +272,7 @@ export default async function SalesPage({
                                   fileName={`${task.enquiryNumber}-quote.pdf`}
                                   href={`/commercial/quotes/enquiry/${task.enquiryId}/pdf?draft=true`}
                                   mediaType="application/pdf">Preview PDF</AttachmentViewerLink></Button>
-                                <Button asChild size="sm" variant="outline"><Link href={`/commercial/quotes/enquiry/${task.enquiryId}/drawings?draft=true`}>Customer Drawings</Link></Button>
+                                <Button asChild size="sm" variant="outline"><Link href={`/commercial/enquiries/${task.enquiryId}#quotation-parts`}>Quote Details</Link></Button>
                                 {readyQuoteByEnquiry.get(task.enquiryId) ? <form action={sendQuoteAction} className="flex flex-wrap items-end gap-2">
                                   <input type="hidden" name="quote_item_id" value={readyQuoteByEnquiry.get(task.enquiryId)} />
                                   <label className="grid gap-1 text-xs">Follow-Up Date
@@ -799,7 +799,7 @@ export default async function SalesPage({
                             </AttachmentViewerLink>
                           </Button>
                           <Button asChild size="sm" variant="outline">
-                            <Link href={`/commercial/quotes/enquiry/${task.enquiryId}/drawings?revision=${task.quoteRevision}`}>Customer Drawings</Link>
+                            <Link href={`/commercial/enquiries/${task.enquiryId}?revision=${task.quoteRevision}#quotation-parts`}>Quote Details</Link>
                           </Button>
                         </TableCell>
                       </TableRow>

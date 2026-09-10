@@ -28,10 +28,14 @@ omitted without substituting another drawing. Quote issuance captures file IDs
 per part in `quotation_versions.lines_snapshot`; historical reads use those IDs.
 Legacy quote backfills deliberately do not resolve current drawings.
 
-Sales quote actions and quotation history link to the customer drawing list.
-List and file routes require quote read access and enforce the originating
-salesperson scope. Downloads recheck availability and do not require Design
-access. Working files are never implicitly exposed to Sales.
+Quotation parts display a Drawings column with per-file view and direct download
+links. The header's Download All Drawings action returns a ZIP grouped by line,
+with unique safe filenames. Sales links open the quotation rather than a separate
+drawing page; old drawing-page URLs redirect to the quotation. File and ZIP routes
+require quote read access and enforce the originating salesperson scope. Downloads
+recheck availability and omit missing files; temporary storage failures surface
+as errors rather than silently producing an incomplete archive. Working files are
+never implicitly exposed to Sales.
 
 ## Statuses
 

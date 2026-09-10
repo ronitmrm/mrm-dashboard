@@ -3,55 +3,298 @@ import type { ReactNode } from "react"
 import type { QuotationVersion } from "@workspace/db"
 import { Button } from "@workspace/ui/components/button"
 import { Badge } from "@workspace/ui/components/badge"
-import { SectionCard, CardHeader, CardTitle, CardContent } from "@workspace/ui/components/card"
-import { OperationalTable, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@workspace/ui/components/table"
-import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
+import {
+  SectionCard,
+  CardHeader,
+  CardTitle,
+  CardContent,
+} from "@workspace/ui/components/card"
+import {
+  OperationalTable,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "@workspace/ui/components/table"
+import { AttachmentViewerLink } from "../../../components/attachment-viewer-link"
 
-import { quotationRevisionLabel } from "@/lib/pricing/quotation-revision"
+import { quotationRevisionLabel } from "../../../lib/pricing/quotation-revision"
 
-export function QuotationTabs({enquiryId,versions,selected}:{enquiryId:string;versions:QuotationVersion[];selected:number}) {
-  return <nav aria-label="Quotation revisions" role="tablist" className="flex gap-2 overflow-x-auto border-b pb-2">
-    {versions.map(version=><Button asChild key={version.id} variant={version.revision===selected ? "default" : "outline"} size="sm">
-      <Link role="tab" aria-selected={version.revision===selected} href={`/commercial/enquiries/${enquiryId}?revision=${version.revision}`}>
-        {quotationRevisionLabel(version.revision)}{version.status==='Draft' ? ' · In Progress' : ''}
-      </Link>
-    </Button>)}
-  </nav>
+type DrawingLink = {
+  enquiryItemId: string
+  fileId: string
+  fileName: string
+  mediaType: string | null
 }
 
-export function QuotationHistory({enquiryId,enquiryNumber,versions,selected,action}:{
-  enquiryId:string;enquiryNumber:string;versions:QuotationVersion[];selected:QuotationVersion;action?:ReactNode
+export function DownloadAllDrawings({
+  enquiryId,
+  query,
+  available,
+}: {
+  enquiryId: string
+  query: string
+  available: boolean
 }) {
-  const previous=versions.find(version=>version.revision===selected.revision-1)
-  const terms = [
-    ['incoterms','Delivery'],['payment_terms','Payment'],['shipment_mode','Shipment Mode'],
-    ['packaging_terms','Packaging'],['brass_material_specs','Brass Material Specs'],
-    ['reports','Reports'],['taxes_and_duties','Taxes and Duties'],['currency','Currency'],
-  ] as const
-  return <div className="grid gap-6">
-    <div className="flex flex-wrap items-center justify-between gap-2">
-      <div><h2 className="text-2xl font-semibold">{enquiryNumber}</h2><p>{quotationRevisionLabel(selected.revision)} · {selected.status}</p></div>
-      <div className="flex flex-wrap gap-2"><Button asChild variant="outline"><Link href="/commercial/sales?view=sent-quotes">Back To Sent Quotes</Link></Button>{action}
-        <Button asChild variant="outline"><Link href={`/commercial/quotes/enquiry/${enquiryId}/drawings?revision=${selected.revision}`}>Customer Drawings</Link></Button>
-        <Button asChild variant="outline"><AttachmentViewerLink fileName={`${enquiryNumber}-${selected.revision}.pdf`}
-          href={`/commercial/quotes/enquiry/${enquiryId}/pdf?revision=${selected.revision}`} mediaType="application/pdf">Open PDF</AttachmentViewerLink></Button>
-      </div>
+  return available ? (
+    <Button asChild variant="outline">
+      <a
+        download
+        href={`/commercial/quotes/enquiry/${enquiryId}/drawings/download?${query}`}
+      >
+        Download All Drawings
+      </a>
+    </Button>
+  ) : (
+    <Button disabled variant="outline">
+      Download All Drawings
+    </Button>
+  )
+}
+
+export function QuotationDrawingsCell({
+  enquiryId,
+  query,
+  drawings,
+}: {
+  enquiryId: string
+  query: string
+  drawings: DrawingLink[]
+}) {
+  return drawings.length ? (
+    <div className="grid gap-2">
+      {drawings.map((drawing) => {
+        const href = `/commercial/quotes/enquiry/${enquiryId}/drawings/${drawing.fileId}?${query}`
+        return (
+          <div className="flex items-center gap-2" key={drawing.fileId}>
+            <AttachmentViewerLink
+              fileName={drawing.fileName}
+              mediaType={drawing.mediaType ?? undefined}
+              href={href}
+            />
+            <a
+              className="text-primary underline underline-offset-4"
+              download
+              href={`${href}&download=1`}
+              aria-label={`Download ${drawing.fileName}`}
+            >
+              Download
+            </a>
+          </div>
+        )
+      })}
     </div>
-    <QuotationTabs enquiryId={enquiryId} versions={versions} selected={selected.revision}/>
-    <SectionCard><CardHeader><CardTitle>Terms &amp; Conditions</CardTitle></CardHeader><CardContent>
-      {selected.terms ? <OperationalTable><TableHeader><TableRow><TableHead>Field</TableHead><TableHead>Value</TableHead><TableHead>Previous Value</TableHead></TableRow></TableHeader><TableBody>
-        {terms.map(([key,label])=><TableRow key={key}><TableCell>{label}</TableCell><TableCell className="whitespace-pre-wrap">{selected.terms?.[key] || '—'}</TableCell>
-          <TableCell className="whitespace-pre-wrap">{previous?.terms && previous.terms[key]!==selected.terms?.[key] ? previous.terms[key] || '—' : '—'}</TableCell></TableRow>)}
-      </TableBody></OperationalTable> : <p>Historical terms were not stored separately. Open this revision’s saved PDF to review them.</p>}
-    </CardContent></SectionCard>
-    <SectionCard><CardHeader><CardTitle>Quotation Parts</CardTitle></CardHeader><CardContent>
-      <OperationalTable><TableHeader><TableRow><TableHead>Line</TableHead><TableHead>Product</TableHead><TableHead>Customer Part</TableHead><TableHead>Description</TableHead><TableHead>Quantity</TableHead><TableHead>Unit Price</TableHead><TableHead>Item Price Revision</TableHead><TableHead>Change</TableHead></TableRow></TableHeader><TableBody>
-        {selected.lines.map(line=>{
-          const prior=previous?.lines.find(item=>item.enquiryItemId===line.enquiryItemId)
-          return <TableRow key={line.enquiryItemId}><TableCell>{line.lineNumber}</TableCell><TableCell>{line.productCode || '—'}</TableCell><TableCell>{line.customerPartCode || '—'}</TableCell><TableCell>{line.description}</TableCell><TableCell>{line.quantity}</TableCell><TableCell>{line.price?.toFixed(4) ?? 'Cannot Quote'}</TableCell><TableCell>{line.itemRevision ?? '—'}</TableCell>
-            <TableCell>{previous ? <Badge variant="outline">{!prior ? 'Added' : prior.quoteItemId!==line.quoteItemId ? 'Revised' : 'Unchanged'}</Badge> : '—'}</TableCell></TableRow>
-        })}
-      </TableBody></OperationalTable>
-    </CardContent></SectionCard>
-  </div>
+  ) : (
+    <>—</>
+  )
+}
+
+export function QuotationTabs({
+  enquiryId,
+  versions,
+  selected,
+}: {
+  enquiryId: string
+  versions: QuotationVersion[]
+  selected: number
+}) {
+  return (
+    <nav
+      aria-label="Quotation revisions"
+      role="tablist"
+      className="flex gap-2 overflow-x-auto border-b pb-2"
+    >
+      {versions.map((version) => (
+        <Button
+          asChild
+          key={version.id}
+          variant={version.revision === selected ? "default" : "outline"}
+          size="sm"
+        >
+          <Link
+            role="tab"
+            aria-selected={version.revision === selected}
+            href={`/commercial/enquiries/${enquiryId}?revision=${version.revision}`}
+          >
+            {quotationRevisionLabel(version.revision)}
+            {version.status === "Draft" ? " · In Progress" : ""}
+          </Link>
+        </Button>
+      ))}
+    </nav>
+  )
+}
+
+export function QuotationHistory({
+  enquiryId,
+  enquiryNumber,
+  versions,
+  selected,
+  action,
+  drawings = [],
+}: {
+  enquiryId: string
+  enquiryNumber: string
+  versions: QuotationVersion[]
+  selected: QuotationVersion
+  action?: ReactNode
+  drawings?: DrawingLink[]
+}) {
+  const previous = versions.find(
+    (version) => version.revision === selected.revision - 1
+  )
+  const terms = [
+    ["incoterms", "Delivery"],
+    ["payment_terms", "Payment"],
+    ["shipment_mode", "Shipment Mode"],
+    ["packaging_terms", "Packaging"],
+    ["brass_material_specs", "Brass Material Specs"],
+    ["reports", "Reports"],
+    ["taxes_and_duties", "Taxes and Duties"],
+    ["currency", "Currency"],
+  ] as const
+  return (
+    <div className="grid gap-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-2xl font-semibold">{enquiryNumber}</h2>
+          <p>
+            {quotationRevisionLabel(selected.revision)} · {selected.status}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="outline">
+            <Link href="/commercial/sales?view=sent-quotes">
+              Back To Sent Quotes
+            </Link>
+          </Button>
+          {action}
+          <DownloadAllDrawings
+            enquiryId={enquiryId}
+            query={`revision=${selected.revision}`}
+            available={drawings.length > 0}
+          />
+          <Button asChild variant="outline">
+            <AttachmentViewerLink
+              fileName={`${enquiryNumber}-${selected.revision}.pdf`}
+              href={`/commercial/quotes/enquiry/${enquiryId}/pdf?revision=${selected.revision}`}
+              mediaType="application/pdf"
+            >
+              Open PDF
+            </AttachmentViewerLink>
+          </Button>
+        </div>
+      </div>
+      <QuotationTabs
+        enquiryId={enquiryId}
+        versions={versions}
+        selected={selected.revision}
+      />
+      <SectionCard>
+        <CardHeader>
+          <CardTitle>Terms &amp; Conditions</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {selected.terms ? (
+            <OperationalTable>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Field</TableHead>
+                  <TableHead>Value</TableHead>
+                  <TableHead>Previous Value</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {terms.map(([key, label]) => (
+                  <TableRow key={key}>
+                    <TableCell>{label}</TableCell>
+                    <TableCell className="whitespace-pre-wrap">
+                      {selected.terms?.[key] || "—"}
+                    </TableCell>
+                    <TableCell className="whitespace-pre-wrap">
+                      {previous?.terms &&
+                      previous.terms[key] !== selected.terms?.[key]
+                        ? previous.terms[key] || "—"
+                        : "—"}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </OperationalTable>
+          ) : (
+            <p>
+              Historical terms were not stored separately. Open this revision’s
+              saved PDF to review them.
+            </p>
+          )}
+        </CardContent>
+      </SectionCard>
+      <SectionCard id="quotation-parts">
+        <CardHeader>
+          <CardTitle>Quotation Parts</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <OperationalTable>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Line</TableHead>
+                <TableHead>Product</TableHead>
+                <TableHead>Customer Part</TableHead>
+                <TableHead>Description</TableHead>
+                <TableHead>Quantity</TableHead>
+                <TableHead>Unit Price</TableHead>
+                <TableHead>Drawings</TableHead>
+                <TableHead>Item Price Revision</TableHead>
+                <TableHead>Change</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {selected.lines.map((line) => {
+                const prior = previous?.lines.find(
+                  (item) => item.enquiryItemId === line.enquiryItemId
+                )
+                return (
+                  <TableRow key={line.enquiryItemId}>
+                    <TableCell>{line.lineNumber}</TableCell>
+                    <TableCell>{line.productCode || "—"}</TableCell>
+                    <TableCell>{line.customerPartCode || "—"}</TableCell>
+                    <TableCell>{line.description}</TableCell>
+                    <TableCell>{line.quantity}</TableCell>
+                    <TableCell>
+                      {line.price?.toFixed(4) ?? "Cannot Quote"}
+                    </TableCell>
+                    <TableCell>
+                      <QuotationDrawingsCell
+                        enquiryId={enquiryId}
+                        query={`revision=${selected.revision}`}
+                        drawings={drawings.filter(
+                          (drawing) =>
+                            drawing.enquiryItemId === line.enquiryItemId
+                        )}
+                      />
+                    </TableCell>
+                    <TableCell>{line.itemRevision ?? "—"}</TableCell>
+                    <TableCell>
+                      {previous ? (
+                        <Badge variant="outline">
+                          {!prior
+                            ? "Added"
+                            : prior.quoteItemId !== line.quoteItemId
+                              ? "Revised"
+                              : "Unchanged"}
+                        </Badge>
+                      ) : (
+                        "—"
+                      )}
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </OperationalTable>
+        </CardContent>
+      </SectionCard>
+    </div>
+  )
 }

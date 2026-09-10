@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { notFound } from "next/navigation"
-import { QuotationHistory, QuotationTabs } from "../quotation-history"
+import { DownloadAllDrawings, QuotationDrawingsCell, QuotationHistory, QuotationTabs } from "../quotation-history"
 
 import {
   createCommercialMasterRepository,
@@ -122,6 +122,9 @@ export default async function EnquiryDetailPage({
       })
       const revisions = await workflow.listEnquiryRevisions(id,session.user.id)
       const quotations = await workflow.listQuotationVersions(id,session.user.id)
+      const displayedQuotation = selectorParams.revision === undefined ? quotations.at(-1) : quotations.find(version => String(version.revision) === selectorParams.revision)
+      const quoteDrawings = await workflow.getQuotationDrawings(id, session.user.id,
+        displayedQuotation?.status === "Sent" ? {revision: displayedQuotation.revision} : {draft: true})
       const selectedItem = selectedEnquiryLine(snapshot.items, selectedLineId)
       const drawingHistoryEntries = selectedItem
         ? [
@@ -134,7 +137,7 @@ export default async function EnquiryDetailPage({
             ] as const,
           ]
         : []
-      return { drawingHistoryEntries, selectedItem, snapshot, revisions, quotations }
+      return { drawingHistoryEntries, selectedItem, snapshot, revisions, quotations, quoteDrawings }
     } finally {
       await workflow.close()
     }
@@ -145,7 +148,7 @@ export default async function EnquiryDetailPage({
   const selectedQuotation = selectorParams.revision === undefined ? currentQuotation : loaded.quotations.find(version=>String(version.revision)===selectorParams.revision)
   if (selectorParams.revision !== undefined && !selectedQuotation) notFound()
   if (selectedQuotation?.status === 'Sent') return <QuotationHistory enquiryId={id} enquiryNumber={snapshot.enquiry.enquiryNumber}
-    versions={loaded.quotations} selected={selectedQuotation} action={canRequestRevision && selectedQuotation.id===currentQuotation?.id
+    versions={loaded.quotations} selected={selectedQuotation} drawings={loaded.quoteDrawings} action={canRequestRevision && selectedQuotation.id===currentQuotation?.id
       ? <RequestRevision enquiryId={id} lines={snapshot.items} disabled={loaded.revisions.some(revision=>revision.status==='Open')}/> : null}/>
   const canEditIntake = canRequestRevision && snapshot.enquiry.intakeEditable
   const canEditTerms = canRequestRevision && (canEditIntake || loaded.revisions.some(revision=>revision.status==='Open'))
@@ -193,6 +196,7 @@ export default async function EnquiryDetailPage({
             {canRequestRevision?<RequestRevision enquiryId={id} lines={snapshot.items} disabled={loaded.revisions.some(revision=>revision.status==='Open')}/>:null}
           </div>
         </div>
+        <DownloadAllDrawings enquiryId={id} query="draft=true" available={loaded.quoteDrawings.length > 0} />
         {snapshot.enquiry.technicalHandoverStatus !== "Handed Over" ? (
           <form action={handOverEnquiryAction}>
             <input type="hidden" name="enquiry_id" value={id} />
@@ -591,7 +595,7 @@ export default async function EnquiryDetailPage({
             and Design are handled in their own modules after handover.
           </p>
         </div>
- <SectionCard>
+ <SectionCard id="quotation-parts">
           <CardContent className="pt-6">
             <div className="overflow-x-auto rounded-md border">
  <OperationalTable
@@ -607,6 +611,7 @@ export default async function EnquiryDetailPage({
                     <TableHead className="text-right">Quantity</TableHead>
                     <TableHead className="text-right">Target Price</TableHead>
                     <TableHead>Drawing</TableHead>
+                    <TableHead>Quote Drawings</TableHead>
                     <TableHead className="text-right">Action</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -629,6 +634,7 @@ export default async function EnquiryDetailPage({
                         <TableCell>
                           {item.drawingFileName ?? item.drawingReference ?? "—"}
                         </TableCell>
+                        <TableCell><QuotationDrawingsCell enquiryId={id} query="draft=true" drawings={loaded.quoteDrawings.filter(drawing => drawing.enquiryItemId === item.id)} /></TableCell>
                         <TableCell className="text-right">
                           <Button asChild size="sm" variant="outline">
                             <Link
@@ -648,7 +654,7 @@ export default async function EnquiryDetailPage({
                     <TableRow>
                       <TableCell
                         className="py-10 text-center text-muted-foreground"
-                        colSpan={8}
+                        colSpan={9}
                       >
                         Add at least one line before handing the enquiry to
                         Technical Review.
