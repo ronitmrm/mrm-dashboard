@@ -94,6 +94,7 @@ type DrawingChangeLogDatabaseRow = {
 export type WebsiteProductInput = ActorContext & {
   additionalNotes?: string | null
   applications: string
+  grade: string
   certifications?: string | null
   connections?: string | null
   description?: string | null
@@ -360,8 +361,6 @@ function websiteRow(row: WebsiteDatabaseRow): WebsiteProductRow {
 
 // Match Product Portfolio: Product-owned values first, legacy profile fallback.
 const websitePortfolioJoin = `
-  LEFT JOIN catalog.material_grades product_grade
-    ON product_grade.id = items.material_grade_id
   LEFT JOIN sales.design_tasks product_design
     ON product_design.id::text = items.source_payload ->> 'designTaskId'
   CROSS JOIN LATERAL (
@@ -373,10 +372,7 @@ const websitePortfolioJoin = `
         NULLIF(btrim(product_design.internal_part_sub_category), ''), '') AS sub_category,
       COALESCE(NULLIF(btrim(items.source_payload ->> 'productSize'), ''),
         NULLIF(btrim(profiles.size), ''),
-        NULLIF(btrim(product_design.internal_part_size), ''), '') AS size,
-      COALESCE(NULLIF(btrim(product_grade.name), ''),
-        NULLIF(btrim(items.source_payload ->> 'grade'), ''),
-        NULLIF(btrim(profiles.grade), ''), '') AS grade
+        NULLIF(btrim(product_design.internal_part_size), ''), '') AS size
   ) portfolio
 `
 
@@ -384,7 +380,7 @@ const websiteSelect = `
   SELECT profiles.id profile_id, profiles.item_id, profiles.source_quote_item_id,
     items.uid, profiles.remark, portfolio.category, portfolio.sub_category,
     profiles.product_description, profiles.part_code, portfolio.size,
-    portfolio.grade, profiles.material, profiles.material_construction,
+    profiles.grade, profiles.material, profiles.material_construction,
     profiles.finish_plating, profiles.thread_standard, profiles.sealant,
     profiles.temperature, profiles.pressure, profiles.connections,
     profiles.final_assemblies_code, profiles.catalog_grade,
@@ -1024,7 +1020,7 @@ export function createCommercialReportingRepository(
                COALESCE(profiles.product_description, '') || ' ' ||
                COALESCE(portfolio.category, '') || ' ' ||
                COALESCE(portfolio.sub_category, '') || ' ' ||
-               COALESCE(portfolio.grade, '')
+               COALESCE(profiles.grade, '')
              ) LIKE $7 ESCAPE '\\')
            )
          ORDER BY CASE
@@ -1148,7 +1144,7 @@ export function createCommercialReportingRepository(
                AND ($4::text IS NULL OR portfolio.category = $4)
                AND ($5::text IS NULL OR concat_ws(' ', items.uid,
                  profiles.part_code, profiles.product_description,
-                 portfolio.category, portfolio.sub_category, portfolio.grade)
+                 portfolio.category, portfolio.sub_category, profiles.grade)
                  ILIKE '%' || $5 || '%')
                AND (
                  $6::bigint IS NULL
@@ -1352,6 +1348,7 @@ export function createCommercialReportingRepository(
     },
 
     async updateWebsiteProduct(input: WebsiteProductInput) {
+      const grade = input.grade.trim()
       const material = input.material.trim()
       const temperature = input.temperature.trim()
       const applications = input.applications.trim()
@@ -1362,7 +1359,6 @@ export function createCommercialReportingRepository(
           category: string
           sub_category: string
           size: string
-          grade: string
           category_code: string | null
           current_part_code: string | null
           material_construction: string | null
@@ -1389,7 +1385,7 @@ export function createCommercialReportingRepository(
         )
         const record = current.rows[0]
         if (!record) throw new Error("Website product row was not found.")
-        const { category, sub_category: subCategory, size, grade } = record
+        const { category, sub_category: subCategory, size } = record
         let partCode = record.current_part_code?.trim() ?? ""
         if (record.category_code && record.subcategory_code) {
           const prefix = `${record.category_code}-${record.subcategory_code}`

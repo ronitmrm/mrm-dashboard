@@ -42,6 +42,7 @@ export async function updateWebsiteProductAction(formData: FormData) {
       actorUserId: session.user.id,
       additionalNotes: nullable(formData, "additional_notes"),
       applications: selected(formData, "applications"),
+      grade: value(formData, "grade"),
       certifications: selected(formData, "certifications"),
       connections: nullable(formData, "connections"),
       description: nullable(formData, "description"),
