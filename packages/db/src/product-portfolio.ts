@@ -164,19 +164,19 @@ export function createProductPortfolioRepository(
         `
           SELECT item.uid, item.item_type,
             COALESCE(
-              NULLIF(btrim(profile.size), ''),
               NULLIF(btrim(item.source_payload ->> 'productSize'), ''),
+              NULLIF(btrim(profile.size), ''),
               NULLIF(btrim(design.internal_part_size), '')
             ) AS product_size,
             NULLIF(btrim(item.rod_size), '') AS rod_size,
             COALESCE(
-              NULLIF(btrim(profile.category), ''),
               NULLIF(btrim(item.source_payload ->> 'category'), ''),
+              NULLIF(btrim(profile.category), ''),
               NULLIF(btrim(design.internal_part_category), '')
             ) AS category,
             COALESCE(
-              NULLIF(btrim(profile.sub_category), ''),
               NULLIF(btrim(item.source_payload ->> 'subcategory'), ''),
+              NULLIF(btrim(profile.sub_category), ''),
               NULLIF(btrim(design.internal_part_sub_category), '')
             ) AS sub_category,
             COALESCE(

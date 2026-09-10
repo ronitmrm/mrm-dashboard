@@ -211,6 +211,13 @@ describe("commercial drawing, website, and analytics parity", () => {
       description: "Unrelated fitting",
       uid: `M-${randomUUID()}`,
     })
+    await pool.query(
+      `UPDATE catalog.items SET source_payload = jsonb_build_object(
+        'category', 'Fittings', 'subcategory', 'Elbows',
+        'productSize', '1/2 in', 'grade', 'C3604'
+      ) WHERE id = ANY($1::uuid[])`,
+      [[parentId, childId]]
+    )
     const profiles = await pool.query<{ id: string; item_id: string }>(
       `
         INSERT INTO catalog.website_product_profiles (
@@ -255,19 +262,19 @@ describe("commercial drawing, website, and analytics parity", () => {
     const completeFields = {
       additionalNotes: "Catalog approved",
       applications: "Heating",
-      category: "Fittings",
+      category: "Ignored CSV category",
       certifications: "ROHS",
       connections: "NPT",
       description: "A complete catalog description",
       dimensions: "10 x 20 mm",
       drawingCategory: "Production",
       finishPlating: "Nickel",
-      grade: "C3604",
+      grade: "Ignored CSV grade",
       material: "Brass",
       pressure: "10 bar",
       sealant: "PTFE",
-      size: "1/2 in",
-      subCategory: "Elbows",
+      size: "Ignored CSV size",
+      subCategory: "Ignored CSV subcategory",
       temperature: "120 C",
       threadSize1: "1/2 NPT",
     }
@@ -284,6 +291,12 @@ describe("commercial drawing, website, and analytics parity", () => {
       isActive: true,
       organizationId,
       profileId: parentProfile.id,
+    })
+    expect(parent).toMatchObject({
+      category: "Fittings",
+      subCategory: "Elbows",
+      size: "1/2 in",
+      grade: "C3604",
     })
     const unrelatedVersion = await pool.query<{ row_version: string }>(
       `SELECT row_version::text

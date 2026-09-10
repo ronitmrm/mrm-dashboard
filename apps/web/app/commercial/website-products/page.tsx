@@ -1,17 +1,15 @@
-import type { ReactNode } from "react"
 import {
   createCommercialMasterRepository,
   createCommercialReportingRepository,
   createCustomerRepository,
   type WebsiteProductRow,
 } from "@workspace/db"
-import { Pencil, RotateCcw } from "lucide-react"
+import { Pencil } from "lucide-react"
 import Link from "next/link"
 
-import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
- SectionCard,
+  SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -21,7 +19,7 @@ import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
 import { SearchableSelect } from "@workspace/ui/components/searchable-select"
 import {
- OperationalTable,
+  OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -40,12 +38,17 @@ import {
   MasterDataCsvDownloadButton,
   MasterDataCsvImportButton,
 } from "@/components/master-data-csv-import-button"
-import { requireCapability, listGrantedCapabilities } from "@/lib/auth/require-capability"
+import {
+  requireCapability,
+  listGrantedCapabilities,
+} from "@/lib/auth/require-capability"
 import {
   externalMasterAllMastersHref,
   externalMasterView,
   externalMasterViewHref,
 } from "@/lib/external-master-workspace"
+
+import { websiteProductFields, websiteProductValue } from "./fields"
 
 import { updateWebsiteProductAction } from "./actions"
 import { importWebsiteProductsCsvAction } from "./import-action"
@@ -54,71 +57,10 @@ const websiteProductsPath = "/commercial/website-products"
 const selectClassName =
   "border-input bg-background h-9 w-full rounded-md border px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
 
-const columns: Array<{
-  label: string
-  value: (row: WebsiteProductRow) => ReactNode
-}> = [
-  { label: "Uid", value: (row) => row.uid },
-  { label: "Partcode", value: (row) => row.partCode },
-  { label: "Product Description", value: (row) => row.productDescription },
-  { label: "Category", value: (row) => row.category },
-  { label: "Subcategory", value: (row) => row.subCategory },
-  { label: "Size", value: (row) => row.size },
-  { label: "Grade", value: (row) => row.grade },
-  { label: "Material", value: (row) => row.material },
-  {
-    label: "Material Construction",
-    value: (row) => row.materialConstruction,
-  },
-  { label: "Finishplating", value: (row) => row.finishPlating },
-  { label: "Drawing Category", value: (row) => row.drawingCategory },
-  { label: "Dimensions", value: (row) => row.dimensions },
-  { label: "Thread Size 1", value: (row) => row.threadSize1 },
-  { label: "Thread Size 2", value: (row) => row.threadSize2 },
-  { label: "Thread Size 3", value: (row) => row.threadSize3 },
-  { label: "Thread Size 4", value: (row) => row.threadSize4 },
-  { label: "Threadstandard", value: (row) => row.threadStandard },
-  { label: "Connections", value: (row) => row.connections },
-  { label: "Pressure", value: (row) => row.pressure },
-  { label: "Temperature", value: (row) => row.temperature },
-  { label: "Sealant", value: (row) => row.sealant },
-  {
-    label: "Final Assemblies Code",
-    value: (row) => row.finalAssembliesCode,
-  },
-  { label: "Description", value: (row) => row.description },
-  { label: "Applications", value: (row) => row.applications },
-  { label: "Certifications", value: (row) => row.certifications },
-  { label: "Additiolnotes", value: (row) => row.additionalNotes },
-  { label: "Assembly 1 Uid", value: (row) => row.assemblyUid1 },
-  { label: "Assembly 1 Code", value: (row) => row.assemblyCode1 },
-  { label: "Assembly 2 Uid", value: (row) => row.assemblyUid2 },
-  { label: "Assembly 2 Code", value: (row) => row.assemblyCode2 },
-  { label: "Assembly 3 Uid", value: (row) => row.assemblyUid3 },
-  { label: "Assembly 3 Code", value: (row) => row.assemblyCode3 },
-  { label: "Assembly 4 Uid", value: (row) => row.assemblyUid4 },
-  { label: "Assembly 4 Code", value: (row) => row.assemblyCode4 },
-  { label: "Assembly 5 Uid", value: (row) => row.assemblyUid5 },
-  { label: "Assembly 5 Code", value: (row) => row.assemblyCode5 },
-  { label: "Assembly 6 Uid", value: (row) => row.assemblyUid6 },
-  { label: "Assembly 6 Code", value: (row) => row.assemblyCode6 },
-  { label: "Remark", value: (row) => row.remark },
-  {
-    label: "Website Active",
-    value: (row) => (row.isActive ? "TRUE" : "FALSE"),
-  },
-  { label: "Createdat", value: (row) => row.entryCreatedAt },
-  {
-    label: "Status For Websit",
-    value: (row) => (
-      <Badge
-        variant={row.websiteStatus === "Completed" ? "default" : "secondary"}
-      >
-        {row.websiteStatus}
-      </Badge>
-    ),
-  },
-]
+const columns = websiteProductFields.map((field) => ({
+  label: field.label,
+  value: (row: WebsiteProductRow) => websiteProductValue(row, field.key),
+}))
 
 function Field({
   defaultValue,
@@ -226,18 +168,24 @@ export default async function WebsiteProductsPage({
   searchParams,
 }: {
   searchParams: Promise<{
-    active?: string
-    category?: string
     edit?: string
     masterView?: string | string[]
-    q?: string
-    status?: string
   }>
 }) {
-  const session = await requireCapability("masters.universal.commercial_website_products.read", websiteProductsPath)
-  const canSave = (await listGrantedCapabilities(session.user.id, ["masters.universal.commercial_website_products.save"])).length > 0
+  const session = await requireCapability(
+    "masters.universal.commercial_website_products.read",
+    websiteProductsPath
+  )
+  const canSave =
+    (
+      await listGrantedCapabilities(session.user.id, [
+        "masters.universal.commercial_website_products.save",
+      ])
+    ).length > 0
   const filters = await searchParams
-  const activeView = canSave ? externalMasterView(filters.masterView) : "masterTables"
+  const activeView = canSave
+    ? externalMasterView(filters.masterView)
+    : "masterTables"
   const showDataEntry = activeView === "dataEntry"
   const showMasterTables = activeView === "masterTables"
   const connectionString = readAuthEnvironment().connectionString
@@ -251,19 +199,22 @@ export default async function WebsiteProductsPage({
   try {
     const organizationId = await customers.organizationIdForCode("MRMPL")
     ;[result, masters] = await Promise.all([
-      repository.listWebsiteProducts({
-        active:
-          filters.active === "true"
-            ? true
-            : filters.active === "false"
-              ? false
-              : null,
-        category: filters.category,
-        organizationId,
-        profileId: showDataEntry ? filters.edit : undefined,
-        query: showMasterTables ? filters.q : undefined,
-        status: filters.status,
-      }),
+      showMasterTables
+        ? repository
+            .listWebsiteProductsForExport({ organizationId })
+            .then((rows) => ({
+              rows,
+              coverage: {
+                limit: rows.length,
+                returned: rows.length,
+                total: rows.length,
+                truncated: false,
+              },
+            }))
+        : repository.listWebsiteProducts({
+            organizationId,
+            profileId: filters.edit,
+          }),
       mastersRepository.snapshot(organizationId),
     ])
   } finally {
@@ -285,39 +236,16 @@ export default async function WebsiteProductsPage({
         allMastersHref={externalMasterAllMastersHref(activeView)}
         csvDownloadAction={
           <MasterDataCsvDownloadButton
-            columns={[
-              "uid",
-              "description",
-              "grade",
-              "material",
-              "size",
-              "category",
-              "sub_category",
-              "applications",
-              "certifications",
-              "connections",
-              "dimensions",
-              "drawing_category",
-              "finish_plating",
-              "pressure",
-              "sealant",
-              "temperature",
-              "thread_size_1",
-              "thread_size_2",
-              "thread_size_3",
-              "thread_size_4",
-              "website_category",
-              "website_sub_category",
-              "website_active",
-              "created_at",
-              "remark",
-              "additional_notes",
-            ]}
+            columns={websiteProductFields.map((field) => field.header)}
             fileName="website-product-master-template.csv"
           />
         }
         csvImportAction={
-          canSave ? <MasterDataCsvImportButton action={importWebsiteProductsCsvAction} /> : null
+          canSave ? (
+            <MasterDataCsvImportButton
+              action={importWebsiteProductsCsvAction}
+            />
+          ) : null
         }
         dataEntryHref={externalMasterViewHref(
           websiteProductsPath,
@@ -335,102 +263,30 @@ export default async function WebsiteProductsPage({
 
       {showMasterTables ? (
         <MetricSummary
-          scope="Loaded website products matching page search · before table filters"
+          scope="All website products · before table filters"
           items={[
             {
               label: "Product Profiles",
               value: rows.length,
-              tone: "information"
+              tone: "information",
             },
             {
               label: "Website Active",
               value: rows.filter((row) => row.isActive).length,
-              tone: "positive"
+              tone: "positive",
             },
             {
               label: "Completed Profiles",
               value: rows.filter((row) => row.websiteStatus === "Completed")
                 .length,
-              tone: "brand"
-            }
+              tone: "brand",
+            },
           ]}
         />
       ) : null}
 
-      {showMasterTables ? (
- <SectionCard>
-          <CardHeader>
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <CardTitle>Website Product Data</CardTitle>
-              </div>
-            </div>
-            <BoundedResultNotice
-              coverage={result.coverage}
-              searchQuery={filters.q?.trim()}
-              section="Website Products"
-            />
-          </CardHeader>
-          <CardContent>
-            <form className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_12rem_12rem_12rem_auto_auto]">
-              <input name="masterView" type="hidden" value="masterTables" />
-              <Input
-                aria-label="Search Website Products"
-                defaultValue={filters.q}
-                name="q"
-                placeholder="Search Uid, Code, Description Or Grade"
-              />
-              <SearchableSelect
-                aria-label="Filter Category"
-                className={selectClassName}
-                defaultValue={filters.category ?? ""}
-                name="category"
-              >
-                <option value="">All Categories</option>
-                {masters.categories.map((category) => (
-                  <option key={category.name} value={category.name}>
-                    {category.name}
-                  </option>
-                ))}
-              </SearchableSelect>
-              <SearchableSelect
-                aria-label="Filter Website Status"
-                className={selectClassName}
-                defaultValue={filters.status ?? ""}
-                name="status"
-              >
-                <option value="">All Statuses</option>
-                <option value="In Progress">In Progress</option>
-                <option value="Completed">Completed</option>
-              </SearchableSelect>
-              <SearchableSelect
-                aria-label="Filter Website Active"
-                className={selectClassName}
-                defaultValue={filters.active ?? ""}
-                name="active"
-              >
-                <option value="">All Activation States</option>
-                <option value="true">True</option>
-                <option value="false">False</option>
-              </SearchableSelect>
-              <Button type="submit">Apply Filters</Button>
-              <Button asChild variant="ghost">
-                <Link
-                  href={externalMasterViewHref(
-                    websiteProductsPath,
-                    "masterTables"
-                  )}
-                >
-                  <RotateCcw /> Reset
-                </Link>
-              </Button>
-            </form>
-          </CardContent>
- </SectionCard>
-      ) : null}
-
       {showDataEntry && !editing ? (
- <SectionCard>
+        <SectionCard>
           <CardHeader>
             <CardTitle>Select Website Product</CardTitle>
           </CardHeader>
@@ -461,17 +317,18 @@ export default async function WebsiteProductsPage({
               <Button type="submit">Open For Editing</Button>
             </form>
           </CardContent>
- </SectionCard>
+        </SectionCard>
       ) : null}
 
       {showDataEntry && editing ? (
- <SectionCard>
+        <SectionCard>
           <CardHeader>
             <CardTitle>Edit {editing.uid}</CardTitle>
             <CardDescription>
               Part Code, Product Description, Material Construction, Thread
               Standard, Assembly Slots, And Completion Status Are Derived On
-              Save.
+              Save. Grade, Size, Category And Subcategory Come From Product
+              Portfolio.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -505,33 +362,20 @@ export default async function WebsiteProductsPage({
                 </p>
               </div>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <SelectField
-                  current={editing.category}
-                  label="Category"
-                  name="category"
-                  options={masters.categories.map((row) => ({
-                    label: row.code ? `${row.code} - ${row.name}` : row.name,
-                    value: row.name,
-                  }))}
-                />
-                <SelectField
-                  current={editing.subCategory}
-                  label="Subcategory"
-                  name="sub_category"
-                  options={masters.subcategories.map((row) => ({
-                    label: `${row.category} / ${row.name}`,
-                    value: row.name,
-                  }))}
-                />
-                <Field defaultValue={editing.size} label="Size" name="size" />
-                <SelectField
-                  current={editing.grade}
-                  label="Grade"
-                  name="grade"
-                  options={masters.materialGrades.map((row) => ({
-                    value: row.name,
-                  }))}
-                />
+                {[
+                  ["Grade", editing.grade],
+                  ["Size", editing.size],
+                  ["Category", editing.category],
+                  ["Subcategory", editing.subCategory],
+                ].map(([label, value]) => (
+                  <div className="grid gap-2" key={label}>
+                    <span className="text-sm font-medium">{label}</span>
+                    <p className="text-sm">{value || "—"}</p>
+                    <p className="text-xs text-muted-foreground">
+                      From Product Portfolio
+                    </p>
+                  </div>
+                ))}
                 <SelectField
                   current={editing.material}
                   label="Material"
@@ -540,7 +384,7 @@ export default async function WebsiteProductsPage({
                 />
                 <Field
                   defaultValue={editing.finishPlating}
-                  label="Finishplating"
+                  label="Finish Plating"
                   name="finish_plating"
                 />
                 <Field
@@ -597,16 +441,6 @@ export default async function WebsiteProductsPage({
                   name="sealant"
                   options={websiteOptions("sealant")}
                 />
-                <Field
-                  defaultValue={editing.websiteCategory}
-                  label="Website Category"
-                  name="website_category"
-                />
-                <Field
-                  defaultValue={editing.websiteSubCategory}
-                  label="Website Sub Category"
-                  name="website_sub_category"
-                />
                 <div className="grid gap-2">
                   <Label htmlFor="is_active">Website Active</Label>
                   <SearchableSelect
@@ -621,7 +455,7 @@ export default async function WebsiteProductsPage({
                 </div>
                 <Field
                   defaultValue={editing.entryCreatedAt}
-                  label="Createdat"
+                  label="Created At"
                   name="entry_created_at"
                   type="date"
                 />
@@ -650,7 +484,7 @@ export default async function WebsiteProductsPage({
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="additional_notes">Additiolnotes</Label>
+                  <Label htmlFor="additional_notes">Additional Notes</Label>
                   <Textarea
                     defaultValue={editing.additionalNotes ?? ""}
                     id="additional_notes"
@@ -681,11 +515,11 @@ export default async function WebsiteProductsPage({
               </div>
             </form>
           </CardContent>
- </SectionCard>
+        </SectionCard>
       ) : null}
 
       {showMasterTables ? (
- <SectionCard>
+        <SectionCard>
           <CardHeader>
             <CardTitle>Website Product Excel View</CardTitle>
             <CardDescription>
@@ -693,24 +527,28 @@ export default async function WebsiteProductsPage({
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="max-h-[70vh] overflow-auto rounded-2xl border">
- <OperationalTable containerClassName="max-h-none overflow-visible" className="min-w-max text-xs">
-                <TableHeader className="sticky top-0 z-10 bg-background">
-                  <TableRow>
-                    <TableHead className="sticky left-0 z-20 bg-background">
-                      Action
-                    </TableHead>
-                    {columns.map((column) => (
-                      <TableHead key={column.label}>{column.label}</TableHead>
-                    ))}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rows.length ? (
-                    rows.map((row) => (
-                      <TableRow key={row.profileId}>
-                        <TableCell className="sticky left-0 bg-background">
-                          {canSave ? <Button asChild size="sm" variant="ghost">
+            <OperationalTable
+              containerClassName="max-h-[70vh] rounded-2xl border"
+              filterStorageKey="website-products"
+              className="min-w-max text-xs"
+            >
+              <TableHeader className="sticky top-0 z-10 bg-background">
+                <TableRow>
+                  <TableHead className="sticky left-0 z-20 bg-background">
+                    Action
+                  </TableHead>
+                  {columns.map((column) => (
+                    <TableHead key={column.label}>{column.label}</TableHead>
+                  ))}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.length ? (
+                  rows.map((row) => (
+                    <TableRow key={row.profileId}>
+                      <TableCell className="sticky left-0 bg-background">
+                        {canSave ? (
+                          <Button asChild size="sm" variant="ghost">
                             <Link
                               href={externalMasterViewHref(
                                 websiteProductsPath,
@@ -720,33 +558,33 @@ export default async function WebsiteProductsPage({
                             >
                               <Pencil /> Edit
                             </Link>
-                          </Button> : null}
-                        </TableCell>
-                        {columns.map((column) => (
-                          <TableCell
-                            className="max-w-72 whitespace-normal"
-                            key={column.label}
-                          >
-                            {column.value(row) || "—"}
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell
-                        className="h-32 text-center text-muted-foreground"
-                        colSpan={columns.length + 1}
-                      >
-                        No Website Products Match These Filters.
+                          </Button>
+                        ) : null}
                       </TableCell>
+                      {columns.map((column) => (
+                        <TableCell
+                          className="max-w-72 whitespace-normal"
+                          key={column.label}
+                        >
+                          {column.value(row) || "—"}
+                        </TableCell>
+                      ))}
                     </TableRow>
-                  )}
-                </TableBody>
- </OperationalTable>
-            </div>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell
+                      className="h-32 text-center text-muted-foreground"
+                      colSpan={columns.length + 1}
+                    >
+                      No Website Products Match These Filters.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </OperationalTable>
           </CardContent>
- </SectionCard>
+        </SectionCard>
       ) : null}
     </div>
   )

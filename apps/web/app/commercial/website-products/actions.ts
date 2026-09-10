@@ -42,7 +42,6 @@ export async function updateWebsiteProductAction(formData: FormData) {
       actorUserId: session.user.id,
       additionalNotes: nullable(formData, "additional_notes"),
       applications: selected(formData, "applications"),
-      category: value(formData, "category"),
       certifications: selected(formData, "certifications"),
       connections: nullable(formData, "connections"),
       description: nullable(formData, "description"),
@@ -50,7 +49,6 @@ export async function updateWebsiteProductAction(formData: FormData) {
       drawingCategory: nullable(formData, "drawing_category"),
       entryCreatedAt: nullable(formData, "entry_created_at"),
       finishPlating: nullable(formData, "finish_plating"),
-      grade: value(formData, "grade"),
       isActive: value(formData, "is_active").toUpperCase() !== "FALSE",
       material: value(formData, "material"),
       organizationId: await customers.organizationIdForCode("MRMPL"),
@@ -58,15 +56,11 @@ export async function updateWebsiteProductAction(formData: FormData) {
       profileId: value(formData, "profile_id"),
       remark: nullable(formData, "remark"),
       sealant: nullable(formData, "sealant"),
-      size: value(formData, "size"),
-      subCategory: value(formData, "sub_category"),
       temperature: value(formData, "temperature"),
       threadSize1: nullable(formData, "thread_size_1"),
       threadSize2: nullable(formData, "thread_size_2"),
       threadSize3: nullable(formData, "thread_size_3"),
       threadSize4: nullable(formData, "thread_size_4"),
-      websiteCategory: nullable(formData, "website_category"),
-      websiteSubCategory: nullable(formData, "website_sub_category"),
     })
   } finally {
     await repository.close()
