@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto"
+import { readPriceMaster, productPriceDefaults } from "./price-master"
 import { enquiryMasterCosts } from "./commercial-term-selection"
 
 import type { Pool, PoolClient } from "pg"
@@ -26,6 +27,7 @@ import {
 } from "./pricing-calculation"
 
 type ProductRow = {
+  price_defaults_initialized?: boolean
   alloy_premium: string
   annealing: string
   assembly_operation_cost: string
@@ -800,7 +802,9 @@ async function getQuoteDocumentWithClient(
   }>(
     `
       SELECT enquiry.enquiry_number, enquiry.currency,
-        enquiry.conversion_rate::text, enquiry.incoterms,
+        COALESCE((SELECT quote.conversion_rate::text FROM sales.quote_items quote
+          WHERE quote.enquiry_id = enquiry.id AND quote.status <> 'Superseded'
+          ORDER BY CASE WHEN quote.id = $3::uuid THEN 0 ELSE 1 END, quote.created_at DESC LIMIT 1), enquiry.conversion_rate::text) AS conversion_rate, enquiry.incoterms,
         enquiry.payment_terms, enquiry.shipment_mode,
         enquiry.packaging_terms, enquiry.delivery_terms, enquiry.buyer_name, customer.customer_uid,
         customer.company_name,
@@ -814,7 +818,7 @@ async function getQuoteDocumentWithClient(
       WHERE enquiry.id = $1
         AND ($2::uuid IS NULL OR enquiry.created_by_user_id = $2 OR (SELECT identity.has_administrative_access($2)))
     `,
-    [enquiryId, scope?.originatingSalespersonUserId ?? null]
+    [enquiryId, scope?.originatingSalespersonUserId ?? null, options.issuedQuoteItemId ?? null]
   )
   if (!header.rows[0]) {
     throw new Error("Enquiry was not found.")
@@ -963,7 +967,8 @@ async function enquiryQuoteLines(
     cannot_quote: boolean
   }>(
     `SELECT line.enquiry_id, line.line_number, selected.id AS quote_item_id,
-       selected.status, line.technical_review_status = 'NotFeasible' AS cannot_quote
+       CASE WHEN line.customer_recost_required THEN 'Draft' ELSE selected.status END AS status,
+       line.technical_review_status = 'NotFeasible' AS cannot_quote
      FROM sales.enquiry_items line
      JOIN sales.enquiries enquiry ON enquiry.id = line.enquiry_id
      LEFT JOIN LATERAL (
@@ -1032,6 +1037,8 @@ async function transitionQuoteToSent(
   }
   // Serialize the whole enquiry before locking any individual quote.
   await client.query("SELECT id FROM sales.enquiries WHERE id = $1 FOR UPDATE", [enquiryId])
+  const recost = await client.query("SELECT 1 FROM sales.enquiry_items WHERE enquiry_id = $1 AND customer_recost_required LIMIT 1", [enquiryId])
+  if (recost.rowCount) throw new Error("Complete Customer Costing for changed enquiry terms before sending.")
   const current = await client.query<{ status: string }>(
     "SELECT status FROM sales.quote_items WHERE id = $1 FOR UPDATE", [input.quoteItemId]
   )
@@ -1966,7 +1973,7 @@ export function createCommercialCostingRepository(
               AND design.next_stage_status IN (
                 'Product Costing Complete', 'Started'
               )
-              AND COALESCE(latest_quote.status, 'Draft') = 'Draft'
+              AND (enquiry_item.customer_recost_required OR COALESCE(latest_quote.status, 'Draft') = 'Draft')
 
             UNION ALL
 
@@ -2071,11 +2078,11 @@ export function createCommercialCostingRepository(
                 AND design.next_stage_status IN (
                   'Product Costing Complete', 'Started'
                 )
-                AND NOT EXISTS (
+                AND (enquiry_item.customer_recost_required OR NOT EXISTS (
                   SELECT 1 FROM sales.quote_items quote
                   WHERE quote.enquiry_item_id = design.enquiry_item_id
                     AND quote.status IN ('Ready', 'Sent', 'Accepted')
-                )
+                ))
             ) AS new_quote_costing,
             (
               SELECT count(*)::text FROM sales.quote_revision_requests request
@@ -2163,7 +2170,19 @@ export function createCommercialCostingRepository(
         `,
         [organizationCode.trim(), itemId]
       )
-      return result.rows[0] ? productCostingProduct(result.rows[0]) : null
+      const row = result.rows[0]
+      if (!row) return null
+      const product = productCostingProduct(row)
+      if (row.price_defaults_initialized === false) {
+        const defaults = productPriceDefaults(await readPriceMaster(pool, row.organization_id), product.weight100Pcs > 0 ? 1000 / product.weight100Pcs : product.piecesPerKg)
+        const selectedProcesses = designProcessSelection({ processesRequired: product.processesRequired })
+        for (const [key, value] of Object.entries(defaults)) {
+          if (key === "forgingCost" ? isForgingCostApplicable(product.productType) : key === "overheadCost" || processFieldIsApplicable(key, selectedProcesses)) {
+            Object.assign(product, { [key]: value })
+          }
+        }
+      }
+      return product
     },
 
     async listProductCostingTasksBounded(
@@ -2405,17 +2424,19 @@ export function createCommercialCostingRepository(
         const selectedProcesses = designProcessSelection({
           processesRequired: processesRequiredFromPayload(product.source_payload),
         })
+        const defaultPrices = product.price_defaults_initialized === false
+          ? productPriceDefaults(await readPriceMaster(client, product.organization_id), piecesPerKg) : {}
         const currentProcessPrices = {
-          annealing: asNumber(product.annealing),
+          annealing: defaultPrices.annealing ?? asNumber(product.annealing),
           assemblyOperationCost: asNumber(product.assembly_operation_cost),
-          buffing: asNumber(product.buffing),
-          checking: asNumber(product.checking),
-          deburring: asNumber(product.deburring),
+          buffing: defaultPrices.buffing ?? asNumber(product.buffing),
+          checking: defaultPrices.checking ?? asNumber(product.checking),
+          deburring: defaultPrices.deburring ?? asNumber(product.deburring),
           machiningCost: asNumber(product.machining_cost),
-          marking: asNumber(product.marking),
-          plating: asNumber(product.plating),
-          sealant: asNumber(product.sealant),
-          washing: asNumber(product.washing),
+          marking: defaultPrices.marking ?? asNumber(product.marking),
+          plating: defaultPrices.plating ?? asNumber(product.plating),
+          sealant: defaultPrices.sealant ?? asNumber(product.sealant),
+          washing: defaultPrices.washing ?? asNumber(product.washing),
         }
         const submittedProcessPrices = {
           annealing: input.annealing,
@@ -2496,7 +2517,7 @@ export function createCommercialCostingRepository(
         )
         const overheadCost = isDirectPurchase
           ? 0
-          : (input.overheadCost ?? asNumber(product.overhead_cost))
+          : (input.overheadCost ?? defaultPrices.overheadCost ?? asNumber(product.overhead_cost))
         const productProcess = calculateProductProcessCost({
           annealing,
           assemblyOperationCost,
@@ -2558,7 +2579,7 @@ export function createCommercialCostingRepository(
         const forgingCost =
           isDirectPurchase || !isForgingCostApplicable(costingProductType(product))
             ? 0
-            : (input.forgingCost ?? asNumber(product.forging_cost))
+            : (input.forgingCost ?? defaultPrices.forgingCost ?? asNumber(product.forging_cost))
         const updated = await client.query<ProductRow>(
           `
             UPDATE catalog.items
@@ -2573,6 +2594,7 @@ export function createCommercialCostingRepository(
               assembly_operation_cost = $20, overhead_cost = $21,
               rejection_percent = $22, burning_loss_percent = $23,
               machine_type_id = $24, remarks = $25,
+              price_defaults_initialized = true,
               updated_by_user_id = $26, updated_at = now(),
               row_version = row_version + 1
             WHERE id = $27
@@ -2672,9 +2694,12 @@ export function createCommercialCostingRepository(
       quoteRevisionRequestId?: string | null
       shippingTerms?: string | null
     }) {
+      if (!Number.isFinite(input.inputs.conversionRate) || input.inputs.conversionRate <= 0) throw new Error("Enter a positive exchange rate in Customer Costing.")
       return transaction(pool, async (client) => {
         const context = await client.query<{
           customer_id: string
+          customer_recost_required: boolean
+          currency: string
           customer_part_code: string | null
           enquiry_id: string
           enquiry_number: string
@@ -2686,6 +2711,8 @@ export function createCommercialCostingRepository(
         }>(
           `
             SELECT enquiry.customer_id, enquiry.id AS enquiry_id,
+              enquiry.currency,
+              enquiry_item.customer_recost_required,
               enquiry.enquiry_number, enquiry.organization_id,
               enquiry_item.customer_part_code, enquiry_item.item_id,
               design.matched_product_id, design.quoted_part_uid,
@@ -2711,6 +2738,8 @@ export function createCommercialCostingRepository(
           inputs: { ...input.inputs, packingCost: masterCosts.packingCost, shippingCost: masterCosts.shippingCost },
         }
         const rootProduct = await getProduct(client, input.itemId)
+        const priceDefaults = await readPriceMaster(client, row.organization_id)
+        if (row.currency === 'INR') input = { ...input, inputs: { ...input.inputs, conversionRate: 1 } }
         const productMatches =
           row.item_id === rootProduct.id ||
           row.matched_product_id === rootProduct.id ||
@@ -2895,14 +2924,14 @@ export function createCommercialCostingRepository(
                   packingCost: 0,
                   profitPercent: childInput?.profitPercent ?? 0,
                   purchaseTimes: childInput?.purchaseTimes ?? 1,
-                  scrapRate: childInput?.scrapRate ?? 0,
+                  scrapRate: childInput?.scrapRate ?? priceDefaults.marketRates.find(rate => rate.gradeId === product.material_grade_id)?.rate ?? 0,
                   shippingCost: 0,
                 }
             calculation = calculateProductQuote(product, quoteInputs).result
           }
 
           const quoteItemId = await persistQuote(client, {
-            allowRevision: Boolean(revisionRequest?.rows[0]),
+            allowRevision: row.customer_recost_required || Boolean(revisionRequest?.rows[0]),
             actorUserId: input.actorUserId,
             calculation,
             components,
@@ -2922,11 +2951,17 @@ export function createCommercialCostingRepository(
             status: input.action === "complete" ? "Ready" : "Draft",
           })
           const result = { calculation, quoteItemId }
+          await client.query("UPDATE sales.quote_items SET currency_code = $2 WHERE id = $1", [quoteItemId, row.currency])
+          if (row.customer_recost_required && input.action === "complete") await client.query(`UPDATE sales.quote_items
+            SET status = 'Superseded', superseded_by_quote_item_id = $1, updated_at = now(), row_version = row_version + 1
+            WHERE enquiry_item_id = $2 AND item_id = $3 AND id <> $1 AND status = 'Ready' AND sent_at IS NULL`,
+            [quoteItemId, input.enquiryItemId, product.id])
           saved.set(product.id, result)
           return result
         }
 
         const root = await quoteProduct(rootProduct, { isRoot: true })
+        if (input.action === "complete") await client.query("UPDATE sales.enquiry_items SET customer_recost_required = false WHERE id = $1", [input.enquiryItemId])
         const targetPrice = revisionRequest?.rows[0]
           ? asNumber(revisionRequest.rows[0].requested_price)
           : null
@@ -3060,6 +3095,11 @@ export function createCommercialCostingRepository(
         quantity: string
         quote_approved_price_usd: string | null
         quote_conversion_rate: string | null
+        quote_enquiry_id: string | null
+        quote_currency: string | null
+        customer_recost_required: boolean
+        master_market_rate: string | null
+        master_exchange_rate: string | null
         quote_id: string | null
         quote_packing_cost: string | null
         master_packing_cost: string | null
@@ -3081,10 +3121,17 @@ export function createCommercialCostingRepository(
       }>(
         `
           SELECT design.enquiry_item_id, design.next_stage_status,
+            enquiry_item.customer_recost_required,
             enquiry.id AS enquiry_id,
             enquiry.enquiry_number, customer.company_name,
             enquiry_item.customer_part_code, enquiry_item.quantity,
             enquiry.conversion_rate, enquiry.currency,
+            (SELECT entry ->> 'rate' FROM sales.price_master prices,
+              jsonb_array_elements(prices.prices -> 'marketRates') entry
+              WHERE prices.organization_id = enquiry.organization_id
+              AND entry ->> 'gradeId' = item.material_grade_id::text) AS master_market_rate,
+            (SELECT prices.prices -> 'exchangeRates' ->> enquiry.currency
+              FROM sales.price_master prices WHERE prices.organization_id = enquiry.organization_id) AS master_exchange_rate,
             COALESCE(packaging_master.name, enquiry.packaging_terms) AS packaging_terms,
             COALESCE(incoterm_master.name, enquiry.incoterms) AS incoterms,
             packaging_master.cost_per_kg::text AS master_packing_cost,
@@ -3100,6 +3147,8 @@ export function createCommercialCostingRepository(
             item.sealant, item.burning_loss_percent, item.overhead_cost,
             item.rejection_percent, item.assembly_operation_cost,
             latest_quote.id AS quote_id,
+            latest_quote.enquiry_id AS quote_enquiry_id,
+            latest_quote.currency_code AS quote_currency,
             latest_quote.status AS quote_status,
             latest_quote.scrap_rate::text AS quote_scrap_rate,
             latest_quote.purchase_times::text AS quote_purchase_times,
@@ -3194,6 +3243,7 @@ export function createCommercialCostingRepository(
         [organizationCode.trim(), options.enquiryItemId ?? null, limit]
       )
       const bom = await pool.query<{
+        market_rate: string | null
         depth: number
         description: string
         item_id: string
@@ -3277,6 +3327,10 @@ export function createCommercialCostingRepository(
             JOIN catalog.bom_lines line ON line.parent_item_id = tree.item_id
           )
           SELECT tree.root_item_id, tree.parent_item_id, tree.item_id,
+            (SELECT entry ->> 'rate' FROM sales.price_master prices,
+              jsonb_array_elements(prices.prices -> 'marketRates') entry
+              WHERE prices.organization_id = item.organization_id
+              AND entry ->> 'gradeId' = item.material_grade_id::text) AS market_rate,
             tree.quantity, tree.line_quantity, tree.depth,
             item.uid, item.description, item.item_type, item.lifecycle_status,
             item.pricing_method, item.product_cost_inr, item.weight_100_pcs
@@ -3401,25 +3455,24 @@ export function createCommercialCostingRepository(
           weight100Pcs: asNumber(row.weight_100_pcs),
         },
         quantity: asNumber(row.quantity),
-        componentQuoteDefaults:
-          savedInputsByTask.get(row.enquiry_item_id) ?? [],
+        componentQuoteDefaults: bom.rows.filter(part => part.root_item_id === row.item_id).map(part =>
+          savedInputsByTask.get(row.enquiry_item_id)?.find(saved => saved.itemId === part.item_id) ??
+          { itemId: part.item_id, scrapRate: asNumber(part.market_rate), purchaseTimes: 1, profitPercent: 0 }),
         quoteDefaults: {
           approvedPriceUsd: asNumber(row.quote_approved_price_usd),
-          conversionRate: asNumber(
-            row.quote_conversion_rate,
-            asNumber(row.conversion_rate, 1)
-          ),
+          conversionRate: row.currency === 'INR' ? 1 : row.quote_enquiry_id === row.enquiry_id && row.quote_currency === row.currency
+            ? asNumber(row.quote_conversion_rate) : asNumber(row.master_exchange_rate),
           id: row.quote_id,
-          packingCost: asNumber(row.quote_status && row.quote_status !== 'Draft' ? row.quote_packing_cost : row.master_packing_cost),
-          packaging: row.quote_status && row.quote_status !== 'Draft' ? row.quote_packaging : row.packaging_terms,
+          packingCost: asNumber(!row.customer_recost_required && row.quote_status && row.quote_status !== 'Draft' ? row.quote_packing_cost : row.master_packing_cost),
+          packaging: !row.customer_recost_required && row.quote_status && row.quote_status !== 'Draft' ? row.quote_packaging : row.packaging_terms,
           masterCostsReady: row.master_packing_cost !== null && row.master_shipping_cost !== null,
           profitPercent: asNumber(row.quote_profit_percent),
           purchaseTimes: asNumber(row.quote_purchase_times, 1),
           rateInr: asNumber(row.quote_rate_inr),
           rateUsd: asNumber(row.quote_rate_usd),
-          scrapRate: asNumber(row.quote_scrap_rate),
-          shippingCost: asNumber(row.quote_status && row.quote_status !== 'Draft' ? row.quote_shipping_cost : row.master_shipping_cost),
-          shippingTerms: row.quote_status && row.quote_status !== 'Draft' ? row.quote_shipping_terms : row.incoterms,
+          scrapRate: row.quote_enquiry_id === row.enquiry_id ? asNumber(row.quote_scrap_rate) : asNumber(row.master_market_rate, asNumber(row.quote_scrap_rate)),
+          shippingCost: asNumber(!row.customer_recost_required && row.quote_status && row.quote_status !== 'Draft' ? row.quote_shipping_cost : row.master_shipping_cost),
+          shippingTerms: !row.customer_recost_required && row.quote_status && row.quote_status !== 'Draft' ? row.quote_shipping_terms : row.incoterms,
           status: row.quote_status,
         },
         uid: row.uid,

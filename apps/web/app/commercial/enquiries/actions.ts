@@ -166,7 +166,6 @@ export async function createEnquiryAction(formData: FormData) {
         actorUserId,
         buyerName: optionalText(formData, "buyer_name"),
         commercialTerms: {
-          conversionRate: numeric(formData, "conversion_rate", 1),
           currency: requiredText(formData, "currency"),
           incoterms: optionalText(formData, "incoterms"),
           packagingTerms: optionalText(formData, "packaging_terms"),
@@ -263,7 +262,6 @@ export async function updateEnquiryAction(formData: FormData) {
         actorUserId,
         buyerName: optionalText(formData, "buyer_name"),
         commercialTerms: {
-          conversionRate: numeric(formData, "conversion_rate", 1),
           currency: requiredText(formData, "currency"),
           incoterms: optionalText(formData, "incoterms"),
           packagingTerms: optionalText(formData, "packaging_terms"),
@@ -284,6 +282,8 @@ export async function updateEnquiryAction(formData: FormData) {
   )
   revalidatePath(enquiriesPath)
   revalidatePath(`${enquiriesPath}/${enquiryId}`)
+  revalidatePath("/commercial/customer-costing")
+  revalidatePath("/commercial/sales")
 }
 
 export async function deleteEnquiryAction(formData: FormData) {

@@ -58,10 +58,6 @@ function defaultsFor(customer: EnquiryCustomerOption): CustomerDefaults {
   }
 }
 
-function optionsIncludingCurrent(options: string[], current: string) {
-  return current && !options.includes(current) ? [current, ...options] : options
-}
-
 export function EnquiryLogForm({
   customers,
   organizationId,
@@ -117,10 +113,10 @@ export function EnquiryLogForm({
             }))
           }
           required={required}
-          value={defaults[name]}
+          value={termOptions[termType].includes(defaults[name]) ? defaults[name] : ""}
         >
           <NativeSelectOption value="">Select {label}</NativeSelectOption>
-          {optionsIncludingCurrent(termOptions[termType], defaults[name]).map(
+          {termOptions[termType].map(
             (option) => (
               <NativeSelectOption key={option} value={option}>
                 {option}
@@ -212,18 +208,6 @@ export function EnquiryLogForm({
           {commercialSelect("Reports", "reports", "reports", false)}
           {commercialSelect("Taxes and Duties", "taxes_and_duties", "taxes_and_duties", false)}
           {commercialSelect("Currency", "currency", "currency")}
-          <Field>
-            <FieldLabel htmlFor="enquiry-fx">Fx / Exchange Rate</FieldLabel>
-            <Input
-              defaultValue="1"
-              id="enquiry-fx"
-              min="0.00000001"
-              name="conversion_rate"
-              required
-              step="0.00000001"
-              type="number"
-            />
-          </Field>
         </div>
         <Field>
           <FieldLabel htmlFor="enquiry-remarks">Remarks</FieldLabel>

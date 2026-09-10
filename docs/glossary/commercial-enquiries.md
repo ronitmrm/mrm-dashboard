@@ -310,6 +310,16 @@ worklists only; each selected task opens on its own task URL so growing queues
 do not share a page with the active form.
 
 Each organization has exactly one Material Rate per Grade + Rod Type combination.
+Price Master is one form containing Grade-specific Market Rates (INR/kg), common
+process defaults, and currency conversion rates (INR per unit of quote currency).
+Washing, Checking, Forging, Plating, Annealing, Deburring and Overhead defaults
+are INR/kg. Buffing, Marking and Sealant defaults are INR/piece, multiplied by
+the product's Pieces/kg to populate the existing INR/kg costing inputs.
+Design process selection controls applicability. Product Costing may override
+these defaults, including zero; saved product inputs and issued quotes retain
+their snapshots. Market Rate defaults the existing Scrap INR/kg input for new
+customer quotes; existing pricing formulas are unchanged. Exchange rate belongs
+to Customer Costing, not Sales enquiry entry.
 Master Tables shows both prices; users with Material Rates Save permission can
 edit them in place. Blank Alloy Premium means market-based; zero is an explicit
 price. Adding a duplicate combination is rejected; imports update the existing rate.
@@ -374,12 +384,22 @@ Sent and stores one combined PDF, including previously sent lines and explicit
 Cannot Quote outcomes. Linked duplicate lines follow their originating line.
 Previously issued PDFs remain immutable; retries reuse the issued document.
 
+The Technical Review handoff badge records history, not the current owner.
+The enquiry header derives its current stage from its lines. A sent quotation is
+Quotation Complete with Sales Follow-up still open; it is not an order completion.
+While all actionable lines are back with Sales and no purchase order exists,
+Sales may update commercial terms without changing enquiry identity. Changing
+Incoterms, Packaging or Currency marks applicable lines for Customer Costing and
+blocks full-enquiry sending until they are completed again. Other terms do not
+reopen costing. Repricing creates new quote snapshots; previous sent prices and
+issued PDFs remain unchanged.
+
 Quote PDFs use the approved Mayank Raw Mint letterhead, green quotation banner,
 details/customer blocks, Product and Customer codes, item prices, prepared-by
 section, commercial terms, and contact footer. The customer record supplies To
 (company, contact, available address); the Enquiry supplies Buyer, RFQ/customer
-reference, items, payment/delivery/incoterms, shipment, packaging and exchange
-rate. Brass Material Specs, Reports, and Taxes and Duties each have a commercial
+reference, items, payment/delivery/incoterms, shipment and packaging. Customer
+Costing supplies the quote's saved exchange rate. Brass Material Specs, Reports, and Taxes and Duties each have a commercial
 master. Sales selects their values on the Enquiry; the PDF uses those saved
 values, so later master edits do not rewrite an enquiry. Unselected terms are
 omitted. Generic Quote Term Templates are not appended. Quote numbers are generated

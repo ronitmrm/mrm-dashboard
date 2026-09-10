@@ -360,7 +360,8 @@ export async function CustomerParameterCostingView({
                       />
                       <NumberField
                         defaultValue={selectedTask.quoteDefaults.conversionRate}
-                        label="INR Per USD"
+                        label={`INR Per ${selectedTask.currency}`}
+                        readOnly={selectedTask.currency === "INR"}
                         name="conversion_rate"
                       />
                       <NumberField

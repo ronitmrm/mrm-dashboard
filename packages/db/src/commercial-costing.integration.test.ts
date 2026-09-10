@@ -13,6 +13,53 @@ const connectionString =
   "postgresql://mrmpl:mrmpl@127.0.0.1:5434/mrmpl_test"
 
 const pool = new Pool({ connectionString })
+
+test("new Product Costing applies selected process defaults per kg and preserves zero overrides", async () => {
+  const masters = createCommercialMasterRepository({ pool })
+  await masters.savePriceMaster({ organizationId, prices: { marketRates: [], processes: { buffing: 5, plating: 12, washing: 8 }, exchangeRates: {} } })
+  const item = await pool.query<{ id: string }>(`INSERT INTO catalog.items
+    (organization_id, uid, uid_kind, lifecycle_status, description, item_type, weight_100_pcs, pieces_per_kg, source_system, source_table, source_id, source_payload)
+    VALUES ($1, $2, 'QUOTE', 'Q', 'Process defaults', 'List', 100, 10, 'test', 'price_defaults', $2,
+    '{"processesRequired":["Buffing", "Plating"]}') RETURNING id`, [organizationId, `DEFAULT-${randomUUID()}`])
+  const id = item.rows[0]!.id
+  expect(await repository.getProductCostingProduct(organizationCode, id)).toMatchObject({ buffing: 50, plating: 12, washing: 0 })
+  await repository.updateProductCostParameters({ itemId: id, piecesPerKg: 10, buffing: 0, plating: 12 })
+  await masters.savePriceMaster({ organizationId, prices: { marketRates: [], processes: { buffing: 6, plating: 15 }, exchangeRates: {} } })
+  expect(await repository.getProductCostingProduct(organizationCode, id)).toMatchObject({ buffing: 0, plating: 12 })
+})
+
+test("Sales terms revisions reopen Customer Costing only for price-affecting terms", async () => {
+  const masters = createCommercialMasterRepository({ pool })
+  const workflow = createCommercialWorkflowRepository({ pool })
+  await masters.upsertCommercialTerm({ organizationId, name: "Terms Bulk", termType: "packaging_terms", costPerKg: 5 })
+  await masters.upsertCommercialTerm({ organizationId, name: "Terms Box", termType: "packaging_terms", costPerKg: 10 })
+  await masters.upsertCommercialTerm({ organizationId, name: "Terms FOB", termType: "incoterms", costPerKg: 7 })
+  const enquiry = await workflow.createEnquiry({ organizationId, customerId, receivedOn: "2026-09-10", commercialTerms: { currency: "USD", packagingTerms: "Terms Bulk", incoterms: "Terms FOB" } })
+  const line = await createEnquiryItem({ customerPartCode: `TERMS-${randomUUID()}`, itemId, nextStageStatus: "Product Costing Complete" })
+  await pool.query("UPDATE sales.enquiry_items SET enquiry_id=$2 WHERE id=$1", [line, enquiry.id])
+  const grades = await masters.listEditableRows({ organizationId, kind: "commercial_material_grade" })
+  await masters.savePriceMaster({ organizationId, prices: { marketRates: [{ gradeId: grades[0]!.id, rate: 915 }], processes: {}, exchangeRates: { USD: 95 } } })
+  expect((await repository.listCostingTasks(organizationCode, { enquiryItemId: line }))[0]?.quoteDefaults).toMatchObject({ scrapRate: 915, conversionRate: 95 })
+  const input = { enquiryItemId: line, itemId, quantity: 100, action: "complete" as const, inputs: { conversionRate: 80, packingCost: 0, shippingCost: 0, profitPercent: 0, purchaseTimes: 1, scrapRate: 915 } }
+  const original = await repository.saveQuote(input)
+  await workflow.updateEnquiry({ organizationId, customerId, enquiryId: enquiry.id, commercialTerms: { paymentTerms: "Net 30" } })
+  expect((await workflow.getEnquiry(enquiry.id)).enquiry.currentStage).toBe("Sales — Ready to Send")
+  await workflow.updateEnquiry({ organizationId, customerId, enquiryId: enquiry.id, commercialTerms: { packagingTerms: "Terms Box" } })
+  expect((await workflow.getEnquiry(enquiry.id)).enquiry.currentStage).toBe("Customer Costing")
+  await expect(repository.sendQuote({ quoteItemId: original.id, followupDueOn: "2026-09-20" })).rejects.toThrow("Complete Customer Costing")
+  expect((await repository.listCostingTasks(organizationCode, { enquiryItemId: line }))[0]?.quoteDefaults.packingCost).toBe(10)
+  const revised = await repository.saveQuote(input)
+  expect(revised.id).not.toBe(original.id)
+  expect(revised.rateInr).toBeGreaterThan(original.rateInr)
+  expect((await workflow.getEnquiry(enquiry.id)).enquiry.currentStage).toBe("Sales — Ready to Send")
+  await masters.savePriceMaster({ organizationId, prices: { marketRates: [], processes: {}, exchangeRates: { EUR: 90 } } })
+  await workflow.updateEnquiry({ organizationId, customerId, enquiryId: enquiry.id, commercialTerms: { currency: "EUR" } })
+  expect((await repository.listCostingTasks(organizationCode, { enquiryItemId: line }))[0]?.quoteDefaults.conversionRate).toBe(90)
+  await repository.saveQuote({ ...input, inputs: { ...input.inputs, conversionRate: 90 } })
+  await masters.upsertCommercialTerm({ organizationId, name: "Terms CIF", termType: "incoterms", costPerKg: 20 })
+  await workflow.updateEnquiry({ organizationId, customerId, enquiryId: enquiry.id, commercialTerms: { incoterms: "Terms CIF" } })
+  expect((await repository.listCostingTasks(organizationCode, { enquiryItemId: line }))[0]?.quoteDefaults.shippingCost).toBe(20)
+})
 const repository = createCommercialCostingRepository({ connectionString })
 let customerId: string
 let enquiryItemId: string

@@ -104,12 +104,14 @@ const websiteProductMasterKinds = new Set<string>([
   "websiteField",
 ])
 
-const commercialSubMasters = commercialMasterKinds
+const commercialSubMasters: Array<{ id: string; label: string }> = commercialMasterKinds
   .filter(({ entryKind }) => !websiteProductMasterKinds.has(entryKind))
   .map((selection) => ({
     id: commercialMasterWorkspaceKind(selection),
     label: selection.label,
   }))
+
+commercialSubMasters.push({ id: "priceMaster", label: "Price Master" })
 
 const websiteProductSubMasters = [
   {
@@ -448,7 +450,7 @@ export function masterFormHref(
     selection.main === "hr_masters"
       ? "/hr"
       : selection.main === "commercial_pricing_masters"
-        ? "/commercial/masters"
+        ? selection.sub === "priceMaster" ? "/commercial/price-master" : "/commercial/masters"
         : selection.main === "commercial_website_products" &&
             selection.sub !== selection.main
           ? "/commercial/masters"

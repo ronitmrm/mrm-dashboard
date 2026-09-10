@@ -46,6 +46,7 @@ export const scopedMasters = masterDefinitions.flatMap((definition) => {
 export function supportedMasterActions(
   master: (typeof scopedMasters)[number]
 ): MasterAction[] {
+  if (master.master === "priceMaster") return ["read", "save"]
   if (master.master === "commercial_customers")
     return ["read", "create", "update", "import"]
   if (master.master === "approved_posts")

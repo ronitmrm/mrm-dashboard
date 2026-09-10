@@ -175,9 +175,9 @@ export default async function EnquiryDetailPage({
             <h2 className="text-2xl font-semibold tracking-tight">
               {snapshot.enquiry.enquiryNumber}
             </h2>
-            <Badge variant="secondary">{snapshot.enquiry.status}</Badge>
+            <Badge variant="secondary">{snapshot.enquiry.currentStage}</Badge>
             <Badge variant="outline">
-              {snapshot.enquiry.technicalHandoverStatus}
+              {snapshot.enquiry.technicalHandoverStatus === "Handed Over" ? "Technical Review Handoff Complete" : snapshot.enquiry.technicalHandoverStatus}
             </Badge>
           </div>
         </div>
@@ -317,20 +317,6 @@ export default async function EnquiryDetailPage({
                   name="currency"
                   options={termOptions.currency}
                 />
-                <Field>
-                  <FieldLabel htmlFor="edit-enquiry-fx">
-                    Fx / Exchange Rate
-                  </FieldLabel>
-                  <Input
-                    id="edit-enquiry-fx"
-                    name="conversion_rate"
-                    type="number"
-                    min="0.00000001"
-                    step="0.00000001"
-                    defaultValue={snapshot.enquiry.conversionRate}
-                    required
-                  />
-                </Field>
               </div>
               <Field>
                 <FieldLabel htmlFor="edit-enquiry-remarks">Remarks</FieldLabel>
