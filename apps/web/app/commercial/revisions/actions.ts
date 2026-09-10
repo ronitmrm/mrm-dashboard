@@ -186,6 +186,7 @@ async function withRevisions<T>(
 }
 
 export async function createBulkPriceRevisionAction(formData: FormData) {
+  const customerSelection = optionalText(formData, "customer_id")
   const revisionRoute = requiredText(formData, "revision_route") as
     | "Customer Parameter Bulk Revision"
     | "Product Parameter Bulk Revision"
@@ -193,7 +194,8 @@ export async function createBulkPriceRevisionAction(formData: FormData) {
     (repository, actorUserId) =>
       repository.createBulkPriceRevision({
         actorUserId,
-        customerId: optionalText(formData, "customer_id"),
+        allCustomers: customerSelection === "all",
+        customerId: customerSelection === "all" ? null : customerSelection,
         effectiveOn: requiredText(formData, "effective_on"),
         organizationId: requiredText(formData, "organization_id"),
         reason: requiredText(formData, "reason"),

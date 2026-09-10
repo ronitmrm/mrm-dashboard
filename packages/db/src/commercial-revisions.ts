@@ -4449,6 +4449,7 @@ export function createCommercialRevisionsRepository(
 
     async createBulkPriceRevision(input: {
       actorUserId?: string | null
+      allCustomers?: boolean
       customerId?: string | null
       effectiveOn: string
       organizationId: string
@@ -4463,7 +4464,8 @@ export function createCommercialRevisionsRepository(
         }
         if (
           input.revisionRoute === "Customer Parameter Bulk Revision" &&
-          !input.customerId
+          !input.customerId &&
+          input.allCustomers !== true
         ) {
           throw new Error("Customer is required for a customer revision.")
         }

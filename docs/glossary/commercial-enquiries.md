@@ -301,9 +301,11 @@ read-only revision details.
 Pending requests appear in Customer Parameter Costing; each opens a dedicated
 Customer revision page there for selecting prices, staging/removing parameter
 changes, and completing the revision.
-Its Customer selector contains only Customers with an active Sent or Accepted
-Quote. It does not contain Product-origin work. Customer inputs are staged against
-the selected Customer''s applicable active prices and produce immutable Quote
+Its Customer selector contains Customers with an active Sent or Accepted Quote,
+plus an explicit **All Customers** option covering those eligible customers within
+the organization. An empty selection is invalid. It does not contain Product-origin
+work. Customer inputs are staged against the selected scope's applicable active
+prices and produce immutable Quote
 replacements on completion.
 A Package or Assembly One-Piece Weight is also derived recursively as the sum of
 each direct component's One-Piece Weight multiplied by its BOM quantity. A nested
