@@ -21,6 +21,16 @@ let actorUserId: string
 let organizationId: string
 let roundTripOrganizationId: string
 
+test("Price Master stores grade market rates and common defaults without inventing prices", async () => {
+  const result = await pool.query<{ id: string }>("INSERT INTO core.organizations (code, name) VALUES ($1, 'Price defaults') RETURNING id", [`PRICES-${randomUUID()}`])
+  const organizationId = result.rows[0]!.id
+  const grade = await repository.upsertNamed({ organizationId, kind: "materialGrade", name: "C3604" })
+  const prices = { marketRates: [{ gradeId: grade.id, rate: 915 }], processes: { buffing: 5, plating: 12, washing: 0 }, exchangeRates: { USD: 95 } }
+  await repository.savePriceMaster({ organizationId, prices })
+  expect(await repository.priceMaster(organizationId)).toEqual(prices)
+  await expect(repository.savePriceMaster({ organizationId, prices: { ...prices, processes: { washing: -1 } } })).rejects.toThrow()
+})
+
 test("material combinations expose prices, edit in place, and reject duplicate entries", async () => {
   const result = await pool.query<{ id: string }>("INSERT INTO core.organizations (code, name) VALUES ($1, 'Rate editing') RETURNING id", [`RATES-${randomUUID()}`])
   const context = { organizationId: result.rows[0]!.id }

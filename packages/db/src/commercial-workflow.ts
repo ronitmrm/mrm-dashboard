@@ -2505,7 +2505,9 @@ export function createCommercialWorkflowRepository(
         }
         const current = await client.query<{
           buyer_name: string | null
+          customer_id: string
           conversion_rate: string
+          sales_terms_editable: boolean
           currency: string
           incoterms: string | null
           packaging_terms: string | null
@@ -2527,7 +2529,11 @@ export function createCommercialWorkflowRepository(
           design_task_count: string
         }>(
           `
-            SELECT enquiry.buyer_name, enquiry.conversion_rate::text,
+            SELECT enquiry.buyer_name, enquiry.customer_id, enquiry.conversion_rate::text,
+              NOT EXISTS (SELECT 1 FROM sales.enquiry_items line WHERE line.enquiry_id = enquiry.id
+                AND line.technical_review_status <> 'NotFeasible' AND (line.customer_recost_required OR NOT EXISTS (
+                  SELECT 1 FROM sales.quote_items quote WHERE quote.enquiry_item_id = line.id
+                  AND quote.status IN ('Ready', 'Sent', 'Accepted')))) AS sales_terms_editable,
               enquiry.currency, enquiry.incoterms, enquiry.packaging_terms,
               enquiry.brass_material_specs, enquiry.reports, enquiry.taxes_and_duties,
               enquiry.payment_terms, enquiry.priority,
@@ -2583,16 +2589,23 @@ export function createCommercialWorkflowRepository(
           Number(row.open_sales_clarification_count) > 0 ||
           (Number(row.technical_started_count) === 0 &&
             Number(row.design_task_count) === 0)
-        if (
+        const salesTermsOnly = row.sales_terms_editable && Number(row.quote_item_count) > 0 && Number(row.po_line_count) === 0 &&
+          input.customerId === row.customer_id && (input.receivedOn ?? row.received_on) === row.received_on &&
+          (input.status ?? row.status) === row.status && (input.source ?? row.source) === row.source &&
+          (input.priority ?? row.priority) === row.priority
+        if (!salesTermsOnly && (
           hasLockedCommercialWork ||
           (row.technical_handover_status === "Handed Over" &&
             !canEditAfterHandover)
-        ) {
+        )) {
           throw new Error(
             "This enquiry cannot be edited after downstream work has started."
           )
         }
         const terms = input.commercialTerms
+        const pricingTermsChanged = (terms?.incoterms !== undefined && terms.incoterms !== row.incoterms) ||
+          (terms?.packagingTerms !== undefined && terms.packagingTerms !== row.packaging_terms) ||
+          (terms?.currency !== undefined && terms.currency !== row.currency)
         const updated = await client.query<{
           buyer_name: string | null
           id: string
@@ -2646,7 +2659,16 @@ export function createCommercialWorkflowRepository(
           targetId: input.enquiryId,
           targetTable: "enquiries",
         })
-        await linkEnquiryCostMasters(client, input.enquiryId)
+        if (pricingTermsChanged || !hasLockedCommercialWork) await linkEnquiryCostMasters(client, input.enquiryId)
+        if (salesTermsOnly && pricingTermsChanged) {
+          await client.query(`UPDATE sales.enquiry_items SET customer_recost_required = true,
+            updated_at = now(), row_version = row_version + 1
+            WHERE enquiry_id = $1 AND technical_review_status <> 'NotFeasible'`, [input.enquiryId])
+          await client.query(`UPDATE sales.design_tasks SET next_stage_status = 'Product Costing Complete',
+            updated_at = now(), row_version = row_version + 1
+            WHERE enquiry_item_id IN (SELECT id FROM sales.enquiry_items WHERE enquiry_id = $1 AND customer_recost_required)
+              AND next_stage_status = 'Quoted'`, [input.enquiryId])
+        }
         return {
           buyerName: updated.rows[0]!.buyer_name,
           id: updated.rows[0]!.id,
@@ -2980,7 +3002,6 @@ export function createCommercialWorkflowRepository(
           !row.shipment_mode?.trim() ? "Shipment Mode" : null,
           !row.packaging_terms?.trim() ? "Packaging" : null,
           !row.currency?.trim() ? "Currency" : null,
-          Number(row.conversion_rate) <= 0 ? "FX / Exchange Rate" : null,
         ].filter(Boolean)
         if (missingTerms.length) {
           throw new Error(
@@ -6337,6 +6358,8 @@ export function createCommercialWorkflowRepository(
         }
         const items = await client.query<{
           customer_part_code: string | null
+          customer_recost_required: boolean
+          quote_status: string | null
           description: string
           design_status: string | null
           drawing_file_id: string | null
@@ -6357,6 +6380,10 @@ export function createCommercialWorkflowRepository(
         }>(
           `
             SELECT item.id, item.line_number, item.customer_part_code,
+              item.customer_recost_required,
+              (SELECT CASE WHEN quote.sent_at IS NOT NULL THEN 'Sent' ELSE quote.status END
+                FROM sales.quote_items quote WHERE quote.enquiry_item_id = item.id AND quote.status <> 'Superseded'
+                ORDER BY quote.created_at DESC, quote.id DESC LIMIT 1) AS quote_status,
               item.description, item.technical_review_status,
               item.grade, item.quantity::text, item.target_price::text,
               item.drawing_reference, item.remarks,
@@ -6429,6 +6456,12 @@ export function createCommercialWorkflowRepository(
             targetStage: row.target_stage,
           })),
           enquiry: {
+            currentStage: items.rows.some(line => line.customer_recost_required) ? "Customer Costing" :
+              items.rows.length > 0 && items.rows.every(line => line.technical_review_status === 'NotFeasible' || line.quote_status === 'Sent') ? "Quotation Complete — Sales Follow-up" :
+              items.rows.length > 0 && items.rows.every(line => line.technical_review_status === 'NotFeasible' || ['Ready', 'Sent', 'Accepted'].includes(line.quote_status ?? '')) ? "Sales — Ready to Send" :
+              items.rows.some(line => ['Product Costing Complete', 'Started'].includes(line.next_stage_status ?? '')) ? "Customer Costing" :
+              items.rows.some(line => line.next_stage_status === 'Product Costing') ? "Product Costing" :
+              items.rows.some(line => line.design_status) ? "Design" : enquiry.rows[0].technical_handover_status === 'Handed Over' ? "Technical Review" : "Sales — Enquiry Entry",
             buyerName: enquiry.rows[0].buyer_name,
             companyName: enquiry.rows[0].company_name,
             conversionRate: Number(enquiry.rows[0].conversion_rate),

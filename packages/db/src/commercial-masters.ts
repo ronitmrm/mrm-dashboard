@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto"
+import { readPriceMaster, priceMasterProcesses, type PriceMaster } from "./price-master"
 import { rejectDuplicateMaster, assertMasterAvailable } from "./master-duplicate"
 
 import type { PoolClient } from "pg"
@@ -1037,6 +1038,28 @@ export function createCommercialMasterRepository(
 
   return {
     close,
+
+    priceMaster(organizationId: string) { return readPriceMaster(pool, organizationId) },
+
+    async savePriceMaster(input: MutationContext & { prices: PriceMaster }) {
+      const { prices } = input
+      const amounts = [...prices.marketRates.map(row => row.rate), ...Object.values(prices.processes), ...Object.values(prices.exchangeRates)]
+      if (amounts.some(rate => !Number.isFinite(rate) || rate < 0) || Object.entries(prices.exchangeRates).some(([currency, rate]) => !/^[A-Z]{3}$/.test(currency) || rate <= 0)) throw new Error("Enter valid nonnegative prices and positive exchange rates.")
+      if (Object.keys(prices.processes).some(key => !priceMasterProcesses.some(process => process.key === key))) throw new Error("Unknown process price.")
+      if (new Set(prices.marketRates.map(row => row.gradeId)).size !== prices.marketRates.length) throw new Error("Each grade can have only one market rate.")
+      return transaction(pool, async client => {
+        const grades = await client.query("SELECT id FROM catalog.material_grades WHERE organization_id = $1 AND id = ANY($2::uuid[])", [input.organizationId, prices.marketRates.map(row => row.gradeId)])
+        if (grades.rowCount !== prices.marketRates.length) throw new Error("Select grades from this organization's master.")
+        await client.query(`INSERT INTO sales.price_master (organization_id, prices, updated_by_user_id)
+          VALUES ($1, $2::jsonb, $3) ON CONFLICT (organization_id) DO UPDATE
+          SET prices = EXCLUDED.prices, updated_by_user_id = EXCLUDED.updated_by_user_id, updated_at = now()`,
+          [input.organizationId, JSON.stringify(prices), input.actorUserId ?? null])
+        await client.query(`INSERT INTO audit.events
+          (organization_id, event_type, target_schema, target_table, target_id, actor_user_id, metadata, source_system, source_table, source_id)
+          VALUES ($1, 'price_master.saved', 'sales', 'price_master', $1, $2, $3::jsonb, 'mrm-dashboard', 'commercial_master_events', $4)`,
+          [input.organizationId, input.actorUserId ?? null, JSON.stringify({ prices }), randomUUID()])
+      })
+    },
 
     async listEditableRows(input: {
       kind: EditableCommercialMasterKind

@@ -85,7 +85,9 @@ export function CommercialShell({
     searchParams.get("floor") ?? defaultProductionFloorCode
   )
   const current =
-    (pathname === "/account/password"
+    (pathname === "/commercial/price-master"
+      ? { label: "Price Master" }
+      : pathname === "/account/password"
       ? { label: "Password & Security" }
       : pathname.startsWith("/operational-entry")
         ? { label: "Operational Entry" }
