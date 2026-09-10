@@ -82,6 +82,21 @@ function ordinal(reference: string) {
   return value
 }
 
+// An offer belongs to its candidate application, not the post's outgoing employee.
+const registerEmployeeCode = `CASE WHEN letter.letter_type = 'offer' THEN
+  coalesce(
+    (SELECT replacement.employee_code FROM recruitment.post_replacements replacement
+     WHERE replacement.organization_id = letter.organization_id
+       AND replacement.application_id = letter.application_id
+       AND replacement.status = 'Joined'
+     ORDER BY replacement.completed_at DESC, replacement.id LIMIT 1),
+    (SELECT assigned.employee_code FROM recruitment.posts assigned
+     WHERE assigned.organization_id = letter.organization_id
+       AND assigned.appointed_application_id = letter.application_id
+       AND assigned.status IN ('Occupied', 'Resigned')
+     ORDER BY assigned.post_code LIMIT 1)
+  ) ELSE letter.employee_code END`
+
 export function createRecruitmentEmploymentLetterRepository(
   options: RepositoryPoolOptions
 ) {
@@ -127,7 +142,7 @@ export function createRecruitmentEmploymentLetterRepository(
       reference_number: string
     }>(
       `SELECT letter.id, letter.letter_type, letter.application_id,
-           letter.post_id, letter.employee_name, letter.employee_code,
+           letter.post_id, letter.employee_name, ${registerEmployeeCode} AS employee_code,
            letter.designation, letter.department, letter.joining_date::text,
            letter.last_working_date::text, letter.reference_number,
            letter.issued_on::text, letter.details, post.post_code,
@@ -217,7 +232,7 @@ export function createRecruitmentEmploymentLetterRepository(
         reference_number: string
       }>(
         `SELECT letter.id, letter.letter_type, letter.application_id,
-           letter.post_id, letter.employee_name, letter.employee_code,
+           letter.post_id, letter.employee_name, ${registerEmployeeCode} AS employee_code,
            letter.designation, letter.department, letter.joining_date::text,
            letter.last_working_date::text, letter.reference_number,
            letter.issued_on::text, letter.details, post.post_code,
@@ -311,7 +326,6 @@ export function createRecruitmentEmploymentLetterRepository(
             candidate_name: string
             department: string
             designation: string
-            employee_code: string | null
             joining_date: string | null
             post_id: string | null
             salary_before_probation: string | null
@@ -326,7 +340,6 @@ export function createRecruitmentEmploymentLetterRepository(
                application.salary_after_probation_minimum,
                application.salary_after_probation_maximum,
                candidate.name AS candidate_name, job.post_id,
-               post.employee_code,
                designation.name AS designation,
                coalesce(department.name, '') AS department
              FROM recruitment.applications application
@@ -370,7 +383,7 @@ export function createRecruitmentEmploymentLetterRepository(
             identity: {
               department: row.department,
               designation: row.designation,
-              employeeCode: row.employee_code,
+              employeeCode: null,
               employeeName: row.candidate_name,
               joiningDate: row.joining_date,
             },

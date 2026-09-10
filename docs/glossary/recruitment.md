@@ -63,6 +63,11 @@ reference number, issue date, and exact generated file that were current at
 issuance. A later person filling the same Approved Post never replaces the
 former employee's letter history.
 
+Offer letters are issued before joining and do not inherit an Employee ID from
+the Approved Post. The letter register shows Pending Joining until that candidate
+application has its own employee assignment; joined replacements use their retained
+replacement Employee ID. The outgoing employee's ID belongs only to that employee.
+
 _Avoid_: Regenerating a historical letter from current master data, storing a
 letter only on an Approved Post, appointment letter before probation completion,
 experience letter before departure.

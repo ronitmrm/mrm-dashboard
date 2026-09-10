@@ -28,7 +28,7 @@ describe("employment letter lifecycle", () => {
       },
       identity: {
         ...identity,
-        employeeCode: null,
+        employeeCode: "69",
       },
       issuedOn: "2026-04-13",
       ordinal: 11,
@@ -38,6 +38,7 @@ describe("employment letter lifecycle", () => {
     })
 
     expect(letter.reference).toBe("MRMPL-HR-202627-OL-11")
+    expect(letter.identity.employeeCode).toBeNull()
     expect(letter.details.postalAddress).toContain("Hapa, Jamnagar")
   })
 
