@@ -77,6 +77,8 @@ export default async function MastersPage({
     kind: EditableCommercialMasterKind
     label: string
     costPerKg?: number | null
+    alloyPremium?: number | null
+    extrusionCost?: number
   }> = []
 
   if ((showDataEntry && canUpdate) || showMasterTables) {
@@ -190,7 +192,8 @@ export default async function MastersPage({
           <CardContent>
             <CommercialMasterTable
               canSaveCost={canUpdate && (selectionKind === "packaging_terms" || selectionKind === "incoterms")}
-              canWrite={canDelete || canRename}
+              canSaveRates={canUpdate && selectionKind === "materialRate"}
+              canWrite={canDelete || canRename || (canUpdate && selectionKind === "materialRate")}
               canDelete={canDelete}
               canRename={canRename}
               initialKind={selectionKind}

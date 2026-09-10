@@ -136,6 +136,15 @@ export async function updateCommercialTermCostAction(formData: FormData) {
   revalidatePath("/commercial/customer-costing")
 }
 
+export async function updateMaterialRateAction(formData: FormData) {
+  await withMasters(masterCapability("materialRate", "save"), (repository, actorUserId, organizationId) =>
+    repository.updateMaterialRate({ actorUserId, organizationId, id: required(formData, "master_id"),
+      alloyPremium: optional(formData, "alloy_premium") === null ? null : Number(required(formData, "alloy_premium")),
+      extrusionCost: Number(required(formData, "ext_cost")) }))
+  revalidatePath(mastersPath)
+  revalidatePath("/commercial/masters")
+}
+
 export async function upsertMasterAction(formData: FormData) {
   return withMasterSaveFeedback(async () => {
     const kind = required(formData, "kind")
