@@ -95,7 +95,6 @@ describe("Pricing masters workbook", () => {
       "Website Sealant",
       "Material Rates",
       "Commercial Terms",
-      "Quote PDF Terms",
     ])
     expect(masterTemplateFilename()).toBe("masters-template.xlsx")
     expect(masterTemplateFilename("rod-types")).toBe(
@@ -223,6 +222,6 @@ describe("Pricing masters workbook", () => {
     }) as Buffer
     const reparsed = XLSX.read(output, { type: "buffer" })
 
-    expect(parseMastersWorkbook(reparsed)).toEqual({ ...snapshot, packagingOptions: [], shippingTerms: [] })
+    expect(parseMastersWorkbook(reparsed)).toEqual({ ...snapshot, packagingOptions: [], shippingTerms: [], quoteTerms: [] })
   })
 })

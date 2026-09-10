@@ -32,7 +32,6 @@ const templateMasters = {
   materials: "materialRate",
   shipping: "incoterms",
   packaging: "packaging_terms",
-  "quote-terms": "quoteTerm",
 } as const
 
 export function commercialTemplateReadCapabilities(key?: string, termType?: string | null) {
@@ -56,6 +55,7 @@ export const commercialSnapshotMasters = {
 } as const satisfies Record<Exclude<keyof CommercialMasterSnapshot, "commercialTerms">, string>
 
 export function commercialImportCapabilities(snapshot: CommercialMasterSnapshot) {
+  if (snapshot.quoteTerms.length) throw new Error("Quote PDF Terms is retired. Select quotation terms on the enquiry.")
   if (snapshot.packagingOptions.length || snapshot.shippingTerms.length)
     throw new Error("Use Packaging and Incoterms in the Commercial Terms sheet with cost_per_kg. Legacy cost sheets are no longer imported.")
   return [...new Set([
@@ -70,7 +70,7 @@ export function readableCommercialSnapshot(snapshot: CommercialMasterSnapshot, g
   const allowed = new Set(grants)
   const selected = { ...snapshot }
   for (const [key, master] of Object.entries(commercialSnapshotMasters)) {
-    if (key === "packagingOptions" || key === "shippingTerms") {
+    if (key === "packagingOptions" || key === "shippingTerms" || key === "quoteTerms") {
       selected[key] = []
       continue
     }
