@@ -47,6 +47,11 @@ const nextConfig: NextConfig = {
     root: workspaceRoot,
   },
   transpilePackages: ["@workspace/ui"],
+  webpack(config) {
+    // PDF.js's unminified bundle conflicts with Webpack's development eval wrapper.
+    config.resolve.alias["pdfjs-dist$"] = "pdfjs-dist/build/pdf.min.mjs"
+    return config
+  },
 }
 
 export default nextConfig
