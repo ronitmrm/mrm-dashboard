@@ -2611,7 +2611,7 @@ export function createCommercialRevisionsRepository(
           LEFT JOIN sales.bulk_price_revision_changes change
             ON change.bulk_price_revision_id = revision.id
           WHERE revision.revision_route = 'Product Parameter Bulk Revision'
-            AND revision.status NOT IN ('Completed', 'Pending Customer Costing')
+            AND revision.status NOT IN ('Completed', 'Cancelled', 'Pending Customer Costing')
           GROUP BY revision.id
           ORDER BY revision.created_at DESC, revision.id DESC
           LIMIT $2
@@ -2677,7 +2677,7 @@ export function createCommercialRevisionsRepository(
           WHERE lower(organization.code) = lower($1)
             AND revision.id = $2
             AND revision.revision_route = 'Product Parameter Bulk Revision'
-            AND revision.status NOT IN ('Completed', 'Pending Customer Costing')
+            AND revision.status NOT IN ('Completed', 'Cancelled', 'Pending Customer Costing')
           GROUP BY revision.id
         `,
         [organizationCode.trim(), bulkPriceRevisionId]
@@ -2800,7 +2800,7 @@ export function createCommercialRevisionsRepository(
           CROSS JOIN active_total
           LEFT JOIN sales.bulk_price_revision_changes change
             ON change.bulk_price_revision_id = revision.id
-          WHERE revision.status <> 'Completed'
+          WHERE revision.status NOT IN ('Completed', 'Cancelled')
             AND revision.revision_route IN (
               'Customer Parameter Bulk Revision',
               'Customer Parameter Costing Only',
@@ -2917,7 +2917,7 @@ export function createCommercialRevisionsRepository(
             SELECT revision.*
             FROM sales.bulk_price_revisions revision
             JOIN organization ON organization.id = revision.organization_id
-            WHERE revision.status <> 'Completed'
+            WHERE revision.status NOT IN ('Completed', 'Cancelled')
               AND revision.revision_route IN (
                 'Customer Parameter Bulk Revision',
                 'Customer Parameter Costing Only',
@@ -3420,7 +3420,7 @@ export function createCommercialRevisionsRepository(
             FROM sales.bulk_price_revisions
             WHERE id = $1
               AND revision_route = 'Product Parameter Bulk Revision'
-              AND status NOT IN ('Completed', 'Pending Customer Costing')
+              AND status NOT IN ('Completed', 'Cancelled', 'Pending Customer Costing')
           ), quote_tree AS (
             SELECT quote.id AS root_quote_item_id, quote.id AS quote_item_id,
               quote.item_id, ARRAY[quote.id]::uuid[] AS quote_path, 0 AS depth
@@ -4543,7 +4543,7 @@ export function createCommercialRevisionsRepository(
           [input.bulkPriceRevisionId]
         )
         const row = revision.rows[0]
-        if (!row || row.status === "Completed") {
+        if (!row || row.status === "Completed" || row.status === "Cancelled") {
           throw new Error("Open bulk revision was not found.")
         }
         if (!isBulkRevisionField(input.fieldName)) {
@@ -4928,7 +4928,7 @@ export function createCommercialRevisionsRepository(
           [input.bulkPriceRevisionId]
         )
         const row = revision.rows[0]
-        if (!row || row.status === "Completed") {
+        if (!row || row.status === "Completed" || row.status === "Cancelled") {
           throw new Error("Open bulk revision was not found.")
         }
         const target = await client.query<{
@@ -5039,7 +5039,7 @@ export function createCommercialRevisionsRepository(
           [input.bulkPriceRevisionId]
         )
         const row = revision.rows[0]
-        if (!row || row.status === "Completed") {
+        if (!row || row.status === "Completed" || row.status === "Cancelled") {
           throw new Error("Open bulk revision was not found.")
         }
         const lockedRevision = row

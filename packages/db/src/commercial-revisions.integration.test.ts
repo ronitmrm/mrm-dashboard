@@ -294,6 +294,19 @@ describe("commercial revisions and corrections", () => {
     expect(bulkRevisionFields.scrap_rate.valueType).toBe("number")
   })
 
+  test("cancelled customer revisions stay out of pending work and cannot be completed", async () => {
+    const revision = await repository.createBulkPriceRevision({
+      customerId, organizationId, effectiveOn: "2026-09-10",
+      reason: "Obsolete repair attempt", revisionRoute: "Customer Parameter Bulk Revision",
+    })
+    await pool.query("UPDATE sales.bulk_price_revisions SET status = 'Cancelled' WHERE id = $1", [revision.id])
+    const queue = await repository.listCustomerBulkPriceRevisionsBounded(organizationCode)
+    expect(queue.rows.map(row => row.id)).not.toContain(revision.id)
+    expect((await repository.getCustomerBulkRevisionSummary(organizationCode)).openRevisionCount).toBe(0)
+    await expect(repository.completeBulkPriceRevision({bulkPriceRevisionId: revision.id})).rejects.toThrow("Open bulk revision was not found")
+    expect(await repository.getCustomerBulkPriceRevision(organizationCode, revision.id)).toMatchObject({status: "Cancelled"})
+  })
+
   test("bounds the customer bulk revision queue and searches only its active customer prices", async () => {
     const suffix = randomUUID()
     const firstItemId = await createItem(`M-CBR-A-${suffix}`, "List")
