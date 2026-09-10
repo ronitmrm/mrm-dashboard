@@ -402,7 +402,9 @@ reference, items, payment/delivery/incoterms, shipment and packaging. Customer
 Costing supplies the quote's saved exchange rate. Brass Material Specs, Reports, and Taxes and Duties each have a commercial
 master. Sales selects their values on the Enquiry; the PDF uses those saved
 values, so later master edits do not rewrite an enquiry. Unselected terms are
-omitted. Generic Quote Term Templates are not appended. Quote numbers are generated
+omitted. The obsolete Quote PDF Terms master is retired from Masters, Access
+Administration and workbook exports; its historical records are retained.
+Generic Quote Term Templates are not appended. Quote numbers are generated
 as `QTN-<Enquiry number>` without displaying the internal pricing revision; the date is the PDF
 generation date in India time. Prepared by is always Ankit Khattar, Engineering
 Lead. Westmetall's Official LME USD/ton **3 months** Copper and Zinc column is

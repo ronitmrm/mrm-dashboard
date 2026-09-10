@@ -342,7 +342,7 @@ export function buildMastersWorkbook(
     ? sheetDefinitions.find((definition) => definition.key === selectedKey)
     : undefined
   const selected = (selectedDefinition ? [selectedDefinition] : sheetDefinitions)
-    .filter(({ key }) => key !== "packaging" && key !== "shipping")
+    .filter(({ key }) => key !== "packaging" && key !== "shipping" && key !== "quote-terms")
 
   for (const definition of selected) {
     const data = snapshot

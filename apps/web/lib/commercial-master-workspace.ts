@@ -127,9 +127,9 @@ const commercialMasterDefinitions = [
   },
 ] as const
 
-// Legacy cost tables remain for migration/history, not as independent masters.
+// Retired masters remain only for historical compatibility.
 export const commercialMasterKinds = commercialMasterDefinitions.filter(
-  ({ entryKind }) => entryKind !== "shippingTerm" && entryKind !== "packagingOption"
+  ({ entryKind }) => entryKind !== "shippingTerm" && entryKind !== "packagingOption" && entryKind !== "quoteTerm"
 )
 
 export type CommercialMasterEntryKind =

@@ -4,6 +4,7 @@ import {
   type CommercialMasterSnapshot,
   type EditableCommercialMasterKind,
 } from "@workspace/db"
+import { redirect } from "next/navigation"
 import { Alert, AlertDescription } from "@workspace/ui/components/alert"
 import {
  SectionCard,
@@ -54,6 +55,7 @@ export default async function MastersPage({
   }>
 }) {
   const feedback = await searchParams
+  if (feedback.kind === "quoteTerm" || feedback.kind === "commercial_quote_term") redirect("/masters?unit=universal")
   const selection = commercialMasterSelection(feedback.kind)
   const selectionKind = commercialMasterWorkspaceKind(selection)
   const session = await requireCapability(
