@@ -14,6 +14,138 @@ const letters = createRecruitmentEmploymentLetterRepository({ pool })
 beforeAll(() => migrateDatabase({ connectionString }), 120_000)
 afterAll(() => pool.end())
 
+test.each(["non-joining", "joining"])(
+  "candidate replacement preserves outgoing combined posts through appointment and %s",
+  async (outcome) => {
+    const f = await fixture()
+    await pool.query(
+      "UPDATE recruitment.applications SET willing_to_join=NULL WHERE id=$1",
+      [f.applicationId]
+    )
+    await pool.query(
+      "UPDATE recruitment.job_posts SET status='Open',closed_on=NULL WHERE id=$1",
+      [f.jobId]
+    )
+    await pool.query(
+      `UPDATE recruitment.posts SET status='Resigned', employee_name='Outgoing Employee',
+    employee_code='104',last_working_date=current_date+10,joining_date=NULL,appointed_application_id=NULL
+    WHERE id=ANY($1::uuid[])`,
+      [f.postIds]
+    )
+    for (const round of ["Screening Round", "Department Round", "HR Round"]) {
+      await pool.query(
+        `INSERT INTO recruitment.interviews
+      (organization_id,application_id,round_name,status,source_system,source_table,source_id)
+      VALUES ($1,$2,$3,'Approved','test','interviews',$4)`,
+        [f.organizationId, f.applicationId, round, randomUUID()]
+      )
+    }
+    await repository.completeCandidateAppointment({
+      organizationId: f.organizationId,
+      applicationId: f.applicationId,
+      willingToJoin: "yes",
+      joiningDate: "2026-01-01",
+      salaryBeforeProbation: 10000,
+      salaryAfterProbationMinimum: 12000,
+      salaryAfterProbationMaximum: 14000,
+    })
+    const posts = (await repository.listPosts(f.organizationId)).filter(
+      (post) => f.postIds.some((id) => id === post.id)
+    )
+    expect(posts).toHaveLength(2)
+    for (const post of posts)
+      expect(post).toMatchObject({
+        employeeName: "Outgoing Employee",
+        employeeCode: "104",
+        status: "Resigned",
+        replacementAppointments: [
+          expect.objectContaining({
+            applicationId: f.applicationId,
+            status: "Pending",
+          }),
+        ],
+      })
+    const workspace = await repository.getJobWorkspace(
+      f.organizationId,
+      f.jobId
+    )
+    expect(workspace?.job.status).toBe("Closed")
+    expect(workspace?.applications[0]?.canRecordDidNotJoin).toBe(true)
+    await expect(
+      repository.assignEmployee({
+        organizationId: f.organizationId,
+        postId: f.postIds[0]!,
+        employeeEvent: "Replacement Joined",
+        employeeCode: "205",
+      })
+    ).rejects.toThrow("last working date")
+    if (outcome === "joining") {
+      await pool.query(
+        "UPDATE recruitment.posts SET last_working_date=current_date-1 WHERE id=ANY($1::uuid[])",
+        [f.postIds]
+      )
+      await repository.assignEmployee({
+        organizationId: f.organizationId,
+        postId: f.postIds[0]!,
+        employeeEvent: "Replacement Joined",
+        employeeCode: "205",
+      })
+      for (const post of (await repository.listPosts(f.organizationId)).filter(
+        (post) => f.postIds.some((id) => id === post.id)
+      )) {
+        expect(post).toMatchObject({
+          employeeName: "No-Show Candidate",
+          employeeCode: "205",
+          status: "Occupied",
+          replacementAppointments: [
+            expect.objectContaining({
+              applicationId: f.applicationId,
+              status: "Joined",
+              outgoingEmployeeName: "Outgoing Employee",
+              outgoingEmployeeCode: "104",
+            }),
+          ],
+        })
+      }
+      expect(
+        (await repository.getJobWorkspace(f.organizationId, f.jobId))
+          ?.applications[0]?.canRecordDidNotJoin
+      ).toBe(false)
+      await expect(
+        repository.recordCandidateDidNotJoin({
+          organizationId: f.organizationId,
+          applicationId: f.applicationId,
+          didNotJoinOn: "2026-01-02",
+          reason: "Late no-show report",
+        })
+      ).rejects.toThrow("joined")
+      return
+    }
+    await repository.recordCandidateDidNotJoin({
+      organizationId: f.organizationId,
+      applicationId: f.applicationId,
+      didNotJoinOn: "2026-01-02",
+      reason: "Candidate did not attend",
+    })
+    const cancelled = (await repository.listPosts(f.organizationId)).filter(
+      (post) => f.postIds.some((id) => id === post.id)
+    )
+    for (const post of cancelled)
+      expect(post).toMatchObject({
+        employeeName: "Outgoing Employee",
+        employeeCode: "104",
+        status: "Resigned",
+        replacementAppointments: [
+          expect.objectContaining({ status: "Cancelled" }),
+        ],
+      })
+    expect(
+      (await repository.getJobWorkspace(f.organizationId, f.jobId))?.job.status
+    ).toBe("Open")
+  },
+  60_000
+)
+
 async function fixture(joined = false) {
   const organizationId = randomUUID(),
     departmentId = randomUUID(),
