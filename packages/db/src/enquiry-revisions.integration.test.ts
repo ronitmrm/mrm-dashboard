@@ -201,7 +201,8 @@ test("technical revision opens controlled Design work for a quoted part without 
   const updated = await costing.saveQuote({
     enquiryItemId: f.lineIds[0]!,
     itemId: current!.itemId,
-    quantity: 1,
+    customerPartCode: "COSTING-OVERRIDE",
+    quantity: 999,
     action: "complete",
     inputs: {
       conversionRate: 1,
@@ -212,6 +213,9 @@ test("technical revision opens controlled Design work for a quoted part without 
       purchaseTimes: 1,
     },
   })
+  const saved = await costing.getQuote(updated.id)
+  expect(saved.customerPartCode).toBe("Q-1")
+  expect(saved.quantity).toBe(1)
   expect(
     (await workflow.listEnquirySpreadsheetBounded(f.code)).rows[0]!
       .currentStatus

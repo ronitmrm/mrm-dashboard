@@ -351,12 +351,14 @@ export async function CustomerParameterCostingView({
                           defaultValue={selectedTask.customerPartCode ?? ""}
                           id="customer_part_code"
                           name="customer_part_code"
+                          readOnly
                         />
                       </Field>
                       <NumberField
                         defaultValue={selectedTask.quantity}
                         label="Quantity"
                         name="quantity"
+                        readOnly
                       />
                       <NumberField
                         defaultValue={selectedTask.quoteDefaults.conversionRate}

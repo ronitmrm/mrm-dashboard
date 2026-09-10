@@ -666,6 +666,8 @@ function calculateProductQuote(product: ProductRow, inputs: QuoteInputs) {
 
 async function getQuoteWithClient(client: PoolClient, quoteItemId: string) {
   const quote = await client.query<{
+    customer_part_code: string | null
+    quantity: string
     approved_price_usd: string
     company_name: string
     enquiry_item_id: string | null
@@ -682,6 +684,7 @@ async function getQuoteWithClient(client: PoolClient, quoteItemId: string) {
   }>(
     `
       SELECT quote.id, quote.quote_number, quote.revision, quote.status,
+        quote.customer_part_code, quote.quantity::text,
         quote.is_active, quote.rate_inr, quote.total_rate_inr,
         quote.rate_usd, quote.approved_price_usd, quote.enquiry_item_id, quote.enquiry_id,
         customer.company_name,
@@ -719,6 +722,8 @@ async function getQuoteWithClient(client: PoolClient, quoteItemId: string) {
   const row = quote.rows[0]
   return {
     approvedPriceUsd: asNumber(row.approved_price_usd),
+    customerPartCode: row.customer_part_code,
+    quantity: asNumber(row.quantity),
     companyName: row.company_name,
     components: components.rows.map((component) => ({
       childQuoteItemId: component.child_quote_item_id,
@@ -2709,6 +2714,7 @@ export function createCommercialCostingRepository(
           currency: string
           revision_stage: string | null
           customer_part_code: string | null
+          quantity: string
           enquiry_id: string
           enquiry_number: string
           item_id: string | null
@@ -2724,6 +2730,7 @@ export function createCommercialCostingRepository(
               enquiry_item.revision_stage,
               enquiry.enquiry_number, enquiry.organization_id,
               enquiry_item.customer_part_code, enquiry_item.item_id,
+              enquiry_item.quantity::text,
               design.matched_product_id, design.quoted_part_uid,
               design.next_stage_status
             FROM sales.enquiry_items enquiry_item
@@ -2743,6 +2750,7 @@ export function createCommercialCostingRepository(
         const masterCosts = await enquiryMasterCosts(client, row.enquiry_id)
         input = {
           ...input,
+          quantity: asNumber(row.quantity),
           packaging: masterCosts.packaging,
           shippingTerms: masterCosts.shippingTerms,
           inputs: { ...input.inputs, packingCost: masterCosts.packingCost, shippingCost: masterCosts.shippingCost },
@@ -2947,7 +2955,7 @@ export function createCommercialCostingRepository(
             components,
             customerId: row.customer_id,
             customerPartCode: options.isRoot
-              ? (input.customerPartCode ?? row.customer_part_code)
+              ? row.customer_part_code
               : null,
             enquiryId: row.enquiry_id,
             enquiryItemId: input.enquiryItemId,
