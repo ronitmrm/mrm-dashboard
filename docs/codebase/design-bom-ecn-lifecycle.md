@@ -13,6 +13,26 @@ Repository commands are authoritative; UI state is advisory.
   Parameter Costing -> close ECN.
 - Files: authenticated viewer -> inline preview -> explicit original download.
 
+## Quote customer drawings
+
+`DesignTaskEditor` owns a separate Customer Drawings tab. The existing design
+save action uploads multiple files under independent `customer_drawing_<uuid>`
+purposes; `saveDesign` validates selected file IDs against available attachments
+owned by the same task and saves `source_payload.customerDrawingFileIds` in its
+transaction. Draft saves preserve that selection when the field is omitted.
+
+`quote-drawings.ts` resolves explicit selections first, otherwise the latest
+approved portfolio drawing. It never substitutes an older revision when the
+latest approved file is unavailable. An unavailable explicit selection is
+omitted without substituting another drawing. Quote issuance captures file IDs
+per part in `quotation_versions.lines_snapshot`; historical reads use those IDs.
+Legacy quote backfills deliberately do not resolve current drawings.
+
+Sales quote actions and quotation history link to the customer drawing list.
+List and file routes require quote read access and enforce the originating
+salesperson scope. Downloads recheck availability and do not require Design
+access. Working files are never implicitly exposed to Sales.
+
 ## Statuses
 
 Initial Design uses `In Progress`, `Drawings Pending`, and `Design Complete`.

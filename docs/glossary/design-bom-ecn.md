@@ -71,6 +71,16 @@ Drawing Revisions, including release/effective date, ECN or Initial Release,
 reason, raiser, uploader, Design approval, linked BOM revision, and separate
 view/download actions.
 
+**Customer Drawings for a Quote**: Design explicitly selects or uploads the
+drawings intended for the customer in the Design Task's Customer Drawings tab.
+Working files are not automatically shared. For each quoted part, these selected
+files take precedence; a portfolio-mapped part otherwise uses its latest approved
+released Drawing Revision. Unavailable files are omitted and do not block quoting.
+Sales can open and download the drawings alongside the quote PDF. Each issued
+quotation pins its selected file IDs, so later drawing releases do not change
+that quotation's attachments. Legacy quotations without captured attachments do
+not acquire today's drawings retroactively.
+
 **Authenticated Attachment Viewer**: The shared signed-in file surface opened
 when an upload is clicked. PDFs and images render inline; incompatible formats
 show metadata and a compatible preview when available. Original download is a

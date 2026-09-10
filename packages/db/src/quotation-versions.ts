@@ -1,4 +1,8 @@
 import type { Pool, PoolClient } from "pg"
+import {
+  availableQuoteDrawingFiles,
+  currentQuoteDrawings,
+} from "./quote-drawings"
 
 export type QuotationVersion = {
   id: string
@@ -26,11 +30,21 @@ export type QuotationVersion = {
     quantity: number
     price: number | null
     itemRevision: number | null
+    customerDrawingFileIds?: string[]
   }>
 }
 
-export async function captureQuotation(client: PoolClient, id: string, quoteItemId: string | null) {
-  await client.query(`UPDATE sales.quotation_versions v SET status='Sent', sent_at=now(),
+export async function captureQuotation(
+  client: PoolClient,
+  id: string,
+  quoteItemId: string | null,
+  captureDrawings = true
+) {
+  const captured = await client.query<{
+    enquiry_id: string
+    lines_snapshot: QuotationVersion["lines"]
+  }>(
+    `UPDATE sales.quotation_versions v SET status='Sent', sent_at=now(),
     terms_snapshot=(SELECT jsonb_build_object('incoterms',e.incoterms,'payment_terms',e.payment_terms,
       'shipment_mode',e.shipment_mode,'packaging_terms',e.packaging_terms,'brass_material_specs',e.brass_material_specs,
       'reports',e.reports,'taxes_and_duties',e.taxes_and_duties,'currency',e.currency) FROM sales.enquiries e WHERE e.id=v.enquiry_id),
@@ -43,36 +57,136 @@ export async function captureQuotation(client: PoolClient, id: string, quoteItem
       LEFT JOIN catalog.items p ON p.id=q.item_id WHERE i.enquiry_id=v.enquiry_id AND i.linked_enquiry_item_id IS NULL),'[]'::jsonb),
     quote_item_id=$2, file_id=(SELECT file_id FROM core.file_links WHERE target_id=$2 AND target_schema='sales'
       AND target_table='quote_items' AND purpose='issued_quote_pdf' ORDER BY version DESC LIMIT 1)
-    WHERE v.id=$1 AND v.status='Draft'`, [id, quoteItemId])
+    WHERE v.id=$1 AND v.status='Draft' RETURNING enquiry_id, lines_snapshot`,
+    [id, quoteItemId]
+  )
+  const version = captured.rows[0]
+  if (captureDrawings && version) {
+    const drawings = await currentQuoteDrawings(client, version.enquiry_id)
+    const lines = version.lines_snapshot.map((line) => ({
+      ...line,
+      customerDrawingFileIds: drawings
+        .filter((drawing) => drawing.enquiryItemId === line.enquiryItemId)
+        .map((drawing) => drawing.fileId),
+    }))
+    await client.query(
+      "UPDATE sales.quotation_versions SET lines_snapshot=$2::jsonb WHERE id=$1",
+      [id, JSON.stringify(lines)]
+    )
+  }
 }
 
 // Call under the enquiry row lock. Repeated edits share the current draft.
-export async function ensureQuotationDraft(client: PoolClient, enquiryId: string) {
-  let latest = (await client.query<{id:string; revision:number; status:string}>(
-    "SELECT id,revision,status FROM sales.quotation_versions WHERE enquiry_id=$1 ORDER BY revision DESC LIMIT 1", [enquiryId])).rows[0]
+export async function ensureQuotationDraft(
+  client: PoolClient,
+  enquiryId: string
+) {
+  let latest = (
+    await client.query<{ id: string; revision: number; status: string }>(
+      "SELECT id,revision,status FROM sales.quotation_versions WHERE enquiry_id=$1 ORDER BY revision DESC LIMIT 1",
+      [enquiryId]
+    )
+  ).rows[0]
   if (!latest) {
-    const previous = (await client.query<{id:string}>("SELECT id FROM sales.quote_items WHERE enquiry_id=$1 AND sent_at IS NOT NULL ORDER BY sent_at DESC LIMIT 1", [enquiryId])).rows[0]
+    const previous = (
+      await client.query<{ id: string }>(
+        "SELECT id FROM sales.quote_items WHERE enquiry_id=$1 AND sent_at IS NOT NULL ORDER BY sent_at DESC LIMIT 1",
+        [enquiryId]
+      )
+    ).rows[0]
     if (previous) {
-      const baseline = (await client.query<{id:string}>(`INSERT INTO sales.quotation_versions(organization_id,enquiry_id,revision,status)
-        SELECT organization_id,id,0,'Draft' FROM sales.enquiries WHERE id=$1 RETURNING id`, [enquiryId])).rows[0]!
-      await captureQuotation(client, baseline.id, previous.id)
-      await client.query("UPDATE sales.quotation_versions SET sent_at=(SELECT max(sent_at) FROM sales.quote_items WHERE enquiry_id=$2),created_at=(SELECT min(sent_at) FROM sales.quote_items WHERE enquiry_id=$2) WHERE id=$1", [baseline.id,enquiryId])
-      latest = {id:baseline.id,revision:0,status:"Sent"}
+      const baseline = (
+        await client.query<{ id: string }>(
+          `INSERT INTO sales.quotation_versions(organization_id,enquiry_id,revision,status)
+        SELECT organization_id,id,0,'Draft' FROM sales.enquiries WHERE id=$1 RETURNING id`,
+          [enquiryId]
+        )
+      ).rows[0]!
+      await captureQuotation(client, baseline.id, previous.id, false)
+      await client.query(
+        "UPDATE sales.quotation_versions SET sent_at=(SELECT max(sent_at) FROM sales.quote_items WHERE enquiry_id=$2),created_at=(SELECT min(sent_at) FROM sales.quote_items WHERE enquiry_id=$2) WHERE id=$1",
+        [baseline.id, enquiryId]
+      )
+      latest = { id: baseline.id, revision: 0, status: "Sent" }
     }
   }
   if (latest?.status === "Draft") return latest
-  return (await client.query<{id:string;revision:number;status:string}>(`INSERT INTO sales.quotation_versions(organization_id,enquiry_id,revision,status)
-    SELECT organization_id,id,$2,'Draft' FROM sales.enquiries WHERE id=$1 RETURNING id,revision,status`, [enquiryId,(latest?.revision ?? -1)+1])).rows[0]!
+  return (
+    await client.query<{ id: string; revision: number; status: string }>(
+      `INSERT INTO sales.quotation_versions(organization_id,enquiry_id,revision,status)
+    SELECT organization_id,id,$2,'Draft' FROM sales.enquiries WHERE id=$1 RETURNING id,revision,status`,
+      [enquiryId, (latest?.revision ?? -1) + 1]
+    )
+  ).rows[0]!
 }
 
 export function quotationVersionMethods(pool: Pool) {
   return {
-    async listQuotationVersions(enquiryId: string, actorUserId?: string | null) {
-      return (await pool.query<QuotationVersion>(`SELECT v.id,v.revision,v.status,v.sent_at AS "sentAt",v.file_id AS "fileId",
+    async getQuotationDrawings(
+      enquiryId: string,
+      actorUserId: string,
+      options: { revision?: number; draft?: boolean } = {}
+    ) {
+      const visible = await pool.query(
+        `SELECT id FROM sales.enquiries WHERE id=$1
+        AND (created_by_user_id=$2 OR identity.has_administrative_access($2))`,
+        [enquiryId, actorUserId]
+      )
+      if (!visible.rows.length) throw new Error("Enquiry was not found.")
+      const versions = await pool.query<{
+        status: string
+        lines_snapshot: QuotationVersion["lines"]
+      }>(
+        `
+        SELECT status,lines_snapshot FROM sales.quotation_versions WHERE enquiry_id=$1
+          AND ($2::integer IS NULL OR revision=$2) ORDER BY revision DESC LIMIT 1
+      `,
+        [enquiryId, options.revision ?? null]
+      )
+      const version = versions.rows[0]
+      if (options.revision !== undefined && !version)
+        throw new Error("Quote revision was not found.")
+      if (
+        (options.draft && options.revision === undefined) ||
+        version?.status === "Draft"
+      ) {
+        return currentQuoteDrawings(pool, enquiryId)
+      }
+      if (!version) return []
+      const files = await availableQuoteDrawingFiles(
+        pool,
+        version.lines_snapshot.flatMap(
+          (line) => line.customerDrawingFileIds ?? []
+        )
+      )
+      return version.lines_snapshot.flatMap((line) =>
+        (line.customerDrawingFileIds ?? []).flatMap((fileId) => {
+          const file = files.find((file) => file.fileId === fileId)
+          return file
+            ? [
+                {
+                  ...file,
+                  enquiryItemId: line.enquiryItemId,
+                  lineNumber: line.lineNumber,
+                },
+              ]
+            : []
+        })
+      )
+    },
+    async listQuotationVersions(
+      enquiryId: string,
+      actorUserId?: string | null
+    ) {
+      return (
+        await pool.query<QuotationVersion>(
+          `SELECT v.id,v.revision,v.status,v.sent_at AS "sentAt",v.file_id AS "fileId",
         v.terms_snapshot AS terms,v.lines_snapshot AS lines FROM sales.quotation_versions v
         JOIN sales.enquiries e ON e.id=v.enquiry_id WHERE e.id=$1
         AND ($2::uuid IS NULL OR e.created_by_user_id=$2 OR identity.has_administrative_access($2)) ORDER BY v.revision`,
-        [enquiryId,actorUserId ?? null])).rows
+          [enquiryId, actorUserId ?? null]
+        )
+      ).rows
     },
   }
 }

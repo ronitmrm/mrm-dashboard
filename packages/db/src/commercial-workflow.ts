@@ -213,6 +213,7 @@ type DesignBomLine = {
 }
 
 type DesignAttachment = {
+  customerSelected: boolean
   byteSize: number
   createdAt: Date
   fileName: string
@@ -432,6 +433,7 @@ async function designRowsWithRelations(
     designIds.length
       ? queryable.query<{
           byte_size: string
+          customer_selected: boolean
           created_at: Date
           file_name: string
           id: string
@@ -443,14 +445,19 @@ async function designRowsWithRelations(
           `
             SELECT file_link.target_id, file.id, file.file_name,
               file.media_type, file.byte_size::text, file.storage_key,
-              file.created_at, file_link.purpose
+              file.created_at, file_link.purpose,
+              COALESCE(design.source_payload->'customerDrawingFileIds', '[]'::jsonb) ? file.id::text AS customer_selected
             FROM core.file_links file_link
             JOIN core.files file ON file.id = file_link.file_id
+            JOIN sales.design_tasks design ON design.id=file_link.target_id
+            LEFT JOIN core.file_objects object ON object.id=file.physical_object_id
             WHERE file_link.organization_id = $1
               AND file_link.target_schema = 'sales'
               AND file_link.target_table = 'design_tasks'
               AND file_link.target_id = ANY($2::uuid[])
               AND file_link.is_current
+              AND file.lifecycle_state <> 'deleted'
+              AND (file.physical_object_id IS NULL OR object.lifecycle_state='available')
             ORDER BY file_link.target_id, file.created_at DESC, file.id DESC
           `,
           [roots[0]!.organization_id, designIds]
@@ -513,6 +520,7 @@ async function designRowsWithRelations(
   for (const row of files.rows) {
     const rows = attachmentsByDesign.get(row.target_id) ?? []
     rows.push({
+      customerSelected: row.customer_selected,
       byteSize: Number(row.byte_size),
       createdAt: row.created_at,
       fileName: row.file_name,
@@ -4702,6 +4710,7 @@ export function createCommercialWorkflowRepository(
     },
 
     async saveDesign(input: {
+      customerDrawingFileIds?: string[]
       approvalStatus?: string
       actorUserId?: string | null
       assemblyRequired?: string
@@ -4969,7 +4978,7 @@ export function createCommercialWorkflowRepository(
               checked_by = EXCLUDED.checked_by,
               approval_status = EXCLUDED.approval_status,
               drawing_requirement = EXCLUDED.drawing_requirement,
-              source_payload = EXCLUDED.source_payload,
+              source_payload = COALESCE(sales.design_tasks.source_payload, '{}'::jsonb) || EXCLUDED.source_payload,
               updated_by_user_id = EXCLUDED.updated_by_user_id,
               updated_at = now(),
               row_version = sales.design_tasks.row_version + 1
@@ -5022,6 +5031,19 @@ export function createCommercialWorkflowRepository(
         )
         const savedDesign = design.rows[0]
         if (!savedDesign) throw new Error("Design task could not be saved.")
+        if (input.customerDrawingFileIds !== undefined) {
+          const selected = [...new Set(input.customerDrawingFileIds)]
+          const allowed = await client.query<{ file_id: string }>(`
+            SELECT DISTINCT link.file_id FROM core.file_links link
+            JOIN core.files file ON file.id=link.file_id
+            LEFT JOIN core.file_objects object ON object.id=file.physical_object_id
+            WHERE link.target_schema='sales' AND link.target_table='design_tasks'
+              AND link.target_id=$1 AND link.organization_id=$2 AND link.is_current
+              AND link.file_id=ANY($3::uuid[]) AND file.lifecycle_state <> 'deleted'
+              AND (file.physical_object_id IS NULL OR object.lifecycle_state='available')
+          `, [savedDesign.id, enquiryLine.organization_id, selected])
+          if (allowed.rows.length !== selected.length) throw new Error("Select available drawings belonging to this Design task.")
+        }
         await client.query(
           `
             UPDATE sales.design_tasks

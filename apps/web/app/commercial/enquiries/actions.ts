@@ -1,6 +1,6 @@
 "use server"
 
-import { createHash } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 import path from "node:path"
 
 import {
@@ -121,7 +121,7 @@ async function persistAttachment(
     provider: createUploadThingArtifactProvider(),
   })
   try {
-    await service.store({
+    return await service.store({
       actorUserId: session.user.id,
       authorizeTarget: (client, { isRetry }) =>
         authorizeCommercialAttachmentTarget(client, input.authorization, {
@@ -468,6 +468,19 @@ export async function saveDesignAction(formData: FormData) {
   const quotedPartUid = normalizeDesignAllocatedUid(
     optionalText(formData, "quoted_part_uid")
   )
+  const customerDrawingFileIds = formData.has("customer_drawings_present")
+    ? formData.getAll("customer_drawing_file_ids").filter((value): value is string => typeof value === "string")
+    : undefined
+  for (const file of formData.getAll("customer_drawing_files")) {
+    if (!(file instanceof File) || !file.size) continue
+    const stored = await persistAttachment(file, {
+      authorization: { designId, enquiryId, enquiryItemId, kind: "design", organizationId },
+      capability: commercialTaskCapabilities.saveDesign,
+      enquiryId, organizationId, purpose: "customer_drawing",
+      linkPurpose: `customer_drawing_${randomUUID()}`, targetId: designId, targetTable: "design_tasks",
+    })
+    customerDrawingFileIds?.push(stored.id)
+  }
   const values = (name: string) =>
     formData
       .getAll(name)
@@ -667,6 +680,7 @@ export async function saveDesignAction(formData: FormData) {
       const completionReady =
         completionRequested && completionMissingFields.length === 0
       const savedDesign = await workflow.saveDesign({
+        customerDrawingFileIds,
         approvalStatus: optionalText(formData, "approval_status") ?? "Pending",
         actorUserId,
         assemblyRequired: optionalText(formData, "assembly_required") ?? "No",
