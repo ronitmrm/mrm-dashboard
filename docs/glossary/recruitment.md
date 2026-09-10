@@ -25,6 +25,20 @@ Offer Letter remain historical evidence; the cancellation reason and date are
 recorded in candidate history and the audit log. Repeating the action cannot
 release another vacancy. A future application is a new application cycle.
 
+## Pending Replacement Appointment
+
+A Resigned employee's Approved Post may reserve one incoming employee while the
+outgoing employee serves notice. This reservation does not add approved headcount
+or replace the current employee, Employee ID, or Last Working Date.
+
+Employee Assignment's Appointed event records the replacement separately. HR
+may cancel that pending appointment without affecting the outgoing employee.
+After the outgoing Last Working Date, HR explicitly confirms Replacement Joined
+with the incoming employee's numeric Employee ID. The outgoing assignment is
+retained in replacement history and the incoming employee becomes Occupied.
+There is no automatic joining and the outgoing Employee ID is never reused.
+Combined jobs reserve and confirm their linked posts atomically.
+
 ## Employment Letter
 
 An immutable, generated PDF retained against one employment lifecycle record.

@@ -16,6 +16,207 @@ import {
 } from "./recruitment-codes"
 
 describe("assignEmployee", () => {
+  test.each([
+    {
+      event: "Replacement Joined",
+      employeeCode: "104",
+      canReplace: true,
+      expectedError: "different Employee ID",
+      expectedStatus: "Resigned",
+      replacementStatus: "Pending",
+    },
+    {
+      event: "Replacement Joined",
+      canReplace: false,
+      expectedError: "only after the outgoing employee's last working date",
+      expectedStatus: "Resigned",
+      replacementStatus: "Pending",
+    },
+    {
+      event: "Replacement Joined",
+      canReplace: true,
+      expectedError: null,
+      expectedStatus: "Occupied",
+      replacementStatus: "Joined",
+    },
+    {
+      event: "Cancel Replacement",
+      canReplace: false,
+      expectedError: null,
+      expectedStatus: "Resigned",
+      replacementStatus: "Cancelled",
+    },
+  ])(
+    "$event respects notice and preserves history (vacant: $canReplace)",
+    async ({
+      event,
+      canReplace,
+      expectedError,
+      expectedStatus,
+      replacementStatus,
+      ...input
+    }) => {
+      const post = {
+        id: "00000000-0000-4000-8000-000000000001",
+        combined_role_id: null,
+        employee_name: "Outgoing Employee",
+        employee_code: "104",
+        status: "Resigned",
+        last_working_date: "2026-09-26",
+        can_replace: canReplace,
+        current_date: canReplace ? "2026-09-27" : "2026-09-10",
+      }
+      const history = {
+        id: "replacement-1",
+        employeeName: "Incoming Employee",
+        employeeCode: "205",
+        status: "Pending",
+        outgoingEmployeeName: "Outgoing Employee",
+        outgoingEmployeeCode: "104",
+        outgoingLastWorkingDate: "2026-09-26",
+      }
+      const query = vi.fn(
+        async (statement: string, parameters?: readonly unknown[]) => {
+          if (statement.includes("SELECT id, employee_name, employee_code"))
+            return { rows: [post] }
+          if (statement.includes("SELECT id, post_id, employee_name"))
+            return {
+              rows:
+                history.status === "Pending"
+                  ? [
+                      {
+                        id: history.id,
+                        post_id: post.id,
+                        employee_name: history.employeeName,
+                        employee_code: history.employeeCode,
+                      },
+                    ]
+                  : [],
+            }
+          if (statement.includes("UPDATE recruitment.post_replacements"))
+            history.status =
+              event === "Replacement Joined" ? "Joined" : "Cancelled"
+          if (statement.includes("UPDATE recruitment.posts")) {
+            post.employee_name = String(parameters?.[0])
+            post.employee_code = String(parameters?.[1])
+            post.status = String(parameters?.[2])
+          }
+          if (statement.includes("FROM recruitment.posts post"))
+            return { rows: [{ ...post, replacement_appointments: [history] }] }
+          return { rows: [], rowCount: 1 }
+        }
+      )
+      const client = { query, release: vi.fn() } as unknown as PoolClient
+      const repository = createRecruitmentRepository({
+        pool: { query, connect: vi.fn(async () => client) } as unknown as Pool,
+      })
+      const command = repository.assignEmployee({
+        postId: post.id,
+        organizationId: "00000000-0000-4000-8000-000000000010",
+        employeeEvent: event,
+        ...input,
+      })
+      if (expectedError) await expect(command).rejects.toThrow(expectedError)
+      else await command
+      expect(
+        (await repository.listPosts("00000000-0000-4000-8000-000000000010"))[0]
+      ).toMatchObject({
+        status: expectedStatus,
+        employeeName:
+          expectedStatus === "Occupied"
+            ? "Incoming Employee"
+            : "Outgoing Employee",
+        employeeCode: expectedStatus === "Occupied" ? "205" : "104",
+        replacementAppointments: [
+          {
+            status: replacementStatus,
+            outgoingEmployeeName: "Outgoing Employee",
+            outgoingEmployeeCode: "104",
+            outgoingLastWorkingDate: "2026-09-26",
+          },
+        ],
+      })
+    }
+  )
+
+  test("reserves a replacement during notice without overwriting the outgoing employee", async () => {
+    const post = {
+      id: "00000000-0000-4000-8000-000000000001",
+      combined_role_id: null,
+      employee_name: "Outgoing Employee",
+      employee_code: "104",
+      status: "Resigned",
+      last_working_date: "2099-09-26",
+      can_replace: false,
+      post_code: "OCMM-AS-1",
+      current_date: "2099-09-10",
+    }
+    let replacement:
+      | { employeeName: string; employeeCode: string | null; status: string }
+      | undefined
+    const query = vi.fn(
+      async (statement: string, parameters?: readonly unknown[]) => {
+        if (statement.includes("INSERT INTO recruitment.post_replacements")) {
+          replacement = {
+            employeeName: String(parameters?.[2]),
+            employeeCode: parameters?.[3] as string | null,
+            status: "Pending",
+          }
+          return { rows: [{ id: "replacement-1" }], rowCount: 1 }
+        }
+        if (statement.includes("UPDATE recruitment.posts")) {
+          post.employee_name = String(parameters?.[0])
+          post.employee_code = String(parameters?.[1])
+          post.status = String(parameters?.[2])
+          return { rows: [{ id: post.id }], rowCount: 1 }
+        }
+        if (
+          statement.includes("SELECT id, employee_name, employee_code") ||
+          statement.includes("SELECT post.*")
+        ) {
+          return { rows: [post], rowCount: 1 }
+        }
+        if (statement.includes("FROM recruitment.posts post")) {
+          return {
+            rows: [
+              {
+                ...post,
+                replacement_appointments: replacement ? [replacement] : [],
+              },
+            ],
+            rowCount: 1,
+          }
+        }
+        return { rows: [], rowCount: 0 }
+      }
+    )
+    const client = { query, release: vi.fn() } as unknown as PoolClient
+    const repository = createRecruitmentRepository({
+      pool: { query, connect: vi.fn(async () => client) } as unknown as Pool,
+    })
+    await repository.assignEmployee({
+      employeeName: "Incoming Employee",
+      employeeEvent: "Appointed",
+      organizationId: "00000000-0000-4000-8000-000000000010",
+      postId: post.id,
+    })
+    expect(
+      (await repository.listPosts("00000000-0000-4000-8000-000000000010"))[0]
+    ).toMatchObject({
+      employeeName: "Outgoing Employee",
+      employeeCode: "104",
+      lastWorkingDate: "2099-09-26",
+      status: "Resigned",
+      replacementAppointments: [
+        {
+          employeeName: "Incoming Employee",
+          employeeCode: null,
+          status: "Pending",
+        },
+      ],
+    })
+  })
+
   test("rejects replacing an occupied employee before the post is vacated", async () => {
     const postId = "00000000-0000-4000-8000-000000000001"
     const query = vi.fn(async (statement: string) => {

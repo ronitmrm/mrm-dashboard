@@ -29,6 +29,10 @@ import {
   type RecruitmentInterviewRoundName,
 } from "./recruitment-interview-workflow"
 import { properCaseUserText } from "./user-entry-text"
+import {
+  applyReplacementAssignment,
+  type ReplacementAppointment,
+} from "./recruitment-replacements"
 
 export {
   deriveRecruitmentEmployeeAssignment,
@@ -91,6 +95,7 @@ export type RecruitmentCombinedRoleRow = {
 }
 
 export type RecruitmentPostRow = {
+  replacementAppointments?: ReplacementAppointment[]
   combinedRoleId: string | null
   combinedRoleName: string | null
   combinedVacancyCode: string | null
@@ -533,7 +538,8 @@ type EmployeeAssignmentInput = MutationContext & {
 async function assignEmployeeInTransaction(
   client: PoolClient,
   input: EmployeeAssignmentInput,
-  commandId: string
+  commandId: string,
+  allowReplacement = false
 ) {
   const current = await client.query<{
     can_replace: boolean
@@ -588,6 +594,41 @@ async function assignEmployeeInTransaction(
     : current
   if (!targets.rows.length) {
     throw new Error("The combined role has no active approved posts.")
+  }
+  if (allowReplacement) {
+    const replacementEvent = await applyReplacementAssignment(
+      client,
+      {
+        ...input,
+        employeeName: optionalProperCase(input.employeeName),
+      },
+      targets.rows
+    )
+    if (replacementEvent) {
+      await auditMany(
+        client,
+        targets.rows.map((post, ordinal) =>
+          recruitmentAssignmentAudit(
+            {
+              ...input,
+              eventType: `recruitment.employee.${replacementEvent}`,
+              metadata: {
+                postId: post.id,
+                combinedRoleId: currentPost.combined_role_id,
+              },
+              targetId: post.id,
+              targetTable: "posts",
+            },
+            commandId,
+            ordinal
+          )
+        )
+      )
+      return {
+        selectedPost: { id: currentPost.id },
+        updatedPostCount: targets.rows.length,
+      }
+    }
   }
   const existingAssignment =
     targets.rows.find(
@@ -1100,6 +1141,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
 
     async listPosts(organizationId: string): Promise<RecruitmentPostRow[]> {
       const result = await pool.query<{
+        replacement_appointments: ReplacementAppointment[]
         combined_role_id: string | null
         combined_role_name: string | null
         combined_vacancy_code: string | null
@@ -1121,6 +1163,18 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       }>(
         `
           SELECT post.id, post.post_code, post.vacancy_code,
+            COALESCE((SELECT jsonb_agg(jsonb_build_object(
+              'id', replacement.id, 'employeeName', replacement.employee_name,
+              'employeeCode', replacement.employee_code, 'status', replacement.status,
+              'appointedAt', replacement.created_at::date::text,
+              'completedAt', replacement.completed_at::date::text,
+              'outgoingEmployeeName', replacement.outgoing_assignment ->> 'employee_name',
+              'outgoingEmployeeCode', replacement.outgoing_assignment ->> 'employee_code',
+              'outgoingLastWorkingDate', replacement.outgoing_assignment ->> 'last_working_date'
+            ) ORDER BY replacement.created_at DESC, replacement.id)
+            FROM recruitment.post_replacements replacement
+            WHERE replacement.post_id = post.id AND replacement.organization_id = post.organization_id),
+            '[]'::jsonb) AS replacement_appointments,
             post.vacancy_number, post.status, current_date::text,
             CASE WHEN post.status = 'Resigned'
                 AND post.last_working_date < current_date
@@ -1157,6 +1211,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         [organizationId]
       )
       return result.rows.map((row) => ({
+        replacementAppointments: row.replacement_appointments ?? [],
         combinedRoleId: row.combined_role_id,
         combinedRoleName: row.combined_role_name,
         combinedVacancyCode: row.combined_vacancy_code,
@@ -2795,7 +2850,8 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         const result = await assignEmployeeInTransaction(
           client,
           input,
-          commandId
+          commandId,
+          true
         )
         return result.selectedPost
       })

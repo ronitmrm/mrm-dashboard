@@ -286,7 +286,21 @@ export function ApprovedPostsTable({
                         <TableCell className="font-mono">
                           {row.requirementTemplateCode ?? "—"}
                         </TableCell>
-                        <TableCell>{row.employeeName ?? "—"}</TableCell>
+                        <TableCell>
+                          {row.employeeName ?? "—"}
+                          {row.replacementAppointments
+                            ?.filter(
+                              (appointment) => appointment.status === "Pending"
+                            )
+                            .map((appointment) => (
+                              <p
+                                className="text-xs text-muted-foreground"
+                                key={appointment.id}
+                              >
+                                Pending replacement: {appointment.employeeName}
+                              </p>
+                            ))}
+                        </TableCell>
                         <TableCell className="font-mono">
                           {row.employeeCode ?? "—"}
                         </TableCell>
