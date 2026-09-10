@@ -98,6 +98,24 @@ test("Sales requests pricing revision on selected lines of the same enquiry and 
   })
 })
 
+test("quotation revisions preserve original terms and share one number across enquiry lines", async () => {
+  const f = await fixture()
+  const costing = createCommercialCostingRepository({ pool })
+  await workflow.requestEnquiryRevision({ enquiryId: f.enquiry_id, kind: "Terms", reason: "New reports", enquiryItemIds: [] })
+  expect((await workflow.listQuotationVersions(f.enquiry_id)).map(row => [row.revision, row.status])).toEqual([[0, "Sent"], [1, "Draft"]])
+  await workflow.updateEnquiry({ enquiryId: f.enquiry_id, organizationId: f.organization_id,
+    customerId: f.customer_id, commercialTerms: { reports: "MTC included" } })
+  const quotes = await costing.listQuotes(f.code)
+  await costing.sendQuote({quoteItemId: quotes.find(row => row.status === "Ready")!.id, followupDueOn: "2026-12-01"})
+  const versions = await workflow.listQuotationVersions(f.enquiry_id)
+  expect(versions.map(row => [row.revision, row.status])).toEqual([[0, "Sent"], [1, "Sent"]])
+  expect(versions[0]!.terms?.reports).toBeNull()
+  expect(versions[1]!.terms?.reports).toBe("MTC included")
+  expect(versions[1]!.lines).toHaveLength(2)
+  expect((await workflow.listEnquirySpreadsheetBounded(f.code)).rows.map(row=>row.quoteRevision)).toEqual([1,1])
+  expect((await workflow.listSalesSentQuoteQueue(f.code)).map(row=>row.quoteRevision)).toEqual([1,0])
+})
+
 test("pricing-term edits close old follow-ups when they reopen customer costing", async () => {
   const f = await fixture()
   for (const quote of await createCommercialCostingRepository({ pool }).listQuotes(f.code)) {
@@ -261,6 +279,12 @@ test("technical revision opens controlled Design work for a quoted part without 
     quoteItemId: updated.id,
     followupDueOn: "2026-12-01",
   })
+  const versions = await workflow.listQuotationVersions(f.enquiry_id)
+  const originalSibling = versions[0]!.lines.find(line=>line.enquiryItemId===f.lineIds[1])!
+  const revisedSibling = versions[1]!.lines.find(line=>line.enquiryItemId===f.lineIds[1])!
+  expect(revisedSibling).toEqual(originalSibling)
+  expect(versions[1]!.lines.find(line=>line.enquiryItemId===f.lineIds[0])?.quoteItemId).toBe(updated.id)
+  expect((await workflow.listEnquirySpreadsheetBounded(f.code)).rows.map(row=>row.quoteRevision)).toEqual([1,1])
   expect((await workflow.listEnquiryRevisions(f.enquiry_id))[0]!.status).toBe(
     "Completed"
   )

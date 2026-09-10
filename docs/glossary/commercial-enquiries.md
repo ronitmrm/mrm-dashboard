@@ -412,6 +412,20 @@ blocks full-enquiry sending until they are completed again. Other terms do not
 reopen costing. Repricing creates new quote snapshots; previous sent prices and
 issued PDFs remain unchanged.
 
+Quotation versions are enquiry-wide: Original (0), Revision 1, Revision 2, and so
+on. Starting a revision opens one draft version; repeated edits reuse that draft.
+Sending freezes its terms, part prices and PDF. Only affected parts receive new
+item-price revisions; unchanged parts retain their pricing identities. Excel
+keeps one row per enquiry part and shows the current whole-quotation revision.
+Enquiry tabs default to the newest version, with older versions read-only. Each
+Sent Quotes entry represents one issued version and links its enquiry number to
+that exact tab and its PDF to the exact stored artifact. Legacy terms that were
+not stored separately must be read from their original PDF, never reconstructed
+from current enquiry values. Legacy per-part first sends form one Original.
+Sales previews and sends new quotes directly from Tasks, with one follow-up date
+applied to all newly sent parts. Excel's PDF opens the current quotation, using
+the draft preview while a revision is in progress.
+
 Starting an enquiry revision completes pending follow-ups for affected lines with
 the appended reason `Revision initiated.`, retaining earlier notes and history.
 Pricing-term edits that reopen Customer Costing do the same for recosted lines.

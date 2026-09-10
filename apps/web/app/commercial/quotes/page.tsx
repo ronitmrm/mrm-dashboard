@@ -188,13 +188,7 @@ export default async function QuotesPage() {
                               Continue Costing
                             </Link>
                           </Button>
-                        ) : (
-                          <Button asChild size="sm" variant="ghost">
-                            <Link href={`/commercial/quotes/${quote.id}`}>
-                              View
-                            </Link>
-                          </Button>
-                        )}
+                        ) : null}
                       </div>
                     </TableCell>
                   </TableRow>

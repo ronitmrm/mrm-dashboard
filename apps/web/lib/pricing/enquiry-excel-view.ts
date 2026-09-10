@@ -1,5 +1,6 @@
 export const enquiryExcelViewColumns = [
   ["enquiryNumber", "ENQ No.", "From enquiry", "mono"],
+  ["quoteRevision", "Quote Revision", "Whole quotation", undefined],
   ["lineNumber", "Line", "From enquiry line", undefined],
   ["customerUid", "Customer UID", "From customer master", "mono"],
   ["companyName", "Customer", "From customer master", undefined],

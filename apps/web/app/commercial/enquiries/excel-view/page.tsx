@@ -94,7 +94,7 @@ export default async function EnquiryExcelViewPage() {
               <TableHeader className="sticky top-0 z-20 bg-background">
                 <TableRow>
                   <TableHead className="sticky left-0 z-30 bg-background">
-                    Sent Quote PDF
+                    Current Quote PDF
                   </TableHead>
                   {enquiryExcelViewColumns.map(([, label, source]) => (
                     <TableHead
@@ -114,7 +114,7 @@ export default async function EnquiryExcelViewPage() {
                 {result.rows.map((row) => (
                   <TableRow key={row.enquiryItemId}>
                     <TableCell className="sticky left-0 z-10 bg-background">
-                      {row.quotePdfSentAt ? (
+                      {row.quotePdfSentAt || row.currentStatus === "Ready To Send" || row.currentStatus === "Costing Complete" ? (
                         <Button asChild size="sm" variant="outline">
                           <AttachmentViewerLink
                             fileName={`${row.enquiryNumber}-quote.pdf`}
@@ -136,6 +136,7 @@ export default async function EnquiryExcelViewPage() {
                         {row.enquiryNumber}
                       </Link>
                     </TableCell>
+                    <TableCell>{row.quoteRevision === 0 ? "Original" : `Revision ${row.quoteRevision}`}</TableCell>
                     <TableCell>
                       <Link
                         className="font-medium text-primary underline-offset-4 hover:underline"
@@ -214,7 +215,7 @@ export default async function EnquiryExcelViewPage() {
                   <TableRow>
                     <TableCell
                       className="py-10 text-center text-muted-foreground"
-                      colSpan={20}
+                      colSpan={enquiryExcelViewColumns.length + 1}
                     >
                       No Enquiry Lines Are Available.
                     </TableCell>
