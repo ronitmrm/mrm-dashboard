@@ -43,6 +43,7 @@ export async function importWebsiteProductsCsvAction(formData: FormData) {
         additionalNotes:
           csvValue(row, "additional_notes", "additiol_notes") || null,
         applications: csvValue(row, "applications"),
+        grade: csvValue(row, "grade"),
         certifications: csvValue(row, "certifications") || null,
         connections: csvValue(row, "connections") || null,
         description: csvValue(row, "description") || null,

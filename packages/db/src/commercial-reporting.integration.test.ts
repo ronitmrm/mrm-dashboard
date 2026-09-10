@@ -269,7 +269,7 @@ describe("commercial drawing, website, and analytics parity", () => {
       dimensions: "10 x 20 mm",
       drawingCategory: "Production",
       finishPlating: "Nickel",
-      grade: "Ignored CSV grade",
+      grade: "Catalogue Grade",
       material: "Brass",
       pressure: "10 bar",
       sealant: "PTFE",
@@ -296,7 +296,7 @@ describe("commercial drawing, website, and analytics parity", () => {
       category: "Fittings",
       subCategory: "Elbows",
       size: "1/2 in",
-      grade: "C3604",
+      grade: "Catalogue Grade",
     })
     const unrelatedVersion = await pool.query<{ row_version: string }>(
       `SELECT row_version::text
@@ -320,6 +320,7 @@ describe("commercial drawing, website, and analytics parity", () => {
       await repository.listWebsiteProducts({ organizationId })
     ).rows.find((row) => row.profileId === parentProfile.id)
     expect(listedParent).toMatchObject({
+      grade: "Catalogue Grade",
       partCode: "01-101-002",
       websiteStatus: "Completed",
     })

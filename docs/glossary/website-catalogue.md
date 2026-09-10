@@ -1,9 +1,11 @@
 # Website Catalogue
 
 Website Product Data enriches existing Products for the website. UID identifies
-the Product. Grade, Size, Category and Subcategory are read-only Product Portfolio
+the Product. Size, Category and Subcategory are read-only Product Portfolio
 values; neither manual catalogue saves nor CSV imports can override them.
-Current Product classification and material grade take precedence, with existing
+Grade belongs to the website catalogue and is entered independently in its form
+or CSV import. It never defaults to or updates the Product Portfolio grade.
+Current Product classification takes precedence, with existing
 profile values retained as a fallback for legacy Products.
 
 The catalogue table, CSV template and Excel export use these fields in order:

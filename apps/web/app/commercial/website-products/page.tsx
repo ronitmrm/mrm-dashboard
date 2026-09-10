@@ -327,8 +327,8 @@ export default async function WebsiteProductsPage({
             <CardDescription>
               Part Code, Product Description, Material Construction, Thread
               Standard, Assembly Slots, And Completion Status Are Derived On
-              Save. Grade, Size, Category And Subcategory Come From Product
-              Portfolio.
+              Save. Size, Category And Subcategory Come From Product Portfolio.
+              Grade Is Entered Separately For The Website Catalogue.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -362,8 +362,8 @@ export default async function WebsiteProductsPage({
                 </p>
               </div>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <Field defaultValue={editing.grade} label="Grade" name="grade" />
                 {[
-                  ["Grade", editing.grade],
                   ["Size", editing.size],
                   ["Category", editing.category],
                   ["Subcategory", editing.subCategory],
