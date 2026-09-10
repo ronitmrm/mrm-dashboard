@@ -27,6 +27,10 @@ readable and selectable when editing historical records.
 commercial terms and line items before downstream work. Its line register opens
 one selected line for editing and does not expose Technical Review or Design
 inputs.
+Once quotation work exists, the enquiry opens as a read-only register summary.
+An open revision exposes term editing; Add Line belongs to editable intake, and
+completed line corrections remain read-only. Request Revision is the entry point
+for changing completed work.
 _Avoid_: Combined enquiry, Technical Review, and Design workspace.
 
 **Originating Salesperson**: The authenticated Sales user who first creates an
