@@ -195,7 +195,7 @@ export default async function MastersPage({
             <CommercialMasterTable
               canSaveCost={canUpdate && (selectionKind === "packaging_terms" || selectionKind === "incoterms")}
               canSaveRates={canUpdate && selectionKind === "materialRate"}
-              canWrite={canDelete || canRename || (canUpdate && selectionKind === "materialRate")}
+              canWrite={canDelete || canRename || (canUpdate && ["materialRate", "packaging_terms", "incoterms"].includes(selectionKind))}
               canDelete={canDelete}
               canRename={canRename}
               initialKind={selectionKind}

@@ -83,6 +83,7 @@ export function CommercialMasterTable({
   const [editing, setEditing] = useState<CommercialMasterRow | null>(null)
   const [deleting, setDeleting] = useState<CommercialMasterRow | null>(null)
   const selection = commercialMasterSelection(workspaceKind)
+  const isCostMaster = workspaceKind === "packaging_terms" || workspaceKind === "incoterms"
   const visibleRows = rows.filter((row) => row.kind === selection.tableKind)
   const replacementRows = deleting
     ? rows.filter((row) => row.kind === deleting.kind && row.id !== deleting.id)
@@ -134,20 +135,13 @@ export function CommercialMasterTable({
                 {workspaceKind === "materialRate" ? <><TableCell>{row.alloyPremium ?? "Market-based"}</TableCell><TableCell>{row.extrusionCost ?? "Not set"}</TableCell></> : null}
                 {workspaceKind === "packaging_terms" || workspaceKind === "incoterms" ? (
                   <TableCell data-filter-value={row.costPerKg ?? "Not set"}>
-                    {canSaveCost ? (
-                      <form action={updateCommercialTermCostAction} className="flex items-center gap-2">
-                        <input type="hidden" name="master_id" value={row.id} />
-                        <input type="hidden" name="term_type" value={workspaceKind} />
-                        <Input aria-label={`${row.label} cost INR/kg`} name="cost_per_kg" type="number" min="0" step="0.00000001" required defaultValue={row.costPerKg ?? ""} className="w-32" />
-                        <Button type="submit" size="sm" variant="outline">Save Cost</Button>
-                      </form>
-                    ) : row.costPerKg ?? "Not set"}
+                    {row.costPerKg ?? "Not set"}
                   </TableCell>
                 ) : null}
                 {canWrite ? (
                   <TableCell>
                     <div className="flex justify-end gap-1">
-                      {(row.kind === "commercial_material_rate" ? canSaveRates : canRename) ? (
+                      {(row.kind === "commercial_material_rate" ? canSaveRates : canRename || (isCostMaster && canSaveCost)) ? (
                         <Button
                           onClick={() => setEditing(row)}
                           size="sm"
@@ -198,10 +192,24 @@ export function CommercialMasterTable({
                 {editing.kind === "commercial_material_rate" ? `${editing.label}: update the existing combination. Leave Alloy Premium blank for market-based pricing.` : "The master identity stays fixed. The new name is used everywhere."}
               </DialogDescription>
             </DialogHeader>
-            <form action={editing.kind === "commercial_material_rate" ? async (formData) => { await updateMaterialRateAction(formData); setEditing(null); router.refresh() } : renameCommercialMasterAction} className="grid gap-4">
+            <form action={async (formData) => {
+              if (editing.kind === "commercial_material_rate") {
+                await updateMaterialRateAction(formData)
+              } else {
+                if (isCostMaster && canSaveCost && String(formData.get("cost_per_kg") ?? "") !== String(editing.costPerKg ?? "")) {
+                  await updateCommercialTermCostAction(formData)
+                }
+                if (canRename && formData.get("name") !== editing.label) {
+                  await renameCommercialMasterAction(formData)
+                }
+              }
+              setEditing(null)
+              router.refresh()
+            }} className="grid gap-4">
               <input name="master_view" type="hidden" value="masterTables" />
               <input name="master_id" type="hidden" value={editing.id} />
               <input name="master_kind" type="hidden" value={editing.kind} />
+              <input name="term_type" type="hidden" value={workspaceKind} />
               <input
                 name="workspace_kind"
                 type="hidden"
@@ -224,9 +232,14 @@ export function CommercialMasterTable({
                   defaultValue={editing.label}
                   id="commercial-master-edit-name"
                   name="name"
+                  readOnly={!canRename}
                   required
                 />
               </Field>}
+              {isCostMaster ? <Field>
+                <FieldLabel htmlFor="commercial-master-edit-cost">Cost (INR/kg)</FieldLabel>
+                <Input id="commercial-master-edit-cost" name="cost_per_kg" type="number" min="0" step="0.00000001" defaultValue={editing.costPerKg ?? ""} readOnly={!canSaveCost} />
+              </Field> : null}
               <DialogFooter>
                 <Button
                   onClick={() => setEditing(null)}
