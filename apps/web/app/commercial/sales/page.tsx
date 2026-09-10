@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { quotationRevisionLabel } from "@/lib/pricing/quotation-revision"
 import { X } from "lucide-react"
 
 import { createCommercialWorkflowRepository } from "@workspace/db"
@@ -785,7 +786,7 @@ export default async function SalesPage({
                         <TableCell>{task.sentQuoteItems}</TableCell>
                         <TableCell>{task.nextFollowupDue ?? "—"}</TableCell>
                         <TableCell>{task.pendingFollowups}</TableCell>
-                        <TableCell>{task.quoteRevision === 0 ? "Original" : `Revision ${task.quoteRevision}`}</TableCell>
+                        <TableCell>{quotationRevisionLabel(task.quoteRevision)}</TableCell>
                         <TableCell>
                           <Button asChild size="sm" variant="outline">
                             <AttachmentViewerLink

@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { quotationRevisionLabel } from "@/lib/pricing/quotation-revision"
 
 import { createCommercialWorkflowRepository } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
@@ -136,7 +137,7 @@ export default async function EnquiryExcelViewPage() {
                         {row.enquiryNumber}
                       </Link>
                     </TableCell>
-                    <TableCell>{row.quoteRevision === 0 ? "Original" : `Revision ${row.quoteRevision}`}</TableCell>
+                    <TableCell>{quotationRevisionLabel(row.quoteRevision)}</TableCell>
                     <TableCell>
                       <Link
                         className="font-medium text-primary underline-offset-4 hover:underline"

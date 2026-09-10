@@ -412,7 +412,7 @@ blocks full-enquiry sending until they are completed again. Other terms do not
 reopen costing. Repricing creates new quote snapshots; previous sent prices and
 issued PDFs remain unchanged.
 
-Quotation versions are enquiry-wide: Original (0), Revision 1, Revision 2, and so
+Quotation versions are enquiry-wide: Revision 00 (original), Revision 01, Revision 02, and so
 on. Starting a revision opens one draft version; repeated edits reuse that draft.
 Sending freezes its terms, part prices and PDF. Only affected parts receive new
 item-price revisions; unchanged parts retain their pricing identities. Excel

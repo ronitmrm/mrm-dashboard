@@ -1,4 +1,5 @@
 import * as XLSX from "xlsx"
+import { quotationRevisionLabel } from "@/lib/pricing/quotation-revision"
 
 type Followup = {
   channel: string
@@ -46,7 +47,7 @@ export function buildSentQuoteHistoryWorkbook(rows: SentQuote[]) {
   const sheet = XLSX.utils.json_to_sheet(
     rows.map((row) => ({
       ENQ: row.enquiryNumber,
-      "Quote Revision": row.quoteRevision ? `Revision ${row.quoteRevision}` : "Original",
+      "Quote Revision": quotationRevisionLabel(row.quoteRevision ?? 0),
       "Customer UID": row.customerUid,
       Customer: row.companyName,
       Currency: row.currency,
