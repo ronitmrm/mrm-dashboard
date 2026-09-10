@@ -1345,7 +1345,7 @@ function HourlyQualityCheckShell({
               selectedCheckKey ? (
                 <Skeleton className="h-24 w-full" />
               ) : selectedRow && parameters.length ? (
-                <div className="overflow-auto rounded-lg border">
+                <div className="rounded-lg border min-w-0">
                   <OperationalTable>
                     <TableHeader>
                       <TableRow>
@@ -3068,7 +3068,7 @@ function ProductionDashboardPanel({ payload }: { payload: DashboardPayload }) {
                 Automatically.
               </div>
             ) : null}
-            <div className="overflow-x-auto rounded-lg border">
+            <div className="rounded-lg border min-w-0">
               <OperationalTable excelFilters>
                 <TableHeader className="sticky top-0 z-10 bg-background">
                   <TableRow>
@@ -6134,7 +6134,7 @@ function RouteChangePlannerForm({
           />
         </Field>
       </div>
-      <div className="overflow-x-auto rounded-md border">
+      <div className="rounded-md border min-w-0">
         <OperationalTable>
           <TableHeader>
             <TableRow>
@@ -6855,8 +6855,8 @@ function ShopFloorStatusPanel({
           ]}
         />
         {floorRows.length ? (
-          <div className="max-h-[72vh] overflow-auto rounded-lg border">
-            <OperationalTable containerClassName="max-h-none overflow-visible">
+          <div className="rounded-lg border min-w-0">
+            <OperationalTable containerClassName="max-h-[72vh]">
               <TableHeader className="sticky top-0 z-10 bg-background">
                 <TableRow>
                   <TableHead className="min-w-32">Machine No.</TableHead>
@@ -7133,8 +7133,8 @@ function RoleTaskPanel({
             ]}
           />
           {roleRows.length ? (
-            <div className="max-h-[72vh] overflow-auto rounded-lg border">
-              <OperationalTable containerClassName="max-h-none overflow-visible">
+            <div className="rounded-lg border min-w-0">
+              <OperationalTable containerClassName="max-h-[72vh]">
                 <TableHeader className="sticky top-0 z-10 bg-background">
                   <TableRow>
                     <TableHead className="min-w-32">Machine No.</TableHead>
@@ -7366,7 +7366,7 @@ function FirstPieceInspectionPanel({
           </CardHeader>
           <CardContent className="grid gap-4">
             {tasks.length ? (
-              <div className="overflow-x-auto rounded-md border">
+              <div className="rounded-md border min-w-0">
                 <OperationalTable>
                   <TableHeader>
                     <TableRow>
@@ -8072,7 +8072,7 @@ function SetupChecklistForm({
           value={`Version ${displayValue(session?.masterVersion || items[0]?.version)}`}
         />
       </div>
-      <div className="overflow-auto">
+      <div className="min-w-0">
         <OperationalTable>
           <TableHeader>
             <TableRow>
@@ -8265,7 +8265,7 @@ function FirstPieceInspectionForm({
           </div>
         ))}
       </div>
-      <div className="hidden overflow-auto @5xl/main:block">
+      <div className="hidden @5xl/main:block min-w-0">
         <OperationalTable>
           <TableHeader>
             <TableRow>
@@ -9203,7 +9203,7 @@ function OperationalTablesPanel({
               No Saved Rows Found For This Operational Entry.
             </div>
           ) : (
-            <div className="overflow-x-auto rounded-md border">
+            <div className="rounded-md border min-w-0">
               <OperationalTable
                 key={`${selectedSpec.entryType}-${tableResetKey}`}
               >
@@ -9411,7 +9411,7 @@ function MasterTablesPanel({
                 No Saved Rows Found For This Master.
               </div>
             ) : (
-              <div className="overflow-x-auto rounded-md border">
+              <div className="rounded-md border min-w-0">
                 <OperationalTable key={selectedSpec.entryType}>
                   <TableHeader>
                     <TableRow>
@@ -10006,8 +10006,8 @@ function MachineMasterPanel({
                 </Link>
               </Button>
             </div>
-            <div className="max-h-[72vh] overflow-auto rounded-lg border">
-              <OperationalTable containerClassName="max-h-none overflow-visible">
+            <div className="rounded-lg border min-w-0">
+              <OperationalTable containerClassName="max-h-[72vh]">
                 <TableHeader className="sticky top-0 z-10 bg-background">
                   <TableRow>
                     <TableHead>Machine No.</TableHead>
@@ -10308,7 +10308,7 @@ function MachineMasterPanel({
             </div>
           ) : null}
           {machineSchedules.length ? (
-            <div className="overflow-auto rounded-lg border">
+            <div className="rounded-lg border min-w-0">
               <OperationalTable
                 onFilteredRowCountChange={(visible) =>
                   setVisibleScheduleCount(visible)
@@ -10415,7 +10415,7 @@ function MachineMasterPanel({
             />
           </div>
           {filteredHistory.length ? (
-            <div className="overflow-auto rounded-lg border">
+            <div className="rounded-lg border min-w-0">
               <OperationalTable>
                 <TableHeader className="sticky top-0 z-10 bg-background">
                   <TableRow>
@@ -10706,7 +10706,7 @@ function MaintenancePanel({
         </CardHeader>
         <CardContent>
           {workRows.length ? (
-            <div className="overflow-auto rounded-lg border">
+            <div className="rounded-lg border min-w-0">
               <OperationalTable>
                 <TableHeader>
                   <TableRow>
@@ -10973,7 +10973,7 @@ function MaintenanceReportDetail({ row }: { row: DashboardPayload }) {
         </div>
       ) : null}
       {checklistSteps.length ? (
-        <div className="overflow-auto rounded-md border bg-background">
+        <div className="rounded-md border bg-background min-w-0">
           <OperationalTable>
             <TableHeader>
               <TableRow>
@@ -11153,7 +11153,7 @@ function PlanningHolidayPanel({
         </CardHeader>
         <CardContent>
           {holidayRows.length ? (
-            <div className="overflow-auto rounded-md border">
+            <div className="rounded-md border min-w-0">
               <OperationalTable>
                 <TableHeader>
                   <TableRow>
@@ -11833,7 +11833,7 @@ function QualityParameterMasterForm({
               </SearchableSelect>
             </Field>
           </div>
-          <div className="overflow-auto rounded-lg border">
+          <div className="rounded-lg border min-w-0">
             <OperationalTable>
               <TableHeader>
                 <TableRow>
@@ -12534,7 +12534,7 @@ function MaintenanceChecklistMasterForm({
               />
             </Field>
           </div>
-          <div className="overflow-auto rounded-lg border">
+          <div className="rounded-lg border min-w-0">
             <OperationalTable>
               <TableHeader>
                 <TableRow>
@@ -12913,7 +12913,7 @@ function SetupChecklistMasterForm({
               />
             </Field>
           </div>
-          <div className="overflow-auto rounded-lg border">
+          <div className="rounded-lg border min-w-0">
             <OperationalTable>
               <TableHeader>
                 <TableRow>
@@ -13143,8 +13143,8 @@ function PlannerWorkflowExceptionPanel({
       </CardHeader>
       <CardContent>
         {rows.length ? (
-          <div className="max-h-80 overflow-auto rounded-lg border">
-            <OperationalTable>
+          <div className="rounded-lg border min-w-0">
+            <OperationalTable containerClassName="max-h-80">
               <TableHeader className="sticky top-0 z-10 bg-background">
                 <TableRow>
                   <TableHead>Machine</TableHead>
@@ -13338,8 +13338,8 @@ function CorrectionsPanel({
           </Field>
         </div>
         {filteredRows.length ? (
-          <div className="max-h-[72vh] overflow-auto rounded-lg border">
-            <OperationalTable containerClassName="max-h-none overflow-visible">
+          <div className="rounded-lg border min-w-0">
+            <OperationalTable containerClassName="max-h-[72vh]">
               <TableHeader className="sticky top-0 z-10 bg-background">
                 <TableRow>
                   <TableHead className="min-w-40">Production Unit</TableHead>
@@ -14251,7 +14251,7 @@ function DataRowsCard({
       </CardHeader>
       <CardContent>
         {rows.length && columns.length ? (
-          <div className="overflow-x-auto">
+          <div className="min-w-0">
             <OperationalTable>
               <TableHeader>
                 <TableRow>

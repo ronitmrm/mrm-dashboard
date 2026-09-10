@@ -70,8 +70,8 @@ export default async function TechnicalReviewPage() {
           <CardTitle>Technical Review Queue</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="max-h-[70vh] overflow-auto rounded-md border">
- <OperationalTable containerClassName="max-h-none overflow-visible" excelFilters>
+          <div className="rounded-md border min-w-0">
+ <OperationalTable containerClassName="max-h-[70vh]" excelFilters>
               <TableHeader className="sticky top-0 z-10 bg-background">
                 <TableRow>
                   <TableHead data-filterable="true">Enquiry</TableHead>

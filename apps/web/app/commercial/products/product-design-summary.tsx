@@ -142,7 +142,7 @@ export function ProductDesignSummary({
               : "Design-only recursive structure. Quantities are shown per parent and rolled up from the root."}
           </CardDescription>
         </CardHeader>
-        <CardContent className="overflow-x-auto">
+        <CardContent className="min-w-0">
  <OperationalTable>
             <TableHeader>
               <TableRow>
@@ -216,7 +216,7 @@ export function ProductDesignSummary({
           <CardHeader>
             <CardTitle>Design Revision History</CardTitle>
           </CardHeader>
-          <CardContent className="overflow-x-auto">
+          <CardContent className="min-w-0">
  <OperationalTable>
               <TableHeader>
                 <TableRow>

@@ -88,7 +88,7 @@ export default async function StoreRequestsPage() {
         <CardHeader>
           <CardTitle>Request Allocation Queue</CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-4 overflow-x-auto">
+        <CardContent className="grid gap-4 min-w-0">
  <OperationalTable>
             <TableHeader>
               <TableRow>

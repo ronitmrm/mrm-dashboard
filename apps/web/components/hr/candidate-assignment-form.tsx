@@ -246,8 +246,8 @@ export function CandidateAssignmentForm({
           </Button>
         </div>
 
-        <div className="max-h-[32rem] overflow-auto rounded-xl border">
-          <OperationalTable filterMode="external">
+        <div className="rounded-xl border min-w-0">
+          <OperationalTable containerClassName="max-h-[32rem]" filterMode="external">
             <TableHeader className="sticky top-0 z-10 bg-background">
               <TableRow>
                 <TableHead className="w-12">Select</TableHead>

@@ -152,7 +152,7 @@ export default async function StoreOverviewPage() {
             icon={TableProperties}
             title="Open Department Requests"
           >
-            <div className="overflow-x-auto rounded-lg border">
+            <div className="rounded-lg border min-w-0">
               <OperationalTable>
                 <TableHeader>
                   <TableRow>

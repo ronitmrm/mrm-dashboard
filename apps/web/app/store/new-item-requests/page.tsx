@@ -164,7 +164,7 @@ export default async function NewItemRequestsPage() {
         <CardHeader>
           <CardTitle>New Item Request Register</CardTitle>
         </CardHeader>
-        <CardContent className="overflow-x-auto">
+        <CardContent className="min-w-0">
  <OperationalTable>
             <TableHeader>
               <TableRow>

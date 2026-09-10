@@ -46,7 +46,11 @@ Filters persist in browser storage. Pass a descriptive `filterStorageKey` for im
 Multi-row selection tables must expose **Select All (matching count)**. Use
 the top-left toolbar position above the Select column for the selection action;
 keep **Clear All Filters** at the table's top-right edge. Keep these controls
-outside the horizontal scrolling area so wide tables cannot hide them. Use
+outside the scrolling area so wide or tall tables cannot hide them. Put table
+height limits and borders in `OperationalTable.containerClassName`. Do not wrap
+an automatically filtered table in another scrolling container. Keep surrounding
+card content `min-w-0`. Externally filtered tables must place their toolbar
+outside the scrolling container, with Clear All Filters last at the right edge. Use
 `filteredSelection.checkboxName` for native row checkboxes and provide
 `filteredSelection.onSelect` when React owns their selection state. Disabled
 and filtered-out rows are excluded. External filter adapters must select from

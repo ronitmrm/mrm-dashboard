@@ -157,7 +157,7 @@ export default async function StoreStockPage({
             </div>
           </div>
         </CardHeader>
-        <CardContent className="grid gap-4 overflow-x-auto">
+        <CardContent className="grid gap-4 min-w-0">
           {mode === "request" ? (
             <form action="/store/requests/new" id={actionFormId} method="get" />
           ) : mode === "order" ? (

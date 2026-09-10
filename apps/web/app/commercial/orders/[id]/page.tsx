@@ -346,7 +346,7 @@ export default async function PurchaseOrderPage({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto rounded-3xl border">
+          <div className="rounded-3xl border min-w-0">
  <OperationalTable>
               <TableHeader>
                 <TableRow>

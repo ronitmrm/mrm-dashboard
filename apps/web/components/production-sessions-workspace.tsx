@@ -364,7 +364,7 @@ function SessionTimeline({ rows }: { rows: Row[] }) {
 }
 
 function ScrollableTable({ headers, children }: { headers: string[]; children: React.ReactNode }) {
- return <div className="max-h-[65vh] overflow-auto rounded-md border"><OperationalTable containerClassName="max-h-none overflow-visible"><TableHeader className="sticky top-0 z-10 bg-background"><TableRow>{headers.map((header) => <TableHead key={header}>{header}</TableHead>)}</TableRow></TableHeader><TableBody>{children}</TableBody></OperationalTable></div>
+ return <div className="rounded-md border min-w-0"><OperationalTable containerClassName="max-h-[65vh]"><TableHeader className="sticky top-0 z-10 bg-background"><TableRow>{headers.map((header) => <TableHead key={header}>{header}</TableHead>)}</TableRow></TableHeader><TableBody>{children}</TableBody></OperationalTable></div>
 }
 
 function ActionSheet({ action, target, floor, shift, employees, control, saving, message, onOpenChange, onSave }: { action: Action | null; target: Row | null; floor: ProductionFloorCode; shift: ReturnType<typeof productionShiftAt>; employees: Array<{ code: string; name: string }>; control: Row; saving: boolean; message: string; onOpenChange: (open: boolean) => void; onSave: (entryType: string, payload: Row) => void }) {

@@ -37,7 +37,7 @@ export function CandidateOfferLetterRegister({
             : "Generated Offer Letters Retained Across This Candidate's Job Applications."}
         </CardDescription>
       </CardHeader>
-      <CardContent className="overflow-x-auto">
+      <CardContent className="min-w-0">
         <OperationalTable>
           <TableHeader>
             <TableRow>

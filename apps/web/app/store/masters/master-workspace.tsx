@@ -257,7 +257,7 @@ export function StoreMasterWorkspace({
           <CardHeader>
             <CardTitle>Saved {selectedLabel} Records</CardTitle>
           </CardHeader>
-          <CardContent className="overflow-x-auto">
+          <CardContent className="min-w-0">
             {selectedMaster === "ITEM_TYPE" ? (
  <OperationalTable>
                 <TableHeader>

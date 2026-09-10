@@ -51,7 +51,7 @@ describe("Production operational page loading", () => {
     )
     expect(firstPieceForm).toContain("@5xl/main:hidden")
     expect(firstPieceForm).toContain("@4xl/main:grid-cols-5")
-    expect(firstPieceForm).toContain("hidden overflow-auto @5xl/main:block")
+    expect(firstPieceForm).toContain("hidden @5xl/main:block min-w-0")
   })
 
   it("handles rejected CSV imports without an unhandled browser error", () => {

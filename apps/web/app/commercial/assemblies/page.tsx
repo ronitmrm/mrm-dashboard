@@ -94,7 +94,7 @@ export default async function AssembliesPage({
         <CardHeader>
           <CardTitle>Assembly / Bom Register</CardTitle>
         </CardHeader>
-        <CardContent className="overflow-x-auto">
+        <CardContent className="min-w-0">
  <OperationalTable>
             <TableHeader>
               <TableRow>

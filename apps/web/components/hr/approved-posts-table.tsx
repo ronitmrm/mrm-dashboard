@@ -226,7 +226,7 @@ export function ApprovedPostsTable({
                 </Button>
               </div>
             </div>
-            <div className="overflow-x-auto rounded-lg border">
+            <div className="rounded-lg border min-w-0">
  <OperationalTable>
                 <TableHeader>
                   <TableRow>
@@ -442,7 +442,7 @@ export function ApprovedPostsTable({
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto rounded-lg border">
+              <div className="rounded-lg border min-w-0">
  <OperationalTable>
                   <TableHeader>
                     <TableRow>

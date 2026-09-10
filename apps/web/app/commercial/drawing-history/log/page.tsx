@@ -91,8 +91,8 @@ export default async function DrawingChangeLogPage() {
             }
           ]}
         />
-        <div className="max-h-[75vh] overflow-auto rounded-2xl border">
- <OperationalTable excelFilters>
+        <div className="rounded-2xl border min-w-0">
+ <OperationalTable containerClassName="max-h-[75vh]" excelFilters>
             <TableHeader className="sticky top-0 z-10 bg-background">
               <TableRow>
                 <TableHead data-filterable="true">Changed At</TableHead>

@@ -328,7 +328,7 @@ export default async function CandidateWorkspacePage({
         <CardHeader>
           <CardTitle>Job Application History</CardTitle>
         </CardHeader>
-        <CardContent className="overflow-x-auto">
+        <CardContent className="min-w-0">
           <OperationalTable>
             <TableHeader>
               <TableRow>

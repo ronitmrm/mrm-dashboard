@@ -258,7 +258,7 @@ export default async function JobWorkspacePage({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto rounded-2xl border">
+          <div className="rounded-2xl border min-w-0">
             <OperationalTable>
               <TableHeader>
                 <TableRow>
@@ -411,7 +411,7 @@ export default async function JobWorkspacePage({
           <CardTitle>Complete Interview History</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto rounded-2xl border">
+          <div className="rounded-2xl border min-w-0">
             <OperationalTable>
               <TableHeader>
                 <TableRow>

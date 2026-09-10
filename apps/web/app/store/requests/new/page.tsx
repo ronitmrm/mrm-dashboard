@@ -129,7 +129,7 @@ export default async function NewStoreRequestPage({
                 </Field>
               </FieldGroup>
 
-              <div className="mt-6 overflow-x-auto rounded-md border">
+              <div className="mt-6 rounded-md border min-w-0">
  <OperationalTable>
                   <TableHeader>
                     <TableRow>
