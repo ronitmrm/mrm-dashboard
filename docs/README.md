@@ -4,6 +4,7 @@ Use this index before changing domain behavior or implementation conventions.
 
 - [Codebase](./codebase/): implementation and architecture guidance.
 - [Glossary](./glossary/): canonical business terms, lifecycle rules, formulas, and metrics.
+- [Website Catalogue](./glossary/website-catalogue.md): included fields and Product Portfolio ownership.
 - [Personal dashboard analytics](./glossary/dashboard-analytics.md): permission-aware metrics, charts, and calculated KPIs.
 - [Golden UI patterns](./codebase/ui-golden-patterns.md): mandatory dashboard composition and visual semantics.
 - [Access Administration](./codebase/access-administration.md): granular permission catalogue, coverage, enforcement, and exceptions.

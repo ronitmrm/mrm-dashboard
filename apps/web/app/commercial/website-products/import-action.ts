@@ -43,7 +43,6 @@ export async function importWebsiteProductsCsvAction(formData: FormData) {
         additionalNotes:
           csvValue(row, "additional_notes", "additiol_notes") || null,
         applications: csvValue(row, "applications"),
-        category: csvValue(row, "category"),
         certifications: csvValue(row, "certifications") || null,
         connections: csvValue(row, "connections") || null,
         description: csvValue(row, "description") || null,
@@ -51,7 +50,6 @@ export async function importWebsiteProductsCsvAction(formData: FormData) {
         drawingCategory: csvValue(row, "drawing_category") || null,
         entryCreatedAt: csvValue(row, "created_at", "entry_created_at") || null,
         finishPlating: csvValue(row, "finish_plating") || null,
-        grade: csvValue(row, "grade"),
         isActive:
           csvValue(row, "website_active", "is_active").toUpperCase() !==
           "FALSE",
@@ -61,15 +59,11 @@ export async function importWebsiteProductsCsvAction(formData: FormData) {
         profileId: product.profileId,
         remark: csvValue(row, "remark") || null,
         sealant: csvValue(row, "sealant") || null,
-        size: csvValue(row, "size"),
-        subCategory: csvValue(row, "sub_category", "subcategory"),
         temperature: csvValue(row, "temperature"),
         threadSize1: csvValue(row, "thread_size_1") || null,
         threadSize2: csvValue(row, "thread_size_2") || null,
         threadSize3: csvValue(row, "thread_size_3") || null,
         threadSize4: csvValue(row, "thread_size_4") || null,
-        websiteCategory: csvValue(row, "website_category") || null,
-        websiteSubCategory: csvValue(row, "website_sub_category") || null,
       })
     }
   } finally {

@@ -94,7 +94,6 @@ type DrawingChangeLogDatabaseRow = {
 export type WebsiteProductInput = ActorContext & {
   additionalNotes?: string | null
   applications: string
-  category: string
   certifications?: string | null
   connections?: string | null
   description?: string | null
@@ -102,22 +101,17 @@ export type WebsiteProductInput = ActorContext & {
   drawingCategory?: string | null
   entryCreatedAt?: string | null
   finishPlating?: string | null
-  grade: string
   isActive: boolean
   material: string
   pressure?: string | null
   profileId: string
   remark?: string | null
   sealant?: string | null
-  size: string
-  subCategory: string
   temperature: string
   threadSize1?: string | null
   threadSize2?: string | null
   threadSize3?: string | null
   threadSize4?: string | null
-  websiteCategory?: string | null
-  websiteSubCategory?: string | null
 }
 
 export type WebsiteProductRow = {
@@ -364,11 +358,33 @@ function websiteRow(row: WebsiteDatabaseRow): WebsiteProductRow {
   }
 }
 
+// Match Product Portfolio: Product-owned values first, legacy profile fallback.
+const websitePortfolioJoin = `
+  LEFT JOIN catalog.material_grades product_grade
+    ON product_grade.id = items.material_grade_id
+  LEFT JOIN sales.design_tasks product_design
+    ON product_design.id::text = items.source_payload ->> 'designTaskId'
+  CROSS JOIN LATERAL (
+    SELECT COALESCE(NULLIF(btrim(items.source_payload ->> 'category'), ''),
+      NULLIF(btrim(profiles.category), ''),
+      NULLIF(btrim(product_design.internal_part_category), ''), '') AS category,
+      COALESCE(NULLIF(btrim(items.source_payload ->> 'subcategory'), ''),
+        NULLIF(btrim(profiles.sub_category), ''),
+        NULLIF(btrim(product_design.internal_part_sub_category), ''), '') AS sub_category,
+      COALESCE(NULLIF(btrim(items.source_payload ->> 'productSize'), ''),
+        NULLIF(btrim(profiles.size), ''),
+        NULLIF(btrim(product_design.internal_part_size), ''), '') AS size,
+      COALESCE(NULLIF(btrim(product_grade.name), ''),
+        NULLIF(btrim(items.source_payload ->> 'grade'), ''),
+        NULLIF(btrim(profiles.grade), ''), '') AS grade
+  ) portfolio
+`
+
 const websiteSelect = `
   SELECT profiles.id profile_id, profiles.item_id, profiles.source_quote_item_id,
-    items.uid, profiles.remark, profiles.category, profiles.sub_category,
-    profiles.product_description, profiles.part_code, profiles.size,
-    profiles.grade, profiles.material, profiles.material_construction,
+    items.uid, profiles.remark, portfolio.category, portfolio.sub_category,
+    profiles.product_description, profiles.part_code, portfolio.size,
+    portfolio.grade, profiles.material, profiles.material_construction,
     profiles.finish_plating, profiles.thread_standard, profiles.sealant,
     profiles.temperature, profiles.pressure, profiles.connections,
     profiles.final_assemblies_code, profiles.catalog_grade,
@@ -387,6 +403,7 @@ const websiteSelect = `
     profiles.website_status
   FROM catalog.website_product_profiles profiles
   JOIN catalog.items items ON items.id = profiles.item_id
+  ${websitePortfolioJoin}
 `
 
 async function writeAudit(
@@ -996,7 +1013,7 @@ export function createCommercialReportingRepository(
          WHERE profiles.organization_id = $1
            AND ($2::boolean IS NULL OR profiles.is_active = $2)
            AND ($3::text IS NULL OR profiles.website_status = $3)
-           AND ($4::text IS NULL OR profiles.category = $4)
+           AND ($4::text IS NULL OR portfolio.category = $4)
            AND ($5::uuid IS NULL OR profiles.id = $5)
            AND (
              $6::text = ''
@@ -1005,9 +1022,9 @@ export function createCommercialReportingRepository(
              OR ($7::text IS NOT NULL AND lower(
                COALESCE(profiles.part_code, '') || ' ' ||
                COALESCE(profiles.product_description, '') || ' ' ||
-               COALESCE(profiles.category, '') || ' ' ||
-               COALESCE(profiles.sub_category, '') || ' ' ||
-               COALESCE(profiles.grade, '')
+               COALESCE(portfolio.category, '') || ' ' ||
+               COALESCE(portfolio.sub_category, '') || ' ' ||
+               COALESCE(portfolio.grade, '')
              ) LIKE $7 ESCAPE '\\')
            )
          ORDER BY CASE
@@ -1128,10 +1145,10 @@ export function createCommercialReportingRepository(
              WHERE profiles.organization_id = $1
                AND ($2::boolean IS NULL OR profiles.is_active = $2)
                AND ($3::text IS NULL OR profiles.website_status = $3)
-               AND ($4::text IS NULL OR profiles.category = $4)
+               AND ($4::text IS NULL OR portfolio.category = $4)
                AND ($5::text IS NULL OR concat_ws(' ', items.uid,
                  profiles.part_code, profiles.product_description,
-                 profiles.category, profiles.sub_category, profiles.grade)
+                 portfolio.category, portfolio.sub_category, portfolio.grade)
                  ILIKE '%' || $5 || '%')
                AND (
                  $6::bigint IS NULL
@@ -1335,10 +1352,6 @@ export function createCommercialReportingRepository(
     },
 
     async updateWebsiteProduct(input: WebsiteProductInput) {
-      const category = input.category.trim()
-      const subCategory = input.subCategory.trim()
-      const size = input.size.trim()
-      const grade = input.grade.trim()
       const material = input.material.trim()
       const temperature = input.temperature.trim()
       const applications = input.applications.trim()
@@ -1346,31 +1359,37 @@ export function createCommercialReportingRepository(
       try {
         await client.query("BEGIN")
         const current = await client.query<{
+          category: string
+          sub_category: string
+          size: string
+          grade: string
           category_code: string | null
           current_part_code: string | null
           material_construction: string | null
           subcategory_code: string | null
         }>(
           `
-            SELECT profiles.part_code current_part_code,
+            SELECT portfolio.*, profiles.part_code current_part_code,
               categories.code category_code,
               subcategories.combination_code subcategory_code,
               items.production_type material_construction
             FROM catalog.website_product_profiles profiles
             JOIN catalog.items items ON items.id = profiles.item_id
+            ${websitePortfolioJoin}
             LEFT JOIN catalog.item_categories categories
               ON categories.organization_id = profiles.organization_id
-             AND lower(categories.name) = lower($1)
+             AND lower(categories.name) = lower(portfolio.category)
             LEFT JOIN catalog.item_subcategories subcategories
               ON subcategories.category_id = categories.id
-             AND lower(subcategories.name) = lower($2)
-            WHERE profiles.id = $3 AND profiles.organization_id = $4
+             AND lower(subcategories.name) = lower(portfolio.sub_category)
+            WHERE profiles.id = $1 AND profiles.organization_id = $2
             FOR UPDATE OF profiles
           `,
-          [category, subCategory, input.profileId, input.organizationId]
+          [input.profileId, input.organizationId]
         )
         const record = current.rows[0]
         if (!record) throw new Error("Website product row was not found.")
+        const { category, sub_category: subCategory, size, grade } = record
         let partCode = record.current_part_code?.trim() ?? ""
         if (record.category_code && record.subcategory_code) {
           const prefix = `${record.category_code}-${record.subcategory_code}`
@@ -1442,20 +1461,19 @@ export function createCommercialReportingRepository(
               pressure = $15, connections = $16, catalog_grade = $8,
               description = $17, summary = $17, applications = $18,
               certifications = $19, additional_notes = $20,
-              dimensions = $21, website_category = $22,
-              website_sub_category = $23, is_active = $2,
-              entry_created_at = COALESCE($24::date, entry_created_at),
-              drawing_category = $25, thread_size_1 = $26,
-              thread_size_2 = $27, thread_size_3 = $28,
-              thread_size_4 = $29, website_status = $30,
-              updated_by_user_id = $31, updated_at = now(),
+              dimensions = $21, is_active = $2,
+              entry_created_at = COALESCE($22::date, entry_created_at),
+              drawing_category = $23, thread_size_1 = $24,
+              thread_size_2 = $25, thread_size_3 = $26,
+              thread_size_4 = $27, website_status = $28,
+              updated_by_user_id = $29, updated_at = now(),
               row_version = row_version + 1,
               source_payload = COALESCE(source_payload, '{}'::jsonb) ||
                 jsonb_build_object(
-                  'websiteStatus', $30::text,
+                  'websiteStatus', $28::text,
                   'isActive', $2::boolean
                 )
-            WHERE id = $32 AND organization_id = $33
+            WHERE id = $30 AND organization_id = $31
           `,
           [
             productDescription,
@@ -1479,8 +1497,6 @@ export function createCommercialReportingRepository(
             optional(input.certifications),
             optional(input.additionalNotes),
             optional(input.dimensions),
-            optional(input.websiteCategory),
-            optional(input.websiteSubCategory),
             optional(input.entryCreatedAt),
             optional(input.drawingCategory),
             ...threadSizes,
