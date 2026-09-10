@@ -179,7 +179,7 @@ export function InterviewScheduleBoard({
             />
           </Field>
         </CardHeader>
-        <CardContent className="overflow-x-auto">
+        <CardContent className="min-w-0">
  <OperationalTable>
             <TableHeader>
               <TableRow>
@@ -330,7 +330,7 @@ export function InterviewResultsWorkspace({
         <CardHeader>
           <CardTitle>Interview Workspace</CardTitle>
         </CardHeader>
-        <CardContent className="overflow-x-auto">
+        <CardContent className="min-w-0">
  <OperationalTable>
             <TableHeader>
               <TableRow>

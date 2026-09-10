@@ -366,7 +366,7 @@ export default async function CustomersPage({
                 )}
               </div>
             </div>
-            <div className="overflow-x-auto rounded-3xl border">
+            <div className="rounded-3xl border min-w-0">
  <OperationalTable>
                 <TableHeader>
                   <TableRow>

@@ -519,7 +519,10 @@ function OperationalTable({
           : null
       })}
       {columns.length ? (
-        <div className="flex justify-end gap-2 pb-2">
+        <div
+          data-slot="table-toolbar"
+          className="flex flex-wrap items-center gap-2 pb-2"
+        >
           {filteredSelection ? (
             <Button
               aria-label={`${filteredSelection.label ?? "Select All"} (${selectionState.selectableCount})`}
@@ -561,6 +564,7 @@ function OperationalTable({
           ) : null}
           <Button
             aria-label="Clear all table filters"
+            className="ml-auto shrink-0"
             disabled={!Object.values(filters).some(Array.isArray)}
             onClick={() => setFilters({})}
             size="sm"

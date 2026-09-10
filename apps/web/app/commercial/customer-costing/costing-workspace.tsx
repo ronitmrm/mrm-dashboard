@@ -191,9 +191,9 @@ export async function CustomerParameterCostingView({
               <CardTitle>Customer Costing Queue</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="max-h-[60vh] overflow-auto rounded-md border">
+              <div className="rounded-md border min-w-0">
  <OperationalTable
-                  containerClassName="max-h-none overflow-visible"
+                  containerClassName="max-h-[60vh]"
                   excelFilters
                 >
                   <TableHeader className="sticky top-0 z-10 bg-background">

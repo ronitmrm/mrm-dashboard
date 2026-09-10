@@ -610,7 +610,7 @@ export default async function EnquiryDetailPage({
         </div>
  <SectionCard id="quotation-parts">
           <CardContent className="pt-6">
-            <div className="overflow-x-auto rounded-md border">
+            <div className="rounded-md border min-w-0">
  <OperationalTable
                 excelFilters
                 filterStorageKey="mrmpl:commercial:enquiry-lines:filters:v1"

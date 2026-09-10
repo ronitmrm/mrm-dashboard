@@ -83,7 +83,7 @@ export default async function DrawingHistoryPage() {
           <CardDescription>{rows.length} Products.</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto rounded-2xl border">
+          <div className="rounded-2xl border min-w-0">
  <OperationalTable excelFilters>
               <TableHeader>
                 <TableRow>

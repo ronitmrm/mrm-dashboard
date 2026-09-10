@@ -218,8 +218,8 @@ export default async function SalesPage({
               <CardTitle>Sales Task List</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="max-h-[70vh] overflow-auto rounded-md border">
- <OperationalTable excelFilters>
+              <div className="rounded-md border min-w-0">
+ <OperationalTable containerClassName="max-h-[70vh]" excelFilters>
                   <TableHeader className="sticky top-0 z-10 bg-background">
                     <TableRow>
                       <TableHead data-filterable="true">Date / Due</TableHead>
@@ -710,8 +710,8 @@ export default async function SalesPage({
               <CardTitle>Follow-Up History</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="max-h-[70vh] overflow-auto rounded-md border">
- <OperationalTable excelFilters>
+              <div className="rounded-md border min-w-0">
+ <OperationalTable containerClassName="max-h-[70vh]" excelFilters>
                   <TableHeader className="sticky top-0 z-10 bg-background">
                     <TableRow>
                       <TableHead data-filterable="true">Due</TableHead>
@@ -764,8 +764,8 @@ export default async function SalesPage({
               <CardTitle>Sent Quotes</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="max-h-[70vh] overflow-auto rounded-md border">
- <OperationalTable excelFilters>
+              <div className="rounded-md border min-w-0">
+ <OperationalTable containerClassName="max-h-[70vh]" excelFilters>
                   <TableHeader className="sticky top-0 z-10 bg-background">
                     <TableRow>
                       <TableHead data-filterable="true">Sent At</TableHead>

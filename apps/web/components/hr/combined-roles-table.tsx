@@ -191,7 +191,7 @@ export function CombinedRolesTable({
             Active Groups
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-2 overflow-x-auto">
+        <CardContent className="space-y-2 min-w-0">
           <div className="flex justify-end">
             <Button
               disabled={!table.hasFilters}

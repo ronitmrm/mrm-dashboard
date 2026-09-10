@@ -66,7 +66,7 @@ export default async function DrawingRevisionHistoryPage({
           <CardDescription>{rows.length} drawing records.</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto rounded-2xl border">
+          <div className="rounded-2xl border min-w-0">
  <OperationalTable>
               <TableHeader>
                 <TableRow>

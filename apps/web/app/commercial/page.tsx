@@ -210,7 +210,7 @@ export default async function CommercialPage() {
             icon={TableProperties}
             title="Material Lead Time"
           >
-            <div className="overflow-x-auto rounded-lg border">
+            <div className="rounded-lg border min-w-0">
               <OperationalTable>
                 <TableHeader>
                   <TableRow>
@@ -258,7 +258,7 @@ export default async function CommercialPage() {
           icon={Users}
           title="Customer Quote Pareto"
         >
-          <div className="overflow-x-auto rounded-lg border">
+          <div className="rounded-lg border min-w-0">
             <OperationalTable>
               <TableHeader>
                 <TableRow>

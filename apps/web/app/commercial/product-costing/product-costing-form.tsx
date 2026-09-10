@@ -235,7 +235,7 @@ export function ProductCostingForm({
       </div>
 
       {isRoot && bomParts.length ? (
-        <div className="overflow-auto rounded-2xl border">
+        <div className="rounded-2xl border min-w-0">
  <OperationalTable className="w-full text-sm">
             <TableHeader className="bg-muted/50 text-left">
               <TableRow>

@@ -116,7 +116,7 @@ export function CommercialMasterTable({
           })}
         </NativeSelect>
       </Field> : null}
-      <div className="overflow-x-auto rounded-md border">
+      <div className="rounded-md border min-w-0">
  <OperationalTable>
           <TableHeader>
             <TableRow>

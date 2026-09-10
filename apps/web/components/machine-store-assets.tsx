@@ -81,7 +81,7 @@ export function MachineStoreAssets({
         <CardTitle>Assigned Store Assets</CardTitle>
       </CardHeader>
       <CardContent className="grid gap-5">
-        <div className="overflow-auto rounded-lg border">
+        <div className="rounded-lg border min-w-0">
  <OperationalTable>
             <TableHeader>
               <TableRow>
@@ -141,7 +141,7 @@ export function MachineStoreAssets({
             <summary className="cursor-pointer text-sm font-medium">
               Previous assignment history ({data.history.length})
             </summary>
-            <div className="mt-3 overflow-auto rounded-lg border">
+            <div className="mt-3 rounded-lg border min-w-0">
  <OperationalTable>
                 <TableHeader>
                   <TableRow>

@@ -161,9 +161,9 @@ export default async function EngineeringChangeNotesPage() {
           <CardTitle>ECN Register</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="max-h-[65vh] overflow-auto rounded-md border">
+          <div className="rounded-md border min-w-0">
  <OperationalTable
-              containerClassName="max-h-none overflow-visible"
+              containerClassName="max-h-[65vh]"
               excelFilters
             >
               <TableHeader className="sticky top-0 z-10 bg-background">

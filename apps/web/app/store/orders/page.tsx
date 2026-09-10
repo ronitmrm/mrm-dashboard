@@ -92,7 +92,7 @@ export default async function StoreOrdersPage() {
         <CardHeader>
           <CardTitle>Purchase Orders and Receipts</CardTitle>
         </CardHeader>
-        <CardContent className="overflow-x-auto">
+        <CardContent className="min-w-0">
  <OperationalTable>
             <TableHeader>
               <TableRow>

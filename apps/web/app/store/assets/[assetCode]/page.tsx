@@ -562,7 +562,7 @@ export default async function StoreAssetWorkspacePage({
         <CardHeader>
           <CardTitle>Repair Purchase Orders</CardTitle>
         </CardHeader>
-        <CardContent className="overflow-x-auto">
+        <CardContent className="min-w-0">
  <OperationalTable>
             <TableHeader>
               <TableRow>
@@ -648,7 +648,7 @@ export default async function StoreAssetWorkspacePage({
         <CardHeader>
           <CardTitle>Maintenance & Calibration Timetable</CardTitle>
         </CardHeader>
-        <CardContent className="overflow-x-auto">
+        <CardContent className="min-w-0">
  <OperationalTable>
             <TableHeader>
               <TableRow>
@@ -707,7 +707,7 @@ export default async function StoreAssetWorkspacePage({
         <CardHeader>
           <CardTitle>Movement Record</CardTitle>
         </CardHeader>
-        <CardContent className="overflow-x-auto">
+        <CardContent className="min-w-0">
  <OperationalTable>
             <TableHeader>
               <TableRow>
@@ -757,7 +757,7 @@ export default async function StoreAssetWorkspacePage({
         <CardHeader>
           <CardTitle>Maintenance History</CardTitle>
         </CardHeader>
-        <CardContent className="overflow-x-auto">
+        <CardContent className="min-w-0">
  <OperationalTable>
             <TableHeader>
               <TableRow>
@@ -807,7 +807,7 @@ export default async function StoreAssetWorkspacePage({
         <CardHeader>
           <CardTitle>Supplier Price History</CardTitle>
         </CardHeader>
-        <CardContent className="overflow-x-auto">
+        <CardContent className="min-w-0">
  <OperationalTable>
             <TableHeader>
               <TableRow>
@@ -958,7 +958,7 @@ function StoreItemWorkspace({
         <CardHeader>
           <CardTitle>Physical Units</CardTitle>
         </CardHeader>
-        <CardContent className="overflow-x-auto">
+        <CardContent className="min-w-0">
  <OperationalTable>
             <TableHeader>
               <TableRow>
@@ -1086,7 +1086,7 @@ function StoreItemWorkspace({
                 effective date.
               </CardDescription>
         </CardHeader>
-        <CardContent className="overflow-x-auto">
+        <CardContent className="min-w-0">
  <OperationalTable>
             <TableHeader>
               <TableRow>

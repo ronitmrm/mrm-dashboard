@@ -166,7 +166,7 @@ export function PricingTable({
           { tone: "brand", label: "On This Page", value: visibleRows.length }
         ]}
       />
-      <div className="flex shrink-0 items-center justify-between gap-3 text-xs text-muted-foreground">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
         <div className="flex items-center gap-2">
           <span
             aria-hidden="true"
@@ -174,21 +174,7 @@ export function PricingTable({
           />
           Formula-derived cells
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            aria-label="Clear all pricing table filters"
-            disabled={!Object.values(filters).some(Array.isArray)}
-            onClick={() => {
-              setFilters({})
-              setPageIndex(0)
-            }}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            <FilterX data-icon="inline-start" />
-            Clear All Filters
-          </Button>
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
           <Button
             disabled={currentPage === 0}
             onClick={() => setPageIndex((value) => Math.max(0, value - 1))}
@@ -211,6 +197,20 @@ export function PricingTable({
             variant="outline"
           >
             Next
+          </Button>
+          <Button
+            aria-label="Clear all pricing table filters"
+            disabled={!Object.values(filters).some(Array.isArray)}
+            onClick={() => {
+              setFilters({})
+              setPageIndex(0)
+            }}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            <FilterX data-icon="inline-start" />
+            Clear All Filters
           </Button>
         </div>
       </div>

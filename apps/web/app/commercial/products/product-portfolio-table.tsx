@@ -164,21 +164,7 @@ export function ProductPortfolioTable({
         <span>
           {filteredRows.length} of {rows.length} products
         </span>
-        <div className="flex items-center gap-2">
-          <Button
-            aria-label="Clear all product portfolio filters"
-            disabled={!Object.values(filters).some(Array.isArray)}
-            onClick={() => {
-              setFilters({})
-              setPageIndex(0)
-            }}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            <FilterX data-icon="inline-start" />
-            Clear All Filters
-          </Button>
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
           <Button
             disabled={currentPage === 0}
             onClick={() => setPageIndex((value) => Math.max(0, value - 1))}
@@ -201,6 +187,20 @@ export function ProductPortfolioTable({
             variant="outline"
           >
             Next
+          </Button>
+          <Button
+            aria-label="Clear all product portfolio filters"
+            disabled={!Object.values(filters).some(Array.isArray)}
+            onClick={() => {
+              setFilters({})
+              setPageIndex(0)
+            }}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            <FilterX data-icon="inline-start" />
+            Clear All Filters
           </Button>
         </div>
       </div>

@@ -131,7 +131,7 @@ export default async function DesignPage({
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto rounded-md border">
+          <div className="rounded-md border min-w-0">
             <OperationalTable
               excelFilters
               filterStorageKey="mrmpl:commercial:design-queue:filters:v2"
