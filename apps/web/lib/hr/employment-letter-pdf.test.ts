@@ -21,6 +21,10 @@ describe("employment letter PDF", () => {
       {
         applicationStatus: "Approved",
         details: {
+          dutyStartTime: "09:15",
+          dutyEndTime: "18:45",
+          salaryAfterProbationMinimum: 18000,
+          salaryAfterProbationMaximum: 22000,
           payPeriod: "month",
           postalAddress: "368-1, Elgan Society\nHapa, Jamnagar",
           probationLength: 2,

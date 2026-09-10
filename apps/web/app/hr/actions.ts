@@ -515,6 +515,16 @@ export async function completeCandidateAppointmentAction(formData: FormData) {
     const organizationId = await recruitment.organizationIdForCode("MRMPL")
     const context = { actorUserId: session.user.id, organizationId }
     const willingToJoin = value(formData, "willing_to_join")
+    const dutyStartTime = value(formData, "offer_duty_start_time")
+    const dutyEndTime = value(formData, "offer_duty_end_time")
+    if (
+      willingToJoin === "yes" &&
+      ![dutyStartTime, dutyEndTime].every((time) =>
+        /^([01]\d|2[0-3]):[0-5]\d$/.test(time)
+      )
+    ) {
+      throw new Error("Enter valid duty start and end times.")
+    }
     await recruitment.completeCandidateAppointment({
       ...context,
       applicationId,
@@ -535,6 +545,8 @@ export async function completeCandidateAppointmentAction(formData: FormData) {
         ...context,
         applicationId,
         details: {
+          dutyStartTime,
+          dutyEndTime,
           payPeriod:
             value(formData, "offer_pay_period") === "day" ? "day" : "month",
           postalAddress: value(formData, "offer_postal_address"),

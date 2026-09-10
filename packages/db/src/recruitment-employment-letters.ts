@@ -16,6 +16,10 @@ export type EmploymentLetterIdentity = {
 
 type Signatory = { signatoryDesignation: string; signatoryName: string }
 export type OfferLetterDetails = Signatory & {
+  dutyStartTime: string
+  dutyEndTime: string
+  salaryAfterProbationMinimum: number
+  salaryAfterProbationMaximum: number
   payPeriod: "day" | "month"
   postalAddress: string
   probationLength: number
@@ -83,6 +87,12 @@ function positive(value: number, label: string) {
   return value
 }
 
+function time(value: string, label: string) {
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(value))
+    throw new Error(`${label} must be a valid time.`)
+  return value
+}
+
 function date(value: string, label: string) {
   const normalized = value.trim()
   if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized))
@@ -145,11 +155,27 @@ export function prepareEmploymentLetter(
       throw new Error(
         "An Offer Letter requires an approved candidate who is willing to join."
       )
+    const minimum = positive(
+      request.details.salaryAfterProbationMinimum,
+      "Minimum salary after probation"
+    )
+    const maximum = positive(
+      request.details.salaryAfterProbationMaximum,
+      "Maximum salary after probation"
+    )
+    if (maximum < minimum)
+      throw new Error(
+        "Maximum salary after probation must be at least the minimum salary."
+      )
     return {
       ...request,
       details: {
         ...request.details,
         ...signer,
+        dutyStartTime: time(request.details.dutyStartTime, "Duty start time"),
+        dutyEndTime: time(request.details.dutyEndTime, "Duty end time"),
+        salaryAfterProbationMinimum: minimum,
+        salaryAfterProbationMaximum: maximum,
         postalAddress: text(request.details.postalAddress, "Postal address"),
         probationLength: positive(
           request.details.probationLength,

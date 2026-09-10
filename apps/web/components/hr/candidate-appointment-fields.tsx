@@ -63,7 +63,7 @@ export function CandidateAppointmentFields({
               <div>
                 <p className="font-medium">Before Probation</p>
                 <p className="text-xs text-muted-foreground">
-                  Enter One Fixed Monthly Salary.
+                  Enter One Fixed Salary For The Selected Salary Period.
                 </p>
               </div>
               <Field>
@@ -87,7 +87,7 @@ export function CandidateAppointmentFields({
               <div>
                 <p className="font-medium">After Probation</p>
                 <p className="text-xs text-muted-foreground">
-                  Enter The Monthly Salary Range.
+                  Enter The Range For The Selected Salary Period.
                 </p>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
@@ -160,6 +160,30 @@ export function CandidateAppointmentFields({
                   </NativeSelectOption>
                   <NativeSelectOption value="day">Per Day</NativeSelectOption>
                 </NativeSelect>
+              </Field>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field>
+                <FieldLabel htmlFor={`${fieldId}-duty-start`}>
+                  Duty Start Time
+                </FieldLabel>
+                <Input
+                  id={`${fieldId}-duty-start`}
+                  name="offer_duty_start_time"
+                  required
+                  type="time"
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor={`${fieldId}-duty-end`}>
+                  Duty End Time
+                </FieldLabel>
+                <Input
+                  id={`${fieldId}-duty-end`}
+                  name="offer_duty_end_time"
+                  required
+                  type="time"
+                />
               </Field>
             </div>
             <Field>
