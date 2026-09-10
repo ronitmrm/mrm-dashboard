@@ -43,7 +43,8 @@ import { Textarea } from "@workspace/ui/components/textarea"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { DataDownloadButton } from "@/components/data-download-button"
 import { EnquiryLineImportButton } from "@/components/enquiry-line-import-button"
-import { requireCapability } from "@/lib/auth/require-capability"
+import { requireCapability, listGrantedCapabilities } from "@/lib/auth/require-capability"
+import { RequestRevision } from "../request-revision"
 import { selectedEnquiryLine } from "@/lib/pricing/enquiry-detail"
 import { isActiveEnquiryCustomer } from "@/lib/pricing/enquiry-customers"
 import { commercialTermOptions } from "@/lib/commercial-term-options"
@@ -117,6 +118,7 @@ export default async function EnquiryDetailPage({
       const snapshot = await workflow.getEnquiry(id, {
         originatingSalespersonUserId: session.user.id,
       })
+      const revisions = await workflow.listEnquiryRevisions(id,session.user.id)
       const selectedItem = selectedEnquiryLine(snapshot.items, selectedLineId)
       const drawingHistoryEntries = selectedItem
         ? [
@@ -129,12 +131,13 @@ export default async function EnquiryDetailPage({
             ] as const,
           ]
         : []
-      return { drawingHistoryEntries, selectedItem, snapshot }
+      return { drawingHistoryEntries, selectedItem, snapshot, revisions }
     } finally {
       await workflow.close()
     }
   })()
   const { selectedItem, snapshot } = loaded
+  const canRequestRevision = (await listGrantedCapabilities(session.user.id,['pricing.enquiries.update'])).length > 0
   const drawingHistory = new Map(loaded.drawingHistoryEntries)
   const customerRepository = createCustomerRepository({ connectionString })
   const masterRepository = createCommercialMasterRepository({
@@ -175,6 +178,7 @@ export default async function EnquiryDetailPage({
               {snapshot.enquiry.enquiryNumber}
             </h2>
             <Badge variant="secondary">{snapshot.enquiry.currentStage}</Badge>
+            {canRequestRevision?<RequestRevision enquiryId={id} lines={snapshot.items} disabled={loaded.revisions.some(revision=>revision.status==='Open')}/>:null}
           </div>
         </div>
         {snapshot.enquiry.technicalHandoverStatus !== "Handed Over" ? (
@@ -184,6 +188,11 @@ export default async function EnquiryDetailPage({
           </form>
         ) : null}
       </section>
+      {loaded.revisions.length ? <SectionCard><CardHeader><CardTitle>Revision Requests</CardTitle></CardHeader><CardContent>
+        <OperationalTable><TableHeader><TableRow><TableHead>Requested</TableHead><TableHead>Type</TableHead><TableHead>Reason</TableHead><TableHead>Status</TableHead><TableHead>Lines</TableHead></TableRow></TableHeader><TableBody>
+          {loaded.revisions.map(revision=><TableRow key={revision.id}><TableCell>{revision.createdAt.toLocaleDateString('en-IN')}</TableCell><TableCell>{revision.kind}</TableCell><TableCell>{revision.reason}</TableCell><TableCell>{revision.status}</TableCell><TableCell>{revision.lines.map(line=><div key={line.enquiryItemId}>Line {line.lineNumber}: {revision.status==='Completed'?'Completed':line.stage}{line.engineeringChangeNoteId?<Link className="ml-2 underline" href={`/commercial/ecns/${line.engineeringChangeNoteId}`}>Open Design Revision</Link>:null}</div>)}</TableCell></TableRow>)}
+        </TableBody></OperationalTable>
+      </CardContent></SectionCard>:null}
 
  <SectionCard>
         <CardHeader>
