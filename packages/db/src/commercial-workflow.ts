@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto"
 import { linkEnquiryCostMasters } from "./commercial-term-selection"
-import { enquiryRevisionMethods, prepareTermsRevision } from "./enquiry-revisions"
+import { completeRevisionFollowups, enquiryRevisionMethods, prepareTermsRevision } from "./enquiry-revisions"
 import path from "node:path"
 
 import type { Pool, PoolClient, QueryResult } from "pg"
@@ -2670,6 +2670,10 @@ export function createCommercialWorkflowRepository(
         })
         if (pricingTermsChanged || !hasLockedCommercialWork) await linkEnquiryCostMasters(client, input.enquiryId)
         if (salesTermsOnly && pricingTermsChanged && hasLockedCommercialWork) {
+          const affected = await client.query<{ id: string }>(
+            "SELECT id FROM sales.enquiry_items WHERE enquiry_id = $1 AND technical_review_status <> 'NotFeasible'",
+            [input.enquiryId])
+          await completeRevisionFollowups(client, affected.rows.map(line => line.id), input.actorUserId)
           await client.query(`UPDATE sales.enquiry_items SET customer_recost_required = true,
             updated_at = now(), row_version = row_version + 1
             WHERE enquiry_id = $1 AND technical_review_status <> 'NotFeasible'`, [input.enquiryId])

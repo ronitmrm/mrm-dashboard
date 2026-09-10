@@ -412,6 +412,15 @@ blocks full-enquiry sending until they are completed again. Other terms do not
 reopen costing. Repricing creates new quote snapshots; previous sent prices and
 issued PDFs remain unchanged.
 
+Starting an enquiry revision completes pending follow-ups for affected lines with
+the appended reason `Revision initiated.`, retaining earlier notes and history.
+Pricing-term edits that reopen Customer Costing do the same for recosted lines.
+Unaffected follow-ups continue. Sending the revised quote creates a fresh
+follow-up for each newly sent root line, without restarting unchanged lines.
+Ready quotes open a current PDF preview containing saved enquiry terms and the
+latest ready prices alongside unchanged quoted lines. Sent PDF history remains
+the immutable issued document.
+
 Quote PDFs use the approved Mayank Raw Mint letterhead, green quotation banner,
 details/customer blocks, Product and Customer codes, item prices, prepared-by
 section, commercial terms, and contact footer. The customer record supplies To

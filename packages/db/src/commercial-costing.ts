@@ -785,7 +785,7 @@ async function getQuoteDocumentWithClient(
   queryable: Pool | PoolClient,
   enquiryId: string,
   scope?: SalesWorkScope,
-  options: { issuedQuoteItemId?: string } = {}
+  options: { issuedQuoteItemId?: string; preview?: boolean } = {}
 ) {
   const header = await queryable.query<{
     company_name: string
@@ -861,7 +861,8 @@ async function getQuoteDocumentWithClient(
           quote.created_at, quote.updated_at
         FROM sales.quote_items quote
         WHERE quote.enquiry_item_id = enquiry_item.id
-        ORDER BY CASE WHEN quote.id = $2::uuid THEN 0 ELSE 1 END, CASE
+        ORDER BY CASE WHEN quote.id = $2::uuid THEN 0 ELSE 1 END,
+          CASE WHEN $3::boolean AND quote.status = 'Ready' AND quote.sent_at IS NULL THEN 0 ELSE 1 END, CASE
             WHEN quote.sent_at IS NOT NULL
               AND quote.created_at <= quote.sent_at THEN 0
             WHEN quote.sent_at IS NULL
@@ -885,11 +886,11 @@ async function getQuoteDocumentWithClient(
         AND enquiry_item.linked_enquiry_item_id IS NULL
       ORDER BY enquiry_item.line_number
     `,
-    [enquiryId, options.issuedQuoteItemId ?? null]
+    [enquiryId, options.issuedQuoteItemId ?? null, options.preview ?? false]
   )
   const row = header.rows[0]
-  const includedLines = options.issuedQuoteItemId
-    ? lines.rows.filter(line => line.status === "Cannot Quote" || (line.sent_at !== null &&
+  const includedLines = options.issuedQuoteItemId || options.preview
+    ? lines.rows.filter(line => line.status === "Cannot Quote" || (options.preview && line.status === "Ready") || (line.sent_at !== null &&
         ["Sent", "Accepted", "Ordered", "Superseded"].includes(line.status ?? "")))
     : lines.rows
   const issuedLine = includedLines.find(line => line.quote_item_id === options.issuedQuoteItemId)
@@ -1210,7 +1211,7 @@ async function transitionQuoteToSent(
       [input.actorUserId ?? null, quoteItemIds]
     )
   }
-  if (root.rows[0].enquiry_id) {
+  for (const sentQuoteItemId of quoteItemIds) {
     const note = `Quote sent to ${root.rows[0].company_name}.`
     await client.query(
       `
@@ -1236,7 +1237,7 @@ async function transitionQuoteToSent(
         note,
         input.actorUserId ?? null,
         randomUUID(),
-        input.quoteItemId,
+        sentQuoteItemId,
         input.followupDueOn,
       ]
     )
@@ -3583,8 +3584,8 @@ export function createCommercialCostingRepository(
       })
     },
 
-    async getQuoteDocument(enquiryId: string, scope?: SalesWorkScope) {
-      return getQuoteDocumentWithClient(pool, enquiryId, scope)
+    async getQuoteDocument(enquiryId: string, scope?: SalesWorkScope, options: { preview?: boolean } = {}) {
+      return getQuoteDocumentWithClient(pool, enquiryId, scope, options)
     },
 
     async getQuotePdfArtifact(enquiryId: string, scope?: SalesWorkScope) {

@@ -5,6 +5,22 @@ import { nextRevisionNumber } from "./commercial-revisions"
 
 export type EnquiryRevisionKind = "Terms" | "Pricing" | "Technical"
 
+export async function completeRevisionFollowups(
+  client: PoolClient,
+  enquiryItemIds: string[],
+  actorUserId?: string | null
+) {
+  await client.query(`
+    UPDATE sales.followups followup
+    SET status = 'Completed', completed_at = now(),
+      note = concat_ws(E'\n', nullif(followup.note, ''), 'Revision initiated.'),
+      updated_by_user_id = $2, updated_at = now(), row_version = followup.row_version + 1
+    FROM sales.quote_items quote
+    WHERE followup.quote_item_id = quote.id AND followup.status = 'Pending'
+      AND quote.enquiry_item_id = ANY($1::uuid[])`,
+    [enquiryItemIds, actorUserId ?? null])
+}
+
 export function enquiryRevisionMethods(pool: Pool) {
   return {
     async listSalesTermsRevisions(
@@ -181,6 +197,7 @@ export function enquiryRevisionMethods(pool: Pool) {
           ]
         )
         const id = created.rows[0]!.id
+        await completeRevisionFollowups(client, lines.rows.map(line => line.id), input.actorUserId)
         const ecns = new Map<string, string>()
         for (const line of lines.rows) {
           let ecnId: string | null = null
