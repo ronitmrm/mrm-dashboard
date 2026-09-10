@@ -182,7 +182,7 @@ export function prepareEmploymentLetter(
           "Probation period"
         ),
       },
-      identity: person,
+      identity: { ...person, employeeCode: null },
       issuedOn,
       reference: letterReference,
       salary: positive(request.salary, "Salary"),
