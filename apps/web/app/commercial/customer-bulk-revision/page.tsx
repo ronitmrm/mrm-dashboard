@@ -95,7 +95,8 @@ export default async function CustomerBulkRevisionPage({
           <CardHeader>
             <CardTitle>Start A Customer Revision</CardTitle>
             <CardDescription>
-              Select one customer that has an active quote or price.
+              Select all customers or one customer with an active quote or
+              price.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -125,6 +126,12 @@ export default async function CustomerBulkRevisionPage({
                   >
                     <NativeSelectOption value="">
                       Select Customer With Active Price
+                    </NativeSelectOption>
+                    <NativeSelectOption
+                      value="all"
+                      disabled={!reference.rows.length}
+                    >
+                      All Customers
                     </NativeSelectOption>
                     {reference.rows.map((customer) => (
                       <NativeSelectOption key={customer.id} value={customer.id}>
