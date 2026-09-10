@@ -84,12 +84,14 @@ export default async function SalesPage({
       handoverResults,
       quoteReadyResults,
       sentQuoteResults,
+      termsRevisions,
     ] = await Promise.all([
       workflow.listSalesClarificationQueueBounded("MRMPL", 200, salesScope),
       workflow.listFollowupsBounded("MRMPL", 200, salesScope),
       workflow.listSalesHandoverQueueBounded("MRMPL", 200, salesScope),
       workflow.listSalesQuoteReadyQueueBounded("MRMPL", 200, salesScope),
       workflow.listSalesSentQuoteQueueBounded("MRMPL", salesScope),
+      workflow.listSalesTermsRevisions("MRMPL",session.user.id),
     ])
     const clarificationTasks = clarificationResults.rows
     const followups = followupResults.rows
@@ -133,6 +135,11 @@ export default async function SalesPage({
 
     return (
       <div className="grid gap-6">
+        {termsRevisions.length ? <SectionCard><CardHeader><CardTitle>Enquiry Terms Revisions</CardTitle></CardHeader><CardContent>
+          <OperationalTable><TableHeader><TableRow><TableHead>Enquiry</TableHead><TableHead>Requested Changes</TableHead><TableHead>Action</TableHead></TableRow></TableHeader><TableBody>
+            {termsRevisions.map(revision=><TableRow key={revision.id}><TableCell>{revision.enquiryNumber}</TableCell><TableCell>{revision.reason}</TableCell><TableCell><Button asChild size="sm" variant="outline"><Link href={`/commercial/enquiries/${revision.enquiryId}`}>Update Terms</Link></Button></TableCell></TableRow>)}
+          </TableBody></OperationalTable>
+        </CardContent></SectionCard>:null}
         <section className="grid gap-2">
           <h2 className="text-2xl font-semibold tracking-tight">Sales</h2>
         </section>

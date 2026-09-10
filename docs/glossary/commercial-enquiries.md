@@ -37,6 +37,19 @@ downstream team queues remain shared; when downstream work is returned to
 Sales, it returns to the same Originating Salesperson.
 _Avoid_: Reassigning ownership when another team reviews or updates the Enquiry.
 
+**Enquiry Revision Request**: Sales opens Request Revision on the existing enquiry,
+records the customer's reason and selects affected lines. One request may remain
+open per enquiry before purchase-order creation. Terms-only revisions stay with
+Sales and copy saved quotation prices into new Ready quotation snapshots after
+terms are saved. Pricing revisions return selected lines to Customer Costing.
+Technical revisions use a linked controlled ECN, including quoted products with a
+released design, then Design approval, Product Costing and Customer Costing.
+Original Design Tasks, sent quote snapshots and issued PDF bytes are retained.
+Full-enquiry issuance remains blocked until every requested line is ready; issuing
+the revised PDF completes the request. Non-price terms may be corrected before an
+order without restarting costing; Incoterms, Packaging and Currency changes require
+customer repricing. A request does not create another enquiry or grant permissions.
+
 **Commercial Requote**: Sales selects an existing matched Product for a new
 commercial price without a technical change. The Enquiry line retains that Product
 link and is marked Duplicate / Existing Product; Technical Review and Design are
@@ -384,8 +397,7 @@ Sent and stores one combined PDF, including previously sent lines and explicit
 Cannot Quote outcomes. Linked duplicate lines follow their originating line.
 Previously issued PDFs remain immutable; retries reuse the issued document.
 
-The Technical Review handoff badge records history, not the current owner.
-The enquiry header derives its current stage from its lines. A sent quotation is
+The enquiry header shows one current stage derived from its lines. A sent quotation is
 Quotation Complete with Sales Follow-up still open; it is not an order completion.
 While all actionable lines are back with Sales and no purchase order exists,
 Sales may update commercial terms without changing enquiry identity. Changing

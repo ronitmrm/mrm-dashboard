@@ -1347,7 +1347,7 @@ async function createBulkRevisedQuotes(
   return { cache, graph }
 }
 
-async function nextRevisionNumber(
+export async function nextRevisionNumber(
   client: PoolClient,
   organizationId: string,
   prefix: string
@@ -5859,8 +5859,10 @@ export function createCommercialRevisionsRepository(
           )
         }
         const status = engineeringChangeStatusAfterApproval(
-          impact.costImpacting
+          impact.costImpacting || typeof row.source_payload.enquiryRevisionId === 'string'
         )
+        await client.query(`UPDATE sales.enquiry_items SET revision_stage='Product Costing' WHERE id IN
+          (SELECT enquiry_item_id FROM sales.enquiry_revision_lines WHERE engineering_change_note_id=$1) AND revision_stage='Design'`, [input.engineeringChangeNoteId])
         await client.query(
           `
             UPDATE sales.engineering_change_notes
@@ -6021,13 +6023,21 @@ export function createCommercialRevisionsRepository(
           input.actorUserId
         )
         const after = await itemAndBomEvidence(client, row.item_id)
-        const affectedQuoteItemIds = await activeAffectedQuoteIds(
+        const allAffectedQuoteItemIds = await activeAffectedQuoteIds(
           client,
           row.item_id,
           row.organization_id
         )
+        const requested = await client.query<{id:string;previous_quote_item_id:string|null}>(`SELECT line.id,link.previous_quote_item_id FROM sales.enquiry_revision_lines link
+          JOIN sales.enquiry_items line ON line.id=link.enquiry_item_id WHERE link.engineering_change_note_id=$1 AND line.revision_stage='Product Costing'`, [input.engineeringChangeNoteId])
+        const requestedQuotes = new Set(requested.rows.map(line=>line.previous_quote_item_id))
+        const affectedQuoteItemIds = allAffectedQuoteItemIds.filter(id=>!requestedQuotes.has(id))
+        for (const line of requested.rows) {
+          await client.query("UPDATE sales.enquiry_items SET revision_stage='Customer Costing' WHERE id=$1", [line.id])
+          await client.query("UPDATE sales.design_tasks SET next_stage_status='Product Costing Complete' WHERE enquiry_item_id=$1", [line.id])
+        }
         const status =
-          affectedQuoteItemIds.length > 0
+          affectedQuoteItemIds.length > 0 || requested.rows.length > 0
             ? "Pending Customer Costing"
             : "Completed"
         await client.query(

@@ -41,13 +41,14 @@ export default async function DesignPage({
   const workflow = createCommercialWorkflowRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
-  const { designResult, summary } = await (async () => {
+  const { designResult, summary, revisions } = await (async () => {
     try {
-      const [designResult, summary] = await Promise.all([
+      const [designResult, summary, revisions] = await Promise.all([
         workflow.listDesignQueueBounded("MRMPL", 200, view),
         workflow.getDesignQueueSummary("MRMPL"),
+        workflow.listEnquiryRevisionDesignTasks("MRMPL"),
       ])
-      return { designResult, summary }
+      return { designResult, summary, revisions }
     } finally {
       await workflow.close()
     }
@@ -58,6 +59,12 @@ export default async function DesignPage({
       <section className="grid gap-2">
         <h2 className="text-2xl font-semibold tracking-tight">Design Tasks</h2>
       </section>
+
+      {view==='active' && revisions.length ? <SectionCard><CardHeader><CardTitle>Enquiry Design Revisions</CardTitle></CardHeader><CardContent>
+        <OperationalTable><TableHeader><TableRow><TableHead>Enquiry</TableHead><TableHead>Line</TableHead><TableHead>Part</TableHead><TableHead>Requested Changes</TableHead><TableHead>Status</TableHead><TableHead>Action</TableHead></TableRow></TableHeader><TableBody>
+          {revisions.map(revision=><TableRow key={`${revision.id}:${revision.lineNumber}`}><TableCell>{revision.enquiryNumber}</TableCell><TableCell>{revision.lineNumber}</TableCell><TableCell>{revision.description}</TableCell><TableCell>{revision.reason}</TableCell><TableCell>{revision.status}</TableCell><TableCell><Button asChild size="sm" variant="outline"><Link href={`/commercial/ecns/${revision.id}${revision.status==='Pending Design'?'/design':''}`}>Open Revision</Link></Button></TableCell></TableRow>)}
+        </TableBody></OperationalTable>
+      </CardContent></SectionCard>:null}
 
       <section className="grid gap-3 sm:grid-cols-3">
         <MetricCard

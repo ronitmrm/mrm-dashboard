@@ -286,6 +286,25 @@ export async function updateEnquiryAction(formData: FormData) {
   revalidatePath("/commercial/sales")
 }
 
+export async function requestEnquiryRevisionAction(formData: FormData) {
+  const enquiryId = requiredText(formData,"enquiry_id")
+  const kind = requiredText(formData,"revision_kind")
+  if (kind !== 'Terms' && kind !== 'Pricing' && kind !== 'Technical') return {error:'Select a revision type.'}
+  try {
+    await withWorkflow(commercialTaskCapabilities.updateEnquiry,`${enquiriesPath}/${enquiryId}`,
+      (workflow,actorUserId)=>workflow.requestEnquiryRevision({actorUserId,enquiryId,kind,
+        reason:requiredText(formData,'reason'),enquiryItemIds:formData.getAll('enquiry_item_id').filter((value): value is string=>typeof value==='string')}))
+    revalidatePath(enquiriesPath)
+    revalidatePath(`${enquiriesPath}/${enquiryId}`)
+    revalidatePath('/commercial/design')
+    revalidatePath('/commercial/customer-costing')
+    revalidatePath('/commercial/sales')
+    return {error:null}
+  } catch(error) {
+    return {error:error instanceof Error ? error.message : 'Could not request revision.'}
+  }
+}
+
 export async function deleteEnquiryAction(formData: FormData) {
   const enquiryId = requiredText(formData, "enquiry_id")
   await withWorkflow(

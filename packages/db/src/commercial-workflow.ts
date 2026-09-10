@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto"
 import { linkEnquiryCostMasters } from "./commercial-term-selection"
+import { enquiryRevisionMethods, prepareTermsRevision } from "./enquiry-revisions"
 import path from "node:path"
 
 import type { Pool, PoolClient, QueryResult } from "pg"
@@ -2132,6 +2133,7 @@ export function createCommercialWorkflowRepository(
   const { close, pool } = repositoryPool(options)
 
   return {
+    ...enquiryRevisionMethods(pool),
     close,
 
     async createEnquiry(input: {
@@ -2585,11 +2587,17 @@ export function createCommercialWorkflowRepository(
         }
         const hasLockedCommercialWork =
           Number(row.quote_item_count) > 0 || Number(row.po_line_count) > 0
+        const openRevision = (await client.query<{kind: string}>("SELECT kind FROM sales.enquiry_revision_requests WHERE enquiry_id=$1 AND status='Open'", [input.enquiryId])).rows[0]
+        const terms = input.commercialTerms
+        const pricingTermsChanged = (terms?.incoterms !== undefined && terms.incoterms !== row.incoterms) ||
+          (terms?.packagingTerms !== undefined && terms.packagingTerms !== row.packaging_terms) ||
+          (terms?.currency !== undefined && terms.currency !== row.currency)
+        if (pricingTermsChanged && openRevision?.kind === 'Terms') throw new Error("Incoterms, Packaging and Currency need a Pricing revision.")
         const canEditAfterHandover =
           Number(row.open_sales_clarification_count) > 0 ||
           (Number(row.technical_started_count) === 0 &&
             Number(row.design_task_count) === 0)
-        const salesTermsOnly = row.sales_terms_editable && Number(row.quote_item_count) > 0 && Number(row.po_line_count) === 0 &&
+        const salesTermsOnly = (row.sales_terms_editable || !pricingTermsChanged || Boolean(openRevision)) && Number(row.po_line_count) === 0 &&
           input.customerId === row.customer_id && (input.receivedOn ?? row.received_on) === row.received_on &&
           (input.status ?? row.status) === row.status && (input.source ?? row.source) === row.source &&
           (input.priority ?? row.priority) === row.priority
@@ -2602,10 +2610,11 @@ export function createCommercialWorkflowRepository(
             "This enquiry cannot be edited after downstream work has started."
           )
         }
-        const terms = input.commercialTerms
-        const pricingTermsChanged = (terms?.incoterms !== undefined && terms.incoterms !== row.incoterms) ||
-          (terms?.packagingTerms !== undefined && terms.packagingTerms !== row.packaging_terms) ||
-          (terms?.currency !== undefined && terms.currency !== row.currency)
+        if (pricingTermsChanged && openRevision && (await client.query(`SELECT 1 FROM sales.enquiry_revision_lines link
+          JOIN sales.enquiry_revision_requests request ON request.id=link.request_id
+          JOIN sales.enquiry_items line ON line.id=link.enquiry_item_id
+          WHERE request.enquiry_id=$1 AND request.status='Open' AND (line.revision_stage='Ready To Send' OR EXISTS (
+            SELECT 1 FROM sales.quote_items q WHERE q.enquiry_item_id=line.id AND q.created_at >= request.created_at AND q.status='Draft')) LIMIT 1`, [input.enquiryId])).rowCount) throw new Error("Pricing has started for this revision. Complete it before changing pricing terms again.")
         const updated = await client.query<{
           buyer_name: string | null
           id: string
@@ -2660,7 +2669,7 @@ export function createCommercialWorkflowRepository(
           targetTable: "enquiries",
         })
         if (pricingTermsChanged || !hasLockedCommercialWork) await linkEnquiryCostMasters(client, input.enquiryId)
-        if (salesTermsOnly && pricingTermsChanged) {
+        if (salesTermsOnly && pricingTermsChanged && hasLockedCommercialWork) {
           await client.query(`UPDATE sales.enquiry_items SET customer_recost_required = true,
             updated_at = now(), row_version = row_version + 1
             WHERE enquiry_id = $1 AND technical_review_status <> 'NotFeasible'`, [input.enquiryId])
@@ -2669,6 +2678,7 @@ export function createCommercialWorkflowRepository(
             WHERE enquiry_item_id IN (SELECT id FROM sales.enquiry_items WHERE enquiry_id = $1 AND customer_recost_required)
               AND next_stage_status = 'Quoted'`, [input.enquiryId])
         }
+        await prepareTermsRevision(client, input.enquiryId, input.actorUserId)
         return {
           buyerName: updated.rows[0]!.buyer_name,
           id: updated.rows[0]!.id,
@@ -3265,6 +3275,8 @@ export function createCommercialWorkflowRepository(
                 AND ready_quote.status = 'Ready'
                 AND ready_quote.sent_at IS NULL
             )
+            AND NOT EXISTS (SELECT 1 FROM sales.enquiry_items revision_line WHERE revision_line.enquiry_id=enquiry.id
+              AND (revision_line.customer_recost_required OR (revision_line.revision_stage IS NOT NULL AND revision_line.revision_stage <> 'Ready To Send')))
             AND NOT EXISTS (
               SELECT 1 FROM sales.enquiry_items pending_item
               WHERE pending_item.enquiry_id = enquiry.id
@@ -6359,6 +6371,7 @@ export function createCommercialWorkflowRepository(
         const items = await client.query<{
           customer_part_code: string | null
           customer_recost_required: boolean
+          revision_stage: string | null
           quote_status: string | null
           description: string
           design_status: string | null
@@ -6380,7 +6393,7 @@ export function createCommercialWorkflowRepository(
         }>(
           `
             SELECT item.id, item.line_number, item.customer_part_code,
-              item.customer_recost_required,
+              item.customer_recost_required, item.revision_stage,
               (SELECT CASE WHEN quote.sent_at IS NOT NULL THEN 'Sent' ELSE quote.status END
                 FROM sales.quote_items quote WHERE quote.enquiry_item_id = item.id AND quote.status <> 'Superseded'
                 ORDER BY quote.created_at DESC, quote.id DESC LIMIT 1) AS quote_status,
@@ -6456,7 +6469,10 @@ export function createCommercialWorkflowRepository(
             targetStage: row.target_stage,
           })),
           enquiry: {
-            currentStage: items.rows.some(line => line.customer_recost_required) ? "Customer Costing" :
+            currentStage: items.rows.some(line => line.revision_stage === 'Design') ? 'Design' :
+              items.rows.some(line => line.revision_stage === 'Product Costing') ? 'Product Costing' :
+              items.rows.some(line => line.revision_stage === 'Sales') ? 'Sales — Terms Revision' :
+              items.rows.some(line => line.customer_recost_required) ? "Customer Costing" :
               items.rows.length > 0 && items.rows.every(line => line.technical_review_status === 'NotFeasible' || line.quote_status === 'Sent') ? "Quotation Complete — Sales Follow-up" :
               items.rows.length > 0 && items.rows.every(line => line.technical_review_status === 'NotFeasible' || ['Ready', 'Sent', 'Accepted'].includes(line.quote_status ?? '')) ? "Sales — Ready to Send" :
               items.rows.some(line => ['Product Costing Complete', 'Started'].includes(line.next_stage_status ?? '')) ? "Customer Costing" :
@@ -6745,6 +6761,7 @@ export function createCommercialWorkflowRepository(
             enquiry_item.drawing_reference,
             drawing.file_name AS drawing_file_name,
             CASE
+              WHEN enquiry_item.revision_stage IS NOT NULL THEN enquiry_item.revision_stage
               WHEN enquiry.technical_handover_status <> 'Handed Over'
                 THEN 'With Sales'
               WHEN EXISTS (
@@ -6826,6 +6843,7 @@ export function createCommercialWorkflowRepository(
             JOIN catalog.items product ON product.id = quote.item_id
             WHERE quote.organization_id = enquiry.organization_id
               AND quote.status <> 'Cancelled'
+              AND NOT EXISTS(SELECT 1 FROM sales.quote_package_components component WHERE component.child_quote_item_id=quote.id)
               AND (
                 quote.enquiry_item_id = enquiry_item.id
                 OR (
@@ -6839,6 +6857,8 @@ export function createCommercialWorkflowRepository(
               )
             ORDER BY
               CASE WHEN quote.enquiry_item_id = enquiry_item.id THEN 0 ELSE 1 END,
+              CASE WHEN quote.status = 'Superseded' THEN 1 ELSE 0 END,
+              quote.created_at DESC,
               CASE
                 WHEN quote.status IN ('Accepted', 'Ordered')
                   OR quote.ordered_at IS NOT NULL THEN 0

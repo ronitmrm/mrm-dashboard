@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto"
+import { assertRevisionCanSend } from "./enquiry-revisions"
 import { readPriceMaster, productPriceDefaults } from "./price-master"
 import { enquiryMasterCosts } from "./commercial-term-selection"
 
@@ -967,13 +968,14 @@ async function enquiryQuoteLines(
     cannot_quote: boolean
   }>(
     `SELECT line.enquiry_id, line.line_number, selected.id AS quote_item_id,
-       CASE WHEN line.customer_recost_required THEN 'Draft' ELSE selected.status END AS status,
+       CASE WHEN line.customer_recost_required OR (line.revision_stage IS NOT NULL AND line.revision_stage <> 'Ready To Send') THEN 'Draft' ELSE selected.status END AS status,
        line.technical_review_status = 'NotFeasible' AS cannot_quote
      FROM sales.enquiry_items line
      JOIN sales.enquiries enquiry ON enquiry.id = line.enquiry_id
      LEFT JOIN LATERAL (
        SELECT quote.id, quote.status FROM sales.quote_items quote
        WHERE quote.enquiry_item_id = line.id AND quote.status <> 'Superseded'
+         AND NOT EXISTS(SELECT 1 FROM sales.quote_package_components component WHERE component.child_quote_item_id=quote.id)
        ORDER BY quote.created_at DESC, quote.id DESC LIMIT 1
      ) selected ON true
      WHERE line.enquiry_id = ANY($1::uuid[])
@@ -1039,6 +1041,7 @@ async function transitionQuoteToSent(
   await client.query("SELECT id FROM sales.enquiries WHERE id = $1 FOR UPDATE", [enquiryId])
   const recost = await client.query("SELECT 1 FROM sales.enquiry_items WHERE enquiry_id = $1 AND customer_recost_required LIMIT 1", [enquiryId])
   if (recost.rowCount) throw new Error("Complete Customer Costing for changed enquiry terms before sending.")
+  await assertRevisionCanSend(client,enquiryId)
   const current = await client.query<{ status: string }>(
     "SELECT status FROM sales.quote_items WHERE id = $1 FOR UPDATE", [input.quoteItemId]
   )
@@ -1163,7 +1166,7 @@ async function transitionQuoteToSent(
           row_version = row_version + 1
         WHERE id = $3
       `,
-      [revision.rows[0]!.revision, input.actorUserId ?? null, member.id]
+      [Math.max(quoteRow.revision, revision.rows[0]!.revision), input.actorUserId ?? null, member.id]
     )
   }
   if (input.storeIssuedPdf) {
@@ -1233,6 +1236,8 @@ async function transitionQuoteToSent(
       ]
     )
   }
+  await client.query("UPDATE sales.enquiry_revision_requests SET status='Completed',completed_at=now() WHERE enquiry_id=$1 AND status='Open'", [enquiryId])
+  await client.query("UPDATE sales.enquiry_items SET revision_stage=NULL WHERE enquiry_id=$1", [enquiryId])
   await writeAuditEvent(client, {
     actorUserId: input.actorUserId,
     eventType: "quote.sent",
@@ -1973,6 +1978,7 @@ export function createCommercialCostingRepository(
               AND design.next_stage_status IN (
                 'Product Costing Complete', 'Started'
               )
+              AND COALESCE(enquiry_item.revision_stage,'') NOT IN ('Sales','Design','Product Costing')
               AND (enquiry_item.customer_recost_required OR COALESCE(latest_quote.status, 'Draft') = 'Draft')
 
             UNION ALL
@@ -2078,6 +2084,7 @@ export function createCommercialCostingRepository(
                 AND design.next_stage_status IN (
                   'Product Costing Complete', 'Started'
                 )
+                AND COALESCE(enquiry_item.revision_stage,'') NOT IN ('Sales','Design','Product Costing')
                 AND (enquiry_item.customer_recost_required OR NOT EXISTS (
                   SELECT 1 FROM sales.quote_items quote
                   WHERE quote.enquiry_item_id = design.enquiry_item_id
@@ -2700,6 +2707,7 @@ export function createCommercialCostingRepository(
           customer_id: string
           customer_recost_required: boolean
           currency: string
+          revision_stage: string | null
           customer_part_code: string | null
           enquiry_id: string
           enquiry_number: string
@@ -2713,6 +2721,7 @@ export function createCommercialCostingRepository(
             SELECT enquiry.customer_id, enquiry.id AS enquiry_id,
               enquiry.currency,
               enquiry_item.customer_recost_required,
+              enquiry_item.revision_stage,
               enquiry.enquiry_number, enquiry.organization_id,
               enquiry_item.customer_part_code, enquiry_item.item_id,
               design.matched_product_id, design.quoted_part_uid,
@@ -2730,6 +2739,7 @@ export function createCommercialCostingRepository(
         if (!row) {
           throw new Error("Enquiry and product are required.")
         }
+        if (['Sales','Design','Product Costing'].includes(row.revision_stage ?? '')) throw new Error("Complete the current revision stage before Customer Costing.")
         const masterCosts = await enquiryMasterCosts(client, row.enquiry_id)
         input = {
           ...input,
@@ -2961,7 +2971,13 @@ export function createCommercialCostingRepository(
         }
 
         const root = await quoteProduct(rootProduct, { isRoot: true })
-        if (input.action === "complete") await client.query("UPDATE sales.enquiry_items SET customer_recost_required = false WHERE id = $1", [input.enquiryItemId])
+        if (input.action === "complete") {
+          await client.query("UPDATE sales.enquiry_items SET customer_recost_required=false,revision_stage=CASE WHEN revision_stage IS NOT NULL THEN 'Ready To Send' END WHERE id=$1", [input.enquiryItemId])
+          await client.query(`UPDATE sales.engineering_change_notes ecn SET status='Completed',completed_at=now()
+            WHERE ecn.status='Pending Customer Costing' AND jsonb_array_length(ecn.affected_quote_item_ids_json)=0
+              AND EXISTS(SELECT 1 FROM sales.enquiry_revision_lines link WHERE link.engineering_change_note_id=ecn.id AND link.enquiry_item_id=$1)
+              AND NOT EXISTS(SELECT 1 FROM sales.enquiry_revision_lines link JOIN sales.enquiry_items line ON line.id=link.enquiry_item_id WHERE link.engineering_change_note_id=ecn.id AND line.revision_stage <> 'Ready To Send')`, [input.enquiryItemId])
+        }
         const targetPrice = revisionRequest?.rows[0]
           ? asNumber(revisionRequest.rows[0].requested_price)
           : null
