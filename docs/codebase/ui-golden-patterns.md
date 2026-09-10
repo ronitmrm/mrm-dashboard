@@ -107,6 +107,10 @@ User-facing PDF actions open the authenticated in-app attachment viewer through
 `AttachmentViewerLink`. PDF routes serve inline content for viewer previews and
 attachment content only for the viewer's explicit **Download Original** action.
 Exports such as CSV and Excel remain direct downloads.
+PDF previews use the shared client-only `PdfPreview` renderer with page count,
+Previous/Next controls and zoom. Do not embed PDFs in iframes: mobile browsers
+may expose only the first page, and desktop settings can force a download.
+Keep the PDF.js worker bundled locally and its version matched to React-PDF.
 
 ## Navigation shell
 

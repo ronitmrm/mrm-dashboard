@@ -2,6 +2,7 @@ import Link from "next/link"
 import { notFound } from "next/navigation"
 
 import { Button } from "@workspace/ui/components/button"
+import { PdfPreview } from "@/components/pdf-preview"
 
 import {
   attachmentSourceWithMode,
@@ -41,16 +42,15 @@ export default async function AttachmentViewerPage({
   )
   const fileName = query.name?.trim() || "Attachment"
   const mediaType = query.type?.trim() || "Unknown media type"
+  const isPdf = mediaType === "application/pdf" || /\.pdf$/i.test(fileName)
   const previewable =
-    mediaType === "application/pdf" ||
-    mediaType.startsWith("image/") ||
-    /\.(pdf|png|jpe?g)$/i.test(fileName)
+    mediaType.startsWith("image/") || /\.(pdf|png|jpe?g)$/i.test(fileName)
   const previewHref = attachmentSourceWithMode(source, "preview")
   const downloadHref = attachmentSourceWithMode(source, "download")
 
   return (
-    <main className="flex min-h-svh flex-col bg-background">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
+    <main className="flex h-dvh flex-col overflow-hidden bg-background">
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
         <div className="min-w-0">
           <h1 className="truncate font-medium">{fileName}</h1>
           <p className="text-xs text-muted-foreground">
@@ -65,7 +65,9 @@ export default async function AttachmentViewerPage({
           </Button>
         </div>
       </header>
-      {previewable ? (
+      {isPdf ? (
+        <PdfPreview source={previewHref} />
+      ) : previewable ? (
         <iframe
           className="min-h-0 flex-1 bg-muted"
           src={previewHref}
