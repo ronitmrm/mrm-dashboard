@@ -57,6 +57,21 @@ const designOptions = {
 }
 
 describe("DesignTaskEditor", () => {
+  test("restores customer drawing selections separately from working files", () => {
+    const markup = renderToStaticMarkup(
+      <DesignTaskEditor designOptions={designOptions} editable initial={initial}
+        initialSection="customer-drawings" products={[]} attachments={[
+          { id: "selected-file", customerSelected: true, fileName: "customer.pdf", href: "/customer", purpose: "internal_drawing" },
+          { id: "working-file", customerSelected: false, fileName: "working.pdf", href: "/working", purpose: "cad" },
+        ]} />
+    )
+    expect(markup).toContain("Customer Drawings")
+    expect(markup).toMatch(/name="customer_drawing_file_ids"[^>]*checked=""[^>]*value="selected-file"/)
+    expect(markup).not.toMatch(/checked=""[^>]*value="working-file"/)
+    expect(markup).toContain('name="customer_drawing_files"')
+    expect(markup).toContain('multiple=""')
+    expect(markup).toContain('value="customer-drawings"')
+  })
   test("shows a Package parent with identity, derived weight, and post-package processes", () => {
     const markup = renderToStaticMarkup(
       <DesignTaskEditor

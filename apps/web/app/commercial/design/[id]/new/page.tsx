@@ -364,6 +364,8 @@ export default async function NewDesignWorkspacePage({
             ) : (
               <DesignTaskEditor
                 attachments={selectedItem.attachments.map((attachment) => ({
+                  id: attachment.id,
+                  customerSelected: attachment.customerSelected,
                   fileName: attachment.fileName,
                   href: `/commercial/design/${selectedItem.designId}/file/${attachment.purpose}`,
                   purpose: attachment.purpose,

@@ -17,7 +17,7 @@ export async function GET(
 ) {
   await requireCapability("pricing.design.read", "/commercial/design")
   const { id, purpose } = await params
-  if (!purposes.has(purpose) && !parseDesignBomAttachmentPurpose(purpose)) {
+  if (!purposes.has(purpose) && !/^customer_drawing_[a-f0-9-]{36}$/.test(purpose) && !parseDesignBomAttachmentPurpose(purpose)) {
     return new Response("Design attachment was not found.", { status: 404 })
   }
   const connectionString = readAuthEnvironment().connectionString

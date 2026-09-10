@@ -32,6 +32,7 @@ export function QuotationHistory({enquiryId,enquiryNumber,versions,selected,acti
     <div className="flex flex-wrap items-center justify-between gap-2">
       <div><h2 className="text-2xl font-semibold">{enquiryNumber}</h2><p>{quotationRevisionLabel(selected.revision)} · {selected.status}</p></div>
       <div className="flex flex-wrap gap-2"><Button asChild variant="outline"><Link href="/commercial/sales?view=sent-quotes">Back To Sent Quotes</Link></Button>{action}
+        <Button asChild variant="outline"><Link href={`/commercial/quotes/enquiry/${enquiryId}/drawings?revision=${selected.revision}`}>Customer Drawings</Link></Button>
         <Button asChild variant="outline"><AttachmentViewerLink fileName={`${enquiryNumber}-${selected.revision}.pdf`}
           href={`/commercial/quotes/enquiry/${enquiryId}/pdf?revision=${selected.revision}`} mediaType="application/pdf">Open PDF</AttachmentViewerLink></Button>
       </div>

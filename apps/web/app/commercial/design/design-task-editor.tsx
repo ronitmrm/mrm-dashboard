@@ -111,6 +111,8 @@ type DesignOptions = {
 }
 
 type DesignAttachment = {
+  id?: string
+  customerSelected?: boolean
   fileName: string
   href: string
   purpose: string
@@ -120,6 +122,7 @@ const designSections = [
   { id: "product", label: "Product Details" },
   { id: "bom", label: "BOM" },
   { id: "files", label: "Files" },
+  { id: "customer-drawings", label: "Customer Drawings" },
   { id: "controls", label: "Design Controls" },
 ] as const
 
@@ -998,7 +1001,7 @@ export function DesignTaskEditor({
       <input name="approval_status" type="hidden" value="Pending" />
       <div
         aria-label="Design workspace sections"
-        className="grid grid-cols-2 gap-1 rounded-xl border bg-muted/40 p-1 lg:grid-cols-4"
+        className="grid grid-cols-2 gap-1 rounded-xl border bg-muted/40 p-1 lg:grid-cols-5"
         role="tablist"
       >
         {designSections.map((section) => {
@@ -1499,6 +1502,29 @@ export function DesignTaskEditor({
                   />
                 ))}
               </div>
+            </FieldSet>
+          </div>
+
+          <div hidden={activeSection !== "customer-drawings"} id="design-panel-customer-drawings" role="tabpanel">
+            <FieldSet className="rounded-xl border bg-muted/20 p-5">
+              <FieldLegend>Customer Drawings</FieldLegend>
+              <FieldDescription>Select the drawings Sales should receive with this part&apos;s quote, or upload additional customer drawings. Working files remain separate. Unavailable drawings are not attached.</FieldDescription>
+              <input type="hidden" name="customer_drawings_present" value="1" />
+              {attachments.filter((attachment) => attachment.id).map((attachment) => (
+                <div className="flex items-center gap-3" key={attachment.id}>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" name="customer_drawing_file_ids" value={attachment.id}
+                      defaultChecked={attachment.customerSelected ?? false} />
+                    {attachment.fileName}
+                  </label>
+                  <AttachmentViewerLink fileName={attachment.fileName} href={attachment.href}>View</AttachmentViewerLink>
+                </div>
+              ))}
+              <Field>
+                <FieldLabel htmlFor="customer-drawing-files">Add Customer Drawings</FieldLabel>
+                <Input id="customer-drawing-files" name="customer_drawing_files" type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.dwg,.dxf" />
+                <FieldDescription>New uploads are selected automatically when you save. Maximum 25 MB per file.</FieldDescription>
+              </Field>
             </FieldSet>
           </div>
 

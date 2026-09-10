@@ -18,6 +18,7 @@ export const designWorkspaceSections = [
   "product",
   "bom",
   "files",
+  "customer-drawings",
   "controls",
 ] as const
 

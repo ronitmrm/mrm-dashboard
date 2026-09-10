@@ -7,6 +7,7 @@ export const commercialArtifactPurposes = [
   "sales_clarification",
   "internal_drawing",
   "customer_marked",
+  "customer_drawing",
   "cad",
 ] as const
 
