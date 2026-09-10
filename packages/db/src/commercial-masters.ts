@@ -857,7 +857,9 @@ export function createCommercialMasterRepository(
       "SELECT id, 'commercial_material_grade' kind, name label FROM catalog.material_grades WHERE organization_id = $1",
     commercial_material_rate: `
       SELECT rate.id, 'commercial_material_rate' kind,
-        grade.name || ' / ' || rod.name label
+        grade.name || ' / ' || rod.name label,
+        rate.alloy_premium::float8 AS "alloyPremium",
+        rate.extrusion_cost::float8 AS "extrusionCost"
       FROM sales.material_rates rate
       JOIN catalog.material_grades grade ON grade.id = rate.material_grade_id
       JOIN catalog.rod_types rod ON rod.id = rate.rod_type_id
@@ -1051,8 +1053,10 @@ export function createCommercialMasterRepository(
         kind: EditableCommercialMasterKind
         label: string
         costPerKg?: number | null
+        alloyPremium?: number | null
+        extrusionCost?: number
       }>(
-        `SELECT id, kind, label${filtersCommercialTerm && ['packaging_terms', 'incoterms'].includes(input.termType!)
+        `SELECT id, kind, label${input.kind === 'commercial_material_rate' ? ', "alloyPremium", "extrusionCost"' : ''}${filtersCommercialTerm && ['packaging_terms', 'incoterms'].includes(input.termType!)
           ? ', (SELECT cost_per_kg::float8 FROM sales.commercial_terms term WHERE term.id = editable_rows.id) AS "costPerKg"' : ''}
          FROM (${editableQuery}) editable_rows
          ORDER BY lower(label), id`,
@@ -1061,6 +1065,21 @@ export function createCommercialMasterRepository(
           : [input.organizationId]
       )
       return result.rows
+    },
+
+    async updateMaterialRate(input: MutationContext & { id: string; alloyPremium: number | null; extrusionCost: number }) {
+      if ((input.alloyPremium !== null && (!Number.isFinite(input.alloyPremium) || input.alloyPremium < 0)) || !Number.isFinite(input.extrusionCost) || input.extrusionCost < 0)
+        throw new Error("Material prices must be nonnegative INR/kg amounts.")
+      return transaction(pool, async client => {
+        const result = await client.query(`UPDATE sales.material_rates
+          SET alloy_premium = $1, extrusion_cost = $2, updated_by_user_id = $3,
+              updated_at = now(), row_version = row_version + 1
+          WHERE id = $4 AND organization_id = $5 RETURNING id`,
+          [input.alloyPremium, input.extrusionCost, input.actorUserId ?? null, input.id, input.organizationId])
+        if (result.rowCount !== 1) throw new Error("Material rate was not found.")
+        await audit(client, { ...input, action: 'updated', kind: 'materialRate',
+          targetId: input.id, targetSchema: 'sales', targetTable: 'material_rates' })
+      })
     },
 
     async updateTermCost(input: MutationContext & { id: string; termType: 'packaging_terms' | 'incoterms'; costPerKg: number }) {

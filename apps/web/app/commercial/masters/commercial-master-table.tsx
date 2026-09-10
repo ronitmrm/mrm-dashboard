@@ -32,6 +32,7 @@ import {
   deleteCommercialMasterAction,
   renameCommercialMasterAction,
   updateCommercialTermCostAction,
+  updateMaterialRateAction,
 } from "./actions"
 import {
   commercialMasterKinds,
@@ -45,6 +46,8 @@ type CommercialMasterRow = {
   kind: string
   label: string
   costPerKg?: number | null
+  alloyPremium?: number | null
+  extrusionCost?: number
 }
 
 function kindLabel(kind: string) {
@@ -56,6 +59,7 @@ function kindLabel(kind: string) {
 
 export function CommercialMasterTable({
   canSaveCost = false,
+  canSaveRates = false,
   canWrite,
   canDelete = canWrite,
   canRename = canWrite,
@@ -64,6 +68,7 @@ export function CommercialMasterTable({
   selectionLocked = false,
 }: {
   canSaveCost?: boolean
+  canSaveRates?: boolean
   canWrite: boolean
   canDelete?: boolean
   canRename?: boolean
@@ -115,6 +120,7 @@ export function CommercialMasterTable({
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
+              {workspaceKind === "materialRate" ? <><TableHead>Alloy Premium (INR/kg)</TableHead><TableHead>Extrusion Cost (INR/kg)</TableHead></> : null}
               {workspaceKind === "packaging_terms" || workspaceKind === "incoterms" ? <TableHead>Cost (INR/kg)</TableHead> : null}
               {canWrite ? (
                 <TableHead className="text-right">Actions</TableHead>
@@ -125,6 +131,7 @@ export function CommercialMasterTable({
             {visibleRows.map((row) => (
               <TableRow key={row.id}>
                 <TableCell>{row.label}</TableCell>
+                {workspaceKind === "materialRate" ? <><TableCell>{row.alloyPremium ?? "Market-based"}</TableCell><TableCell>{row.extrusionCost ?? "Not set"}</TableCell></> : null}
                 {workspaceKind === "packaging_terms" || workspaceKind === "incoterms" ? (
                   <TableCell data-filter-value={row.costPerKg ?? "Not set"}>
                     {canSaveCost ? (
@@ -140,14 +147,14 @@ export function CommercialMasterTable({
                 {canWrite ? (
                   <TableCell>
                     <div className="flex justify-end gap-1">
-                      {canRename && row.kind !== "commercial_material_rate" ? (
+                      {(row.kind === "commercial_material_rate" ? canSaveRates : canRename) ? (
                         <Button
                           onClick={() => setEditing(row)}
                           size="sm"
                           type="button"
                           variant="outline"
                         >
-                          <Pencil className="size-3.5" /> Edit
+                          <Pencil className="size-3.5" /> {row.kind === "commercial_material_rate" ? "Edit Rates" : "Edit"}
                         </Button>
                       ) : null}
                       {canDelete ? <Button
@@ -167,7 +174,7 @@ export function CommercialMasterTable({
               <TableRow>
                 <TableCell
                   className="py-10 text-center text-muted-foreground"
-                  colSpan={(canWrite ? 2 : 1) + (workspaceKind === "packaging_terms" || workspaceKind === "incoterms" ? 1 : 0)}
+                  colSpan={(canWrite ? 2 : 1) + (workspaceKind === "materialRate" ? 2 : workspaceKind === "packaging_terms" || workspaceKind === "incoterms" ? 1 : 0)}
                 >
                   No {selection.label.toLowerCase()} records yet.
                 </TableCell>
@@ -188,11 +195,10 @@ export function CommercialMasterTable({
             <DialogHeader>
               <DialogTitle>Edit {kindLabel(editing.kind)}</DialogTitle>
               <DialogDescription>
-                The master identity stays fixed. The new name is used
-                everywhere.
+                {editing.kind === "commercial_material_rate" ? `${editing.label}: update the existing combination. Leave Alloy Premium blank for market-based pricing.` : "The master identity stays fixed. The new name is used everywhere."}
               </DialogDescription>
             </DialogHeader>
-            <form action={renameCommercialMasterAction} className="grid gap-4">
+            <form action={editing.kind === "commercial_material_rate" ? async (formData) => { await updateMaterialRateAction(formData); setEditing(null); router.refresh() } : renameCommercialMasterAction} className="grid gap-4">
               <input name="master_view" type="hidden" value="masterTables" />
               <input name="master_id" type="hidden" value={editing.id} />
               <input name="master_kind" type="hidden" value={editing.kind} />
@@ -201,7 +207,16 @@ export function CommercialMasterTable({
                 type="hidden"
                 value={workspaceKind}
               />
-              <Field>
+              {editing.kind === "commercial_material_rate" ? <>
+                <Field>
+                  <FieldLabel htmlFor="material-rate-alloy">Alloy Premium (INR/kg)</FieldLabel>
+                  <Input id="material-rate-alloy" name="alloy_premium" type="number" min="0" step="0.000001" defaultValue={editing.alloyPremium ?? ""} placeholder="Market-based" />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="material-rate-extrusion">Extrusion Cost (INR/kg)</FieldLabel>
+                  <Input id="material-rate-extrusion" name="ext_cost" type="number" min="0" step="0.000001" required defaultValue={editing.extrusionCost ?? ""} />
+                </Field>
+              </> : <Field>
                 <FieldLabel htmlFor="commercial-master-edit-name">
                   Name
                 </FieldLabel>
@@ -211,7 +226,7 @@ export function CommercialMasterTable({
                   name="name"
                   required
                 />
-              </Field>
+              </Field>}
               <DialogFooter>
                 <Button
                   onClick={() => setEditing(null)}

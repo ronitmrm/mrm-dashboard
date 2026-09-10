@@ -309,6 +309,11 @@ time. Product Parameter Costing and Customer Parameter Costing queues are
 worklists only; each selected task opens on its own task URL so growing queues
 do not share a page with the active form.
 
+Each organization has exactly one Material Rate per Grade + Rod Type combination.
+Master Tables shows both prices; users with Material Rates Save permission can
+edit them in place. Blank Alloy Premium means market-based; zero is an explicit
+price. Adding a duplicate combination is rejected; imports update the existing rate.
+
 **Grade and Rod Material Rate**: The active Grade + Rod Type combination in the
 Material Rates master owns Alloy Premium and Extrusion Cost. Product Parameter
 Costing displays those values read-only and persists them when calculating the

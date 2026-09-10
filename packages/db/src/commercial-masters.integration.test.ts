@@ -21,6 +21,23 @@ let actorUserId: string
 let organizationId: string
 let roundTripOrganizationId: string
 
+test("material combinations expose prices, edit in place, and reject duplicate entries", async () => {
+  const result = await pool.query<{ id: string }>("INSERT INTO core.organizations (code, name) VALUES ($1, 'Rate editing') RETURNING id", [`RATES-${randomUUID()}`])
+  const context = { organizationId: result.rows[0]!.id }
+  await repository.upsertNamed({ ...context, kind: "materialGrade", name: "C3604" })
+  await repository.upsertNamed({ ...context, kind: "rodType", name: "Solid" })
+  const rate = { ...context, grade: "C3604", rodType: "Solid", alloyPremium: 7, extrusionCost: 26 }
+  const created = await repository.upsertMaterialRate(rate)
+  await expect(repository.upsertMaterialRate({ ...rate, grade: "c3604", rodType: "solid", alloyPremium: 5, extrusionCost: 20, rejectDuplicates: true })).rejects.toThrow()
+  expect(await repository.listEditableRows({ ...context, kind: "commercial_material_rate" })).toMatchObject([{ id: created.id, alloyPremium: 7, extrusionCost: 26 }])
+  await repository.updateMaterialRate({ ...context, id: created.id, alloyPremium: 5, extrusionCost: 20 })
+  expect(await repository.listEditableRows({ ...context, kind: "commercial_material_rate" })).toMatchObject([{ id: created.id, alloyPremium: 5, extrusionCost: 20 }])
+  await repository.updateMaterialRate({ ...context, id: created.id, alloyPremium: null, extrusionCost: 0 })
+  expect((await repository.snapshot(context.organizationId)).materialRates).toMatchObject([{ alloyPremium: null, extrusionCost: 0 }])
+  await expect(repository.updateMaterialRate({ ...context, id: created.id, alloyPremium: -1, extrusionCost: 20 })).rejects.toThrow()
+  await expect(repository.updateMaterialRate({ organizationId, id: created.id, alloyPremium: 1, extrusionCost: 2 })).rejects.toThrow()
+})
+
 test("unified commercial masters retain costs and reject costs on shipment mode", async () => {
   const result = await pool.query<{ id: string }>(
     "INSERT INTO core.organizations (code, name) VALUES ($1, 'Term costs') RETURNING id",
