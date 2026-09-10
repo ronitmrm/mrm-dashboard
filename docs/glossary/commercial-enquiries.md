@@ -308,7 +308,9 @@ Package or Assembly contributes its recursively derived weight. Pieces per Kg is
 `1000 / One-Piece Weight`; neither value is a parent-level manual input.
 
 **Customer Parameter Costing**: The customer- and Enquiry-specific price step
-after Product Parameter Costing. It applies scrap/purchase factors, profit,
+after Product Parameter Costing. Customer Part Code and enquiry Quantity are
+read-only in costing. Quote saves take both values from the enquiry line;
+costing cannot override them. It applies scrap/purchase factors, profit,
 packaging, shipping, and FX without changing the Product master cost. Product
 Overhead is an INR/kg Product Parameter input and cannot be entered or overridden
 at the customer level. For a Package or Assembly, Product Overhead joins only the
