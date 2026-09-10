@@ -51,10 +51,12 @@ const money = (value: number) =>
 const percent = (value: number) => Number((value * 100).toFixed(6))
 
 function NumberField({
+  readOnly = false,
   defaultValue,
   label,
   name,
 }: {
+  readOnly?: boolean
   defaultValue: number
   label: string
   name: string
@@ -63,6 +65,7 @@ function NumberField({
     <Field>
       <FieldLabel htmlFor={name}>{label}</FieldLabel>
       <Input
+        readOnly={readOnly}
         defaultValue={defaultValue}
         id={name}
         min="0"
@@ -396,11 +399,13 @@ export async function CustomerParameterCostingView({
                         defaultValue={selectedTask.quoteDefaults.packingCost}
                         label="Packing INR / Kg"
                         name="packing_cost"
+                        readOnly
                       />
                       <NumberField
                         defaultValue={selectedTask.quoteDefaults.shippingCost}
                         label="Shipping INR / Kg"
                         name="shipping_cost"
+                        readOnly
                       />
                       <Field>
                         <FieldLabel htmlFor="packaging">Packaging</FieldLabel>
@@ -410,11 +415,12 @@ export async function CustomerParameterCostingView({
                           }
                           id="packaging"
                           name="packaging"
+                          readOnly
                         />
                       </Field>
                       <Field>
                         <FieldLabel htmlFor="shipping_terms">
-                          Shipping Terms
+                          Incoterms
                         </FieldLabel>
                         <Input
                           defaultValue={
@@ -422,6 +428,7 @@ export async function CustomerParameterCostingView({
                           }
                           id="shipping_terms"
                           name="shipping_terms"
+                          readOnly
                         />
                       </Field>
                     </div>
@@ -554,7 +561,10 @@ export async function CustomerParameterCostingView({
                 ) : null}
 
                 <div className="flex flex-wrap gap-2">
-                  <Button name="action" type="submit" value="in_progress">
+                  {!selectedTask.quoteDefaults.masterCostsReady ? (
+                    <p className="w-full text-sm text-destructive">Select active Packaging and Incoterms on the enquiry and set their INR/kg costs in Masters before costing.</p>
+                  ) : null}
+                  <Button disabled={!selectedTask.quoteDefaults.masterCostsReady} name="action" type="submit" value="in_progress">
                     Calculate And Save In Progress
                   </Button>
                   <Button
@@ -562,6 +572,7 @@ export async function CustomerParameterCostingView({
                     type="submit"
                     value="complete"
                     variant="secondary"
+                    disabled={!selectedTask.quoteDefaults.masterCostsReady}
                   >
                     Calculate And Complete Costing
                   </Button>

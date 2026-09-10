@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto"
+import { enquiryMasterCosts } from "./commercial-term-selection"
 
 import type { Pool, PoolClient } from "pg"
 
@@ -2702,6 +2703,13 @@ export function createCommercialCostingRepository(
         if (!row) {
           throw new Error("Enquiry and product are required.")
         }
+        const masterCosts = await enquiryMasterCosts(client, row.enquiry_id)
+        input = {
+          ...input,
+          packaging: masterCosts.packaging,
+          shippingTerms: masterCosts.shippingTerms,
+          inputs: { ...input.inputs, packingCost: masterCosts.packingCost, shippingCost: masterCosts.shippingCost },
+        }
         const rootProduct = await getProduct(client, input.itemId)
         const productMatches =
           row.item_id === rootProduct.id ||
@@ -3054,6 +3062,8 @@ export function createCommercialCostingRepository(
         quote_conversion_rate: string | null
         quote_id: string | null
         quote_packing_cost: string | null
+        master_packing_cost: string | null
+        master_shipping_cost: string | null
         quote_packaging: string | null
         quote_profit_percent: string | null
         quote_purchase_times: string | null
@@ -3075,7 +3085,10 @@ export function createCommercialCostingRepository(
             enquiry.enquiry_number, customer.company_name,
             enquiry_item.customer_part_code, enquiry_item.quantity,
             enquiry.conversion_rate, enquiry.currency,
-            enquiry.packaging_terms, enquiry.incoterms,
+            COALESCE(packaging_master.name, enquiry.packaging_terms) AS packaging_terms,
+            COALESCE(incoterm_master.name, enquiry.incoterms) AS incoterms,
+            packaging_master.cost_per_kg::text AS master_packing_cost,
+            incoterm_master.cost_per_kg::text AS master_shipping_cost,
             item.id AS item_id, item.uid,
             item.item_type, item.weight_100_pcs, item.casting,
             item.alloy_premium,
@@ -3103,6 +3116,14 @@ export function createCommercialCostingRepository(
           JOIN sales.enquiry_items enquiry_item
             ON enquiry_item.id = design.enquiry_item_id
           JOIN sales.enquiries enquiry ON enquiry.id = enquiry_item.enquiry_id
+          LEFT JOIN sales.commercial_terms packaging_master
+            ON packaging_master.id = enquiry.packaging_term_id
+            AND packaging_master.organization_id = enquiry.organization_id
+            AND packaging_master.term_type = 'packaging_terms' AND packaging_master.active
+          LEFT JOIN sales.commercial_terms incoterm_master
+            ON incoterm_master.id = enquiry.incoterm_id
+            AND incoterm_master.organization_id = enquiry.organization_id
+            AND incoterm_master.term_type = 'incoterms' AND incoterm_master.active
           JOIN sales.customers customer ON customer.id = enquiry.customer_id
           JOIN core.organizations organization
             ON organization.id = enquiry.organization_id
@@ -3389,15 +3410,16 @@ export function createCommercialCostingRepository(
             asNumber(row.conversion_rate, 1)
           ),
           id: row.quote_id,
-          packingCost: asNumber(row.quote_packing_cost),
-          packaging: row.quote_packaging ?? row.packaging_terms,
+          packingCost: asNumber(row.quote_status && row.quote_status !== 'Draft' ? row.quote_packing_cost : row.master_packing_cost),
+          packaging: row.quote_status && row.quote_status !== 'Draft' ? row.quote_packaging : row.packaging_terms,
+          masterCostsReady: row.master_packing_cost !== null && row.master_shipping_cost !== null,
           profitPercent: asNumber(row.quote_profit_percent),
           purchaseTimes: asNumber(row.quote_purchase_times, 1),
           rateInr: asNumber(row.quote_rate_inr),
           rateUsd: asNumber(row.quote_rate_usd),
           scrapRate: asNumber(row.quote_scrap_rate),
-          shippingCost: asNumber(row.quote_shipping_cost),
-          shippingTerms: row.quote_shipping_terms ?? row.incoterms,
+          shippingCost: asNumber(row.quote_status && row.quote_status !== 'Draft' ? row.quote_shipping_cost : row.master_shipping_cost),
+          shippingTerms: row.quote_status && row.quote_status !== 'Draft' ? row.quote_shipping_terms : row.incoterms,
           status: row.quote_status,
         },
         uid: row.uid,

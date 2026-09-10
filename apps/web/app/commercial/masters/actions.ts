@@ -126,6 +126,16 @@ async function withMasters<T>(
   }
 }
 
+export async function updateCommercialTermCostAction(formData: FormData) {
+  const termType = required(formData, "term_type")
+  if (termType !== "packaging_terms" && termType !== "incoterms") throw new Error("Unknown cost master.")
+  const costPerKg = Number(required(formData, "cost_per_kg"))
+  await withMasters(masterCapability(termType, "save"), (repository, actorUserId, organizationId) =>
+    repository.updateTermCost({ actorUserId, organizationId, id: required(formData, "master_id"), termType, costPerKg }))
+  revalidatePath(mastersPath)
+  revalidatePath("/commercial/customer-costing")
+}
+
 export async function upsertMasterAction(formData: FormData) {
   return withMasterSaveFeedback(async () => {
     const kind = required(formData, "kind")
@@ -205,6 +215,8 @@ export async function upsertMasterAction(formData: FormData) {
               active: active(formData),
               name: required(formData, "name"),
               termType: termType as CommercialTermType,
+              costPerKg: ["packaging_terms", "incoterms"].includes(termType ?? "")
+                ? Number(required(formData, "cost_per_kg")) : undefined,
             })
           case "quoteTerm":
             return repository.upsertQuoteTerm({

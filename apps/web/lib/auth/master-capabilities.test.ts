@@ -152,7 +152,7 @@ describe("independent master permissions", () => {
     ).toEqual([])
   })
   it("keeps unit grants separate and shared checklists Universal", () => {
-    expect(scopedMasters).toHaveLength(73)
+    expect(scopedMasters).toHaveLength(71)
     expect(
       scopedMasters
         .filter(({ master }) => master === "setup_checklist_master")

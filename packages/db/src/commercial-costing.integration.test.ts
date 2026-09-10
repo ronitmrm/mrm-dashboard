@@ -4,6 +4,8 @@ import { Pool } from "pg"
 import { afterAll, beforeAll, describe, expect, test } from "vitest"
 
 import { createCommercialCostingRepository } from "./commercial-costing"
+import { createCommercialMasterRepository } from "./commercial-masters"
+import { createCommercialWorkflowRepository } from "./commercial-workflow"
 import { migrateDatabase } from "./migrate"
 
 const connectionString =
@@ -17,6 +19,30 @@ let enquiryItemId: string
 let itemId: string
 let organizationCode: string
 let organizationId: string
+
+test("costing uses selected master IDs and ignores submitted term names and costs", async () => {
+  const masters = createCommercialMasterRepository({ pool })
+  const workflow = createCommercialWorkflowRepository({ pool })
+  const pack = await masters.upsertCommercialTerm({ organizationId, name: "Bulk", termType: "packaging_terms", costPerKg: 5 })
+  const ship = await masters.upsertCommercialTerm({ organizationId, name: "FOB", termType: "incoterms", costPerKg: 7 })
+  await expect(workflow.createEnquiry({ organizationId, customerId, receivedOn: "2026-09-10", commercialTerms: { incoterms: "NOT IN MASTER" } })).rejects.toThrow("active Incoterms")
+  const selectedLine = await createEnquiryItem({ customerPartCode: `TERMCOST-${randomUUID()}`, itemId, nextStageStatus: "Product Costing Complete" })
+  const enq = await workflow.createEnquiry({ organizationId, customerId, receivedOn: "2026-09-10", commercialTerms: { packagingTerms: "Bulk", incoterms: "FOB" } })
+  // Move the downstream fixture onto an enquiry saved through the real intake interface.
+  await pool.query("UPDATE sales.enquiry_items SET enquiry_id=$2 WHERE id=$1", [selectedLine, enq.id])
+  await repository.updateProductCostParameters({ itemId, action: "complete" })
+  const input = { enquiryItemId: selectedLine, itemId, quantity: 100, inputs: { conversionRate: 80, packingCost: 999, shippingCost: 999, profitPercent: 0, purchaseTimes: 1, scrapRate: 0 }, packaging: "Forged packaging", shippingTerms: "Air" }
+  const first = await repository.saveQuote(input)
+  const second = await repository.saveQuote({ ...input, inputs: { ...input.inputs, packingCost: 0, shippingCost: 0 } })
+  expect(second.rateInr).toBe(first.rateInr)
+  const tasks = await repository.listCostingTasks(organizationCode, { enquiryItemId: selectedLine })
+  expect(tasks[0]?.quoteDefaults).toMatchObject({ packaging: "Bulk", shippingTerms: "FOB", packingCost: 5, shippingCost: 7 })
+  await masters.updateTermCost({ organizationId, id: pack.id, termType: "packaging_terms", costPerKg: 8 })
+  const changed = await repository.saveQuote(input)
+  expect(changed.rateInr).toBeGreaterThan(first.rateInr)
+  await masters.setActive({ organizationId, id: ship.id, kind: "commercialTerm", active: false })
+  await expect(repository.saveQuote(input)).rejects.toThrow("active Packaging and Incoterms")
+})
 
 async function createEnquiryItem(input: {
   customerPartCode: string
