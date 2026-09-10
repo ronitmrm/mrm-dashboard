@@ -1,6 +1,7 @@
 import type { PoolClient } from "pg"
 
 export type ReplacementAppointment = {
+  applicationId?: string | null
   id: string
   employeeName: string
   employeeCode: string | null
@@ -29,6 +30,7 @@ export async function applyReplacementAssignment(
     employeeEvent?: string | null
     employeeName?: string | null
     employeeCode?: string | null
+    appointedApplicationId?: string | null
   },
   targets: readonly AssignmentTarget[]
 ) {
@@ -39,8 +41,9 @@ export async function applyReplacementAssignment(
     post_id: string
     employee_name: string
     employee_code: string | null
+    application_id: string | null
   }>(
-    `SELECT id, post_id, employee_name, employee_code
+    `SELECT id, post_id, employee_name, employee_code, application_id
      FROM recruitment.post_replacements
      WHERE organization_id = $1 AND post_id = ANY($2::uuid[]) AND status = 'Pending'
      ORDER BY post_id FOR UPDATE`,
@@ -58,7 +61,8 @@ export async function applyReplacementAssignment(
       pending.rows.some(
         (row) =>
           row.employee_name !== replacement.employee_name ||
-          row.employee_code !== replacement.employee_code
+          row.employee_code !== replacement.employee_code ||
+          row.application_id !== replacement.application_id
       )
     ) {
       throw new Error(
@@ -100,7 +104,7 @@ export async function applyReplacementAssignment(
         `UPDATE recruitment.posts
          SET employee_name = $1, employee_code = $2, status = $3,
              joining_date = current_date, last_working_date = NULL,
-             appointed_application_id = NULL, updated_by_user_id = $4,
+             appointed_application_id = $7, updated_by_user_id = $4,
              updated_at = now(), row_version = row_version + 1
          WHERE organization_id = $5 AND id = ANY($6::uuid[])`,
         [
@@ -110,9 +114,15 @@ export async function applyReplacementAssignment(
           input.actorUserId ?? null,
           input.organizationId,
           ids,
+          replacement.application_id ?? null,
         ]
       )
       return "replacement_joined"
+    }
+    if (replacement.application_id) {
+      throw new Error(
+        "Record Did Not Join in the candidate's job to cancel this appointment and reopen the job."
+      )
     }
     await client.query(
       `UPDATE recruitment.post_replacements SET status = 'Cancelled',
@@ -152,8 +162,8 @@ export async function applyReplacementAssignment(
   for (const post of targets) {
     await client.query(
       `INSERT INTO recruitment.post_replacements
-         (organization_id, post_id, employee_name, employee_code, outgoing_assignment, created_by_user_id)
-       SELECT $1, id, $3, $4, to_jsonb(post), $5
+         (organization_id, post_id, employee_name, employee_code, outgoing_assignment, created_by_user_id, application_id)
+       SELECT $1, id, $3, $4, to_jsonb(post), $5, $6
        FROM recruitment.posts post WHERE id = $2 AND organization_id = $1`,
       [
         input.organizationId,
@@ -161,6 +171,7 @@ export async function applyReplacementAssignment(
         employeeName,
         employeeCode,
         input.actorUserId ?? null,
+        input.appointedApplicationId ?? null,
       ]
     )
   }

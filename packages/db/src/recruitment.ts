@@ -927,7 +927,8 @@ async function completeCandidateAppointmentInTransaction(
         organizationId: input.organizationId,
         postId: application.post_id,
       },
-      randomUUID()
+      randomUUID(),
+      true
     )
     await client.query(
       `
@@ -1164,7 +1165,8 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         `
           SELECT post.id, post.post_code, post.vacancy_code,
             COALESCE((SELECT jsonb_agg(jsonb_build_object(
-              'id', replacement.id, 'employeeName', replacement.employee_name,
+              'id', replacement.id, 'applicationId', replacement.application_id,
+              'employeeName', replacement.employee_name,
               'employeeCode', replacement.employee_code, 'status', replacement.status,
               'appointedAt', replacement.created_at::date::text,
               'completedAt', replacement.completed_at::date::text,
@@ -1580,7 +1582,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
                 application.status, application.interview_at::text,
                 application.did_not_join_on::text, application.did_not_join_reason,
                 (application.status = 'Approved' AND application.willing_to_join = true
-                  AND EXISTS (SELECT 1 FROM recruitment.posts reserved
+                  AND ((EXISTS (SELECT 1 FROM recruitment.posts reserved
                     JOIN recruitment.job_posts opening ON opening.post_id = reserved.id
                     WHERE opening.id = application.job_post_id
                       AND reserved.organization_id = application.organization_id
@@ -1589,7 +1591,13 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
                   AND NOT EXISTS (SELECT 1 FROM recruitment.posts assigned
                     WHERE assigned.appointed_application_id = application.id
                       AND assigned.organization_id = application.organization_id
-                      AND (assigned.status <> 'Appointed' OR NULLIF(btrim(assigned.employee_code), '') IS NOT NULL))
+                      AND (assigned.status <> 'Appointed' OR NULLIF(btrim(assigned.employee_code), '') IS NOT NULL)))
+                    OR EXISTS (SELECT 1 FROM recruitment.post_replacements replacement
+                      JOIN recruitment.job_posts opening ON opening.post_id = replacement.post_id
+                      WHERE opening.id = application.job_post_id
+                        AND replacement.organization_id = application.organization_id
+                        AND replacement.application_id = application.id
+                        AND replacement.status = 'Pending'))
                 ) AS can_record_did_not_join,
                 application.planned_round, application.joining_date::text,
                 application.willing_to_join,
@@ -3759,14 +3767,37 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
              )
            ) ORDER BY post.id FOR UPDATE OF post`, [application.id, input.organizationId, application.post_id]
         )
-        if (posts.rows.some((post) => post.status === "Occupied" || optional(post.employee_code))) {
+        const reservations = await client.query<{ post_id: string; application_id: string | null }>(
+          `SELECT post_id, application_id FROM recruitment.post_replacements
+           WHERE organization_id = $1 AND status = 'Pending'
+             AND (application_id = $2 OR post_id = ANY($3::uuid[]))
+           ORDER BY post_id FOR UPDATE`,
+          [input.organizationId, application.id, posts.rows.map((post) => post.id)]
+        )
+        const pendingReplacement = reservations.rows.length > 0
+        if (pendingReplacement && (
+          !posts.rows.length || !posts.rows.some((post) => post.id === application.post_id) ||
+          reservations.rows.length !== posts.rows.length ||
+          reservations.rows.some((row) => row.application_id !== application.id ||
+            !posts.rows.some((post) => post.id === row.post_id && post.status === "Resigned"))
+        )) {
+          throw new Error("The original replacement is no longer reserved for this application. No posts were changed.")
+        }
+        if (!pendingReplacement && posts.rows.some((post) => post.status === "Occupied" || optional(post.employee_code))) {
           throw new Error("This employee has already joined; use the employee departure workflow.")
         }
-        if (!posts.rows.length || !posts.rows.some((post) => post.id === application.post_id) || posts.rows.some((post) => post.status !== "Appointed" || post.appointed_application_id !== application.id)) {
+        if (!pendingReplacement && (!posts.rows.length || !posts.rows.some((post) => post.id === application.post_id) || posts.rows.some((post) => post.status !== "Appointed" || post.appointed_application_id !== application.id))) {
           throw new Error("The original appointment is no longer reserved for this application. No posts were changed.")
         }
         const postIds = posts.rows.map((post) => post.id)
-        await client.query(
+        if (pendingReplacement) {
+          await client.query(
+            `UPDATE recruitment.post_replacements SET status = 'Cancelled',
+               completed_at = now(), updated_by_user_id = $3
+             WHERE organization_id = $1 AND application_id = $2 AND status = 'Pending'`,
+            [input.organizationId, application.id, input.actorUserId ?? null]
+          )
+        } else await client.query(
           `UPDATE recruitment.posts SET status = 'Vacant', employee_name = NULL, employee_code = NULL,
              joining_date = NULL, last_working_date = NULL, appointed_application_id = NULL,
              updated_by_user_id = $1, updated_at = now(), row_version = row_version + 1

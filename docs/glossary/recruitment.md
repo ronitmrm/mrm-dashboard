@@ -31,8 +31,13 @@ A Resigned employee's Approved Post may reserve one incoming employee while the
 outgoing employee serves notice. This reservation does not add approved headcount
 or replace the current employee, Employee ID, or Last Working Date.
 
-Employee Assignment's Appointed event records the replacement separately. HR
-may cancel that pending appointment without affecting the outgoing employee.
+Employee Assignment's Appointed event and accepted Job Candidate Appointment
+details record the replacement separately. Candidate reservations retain their
+application link and agreed joining terms. Did Not Join cancels only that
+candidate's pending reservation and reopens the same job; the outgoing employee
+is unchanged. Confirming Replacement Joined retains the application link for
+employment history. Candidate reservations are cancelled through Did Not Join.
+HR may cancel a manual pending appointment without affecting the outgoing employee.
 After the outgoing Last Working Date, HR explicitly confirms Replacement Joined
 with the incoming employee's numeric Employee ID. The outgoing assignment is
 retained in replacement history and the incoming employee becomes Occupied.
