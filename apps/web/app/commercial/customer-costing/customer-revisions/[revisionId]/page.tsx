@@ -121,7 +121,7 @@ export default async function CustomerRevisionCostingPage({
     }
   })()
   const { selectedRevision, stages, prices } = data
-  const isCompleted = selectedRevision.status === "Completed"
+  const isCompleted = ["Completed", "Cancelled"].includes(selectedRevision.status)
   return (
     <div className="grid gap-6">
       <PageHeader title="Customer Parameter Costing" />

@@ -293,6 +293,9 @@ Legacy original values are shown only when saved evidence exists; current master
 values must never be presented as historical inputs. Completed history cannot be edited.
 
 **Customer Parameter Bulk Revision**: Customer-specific commercial recalculation.
+Cancelled requests retain their staged changes and reason as read-only history,
+leave pending queues and counts, and cannot be staged, modified or completed.
+Cancellation never publishes or changes a price.
 Customer Bulk Revision owns request creation, request status and completed
 read-only revision details.
 Pending requests appear in Customer Parameter Costing; each opens a dedicated

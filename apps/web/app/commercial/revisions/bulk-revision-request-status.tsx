@@ -88,8 +88,8 @@ export async function BulkRevisionRequestStatus({
                   <StatusBadge value={request.status} />
                 </TableCell>
                 <TableCell>
-                  {request.status === "Completed"
-                    ? "Completed"
+                  {["Completed", "Cancelled"].includes(request.status)
+                    ? request.status
                     : origin === "customer" ||
                         request.status === "Pending Customer Costing"
                       ? "Customer Parameter Costing"
