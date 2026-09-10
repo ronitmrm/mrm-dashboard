@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises"
 import path from "node:path"
 import fontkit from "@pdf-lib/fontkit"
 import { PDFDocument, rgb } from "pdf-lib"
+import { quotationRevisionLabel } from "./quotation-revision"
 
 export type QuoteDocument = {
   companyName: string
@@ -225,6 +226,7 @@ export async function buildQuotePdf(
     `QTN-${document.enquiryNumber}`
   const details = [
     ["Quotation No:", quoteNumber],
+    ["Quote Revision:", quotationRevisionLabel(document.revision)],
     ["RFQ No:", document.customerReference || "-"],
     [
       "Date:",

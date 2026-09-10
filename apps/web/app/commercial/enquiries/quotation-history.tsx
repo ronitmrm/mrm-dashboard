@@ -7,7 +7,7 @@ import { SectionCard, CardHeader, CardTitle, CardContent } from "@workspace/ui/c
 import { OperationalTable, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@workspace/ui/components/table"
 import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
 
-export const quotationRevisionLabel = (revision: number) => revision === 0 ? "Original" : `Revision ${revision}`
+import { quotationRevisionLabel } from "@/lib/pricing/quotation-revision"
 
 export function QuotationTabs({enquiryId,versions,selected}:{enquiryId:string;versions:QuotationVersion[];selected:number}) {
   return <nav aria-label="Quotation revisions" role="tablist" className="flex gap-2 overflow-x-auto border-b pb-2">
