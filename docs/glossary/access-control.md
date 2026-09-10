@@ -37,6 +37,12 @@ administrative work does not transfer it. Explicit user permission denials,
 employee eligibility, organization boundaries, workflow validation and
 immutable-history rules still apply.
 
+**System Administrator**: The protected `administrator` Application Role has the
+same cross-salesperson enquiry access as Administrative, including Excel View,
+Sales tasks, sent quotations, follow-up history and exports. Record ownership
+remains with its originating salesperson. Explicit permission denials and
+organization and workflow boundaries still apply.
+
 **Sales & Marketing Role**: The assignable Application Role for the sales team.
 It can read Commercial Pricing Masters and add or update the Buyer, Incoterms,
 Payment Terms, Shipment Mode, and Packaging Terms used by Customer Commercial

@@ -30,6 +30,13 @@ beforeAll(async () => {
     [organizationCode]
   )
   organizationId = organization.rows[0]!.id
+  await pool.query(
+    `INSERT INTO sales.commercial_terms
+       (organization_id, term_type, name, value, source_system, source_table, source_id)
+     VALUES ($1::uuid, 'packaging_terms', 'Export', 'Export', 'test', 'commercial_terms', $1::uuid::text || '-packaging'),
+            ($1::uuid, 'incoterms', 'FOB', 'FOB', 'test', 'commercial_terms', $1::uuid::text || '-incoterms')`,
+    [organizationId]
+  )
   const customer = await pool.query<{ id: string }>(
     `
       INSERT INTO sales.customers (
@@ -69,7 +76,7 @@ afterAll(async () => {
 })
 
 describe("originating salesperson ownership", () => {
-  test("Administrative can access another salesperson's enquiries with full permissions", async () => {
+  test.each(["administrative", "administrator"])("%s can access another salesperson's enquiries with full permissions", async (roleKey) => {
     const authorization = createAuthorizationRepository({ pool })
     const enquiry = await repository.createEnquiry({
       actorUserId: salespersonAId,
@@ -77,7 +84,6 @@ describe("originating salesperson ownership", () => {
       organizationId,
       receivedOn: "2026-09-09",
     })
-    const roleKey = "administrative"
     await pool.query(
       `INSERT INTO identity.user_roles (user_id, role_id)
          SELECT $1, id FROM identity.roles WHERE key = $2`,
