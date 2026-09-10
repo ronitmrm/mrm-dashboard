@@ -10,8 +10,9 @@ export const dynamic = "force-dynamic"
 
 export async function GET(request: Request) {
   const searchParams = new URL(request.url).searchParams
-  const selectedKey = searchParams.get("master")?.trim() || undefined
-  const selectedTermType = searchParams.get("termType")?.trim()
+  const requestedKey = searchParams.get("master")?.trim() || undefined
+  const selectedKey = requestedKey === "shipping" || requestedKey === "packaging" ? "commercials" : requestedKey
+  const selectedTermType = requestedKey === "shipping" ? "incoterms" : requestedKey === "packaging" ? "packaging_terms" : searchParams.get("termType")?.trim()
   for (const capability of commercialTemplateReadCapabilities(selectedKey, selectedTermType)) {
     await requireCapability(capability, "/commercial/masters")
   }

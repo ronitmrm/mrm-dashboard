@@ -31,6 +31,7 @@ import {
 import {
   deleteCommercialMasterAction,
   renameCommercialMasterAction,
+  updateCommercialTermCostAction,
 } from "./actions"
 import {
   commercialMasterKinds,
@@ -43,6 +44,7 @@ type CommercialMasterRow = {
   id: string
   kind: string
   label: string
+  costPerKg?: number | null
 }
 
 function kindLabel(kind: string) {
@@ -53,6 +55,7 @@ function kindLabel(kind: string) {
 }
 
 export function CommercialMasterTable({
+  canSaveCost = false,
   canWrite,
   canDelete = canWrite,
   canRename = canWrite,
@@ -60,6 +63,7 @@ export function CommercialMasterTable({
   rows,
   selectionLocked = false,
 }: {
+  canSaveCost?: boolean
   canWrite: boolean
   canDelete?: boolean
   canRename?: boolean
@@ -111,6 +115,7 @@ export function CommercialMasterTable({
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
+              {workspaceKind === "packaging_terms" || workspaceKind === "incoterms" ? <TableHead>Cost (INR/kg)</TableHead> : null}
               {canWrite ? (
                 <TableHead className="text-right">Actions</TableHead>
               ) : null}
@@ -120,6 +125,18 @@ export function CommercialMasterTable({
             {visibleRows.map((row) => (
               <TableRow key={row.id}>
                 <TableCell>{row.label}</TableCell>
+                {workspaceKind === "packaging_terms" || workspaceKind === "incoterms" ? (
+                  <TableCell data-filter-value={row.costPerKg ?? "Not set"}>
+                    {canSaveCost ? (
+                      <form action={updateCommercialTermCostAction} className="flex items-center gap-2">
+                        <input type="hidden" name="master_id" value={row.id} />
+                        <input type="hidden" name="term_type" value={workspaceKind} />
+                        <Input aria-label={`${row.label} cost INR/kg`} name="cost_per_kg" type="number" min="0" step="0.00000001" required defaultValue={row.costPerKg ?? ""} className="w-32" />
+                        <Button type="submit" size="sm" variant="outline">Save Cost</Button>
+                      </form>
+                    ) : row.costPerKg ?? "Not set"}
+                  </TableCell>
+                ) : null}
                 {canWrite ? (
                   <TableCell>
                     <div className="flex justify-end gap-1">
@@ -150,7 +167,7 @@ export function CommercialMasterTable({
               <TableRow>
                 <TableCell
                   className="py-10 text-center text-muted-foreground"
-                  colSpan={canWrite ? 2 : 1}
+                  colSpan={(canWrite ? 2 : 1) + (workspaceKind === "packaging_terms" || workspaceKind === "incoterms" ? 1 : 0)}
                 >
                   No {selection.label.toLowerCase()} records yet.
                 </TableCell>

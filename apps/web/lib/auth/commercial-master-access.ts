@@ -30,8 +30,8 @@ const templateMasters = {
   "website-temperature": "websiteField",
   "website-sealant": "websiteField",
   materials: "materialRate",
-  shipping: "shippingTerm",
-  packaging: "packagingOption",
+  shipping: "incoterms",
+  packaging: "packaging_terms",
   "quote-terms": "quoteTerm",
 } as const
 
@@ -56,6 +56,8 @@ export const commercialSnapshotMasters = {
 } as const satisfies Record<Exclude<keyof CommercialMasterSnapshot, "commercialTerms">, string>
 
 export function commercialImportCapabilities(snapshot: CommercialMasterSnapshot) {
+  if (snapshot.packagingOptions.length || snapshot.shippingTerms.length)
+    throw new Error("Use Packaging and Incoterms in the Commercial Terms sheet with cost_per_kg. Legacy cost sheets are no longer imported.")
   return [...new Set([
     ...Object.entries(commercialSnapshotMasters).filter(([key]) => snapshot[key as keyof typeof commercialSnapshotMasters].length > 0).map(([, master]) => masterCapability(master, "import")),
     ...snapshot.commercialTerms.map(({ termType }) => masterCapability(termType, "import")),
@@ -68,6 +70,10 @@ export function readableCommercialSnapshot(snapshot: CommercialMasterSnapshot, g
   const allowed = new Set(grants)
   const selected = { ...snapshot }
   for (const [key, master] of Object.entries(commercialSnapshotMasters)) {
+    if (key === "packagingOptions" || key === "shippingTerms") {
+      selected[key] = []
+      continue
+    }
     if (!allowed.has(masterCapability(master, "read"))) selected[key as keyof typeof commercialSnapshotMasters] = []
   }
   selected.commercialTerms = snapshot.commercialTerms.filter(({ termType }) => allowed.has(`masters.universal.${termType}.read`))

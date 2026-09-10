@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto"
+import { linkEnquiryCostMasters } from "./commercial-term-selection"
 import path from "node:path"
 
 import type { Pool, PoolClient, QueryResult } from "pg"
@@ -2230,6 +2231,7 @@ export function createCommercialWorkflowRepository(
           ]
         )
         const row = created.rows[0]!
+        await linkEnquiryCostMasters(client, row.id)
         await writeAuditEvent(client, {
           actorUserId: input.actorUserId,
           eventType: "enquiry.created",
@@ -2644,6 +2646,7 @@ export function createCommercialWorkflowRepository(
           targetId: input.enquiryId,
           targetTable: "enquiries",
         })
+        await linkEnquiryCostMasters(client, input.enquiryId)
         return {
           buyerName: updated.rows[0]!.buyer_name,
           id: updated.rows[0]!.id,
@@ -2970,6 +2973,7 @@ export function createCommercialWorkflowRepository(
             "Resolve pending Sales confirmation before handing over to Technical Review."
           )
         }
+        await linkEnquiryCostMasters(client, enquiryId)
         const missingTerms = [
           !row.incoterms?.trim() ? "Incoterms" : null,
           !row.payment_terms?.trim() ? "Payment Terms" : null,

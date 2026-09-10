@@ -284,7 +284,13 @@ export function MasterMaintenanceForm({
                 </NativeSelect>
               </Field>
             )}
-            <NameInput label="Value" />
+            <NameInput label="Name" />
+            {termType === "packaging_terms" || termType === "incoterms" ? (
+              <NumberInput
+                label={termType === "packaging_terms" ? "Packing Cost (INR/kg)" : "Shipping Cost (INR/kg)"}
+                name="cost_per_kg"
+              />
+            ) : null}
           </>
         ) : null}
 

@@ -94,8 +94,6 @@ describe("Pricing masters workbook", () => {
       "Website Temperature",
       "Website Sealant",
       "Material Rates",
-      "Shipping",
-      "Packaging",
       "Commercial Terms",
       "Quote PDF Terms",
     ])
@@ -225,6 +223,6 @@ describe("Pricing masters workbook", () => {
     }) as Buffer
     const reparsed = XLSX.read(output, { type: "buffer" })
 
-    expect(parseMastersWorkbook(reparsed)).toEqual(snapshot)
+    expect(parseMastersWorkbook(reparsed)).toEqual({ ...snapshot, packagingOptions: [], shippingTerms: [] })
   })
 })

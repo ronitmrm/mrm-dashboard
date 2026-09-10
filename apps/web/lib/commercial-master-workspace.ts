@@ -1,4 +1,4 @@
-export const commercialMasterKinds = [
+const commercialMasterDefinitions = [
   {
     entryKind: "materialGrade",
     label: "Material grade",
@@ -94,7 +94,7 @@ export const commercialMasterKinds = [
   },
   {
     entryKind: "commercialTerm",
-    label: "Packaging terms",
+    label: "Packaging",
     tableKind: "commercial_commercial_term",
     termType: "packaging_terms",
     workspaceKind: "packaging_terms",
@@ -127,10 +127,15 @@ export const commercialMasterKinds = [
   },
 ] as const
 
+// Legacy cost tables remain for migration/history, not as independent masters.
+export const commercialMasterKinds = commercialMasterDefinitions.filter(
+  ({ entryKind }) => entryKind !== "shippingTerm" && entryKind !== "packagingOption"
+)
+
 export type CommercialMasterEntryKind =
-  (typeof commercialMasterKinds)[number]["entryKind"]
+  (typeof commercialMasterDefinitions)[number]["entryKind"]
 export type CommercialMasterTableKind =
-  (typeof commercialMasterKinds)[number]["tableKind"]
+  (typeof commercialMasterDefinitions)[number]["tableKind"]
 
 export type CommercialMasterSelection = (typeof commercialMasterKinds)[number]
 
@@ -181,9 +186,11 @@ const templateKeys = {
   websiteField: "website-material",
 } as const satisfies Record<CommercialMasterEntryKind, string>
 
-const defaultSelection = commercialMasterKinds[0]
+const defaultSelection = commercialMasterDefinitions[0]
 
 export function commercialMasterSelection(kind?: string | null) {
+  if (kind === "shippingTerm" || kind === "commercial_shipping") kind = "incoterms"
+  if (kind === "packagingOption" || kind === "commercial_packaging") kind = "packaging_terms"
   return (
     commercialMasterKinds.find(
       (candidate) =>

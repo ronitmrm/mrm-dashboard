@@ -6,7 +6,17 @@ these defaults, while that Enquiry may select different active Commercial Master
 values without changing the Customer.
 
 **Commercial Term Master**: The company-wide active values available for Buyer,
-Incoterms, Payment Terms, Shipment Mode, and Packaging dropdowns.
+Incoterms, Payment Terms, Shipment Mode, Packaging, Brass Material Specs, Reports,
+and Taxes and Duties dropdowns. Packaging owns its packing cost (INR/kg), and
+Incoterms owns its shipping cost (INR/kg). Each has one name used on forms and
+the PDF; there is no separate PDF description. Shipment Mode has no cost.
+Enquiries reference Packaging and Incoterms master IDs. Customer Parameter
+Costing derives these costs from those records and snapshots them into the
+Quote; submitted text or costs cannot override them. Unmapped/inactive masters
+and missing costs must be corrected before costing. Zero is an explicit valid
+cost. Legacy per-100-piece packaging rates are not silently treated as INR/kg.
+Issued quotations retain their saved prices and PDF bytes. Removed values may
+be displayed as historical text, but are not offered as active dropdown choices.
 
 **Currency Catalog**: The application-owned, company-wide list of currency codes
 available in Customer, Enquiry, and Purchase Order dropdowns. Currency is not a

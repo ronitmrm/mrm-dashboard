@@ -149,7 +149,7 @@ const sheetDefinitions: SheetDefinition[] = [
   {
     key: "commercials",
     name: "Commercial Terms",
-    placeholder: { name: "", term_type: "incoterms" },
+    placeholder: { name: "", term_type: "incoterms", cost_per_kg: "" },
     widths: [20, 56],
   },
   {
@@ -306,6 +306,7 @@ function snapshotRows(
         active: row.active,
         name: row.name,
         term_type: row.termType,
+        cost_per_kg: row.costPerKg ?? "",
       }))
     case "quote-terms":
       return snapshot.quoteTerms.map((row) => ({
@@ -340,7 +341,8 @@ export function buildMastersWorkbook(
   const selectedDefinition = selectedKey
     ? sheetDefinitions.find((definition) => definition.key === selectedKey)
     : undefined
-  const selected = selectedDefinition ? [selectedDefinition] : sheetDefinitions
+  const selected = (selectedDefinition ? [selectedDefinition] : sheetDefinitions)
+    .filter(({ key }) => key !== "packaging" && key !== "shipping")
 
   for (const definition of selected) {
     const data = snapshot
@@ -521,6 +523,7 @@ export function parseMastersWorkbook(
       result.commercialTerms.push({
         active: active(row),
         name,
+        ...(cell(row, "cost_per_kg") ? { costPerKg: Number(cell(row, "cost_per_kg")) } : {}),
         termType:
           termType as CommercialMasterSnapshot["commercialTerms"][number]["termType"],
       })

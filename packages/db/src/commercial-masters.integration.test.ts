@@ -21,6 +21,20 @@ let actorUserId: string
 let organizationId: string
 let roundTripOrganizationId: string
 
+test("unified commercial masters retain costs and reject costs on shipment mode", async () => {
+  const result = await pool.query<{ id: string }>(
+    "INSERT INTO core.organizations (code, name) VALUES ($1, 'Term costs') RETURNING id",
+    [`TERMCOST-${randomUUID()}`]
+  )
+  const selected = { organizationId: result.rows[0]!.id, name: "Bulk", termType: "packaging_terms" as const, costPerKg: 5 }
+  await repository.upsertCommercialTerm(selected)
+  expect((await repository.snapshot(selected.organizationId)).commercialTerms[0]).toMatchObject({ costPerKg: 5 })
+  await repository.upsertCommercialTerm({ ...selected, costPerKg: 8 })
+  expect((await repository.snapshot(selected.organizationId)).commercialTerms[0]).toMatchObject({ costPerKg: 8 })
+  await expect(repository.upsertCommercialTerm({ ...selected, costPerKg: -1 })).rejects.toThrow()
+  await expect(repository.upsertCommercialTerm({ ...selected, termType: "shipment_mode", costPerKg: 5 })).rejects.toThrow()
+})
+
 const fixture: CommercialMasterSnapshot = {
   applications: [{ name: "Heating", sortOrder: 2 }],
   categories: [{ code: "01", name: "Fittings" }],

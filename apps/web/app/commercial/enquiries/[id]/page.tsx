@@ -74,27 +74,25 @@ function EnquiryTermSelect({
   required?: boolean
 }) {
   const id = `edit-enquiry-${name.replaceAll("_", "-")}`
-  const visibleOptions =
-    defaultValue && !options.includes(defaultValue)
-      ? [defaultValue, ...options]
-      : options
+  const historicalValue = defaultValue && !options.includes(defaultValue) ? defaultValue : null
   return (
     <Field>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
       <NativeSelect
         className="w-full"
-        defaultValue={defaultValue ?? ""}
+        defaultValue={historicalValue ? "" : defaultValue ?? ""}
         id={id}
         name={name}
         required={required}
       >
         <NativeSelectOption value="">Select {label}</NativeSelectOption>
-        {visibleOptions.map((option) => (
+        {options.map((option) => (
           <NativeSelectOption key={option} value={option}>
             {option}
           </NativeSelectOption>
         ))}
       </NativeSelect>
+      {historicalValue ? <FieldDescription>Previously saved: {historicalValue}. Select an active master value.</FieldDescription> : null}
     </Field>
   )
 }

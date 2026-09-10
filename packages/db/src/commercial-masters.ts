@@ -62,7 +62,7 @@ export type CommercialMasterSnapshot = {
   applications: Array<{ name: string; sortOrder: number }>
   categories: Array<{ code: string | null; name: string }>
   certifications: Array<{ name: string; sortOrder: number }>
-  commercialTerms: Array<ActiveNamedValue & { termType: CommercialTermType }>
+  commercialTerms: Array<ActiveNamedValue & { termType: CommercialTermType; costPerKg?: number | null }>
   customers: Array<{
     companyName: string
     country: string | null
@@ -625,24 +625,31 @@ async function upsertCommercialTermClient(
     active?: boolean
     name: string
     termType: CommercialTermType
+    costPerKg?: number | null
   }
 ) {
   const name = text(input.name, "Commercial term value")
   if (!commercialTermTypes.includes(input.termType)) {
     throw new Error("Unknown commercial term type.")
   }
+  if (input.costPerKg != null &&
+    (!["packaging_terms", "incoterms"].includes(input.termType) ||
+      !Number.isFinite(input.costPerKg) || input.costPerKg < 0)) {
+    throw new Error("Only Packaging and Incoterms support a nonnegative INR/kg cost.")
+  }
   const result = await client.query<MutationResult>(
     `
       INSERT INTO sales.commercial_terms (
-        organization_id, name, value, active, term_type,
+        organization_id, name, value, active, term_type, cost_per_kg,
         created_by_user_id, updated_by_user_id, source_system,
         source_table, source_id
       )
-      VALUES ($1, $2, $2, $3, $4, $5, $5, 'mrm-dashboard',
+      VALUES ($1, $2, $2, $3, $4, $7, $5, $5, 'mrm-dashboard',
         'quote_commercial_terms', $6)
       ON CONFLICT (organization_id, term_type, lower(name)) DO UPDATE SET
         value = EXCLUDED.value,
         active = EXCLUDED.active,
+        cost_per_kg = CASE WHEN $8 THEN EXCLUDED.cost_per_kg ELSE sales.commercial_terms.cost_per_kg END,
         updated_by_user_id = EXCLUDED.updated_by_user_id,
         updated_at = now(),
         row_version = sales.commercial_terms.row_version + 1
@@ -655,6 +662,8 @@ async function upsertCommercialTermClient(
       input.termType,
       input.actorUserId ?? null,
       randomUUID(),
+      input.costPerKg ?? null,
+      input.costPerKg !== undefined,
     ]
   )
   const row = result.rows[0]!
@@ -889,7 +898,7 @@ export function createCommercialMasterRepository(
         [organizationId]
       )
       const commercialTerms = await client.query(
-        `SELECT name, term_type, active FROM sales.commercial_terms WHERE organization_id = $1 ORDER BY term_type, lower(name)`,
+        `SELECT name, term_type, active, cost_per_kg FROM sales.commercial_terms WHERE organization_id = $1 ORDER BY term_type, lower(name)`,
         [organizationId]
       )
       const customers = await client.query(
@@ -962,6 +971,7 @@ export function createCommercialMasterRepository(
           active: row.active,
           name: row.name,
           termType: row.term_type,
+          ...(row.cost_per_kg === null ? {} : { costPerKg: Number(row.cost_per_kg) }),
         })),
         customers: customers.rows.map((row) => ({
           companyName: row.company_name,
@@ -1040,8 +1050,10 @@ export function createCommercialMasterRepository(
         id: string
         kind: EditableCommercialMasterKind
         label: string
+        costPerKg?: number | null
       }>(
-        `SELECT id, kind, label
+        `SELECT id, kind, label${filtersCommercialTerm && ['packaging_terms', 'incoterms'].includes(input.termType!)
+          ? ', (SELECT cost_per_kg::float8 FROM sales.commercial_terms term WHERE term.id = editable_rows.id) AS "costPerKg"' : ''}
          FROM (${editableQuery}) editable_rows
          ORDER BY lower(label), id`,
         filtersCommercialTerm
@@ -1049,6 +1061,20 @@ export function createCommercialMasterRepository(
           : [input.organizationId]
       )
       return result.rows
+    },
+
+    async updateTermCost(input: MutationContext & { id: string; termType: 'packaging_terms' | 'incoterms'; costPerKg: number }) {
+      if (!Number.isFinite(input.costPerKg) || input.costPerKg < 0)
+        throw new Error("Cost must be a nonnegative INR/kg amount.")
+      return transaction(pool, async client => {
+        const result = await client.query(`UPDATE sales.commercial_terms
+          SET cost_per_kg = $1, updated_by_user_id = $2, updated_at = now(), row_version = row_version + 1
+          WHERE id = $3 AND organization_id = $4 AND term_type = $5 RETURNING id`,
+          [input.costPerKg, input.actorUserId ?? null, input.id, input.organizationId, input.termType])
+        if (result.rowCount !== 1) throw new Error("Commercial cost master was not found.")
+        await audit(client, { ...input, action: 'updated', kind: 'commercialTerm',
+          targetId: input.id, targetSchema: 'sales', targetTable: 'commercial_terms' })
+      })
     },
 
     async importSnapshot(

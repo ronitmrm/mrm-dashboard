@@ -13,11 +13,16 @@ the protected Administrator identity are unchanged.
 
 ## Independent master capabilities
 
-The 70 scoped masters are defined in `lib/auth/master-capabilities.ts`: 42
+The 71 scoped masters are defined in `lib/auth/master-capabilities.ts`: 43
 Universal entries and seven per production unit. Each row owns its supported
 actions through `masters.<scope>.<master>.<action>` keys. The separate Included
 Masters inventory is removed; Capabilities renders these rows from the persisted
 permission registry. Store imports also require the same master's Save grant.
+
+Packaging and Incoterms now own their respective INR/kg costs, using their
+existing independent Save grants. Legacy Packaging Option and Shipping Term
+entries are retired from navigation and capability rows; their old role grants
+and source records are retained, not reassigned. Shipment Mode remains name-only.
 
 Rod Size is a Universal Commercial Pricing Master. Migration 0119 registers
 its five independent actions and grants them only to the system Administrator;

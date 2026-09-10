@@ -35,9 +35,11 @@ describe("commercial master workspace", () => {
 
   it("maps every table kind back to its entry form", () => {
     expect(commercialMasterSelection("commercial_shipping")).toEqual({
-      entryKind: "shippingTerm",
-      label: "Shipping term",
-      tableKind: "commercial_shipping",
+      entryKind: "commercialTerm",
+      label: "Incoterms",
+      tableKind: "commercial_commercial_term",
+      termType: "incoterms",
+      workspaceKind: "incoterms",
     })
   })
 
@@ -73,7 +75,7 @@ describe("commercial master workspace", () => {
       "/commercial/masters/template.csv?master=grades"
     )
     expect(commercialMasterTemplateHref("commercial_shipping")).toBe(
-      "/commercial/masters/template.csv?master=shipping"
+      "/commercial/masters/template.csv?master=commercials&termType=incoterms"
     )
     expect(commercialMasterTemplateHref("buyer")).toBe(
       "/commercial/masters/template.csv?master=commercials&termType=buyer"
