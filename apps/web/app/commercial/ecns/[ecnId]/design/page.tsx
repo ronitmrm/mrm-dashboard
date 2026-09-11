@@ -1,3 +1,4 @@
+import { PendingRetainedUploadForm } from "@/components/pending-retained-upload-form"
 import Link from "next/link"
 import { notFound, redirect } from "next/navigation"
 
@@ -85,7 +86,18 @@ export default async function EngineeringChangeDesignPage({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form action={completeEngineeringChangeDesignAction}>
+          <PendingRetainedUploadForm
+            action={completeEngineeringChangeDesignAction}
+            uploads={[
+              {
+                field: "drawing_file",
+                intent: {
+                  kind: "commercial-ecn-drawing",
+                  engineeringChangeNoteId: data.dossier.id,
+                },
+              },
+            ]}
+          >
             <input
               name="engineering_change_note_id"
               type="hidden"
@@ -102,7 +114,7 @@ export default async function EngineeringChangeDesignPage({
               products={data.reference.items}
               rodTypes={data.reference.rodTypes}
             />
-          </form>
+          </PendingRetainedUploadForm>
         </CardContent>
  </SectionCard>
     </div>

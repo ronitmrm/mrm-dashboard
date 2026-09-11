@@ -1,5 +1,7 @@
 "use client"
 
+import { PendingRetainedUploadForm } from "./pending-retained-upload-form"
+
 import { Upload } from "lucide-react"
 import { useRef, useState } from "react"
 
@@ -21,11 +23,17 @@ export function EnquiryLineImportButton({
   const [submitting, setSubmitting] = useState(false)
 
   return (
-    <form
+    <PendingRetainedUploadForm
       action={action}
       className="contents"
       ref={formRef}
-      onSubmit={() => setSubmitting(true)}
+      onPendingChange={setSubmitting}
+      uploads={[
+        {
+          field: "template_file",
+          intent: { kind: "commercial-enquiry-import", enquiryId },
+        },
+      ]}
     >
       <input name="enquiry_id" type="hidden" value={enquiryId} />
       <input name="organization_id" type="hidden" value={organizationId} />
@@ -52,6 +60,6 @@ export function EnquiryLineImportButton({
         <Upload className="size-4" />
         {submitting ? "Uploading..." : "Upload"}
       </Button>
-    </form>
+    </PendingRetainedUploadForm>
   )
 }

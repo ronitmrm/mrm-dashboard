@@ -1,3 +1,4 @@
+import { PendingRetainedUploadForm } from "@/components/pending-retained-upload-form"
 import { ChevronDown } from "lucide-react"
 import Link from "next/link"
 import { notFound, redirect } from "next/navigation"
@@ -304,7 +305,30 @@ export default async function NewDesignWorkspacePage({
             </section>
           </details>
 
-          <form action={saveDesignAction}>
+          <PendingRetainedUploadForm
+            action={saveDesignAction}
+            uploads={(
+              [
+                "internal_drawing",
+                "customer_marked",
+                "cad",
+                "customer_drawing",
+              ] as const
+            ).map((purpose) => ({
+              field:
+                purpose === "customer_drawing"
+                  ? "customer_drawing_files"
+                  : `${purpose}_file`,
+              includeBomLines: purpose !== "customer_drawing",
+              intent: {
+                kind: "commercial-design-attachment",
+                purpose,
+                designId: selectedItem.designId ?? "",
+                enquiryId: selectedItem.enquiryId,
+                enquiryItemId: selectedItem.enquiryItemId,
+              },
+            }))}
+          >
             <input
               name="customer_uid"
               type="hidden"
@@ -405,7 +429,7 @@ export default async function NewDesignWorkspacePage({
                 products={productOptions.rows}
               />
             )}
-          </form>
+          </PendingRetainedUploadForm>
 
           <Separator className="mt-auto" />
           <div className="grid gap-4">

@@ -1,3 +1,4 @@
+import { PendingRetainedUploadForm } from "@/components/pending-retained-upload-form"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import { DownloadAllDrawings, QuotationDrawingsCell, QuotationHistory, QuotationTabs } from "../quotation-history"
@@ -392,7 +393,19 @@ export default async function EnquiryDetailPage({
           </CardAction>
         </CardHeader>
         <CardContent>
-          <form action={addEnquiryItemAction}>
+          <PendingRetainedUploadForm
+            action={addEnquiryItemAction}
+            uploads={[
+              {
+                field: "drawing_file",
+                intent: {
+                  kind: "commercial-enquiry-item",
+                  operation: "create",
+                  enquiryId: id,
+                },
+              },
+            ]}
+          >
             <input type="hidden" name="enquiry_id" value={id} />
             <input
               type="hidden"
@@ -462,7 +475,7 @@ export default async function EnquiryDetailPage({
               </Field>
               <Button type="submit">Add Line</Button>
             </FieldGroup>
-          </form>
+          </PendingRetainedUploadForm>
         </CardContent>
  </SectionCard> : null}
 
@@ -684,7 +697,20 @@ export default async function EnquiryDetailPage({
               </div>
             </CardHeader>
             <CardContent>
-              <form action={updateEnquiryItemAction}>
+              <PendingRetainedUploadForm
+                action={updateEnquiryItemAction}
+                uploads={[
+                  {
+                    field: "drawing_file",
+                    intent: {
+                      kind: "commercial-enquiry-item",
+                      operation: "update",
+                      enquiryId: id,
+                      enquiryItemId: selectedItem.id,
+                    },
+                  },
+                ]}
+              >
                 <fieldset disabled={!canEditIntake}>
                 <input type="hidden" name="enquiry_id" value={id} />
                 <input
@@ -846,7 +872,7 @@ export default async function EnquiryDetailPage({
                   ) : null}
                 </FieldGroup>
                 </fieldset>
-              </form>
+              </PendingRetainedUploadForm>
             </CardContent>
  </SectionCard>
         ) : null}

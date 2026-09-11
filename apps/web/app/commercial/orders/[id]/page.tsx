@@ -1,3 +1,4 @@
+import { PendingRetainedUploadForm } from "@/components/pending-retained-upload-form"
 import Link from "next/link"
 
 import { createCommercialOrdersRepository } from "@workspace/db"
@@ -296,7 +297,18 @@ export default async function PurchaseOrderPage({
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <form action={uploadPurchaseOrderFileAction}>
+              <PendingRetainedUploadForm
+                action={uploadPurchaseOrderFileAction}
+                uploads={[
+                  {
+                    field: "po_file",
+                    intent: {
+                      kind: "commercial-purchase-order-source",
+                      purchaseOrderId: order.id,
+                    },
+                  },
+                ]}
+              >
                 <input
                   name="purchase_order_id"
                   type="hidden"
@@ -318,7 +330,7 @@ export default async function PurchaseOrderPage({
                     Retain Source File
                   </Button>
                 </FieldGroup>
-              </form>
+              </PendingRetainedUploadForm>
             </CardContent>
  </SectionCard>
         </div>

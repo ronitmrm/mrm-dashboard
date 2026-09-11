@@ -1,3 +1,4 @@
+import { PendingRetainedUploadForm } from "@/components/pending-retained-upload-form"
 import { createStoreRepository } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
@@ -188,8 +189,14 @@ export default async function StoreOrdersPage() {
                                   Store under your signed-in ID.
                                 </DialogDescription>
                               </DialogHeader>
-                              <form
+                              <PendingRetainedUploadForm
                                 action={receiveStoreStockAction}
+                                uploads={[
+                                  {
+                                    field: "guarantee_card",
+                                    intent: { kind: "store-guarantee-card", purchaseOrderLineId: order.id },
+                                  },
+                                ]}
                                 className="grid gap-5"
                                 encType="multipart/form-data"
                               >
@@ -284,7 +291,7 @@ export default async function StoreOrdersPage() {
                                     Receive Into Main Store
                                   </Button>
                                 </DialogFooter>
-                              </form>
+                              </PendingRetainedUploadForm>
                             </DialogContent>
                           </Dialog>
                         ) : order.orderType === "REPAIR" ? (

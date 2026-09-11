@@ -29,6 +29,7 @@ import {
 } from "lucide-react"
 
 import { ArtifactDeleteControl } from "./artifact-delete-control"
+import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
 
 type Ledger = Awaited<
   ReturnType<
@@ -135,6 +136,11 @@ export function ArtifactLedgerView({
           value={`${ledger.page} / ${ledger.totalPages}`}
         />
       </section>
+
+      <p className="text-xs text-muted-foreground">
+        The 5 GB-months allowance is advisory. Storage counts each live physical
+        object once, even when multiple records reference it.
+      </p>
 
       <SectionCard>
         <CardHeader>
@@ -329,27 +335,30 @@ export function ArtifactLedgerView({
                   </TableCell>
                   <TableCell>
                     <div className="flex justify-end gap-1">
-                      {artifact.contentPath ? (
+                      {artifact.contentPath &&
+                      artifact.lifecycleState !== "deleted" &&
+                      artifact.providerState === "available" ? (
                         <>
                           <Button asChild size="xs" variant="outline">
-                            <a
+                            <AttachmentViewerLink
                               href={artifact.contentPath}
-                              rel="noreferrer"
-                              target="_blank"
+                              fileName={artifact.fileName}
+                              mediaType={artifact.mediaType}
+                              byteSize={artifact.byteSize}
                             >
                               <ExternalLink aria-hidden="true" data-icon />
                               {artifact.previewKind === "none"
                                 ? "Open"
                                 : "Preview"}
-                            </a>
+                            </AttachmentViewerLink>
                           </Button>
                           <Button asChild size="xs" variant="ghost">
                             <a
                               download={artifact.fileName}
-                              href={`${artifact.contentPath}?download`}
+                              href={`${artifact.contentPath}?download=1`}
                             >
                               <FileDown aria-hidden="true" data-icon />
-                              Download
+                              Download Original
                             </a>
                           </Button>
                         </>
