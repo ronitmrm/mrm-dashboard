@@ -1,3 +1,4 @@
+import { PendingRetainedUploadForm } from "@/components/pending-retained-upload-form"
 import Link from "next/link"
 import { quotationRevisionLabel } from "@/lib/pricing/quotation-revision"
 import { X } from "lucide-react"
@@ -379,8 +380,19 @@ export default async function SalesPage({
               ) : null}
               {selectedClarification ? (
                 [selectedClarification].map((task) => (
-                  <form
+                  <PendingRetainedUploadForm
                     action={completeSalesClarificationAction}
+                    uploads={[
+                      {
+                        field: "drawing_file",
+                        intent: {
+                          kind: "commercial-sales-clarification",
+                          enquiryId: task.enquiryId,
+                          enquiryItemId: task.enquiryItemId,
+                          clarificationTaskId: task.clarificationTaskId,
+                        },
+                      },
+                    ]}
                     className="rounded-3xl border p-5"
                     key={task.clarificationTaskId}
                   >
@@ -589,7 +601,7 @@ export default async function SalesPage({
                         Complete Clarification
                       </Button>
                     </FieldGroup>
-                  </form>
+                  </PendingRetainedUploadForm>
                 ))
               ) : (
                 <p className="py-6 text-center text-sm text-muted-foreground">

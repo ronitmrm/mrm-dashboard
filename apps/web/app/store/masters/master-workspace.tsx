@@ -804,6 +804,13 @@ function masterForm(
       return (
         <MasterEntryForm
           action={createStoreSupplierPriceAction}
+          uploads={[
+            {
+              field: "supplier_quote",
+              intent: { kind: "store-supplier-quote" },
+              intentFields: { itemTypeId: "item_type_id", supplierId: "supplier_id" },
+            },
+          ]}
           encType="multipart/form-data"
         >
           <FieldGroup className="grid gap-4 md:grid-cols-3">
@@ -976,7 +983,17 @@ function StoreItemTypeForm({
   }
 
   return (
-    <MasterEntryForm action={createStoreItemTypeAction} encType="multipart/form-data">
+    <MasterEntryForm
+      action={createStoreItemTypeAction}
+      uploads={[
+        {
+          field: "asset_drawing",
+          intent: { kind: "store-item-drawing" },
+          intentFields: { itemTypeId: "master_id" },
+        },
+      ]}
+      encType="multipart/form-data"
+    >
       <input name="master_id" type="hidden" value={defaults.master_id ?? ""} />
       <FieldGroup className="grid gap-4 md:grid-cols-2">
         {editing ? (

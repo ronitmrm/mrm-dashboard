@@ -1,3 +1,4 @@
+import { PendingRetainedUploadForm } from "@/components/pending-retained-upload-form"
 import { Camera, Send } from "lucide-react"
 
 import { Button } from "@workspace/ui/components/button"
@@ -36,8 +37,14 @@ export function MaintenanceRequestForm({
         <CardTitle>New Maintenance Request</CardTitle>
       </CardHeader>
       <CardContent>
-        <form
+        <PendingRetainedUploadForm
           action={submitMaintenanceRequestAction}
+          uploads={[
+            {
+              field: "photos",
+              intent: { kind: "maintenance-request-photo", index: 1 },
+            },
+          ]}
           className="grid gap-4"
           encType="multipart/form-data"
         >
@@ -163,7 +170,7 @@ export function MaintenanceRequestForm({
           <Button className="w-fit" type="submit">
             <Send aria-hidden="true" className="size-4" /> Submit Request
           </Button>
-        </form>
+        </PendingRetainedUploadForm>
       </CardContent>
     </SectionCard>
   )
