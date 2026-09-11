@@ -10,7 +10,11 @@ import {
 } from "@workspace/db"
 import * as XLSX from "xlsx"
 
-import { createUploadThingArtifactProvider } from "../lib/uploadthing-artifact-provider"
+import {
+  createGoogleCloudArtifactProvider,
+  readGoogleCloudArtifactEnvironment,
+} from "../lib/google-cloud-artifact-provider"
+import { createOperatorGoogleCloudStorage } from "./operator-google-cloud-storage"
 
 function argument(name: string) {
   const index = process.argv.indexOf(name)
@@ -177,12 +181,17 @@ try {
     if (!drawingsDirectory) {
       console.log(JSON.stringify({ ...report, staged }, null, 2))
     } else {
+      const configuration = readGoogleCloudArtifactEnvironment()
       const filePaths = new Map(
         files.map((file) => [file.fileName.toLowerCase(), file.filePath])
       )
       const artifactService = createArtifactService({
         connectionString,
-        provider: createUploadThingArtifactProvider(),
+        provider: createGoogleCloudArtifactProvider(process.env, {
+          storageClient: await createOperatorGoogleCloudStorage(
+            configuration.projectId
+          ),
+        }),
       })
       const results = new Map<string, number>()
       try {

@@ -15,6 +15,7 @@ const localEnvironment = {
 
 function googleFile(bytes = Buffer.from("drawing")) {
   return {
+    createResumableUpload: vi.fn().mockResolvedValue(["https://session.test"]),
     delete: vi.fn().mockResolvedValue(undefined),
     download: vi.fn().mockResolvedValue([bytes]),
     getMetadata: vi.fn().mockResolvedValue([{ generation: "42" }]),
@@ -33,12 +34,15 @@ function storageWith(file: ReturnType<typeof googleFile>) {
 }
 
 describe("Google Cloud Artifact provider", () => {
-  test("validates ADC and Vercel workload identity configuration", () => {
+  test("requires an operator client locally and validates Vercel workload identity", () => {
     expect(readGoogleCloudArtifactEnvironment(localEnvironment)).toMatchObject({
       bucketName: "mrm-artifacts-test",
       projectId: "mrm-artifacts-test",
-      workloadIdentity: { kind: "application-default-credentials" },
+      workloadIdentity: { kind: "operator-client-required" },
     })
+    expect(() => createGoogleCloudArtifactProvider(localEnvironment)).toThrow(
+      "requires an explicit authenticated storage client"
+    )
     expect(() =>
       readGoogleCloudArtifactEnvironment({
         GCS_BUCKET_NAME: "Invalid Bucket",
@@ -170,5 +174,83 @@ describe("Google Cloud Artifact provider", () => {
       code: "provider-failure",
       message: "Google Cloud Storage could not read the retained file.",
     })
+  })
+
+  test("inspects resumable 308 manually and treats cancelled 499 as terminal", async () => {
+    const { storageClient } = storageWith(googleFile())
+    const fetchImplementation = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(null, {
+          headers: { Range: "bytes=0-262143" },
+          status: 308,
+        })
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 499 }))
+    const provider = createGoogleCloudArtifactProvider(localEnvironment, {
+      fetchImplementation,
+      storageClient,
+    })
+
+    await expect(
+      provider.getResumableStatus({
+        expectedByteSize: 1024 * 1024,
+        session: "https://session.test" as never,
+      })
+    ).resolves.toEqual({ complete: false, nextOffset: 262144 })
+    expect(fetchImplementation).toHaveBeenNthCalledWith(
+      1,
+      "https://session.test",
+      expect.objectContaining({ method: "PUT", redirect: "manual" })
+    )
+    await expect(
+      provider.getResumableStatus({
+        expectedByteSize: 1024 * 1024,
+        session: "https://session.test" as never,
+      })
+    ).rejects.toMatchObject({ code: "not-found" })
+  })
+
+  test("streams 25 MiB through one session in sequential chunks up to 4 MiB", async () => {
+    const { storageClient } = storageWith(googleFile())
+    const total = 25 * 1024 * 1024
+    const chunkSize = 4 * 1024 * 1024
+    const fetchImplementation = vi.fn(async (_session, init) => {
+      const range = new Headers(init?.headers).get("Content-Range")!
+      const match = /^bytes (\d+)-(\d+)\/(\d+)$/.exec(range)
+      if (!match) return new Response(null, { status: 308 })
+      const end = Number(match[2])
+      return end + 1 === total
+        ? new Response(null, { status: 200 })
+        : new Response(null, {
+            headers: { Range: `bytes=0-${end}` },
+            status: 308,
+          })
+    })
+    const provider = createGoogleCloudArtifactProvider(localEnvironment, {
+      fetchImplementation,
+      storageClient,
+    })
+    const session = "https://session.test" as never
+    let offset = 0
+    while (offset < total) {
+      const bytes = Buffer.alloc(Math.min(chunkSize, total - offset), 7)
+      const progress = await provider.uploadResumableChunk({
+        bytes,
+        expectedByteSize: total,
+        offset,
+        session,
+      })
+      expect(progress.nextOffset).toBe(offset + bytes.byteLength)
+      offset = progress.nextOffset
+    }
+
+    expect(fetchImplementation).toHaveBeenCalledTimes(7)
+    for (const [, init] of fetchImplementation.mock.calls) {
+      expect((init?.body as Uint8Array).byteLength).toBeLessThanOrEqual(
+        chunkSize
+      )
+      expect(init).toMatchObject({ method: "PUT", redirect: "manual" })
+    }
   })
 })

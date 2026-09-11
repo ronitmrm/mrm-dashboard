@@ -1,8 +1,9 @@
 # Private Google Cloud Storage Artifacts
 
-Status: Provider and private delivery implemented locally; upload transport and
-migration tooling pending. Production cloud configuration is saved; live
-application acceptance and cutover have not started.
+Status: Provider, private delivery, and server-side pending-upload transport are
+implemented locally; browser form wiring and migration tooling remain pending.
+Production cloud configuration is saved; deployed application acceptance and
+cutover have not started.
 Date: 2026-09-09.
 Revalidated: 2026-09-11 against staging `2bf5572` after rebase.
 Source: [GitHub issue #88](https://github.com/ronitmrm/mrm-dashboard/issues/88).
@@ -134,14 +135,20 @@ the accepted storage architecture or the holiday cutover decision.
 
 ## Verification still needed
 
-- Run the non-mutating live inventory before planning cutover duration or
-  claiming all retained objects fit any particular size. This checkout lacks
-  `apps/web/.env.local`, so the attempted aggregate query did not execute.
+- Confirm the user-selected Vercel Production database before treating the
+  read-only Neon inventory as the live cutover inventory. The current inspected
+  branch reports 38 live UploadThing physical objects (7,419,132 bytes) and 51
+  logical files (48 current, 3 superseded), with no metadata anomalies.
 - Production project identity, team issuer configuration, exact subject trust,
   bucket permissions/settings, and six production environment variables are
   now configured and inspected; see [GCS setup](../codebase/google-cloud-artifacts-setup.md).
   Actual runtime token exchange and real Artifact traffic remain unverified.
   No preview/staging identity requires access.
+- Operator OAuth acceptance passed the unmodified resumable provider with a
+  25 MiB temporary object in seven chunks of at most 4 MiB, confirmed-offset
+  recovery, generation-bound exact read, terminal cancellation, and complete
+  cleanup. This is provider evidence only; browser requests and deployed Vercel
+  WIF remain unverified.
 - Keep the 2026-09-11 staging baseline separate from migration regressions:
   the Quote issuance test expects draft revision 1 instead of the current 0,
   and the Administrative schema test expects 671 grants but finds 669. Both

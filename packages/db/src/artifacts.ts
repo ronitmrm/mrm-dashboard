@@ -37,12 +37,14 @@ export class ArtifactStorageError extends Error {
   }
 }
 
-export type ArtifactStorageProvider = {
+export type ArtifactStoredObjectProvider = {
   readonly identifier: ArtifactStorageProviderIdentifier
-  readonly preserveUploadsOnRollback?: boolean
   delete(input: { key: string }): Promise<void>
   read(input: { key: string }): Promise<Buffer>
-  resolveLegacyPublicUrl?(input: { key: string }): Promise<string>
+}
+
+export type ArtifactStorageProvider = ArtifactStoredObjectProvider & {
+  readonly preserveUploadsOnRollback?: boolean
   upload(input: {
     bytes: Buffer
     customId: string
@@ -74,6 +76,10 @@ export type ArtifactResumableUploadProvider = {
     expectedByteSize: number
     session: ServerResumableUploadSession
   }): Promise<ArtifactResumableUploadProgress>
+  deleteTemporary(input: { generation: string; key: string }): Promise<void>
+  readTemporary(input: {
+    key: string
+  }): Promise<{ bytes: Buffer; generation: string }>
   startResumable(input: {
     customId: string
     expectedByteSize: number
@@ -105,6 +111,7 @@ export type StoreArtifactInput = {
   mediaType: string
   organizationId: string
   origin: "generated" | "uploaded"
+  pendingUploadId?: string
   purpose: string
   supersedesPurposes?: readonly string[]
   target: ArtifactTarget
@@ -204,7 +211,7 @@ function targetLockKey(input: StoreArtifactInput) {
 export function createArtifactService(input: {
   connectionString: string
   provider?: ArtifactStorageProvider
-  compatibilityProviders?: readonly ArtifactStorageProvider[]
+  compatibilityProviders?: readonly ArtifactStoredObjectProvider[]
 }) {
   const pool = new Pool({ connectionString: input.connectionString })
 
@@ -311,6 +318,51 @@ export function createArtifactService(input: {
         storeInput,
       }
     })
+
+    async function bindPendingUpload(
+      client: PoolClient,
+      storeInput: StoreArtifactInput,
+      artifactId: string,
+      sha256: string
+    ) {
+      if (!storeInput.pendingUploadId) return
+      const bound = await client.query<{ id: string }>(
+        `
+          UPDATE core.pending_artifact_uploads
+          SET status = 'finalized', final_target_schema = $4,
+            final_target_table = $5, final_target_id = $6,
+            final_purpose = $7, final_artifact_id = $8, updated_at = now()
+          WHERE id = $1 AND owner_user_id = $2 AND organization_id = $3
+            AND completed_byte_size = $9 AND completed_sha256 = $10
+            AND (
+              (status = 'ready' AND expires_at > now())
+              OR (
+                status = 'finalized' AND final_target_schema = $4
+                AND final_target_table = $5 AND final_target_id = $6
+                AND final_purpose = $7 AND final_artifact_id = $8
+              )
+            )
+          RETURNING id
+        `,
+        [
+          storeInput.pendingUploadId,
+          storeInput.actorUserId,
+          storeInput.organizationId,
+          storeInput.target.schema,
+          storeInput.target.table,
+          storeInput.target.id,
+          storeInput.purpose,
+          artifactId,
+          storeInput.bytes.byteLength,
+          sha256,
+        ]
+      )
+      if (!bound.rows[0]) {
+        throw new Error(
+          "Pending upload is not ready or is bound to another attachment."
+        )
+      }
+    }
     const client = await pool.connect()
     const uploadedObjects: Array<{
       byteSize: number
@@ -331,7 +383,9 @@ export function createArtifactService(input: {
         const retry = await existingArtifact(client, storeInput)
         if (retry) {
           await storeInput.authorizeTarget?.(client, { isRetry: true })
-          results.push(artifactResult(retry))
+          const result = artifactResult(retry)
+          await bindPendingUpload(client, storeInput, result.id, item.sha256)
+          results.push(result)
           continue
         }
         await storeInput.authorizeTarget?.(client, { isRetry: false })
@@ -367,9 +421,6 @@ export function createArtifactService(input: {
             provider,
             sha256,
           })
-          const publicUrl = provider.resolveLegacyPublicUrl
-            ? await provider.resolveLegacyPublicUrl({ key: uploaded.key })
-            : null
           physical = await client.query<{
             id: string
             provider_key: string
@@ -396,7 +447,7 @@ export function createArtifactService(input: {
               storeInput.bytes.byteLength,
               provider.identifier,
               uploaded.key,
-              publicUrl,
+              null,
             ]
           )
         }
@@ -506,9 +557,11 @@ export function createArtifactService(input: {
             storeInput.actorUserId,
           ]
         )
-        results.push(
-          artifactResult((await existingArtifact(client, storeInput))!)
+        const result = artifactResult(
+          (await existingArtifact(client, storeInput))!
         )
+        await bindPendingUpload(client, storeInput, result.id, item.sha256)
+        results.push(result)
       }
       await client.query("COMMIT")
       uploadedObjects.length = 0
@@ -543,6 +596,53 @@ export function createArtifactService(input: {
         [query.organizationId]
       )
       return result.rows.map(artifactResult)
+    },
+
+    async getBound(input: {
+      actorUserId: string | null
+      artifactId: string
+      authorizeTarget?: (
+        client: PoolClient,
+        context: { isRetry: boolean }
+      ) => Promise<void>
+      organizationId: string
+      purpose: string
+      target: ArtifactTarget
+    }) {
+      const client = await pool.connect()
+      try {
+        await client.query("BEGIN")
+        await input.authorizeTarget?.(client, { isRetry: true })
+        const result = await client.query<ArtifactRow>(
+          `
+            SELECT ${artifactColumns}
+            FROM core.files file
+            JOIN core.file_objects object ON object.id = file.physical_object_id
+            JOIN core.file_links link ON link.file_id = file.id
+            WHERE file.id = $1 AND file.organization_id = $2
+              AND link.organization_id = $2 AND link.target_schema = $3
+              AND link.target_table = $4 AND link.target_id = $5
+              AND link.purpose = $6
+            FOR KEY SHARE OF file, object, link
+          `,
+          [
+            input.artifactId,
+            input.organizationId,
+            input.target.schema,
+            input.target.table,
+            input.target.id,
+            input.purpose,
+          ]
+        )
+        if (!result.rows[0]) throw new Error("Bound Artifact was not found.")
+        await client.query("COMMIT")
+        return artifactResult(result.rows[0])
+      } catch (error) {
+        await client.query("ROLLBACK").catch(() => undefined)
+        throw error
+      } finally {
+        client.release()
+      }
     },
 
     async getCurrent(query: {

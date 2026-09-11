@@ -1,7 +1,7 @@
 import "server-only"
 
 import type {
-  ArtifactStorageProvider,
+  ArtifactStoredObjectProvider,
   ArtifactStorageProviderIdentifier,
 } from "@workspace/db"
 
@@ -10,35 +10,18 @@ import { createUploadThingArtifactProvider } from "./uploadthing-artifact-provid
 
 function lazyProvider(
   identifier: ArtifactStorageProviderIdentifier,
-  create: () => ArtifactStorageProvider
-): ArtifactStorageProvider {
-  let provider: ArtifactStorageProvider | undefined
+  create: () => ArtifactStoredObjectProvider
+): ArtifactStoredObjectProvider {
+  let provider: ArtifactStoredObjectProvider | undefined
   const current = () => (provider ??= create())
 
-  const base: ArtifactStorageProvider = {
+  return {
     identifier,
     async delete(input) {
       return current().delete(input)
     },
     async read(input) {
       return current().read(input)
-    },
-    async upload(input) {
-      return current().upload(input)
-    },
-  }
-
-  if (identifier === "google-cloud-storage") {
-    return { ...base, preserveUploadsOnRollback: true }
-  }
-  return {
-    ...base,
-    async resolveLegacyPublicUrl(input) {
-      const resolve = current().resolveLegacyPublicUrl
-      if (!resolve) {
-        throw new Error("Stored Artifact provider has no legacy URL resolver.")
-      }
-      return resolve(input)
     },
   }
 }

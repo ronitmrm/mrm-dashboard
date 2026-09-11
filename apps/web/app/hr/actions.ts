@@ -24,7 +24,13 @@ import { hrTaskCapabilities } from "@/lib/auth/task-capabilities"
 import { hrReturnPath } from "@/lib/hr-return-path"
 import { buildEmploymentLetterPdf } from "@/lib/hr/employment-letter-pdf"
 import { istDateTimeInputToIso } from "@/lib/date-time"
-import { createUploadThingArtifactProvider } from "@/lib/uploadthing-artifact-provider"
+import { createGoogleCloudArtifactProvider } from "@/lib/google-cloud-artifact-provider"
+import {
+  consumePendingArtifactUpload,
+  pendingUploadAuthorizationForUser,
+  pendingUploadId,
+  preparePendingArtifactUploadForFinalAction,
+} from "@/lib/pending-artifact-upload-server"
 
 const hrPath = "/hr"
 
@@ -399,6 +405,15 @@ export async function saveCandidateAction(formData: FormData) {
   try {
     const organizationId = await repository.organizationIdForCode("MRMPL")
     const resume = formData.get("resume")
+    const resumeUploadId = pendingUploadId(formData, "resume")
+    const candidateId = value(formData, "candidate_id")
+    const resumeIntent = {
+      ...(candidateId ? { candidateId } : {}),
+      kind: "recruitment-candidate-resume" as const,
+    }
+    const pendingAuthorization = resumeUploadId
+      ? await pendingUploadAuthorizationForUser(session.user.id)
+      : null
     let resumeData: { bytes: Buffer; fileName: string } | undefined
     if (resume instanceof File && resume.size > 0) {
       if (resume.size > 10 * 1024 * 1024) {
@@ -416,9 +431,28 @@ export async function saveCandidateAction(formData: FormData) {
         fileName: resume.name.replace(/[<>:"/\\|?*]+/g, "_"),
       }
     }
+    if (resumeUploadId && pendingAuthorization) {
+      await preparePendingArtifactUploadForFinalAction({
+        ...(candidateId
+          ? {
+              allowFinalizedBinding: {
+                purpose: "resume",
+                target: {
+                  id: candidateId,
+                  schema: "recruitment",
+                  table: "candidates",
+                },
+              },
+            }
+          : {}),
+        authorization: pendingAuthorization,
+        expectedIntent: resumeIntent,
+        uploadId: resumeUploadId,
+      })
+    }
     const candidate = await repository.upsertCandidate({
       actorUserId: session.user.id,
-      candidateId: value(formData, "candidate_id"),
+      candidateId,
       currentCompany: value(formData, "current_company"),
       departmentCode: value(formData, "department_code"),
       designationCode: value(formData, "designation_code"),
@@ -430,41 +464,73 @@ export async function saveCandidateAction(formData: FormData) {
       phone: value(formData, "phone"),
       source: value(formData, "source"),
     })
-    if (resumeData) {
-      const { bytes, fileName } = resumeData
-      const sha256 = createHash("sha256").update(bytes).digest("hex")
-      const artifacts = createArtifactService({
-        connectionString: readAuthEnvironment().connectionString,
-        provider: createUploadThingArtifactProvider(),
-      })
-      try {
-        await artifacts.store({
-          actorUserId: session.user.id,
-          authorizeTarget: (client) =>
-            authorizeRecruitmentCandidateArtifactTarget(client, {
-              candidateId: candidate.id,
-              organizationId,
-            }),
-          bytes,
-          fileName,
-          idempotencyKey: [
-            "candidate-resume",
-            candidate.id,
-            fileName,
-            sha256,
-          ].join(":"),
-          mediaType: "application/pdf",
-          organizationId,
-          origin: "uploaded",
-          purpose: "resume",
-          target: {
-            id: candidate.id,
-            schema: "recruitment",
-            table: "candidates",
-          },
+    if (resumeData || (resumeUploadId && pendingAuthorization)) {
+      const retain = async (source: {
+        bytes: Buffer
+        fileName: string
+        mediaType: string
+        pendingUploadId?: string
+      }) => {
+        const sha256 = createHash("sha256").update(source.bytes).digest("hex")
+        const artifacts = createArtifactService({
+          connectionString: readAuthEnvironment().connectionString,
+          provider: createGoogleCloudArtifactProvider(),
         })
-      } finally {
-        await artifacts.close()
+        try {
+          return await artifacts.store({
+            actorUserId: session.user.id,
+            authorizeTarget: (client) =>
+              authorizeRecruitmentCandidateArtifactTarget(client, {
+                candidateId: candidate.id,
+                organizationId,
+              }),
+            bytes: source.bytes,
+            fileName: source.fileName,
+            idempotencyKey: [
+              "candidate-resume",
+              candidate.id,
+              source.fileName,
+              sha256,
+            ].join(":"),
+            mediaType: source.mediaType,
+            organizationId,
+            origin: "uploaded",
+            pendingUploadId: source.pendingUploadId,
+            purpose: "resume",
+            target: {
+              id: candidate.id,
+              schema: "recruitment",
+              table: "candidates",
+            },
+          })
+        } finally {
+          await artifacts.close()
+        }
+      }
+      if (resumeUploadId && pendingAuthorization) {
+        await consumePendingArtifactUpload({
+          authorization: pendingAuthorization,
+          expectedIntent: resumeIntent,
+          finalize: async (source) => {
+            const artifact = await retain(source)
+            return {
+              binding: {
+                artifactId: artifact.id,
+                purpose: "resume",
+                target: {
+                  id: candidate.id,
+                  schema: "recruitment",
+                  table: "candidates",
+                },
+              },
+              value: undefined,
+            }
+          },
+          recover: () => undefined,
+          uploadId: resumeUploadId,
+        })
+      } else if (resumeData) {
+        await retain({ ...resumeData, mediaType: "application/pdf" })
       }
     }
     outcome = { success: "Candidate saved successfully." }

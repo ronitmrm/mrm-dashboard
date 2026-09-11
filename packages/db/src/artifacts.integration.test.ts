@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 
 import { Pool, type PoolClient } from "pg"
 import { afterAll, beforeAll, describe, expect, test } from "vitest"
@@ -21,7 +21,7 @@ const connectionString =
 const pool = new Pool({ connectionString })
 
 class ControllableArtifactProvider implements ArtifactStorageProvider {
-  readonly identifier = "uploadthing"
+  readonly identifier = "google-cloud-storage"
   readonly deleted: string[] = []
   readonly uploads: Array<{
     bytes: Buffer
@@ -41,10 +41,6 @@ class ControllableArtifactProvider implements ArtifactStorageProvider {
 
   async read() {
     return Buffer.alloc(0)
-  }
-
-  async resolveLegacyPublicUrl({ key }: { key: string }) {
-    return `https://files.example.test/${key}`
   }
 
   async upload(input: {
@@ -170,6 +166,69 @@ afterAll(async () => {
 })
 
 describe("Artifact service", () => {
+  test("atomically binds a ready pending upload and recovers the exact retry", async () => {
+    const context = await createCommercialTarget("Pending binding")
+    const user = await pool.query<{ id: string }>(
+      `INSERT INTO identity.users (name, email) VALUES ($1, $2) RETURNING id`,
+      ["Pending upload user", `pending-${randomUUID()}@example.test`]
+    )
+    const bytes = Buffer.from("artifact-alpha")
+    const digest = createHash("sha256").update(bytes).digest("hex")
+    const pending = await pool.query<{ id: string }>(
+      `
+        INSERT INTO core.pending_artifact_uploads (
+          id, organization_id, owner_user_id, intent, expected_byte_size,
+          original_file_name, media_type, provider_key, status, expires_at,
+          confirmed_offset, completed_byte_size, completed_sha256,
+          temporary_generation
+        ) VALUES ($7, $1, $2, $3, $4, 'customer-drawing.pdf', 'application/pdf',
+          $5, 'ready', now() + interval '1 day', $4, $4, $6, '42')
+        RETURNING id
+      `,
+      [
+        context.organizationId,
+        user.rows[0]!.id,
+        { enquiryId: context.enquiryId, kind: "test" },
+        bytes.byteLength,
+        `pending-artifact-uploads/${randomUUID()}`,
+        digest,
+        randomUUID(),
+      ]
+    )
+    const provider = new ControllableArtifactProvider()
+    const service = createArtifactService({ connectionString, provider })
+    const input = storeInput(context, {
+      actorUserId: user.rows[0]!.id,
+      bytes,
+      idempotencyKey: `pending-binding:${pending.rows[0]!.id}`,
+      pendingUploadId: pending.rows[0]!.id,
+    })
+
+    try {
+      const first = await service.store(input)
+      const bound = await pool.query<{
+        final_artifact_id: string
+        final_target_id: string
+        status: string
+      }>(
+        `SELECT status, final_artifact_id, final_target_id
+         FROM core.pending_artifact_uploads WHERE id = $1`,
+        [pending.rows[0]!.id]
+      )
+      expect(bound.rows[0]).toEqual({
+        final_artifact_id: first.id,
+        final_target_id: context.target.id,
+        status: "finalized",
+      })
+
+      const retried = await service.store(input)
+      expect(retried.id).toBe(first.id)
+      expect(provider.uploads).toHaveLength(1)
+    } finally {
+      await service.close()
+    }
+  })
+
   test("stores canonical logical and physical metadata for a Commercial Enquiry drawing", async () => {
     const context = await createCommercialTarget("First")
     const provider = new ControllableArtifactProvider()
@@ -190,7 +249,7 @@ describe("Artifact service", () => {
           "361ed25c3e60cacb463301889b040c27ae41ddea7a6445ee82a2221b64c3a35f",
         version: 1,
       })
-      expect(artifact.publicUrl).toMatch(/^https:\/\/files\.example\.test\//)
+      expect(artifact.publicUrl).toBeNull()
       expect(provider.uploads).toHaveLength(1)
       expect(provider.uploads[0]?.bytes.equals(bytes)).toBe(true)
     } finally {
@@ -364,7 +423,7 @@ describe("Artifact service", () => {
         {
           fileName: "sales-answer.pdf",
           isCurrent: true,
-          provider: "uploadthing",
+          provider: "google-cloud-storage",
           providerKey: expect.any(String),
           purpose: "sales_clarification",
           version: 2,
@@ -386,7 +445,7 @@ describe("Artifact service", () => {
           {
             fileName: `${purpose}.pdf`,
             isCurrent: true,
-            provider: "uploadthing",
+            provider: "google-cloud-storage",
             providerKey: expect.any(String),
             purpose,
           },
@@ -680,13 +739,26 @@ describe("Artifact service", () => {
         },
       ])
       await expect(
+        service.getBound({
+          actorUserId: null,
+          artifactId: first.id,
+          organizationId: context.organizationId,
+          purpose: "drawing",
+          target: context.target,
+        })
+      ).resolves.toMatchObject({
+        id: first.id,
+        isCurrent: false,
+        lifecycleState: "superseded",
+      })
+      await expect(
         workflow.getCurrentDrawing({
           enquiryItemId: context.target.id,
           organizationId: context.organizationId,
         })
       ).resolves.toMatchObject({
         id: second.id,
-        provider: "uploadthing",
+        provider: "google-cloud-storage",
         providerKey: second.providerKey,
       })
       await expect(
