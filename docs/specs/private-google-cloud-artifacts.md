@@ -2,6 +2,7 @@
 
 Status: Design decisions recorded; implementation and cutover have not started.
 Date: 2026-09-09.
+Revalidated: 2026-09-11 against staging `2bf5572` after rebase.
 Source: [GitHub issue #88](https://github.com/ronitmrm/mrm-dashboard/issues/88).
 
 This records decisions that clarify or amend #88. The issue remains the full
@@ -39,17 +40,14 @@ delivery specification; this document does not claim the migration is deployed.
 - Cancel incomplete sessions and clean up expired, rejected, or abandoned
   temporary uploads. Cleanup may never delete retained objects. Generated
   business documents keep their existing server-side Buffer path.
-- This deliberately expands the issue's no-resumable-upload scope while keeping
-  its prohibition on browser provider URLs, signing permissions, and bucket
+- Application-mediated resumable uploads are in scope. Keep the prohibition
+  on browser provider URLs, signing permissions, and bucket
   CORS configuration. No compose-based chunk-object system is needed.
-
 - Vercel limits request payloads to 4.5 MB. Increasing Next.js body limits does
   not remove that hosting limit. Stream authenticated download responses to
   preserve larger existing files; verify bytes before starting delivery and
   retain the issue's no-range-request scope.
-- The issue's overview switches the provider locator before deleting the
-  UploadThing source; its detailed migration reverses that order. Use
-  copy, verify, atomically commit the GCS locator and pending source-cleanup
+- Copy, verify, atomically commit the GCS locator and pending source-cleanup
   record, then delete the source and record completion. Source deletion failure
   keeps migration explicitly incomplete.
 - Deterministic object reuse makes the current unconditional rollback cleanup
@@ -63,10 +61,53 @@ delivery specification; this document does not claim the migration is deployed.
   holiday cutover stages; do not build continuous-availability machinery.
 - Historical local reads apply only when a logical file has no physical object;
   clearing a provider URL must never trigger local fallback.
-
 - Include existing Artifact consumers found in code, including Maintenance
   photos; preserve their current permissions and workflows even where the
   issue's route examples do not enumerate them.
+
+## Delivery scope added by staging
+
+The rebase adds consumers and existing behaviors to preserve, without changing
+the accepted storage architecture or the holiday cutover decision.
+
+- **Quotation history:** preserve enquiry-wide Revision 00 onwards, explicit
+  `revision` selection, and `draft=true` behavior. Issued versions retain their
+  exact PDF Artifact; storage migration must not replace a requested historical
+  version with today's PDF or a regenerated draft.
+- **Pinned customer drawings:** preserve Design's explicit file selection and
+  the approved portfolio-drawing fallback. An explicit selection suppresses
+  fallback even when selected files become unavailable. Sent quotation line
+  snapshots pin logical `customerDrawingFileIds`; migrate their physical
+  locators without changing those IDs or substituting newer drawings. Legacy
+  quotations without captured attachments remain without attachments. These
+  rules already belong to the [Design glossary](../glossary/design-bom-ecn.md).
+- **Per-part and ZIP downloads:** include both
+  `/commercial/quotes/enquiry/[id]/drawings/[fileId]` and
+  `/commercial/quotes/enquiry/[id]/drawings/download`. Preserve quotation
+  capability, salesperson/Administrative scope, Organization authorization,
+  and selected-revision file membership before accessing bytes. ZIP delivery
+  preserves its existing line-based filenames and omission of unavailable
+  entries; an empty collection remains unavailable. The archive is a transient
+  export, not a new retained Artifact.
+- **Provider reads behind ZIP assembly:** update `QuoteDrawing`,
+  `availableQuoteDrawingFiles`, and `readQuoteDrawing` alongside the individual
+  response routes. They currently depend on `publicUrl` and `storageKey`.
+  Reuse the verified private-byte read underneath the HTTP response helper for
+  ZIP assembly; do not introduce another URL-fetch path. Local fallback still
+  requires absence of a physical object. Send only logical IDs, application
+  links, and presentation metadata to UI consumers.
+- **Aggregate response size:** the archive can exceed the response limit even
+  when each drawing is small. Apply authenticated streamed delivery to ZIPs as
+  well as individual files, without reducing the existing download-all scope.
+- **Multipage PDF preview:** preserve the shared `PdfPreview`/React-PDF viewer,
+  locally bundled PDF.js worker, pagination, zoom, and Download Original action.
+  Keep application content URLs and the established private-document security
+  headers. Verify preview with the accepted full-response/no-range design;
+  do not regress to iframe or browser-plugin-only rendering. Follow the
+  [golden UI pattern](../codebase/ui-golden-patterns.md).
+- **Existing PDF proxy:** the quotation PDF route already fetches retained
+  UploadThing bytes server-side. Replace that provider fetch with the shared
+  private reader; changing redirects alone would miss this consumer.
 
 ## Acceptance additions to #88
 
@@ -78,6 +119,14 @@ delivery specification; this document does not claim the migration is deployed.
   focused on the shared transport and existing business authorization seams.
 - Prove temporary-upload cleanup cannot touch a retained object. This is not
   a new automatic retention/deletion policy for Artifacts.
+- Extend the existing quote-drawing integration and ZIP tests to prove an
+  issued version still reads the pinned file after migration and a later
+  drawing release. Preserve legacy-empty and unavailable-selection behavior.
+  Verify authorization before reads for both individual and archive access.
+- Exercise a ZIP larger than 4.5 MB and a multipage retained PDF in the deployed
+  application: archive contents, historical selection, page navigation, zoom,
+  and Download Original must work through authenticated application URLs.
+  Reuse existing seams and browser checks instead of adding a test per route.
 
 ## Verification still needed
 
@@ -88,6 +137,10 @@ delivery specification; this document does not claim the migration is deployed.
   Vercel account cannot access `mrm-dashboard`; GitHub deployment labels alone
   do not prove the configured OIDC claims. Do not grant all preview deployments
   bucket access to satisfy staging access.
+- Keep the 2026-09-11 staging baseline separate from migration regressions:
+  the Quote issuance test expects draft revision 1 instead of the current 0,
+  and the Administrative schema test expects 671 grants but finds 669. Both
+  reproduce on untouched staging `2bf5572`; lint, typecheck, and build pass.
 
 ## Evidence
 
@@ -101,6 +154,13 @@ delivery specification; this document does not claim the migration is deployed.
   rollback cleanup, retained logical versions, and deletion.
 - `packages/db/src/commercial-workflow.ts` and the enquiry drawing route:
   current public-URL delivery and historical local-file fallback.
+- `packages/db/src/quotation-versions.ts` and `quote-drawings.ts`: issued
+  snapshot pinning, draft drawing selection, and provider metadata lookup.
+- `apps/web/lib/pricing/read-quote-drawing.ts` and
+  `quote-drawing-download.ts`: shared source-byte reads and ZIP assembly.
+- `apps/web/app/commercial/quotes/enquiry/[id]/pdf/route.ts`: current
+  revision-aware server-side PDF fetch, unavailable handling, and draft preview.
+- `apps/web/components/pdf-document-preview.tsx`: multipage PDF viewer.
 
 The canonical [Artifact glossary](../glossary/artifacts.md), access definitions,
 and [ADR 0007](../adr/0007-private-artifact-delivery.md) describe the approved
