@@ -21,7 +21,12 @@ import { commercialTaskCapabilities } from "@/lib/auth/task-capabilities"
 import { optionalText, requiredText } from "@/lib/form-data"
 import { readMasterCsv } from "@/lib/master-data-csv"
 import { validateUserAttachment } from "@/lib/user-attachment-security"
-import { createUploadThingArtifactProvider } from "@/lib/uploadthing-artifact-provider"
+import { createGoogleCloudArtifactProvider } from "@/lib/google-cloud-artifact-provider"
+import {
+  consumePendingArtifactUpload,
+  pendingUploadAuthorizationForUser,
+  pendingUploadId,
+} from "@/lib/pending-artifact-upload-server"
 
 import {
   buildProformaInvoicePdf,
@@ -238,57 +243,95 @@ export async function importPurchaseOrderWorkbookAction(formData: FormData) {
 export async function uploadPurchaseOrderFileAction(formData: FormData) {
   const purchaseOrderId = requiredText(formData, "purchase_order_id")
   const upload = formData.get("po_file")
-  if (!(upload instanceof File) || upload.size === 0) {
+  const uploadId = pendingUploadId(formData, "po_file")
+  const rawUpload = upload instanceof File && upload.size > 0 ? upload : null
+  if (!uploadId && !rawUpload) {
     throw new Error("PO source file is required.")
   }
-  if (upload.size > 25 * 1024 * 1024) {
+  if (upload instanceof File && upload.size > 25 * 1024 * 1024) {
     throw new Error("PO source file must be 25 MB or smaller.")
   }
   await withOrders(
     commercialTaskCapabilities.uploadPurchaseOrderFile,
     `${ordersPath}/${purchaseOrderId}`,
     async (repository, actorUserId) => {
-      const bytes = Buffer.from(await upload.arrayBuffer())
-      const { fileName, mediaType } = validateUserAttachment({
-        bytes,
-        fileName: upload.name,
-        purpose: "purchase-order",
-      })
-      const sha256 = createHash("sha256").update(bytes).digest("hex")
       const order = await repository.getPurchaseOrder(purchaseOrderId)
-      const artifacts = createArtifactService({
-        connectionString: readAuthEnvironment().connectionString,
-        provider: createUploadThingArtifactProvider(),
-      })
-      try {
-        await artifacts.store({
-          actorUserId,
-          authorizeTarget: (client, { isRetry }) =>
-            authorizeCommercialOrderArtifactTarget(
-              client,
-              { organizationId: order.organizationId, purchaseOrderId },
-              { requireOpenState: !isRetry }
-            ),
-          bytes,
-          fileName,
-          idempotencyKey: [
-            "purchase-order-source",
-            purchaseOrderId,
-            fileName,
-            sha256,
-          ].join(":"),
-          mediaType,
-          organizationId: order.organizationId,
-          origin: "uploaded",
-          purpose: "source_po",
-          target: {
-            id: purchaseOrderId,
-            schema: "sales",
-            table: "purchase_orders",
-          },
+      const retain = async (source: {
+        bytes: Buffer
+        fileName: string
+        mediaType: string
+        pendingUploadId?: string
+      }) => {
+        const sha256 = createHash("sha256").update(source.bytes).digest("hex")
+        const artifacts = createArtifactService({
+          connectionString: readAuthEnvironment().connectionString,
+          provider: createGoogleCloudArtifactProvider(),
         })
-      } finally {
-        await artifacts.close()
+        try {
+          return await artifacts.store({
+            actorUserId,
+            authorizeTarget: (client, { isRetry }) =>
+              authorizeCommercialOrderArtifactTarget(
+                client,
+                { organizationId: order.organizationId, purchaseOrderId },
+                { requireOpenState: !isRetry }
+              ),
+            bytes: source.bytes,
+            fileName: source.fileName,
+            idempotencyKey: [
+              "purchase-order-source",
+              purchaseOrderId,
+              source.fileName,
+              sha256,
+            ].join(":"),
+            mediaType: source.mediaType,
+            organizationId: order.organizationId,
+            origin: "uploaded",
+            pendingUploadId: source.pendingUploadId,
+            purpose: "source_po",
+            target: {
+              id: purchaseOrderId,
+              schema: "sales",
+              table: "purchase_orders",
+            },
+          })
+        } finally {
+          await artifacts.close()
+        }
+      }
+      if (uploadId) {
+        await consumePendingArtifactUpload({
+          authorization: await pendingUploadAuthorizationForUser(actorUserId),
+          expectedIntent: {
+            kind: "commercial-purchase-order-source",
+            purchaseOrderId,
+          },
+          finalize: async (source) => {
+            const artifact = await retain(source)
+            return {
+              binding: {
+                artifactId: artifact.id,
+                purpose: "source_po",
+                target: {
+                  id: purchaseOrderId,
+                  schema: "sales",
+                  table: "purchase_orders",
+                },
+              },
+              value: undefined,
+            }
+          },
+          recover: () => undefined,
+          uploadId,
+        })
+      } else {
+        const bytes = Buffer.from(await rawUpload!.arrayBuffer())
+        const validated = validateUserAttachment({
+          bytes,
+          fileName: rawUpload!.name,
+          purpose: "purchase-order",
+        })
+        await retain({ bytes, ...validated })
       }
     }
   )
@@ -359,7 +402,7 @@ export async function markProformaInvoiceSentAction(formData: FormData) {
   })
   const artifacts = createArtifactService({
     connectionString: environment.connectionString,
-    provider: createUploadThingArtifactProvider(),
+    provider: createGoogleCloudArtifactProvider(),
   })
   try {
     await repository.markProformaInvoiceSent({

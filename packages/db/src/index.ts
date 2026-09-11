@@ -13,6 +13,7 @@ export {
   type ArtifactResumableUploadProvider,
   type DeleteArtifactInput,
   type ArtifactStorageProvider,
+  type ArtifactStoredObjectProvider,
   type ArtifactStorageErrorCode,
   type ArtifactStorageProviderIdentifier,
   type ServerResumableUploadSession,
@@ -86,6 +87,12 @@ export {
 } from "./dashboard-read-model"
 export { createDashboardReadModelRepository } from "./dashboard-read-model-repository"
 export { createMaintenanceRepository } from "./maintenance"
+export {
+  createPendingArtifactUploadRepository,
+  PendingArtifactUploadNotFoundError,
+  type PendingArtifactUploadRecord,
+  type PendingArtifactUploadStatus,
+} from "./pending-artifact-uploads"
 export {
   authorizeMaintenanceRequestPhotoTarget,
   createMaintenanceRequestRepository,

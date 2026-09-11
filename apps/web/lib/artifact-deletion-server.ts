@@ -2,6 +2,7 @@ import {
   createArtifactLedgerRepository,
   createArtifactService,
   type ArtifactStorageProvider,
+  type ArtifactStoredObjectProvider,
 } from "@workspace/db"
 
 import { readAuthEnvironment } from "./auth/auth"
@@ -11,6 +12,7 @@ import {
   requireCapability,
 } from "./auth/require-capability"
 import { createStoredArtifactProvider } from "./artifact-storage-providers"
+import { createGoogleCloudArtifactProvider } from "./google-cloud-artifact-provider"
 
 export type ArtifactDeletionRequest = {
   artifactId: string
@@ -29,7 +31,7 @@ type ArtifactDeletionDependencies = {
     ReturnType<typeof createArtifactLedgerRepository>,
     "close" | "organizationIdForUser"
   >
-  compatibilityProviders?: readonly ArtifactStorageProvider[]
+  compatibilityProviders?: readonly ArtifactStoredObjectProvider[]
   provider: ArtifactStorageProvider
   requireCapability: typeof requireCapability
 }
@@ -92,9 +94,9 @@ export function deleteArtifactForUser(
     createArtifactService,
     createLedgerRepository: createArtifactLedgerRepository,
     compatibilityProviders: [
-      createStoredArtifactProvider("google-cloud-storage"),
+      createStoredArtifactProvider("uploadthing"),
     ],
-    provider: createStoredArtifactProvider("uploadthing"),
+    provider: createGoogleCloudArtifactProvider(),
   })
 }
 

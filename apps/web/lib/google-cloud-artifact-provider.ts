@@ -5,8 +5,12 @@ import { createHash } from "node:crypto"
 import { Storage, type StorageOptions } from "@google-cloud/storage"
 import { getVercelOidcToken } from "@vercel/oidc"
 import {
+  artifactUploadChunkMaxBytes,
   ArtifactStorageError,
+  type ArtifactResumableUploadProgress,
+  type ArtifactResumableUploadProvider,
   type ArtifactStorageProvider,
+  type ServerResumableUploadSession,
 } from "@workspace/db"
 import {
   ExternalAccountClient,
@@ -16,6 +20,10 @@ import {
 type Environment = Record<string, string | undefined>
 
 type GoogleCloudFileClient = {
+  createResumableUpload(options: {
+    metadata: { contentLength: number; contentType: string }
+    preconditionOpts: { ifGenerationMatch: number }
+  }): Promise<[string]>
   delete(options: { ignoreNotFound: boolean }): Promise<unknown>
   download(options: {
     decompress: boolean
@@ -48,13 +56,14 @@ type Dependencies = {
   createStorageClient?: (options: StorageOptions) => GoogleCloudStorageClient
   getOidcToken?: typeof getVercelOidcToken
   storageClient?: GoogleCloudStorageClient
+  fetchImplementation?: typeof fetch
 }
 
 type GoogleCloudArtifactConfiguration = {
   bucketName: string
   projectId: string
   workloadIdentity:
-    | { kind: "application-default-credentials" }
+    | { kind: "operator-client-required" }
     | {
         audience: string
         kind: "vercel-oidc"
@@ -109,7 +118,7 @@ export function readGoogleCloudArtifactEnvironment(
     return {
       bucketName,
       projectId,
-      workloadIdentity: { kind: "application-default-credentials" },
+      workloadIdentity: { kind: "operator-client-required" },
     }
   }
 
@@ -161,6 +170,11 @@ export function googleCloudArtifactObjectKey(customId: string) {
   return `artifacts/${digest}`
 }
 
+export function googleCloudPendingUploadObjectKey(customId: string) {
+  const digest = createHash("sha256").update(customId, "utf8").digest("hex")
+  return `pending-artifact-uploads/${digest}`
+}
+
 function isPreconditionFailure(error: unknown) {
   if (!error || typeof error !== "object" || !("code" in error)) return false
   const code = error.code
@@ -178,8 +192,16 @@ async function downloadExact(file: GoogleCloudFileClient) {
 export function createGoogleCloudArtifactProvider(
   environment: Environment = process.env,
   dependencies: Dependencies = {}
-): ArtifactStorageProvider {
+): ArtifactStorageProvider & ArtifactResumableUploadProvider {
   const configuration = readGoogleCloudArtifactEnvironment(environment)
+  if (
+    configuration.workloadIdentity.kind === "operator-client-required" &&
+    !dependencies.storageClient
+  ) {
+    throw new Error(
+      "Non-Vercel Google Cloud Artifact access requires an explicit authenticated storage client."
+    )
+  }
   let storageClient = dependencies.storageClient
 
   function getStorageClient() {
@@ -189,14 +211,8 @@ export function createGoogleCloudArtifactProvider(
       dependencies.createStorageClient ??
       ((options: StorageOptions) => new Storage(options))
 
-    if (
-      configuration.workloadIdentity.kind === "application-default-credentials"
-    ) {
-      storageClient = createStorageClient({
-        projectId: configuration.projectId,
-      })
-      return storageClient
-    }
+    if (configuration.workloadIdentity.kind === "operator-client-required")
+      throw new Error("An explicit operator storage client was not retained.")
 
     const { audience, serviceAccountEmail, vercelAudience } =
       configuration.workloadIdentity
@@ -234,9 +250,230 @@ export function createGoogleCloudArtifactProvider(
       .file(key, generation === undefined ? undefined : { generation })
   }
 
+  const fetchImplementation = dependencies.fetchImplementation ?? fetch
+
+  async function resumableRequest(
+    session: ServerResumableUploadSession,
+    init: RequestInit
+  ) {
+    try {
+      return await fetchImplementation(session, {
+        ...init,
+        cache: "no-store",
+        redirect: "manual",
+        signal: AbortSignal.timeout(30_000),
+      })
+    } catch (error) {
+      throw new ArtifactStorageError(
+        "provider-failure",
+        "Google Cloud Storage resumable upload request failed.",
+        { cause: error }
+      )
+    }
+  }
+
+  function resumableProgress(
+    response: Response,
+    expectedByteSize: number
+  ): ArtifactResumableUploadProgress | null {
+    if (response.status === 200 || response.status === 201) {
+      return { complete: true, nextOffset: expectedByteSize }
+    }
+    if (response.status !== 308) return null
+    const range = response.headers.get("range")
+    if (!range) return { complete: false, nextOffset: 0 }
+    const match = /^bytes=0-(\d+)$/.exec(range.trim())
+    if (!match) {
+      throw new ArtifactStorageError(
+        "provider-failure",
+        "Google Cloud Storage returned an invalid resumable upload offset."
+      )
+    }
+    const nextOffset = Number(match[1]) + 1
+    if (!Number.isSafeInteger(nextOffset) || nextOffset > expectedByteSize) {
+      throw new ArtifactStorageError(
+        "provider-failure",
+        "Google Cloud Storage returned an invalid resumable upload offset."
+      )
+    }
+    return { complete: false, nextOffset }
+  }
+
+  function resumableFailure(response: Response) {
+    if (
+      response.status === 404 ||
+      response.status === 410 ||
+      response.status === 499
+    ) {
+      return new ArtifactStorageError(
+        "not-found",
+        "The Google Cloud Storage resumable upload session is unavailable."
+      )
+    }
+    return new ArtifactStorageError(
+      "provider-failure",
+      "Google Cloud Storage rejected the resumable upload request."
+    )
+  }
+
+  async function consumeResumableResponse(response: Response) {
+    await response.arrayBuffer().catch(() => undefined)
+  }
+
+  async function getResumableStatus(input: {
+    expectedByteSize: number
+    session: ServerResumableUploadSession
+  }) {
+    const response = await resumableRequest(input.session, {
+      headers: {
+        "Content-Length": "0",
+        "Content-Range": `bytes */${input.expectedByteSize}`,
+      },
+      method: "PUT",
+    })
+    let progress: ArtifactResumableUploadProgress | null
+    try {
+      progress = resumableProgress(response, input.expectedByteSize)
+    } finally {
+      await consumeResumableResponse(response)
+    }
+    if (progress) return progress
+    throw resumableFailure(response)
+  }
+
   return {
     identifier: "google-cloud-storage",
     preserveUploadsOnRollback: true,
+
+    async cancelResumable({ session }) {
+      const response = await resumableRequest(session, { method: "DELETE" })
+      await consumeResumableResponse(response)
+      if (
+        response.ok ||
+        response.status === 404 ||
+        response.status === 410 ||
+        response.status === 499
+      ) {
+        return
+      }
+      throw resumableFailure(response)
+    },
+
+    async deleteTemporary({ generation, key }) {
+      try {
+        await file(key, generation).delete({ ignoreNotFound: true })
+      } catch (error) {
+        if (isNotFound(error)) return
+        throw new ArtifactStorageError(
+          "provider-failure",
+          "Google Cloud Storage could not delete the temporary upload.",
+          { cause: error }
+        )
+      }
+    },
+
+    getResumableStatus,
+
+    async readTemporary({ key }) {
+      try {
+        const [metadata] = await file(key).getMetadata()
+        if (metadata.generation === undefined) {
+          throw new ArtifactStorageError(
+            "integrity-failure",
+            "Temporary upload generation metadata is unavailable."
+          )
+        }
+        const generation = String(metadata.generation)
+        return {
+          bytes: await downloadExact(file(key, generation)),
+          generation,
+        }
+      } catch (error) {
+        if (error instanceof ArtifactStorageError) throw error
+        if (isNotFound(error)) {
+          throw new ArtifactStorageError(
+            "not-found",
+            "The temporary upload was not found in Google Cloud Storage.",
+            { cause: error }
+          )
+        }
+        throw new ArtifactStorageError(
+          "provider-failure",
+          "Google Cloud Storage could not read the temporary upload.",
+          { cause: error }
+        )
+      }
+    },
+
+    async startResumable({ customId, expectedByteSize, mediaType }) {
+      const key = googleCloudPendingUploadObjectKey(customId)
+      try {
+        const [session] = await file(key).createResumableUpload({
+          metadata: {
+            contentLength: expectedByteSize,
+            contentType: mediaType,
+          },
+          preconditionOpts: { ifGenerationMatch: 0 },
+        })
+        if (!session) throw new Error("Resumable session URI was unavailable.")
+        return {
+          key,
+          session: session as ServerResumableUploadSession,
+        }
+      } catch (error) {
+        throw new ArtifactStorageError(
+          "provider-failure",
+          "Google Cloud Storage could not start the temporary upload.",
+          { cause: error }
+        )
+      }
+    },
+
+    async uploadResumableChunk(input) {
+      const nextOffset = input.offset + input.bytes.byteLength
+      const finalChunk = nextOffset === input.expectedByteSize
+      if (
+        input.bytes.byteLength === 0 ||
+        input.bytes.byteLength > artifactUploadChunkMaxBytes ||
+        !Number.isSafeInteger(input.offset) ||
+        input.offset < 0 ||
+        nextOffset > input.expectedByteSize ||
+        (!finalChunk && input.bytes.byteLength % (256 * 1024) !== 0)
+      ) {
+        throw new ArtifactStorageError(
+          "integrity-failure",
+          "The temporary upload chunk is invalid."
+        )
+      }
+      let response: Response
+      try {
+        response = await resumableRequest(input.session, {
+          body: Uint8Array.from(input.bytes),
+          headers: {
+            "Content-Length": String(input.bytes.byteLength),
+            "Content-Range":
+              `bytes ${input.offset}-${nextOffset - 1}/` +
+              input.expectedByteSize,
+          },
+          method: "PUT",
+        })
+      } catch (error) {
+        try {
+          return await getResumableStatus(input)
+        } catch {
+          throw error
+        }
+      }
+      let progress: ArtifactResumableUploadProgress | null
+      try {
+        progress = resumableProgress(response, input.expectedByteSize)
+      } finally {
+        await consumeResumableResponse(response)
+      }
+      if (progress) return progress
+      if (response.status >= 500) return getResumableStatus(input)
+      throw resumableFailure(response)
+    },
 
     async delete({ key }) {
       try {

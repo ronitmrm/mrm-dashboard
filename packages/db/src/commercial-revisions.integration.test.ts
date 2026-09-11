@@ -1599,10 +1599,8 @@ describe("commercial revisions and corrections", () => {
       connectionString,
       provider: {
         delete: async () => undefined,
-        identifier: "uploadthing",
+        identifier: "google-cloud-storage",
         read: async () => Buffer.alloc(0),
-        resolveLegacyPublicUrl: async ({ key }) =>
-          `https://example.test/${key}`,
         upload: async ({ customId }) => ({
           key: `test/${customId}`,
         }),
