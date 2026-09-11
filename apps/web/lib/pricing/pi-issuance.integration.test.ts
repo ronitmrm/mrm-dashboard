@@ -24,6 +24,7 @@ const connectionString =
 const pool = new Pool({ connectionString })
 
 class PiArtifactProvider implements ArtifactStorageProvider {
+  readonly identifier = "uploadthing"
   readonly bytesByUrl = new Map<string, Buffer>()
   readonly deleted: string[] = []
   readonly uploads: Array<{ mediaType: string; url: string }> = []
@@ -32,6 +33,17 @@ class PiArtifactProvider implements ArtifactStorageProvider {
 
   async delete({ key }: { key: string }) {
     this.deleted.push(key)
+  }
+
+  async read({ key }: { key: string }) {
+    return (
+      this.bytesByUrl.get(`https://files.example.test/${key}`) ??
+      Buffer.alloc(0)
+    )
+  }
+
+  async resolveLegacyPublicUrl({ key }: { key: string }) {
+    return `https://files.example.test/${key}`
   }
 
   async upload(input: Parameters<ArtifactStorageProvider["upload"]>[0]) {
@@ -222,7 +234,9 @@ describe("sent PI document-set issuance", () => {
       ]) {
         const context = await createDraftPi(`Failure ${mediaType}`)
         const provider = new PiArtifactProvider(mediaType)
-        await expect(issuePi(context, provider)).rejects.toThrow("upload failed")
+        await expect(issuePi(context, provider)).rejects.toThrow(
+          "upload failed"
+        )
         const order = await reader.getPurchaseOrder(context.purchaseOrderId)
         expect(order.invoices[0]).toMatchObject({ status: "Draft" })
         await expect(

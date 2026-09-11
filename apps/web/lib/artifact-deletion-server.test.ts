@@ -40,7 +40,12 @@ describe("Artifact deletion server boundary", () => {
         connectionString: "postgres://test",
         createArtifactService,
         createLedgerRepository,
-        provider: { delete: vi.fn(), upload: vi.fn() },
+        provider: {
+          delete: vi.fn(),
+          identifier: "uploadthing",
+          read: vi.fn(),
+          upload: vi.fn(),
+        },
         requireCapability,
       }
     )
@@ -70,7 +75,12 @@ describe("Artifact deletion server boundary", () => {
           connectionString: "postgres://test",
           createArtifactService,
           createLedgerRepository,
-          provider: { delete: vi.fn(), upload: vi.fn() },
+          provider: {
+            delete: vi.fn(),
+            identifier: "uploadthing",
+            read: vi.fn(),
+            upload: vi.fn(),
+          },
           requireCapability,
         }
       )

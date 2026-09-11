@@ -19,7 +19,7 @@ describe("UploadThing Artifact provider", () => {
     })
     const provider = createUploadThingArtifactProvider(
       { UPLOADTHING_TOKEN: "server-token" },
-      { deleteFiles: vi.fn(), uploadFiles }
+      { deleteFiles: vi.fn(), getFileUrls: vi.fn(), uploadFiles }
     )
 
     await expect(
@@ -29,10 +29,10 @@ describe("UploadThing Artifact provider", () => {
         mediaType: "application/pdf",
         name: "drawing.pdf",
       })
-    ).resolves.toEqual({
-      key: "file-key",
-      url: "https://app.ufs.sh/f/file-key",
-    })
+    ).resolves.toEqual({ key: "file-key" })
+    await expect(
+      provider.resolveLegacyPublicUrl?.({ key: "file-key" })
+    ).resolves.toBe("https://app.ufs.sh/f/file-key")
     expect(uploadFiles).toHaveBeenCalledWith(
       expect.objectContaining({
         customId: "org:sha:size",
@@ -47,6 +47,7 @@ describe("UploadThing Artifact provider", () => {
       { UPLOADTHING_TOKEN: "server-token" },
       {
         deleteFiles: vi.fn(),
+        getFileUrls: vi.fn(),
         uploadFiles: vi.fn().mockResolvedValue({
           data: null,
           error: { message: "invalid token" },
@@ -68,11 +69,16 @@ describe("UploadThing Artifact provider", () => {
     const deleteFiles = vi.fn().mockResolvedValue({ success: true })
     const provider = createUploadThingArtifactProvider(
       { UPLOADTHING_TOKEN: "server-token" },
-      { deleteFiles, uploadFiles: vi.fn() }
+      { deleteFiles, getFileUrls: vi.fn(), uploadFiles: vi.fn() }
     )
 
     await expect(provider.delete({ key: "file-key" })).resolves.toBeUndefined()
     expect(deleteFiles).toHaveBeenCalledWith("file-key")
+
+    deleteFiles.mockResolvedValueOnce({ success: false })
+    await expect(provider.delete({ key: "file-key" })).rejects.toThrow(
+      "UploadThing could not delete the retained file."
+    )
 
     deleteFiles.mockRejectedValueOnce(new Error("provider unavailable"))
     await expect(provider.delete({ key: "file-key" })).rejects.toThrow(

@@ -3,14 +3,77 @@ import path from "node:path"
 
 import { Pool, type PoolClient } from "pg"
 
+export type ArtifactStorageProviderIdentifier =
+  | "google-cloud-storage"
+  | "uploadthing"
+
+export type ArtifactStorageErrorCode =
+  | "integrity-failure"
+  | "not-found"
+  | "provider-failure"
+
+export class ArtifactStorageError extends Error {
+  readonly code: ArtifactStorageErrorCode
+
+  constructor(
+    code: ArtifactStorageErrorCode,
+    message: string,
+    options?: ErrorOptions
+  ) {
+    super(message, options)
+    this.name = "ArtifactStorageError"
+    this.code = code
+  }
+}
+
 export type ArtifactStorageProvider = {
+  readonly identifier: ArtifactStorageProviderIdentifier
+  readonly preserveUploadsOnRollback?: boolean
   delete(input: { key: string }): Promise<void>
+  read(input: { key: string }): Promise<Buffer>
+  resolveLegacyPublicUrl?(input: { key: string }): Promise<string>
   upload(input: {
     bytes: Buffer
     customId: string
     mediaType: string
     name: string
-  }): Promise<{ key: string; url: string }>
+  }): Promise<{ key: string }>
+}
+
+declare const serverResumableSessionBrand: unique symbol
+
+/** Server-only bearer capability. It must never be returned to a browser. */
+export type ServerResumableUploadSession = string & {
+  readonly [serverResumableSessionBrand]: true
+}
+
+export const artifactUploadChunkMaxBytes = 4 * 1024 * 1024
+
+export type ArtifactResumableUploadProgress = {
+  complete: boolean
+  nextOffset: number
+}
+
+/** Contract reserved for the authenticated pending-upload transport. */
+export type ArtifactResumableUploadProvider = {
+  cancelResumable(input: {
+    session: ServerResumableUploadSession
+  }): Promise<void>
+  getResumableStatus(input: {
+    expectedByteSize: number
+    session: ServerResumableUploadSession
+  }): Promise<ArtifactResumableUploadProgress>
+  startResumable(input: {
+    customId: string
+    expectedByteSize: number
+    mediaType: string
+  }): Promise<{ key: string; session: ServerResumableUploadSession }>
+  uploadResumableChunk(input: {
+    bytes: Buffer
+    expectedByteSize: number
+    offset: number
+    session: ServerResumableUploadSession
+  }): Promise<ArtifactResumableUploadProgress>
 }
 
 export type ArtifactTarget = {
@@ -53,8 +116,9 @@ type ArtifactRow = {
   media_type: string | null
   object_lifecycle_state: "available" | "deleted" | "deletion_failed"
   origin: "generated" | "legacy" | "uploaded"
+  provider: ArtifactStorageProviderIdentifier
   provider_key: string
-  public_url: string
+  public_url: string | null
   sha256: string
   version: number
 }
@@ -80,6 +144,7 @@ function artifactResult(row: ArtifactRow) {
     lifecycleState: row.lifecycle_state,
     mediaType: row.media_type,
     origin: row.origin,
+    provider: row.provider,
     providerKey: row.provider_key,
     publicUrl: row.public_url,
     sha256: row.sha256,
@@ -90,7 +155,7 @@ function artifactResult(row: ArtifactRow) {
 const artifactColumns = `
   file.id, file.file_name, file.media_type, file.origin,
   file.lifecycle_state, file.byte_size::text, object.sha256,
-  object.provider_key, object.public_url,
+  object.provider, object.provider_key, object.public_url,
   object.lifecycle_state AS object_lifecycle_state,
   link.version, link.is_current
 `
@@ -128,8 +193,67 @@ function targetLockKey(input: StoreArtifactInput) {
 export function createArtifactService(input: {
   connectionString: string
   provider?: ArtifactStorageProvider
+  compatibilityProviders?: readonly ArtifactStorageProvider[]
 }) {
   const pool = new Pool({ connectionString: input.connectionString })
+
+  function providerFor(identifier: ArtifactStorageProviderIdentifier) {
+    const provider = [
+      input.provider,
+      ...(input.compatibilityProviders ?? []),
+    ].find((candidate) => candidate?.identifier === identifier)
+    if (!provider) {
+      throw new Error(
+        `Artifact storage provider '${identifier}' is unavailable.`
+      )
+    }
+    return provider
+  }
+
+  async function cleanupUploadedObject(input: {
+    byteSize: number
+    fingerprint: string
+    key: string
+    organizationId: string
+    provider: ArtifactStorageProvider
+    sha256: string
+  }) {
+    if (input.provider.preserveUploadsOnRollback) return
+
+    const client = await pool.connect()
+    try {
+      await client.query("BEGIN")
+      await client.query(
+        "SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))",
+        [input.organizationId, input.fingerprint]
+      )
+      const committedReference = await client.query(
+        `
+          SELECT 1
+          FROM core.file_objects
+          WHERE organization_id = $1 AND sha256 = $2 AND byte_size = $3
+            AND provider = $4 AND provider_key = $5
+            AND lifecycle_state <> 'deleted'
+          LIMIT 1
+        `,
+        [
+          input.organizationId,
+          input.sha256,
+          input.byteSize,
+          input.provider.identifier,
+          input.key,
+        ]
+      )
+      if (!committedReference.rows[0]) {
+        await input.provider.delete({ key: input.key })
+      }
+      await client.query("COMMIT")
+    } catch {
+      await client.query("ROLLBACK").catch(() => undefined)
+    } finally {
+      client.release()
+    }
+  }
 
   async function storeSet(storeInputs: readonly StoreArtifactInput[]) {
     const provider = input.provider
@@ -177,7 +301,14 @@ export function createArtifactService(input: {
       }
     })
     const client = await pool.connect()
-    const uploadedKeys: string[] = []
+    const uploadedObjects: Array<{
+      byteSize: number
+      fingerprint: string
+      key: string
+      organizationId: string
+      provider: ArtifactStorageProvider
+      sha256: string
+    }> = []
     try {
       await client.query("BEGIN")
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
@@ -200,7 +331,7 @@ export function createArtifactService(input: {
         let physical = await client.query<{
           id: string
           provider_key: string
-          public_url: string
+          public_url: string | null
         }>(
           `
             SELECT id, provider_key, public_url
@@ -217,17 +348,27 @@ export function createArtifactService(input: {
             mediaType: storeInput.mediaType,
             name: fileName,
           })
-          uploadedKeys.push(uploaded.key)
+          uploadedObjects.push({
+            byteSize: storeInput.bytes.byteLength,
+            fingerprint,
+            key: uploaded.key,
+            organizationId: storeInput.organizationId,
+            provider,
+            sha256,
+          })
+          const publicUrl = provider.resolveLegacyPublicUrl
+            ? await provider.resolveLegacyPublicUrl({ key: uploaded.key })
+            : null
           physical = await client.query<{
             id: string
             provider_key: string
-            public_url: string
+            public_url: string | null
           }>(
             `
               INSERT INTO core.file_objects (
                 organization_id, sha256, byte_size, provider, provider_key, public_url
               )
-              VALUES ($1, $2, $3, 'uploadthing', $4, $5)
+              VALUES ($1, $2, $3, $4, $5, $6)
               ON CONFLICT (organization_id, sha256, byte_size) DO UPDATE
               SET provider = EXCLUDED.provider,
                 provider_key = EXCLUDED.provider_key,
@@ -242,8 +383,9 @@ export function createArtifactService(input: {
               storeInput.organizationId,
               sha256,
               storeInput.bytes.byteLength,
+              provider.identifier,
               uploaded.key,
-              uploaded.url,
+              publicUrl,
             ]
           )
         }
@@ -358,15 +500,13 @@ export function createArtifactService(input: {
         )
       }
       await client.query("COMMIT")
-      uploadedKeys.length = 0
+      uploadedObjects.length = 0
       return results
     } catch (error) {
       await client.query("ROLLBACK")
-      await Promise.all(
-        uploadedKeys.map((key) =>
-          provider.delete({ key }).catch(() => undefined)
-        )
-      )
+      for (const uploadedObject of uploadedObjects) {
+        await cleanupUploadedObject(uploadedObject)
+      }
       throw error
     } finally {
       client.release()
@@ -495,7 +635,9 @@ export function createArtifactService(input: {
       const reason = deleteInput.reason.trim()
       if (!reason) throw new Error("Artifact deletion reason is required.")
       if (reason.length > 1000) {
-        throw new Error("Artifact deletion reason must be 1000 characters or less.")
+        throw new Error(
+          "Artifact deletion reason must be 1000 characters or less."
+        )
       }
 
       const client = await pool.connect()
@@ -531,6 +673,7 @@ export function createArtifactService(input: {
           object_lifecycle_state: "available" | "deleted" | "deletion_failed"
           origin: "generated" | "legacy" | "uploaded"
           physical_object_id: string
+          provider: ArtifactStorageProviderIdentifier
           provider_key: string
           sha256: string
           source_id: string
@@ -540,7 +683,7 @@ export function createArtifactService(input: {
           `
             SELECT file.file_name, file.lifecycle_state, file.origin,
               file.sha256, file.source_system, file.source_table, file.source_id,
-              file.physical_object_id, object.provider_key,
+              file.physical_object_id, object.provider, object.provider_key,
               object.lifecycle_state AS object_lifecycle_state
             FROM core.files file
             JOIN core.file_objects object ON object.id = file.physical_object_id
@@ -561,7 +704,9 @@ export function createArtifactService(input: {
           [deleteInput.artifactId]
         )
         if (releasedDrawing.rows[0]?.exists) {
-          throw new Error("Released drawing revision evidence cannot be deleted.")
+          throw new Error(
+            "Released drawing revision evidence cannot be deleted."
+          )
         }
         if (deleteInput.confirmation !== row.file_name) {
           throw new Error(
@@ -594,7 +739,7 @@ export function createArtifactService(input: {
         const finalLiveReference = references.rows[0]?.count === "0"
         if (finalLiveReference && row.object_lifecycle_state !== "deleted") {
           try {
-            await provider.delete({ key: row.provider_key })
+            await providerFor(row.provider).delete({ key: row.provider_key })
           } catch (error) {
             providerDeletionFailed = true
             throw error

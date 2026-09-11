@@ -296,15 +296,32 @@ describe("commercial revisions and corrections", () => {
 
   test("cancelled customer revisions stay out of pending work and cannot be completed", async () => {
     const revision = await repository.createBulkPriceRevision({
-      customerId, organizationId, effectiveOn: "2026-09-10",
-      reason: "Obsolete repair attempt", revisionRoute: "Customer Parameter Bulk Revision",
+      customerId,
+      organizationId,
+      effectiveOn: "2026-09-10",
+      reason: "Obsolete repair attempt",
+      revisionRoute: "Customer Parameter Bulk Revision",
     })
-    await pool.query("UPDATE sales.bulk_price_revisions SET status = 'Cancelled' WHERE id = $1", [revision.id])
-    const queue = await repository.listCustomerBulkPriceRevisionsBounded(organizationCode)
-    expect(queue.rows.map(row => row.id)).not.toContain(revision.id)
-    expect((await repository.getCustomerBulkRevisionSummary(organizationCode)).openRevisionCount).toBe(0)
-    await expect(repository.completeBulkPriceRevision({bulkPriceRevisionId: revision.id})).rejects.toThrow("Open bulk revision was not found")
-    expect(await repository.getCustomerBulkPriceRevision(organizationCode, revision.id)).toMatchObject({status: "Cancelled"})
+    await pool.query(
+      "UPDATE sales.bulk_price_revisions SET status = 'Cancelled' WHERE id = $1",
+      [revision.id]
+    )
+    const queue =
+      await repository.listCustomerBulkPriceRevisionsBounded(organizationCode)
+    expect(queue.rows.map((row) => row.id)).not.toContain(revision.id)
+    expect(
+      (await repository.getCustomerBulkRevisionSummary(organizationCode))
+        .openRevisionCount
+    ).toBe(0)
+    await expect(
+      repository.completeBulkPriceRevision({ bulkPriceRevisionId: revision.id })
+    ).rejects.toThrow("Open bulk revision was not found")
+    expect(
+      await repository.getCustomerBulkPriceRevision(
+        organizationCode,
+        revision.id
+      )
+    ).toMatchObject({ status: "Cancelled" })
   })
 
   test("bounds the customer bulk revision queue and searches only its active customer prices", async () => {
@@ -1582,9 +1599,12 @@ describe("commercial revisions and corrections", () => {
       connectionString,
       provider: {
         delete: async () => undefined,
+        identifier: "uploadthing",
+        read: async () => Buffer.alloc(0),
+        resolveLegacyPublicUrl: async ({ key }) =>
+          `https://example.test/${key}`,
         upload: async ({ customId }) => ({
           key: `test/${customId}`,
-          url: `https://example.test/${customId}`,
         }),
       },
     })

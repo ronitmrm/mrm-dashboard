@@ -20,6 +20,7 @@ const pool = new Pool({ connectionString })
 const store = createStoreRepository({ connectionString })
 
 class StorePurchaseOrderArtifactProvider implements ArtifactStorageProvider {
+  readonly identifier = "uploadthing"
   readonly bytesByUrl = new Map<string, Buffer>()
   readonly deleted: string[] = []
   readonly uploads: Array<{ bytes: Buffer; url: string }> = []
@@ -28,6 +29,17 @@ class StorePurchaseOrderArtifactProvider implements ArtifactStorageProvider {
   async delete({ key }: { key: string }) {
     this.deleted.push(key)
     this.bytesByUrl.delete(`https://files.example.test/${key}`)
+  }
+
+  async read({ key }: { key: string }) {
+    return (
+      this.bytesByUrl.get(`https://files.example.test/${key}`) ??
+      Buffer.alloc(0)
+    )
+  }
+
+  async resolveLegacyPublicUrl({ key }: { key: string }) {
+    return `https://files.example.test/${key}`
   }
 
   async upload(input: Parameters<ArtifactStorageProvider["upload"]>[0]) {
@@ -296,9 +308,9 @@ describe("Store Purchase Order PDF issuance", () => {
         supplierId: repairSupplier.id,
       }
       provider.failNextUpload = true
-      await expect(store.createRepairPurchaseOrder(repairInput)).rejects.toThrow(
-        "Store PO upload failed"
-      )
+      await expect(
+        store.createRepairPurchaseOrder(repairInput)
+      ).rejects.toThrow("Store PO upload failed")
       await expect(
         store.getAssetWorkspace({
           assetCode: receipt.assetCodes[0]!,
