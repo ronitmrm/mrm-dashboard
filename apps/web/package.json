@@ -4,6 +4,7 @@
   "type": "module",
   "private": true,
   "scripts": {
+    "artifact:storage:migrate": "node --conditions=react-server --env-file-if-exists=.env.local --import tsx scripts/migrate-artifact-storage.ts",
     "artifact:uploads:cleanup": "node --conditions=react-server --env-file-if-exists=.env.local --import tsx scripts/cleanup-pending-artifact-uploads.ts",
     "dev": "next dev --webpack -p 3001",
     "drawing:baseline": "node --conditions=react-server --env-file=.env.local --import tsx scripts/migrate-legacy-drawing-baseline.ts",

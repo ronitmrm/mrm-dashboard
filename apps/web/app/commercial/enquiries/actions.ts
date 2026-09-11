@@ -26,11 +26,9 @@ import { requireCapability } from "@/lib/auth/require-capability"
 import { commercialTaskCapabilities } from "@/lib/auth/task-capabilities"
 import {
   type CommercialArtifactPurpose,
-  commercialAttachmentLimitBytes,
   designBomAttachmentFieldName,
   designBomAttachmentPurpose,
   type DesignAttachmentKind,
-  validateCommercialAttachment,
 } from "@/lib/commercial-attachment"
 import { optionalText, requiredText } from "@/lib/form-data"
 import {
@@ -96,9 +94,7 @@ async function withWorkflow<T>(
   }
 }
 
-async function persistAttachment(
-  file: File | null,
-  input: {
+async function persistAttachment(input: {
     authorization: CommercialAttachmentAuthorization
     capability: string
     enquiryId: string
@@ -107,13 +103,9 @@ async function persistAttachment(
     purpose?: CommercialArtifactPurpose
     targetId: string
     targetTable?: "design_tasks" | "enquiry_items"
-    uploadId?: string
+    uploadId: string
     uploadIntent: PendingUploadIntent
-  }
-) {
-  if (file && file.size > commercialAttachmentLimitBytes) {
-    throw new Error("Drawing files must not exceed 25 MB.")
-  }
+  }) {
   const session = await requireCapability(
     input.capability,
     `${enquiriesPath}/${input.enquiryId}`
@@ -169,8 +161,7 @@ async function persistAttachment(
       await service.close()
     }
   }
-  if (input.uploadId) {
-    return consumePendingArtifactUpload({
+  return consumePendingArtifactUpload({
       authorization: await pendingUploadAuthorizationForUser(session.user.id),
       expectedIntent: input.uploadIntent,
       finalize: async (source) => {
@@ -212,17 +203,7 @@ async function persistAttachment(
         }
       },
       uploadId: input.uploadId,
-    })
-  }
-  if (!file) throw new Error("Drawing file is required.")
-  const bytes = Buffer.from(await file.arrayBuffer())
-  const validated = validateCommercialAttachment({
-    bytes,
-    declaredMediaType: file.type,
-    fileName: file.name,
-    purpose: input.purpose ?? "drawing",
   })
-  return retain({ bytes, ...validated })
 }
 
 export async function createEnquiryAction(formData: FormData) {
@@ -317,11 +298,8 @@ export async function addEnquiryItemAction(formData: FormData) {
         targetPrice: numeric(formData, "target_price"),
       })
   )
-  const drawing = formData.get("drawing_file")
-  if (drawingUploadId || (drawing instanceof File && drawing.size > 0)) {
-    await persistAttachment(
-      drawing instanceof File && drawing.size > 0 ? drawing : null,
-      {
+  if (drawingUploadId) {
+    await persistAttachment({
         authorization: {
           enquiryId,
           enquiryItemId: line.id,
@@ -333,9 +311,8 @@ export async function addEnquiryItemAction(formData: FormData) {
         organizationId,
         targetId: line.id,
         uploadId: drawingUploadId,
-        uploadIntent: drawingIntent,
-      }
-    )
+      uploadIntent: drawingIntent,
+    })
   }
   revalidatePath(enquiriesPath)
   revalidatePath(`${enquiriesPath}/${enquiryId}`)
@@ -426,12 +403,9 @@ export async function updateEnquiryItemAction(formData: FormData) {
         targetPrice: numeric(formData, "target_price"),
       })
   )
-  const drawing = formData.get("drawing_file")
   const drawingUploadId = pendingUploadId(formData, "drawing_file")
-  if (drawingUploadId || (drawing instanceof File && drawing.size > 0)) {
-    await persistAttachment(
-      drawing instanceof File && drawing.size > 0 ? drawing : null,
-      {
+  if (drawingUploadId) {
+    await persistAttachment({
         authorization: {
           enquiryId,
           enquiryItemId,
@@ -448,9 +422,8 @@ export async function updateEnquiryItemAction(formData: FormData) {
           enquiryItemId,
           kind: "commercial-enquiry-item",
           operation: "update",
-        },
-      }
-    )
+      },
+    })
   }
   revalidatePath(enquiriesPath)
   revalidatePath(`${enquiriesPath}/${enquiryId}`)
@@ -500,12 +473,9 @@ export async function completeSalesClarificationAction(formData: FormData) {
   const enquiryId = requiredText(formData, "enquiry_id")
   const enquiryItemId = requiredText(formData, "enquiry_item_id")
   const organizationId = requiredText(formData, "organization_id")
-  const drawing = formData.get("drawing_file")
   const drawingUploadId = pendingUploadId(formData, "drawing_file")
-  if (drawingUploadId || (drawing instanceof File && drawing.size > 0)) {
-    await persistAttachment(
-      drawing instanceof File && drawing.size > 0 ? drawing : null,
-      {
+  if (drawingUploadId) {
+    await persistAttachment({
         authorization: {
           clarificationTaskId,
           enquiryId,
@@ -524,9 +494,8 @@ export async function completeSalesClarificationAction(formData: FormData) {
           enquiryId,
           enquiryItemId,
           kind: "commercial-sales-clarification",
-        },
-      }
-    )
+      },
+    })
   }
   await withWorkflow(
     commercialTaskCapabilities.completeSalesClarification,
@@ -583,35 +552,8 @@ export async function saveDesignAction(formData: FormData) {
   const customerDrawingFileIds = formData.has("customer_drawings_present")
     ? formData.getAll("customer_drawing_file_ids").filter((value): value is string => typeof value === "string")
     : undefined
-  for (const file of formData.getAll("customer_drawing_files")) {
-    if (!(file instanceof File) || !file.size) continue
-    const stored = await persistAttachment(file, {
-      authorization: {
-        designId,
-        enquiryId,
-        enquiryItemId,
-        kind: "design",
-        organizationId,
-      },
-      capability: commercialTaskCapabilities.saveDesign,
-      enquiryId,
-      organizationId,
-      purpose: "customer_drawing",
-      linkPurpose: `customer_drawing_${randomUUID()}`,
-      targetId: designId,
-      targetTable: "design_tasks",
-      uploadIntent: {
-        designId,
-        enquiryId,
-        enquiryItemId,
-        kind: "commercial-design-attachment",
-        purpose: "customer_drawing",
-      },
-    })
-    customerDrawingFileIds?.push(stored.id)
-  }
   for (const uploadId of pendingUploadIds(formData, "customer_drawing_files")) {
-    const stored = await persistAttachment(null, {
+    const stored = await persistAttachment({
       authorization: {
         designId,
         enquiryId,
@@ -731,12 +673,9 @@ export async function saveDesignAction(formData: FormData) {
     ["cad_file", "cad"],
   ] as const
   for (const [field, purpose] of attachmentFiles) {
-    const file = formData.get(field)
     const uploadId = pendingUploadId(formData, field)
-    if (uploadId || (file instanceof File && file.size > 0)) {
-      await persistAttachment(
-        file instanceof File && file.size > 0 ? file : null,
-        {
+    if (uploadId) {
+      await persistAttachment({
           authorization: {
             designId,
             enquiryId,
@@ -757,9 +696,8 @@ export async function saveDesignAction(formData: FormData) {
             enquiryItemId,
             kind: "commercial-design-attachment",
             purpose,
-          },
-        }
-      )
+        },
+      })
     }
   }
   const bomAttachmentKinds = [
@@ -769,18 +707,13 @@ export async function saveDesignAction(formData: FormData) {
   ] as const satisfies readonly DesignAttachmentKind[]
   for (const line of bomLines) {
     for (const kind of bomAttachmentKinds) {
-      const file = formData.get(
-        designBomAttachmentFieldName({ kind, lineNumber: line.lineNumber })
-      )
       const fieldName = designBomAttachmentFieldName({
         kind,
         lineNumber: line.lineNumber,
       })
       const uploadId = pendingUploadId(formData, fieldName)
-      if (uploadId || (file instanceof File && file.size > 0)) {
-        await persistAttachment(
-          file instanceof File && file.size > 0 ? file : null,
-          {
+      if (uploadId) {
+        await persistAttachment({
             authorization: {
               designId,
               enquiryId,
@@ -806,9 +739,8 @@ export async function saveDesignAction(formData: FormData) {
               enquiryItemId,
               kind: "commercial-design-attachment",
               purpose: kind,
-            },
-          }
-        )
+          },
+        })
       }
     }
   }
@@ -969,11 +901,8 @@ export async function requestDesignClarificationAction(formData: FormData) {
 export async function importEnquiryLinesAction(formData: FormData) {
   const enquiryId = requiredText(formData, "enquiry_id")
   const organizationId = requiredText(formData, "organization_id")
-  const file = formData.get("template_file")
   const uploadId = pendingUploadId(formData, "template_file")
-  if (!uploadId && (!(file instanceof File) || file.size === 0)) {
-    throw new Error("Import file is required.")
-  }
+  if (!uploadId) throw new Error("Import file is required.")
   const session = await requireCapability(
     commercialTaskCapabilities.importEnquiryLines,
     `${enquiriesPath}/${enquiryId}`
@@ -1046,8 +975,7 @@ export async function importEnquiryLinesAction(formData: FormData) {
       await artifacts.close()
     }
   }
-  const reviewId = uploadId
-    ? await consumePendingArtifactUpload({
+  const reviewId = await consumePendingArtifactUpload({
         authorization: await pendingUploadAuthorizationForUser(session.user.id),
         expectedIntent: { enquiryId, kind: "commercial-enquiry-import" },
         finalize: async (source) => {
@@ -1093,15 +1021,8 @@ export async function importEnquiryLinesAction(formData: FormData) {
             await artifacts.close()
           }
         },
-        uploadId,
-      })
-    : (
-        await retain({
-          bytes: Buffer.from(await (file as File).arrayBuffer()),
-          fileName: (file as File).name,
-          organizationId,
-        })
-      ).reviewId
+    uploadId,
+  })
   revalidatePath(`${enquiriesPath}/${enquiryId}`)
   redirect(`${enquiriesPath}/${enquiryId}/import-review/${reviewId}`)
 }

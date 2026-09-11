@@ -320,6 +320,16 @@ export async function pendingUploadAuthorizationForUser(userId: string) {
 }
 
 export function pendingUploadIds(formData: FormData, fileFieldName: string) {
+  if (
+    formData
+      .getAll(fileFieldName)
+      .some((value) => value instanceof File && value.size > 0)
+  ) {
+    throw new PendingUploadError(
+      "invalid_request",
+      "The selected file was not prepared for upload. Please retry."
+    )
+  }
   return formData
     .getAll(`${fileFieldName}_upload_id`)
     .filter((value): value is string => typeof value === "string")

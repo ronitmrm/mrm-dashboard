@@ -31,6 +31,7 @@ import {
   cleanupPendingArtifactUploads,
   completePendingArtifactUpload,
   getPendingArtifactUpload,
+  pendingUploadIds,
   readBoundedUploadChunk,
 } from "./pending-artifact-upload-server"
 import { pendingUploadIntentEquals } from "./artifact-upload-contract"
@@ -113,6 +114,18 @@ const authorization = {
 beforeEach(() => vi.clearAllMocks())
 
 describe("pending Artifact upload lifecycle", () => {
+  test("rejects unprepared retained files but ignores empty placeholders", () => {
+    const raw = new FormData()
+    raw.set("drawing_file", new File(["bytes"], "drawing.pdf"))
+    expect(() => pendingUploadIds(raw, "drawing_file")).toThrowError(
+      expect.objectContaining({ code: "invalid_request" })
+    )
+
+    const empty = new FormData()
+    empty.set("drawing_file", new File([], ""))
+    expect(pendingUploadIds(empty, "drawing_file")).toEqual([])
+  })
+
   test("matches a JSONB intent after persisted key reordering", () => {
     expect(
       pendingUploadIntentEquals(

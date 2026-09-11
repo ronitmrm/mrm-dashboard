@@ -2,6 +2,9 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it, vi } from "vitest"
 
 vi.mock("server-only", () => ({}))
+vi.mock("@/components/attachment-viewer-link", () => ({
+  AttachmentViewerLink: ({ children }: { children: React.ReactNode }) => children,
+}))
 
 import { ArtifactLedgerView } from "./artifact-ledger-view"
 

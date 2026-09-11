@@ -24,6 +24,16 @@ export {
   type ArtifactLedgerFilters,
   type ArtifactLedgerUsage,
 } from "./artifact-ledger"
+export {
+  createArtifactStorageMigrationRepository,
+  createArtifactStorageMigrationService,
+  type ArtifactSourceCleanup,
+  type ArtifactStorageMigrationInventory,
+  type ArtifactStorageMigrationObject,
+  type ArtifactStorageMigrationRepository,
+  type ArtifactStorageMigrationResult,
+  type ArtifactStorageReadiness,
+} from "./artifact-storage-migration"
 export { createCatalogMasterRepository } from "./catalog-masters"
 export {
   type BoundedCommercialResult,

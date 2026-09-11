@@ -16,10 +16,6 @@ import { requireCapability } from "@/lib/auth/require-capability"
 import { commercialTaskCapabilities } from "@/lib/auth/task-capabilities"
 import { ecnDesignHref, ecnHref } from "@/lib/pricing/ecn-routes"
 import { optionalText, requiredText } from "@/lib/form-data"
-import {
-  commercialAttachmentLimitBytes,
-  validateCommercialAttachment,
-} from "@/lib/commercial-attachment"
 import { createGoogleCloudArtifactProvider } from "@/lib/google-cloud-artifact-provider"
 import {
   consumePendingArtifactUpload,
@@ -60,17 +56,11 @@ function selectedValues(formData: FormData, name: string) {
     .filter(Boolean)
 }
 
-async function persistEcnDrawing(
-  file: File | null,
-  input: {
+async function persistEcnDrawing(input: {
     engineeringChangeNoteId: string
     organizationId: string
-    uploadId?: string
-  }
-) {
-  if (file && file.size > commercialAttachmentLimitBytes) {
-    throw new Error("Drawing files must not exceed 25 MB.")
-  }
+    uploadId: string
+  }) {
   const session = await requireCapability(
     commercialTaskCapabilities.completeEngineeringChangeDesign,
     ecnDesignHref(input.engineeringChangeNoteId)
@@ -122,8 +112,7 @@ async function persistEcnDrawing(
       await artifacts.close()
     }
   }
-  if (input.uploadId) {
-    return consumePendingArtifactUpload({
+  return consumePendingArtifactUpload({
       authorization: await pendingUploadAuthorizationForUser(session.user.id),
       expectedIntent: {
         engineeringChangeNoteId: input.engineeringChangeNoteId,
@@ -171,17 +160,7 @@ async function persistEcnDrawing(
         }
       },
       uploadId: input.uploadId,
-    })
-  }
-  if (!file) throw new Error("Drawing file is required.")
-  const bytes = Buffer.from(await file.arrayBuffer())
-  const validated = validateCommercialAttachment({
-    bytes,
-    declaredMediaType: file.type,
-    fileName: file.name,
-    purpose: "drawing",
   })
-  return retain({ bytes, ...validated })
 }
 
 function optionalBomLines(formData: FormData) {
@@ -496,21 +475,14 @@ export async function completeEngineeringChangeDesignAction(
     "engineering_change_note_id"
   )
   const bomLines = optionalBomLines(formData)
-  const drawingFile = formData.get("drawing_file")
   const uploadId = pendingUploadId(formData, "drawing_file")
-  const uploadedDrawing =
-    uploadId || (drawingFile instanceof File && drawingFile.size > 0)
-      ? await persistEcnDrawing(
-          drawingFile instanceof File && drawingFile.size > 0
-            ? drawingFile
-            : null,
-          {
-            engineeringChangeNoteId,
-            organizationId: requiredText(formData, "organization_id"),
-            uploadId,
-          }
-        )
-      : null
+  const uploadedDrawing = uploadId
+    ? await persistEcnDrawing({
+        engineeringChangeNoteId,
+        organizationId: requiredText(formData, "organization_id"),
+        uploadId,
+      })
+    : null
   const drawingRevisionRequested =
     formData.has("drawing_revision_requested") || uploadedDrawing !== null
   const drawingRequirement =

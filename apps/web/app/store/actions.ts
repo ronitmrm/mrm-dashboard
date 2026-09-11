@@ -31,7 +31,6 @@ import {
   resolveStoreRequestDepartment,
   storeRequestFormPolicy,
 } from "@/lib/store-request-policy"
-import { validateUserAttachment } from "@/lib/user-attachment-security"
 import { createGoogleCloudArtifactProvider } from "@/lib/google-cloud-artifact-provider"
 import { buildStorePurchaseOrderPdf } from "@/lib/store/purchase-order-pdf"
 import {
@@ -249,20 +248,6 @@ export async function createStoreSupplierAction(formData: FormData) {
 }
 
 
-async function saveSupplierQuote(upload: FormDataEntryValue | null) {
-  if (!(upload instanceof File) || upload.size === 0) return null
-  if (upload.size > 10 * 1024 * 1024) {
-    throw new Error("Supplier quote must be 10 MB or smaller.")
-  }
-  const bytes = Buffer.from(await upload.arrayBuffer())
-  const validated = validateUserAttachment({
-    bytes,
-    fileName: upload.name,
-    purpose: "supplier-quote",
-  })
-  return { bytes, fileName: validated.fileName, mediaType: "application/pdf" }
-}
-
 async function storeSupplierQuoteArtifact(input: {
   actorUserId: string
   bytes: Buffer
@@ -312,7 +297,6 @@ export async function createStoreSupplierPriceAction(formData: FormData) {
       masterCapability("SUPPLIER_PRICE", "save"),
       storePath
     )
-    const savedQuote = await saveSupplierQuote(formData.get("supplier_quote"))
     const quoteUploadId = pendingUploadId(formData, "supplier_quote")
     const quoteIntent = {
       itemTypeId: requiredText(formData, "item_type_id"),
@@ -342,14 +326,7 @@ export async function createStoreSupplierPriceAction(formData: FormData) {
           unitPrice: requiredText(formData, "unit_price"),
           validFrom: optionalText(formData, "valid_from"),
         })
-        if (savedQuote) {
-          await storeSupplierQuoteArtifact({
-            ...savedQuote,
-            actorUserId,
-            organizationId,
-            supplierPriceId: price.id,
-          })
-        } else if (quoteUploadId && pendingAuthorization) {
+        if (quoteUploadId && pendingAuthorization) {
           await consumePendingArtifactUpload({
             authorization: pendingAuthorization,
             expectedIntent: quoteIntent,
@@ -386,19 +363,16 @@ export async function createStoreSupplierPriceAction(formData: FormData) {
 
 export async function uploadStoreSupplierQuoteAction(formData: FormData) {
   await requireCapability(masterCapability("SUPPLIER_PRICE", "save"), storePath)
-  const savedQuote = await saveSupplierQuote(formData.get("supplier_quote"))
   const quoteUploadId = pendingUploadId(formData, "supplier_quote")
-  if (!savedQuote && !quoteUploadId) {
+  if (!quoteUploadId) {
     throw new Error("Select a Supplier quote PDF to upload.")
   }
   await withStore(
     masterCapability("SUPPLIER_PRICE", "save"),
     async (_repository, actorUserId, organizationId) => {
       const supplierPriceId = requiredText(formData, "supplier_price_id")
-      if (quoteUploadId) {
-        const authorization =
-          await pendingUploadAuthorizationForUser(actorUserId)
-        await consumePendingArtifactUpload({
+      const authorization = await pendingUploadAuthorizationForUser(actorUserId)
+      await consumePendingArtifactUpload({
           authorization,
           expectedIntent: {
             kind: "store-supplier-quote",
@@ -425,16 +399,8 @@ export async function uploadStoreSupplierQuoteAction(formData: FormData) {
             }
           },
           recover: () => undefined,
-          uploadId: quoteUploadId,
-        })
-      } else if (savedQuote) {
-        await storeSupplierQuoteArtifact({
-          ...savedQuote,
-          actorUserId,
-          organizationId,
-          supplierPriceId,
-        })
-      }
+        uploadId: quoteUploadId,
+      })
     }
   )
   revalidatePath("/store/assets/[assetCode]", "page")
@@ -551,7 +517,6 @@ export async function createStoreAssetNameAction(formData: FormData) {
 export async function createStoreItemTypeAction(formData: FormData) {
   return withMasterSaveFeedback(async () => {
     await requireCapability(masterCapability("ITEM_TYPE", "save"), storePath)
-    const savedDrawing = await saveAssetDrawing(formData.get("asset_drawing"))
     const drawingUploadId = pendingUploadId(formData, "asset_drawing")
     const masterId = optionalText(formData, "master_id")
     const drawingIntent = {
@@ -601,14 +566,7 @@ export async function createStoreItemTypeAction(formData: FormData) {
               ...input,
               rejectDuplicates: true,
             })
-        if (savedDrawing) {
-          await storeItemDrawingArtifact({
-            ...savedDrawing,
-            actorUserId,
-            itemTypeId: item.id,
-            organizationId,
-          })
-        } else if (drawingUploadId && pendingAuthorization) {
+        if (drawingUploadId && pendingAuthorization) {
           await consumePendingArtifactUpload({
             authorization: pendingAuthorization,
             expectedIntent: drawingIntent,
@@ -642,24 +600,6 @@ export async function createStoreItemTypeAction(formData: FormData) {
   })
 }
 
-
-async function saveAssetDrawing(upload: FormDataEntryValue | null) {
-  if (!(upload instanceof File) || upload.size === 0) return null
-  if (upload.size > 10 * 1024 * 1024) {
-    throw new Error("Asset drawing must be 10 MB or smaller.")
-  }
-  const allowedTypes = new Set(["application/pdf", "image/jpeg", "image/png"])
-  if (!allowedTypes.has(upload.type)) {
-    throw new Error("Asset drawing must be a PDF, JPG, or PNG file.")
-  }
-  const bytes = Buffer.from(await upload.arrayBuffer())
-  const validated = validateUserAttachment({
-    bytes,
-    fileName: upload.name,
-    purpose: "drawing",
-  })
-  return { bytes, fileName: validated.fileName, mediaType: validated.mediaType }
-}
 
 async function storeItemDrawingArtifact(input: {
   actorUserId: string
@@ -706,19 +646,16 @@ async function storeItemDrawingArtifact(input: {
 
 export async function uploadStoreItemDrawingAction(formData: FormData) {
   await requireCapability(masterCapability("ITEM_TYPE", "save"), storePath)
-  const savedDrawing = await saveAssetDrawing(formData.get("asset_drawing"))
   const drawingUploadId = pendingUploadId(formData, "asset_drawing")
-  if (!savedDrawing && !drawingUploadId) {
+  if (!drawingUploadId) {
     throw new Error("Select an Asset drawing to upload.")
   }
   await withStore(
     masterCapability("ITEM_TYPE", "save"),
     async (_repository, actorUserId, organizationId) => {
       const itemTypeId = requiredText(formData, "item_type_id")
-      if (drawingUploadId) {
-        const authorization =
-          await pendingUploadAuthorizationForUser(actorUserId)
-        await consumePendingArtifactUpload({
+      const authorization = await pendingUploadAuthorizationForUser(actorUserId)
+      await consumePendingArtifactUpload({
           authorization,
           expectedIntent: { itemTypeId, kind: "store-item-drawing" },
           finalize: async (source) => {
@@ -742,16 +679,8 @@ export async function uploadStoreItemDrawingAction(formData: FormData) {
             }
           },
           recover: () => undefined,
-          uploadId: drawingUploadId,
-        })
-      } else if (savedDrawing) {
-        await storeItemDrawingArtifact({
-          ...savedDrawing,
-          actorUserId,
-          itemTypeId,
-          organizationId,
-        })
-      }
+        uploadId: drawingUploadId,
+      })
     }
   )
   revalidateStore()
@@ -906,26 +835,7 @@ export async function issueStoreRequisitionAction(formData: FormData) {
   revalidateStore()
 }
 
-async function saveGuaranteeCard(upload: FormDataEntryValue | null) {
-  if (!(upload instanceof File) || upload.size === 0) return null
-  if (upload.size > 10 * 1024 * 1024) {
-    throw new Error("Guarantee card must be 10 MB or smaller.")
-  }
-  const allowedTypes = new Set(["application/pdf", "image/jpeg", "image/png"])
-  if (!allowedTypes.has(upload.type)) {
-    throw new Error("Guarantee card must be a PDF, JPG, or PNG file.")
-  }
-  const bytes = Buffer.from(await upload.arrayBuffer())
-  const validated = validateUserAttachment({
-    bytes,
-    fileName: upload.name,
-    purpose: "purchase-order",
-  })
-  return { bytes, fileName: validated.fileName, mediaType: validated.mediaType }
-}
-
 export async function receiveStoreStockAction(formData: FormData) {
-  const savedFile = await saveGuaranteeCard(formData.get("guarantee_card"))
   const guaranteeUploadId = pendingUploadId(formData, "guarantee_card")
   const purchaseOrderLineId = requiredText(formData, "purchase_order_line_id")
   const guaranteeIntent = {
@@ -966,7 +876,7 @@ export async function receiveStoreStockAction(formData: FormData) {
         receivedBy: requestContext.requesterEmail,
         warrantyUntil: optionalText(formData, "warranty_until"),
       })
-      if (savedFile || (guaranteeUploadId && pendingAuthorization)) {
+      if (guaranteeUploadId && pendingAuthorization) {
         const artifacts = createArtifactService({
           connectionString: readAuthEnvironment().connectionString,
           provider: createGoogleCloudArtifactProvider(),
@@ -1008,8 +918,7 @@ export async function receiveStoreStockAction(formData: FormData) {
               },
             })
           }
-          if (guaranteeUploadId && pendingAuthorization) {
-            await consumePendingArtifactUpload({
+          await consumePendingArtifactUpload({
               authorization: pendingAuthorization,
               expectedIntent: guaranteeIntent,
               finalize: async (source) => {
@@ -1028,11 +937,8 @@ export async function receiveStoreStockAction(formData: FormData) {
                 }
               },
               recover: () => undefined,
-              uploadId: guaranteeUploadId,
-            })
-          } else if (savedFile) {
-            await retain(savedFile)
-          }
+            uploadId: guaranteeUploadId,
+          })
         } finally {
           await artifacts.close()
         }
