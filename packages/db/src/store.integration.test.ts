@@ -32,9 +32,18 @@ let legacyAssetId: string
 let legacyAssetCode: string
 
 class StoreArtifactProvider implements ArtifactStorageProvider {
+  readonly identifier = "uploadthing"
   readonly uploads: Array<{ bytes: Buffer; name: string }> = []
 
   async delete() {}
+
+  async read() {
+    return Buffer.alloc(0)
+  }
+
+  async resolveLegacyPublicUrl({ key }: { key: string }) {
+    return `https://files.example.test/${key}`
+  }
 
   async upload(input: Parameters<ArtifactStorageProvider["upload"]>[0]) {
     this.uploads.push({ bytes: input.bytes, name: input.name })
@@ -790,8 +799,7 @@ describe("Store requests", () => {
       storeIssuedPdf,
     })
     const order = (await store.listPurchaseOrders(organizationId)).find(
-      (candidate) =>
-        candidate.purchaseOrderId === createdOrder.orders[0]!.id
+      (candidate) => candidate.purchaseOrderId === createdOrder.orders[0]!.id
     )!
 
     await store.receiveStock({

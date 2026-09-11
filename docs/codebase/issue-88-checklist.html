@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Issue 88 — Private Artifact delivery</title>
+<style>body{font:16px/1.5 system-ui;margin:2rem;color:#18251d;background:#fafcfb}table{width:100%;border-collapse:collapse}th,td{padding:.75rem;text-align:left;vertical-align:top;border:1px solid #ccd7cf}th{background:#e8f0eb}code{font-size:.9em}a{color:#176539}</style>
+<h1>Issue #88 — Private Artifact delivery</h1>
+<p>Owner: senior engineer/orchestrator. Updated 2026-09-11. Hard constraint: preserve business rules, authorization, organization scope, immutable history, exact issued evidence, deduplication, and audited manual deletion.</p>
+<p><a href="https://github.com/ronitmrm/mrm-dashboard/issues/88">Approved specification</a>. One writer at a time; implementation and live provider acceptance tracked separately. No live cutover performed.</p>
+<table>
+<thead><tr><th>Deliverable / acceptance</th><th>Owner</th><th>Status</th><th>Verification evidence</th><th>Remaining blocker</th></tr></thead>
+<tbody>
+<tr id="provider"><td>Private GCS provider, validated lazy OIDC / ADC, immutable verified storage; expand schema preserves ledger lifecycle</td><td>Sol implementation; senior review</td><td>Implemented; review pending</td><td><code>@google-cloud/storage@8.1.0</code>, <code>@vercel/oidc@3.8.7</code>, auth 9.15.1; provider tests 9/9, Artifact service integration 11/11, db/web typechecks pass; disposable DB retained 64 legacy rows and stored 2 GCS rows</td><td>Real bucket credentials and provider traffic intentionally not exercised; delivery/upload slices pending</td></tr>
+<tr id="delivery"><td>Authorized verified streamed bytes across domain routes, quotation revision/pinned drawings and ZIPs; legacy local reads preserved</td><td>Sol implementation; senior review</td><td>Pending</td><td>Source contract mapping in progress</td><td>Implementation</td></tr>
+<tr id="uploads"><td>Shared authenticated pending uploads, ≤4 MiB chunks, confirmed-offset retry, target-bound IDs; preserve 25 MiB and existing content rules</td><td>Sol implementation; senior review</td><td>Pending</td><td>Existing workflow allowances are fixed constraints</td><td>Implementation</td></tr>
+<tr id="interface"><td>Ledger uses authenticated logical-ID links; existing preview, download, PDF pagination and zoom preserved</td><td>Astra design; senior review</td><td>Pending</td><td>Design score: Unverified</td><td>Implementation and browser verification</td></tr>
+<tr id="migration"><td>Dry-run inventory; verified copy, atomic locator/cleanup commit, resumable source deletion and reconciliation; guarded contract stage</td><td>Sol implementation; senior review</td><td>Pending</td><td>No live objects changed</td><td>Implementation; later holiday cutover</td></tr>
+<tr id="provider-setup"><td>Single us-central1 Standard bucket; PAP, uniform access, no versioning/soft delete; bucket-scoped identity with previews excluded</td><td>Senior + user setup; Terra research</td><td>Partial; externally unverified</td><td>User reports project <code>project-b3e69f72-3e13-4f13-98b</code>, bucket <code>mrm-erp-gcp-1</code>, and Google-managed encryption</td><td>Project number, pool/provider/service-account identifiers, bucket policy inspection, and actual Vercel production/staging claims</td></tr>
+<tr id="verification"><td>Targeted Artifact and quotation checks, lint, typecheck, web/database tests, build</td><td>Senior engineer</td><td>Pending</td><td>Known baseline: quote draft revision 1 vs 0; Administrative grants 671 vs 669 (issue documents unchanged staging reproduction)</td><td>Implementation</td></tr>
+<tr id="live-acceptance"><td>Real 25 MiB upload, &gt;4.5 MB ZIP, multipage PDF; anonymous provider denial; exact authorized bytes; final-reference deletion and zero public sources</td><td>Senior + user holiday cutover</td><td>Unverified</td><td>Synthetic tests will be recorded separately from real provider traffic</td><td>Configured provider, deployment, controlled holiday window</td></tr>
+</tbody>
+</table>
+</html>

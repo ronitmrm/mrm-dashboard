@@ -1,12 +1,12 @@
 # Artifact storage architecture
 
-This page describes the current UploadThing implementation. The approved
-[private GCS target](../specs/private-google-cloud-artifacts.md) changes storage
-and byte delivery; implementation and live cutover have not started. Update this
-page with the verified implementation before declaring issue #88 complete.
+This page describes the current UploadThing application path and the implemented
+private GCS provider foundation. Application delivery, data migration, and live
+cutover remain pending under the approved
+[private GCS target](../specs/private-google-cloud-artifacts.md).
 
 Runtime Artifact metadata is canonical in PostgreSQL. `core.file_objects`
-represents Organization-scoped physical UploadThing objects; `core.files`
+represents Organization-scoped physical provider objects; `core.files`
 represents immutable logical Artifacts; `core.file_links` versions their
 business-record usages. The Administration ledger queries PostgreSQL, not
 UploadThing file listings, and sums unique live physical bytes without
@@ -18,6 +18,23 @@ deletion state. `apps/web/lib/uploadthing-artifact-provider.ts` is the narrow
 server-only provider boundary for upload and final-reference deletion. Missing
 or invalid `UPLOADTHING_TOKEN` fails new storage; it never falls back to local
 writes.
+
+`apps/web/lib/google-cloud-artifact-provider.ts` implements the private target
+with `@google-cloud/storage` 8.1.0. It validates configuration, uses local
+Application Default Credentials or request-lazy Vercel OIDC federation, derives
+opaque deterministic keys, prevents overwrite, verifies exact bytes after
+upload, reads exact bytes, and fences deletion to the observed object
+generation. PostgreSQL accepts `google-cloud-storage` rows with a nullable
+transitional public URL. The application still constructs UploadThing for its
+business actions until the later delivery and upload slices switch them.
+
+The user-created target is Google Cloud project
+`project-b3e69f72-3e13-4f13-98b` and bucket `mrm-erp-gcp-1`; runtime code has no
+hard-coded defaults. The project number, pool ID, provider ID, service-account
+email, and verified Vercel production/staging claims remain external setup
+blockers. Environment names are `GCS_PROJECT_ID`, `GCS_BUCKET_NAME`,
+`GCS_PROJECT_NUMBER`, `GCS_WORKLOAD_IDENTITY_POOL_ID`,
+`GCS_WORKLOAD_IDENTITY_PROVIDER_ID`, and `GCS_SERVICE_ACCOUNT_EMAIL`.
 
 Retained Commercial, Recruitment, Store, and enquiry-line import actions call
 the shared service. Quote, PI, and Store Purchase Order issuance calls the same

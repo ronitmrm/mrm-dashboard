@@ -21,6 +21,7 @@ const connectionString =
 const pool = new Pool({ connectionString })
 
 class ControllableArtifactProvider implements ArtifactStorageProvider {
+  readonly identifier = "uploadthing"
   readonly deleted: string[] = []
   readonly uploads: Array<{
     bytes: Buffer
@@ -38,6 +39,14 @@ class ControllableArtifactProvider implements ArtifactStorageProvider {
     this.deleted.push(key)
   }
 
+  async read() {
+    return Buffer.alloc(0)
+  }
+
+  async resolveLegacyPublicUrl({ key }: { key: string }) {
+    return `https://files.example.test/${key}`
+  }
+
   async upload(input: {
     bytes: Buffer
     customId: string
@@ -50,6 +59,31 @@ class ControllableArtifactProvider implements ArtifactStorageProvider {
     }
     const key = `${randomUUID()}-${this.uploads.length}`
     return { key, url: `https://files.example.test/${key}` }
+  }
+}
+
+class DeterministicArtifactProvider implements ArtifactStorageProvider {
+  readonly identifier = "google-cloud-storage"
+  readonly preserveUploadsOnRollback = true
+  readonly deleted: string[] = []
+  readonly uploads: string[] = []
+  private failed = false
+
+  async delete({ key }: { key: string }) {
+    this.deleted.push(key)
+  }
+
+  async read() {
+    return Buffer.alloc(0)
+  }
+
+  async upload({ customId }: Parameters<ArtifactStorageProvider["upload"]>[0]) {
+    this.uploads.push(customId)
+    if (this.uploads.length === 2 && !this.failed) {
+      this.failed = true
+      throw new Error("artifact set upload failed")
+    }
+    return { key: `artifacts/${customId}` }
   }
 }
 
@@ -551,6 +585,51 @@ describe("Artifact service", () => {
         first.map((artifact) => artifact.id)
       )
       expect(provider.uploads).toHaveLength(2)
+    } finally {
+      await service.close()
+    }
+  })
+
+  test("persists the configured private provider and safely reuses deterministic uploads after rollback", async () => {
+    const context = await createCommercialTarget("Private provider")
+    const provider = new DeterministicArtifactProvider()
+    const service = createArtifactService({ connectionString, provider })
+    const pdf = storeInput(context, {
+      idempotencyKey: `private-pdf:${context.target.id}`,
+      purpose: "issued_pdf",
+    })
+    const workbook = storeInput(context, {
+      bytes: Buffer.from("private-workbook"),
+      fileName: "private.xlsx",
+      idempotencyKey: `private-xlsx:${context.target.id}`,
+      mediaType:
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      purpose: "issued_xlsx",
+    })
+
+    try {
+      await expect(service.storeSet([pdf, workbook])).rejects.toThrow(
+        "artifact set upload failed"
+      )
+      expect(provider.deleted).toEqual([])
+
+      const stored = await service.storeSet([pdf, workbook])
+      expect(stored).toMatchObject([
+        { provider: "google-cloud-storage", publicUrl: null },
+        { provider: "google-cloud-storage", publicUrl: null },
+      ])
+      const physicalObjects = await pool.query<{
+        provider: string
+        public_url: string | null
+      }>(
+        `SELECT provider, public_url FROM core.file_objects
+         WHERE organization_id = $1 ORDER BY provider_key`,
+        [context.organizationId]
+      )
+      expect(physicalObjects.rows).toEqual([
+        { provider: "google-cloud-storage", public_url: null },
+        { provider: "google-cloud-storage", public_url: null },
+      ])
     } finally {
       await service.close()
     }
