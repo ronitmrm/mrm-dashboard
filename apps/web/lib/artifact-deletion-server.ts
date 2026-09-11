@@ -10,7 +10,7 @@ import {
   requireAuthenticatedSession,
   requireCapability,
 } from "./auth/require-capability"
-import { createUploadThingArtifactProvider } from "./uploadthing-artifact-provider"
+import { createStoredArtifactProvider } from "./artifact-storage-providers"
 
 export type ArtifactDeletionRequest = {
   artifactId: string
@@ -29,6 +29,7 @@ type ArtifactDeletionDependencies = {
     ReturnType<typeof createArtifactLedgerRepository>,
     "close" | "organizationIdForUser"
   >
+  compatibilityProviders?: readonly ArtifactStorageProvider[]
   provider: ArtifactStorageProvider
   requireCapability: typeof requireCapability
 }
@@ -54,6 +55,7 @@ async function deleteArtifactForUserWith(
   }
 
   const artifacts = dependencies.createArtifactService({
+    compatibilityProviders: dependencies.compatibilityProviders,
     connectionString: dependencies.connectionString,
     provider: dependencies.provider,
   })
@@ -89,7 +91,10 @@ export function deleteArtifactForUser(
     connectionString: readAuthEnvironment().connectionString,
     createArtifactService,
     createLedgerRepository: createArtifactLedgerRepository,
-    provider: createUploadThingArtifactProvider(),
+    compatibilityProviders: [
+      createStoredArtifactProvider("google-cloud-storage"),
+    ],
+    provider: createStoredArtifactProvider("uploadthing"),
   })
 }
 

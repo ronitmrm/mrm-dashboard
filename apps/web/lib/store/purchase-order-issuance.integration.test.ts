@@ -212,7 +212,9 @@ describe("Store Purchase Order PDF issuance", () => {
         organizationId,
         purchaseOrderId,
       })
-      const issuedBytes = provider.bytesByUrl.get(artifact!.publicUrl)
+      const issuedBytes = provider.bytesByUrl.get(
+        `https://files.example.test/${artifact!.providerKey}`
+      )
       expect(issuedBytes?.subarray(0, 5).toString()).toBe("%PDF-")
 
       const registerLine = (
@@ -243,9 +245,11 @@ describe("Store Purchase Order PDF issuance", () => {
         purchaseOrderId,
       })
       expect(afterChanges).toEqual(artifact)
-      expect(provider.bytesByUrl.get(afterChanges!.publicUrl)).toEqual(
-        issuedBytes
-      )
+      expect(
+        provider.bytesByUrl.get(
+          `https://files.example.test/${afterChanges!.providerKey}`
+        )
+      ).toEqual(issuedBytes)
     } finally {
       await artifacts.close()
     }

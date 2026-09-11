@@ -618,7 +618,9 @@ describe("commercial purchase orders and proforma invoices", () => {
         byteSize: newestBytes.byteLength,
         fileName: "customer-po-v2.pdf",
         mediaType: "application/pdf",
-        publicUrl: newest.publicUrl,
+        physicalObjectId: expect.any(String),
+        provider: "uploadthing",
+        providerKey: newest.providerKey,
       })
       expect((await repository.getPurchaseOrder(order.id)).fileName).toBe(
         "customer-po-v2.pdf"
@@ -651,7 +653,9 @@ describe("commercial purchase orders and proforma invoices", () => {
       byteSize: 12,
       fileName: "legacy-po.pdf",
       mediaType: "application/pdf",
-      publicUrl: null,
+      physicalObjectId: null,
+      provider: null,
+      providerKey: null,
       sha256: "abc123",
       storageKey,
     })

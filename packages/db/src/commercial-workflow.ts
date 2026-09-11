@@ -6,6 +6,7 @@ import path from "node:path"
 
 import type { Pool, PoolClient, QueryResult } from "pg"
 
+import type { ArtifactStorageProviderIdentifier } from "./artifacts"
 import {
   boundedResult,
   commercialSelectorLimit,
@@ -1764,10 +1765,9 @@ async function getImportReviewWithClient(
   }
   const source = await client.query<{
     file_name: string
-    public_url: string
   }>(
     `
-      SELECT file.file_name, object.public_url
+      SELECT file.file_name
       FROM core.file_links link
       JOIN core.files file ON file.id = link.file_id
       JOIN core.file_objects object ON object.id = file.physical_object_id
@@ -1822,7 +1822,6 @@ async function getImportReviewWithClient(
     sourceFile: source.rows[0]
       ? {
           fileName: source.rows[0].file_name,
-          publicUrl: source.rows[0].public_url,
         }
       : null,
     status: review.rows[0].status,
@@ -5807,7 +5806,7 @@ export function createCommercialWorkflowRepository(
         | "enquiry_items"
     }) {
       const files = await pool.query<{
-        byte_size: string
+        byte_size: string | null
         created_at: Date
         file_name: string
         id: string
@@ -5819,16 +5818,21 @@ export function createCommercialWorkflowRepository(
           | "deleted"
           | "deletion_failed"
           | null
+        physical_object_id: string | null
         purpose: string
-        public_url: string | null
+        provider: ArtifactStorageProviderIdentifier | null
+        provider_key: string | null
+        sha256: string | null
         storage_key: string
         version: number
       }>(
         `
           SELECT file.id, file.file_name, file.media_type,
-            file.byte_size::text, file.storage_key, file.created_at,
+            coalesce(object.byte_size, file.byte_size)::text AS byte_size,
+            file.storage_key, file.created_at,
             file.lifecycle_state, file_link.purpose, file_link.version,
-            file_link.is_current, object.public_url,
+            file_link.is_current, file.physical_object_id, object.provider,
+            object.provider_key, coalesce(object.sha256, file.sha256) AS sha256,
             object.lifecycle_state AS object_lifecycle_state
           FROM core.file_links file_link
           JOIN core.files file ON file.id = file_link.file_id
@@ -5848,7 +5852,7 @@ export function createCommercialWorkflowRepository(
         ]
       )
       return files.rows.map((row) => ({
-        byteSize: Number(row.byte_size),
+        byteSize: row.byte_size === null ? null : Number(row.byte_size),
         createdAt: row.created_at,
         fileName: row.file_name,
         id: row.id,
@@ -5856,8 +5860,11 @@ export function createCommercialWorkflowRepository(
         lifecycleState: row.lifecycle_state,
         mediaType: row.media_type,
         objectLifecycleState: row.object_lifecycle_state,
+        physicalObjectId: row.physical_object_id,
         purpose: row.purpose,
-        publicUrl: row.public_url,
+        provider: row.provider,
+        providerKey: row.provider_key,
+        sha256: row.sha256,
         storageKey: row.storage_key,
         version: row.version,
       }))
@@ -5880,7 +5887,7 @@ export function createCommercialWorkflowRepository(
       }
 
       const files = await pool.query<{
-        byte_size: string
+        byte_size: string | null
         created_at: Date
         file_name: string
         id: string
@@ -5892,17 +5899,22 @@ export function createCommercialWorkflowRepository(
           | "deleted"
           | "deletion_failed"
           | null
+        physical_object_id: string | null
         purpose: string
-        public_url: string | null
+        provider: ArtifactStorageProviderIdentifier | null
+        provider_key: string | null
+        sha256: string | null
         storage_key: string
         target_id: string
         version: number
       }>(
         `
           SELECT file_link.target_id, file.id, file.file_name, file.media_type,
-            file.byte_size::text, file.storage_key, file.created_at,
+            coalesce(object.byte_size, file.byte_size)::text AS byte_size,
+            file.storage_key, file.created_at,
             file.lifecycle_state, file_link.purpose, file_link.version,
-            file_link.is_current, object.public_url,
+            file_link.is_current, file.physical_object_id, object.provider,
+            object.provider_key, coalesce(object.sha256, file.sha256) AS sha256,
             object.lifecycle_state AS object_lifecycle_state
           FROM core.file_links file_link
           JOIN core.files file ON file.id = file_link.file_id
@@ -5929,7 +5941,7 @@ export function createCommercialWorkflowRepository(
       for (const row of files.rows) {
         const attachments = attachmentsByTarget.get(row.target_id) ?? []
         attachments.push({
-          byteSize: Number(row.byte_size),
+          byteSize: row.byte_size === null ? null : Number(row.byte_size),
           createdAt: row.created_at,
           fileName: row.file_name,
           id: row.id,
@@ -5937,8 +5949,11 @@ export function createCommercialWorkflowRepository(
           lifecycleState: row.lifecycle_state,
           mediaType: row.media_type,
           objectLifecycleState: row.object_lifecycle_state,
+          physicalObjectId: row.physical_object_id,
           purpose: row.purpose,
-          publicUrl: row.public_url,
+          provider: row.provider,
+          providerKey: row.provider_key,
+          sha256: row.sha256,
           storageKey: row.storage_key,
           version: row.version,
         })
@@ -5959,16 +5974,14 @@ export function createCommercialWorkflowRepository(
         media_type: string | null
         is_current: boolean
         lifecycle_state: "current" | "deleted" | "superseded"
-        public_url: string | null
         purpose: string
-        storage_key: string
         version: number
       }>(
         `
           SELECT file.id, file.file_name, file.media_type,
-            file.byte_size::text, file.storage_key, file.created_at,
+            file.byte_size::text, file.created_at,
             file.lifecycle_state, file_link.is_current, file_link.version,
-            file_link.purpose, object.public_url
+            file_link.purpose
           FROM core.file_links file_link
           JOIN core.files file ON file.id = file_link.file_id
           LEFT JOIN core.file_objects object ON object.id = file.physical_object_id
@@ -5990,8 +6003,6 @@ export function createCommercialWorkflowRepository(
         lifecycleState: row.lifecycle_state,
         mediaType: row.media_type,
         purpose: row.purpose,
-        publicUrl: row.public_url,
-        storageKey: row.storage_key,
         version: row.version,
       }))
     },
@@ -6001,7 +6012,7 @@ export function createCommercialWorkflowRepository(
       organizationId: string
     }) {
       const drawings = await pool.query<{
-        byte_size: string
+        byte_size: string | null
         created_at: Date
         file_name: string
         id: string
@@ -6012,13 +6023,18 @@ export function createCommercialWorkflowRepository(
           | "deleted"
           | "deletion_failed"
           | null
-        public_url: string | null
+        physical_object_id: string | null
+        provider: ArtifactStorageProviderIdentifier | null
+        provider_key: string | null
+        sha256: string | null
         storage_key: string
       }>(
         `
           SELECT file.id, file.file_name, file.media_type,
-            file.byte_size::text, file.storage_key, file.created_at,
-            file.lifecycle_state, object.public_url,
+            coalesce(object.byte_size, file.byte_size)::text AS byte_size,
+            file.storage_key, file.created_at,
+            file.lifecycle_state, file.physical_object_id, object.provider,
+            object.provider_key, coalesce(object.sha256, file.sha256) AS sha256,
             object.lifecycle_state AS object_lifecycle_state
           FROM core.file_links file_link
           JOIN core.files file ON file.id = file_link.file_id
@@ -6045,12 +6061,15 @@ export function createCommercialWorkflowRepository(
         throw new Error("Drawing is deleted or unavailable.")
       }
       return {
-        byteSize: Number(row.byte_size),
+        byteSize: row.byte_size === null ? null : Number(row.byte_size),
         createdAt: row.created_at,
         fileName: row.file_name,
         id: row.id,
         mediaType: row.media_type,
-        publicUrl: row.public_url,
+        physicalObjectId: row.physical_object_id,
+        provider: row.provider,
+        providerKey: row.provider_key,
+        sha256: row.sha256,
         storageKey: row.storage_key,
       }
     },

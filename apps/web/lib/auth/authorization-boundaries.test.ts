@@ -39,6 +39,10 @@ describe("protected server boundaries", () => {
     ]
     const authenticatedAccountOnlyBoundaries = new Map([
       ["home/actions.ts", "requireAuthenticatedSession("],
+      [
+        "maintenance/requests/[id]/photos/[photoId]/route.ts",
+        "requireAuthenticatedSession(",
+      ],
     ])
     const missing: string[] = []
 

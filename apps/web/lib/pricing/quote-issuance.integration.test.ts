@@ -459,7 +459,9 @@ describe("sent Quote PDF issuance", () => {
     try {
       const issued = await repository.getQuotePdfArtifact(context.enquiryId)
       expect(issued).not.toBeNull()
-      const originalBytes = provider.bytesByUrl.get(issued!.publicUrl)
+      const originalBytes = provider.bytesByUrl.get(
+        `https://files.example.test/${issued!.providerKey}`
+      )
       expect(originalBytes?.subarray(0, 4).toString()).toBe("%PDF")
 
       await pool.query(
@@ -495,9 +497,11 @@ describe("sent Quote PDF issuance", () => {
       expect(liveDocument.lines[0]).toMatchObject({ price: 12.5 })
       const historical = await repository.getQuotePdfArtifact(context.enquiryId)
       expect(historical).toEqual(issued)
-      expect(provider.bytesByUrl.get(historical!.publicUrl)).toEqual(
-        originalBytes
-      )
+      expect(
+        provider.bytesByUrl.get(
+          `https://files.example.test/${historical!.providerKey}`
+        )
+      ).toEqual(originalBytes)
       expect(provider.uploads).toHaveLength(1)
       await pool.query(
         `UPDATE sales.enquiries SET taxes_and_duties = 'Consignee pays duties',
@@ -544,7 +548,7 @@ describe("sent Quote PDF issuance", () => {
         1
       )
       expect(revisedArtifact).not.toBeNull()
-      expect(revisedArtifact?.publicUrl).not.toBe(issued!.publicUrl)
+      expect(revisedArtifact?.providerKey).not.toBe(issued!.providerKey)
       expect(
         (await repository.listQuotationVersions(context.enquiryId)).map(
           (version) => version.revision
@@ -587,7 +591,7 @@ describe("sent Quote PDF issuance", () => {
       ).resolves.toMatchObject({
         available: false,
         fileName: logical!.fileName,
-        publicUrl: issued!.publicUrl,
+        providerKey: issued!.providerKey,
       })
       expect(provider.uploads).toHaveLength(1)
     } finally {

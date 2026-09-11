@@ -7,6 +7,17 @@ export type ArtifactStorageProviderIdentifier =
   | "google-cloud-storage"
   | "uploadthing"
 
+export type ArtifactByteLocator = {
+  byteSize: number | null
+  fileName: string
+  mediaType: string | null
+  physicalObjectId: string | null
+  provider: ArtifactStorageProviderIdentifier | null
+  providerKey: string | null
+  sha256: string | null
+  storageKey: string | null
+}
+
 export type ArtifactStorageErrorCode =
   | "integrity-failure"
   | "not-found"

@@ -1,3 +1,4 @@
+import type { ArtifactStorageProviderIdentifier } from "./artifacts"
 import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
 
 export type ProductPortfolioRow = {
@@ -895,15 +896,22 @@ export function createProductPortfolioRepository(
       revisionLabel: string
     ) {
       const result = await pool.query<{
-        byte_size: string
+        byte_size: string | null
         file_name: string
         media_type: string | null
-        public_url: string | null
+        object_lifecycle_state: string | null
+        physical_object_id: string | null
+        provider: ArtifactStorageProviderIdentifier | null
+        provider_key: string | null
+        sha256: string | null
         storage_key: string | null
       }>(
         `
-          SELECT file.file_name, file.media_type, file.byte_size::text,
-            file.storage_key, object.public_url
+          SELECT file.file_name, file.media_type,
+            coalesce(object.byte_size, file.byte_size)::text AS byte_size,
+            file.storage_key, file.physical_object_id, object.provider,
+            object.provider_key, coalesce(object.sha256, file.sha256) AS sha256,
+            object.lifecycle_state AS object_lifecycle_state
           FROM catalog.drawing_revisions revision
           JOIN catalog.items item ON item.id = revision.item_id
           JOIN core.organizations organization
@@ -922,10 +930,14 @@ export function createProductPortfolioRepository(
       const row = result.rows[0]
       return row
         ? {
-            byteSize: numeric(row.byte_size),
+            byteSize: nullableNumeric(row.byte_size),
             fileName: row.file_name,
             mediaType: row.media_type,
-            publicUrl: row.public_url,
+            objectLifecycleState: row.object_lifecycle_state,
+            physicalObjectId: row.physical_object_id,
+            provider: row.provider,
+            providerKey: row.provider_key,
+            sha256: row.sha256,
             storageKey: row.storage_key,
           }
         : null

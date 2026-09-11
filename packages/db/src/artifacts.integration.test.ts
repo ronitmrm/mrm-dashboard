@@ -364,7 +364,8 @@ describe("Artifact service", () => {
         {
           fileName: "sales-answer.pdf",
           isCurrent: true,
-          publicUrl: expect.stringMatching(/^https:\/\/files\.example\.test\//),
+          provider: "uploadthing",
+          providerKey: expect.any(String),
           purpose: "sales_clarification",
           version: 2,
         },
@@ -385,9 +386,8 @@ describe("Artifact service", () => {
           {
             fileName: `${purpose}.pdf`,
             isCurrent: true,
-            publicUrl: expect.stringMatching(
-              /^https:\/\/files\.example\.test\//
-            ),
+            provider: "uploadthing",
+            providerKey: expect.any(String),
             purpose,
           },
         ])
@@ -686,7 +686,8 @@ describe("Artifact service", () => {
         })
       ).resolves.toMatchObject({
         id: second.id,
-        publicUrl: second.publicUrl,
+        provider: "uploadthing",
+        providerKey: second.providerKey,
       })
       await expect(
         workflow.listDrawingHistory({

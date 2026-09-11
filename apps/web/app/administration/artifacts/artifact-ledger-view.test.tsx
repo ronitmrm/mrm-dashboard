@@ -1,5 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
+
+vi.mock("server-only", () => ({}))
 
 import { ArtifactLedgerView } from "./artifact-ledger-view"
 
@@ -8,6 +10,7 @@ const rows = [
     actorEmail: "admin@example.test",
     actorName: "Administrator",
     byteSize: 14,
+    contentPath: "/administration/artifacts/artifact-1/content",
     createdAt: "2026-08-20T08:00:00.000Z",
     deletedAt: null,
     deletedByEmail: null,
@@ -22,7 +25,7 @@ const rows = [
     physicalReferenceCount: 2,
     previewKind: "pdf" as const,
     providerState: "deletion_failed" as const,
-    publicUrl: "https://files.example.test/issued-quote.pdf",
+    providerLabel: "Google Cloud Storage",
     purposes: ["issued_quote_pdf"],
     sha256: "a".repeat(64),
     updatedAt: "2026-08-20T09:00:00.000Z",
@@ -42,6 +45,7 @@ const rows = [
     actorEmail: null,
     actorName: null,
     byteSize: 80,
+    contentPath: null,
     createdAt: "2026-08-19T08:00:00.000Z",
     deletedAt: "2026-08-20T10:00:00.000Z",
     deletedByEmail: "admin@example.test",
@@ -57,7 +61,7 @@ const rows = [
     physicalReferenceCount: 1,
     previewKind: "none" as const,
     providerState: "deleted" as const,
-    publicUrl: null,
+    providerLabel: "UploadThing",
     purposes: ["issued_pi_xlsx"],
     sha256: "b".repeat(64),
     updatedAt: "2026-08-19T09:00:00.000Z",
@@ -88,7 +92,7 @@ describe("Artifact ledger view", () => {
           totalArtifacts: 2,
           totalPages: 2,
           totals: {
-            allowanceBytes: 2 * 1024 * 1024 * 1024,
+            allowanceBytes: 5 * 1024 * 1024 * 1024,
             livePhysicalObjects: 1,
             logicalArtifacts: 2,
             uniqueLiveBytes: 14,
@@ -97,14 +101,16 @@ describe("Artifact ledger view", () => {
       />
     )
 
-    expect(html).toContain("14 B of 2 GB")
+    expect(html).toContain("14 B of 5 GB")
     expect(html).toContain("Q-1042 / rev 1")
     expect(html).toContain("Current")
     expect(html).toContain("Deleted")
     expect(html).toContain("Preview")
     expect(html).toContain("Download")
     expect(html).toContain("Provider Deletion Failed")
-    expect(html).toContain("https://files.example.test/issued-quote.pdf")
+    expect(html).toContain("Google Cloud Storage")
+    expect(html).toContain("/administration/artifacts/artifact-1/content")
+    expect(html).not.toContain("https://files.example.test")
     expect(html).toContain("Unavailable")
     expect(html).toContain(">Delete</button>")
     expect(html).toContain(
@@ -131,7 +137,7 @@ describe("Artifact ledger view", () => {
           totalArtifacts: 2,
           totalPages: 2,
           totals: {
-            allowanceBytes: 2 * 1024 * 1024 * 1024,
+            allowanceBytes: 5 * 1024 * 1024 * 1024,
             livePhysicalObjects: 1,
             logicalArtifacts: 2,
             uniqueLiveBytes: 14,

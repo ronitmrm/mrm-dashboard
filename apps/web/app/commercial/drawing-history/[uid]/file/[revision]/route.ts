@@ -2,8 +2,10 @@ import { createProductPortfolioRepository } from "@workspace/db"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
-import { userAttachmentResponseHeaders } from "@/lib/user-attachment-security"
-import { readUserAttachment } from "@/lib/user-attachment-storage"
+import {
+  artifactDeliveryErrorResponse,
+  createArtifactDeliveryResponse,
+} from "@/lib/artifact-delivery"
 
 export async function GET(
   request: Request,
@@ -23,20 +25,26 @@ export async function GET(
       uid,
       revision
     )
-    if (!file) return new Response("Drawing revision file not found.", { status: 404 })
-    if (file.publicUrl) return Response.redirect(file.publicUrl, 307)
-    if (!file.storageKey) {
-      return new Response("Drawing revision file is unavailable.", { status: 410 })
+    if (!file)
+      return new Response("Drawing revision file not found.", { status: 404 })
+    if (
+      file.objectLifecycleState !== null &&
+      file.objectLifecycleState !== "available"
+    ) {
+      return new Response("Drawing revision file is unavailable.", {
+        status: 410,
+      })
     }
-    const attachment = await readUserAttachment(file.storageKey)
-    return new Response(attachment.body, {
-      headers: userAttachmentResponseHeaders(
-        file.fileName,
-        attachment.byteSize,
-        file.mediaType,
-        new URL(request.url).searchParams.has("preview")
-      ),
+    return await createArtifactDeliveryResponse(request, file, {
+      download: !new URL(request.url).searchParams.has("preview"),
     })
+  } catch (error) {
+    const delivery = artifactDeliveryErrorResponse(error, {
+      failed: "Drawing revision file could not be loaded. Please try again.",
+      unavailable: "Drawing revision file is unavailable.",
+    })
+    if (delivery) return delivery
+    throw error
   } finally {
     await repository.close()
   }
