@@ -1,6 +1,9 @@
 import { UTApi, UTFile } from "uploadthing/server"
 
-import type { ArtifactStorageProvider } from "@workspace/db"
+import {
+  ArtifactStorageError,
+  type ArtifactStorageProvider,
+} from "@workspace/db"
 
 type Environment = Record<string, string | undefined>
 
@@ -47,11 +50,16 @@ export function createUploadThingArtifactProvider(
       const url = result.data.find((file) => file.key === key)?.url
       if (url) return url
     } catch (error) {
-      throw new Error("UploadThing could not resolve the retained file.", {
-        cause: error,
-      })
+      throw new ArtifactStorageError(
+        "provider-failure",
+        "UploadThing could not resolve the retained file.",
+        { cause: error }
+      )
     }
-    throw new Error("UploadThing could not resolve the retained file.")
+    throw new ArtifactStorageError(
+      "not-found",
+      "The retained file was not found in UploadThing."
+    )
   }
 
   return {
@@ -77,13 +85,26 @@ export function createUploadThingArtifactProvider(
             signal: AbortSignal.timeout(15_000),
           }
         )
-        if (!response.ok)
-          throw new Error("UploadThing returned a failed response.")
+        if (response.status === 404 || response.status === 410) {
+          throw new ArtifactStorageError(
+            "not-found",
+            "The retained file was not found in UploadThing."
+          )
+        }
+        if (!response.ok) {
+          throw new ArtifactStorageError(
+            "provider-failure",
+            "UploadThing returned a failed response."
+          )
+        }
         return Buffer.from(await response.arrayBuffer())
       } catch (error) {
-        throw new Error("UploadThing could not read the retained file.", {
-          cause: error,
-        })
+        if (error instanceof ArtifactStorageError) throw error
+        throw new ArtifactStorageError(
+          "provider-failure",
+          "UploadThing could not read the retained file.",
+          { cause: error }
+        )
       }
     },
 

@@ -281,8 +281,12 @@ describe("sent PI document-set issuance", () => {
         context.invoiceId,
         proformaInvoiceXlsxArtifactPurpose
       )
-      const pdfBytes = provider.bytesByUrl.get(issuedPdf!.publicUrl)!
-      const xlsxBytes = provider.bytesByUrl.get(issuedXlsx!.publicUrl)!
+      const pdfBytes = provider.bytesByUrl.get(
+        `https://files.example.test/${issuedPdf!.providerKey}`
+      )!
+      const xlsxBytes = provider.bytesByUrl.get(
+        `https://files.example.test/${issuedXlsx!.providerKey}`
+      )!
       expect(pdfBytes.subarray(0, 4).toString()).toBe("%PDF")
       const workbook = XLSX.read(xlsxBytes)
       expect(
@@ -317,8 +321,16 @@ describe("sent PI document-set issuance", () => {
           proformaInvoiceXlsxArtifactPurpose
         )
       ).resolves.toEqual(issuedXlsx)
-      expect(provider.bytesByUrl.get(issuedPdf!.publicUrl)).toEqual(pdfBytes)
-      expect(provider.bytesByUrl.get(issuedXlsx!.publicUrl)).toEqual(xlsxBytes)
+      expect(
+        provider.bytesByUrl.get(
+          `https://files.example.test/${issuedPdf!.providerKey}`
+        )
+      ).toEqual(pdfBytes)
+      expect(
+        provider.bytesByUrl.get(
+          `https://files.example.test/${issuedXlsx!.providerKey}`
+        )
+      ).toEqual(xlsxBytes)
       expect(provider.uploads).toHaveLength(2)
     } finally {
       await repository.close()

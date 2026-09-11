@@ -172,7 +172,9 @@ describe("Candidate resume Artifacts", () => {
       ).resolves.toMatchObject({
         fileName: "replacement.pdf",
         mediaType: "application/pdf",
-        publicUrl: replacement.publicUrl,
+        physicalObjectId: expect.any(String),
+        provider: "uploadthing",
+        providerKey: replacement.providerKey,
         storageKey: replacement.providerKey,
       })
     } finally {
@@ -230,7 +232,9 @@ describe("Candidate resume Artifacts", () => {
         byteSize: 17,
         fileName: "legacy.pdf",
         mediaType: "application/pdf",
-        publicUrl: null,
+        physicalObjectId: null,
+        provider: null,
+        providerKey: null,
         sha256: "legacy-resume-sha",
         storageKey,
       })

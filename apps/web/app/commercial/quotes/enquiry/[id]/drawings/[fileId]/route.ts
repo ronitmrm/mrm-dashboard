@@ -1,9 +1,10 @@
 import { createCommercialCostingRepository } from "@workspace/db"
-import { attachmentContentDisposition } from "@/lib/attachment-viewer"
+import {
+  artifactDeliveryErrorResponse,
+  createArtifactDeliveryResponse,
+} from "@/lib/artifact-delivery"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
-import { readQuoteDrawing } from "@/lib/pricing/read-quote-drawing"
-import { privateDocumentSecurityHeaders } from "@/lib/security-headers"
 
 export async function GET(
   request: Request,
@@ -32,21 +33,15 @@ export async function GET(
     )
     const drawing = drawings.find((drawing) => drawing.fileId === fileId)
     if (!drawing) return new Response("Drawing was not found.", { status: 404 })
-    const body = await readQuoteDrawing(drawing)
-    if (!body) return new Response("Drawing is unavailable.", { status: 410 })
-    return new Response(body, {
-      headers: {
-        ...privateDocumentSecurityHeaders,
-        "Cache-Control": "private, no-store",
-        "Content-Type": drawing.mediaType ?? "application/octet-stream",
-        "Content-Disposition": attachmentContentDisposition(
-          request.url,
-          drawing.fileName
-        ),
-        "X-Content-Type-Options": "nosniff",
-      },
+    return await createArtifactDeliveryResponse(request, drawing, {
+      download: query.has("download"),
     })
   } catch (error) {
+    const delivery = artifactDeliveryErrorResponse(error, {
+      failed: "Drawing could not be loaded. Please try again.",
+      unavailable: "Drawing is unavailable.",
+    })
+    if (delivery) return delivery
     if (
       error instanceof Error &&
       ["Enquiry was not found.", "Quote revision was not found."].includes(

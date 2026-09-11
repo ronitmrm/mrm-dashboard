@@ -6,6 +6,7 @@ import { enquiryMasterCosts } from "./commercial-term-selection"
 
 import type { Pool, PoolClient } from "pg"
 
+import type { ArtifactStorageProviderIdentifier } from "./artifacts"
 import { boundedResult, selectorSearchTerm } from "./commercial-bounds"
 import {
   assertApplicableProcessPrices,
@@ -3598,13 +3599,17 @@ export function createCommercialCostingRepository(
         byte_size: string
         file_name: string
         file_lifecycle_state: string
+        media_type: string | null
         object_lifecycle_state: string
-        public_url: string
+        physical_object_id: string
+        provider: ArtifactStorageProviderIdentifier
+        provider_key: string
         sha256: string
       }>(
         `
-          SELECT file.file_name, file.byte_size::text, object.sha256,
-            object.public_url,
+          SELECT file.file_name, file.media_type, file.byte_size::text,
+            file.physical_object_id, object.provider, object.provider_key,
+            object.sha256,
             file.lifecycle_state AS file_lifecycle_state,
             object.lifecycle_state AS object_lifecycle_state
           FROM sales.quote_items quote
@@ -3642,8 +3647,12 @@ export function createCommercialCostingRepository(
               row.object_lifecycle_state !== "deleted",
             byteSize: Number(row.byte_size),
             fileName: row.file_name,
-            publicUrl: row.public_url,
+            mediaType: row.media_type,
+            physicalObjectId: row.physical_object_id,
+            provider: row.provider,
+            providerKey: row.provider_key,
             sha256: row.sha256,
+            storageKey: null,
           }
         : null
     },

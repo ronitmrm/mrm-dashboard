@@ -303,7 +303,9 @@ describe("Store requests", () => {
         })
       ).resolves.toMatchObject({
         fileName: "drawing-v2.pdf",
-        publicUrl: replacement.publicUrl,
+        physicalObjectId: expect.any(String),
+        provider: "uploadthing",
+        providerKey: replacement.providerKey,
         storageKey: replacement.providerKey,
       })
       const drawings = await store.listItemTypeDrawings(organizationId)
@@ -449,7 +451,9 @@ describe("Store requests", () => {
         })
       ).resolves.toMatchObject({
         fileName: "guarantee-v2.pdf",
-        publicUrl: replacement.publicUrl,
+        physicalObjectId: expect.any(String),
+        provider: "uploadthing",
+        providerKey: replacement.providerKey,
         storageKey: replacement.providerKey,
       })
       const independentRows = await pool.query<{ count: string }>(
@@ -472,8 +476,11 @@ describe("Store requests", () => {
           organizationId,
         })
       ).resolves.toMatchObject({
+        byteSize: null,
         fileName: "legacy-drawing.pdf",
-        publicUrl: null,
+        physicalObjectId: null,
+        provider: null,
+        providerKey: null,
         storageKey: "store/drawings/legacy-drawing.pdf",
       })
       const legacyGuarantee = await pool.query<{ id: string }>(
@@ -495,8 +502,11 @@ describe("Store requests", () => {
           organizationId,
         })
       ).resolves.toMatchObject({
+        byteSize: null,
         fileName: "legacy-guarantee.pdf",
-        publicUrl: null,
+        physicalObjectId: null,
+        provider: null,
+        providerKey: null,
         storageKey: "store/legacy-guarantee.pdf",
       })
       expect(first.id).not.toBe(replacement.id)
@@ -1253,8 +1263,13 @@ describe("Store requests", () => {
         organizationId,
       })
     ).toEqual({
+      byteSize: null,
       fileName: "gauge-drawing.pdf",
-      publicUrl: null,
+      mediaType: null,
+      physicalObjectId: null,
+      provider: null,
+      providerKey: null,
+      sha256: null,
       storageKey: `store/drawings/${suffix}-gauge.pdf`,
     })
   })

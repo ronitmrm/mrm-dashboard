@@ -5,8 +5,10 @@ import {
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
-import { userAttachmentResponseHeaders } from "@/lib/user-attachment-security"
-import { readUserAttachment } from "@/lib/user-attachment-storage"
+import {
+  artifactDeliveryErrorResponse,
+  createArtifactDeliveryResponse,
+} from "@/lib/artifact-delivery"
 
 export async function GET(
   request: Request,
@@ -42,16 +44,16 @@ export async function GET(
         status: 410,
       })
     }
-    if (attachment.publicUrl) return Response.redirect(attachment.publicUrl, 307)
-    const file = await readUserAttachment(attachment.storageKey)
-    return new Response(file.body, {
-      headers: userAttachmentResponseHeaders(
-        attachment.fileName,
-        file.byteSize,
-        attachment.mediaType,
-        new URL(request.url).searchParams.has("preview")
-      ),
+    return await createArtifactDeliveryResponse(request, attachment, {
+      download: !new URL(request.url).searchParams.has("preview"),
     })
+  } catch (error) {
+    const delivery = artifactDeliveryErrorResponse(error, {
+      failed: "ECN attachment could not be loaded. Please try again.",
+      unavailable: "ECN attachment is deleted or unavailable.",
+    })
+    if (delivery) return delivery
+    throw error
   } finally {
     await workflow.close()
     await customers.close()

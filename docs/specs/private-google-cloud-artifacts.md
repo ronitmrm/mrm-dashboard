@@ -1,6 +1,8 @@
 # Private Google Cloud Storage Artifacts
 
-Status: Design decisions recorded; implementation and cutover have not started.
+Status: Provider and private delivery implemented locally; upload transport and
+migration tooling pending. Production cloud configuration is saved; live
+application acceptance and cutover have not started.
 Date: 2026-09-09.
 Revalidated: 2026-09-11 against staging `2bf5572` after rebase.
 Source: [GitHub issue #88](https://github.com/ronitmrm/mrm-dashboard/issues/88).
@@ -55,10 +57,12 @@ delivery specification; this document does not claim the migration is deployed.
   Verified uploaded bytes must remain safely reusable after a database failure;
   cleanup must respect committed references, fingerprint locks, and object
   generations. Decide the narrow implementation during coding.
-- Both deployments sharing PostgreSQL must understand GCS before any shared
-  locator switches. Remove compatibility only after source cleanup and
-  acceptance complete everywhere. Keep expand/migrate/contract as controlled
-  holiday cutover stages; do not build continuous-availability machinery.
+- Every deployment or command sharing PostgreSQL must understand GCS before
+  any shared locator switches. The user clarified on 2026-09-11 that only
+  production is hosted; GitHub staging has no deployed preview environment.
+  Remove compatibility only after source cleanup and acceptance complete.
+  Keep expand/migrate/contract as controlled holiday cutover stages; do not
+  build continuous-availability machinery.
 - Historical local reads apply only when a logical file has no physical object;
   clearing a provider URL must never trigger local fallback.
 - Include existing Artifact consumers found in code, including Maintenance
@@ -133,10 +137,11 @@ the accepted storage architecture or the holiday cutover decision.
 - Run the non-mutating live inventory before planning cutover duration or
   claiming all retained objects fit any particular size. This checkout lacks
   `apps/web/.env.local`, so the attempted aggregate query did not execute.
-- Verify actual Vercel project and staging identity claims. The connected
-  Vercel account cannot access `mrm-dashboard`; GitHub deployment labels alone
-  do not prove the configured OIDC claims. Do not grant all preview deployments
-  bucket access to satisfy staging access.
+- Production project identity, team issuer configuration, exact subject trust,
+  bucket permissions/settings, and six production environment variables are
+  now configured and inspected; see [GCS setup](../codebase/google-cloud-artifacts-setup.md).
+  Actual runtime token exchange and real Artifact traffic remain unverified.
+  No preview/staging identity requires access.
 - Keep the 2026-09-11 staging baseline separate from migration regressions:
   the Quote issuance test expects draft revision 1 instead of the current 0,
   and the Administrative schema test expects 671 grants but finds 669. Both

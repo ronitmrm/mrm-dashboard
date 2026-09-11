@@ -1,5 +1,10 @@
 import type { Pool, PoolClient } from "pg"
 
+import type {
+  ArtifactByteLocator,
+  ArtifactStorageProviderIdentifier,
+} from "./artifacts"
+
 export function selectQuoteDrawingIds(input: {
   selected: readonly string[]
   available: readonly string[]
@@ -21,14 +26,22 @@ export function selectQuoteDrawingIds(input: {
   return latest?.fileId && available.has(latest.fileId) ? [latest.fileId] : []
 }
 
-export type QuoteDrawing = {
+export type QuoteDrawing = ArtifactByteLocator & {
   enquiryItemId: string
   lineNumber: number
   fileId: string
+}
+
+type QuoteDrawingRow = {
+  byteSize: string | null
+  fileId: string
   fileName: string
   mediaType: string | null
-  storageKey: string
-  publicUrl: string | null
+  physicalObjectId: string | null
+  provider: ArtifactStorageProviderIdentifier | null
+  providerKey: string | null
+  sha256: string | null
+  storageKey: string | null
 }
 
 type DrawingPart = {
@@ -45,18 +58,24 @@ export async function availableQuoteDrawingFiles(
 ) {
   if (!fileIds.length) return []
   return (
-    await db.query<Omit<QuoteDrawing, "enquiryItemId" | "lineNumber">>(
+    await db.query<QuoteDrawingRow>(
       `
     SELECT f.id AS "fileId", f.file_name AS "fileName", f.media_type AS "mediaType",
-      f.storage_key AS "storageKey", o.public_url AS "publicUrl"
+      coalesce(o.byte_size, f.byte_size)::text AS "byteSize",
+      coalesce(o.sha256, f.sha256) AS sha256,
+      f.storage_key AS "storageKey", f.physical_object_id AS "physicalObjectId",
+      o.provider, o.provider_key AS "providerKey"
     FROM core.files f LEFT JOIN core.file_objects o ON o.id=f.physical_object_id
     WHERE f.id=ANY($1::uuid[]) AND f.lifecycle_state <> 'deleted'
       AND (f.physical_object_id IS NULL OR o.lifecycle_state='available')
-      AND (NULLIF(o.public_url,'') IS NOT NULL OR NULLIF(f.storage_key,'') IS NOT NULL)
+      AND (f.physical_object_id IS NOT NULL OR NULLIF(f.storage_key,'') IS NOT NULL)
   `,
       [fileIds]
     )
-  ).rows
+  ).rows.map((row) => ({
+    ...row,
+    byteSize: row.byteSize === null ? null : Number(row.byteSize),
+  }))
 }
 
 export async function currentQuoteDrawings(

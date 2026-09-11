@@ -3,12 +3,12 @@ import path from "node:path"
 
 import type { PoolClient } from "pg"
 
+import type { ArtifactStorageProviderIdentifier } from "./artifacts"
 import {
   repositoryPool,
   withTransaction as transaction,
   type RepositoryPoolOptions,
 } from "./postgres-runtime"
-
 
 type PriceDecision = "Accept PO Price" | "Keep Our Price"
 
@@ -112,9 +112,11 @@ type PurchaseOrderReportDatabaseRow = {
 
 const currentPurchaseOrderSourceJoin = `
   LEFT JOIN LATERAL (
-    SELECT file.file_name, file.media_type, file.byte_size,
+    SELECT file.id AS selected_file_id, file.file_name, file.media_type,
+      coalesce(object.byte_size, file.byte_size) AS byte_size,
       file.sha256, file.storage_key, file.lifecycle_state,
-      object.public_url,
+      file.physical_object_id, object.provider, object.provider_key,
+      object.sha256 AS object_sha256,
       object.lifecycle_state AS object_lifecycle_state
     FROM core.file_links link
     JOIN core.files file ON file.id = link.file_id
@@ -127,6 +129,8 @@ const currentPurchaseOrderSourceJoin = `
     LIMIT 1
   ) artifact ON true
   LEFT JOIN core.files legacy ON legacy.id = purchase_order.file_id
+  LEFT JOIN core.file_objects legacy_object
+    ON legacy_object.id = legacy.physical_object_id
 `
 
 const asNumber = (value: unknown, fallback = 0) => {
@@ -191,7 +195,6 @@ const purchaseOrderReportRow = (row: PurchaseOrderReportDatabaseRow) => ({
 
 const exportBatchSize = (value: number) =>
   Math.min(Math.max(Math.floor(value), 1), 500)
-
 
 async function purchaseOrderReportBatch(
   client: PoolClient,
@@ -899,11 +902,7 @@ export async function authorizeProformaInvoiceArtifactTarget(
       WHERE id = $1 AND organization_id = $2
         AND ($3::boolean = false OR status = 'Draft')
     `,
-    [
-      input.proformaInvoiceId,
-      input.organizationId,
-      options.requireDraftState,
-    ]
+    [input.proformaInvoiceId, input.organizationId, options.requireDraftState]
   )
   if (!target.rows[0]) {
     throw new Error("PI Artifact target was not found or is not a draft.")
@@ -938,7 +937,9 @@ async function hasIssuedProformaInvoiceSet(
   return new Set(result.rows.map((row) => row.purpose)).size === 2
 }
 
-export function createCommercialOrdersRepository(options: RepositoryPoolOptions) {
+export function createCommercialOrdersRepository(
+  options: RepositoryPoolOptions
+) {
   const { close, pool } = repositoryPool(options)
 
   return {
@@ -2265,19 +2266,39 @@ export function createCommercialOrdersRepository(options: RepositoryPoolOptions)
         lifecycle_state: string
         media_type: string | null
         object_lifecycle_state: string | null
-        public_url: string | null
+        physical_object_id: string | null
+        provider: ArtifactStorageProviderIdentifier | null
+        provider_key: string | null
         sha256: string | null
         storage_key: string | null
       }>(
         `
-          SELECT coalesce(artifact.file_name, legacy.file_name) AS file_name,
-            coalesce(artifact.media_type, legacy.media_type) AS media_type,
-            coalesce(artifact.byte_size, legacy.byte_size)::text AS byte_size,
-            coalesce(artifact.sha256, legacy.sha256) AS sha256,
-            coalesce(artifact.storage_key, legacy.storage_key) AS storage_key,
-            artifact.public_url,
-            coalesce(artifact.lifecycle_state, 'current') AS lifecycle_state,
-            artifact.object_lifecycle_state
+          SELECT CASE WHEN artifact.selected_file_id IS NOT NULL
+              THEN artifact.file_name ELSE legacy.file_name END AS file_name,
+            CASE WHEN artifact.selected_file_id IS NOT NULL
+              THEN artifact.media_type ELSE legacy.media_type END AS media_type,
+            CASE WHEN artifact.selected_file_id IS NOT NULL
+              THEN artifact.byte_size
+              ELSE coalesce(legacy_object.byte_size, legacy.byte_size)
+              END::text AS byte_size,
+            CASE WHEN artifact.selected_file_id IS NOT NULL
+              THEN coalesce(artifact.object_sha256, artifact.sha256)
+              ELSE coalesce(legacy_object.sha256, legacy.sha256) END AS sha256,
+            CASE WHEN artifact.selected_file_id IS NOT NULL
+              THEN artifact.storage_key ELSE legacy.storage_key END AS storage_key,
+            CASE WHEN artifact.selected_file_id IS NOT NULL
+              THEN artifact.physical_object_id ELSE legacy.physical_object_id
+              END AS physical_object_id,
+            CASE WHEN artifact.selected_file_id IS NOT NULL
+              THEN artifact.provider ELSE legacy_object.provider END AS provider,
+            CASE WHEN artifact.selected_file_id IS NOT NULL
+              THEN artifact.provider_key ELSE legacy_object.provider_key
+              END AS provider_key,
+            CASE WHEN artifact.selected_file_id IS NOT NULL
+              THEN artifact.lifecycle_state ELSE 'current' END AS lifecycle_state,
+            CASE WHEN artifact.selected_file_id IS NOT NULL
+              THEN artifact.object_lifecycle_state
+              ELSE legacy_object.lifecycle_state END AS object_lifecycle_state
           FROM sales.purchase_orders purchase_order
           ${currentPurchaseOrderSourceJoin}
           WHERE purchase_order.id = $1
@@ -2298,7 +2319,9 @@ export function createCommercialOrdersRepository(options: RepositoryPoolOptions)
         byteSize: file.byte_size === null ? null : Number(file.byte_size),
         fileName: file.file_name,
         mediaType: file.media_type,
-        publicUrl: file.public_url,
+        physicalObjectId: file.physical_object_id,
+        provider: file.provider,
+        providerKey: file.provider_key,
         sha256: file.sha256,
         storageKey: file.storage_key,
       }
@@ -2314,13 +2337,17 @@ export function createCommercialOrdersRepository(options: RepositoryPoolOptions)
         byte_size: string
         file_name: string
         file_lifecycle_state: string
+        media_type: string | null
         object_lifecycle_state: string
-        public_url: string
+        physical_object_id: string
+        provider: ArtifactStorageProviderIdentifier
+        provider_key: string
         sha256: string
       }>(
         `
-          SELECT file.file_name, file.byte_size::text, object.sha256,
-            object.public_url,
+          SELECT file.file_name, file.media_type, file.byte_size::text,
+            file.physical_object_id, object.provider, object.provider_key,
+            object.sha256,
             file.lifecycle_state AS file_lifecycle_state,
             object.lifecycle_state AS object_lifecycle_state
           FROM core.file_links link
@@ -2342,8 +2369,12 @@ export function createCommercialOrdersRepository(options: RepositoryPoolOptions)
               row.object_lifecycle_state !== "deleted",
             byteSize: Number(row.byte_size),
             fileName: row.file_name,
-            publicUrl: row.public_url,
+            mediaType: row.media_type,
+            physicalObjectId: row.physical_object_id,
+            provider: row.provider,
+            providerKey: row.provider_key,
             sha256: row.sha256,
+            storageKey: null,
           }
         : null
     },

@@ -870,7 +870,7 @@ export default async function StoreAssetWorkspacePage({
                     : document.fileName || "Recorded document"}
                 </p>
               </div>
-              {document.storageKey ? (
+              {document.available ? (
                 <Button asChild size="sm" variant="outline">
                   <a
                     href={`/store/assets/${encodeURIComponent(asset.assetCode)}/documents/${document.id}`}

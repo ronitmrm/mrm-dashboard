@@ -99,7 +99,6 @@ export type StoreMasterData = {
     fileName: string
     id: string
     itemTypeId: string
-    storageKey: string
   }>
   items: Array<{
     assetCategory: string

@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+vi.mock("server-only", () => ({}))
+
 import { deleteArtifactWith } from "./artifact-deletion-server"
 
 describe("Artifact deletion server boundary", () => {

@@ -185,7 +185,7 @@ describe("PostgreSQL enquiry-to-design workflow", () => {
         "Import review was not found"
       )
 
-      const source = await artifacts.store(storeInput)
+      await artifacts.store(storeInput)
 
       expect(
         await artifacts.listHistory({
@@ -200,7 +200,6 @@ describe("PostgreSQL enquiry-to-design workflow", () => {
         {
           sourceFile: {
             fileName: "enquiry-lines.csv",
-            publicUrl: source.publicUrl,
           },
         }
       )

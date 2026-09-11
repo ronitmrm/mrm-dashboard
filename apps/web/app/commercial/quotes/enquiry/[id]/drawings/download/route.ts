@@ -1,7 +1,10 @@
 import { createCommercialCostingRepository } from "@workspace/db"
+import {
+  artifactDeliveryErrorResponse,
+  streamedPrivateFileResponse,
+} from "@/lib/artifact-delivery"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
-import { privateDocumentSecurityHeaders } from "@/lib/security-headers"
 import { buildQuoteDrawingsZip } from "@/lib/pricing/quote-drawing-download"
 import { readQuoteDrawing } from "@/lib/pricing/read-quote-drawing"
 
@@ -45,17 +48,18 @@ export async function GET(
       return new Response("No drawings attached.", { status: 404 })
     const archive = buildQuoteDrawingsZip(files)
     const name = `quotation-drawings-${revision === null ? "current" : `revision-${revision}`}.zip`
-    return new Response(new Uint8Array(archive), {
-      headers: {
-        ...privateDocumentSecurityHeaders,
-        "Cache-Control": "private, no-store",
-        "Content-Type": "application/zip",
-        "Content-Disposition": `attachment; filename="${name}"`,
-        "Content-Length": String(archive.byteLength),
-        "X-Content-Type-Options": "nosniff",
-      },
+    return streamedPrivateFileResponse(archive, {
+      download: true,
+      fileName: name,
+      mediaType: "application/zip",
+      requestUrl: request.url,
     })
   } catch (error) {
+    const delivery = artifactDeliveryErrorResponse(error, {
+      failed: "Drawing archive could not be loaded. Please try again.",
+      unavailable: "Drawing archive is unavailable.",
+    })
+    if (delivery) return delivery
     if (
       error instanceof Error &&
       ["Enquiry was not found.", "Quote revision was not found."].includes(

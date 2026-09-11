@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto"
 
 import type { Pool, PoolClient } from "pg"
 
+import type { ArtifactStorageProviderIdentifier } from "./artifacts"
 import {
   repositoryPool,
   withTransaction as transaction,
@@ -3619,24 +3620,46 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         lifecycle_state: string
         media_type: string | null
         object_lifecycle_state: string | null
-        public_url: string | null
+        physical_object_id: string | null
+        provider: ArtifactStorageProviderIdentifier | null
+        provider_key: string | null
         sha256: string | null
         storage_key: string | null
       }>(
         `
-          SELECT coalesce(artifact.file_name, legacy.file_name) AS file_name,
-            coalesce(artifact.media_type, legacy.media_type) AS media_type,
-            coalesce(artifact.byte_size, legacy.byte_size)::text AS byte_size,
-            coalesce(artifact.sha256, legacy.sha256) AS sha256,
-            coalesce(artifact.storage_key, legacy.storage_key) AS storage_key,
-            artifact.public_url,
-            coalesce(artifact.lifecycle_state, 'current') AS lifecycle_state,
-            artifact.object_lifecycle_state
+          SELECT CASE WHEN artifact.selected_file_id IS NOT NULL
+              THEN artifact.file_name ELSE legacy.file_name END AS file_name,
+            CASE WHEN artifact.selected_file_id IS NOT NULL
+              THEN artifact.media_type ELSE legacy.media_type END AS media_type,
+            CASE WHEN artifact.selected_file_id IS NOT NULL
+              THEN artifact.byte_size
+              ELSE coalesce(legacy_object.byte_size, legacy.byte_size)
+              END::text AS byte_size,
+            CASE WHEN artifact.selected_file_id IS NOT NULL
+              THEN coalesce(artifact.object_sha256, artifact.sha256)
+              ELSE coalesce(legacy_object.sha256, legacy.sha256) END AS sha256,
+            CASE WHEN artifact.selected_file_id IS NOT NULL
+              THEN artifact.storage_key ELSE legacy.storage_key END AS storage_key,
+            CASE WHEN artifact.selected_file_id IS NOT NULL
+              THEN artifact.physical_object_id ELSE legacy.physical_object_id
+              END AS physical_object_id,
+            CASE WHEN artifact.selected_file_id IS NOT NULL
+              THEN artifact.provider ELSE legacy_object.provider END AS provider,
+            CASE WHEN artifact.selected_file_id IS NOT NULL
+              THEN artifact.provider_key ELSE legacy_object.provider_key
+              END AS provider_key,
+            CASE WHEN artifact.selected_file_id IS NOT NULL
+              THEN artifact.lifecycle_state ELSE 'current' END AS lifecycle_state,
+            CASE WHEN artifact.selected_file_id IS NOT NULL
+              THEN artifact.object_lifecycle_state
+              ELSE legacy_object.lifecycle_state END AS object_lifecycle_state
           FROM recruitment.candidates candidate
           LEFT JOIN LATERAL (
-            SELECT file.file_name, file.media_type, file.byte_size,
+            SELECT file.id AS selected_file_id, file.file_name,
+              file.media_type, coalesce(object.byte_size, file.byte_size) AS byte_size,
               file.sha256, file.storage_key, file.lifecycle_state,
-              object.public_url,
+              file.physical_object_id, object.provider, object.provider_key,
+              object.sha256 AS object_sha256,
               object.lifecycle_state AS object_lifecycle_state
             FROM core.file_links link
             JOIN core.files file ON file.id = link.file_id
@@ -3650,6 +3673,8 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             LIMIT 1
           ) artifact ON true
           LEFT JOIN core.files legacy ON legacy.id::text = candidate.resume_reference
+          LEFT JOIN core.file_objects legacy_object
+            ON legacy_object.id = legacy.physical_object_id
           WHERE candidate.organization_id = $1 AND candidate.id = $2
         `,
         [organizationId, required(candidateId, "Candidate")]
@@ -3666,7 +3691,9 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         byteSize: file.byte_size === null ? null : Number(file.byte_size),
         fileName: file.file_name,
         mediaType: file.media_type,
-        publicUrl: file.public_url,
+        physicalObjectId: file.physical_object_id,
+        provider: file.provider,
+        providerKey: file.provider_key,
         sha256: file.sha256,
         storageKey: file.storage_key,
       }

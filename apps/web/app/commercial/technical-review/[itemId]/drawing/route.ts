@@ -5,11 +5,13 @@ import {
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
-import { userAttachmentDownloadHeaders } from "@/lib/user-attachment-security"
-import { readUserAttachment } from "@/lib/user-attachment-storage"
+import {
+  artifactDeliveryErrorResponse,
+  createArtifactDeliveryResponse,
+} from "@/lib/artifact-delivery"
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ itemId: string }> }
 ) {
   await requireCapability(
@@ -27,14 +29,15 @@ export async function GET(
       enquiryItemId: itemId,
       organizationId,
     })
-    if (drawing.publicUrl) {
-      return Response.redirect(drawing.publicUrl, 307)
-    }
-    const file = await readUserAttachment(drawing.storageKey)
-    return new Response(file.body, {
-      headers: userAttachmentDownloadHeaders(drawing.fileName, file.byteSize),
+    return await createArtifactDeliveryResponse(request, drawing, {
+      download: true,
     })
   } catch (error) {
+    const delivery = artifactDeliveryErrorResponse(error, {
+      failed: "Drawing could not be loaded. Please try again.",
+      unavailable: "Drawing is deleted or unavailable.",
+    })
+    if (delivery) return delivery
     if (
       error instanceof Error &&
       error.message.includes("deleted or unavailable")

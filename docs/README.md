@@ -10,7 +10,8 @@ Use this index before changing domain behavior or implementation conventions.
 - [Access Administration](./codebase/access-administration.md): granular permission catalogue, coverage, enforcement, and exceptions.
 - [ADRs](./adr/): durable architectural decisions.
 - [Specs](./specs/): scoped delivery specifications.
-- [Private GCS Artifacts](./specs/private-google-cloud-artifacts.md): issue #88 decisions; implementation pending.
+- [Private GCS Artifacts](./specs/private-google-cloud-artifacts.md): issue #88 decisions; implementation underway, live cutover pending.
+- [GCS configuration](./codebase/google-cloud-artifacts-setup.md): configured production federation, bucket settings, and environment values.
 - [September performance refactor](./codebase/refactor-sept-26.md): fixed contracts, delivery slices, and verification checklist.
 
 Update glossary definitions before consumers when business semantics change. Keep agent-only working notes in `memory/`, not here.

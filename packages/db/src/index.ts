@@ -8,6 +8,7 @@ export {
   artifactUploadChunkMaxBytes,
   ArtifactStorageError,
   createArtifactService,
+  type ArtifactByteLocator,
   type ArtifactResumableUploadProgress,
   type ArtifactResumableUploadProvider,
   type DeleteArtifactInput,
