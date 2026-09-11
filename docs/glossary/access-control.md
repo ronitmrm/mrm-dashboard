@@ -131,9 +131,11 @@ commercial-order, Store, HR, or Production access.
 Account after its Application Roles. A deny override wins over a role grant.
 
 **Artifact Read Access**: The `artifacts.read` capability allows an authorized
-user to discover Artifact metadata and public URLs in the Organization-scoped
-Administration ledger. It does not make the bytes private; anyone who already
-possesses an UploadThing `public-read` URL can read them.
+user to inspect Artifact metadata and retrieve bytes through the
+Organization-scoped Administration ledger. Every byte request requires current
+session and capability authorization; a copied link grants no access by itself.
+This is the approved [private Artifact contract](./artifacts.md); its rollout
+status is tracked in the [delivery specification](../specs/private-google-cloud-artifacts.md).
 
 **Artifact Delete Access**: The separate `artifacts.delete` capability permits
 audited manual deletion with exact-target confirmation and a reason. Read access

@@ -1,5 +1,10 @@
 # Artifact storage architecture
 
+This page describes the current UploadThing implementation. The approved
+[private GCS target](../specs/private-google-cloud-artifacts.md) changes storage
+and byte delivery; implementation and live cutover have not started. Update this
+page with the verified implementation before declaring issue #88 complete.
+
 Runtime Artifact metadata is canonical in PostgreSQL. `core.file_objects`
 represents Organization-scoped physical UploadThing objects; `core.files`
 represents immutable logical Artifacts; `core.file_links` versions their
