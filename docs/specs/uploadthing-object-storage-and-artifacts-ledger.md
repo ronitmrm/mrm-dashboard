@@ -6,6 +6,11 @@ target: feat/object-storage
 
 ## Implementation status
 
+This specification describes the existing UploadThing implementation. Its
+public-byte delivery is being replaced by the approved
+[private GCS design](./private-google-cloud-artifacts.md); that implementation
+and cutover are still pending.
+
 Completed through the expand-migrate-contract sequence on
 `feat/object-storage`. New retained Commercial, Recruitment, and Store uploads,
 the retained enquiry-line import source, and issued Quote, PI, and Store

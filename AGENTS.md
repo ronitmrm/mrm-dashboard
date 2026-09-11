@@ -11,6 +11,7 @@
 - When starting local server/s, opt for the managed config by default, unless specified otherwise by the user.
 - On this Linux VM, the installed Docker Engine may run isolated PostgreSQL and Redis containers for tests and performance benchmarks (authorized 2026-09-08). Use dedicated test databases, bind published ports to localhost, and remove containers and test volumes created for the task after testing. Keep existing containers and application databases untouched.
 - Managed application configuration remains the default for development. The Docker test allowance does not authorize installing virtualization platforms, changing Windows optional features, or changing firmware virtualization settings.
+Never commit `AGENTS.override.md`, and always commit `AGENTS.md`. Do not add `AGENTS.override.md` to `.gitignore` either.
 
 ## Code Architecture Best Practices
 
