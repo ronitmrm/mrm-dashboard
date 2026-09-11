@@ -24,7 +24,6 @@ import {
 } from "@/lib/auth/require-capability"
 import { requiredText } from "@/lib/form-data"
 import { createGoogleCloudArtifactProvider } from "@/lib/google-cloud-artifact-provider"
-import { validateUserAttachment } from "@/lib/user-attachment-security"
 import {
   consumePendingArtifactUpload,
   pendingUploadAuthorizationForUser,
@@ -33,7 +32,6 @@ import {
 } from "@/lib/pending-artifact-upload-server"
 
 const requestsPath = "/maintenance/requests"
-const maximumPhotoBytes = 10 * 1024 * 1024
 const maximumPhotoCount = 8
 
 function category(value: FormDataEntryValue | null): MaintenanceCategory {
@@ -52,28 +50,9 @@ function priority(value: FormDataEntryValue | null): MaintenancePriority {
   return result as MaintenancePriority
 }
 
-function requestPhotos(formData: FormData) {
-  const files = formData
-    .getAll("photos")
-    .filter((file): file is File => file instanceof File && file.size > 0)
-  if (files.length > maximumPhotoCount) {
-    throw new Error(`Attach no more than ${maximumPhotoCount} photos.`)
-  }
-  return files.map((file) => {
-    if (file.size > maximumPhotoBytes) {
-      throw new Error("Each Maintenance photo must be 10 MB or smaller.")
-    }
-    return file
-  })
-}
-
 export async function submitMaintenanceRequestAction(formData: FormData) {
   const session = await requireAuthenticatedSession(requestsPath)
-  const files = requestPhotos(formData)
   const uploadIds = pendingUploadIds(formData, "photos")
-  if (files.length && uploadIds.length) {
-    throw new Error("Maintenance photos cannot mix raw files and upload IDs.")
-  }
   if (uploadIds.length > maximumPhotoCount) {
     throw new Error(`Attach no more than ${maximumPhotoCount} photos.`)
   }
@@ -92,19 +71,6 @@ export async function submitMaintenanceRequestAction(formData: FormData) {
       })
     }
   }
-  const preparedPhotos = await Promise.all(
-    files.map(async (file) => {
-      const bytes = Buffer.from(await file.arrayBuffer())
-      return {
-        bytes,
-        ...validateUserAttachment({
-          bytes,
-          fileName: file.name,
-          purpose: "maintenance-photo",
-        }),
-      }
-    })
-  )
   const repository = createMaintenanceRequestRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
@@ -124,7 +90,7 @@ export async function submitMaintenanceRequestAction(formData: FormData) {
     await repository.close()
   }
 
-  if (preparedPhotos.length || uploadIds.length) {
+  if (uploadIds.length) {
     const artifacts = createArtifactService({
       connectionString: readAuthEnvironment().connectionString,
       provider: createGoogleCloudArtifactProvider(),
@@ -167,9 +133,6 @@ export async function submitMaintenanceRequestAction(formData: FormData) {
           purpose: `request-photo:${index}`,
           target: { id: request.id, schema: "maintenance", table: "requests" },
         })
-      }
-      for (const [index, photo] of preparedPhotos.entries()) {
-        await retain(photo, index + 1)
       }
       if (pendingAuthorization) {
         for (const [index, uploadId] of uploadIds.entries()) {

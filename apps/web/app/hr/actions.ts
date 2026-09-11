@@ -404,7 +404,6 @@ export async function saveCandidateAction(formData: FormData) {
   let outcome: { error?: string; success?: string }
   try {
     const organizationId = await repository.organizationIdForCode("MRMPL")
-    const resume = formData.get("resume")
     const resumeUploadId = pendingUploadId(formData, "resume")
     const candidateId = value(formData, "candidate_id")
     const resumeIntent = {
@@ -414,23 +413,6 @@ export async function saveCandidateAction(formData: FormData) {
     const pendingAuthorization = resumeUploadId
       ? await pendingUploadAuthorizationForUser(session.user.id)
       : null
-    let resumeData: { bytes: Buffer; fileName: string } | undefined
-    if (resume instanceof File && resume.size > 0) {
-      if (resume.size > 10 * 1024 * 1024) {
-        throw new Error("Candidate resume must be 10 MB or smaller.")
-      }
-      if (!/\.pdf$/i.test(resume.name)) {
-        throw new Error("Candidate resume must be a PDF file.")
-      }
-      const bytes = Buffer.from(await resume.arrayBuffer())
-      if (bytes.subarray(0, 5).toString("ascii") !== "%PDF-") {
-        throw new Error("Candidate resume is not a valid PDF file.")
-      }
-      resumeData = {
-        bytes,
-        fileName: resume.name.replace(/[<>:"/\\|?*]+/g, "_"),
-      }
-    }
     if (resumeUploadId && pendingAuthorization) {
       await preparePendingArtifactUploadForFinalAction({
         ...(candidateId
@@ -464,7 +446,7 @@ export async function saveCandidateAction(formData: FormData) {
       phone: value(formData, "phone"),
       source: value(formData, "source"),
     })
-    if (resumeData || (resumeUploadId && pendingAuthorization)) {
+    if (resumeUploadId && pendingAuthorization) {
       const retain = async (source: {
         bytes: Buffer
         fileName: string
@@ -507,8 +489,7 @@ export async function saveCandidateAction(formData: FormData) {
           await artifacts.close()
         }
       }
-      if (resumeUploadId && pendingAuthorization) {
-        await consumePendingArtifactUpload({
+      await consumePendingArtifactUpload({
           authorization: pendingAuthorization,
           expectedIntent: resumeIntent,
           finalize: async (source) => {
@@ -527,11 +508,8 @@ export async function saveCandidateAction(formData: FormData) {
             }
           },
           recover: () => undefined,
-          uploadId: resumeUploadId,
-        })
-      } else if (resumeData) {
-        await retain({ ...resumeData, mediaType: "application/pdf" })
-      }
+        uploadId: resumeUploadId,
+      })
     }
     outcome = { success: "Candidate saved successfully." }
   } catch (error) {

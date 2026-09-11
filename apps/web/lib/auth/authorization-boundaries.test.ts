@@ -30,6 +30,7 @@ describe("protected server boundaries", () => {
       (path) => relativeAppPath(path) !== "api/auth/[...all]/route.ts"
     )
     const guards = [
+      "authenticatePendingUploadRequest(",
       "requireCapability(",
       "requireHrPage(",
       "requireProductionPage(",

@@ -20,7 +20,6 @@ import { requireCapability } from "@/lib/auth/require-capability"
 import { commercialTaskCapabilities } from "@/lib/auth/task-capabilities"
 import { optionalText, requiredText } from "@/lib/form-data"
 import { readMasterCsv } from "@/lib/master-data-csv"
-import { validateUserAttachment } from "@/lib/user-attachment-security"
 import { createGoogleCloudArtifactProvider } from "@/lib/google-cloud-artifact-provider"
 import {
   consumePendingArtifactUpload,
@@ -242,15 +241,8 @@ export async function importPurchaseOrderWorkbookAction(formData: FormData) {
 
 export async function uploadPurchaseOrderFileAction(formData: FormData) {
   const purchaseOrderId = requiredText(formData, "purchase_order_id")
-  const upload = formData.get("po_file")
   const uploadId = pendingUploadId(formData, "po_file")
-  const rawUpload = upload instanceof File && upload.size > 0 ? upload : null
-  if (!uploadId && !rawUpload) {
-    throw new Error("PO source file is required.")
-  }
-  if (upload instanceof File && upload.size > 25 * 1024 * 1024) {
-    throw new Error("PO source file must be 25 MB or smaller.")
-  }
+  if (!uploadId) throw new Error("PO source file is required.")
   await withOrders(
     commercialTaskCapabilities.uploadPurchaseOrderFile,
     `${ordersPath}/${purchaseOrderId}`,
@@ -299,8 +291,7 @@ export async function uploadPurchaseOrderFileAction(formData: FormData) {
           await artifacts.close()
         }
       }
-      if (uploadId) {
-        await consumePendingArtifactUpload({
+      await consumePendingArtifactUpload({
           authorization: await pendingUploadAuthorizationForUser(actorUserId),
           expectedIntent: {
             kind: "commercial-purchase-order-source",
@@ -322,17 +313,8 @@ export async function uploadPurchaseOrderFileAction(formData: FormData) {
             }
           },
           recover: () => undefined,
-          uploadId,
-        })
-      } else {
-        const bytes = Buffer.from(await rawUpload!.arrayBuffer())
-        const validated = validateUserAttachment({
-          bytes,
-          fileName: rawUpload!.name,
-          purpose: "purchase-order",
-        })
-        await retain({ bytes, ...validated })
-      }
+        uploadId,
+      })
     }
   )
   revalidatePath(ordersPath)

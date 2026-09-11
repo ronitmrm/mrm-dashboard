@@ -336,8 +336,7 @@ export function ArtifactLedgerView({
                   <TableCell>
                     <div className="flex justify-end gap-1">
                       {artifact.contentPath &&
-                      artifact.lifecycleState !== "deleted" &&
-                      artifact.providerState === "available" ? (
+                      artifact.lifecycleState !== "deleted" ? (
                         <>
                           <Button asChild size="xs" variant="outline">
                             <AttachmentViewerLink

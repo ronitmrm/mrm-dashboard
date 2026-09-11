@@ -1,9 +1,9 @@
 # Private Google Cloud Storage Artifacts
 
-Status: Provider, private delivery, and server-side pending-upload transport are
-implemented locally; browser form wiring and migration tooling remain pending.
-Production cloud configuration is saved; deployed application acceptance and
-cutover have not started.
+Status: Provider, private delivery, pending-upload transport and forms, and
+controlled migration tooling are implemented locally. Retained submissions are
+upload-ID-only. Production cloud configuration is saved; deployment, live
+migration, application acceptance, and contract removal have not started.
 Date: 2026-09-09.
 Revalidated: 2026-09-11 against staging `2bf5572` after rebase.
 Source: [GitHub issue #88](https://github.com/ronitmrm/mrm-dashboard/issues/88).
@@ -69,6 +69,11 @@ delivery specification; this document does not claim the migration is deployed.
 - Include existing Artifact consumers found in code, including Maintenance
   photos; preserve their current permissions and workflows even where the
   issue's route examples do not enumerate them.
+- Migration tooling defaults to database-only inventory. Mutating modes require
+  an explicit paused-writer acknowledgement. A durable per-object cleanup row
+  keeps the verified locator commit separate from retryable source deletion;
+  completion requires the exact recorded legacy HTTPS URL to return 404/410.
+  See the [operator runbook](../codebase/artifact-storage-migration.md).
 
 ## Delivery scope added by staging
 
@@ -149,10 +154,27 @@ the accepted storage architecture or the holiday cutover decision.
   recovery, generation-bound exact read, terminal cancellation, and complete
   cleanup. This is provider evidence only; browser requests and deployed Vercel
   WIF remain unverified.
-- Keep the 2026-09-11 staging baseline separate from migration regressions:
-  the Quote issuance test expects draft revision 1 instead of the current 0,
-  and the Administrative schema test expects 671 grants but finds 669. Both
-  reproduce on untouched staging `2bf5572`; lint, typecheck, and build pass.
+- An isolated operator migration rehearsal passed against a real disposable GCS
+  bucket, synthetic legacy provider, and local database: exact live bytes,
+  deduplication, locator/cleanup recovery boundaries, cached old-URL refusal,
+  orphan recovery, idempotent rerun, private anonymous denial, and unchanged
+  logical file/link/audit snapshots. It is not Production or UploadThing
+  cutover evidence.
+- Focused migration integration checks pass for one physical object shared by
+  current/superseded logical records and for source-cleanup/DB-completion
+  recovery without recopying or logical metadata changes. This is isolated
+  fake-source evidence, not a live cutover.
+- Use untouched `5772dd7`, immediately before #88 implementation, for regression
+  classification. The full database comparison reproduced all 44 remaining
+  failing test names, the same two failed setup suites, and 16 skips. The only
+  new schema-list expectation was the 0139 cleanup table and is fixed. The
+  migration-package baseline also reproduced its single Packaging-master
+  failure (34 passed, 1 failed).
+- Final root gates passed all package lint, typechecks, builds, and
+  runtime/observability tests. The fresh web build passed in 35 seconds; its
+  full test rerun passed 776/777 with zero failed suites and only the reproduced
+  Quote draft revision 1-versus-0 baseline failure. The schema recheck passed 18
+  with five baseline failures; both 0138/0139 table expectations are present.
 
 ## Evidence
 
@@ -164,8 +186,11 @@ the accepted storage architecture or the holiday cutover decision.
 - `apps/web/lib/commercial-attachment.ts`: 25 MiB Commercial file limit.
 - `packages/db/src/artifacts.ts`: fingerprint locks, provider persistence,
   rollback cleanup, retained logical versions, and deletion.
+- `packages/db/src/artifact-storage-migration.ts` and migration 0139: inventory,
+  locked locator compare-and-swap, durable source cleanup, recovery, and exact
+  GCS readiness verification.
 - `packages/db/src/commercial-workflow.ts` and the enquiry drawing route:
-  current public-URL delivery and historical local-file fallback.
+  authenticated Artifact-reader delivery and historical local-file fallback.
 - `packages/db/src/quotation-versions.ts` and `quote-drawings.ts`: issued
   snapshot pinning, draft drawing selection, and provider metadata lookup.
 - `apps/web/lib/pricing/read-quote-drawing.ts` and
