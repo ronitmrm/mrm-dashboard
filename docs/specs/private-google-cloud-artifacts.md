@@ -156,8 +156,10 @@ the accepted storage architecture or the holiday cutover decision.
   have invalid `example.test`
   source URLs and no matching UploadThing object; their recorded payloads can be
   recovered from repository evidence, but the full original PDFs are absent.
-  Preserve their IDs/links and block cutover pending recovery/security
-  resolution. Production also lacks 0138 and 0139.
+  The user identified these drawings as stale and waived recovery on 2026-09-12,
+  approving the PR merge into `staging`. Their database records remain intact;
+  the separate Production cutover must account for them. Production also lacks
+  0138 and 0139.
 - Production project identity, team issuer configuration, exact subject trust,
   bucket permissions/settings, and six production environment variables are
   now configured and inspected; see [GCS setup](../codebase/google-cloud-artifacts-setup.md).

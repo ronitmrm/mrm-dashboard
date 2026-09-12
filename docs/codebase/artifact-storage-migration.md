@@ -157,12 +157,16 @@ exactly 36 objects/7,419,078 bytes, and anonymous access returned 403. No source
 or database row changed and every database locator still names UploadThing, so
 these immutable copies can be reused during locator cutover. All 36
 real UploadThing URL/key locators also pass the
-strict migration validator. Two current uploaded business drawings are blocked:
+strict migration validator. Two current uploaded drawing records have no source:
 their 27-byte payloads can be reproduced exactly from repository evidence and
 match both stored hashes, but their recorded `example.test` URLs are invalid,
 neither object exists in UploadThing, and the full original business-drawing
-PDFs are absent. Preserve their logical IDs and links; do not reclassify,
-delete, or treat DNS failure as cleanup proof.
+PDFs are absent. On 2026-09-12 the user identified these two drawings as stale,
+waived recovery, and approved merging PR #70 into `staging`. Recovery is no
+longer a merge prerequisite. This waiver does not delete their database records
+or change the migration CLI's live-object checks; account for the stale records
+during the separate Production cutover without fabricating bytes or cleanup
+evidence.
 Production has neither migration 0138 nor 0139 yet. No live locator, byte, or
 database row changed during inventory/preflight. Operator OAuth provider probes
 passed 25 MiB exact/resumable behavior and cleaned their synthetic resources;
