@@ -268,6 +268,19 @@ export async function createCombinedRoleAction(formData: FormData) {
   )
 }
 
+export async function deleteCombinedRoleAction(formData: FormData) {
+  await mutate(
+    formData,
+    masterCapability("combined_approved_posts", "delete"),
+    (repository, context) =>
+      repository.deleteCombinedRole({
+        ...context,
+        combinedRoleId: value(formData, "combined_role_id"),
+      }),
+    "Combined role deleted. Individual approved posts retained."
+  )
+}
+
 export async function updateCombinedRoleAction(formData: FormData) {
   await mutate(
     formData,

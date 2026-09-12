@@ -539,6 +539,20 @@ describe("assignEmployee", () => {
   })
 })
 
+describe("deleteCombinedRole", () => {
+  test("deletes a combined grouping through the guarded database operation", async () => {
+    const query = vi.fn(async () => ({ rows: [] }))
+    const client = { query, release: vi.fn() } as unknown as PoolClient
+    const repository = createRecruitmentRepository({
+      pool: { connect: async () => client } as unknown as Pool,
+    })
+    await expect(repository.deleteCombinedRole({
+      organizationId: "00000000-0000-4000-8000-000000000010",
+      combinedRoleId: "00000000-0000-4000-8000-000000000020",
+    })).resolves.toEqual({ id: "00000000-0000-4000-8000-000000000020" })
+  })
+})
+
 describe("updateCombinedRole", () => {
   test("applies the selected template and occupied employee to every combined post", async () => {
     const organizationId = "00000000-0000-4000-8000-000000000010"
