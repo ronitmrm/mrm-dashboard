@@ -49,3 +49,8 @@ target, a reason, and an audited tombstone. Shared physical bytes remain while
 another live logical Artifact references them. Final-reference provider failure
 stays visible and retryable; nothing is deleted automatically or regenerated
 after deletion.
+
+Deleted physical tombstones with no live references retain their original
+locator as historical evidence; migration readiness does not require that old
+locator to be usable. Available objects and any object with live references
+still require a valid provider locator.
