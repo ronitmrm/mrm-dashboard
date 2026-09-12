@@ -114,31 +114,6 @@ export async function provisionStaffAction(
   )
 }
 
-export async function linkEmployeeAction(
-  _previousState: StaffActionState,
-  formData: FormData
-): Promise<StaffActionState> {
-  const result = await withAccessService(
-    administrationTaskCapabilities.linkStaffAccount,
-    async (access, actorUserId) => {
-      try {
-        await access.linkEmployee({
-          actorUserId,
-          ...employeeReference(formData),
-          userId: requiredText(formData, "userId"),
-        })
-        return {
-          success: "Employee linked. Current post roles now apply as well.",
-        }
-      } catch (error) {
-        return staffActionError(error)
-      }
-    }
-  )
-  if (!result.error) revalidatePath(accessPath)
-  return result
-}
-
 export async function assignStaffRolesAction(
   _previousState: StaffActionState,
   formData: FormData
@@ -240,19 +215,6 @@ export async function updateRolePermissionsAction(formData: FormData) {
   revalidatePath(accessPath)
 }
 
-export async function assignRoleAction(formData: FormData) {
-  await withAccessService(
-    administrationTaskCapabilities.assignStaffRole,
-    (access, actorUserId) =>
-      access.assignRole({
-        actorUserId,
-        roleKey: requiredText(formData, "roleKey"),
-        userId: requiredText(formData, "userId"),
-      })
-  )
-  revalidatePath(accessPath)
-}
-
 export async function setPostRoleAction(formData: FormData) {
   const effect = requiredText(formData, "effect")
   if (effect !== "assign" && effect !== "remove") {
@@ -266,26 +228,6 @@ export async function setPostRoleAction(formData: FormData) {
         enabled: effect === "assign",
         postId: requiredText(formData, "postId"),
         roleKey: requiredText(formData, "roleKey"),
-      })
-  )
-  revalidatePath(accessPath)
-}
-
-export async function setPermissionOverrideAction(formData: FormData) {
-  const effect = requiredText(formData, "effect")
-  if (effect !== "allow" && effect !== "deny") {
-    throw new Error("effect must be allow or deny")
-  }
-
-  await withAccessService(
-    administrationTaskCapabilities.managePermissionOverrides,
-    (access, actorUserId) =>
-      access.setPermissionOverride({
-        actorUserId,
-        effect,
-        permissionKey: requiredText(formData, "permissionKey"),
-        reason: optionalText(formData, "reason"),
-        userId: requiredText(formData, "userId"),
       })
   )
   revalidatePath(accessPath)

@@ -21,9 +21,18 @@ const pool = new Pool({ connectionString })
 const repository = createRecruitmentRepository({ connectionString })
 
 class CandidateResumeArtifactProvider implements ArtifactStorageProvider {
+  readonly identifier = "uploadthing"
   readonly uploads: Array<{ bytes: Buffer; name: string }> = []
 
   async delete() {}
+
+  async read() {
+    return Buffer.alloc(0)
+  }
+
+  async resolveLegacyPublicUrl({ key }: { key: string }) {
+    return `https://files.example.test/${key}`
+  }
 
   async upload(input: Parameters<ArtifactStorageProvider["upload"]>[0]) {
     this.uploads.push({ bytes: input.bytes, name: input.name })
@@ -163,7 +172,9 @@ describe("Candidate resume Artifacts", () => {
       ).resolves.toMatchObject({
         fileName: "replacement.pdf",
         mediaType: "application/pdf",
-        publicUrl: replacement.publicUrl,
+        physicalObjectId: expect.any(String),
+        provider: "uploadthing",
+        providerKey: replacement.providerKey,
         storageKey: replacement.providerKey,
       })
     } finally {
@@ -221,7 +232,9 @@ describe("Candidate resume Artifacts", () => {
         byteSize: 17,
         fileName: "legacy.pdf",
         mediaType: "application/pdf",
-        publicUrl: null,
+        physicalObjectId: null,
+        provider: null,
+        providerKey: null,
         sha256: "legacy-resume-sha",
         storageKey,
       })

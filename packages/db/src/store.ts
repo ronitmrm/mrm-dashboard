@@ -3,6 +3,7 @@ import { createHash } from "node:crypto"
 
 import type { PoolClient } from "pg"
 
+import type { ArtifactStorageProviderIdentifier } from "./artifacts"
 import {
   repositoryPool,
   withTransaction,
@@ -642,6 +643,72 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       )
       if (!result.rows[0]) throw new Error("Organization was not found.")
       return result.rows[0].id
+    },
+
+    async overviewMetrics(input: {
+      istToday: string
+      organizationId: string
+    }) {
+      const result = await pool.query<{
+        item_types: string
+        locations: string
+        low_stock: string
+        maintenance_due: string
+        open_requests: string
+        physical_assets: string
+      }>(
+        `
+          SELECT
+            (SELECT count(*)
+              FROM store.requisitions request
+              JOIN store.requisition_headers header
+                ON header.id = request.request_header_id
+              JOIN store.item_types item ON item.id = request.item_type_id
+              JOIN store.locations location ON location.id = request.location_id
+              WHERE request.organization_id = $1
+                AND request.status IN ('Pending', 'Partially Issued'))
+              AS open_requests,
+            (SELECT count(*)
+              FROM store.item_types item
+              WHERE item.organization_id = $1 AND item.active
+                AND (CASE WHEN item.tracking_mode = 'SERIALIZED'
+                  THEN (SELECT count(*)::numeric FROM store.assets asset
+                    WHERE asset.item_type_id = item.id
+                      AND asset.status = 'AVAILABLE')
+                  ELSE (SELECT COALESCE(sum(movement.quantity), 0)
+                    FROM store.stock_movements movement
+                    WHERE movement.item_type_id = item.id)
+                END)::double precision <= item.minimum_stock::double precision)
+              AS low_stock,
+            (SELECT count(*)
+              FROM store.assets asset
+              JOIN store.item_types item ON item.id = asset.item_type_id
+              WHERE asset.organization_id = $1
+                AND (SELECT min(schedule.next_due_on)::text
+                  FROM store.asset_maintenance_schedules schedule
+                  WHERE schedule.asset_id = asset.id AND schedule.active)
+                    <= $2::text)
+              AS maintenance_due,
+            (SELECT count(*) FROM store.locations
+              WHERE organization_id = $1 AND active) AS locations,
+            (SELECT count(*) FROM store.item_types
+              WHERE organization_id = $1 AND active) AS item_types,
+            (SELECT count(*)
+              FROM store.assets asset
+              JOIN store.item_types item ON item.id = asset.item_type_id
+              WHERE asset.organization_id = $1) AS physical_assets
+        `,
+        [input.organizationId, input.istToday]
+      )
+      const metrics = result.rows[0]!
+      return {
+        itemTypes: Number(metrics.item_types),
+        locations: Number(metrics.locations),
+        lowStock: Number(metrics.low_stock),
+        maintenanceDue: Number(metrics.maintenance_due),
+        openRequests: Number(metrics.open_requests),
+        physicalAssets: Number(metrics.physical_assets),
+      }
     },
 
     async requisitionRequestContext(input: {
@@ -1862,11 +1929,19 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
     }) {
       const result = await pool.query<{
         available: boolean
+        byteSize: string
         fileName: string
-        publicUrl: string
+        mediaType: string | null
+        physicalObjectId: string
+        provider: ArtifactStorageProviderIdentifier
+        providerKey: string
+        sha256: string
       }>(
         `
-          SELECT file.file_name AS "fileName", object.public_url AS "publicUrl",
+          SELECT file.file_name AS "fileName", file.media_type AS "mediaType",
+            object.byte_size::text AS "byteSize", object.sha256,
+            file.physical_object_id AS "physicalObjectId",
+            object.provider, object.provider_key AS "providerKey",
             (file.lifecycle_state <> 'deleted'
               AND object.lifecycle_state <> 'deleted') AS available
           FROM store.purchase_orders purchase_order
@@ -1890,7 +1965,14 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           storePurchaseOrderPdfArtifactPurpose,
         ]
       )
-      return result.rows[0] ?? null
+      const row = result.rows[0]
+      return row
+        ? {
+            ...row,
+            byteSize: Number(row.byteSize),
+            storageKey: null,
+          }
+        : null
     },
 
     async listSupplierPrices(organizationId: string) {
@@ -1933,16 +2015,12 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         fileName: string
         id: string
         itemTypeId: string
-        publicUrl: string | null
-        storageKey: string
       }>(
         `
-          SELECT drawing.id, drawing."itemTypeId", drawing."fileName",
-            drawing."storageKey", drawing."publicUrl"
+          SELECT drawing.id, drawing."itemTypeId", drawing."fileName"
           FROM (
             SELECT file.id, link.target_id AS "itemTypeId",
-              file.file_name AS "fileName", file.storage_key AS "storageKey",
-              object.public_url AS "publicUrl", file.created_at
+              file.file_name AS "fileName", file.created_at
             FROM core.file_links link
             JOIN core.files file ON file.id = link.file_id
             JOIN core.file_objects object ON object.id = file.physical_object_id
@@ -1956,9 +2034,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
               AND item.organization_id = $1 AND item.active
             UNION ALL
             SELECT document.id, document.item_type_id AS "itemTypeId",
-              document.file_name AS "fileName",
-              document.storage_key AS "storageKey", NULL::text AS "publicUrl",
-              document.created_at
+              document.file_name AS "fileName", document.created_at
             FROM store.documents document
             JOIN store.item_types item ON item.id = document.item_type_id
             WHERE document.organization_id = $1
@@ -2043,15 +2119,25 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       organizationId: string
     }) {
       const result = await pool.query<{
+        byteSize: string | null
         fileName: string
-        publicUrl: string | null
+        mediaType: string | null
+        physicalObjectId: string | null
+        provider: ArtifactStorageProviderIdentifier | null
+        providerKey: string | null
+        sha256: string | null
         storageKey: string | null
       }>(
         `
-          SELECT drawing."fileName", drawing."storageKey", drawing."publicUrl"
+          SELECT drawing."fileName", drawing."mediaType", drawing."byteSize",
+            drawing.sha256, drawing."storageKey", drawing."physicalObjectId",
+            drawing.provider, drawing."providerKey"
           FROM (
             SELECT file.id, file.file_name AS "fileName",
-              file.storage_key AS "storageKey", object.public_url AS "publicUrl"
+              file.media_type AS "mediaType", object.byte_size::text AS "byteSize",
+              object.sha256, file.storage_key AS "storageKey",
+              file.physical_object_id AS "physicalObjectId", object.provider,
+              object.provider_key AS "providerKey"
             FROM core.file_links link
             JOIN core.files file ON file.id = link.file_id
             JOIN core.file_objects object ON object.id = file.physical_object_id
@@ -2063,7 +2149,10 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
               AND object.lifecycle_state <> 'deleted'
             UNION ALL
             SELECT document.id, document.file_name AS "fileName",
-              document.storage_key AS "storageKey", NULL::text AS "publicUrl"
+              NULL::text AS "mediaType", NULL::text AS "byteSize",
+              NULL::text AS sha256, document.storage_key AS "storageKey",
+              NULL::uuid AS "physicalObjectId", NULL::text AS provider,
+              NULL::text AS "providerKey"
             FROM store.documents document
             WHERE document.id = $1 AND document.organization_id = $2
               AND document.item_type_id = $3
@@ -2076,7 +2165,11 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         [input.documentId, input.organizationId, input.itemTypeId]
       )
       if (!result.rows[0]) throw new Error("Asset drawing was not found.")
-      return result.rows[0]
+      const row = result.rows[0]
+      return {
+        ...row,
+        byteSize: row.byteSize === null ? null : Number(row.byteSize),
+      }
     },
 
     async getSupplierPriceQuote(input: {
@@ -2085,13 +2178,19 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       supplierPriceId: string
     }) {
       const result = await pool.query<{
+        byteSize: string
         fileName: string
-        publicUrl: string | null
-        storageKey: string | null
+        mediaType: string | null
+        physicalObjectId: string
+        provider: ArtifactStorageProviderIdentifier
+        providerKey: string
+        sha256: string
       }>(
         `
-          SELECT file.file_name AS "fileName", file.storage_key AS "storageKey",
-            object.public_url AS "publicUrl"
+          SELECT file.file_name AS "fileName", file.media_type AS "mediaType",
+            object.byte_size::text AS "byteSize", object.sha256,
+            file.physical_object_id AS "physicalObjectId", object.provider,
+            object.provider_key AS "providerKey"
           FROM core.file_links link
           JOIN core.files file ON file.id = link.file_id
           JOIN core.file_objects object ON object.id = file.physical_object_id
@@ -2108,7 +2207,11 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         [input.documentId, input.organizationId, input.supplierPriceId]
       )
       if (!result.rows[0]) throw new Error("Supplier quote was not found.")
-      return result.rows[0]
+      return {
+        ...result.rows[0],
+        byteSize: Number(result.rows[0].byteSize),
+        storageKey: null,
+      }
     },
 
     async createItemType(input: {
@@ -3145,15 +3248,11 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         pool.query<{
           fileName: string
           id: string
-          publicUrl: string | null
-          storageKey: string | null
         }>(
           `
-            SELECT drawing.id, drawing."fileName", drawing."storageKey",
-              drawing."publicUrl"
+            SELECT drawing.id, drawing."fileName"
             FROM (
               SELECT file.id, file.file_name AS "fileName",
-                file.storage_key AS "storageKey", object.public_url AS "publicUrl",
                 file.created_at
               FROM core.file_links link
               JOIN core.files file ON file.id = link.file_id
@@ -3166,7 +3265,6 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
                 AND object.lifecycle_state <> 'deleted'
               UNION ALL
               SELECT document.id, document.file_name AS "fileName",
-                document.storage_key AS "storageKey", NULL::text AS "publicUrl",
                 document.created_at
               FROM store.documents document
               WHERE document.organization_id = $1 AND document.item_type_id = $2
@@ -3394,16 +3492,15 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         [input.organizationId, asset.rows[0].id]
       )
       const documents = await pool.query<{
+        available: boolean
         billNumber: string | null
         documentType: string
         fileName: string | null
         id: string
-        publicUrl: string | null
-        storageKey: string | null
       }>(
         `
           SELECT document.id, document."documentType", document."billNumber",
-            document."fileName", document."storageKey", document."publicUrl"
+            document."fileName", document.available
           FROM (
             SELECT file.id,
               CASE link.purpose
@@ -3411,8 +3508,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
                 WHEN 'guarantee_card' THEN 'GUARANTEE_CARD'
               END AS "documentType",
               NULL::text AS "billNumber", file.file_name AS "fileName",
-              file.storage_key AS "storageKey", object.public_url AS "publicUrl",
-              file.created_at
+              true AS available, file.created_at
             FROM store.assets linked_asset
             LEFT JOIN store.receipt_lines receipt_line
               ON receipt_line.id = linked_asset.receipt_line_id
@@ -3435,8 +3531,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             UNION ALL
             SELECT legacy.id, legacy.document_type AS "documentType",
               legacy.bill_number AS "billNumber", legacy.file_name AS "fileName",
-              legacy.storage_key AS "storageKey", NULL::text AS "publicUrl",
-              legacy.created_at
+              (legacy.storage_key IS NOT NULL) AS available, legacy.created_at
             FROM store.documents legacy
             WHERE legacy.organization_id = $1
               AND (
@@ -3947,15 +4042,25 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       organizationId: string
     }) {
       const result = await pool.query<{
+        byteSize: string | null
         fileName: string
-        publicUrl: string | null
+        mediaType: string | null
+        physicalObjectId: string | null
+        provider: ArtifactStorageProviderIdentifier | null
+        providerKey: string | null
+        sha256: string | null
         storageKey: string | null
       }>(
         `
-          SELECT document."fileName", document."storageKey", document."publicUrl"
+          SELECT document."fileName", document."mediaType", document."byteSize",
+            document.sha256, document."storageKey", document."physicalObjectId",
+            document.provider, document."providerKey"
           FROM (
             SELECT file.id, file.file_name AS "fileName",
-              file.storage_key AS "storageKey", object.public_url AS "publicUrl"
+              file.media_type AS "mediaType", object.byte_size::text AS "byteSize",
+              object.sha256, file.storage_key AS "storageKey",
+              file.physical_object_id AS "physicalObjectId", object.provider,
+              object.provider_key AS "providerKey"
             FROM store.assets asset
             LEFT JOIN store.receipt_lines line ON line.id = asset.receipt_line_id
             JOIN core.file_links link ON link.organization_id = asset.organization_id
@@ -3977,7 +4082,10 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
               AND lower(asset.asset_code) = lower($3)
             UNION ALL
             SELECT legacy.id, legacy.file_name AS "fileName",
-              legacy.storage_key AS "storageKey", NULL::text AS "publicUrl"
+              NULL::text AS "mediaType", NULL::text AS "byteSize",
+              NULL::text AS sha256, legacy.storage_key AS "storageKey",
+              NULL::uuid AS "physicalObjectId", NULL::text AS provider,
+              NULL::text AS "providerKey"
             FROM store.documents legacy
             JOIN store.assets asset ON asset.organization_id = legacy.organization_id
             LEFT JOIN store.receipt_lines line ON line.id = asset.receipt_line_id
@@ -3996,7 +4104,11 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         [input.documentId, input.organizationId, input.assetCode]
       )
       if (!result.rows[0]) throw new Error("Store document was not found.")
-      return result.rows[0]
+      const row = result.rows[0]
+      return {
+        ...row,
+        byteSize: row.byteSize === null ? null : Number(row.byteSize),
+      }
     },
   }
 }

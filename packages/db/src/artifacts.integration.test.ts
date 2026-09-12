@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 
 import { Pool, type PoolClient } from "pg"
 import { afterAll, beforeAll, describe, expect, test } from "vitest"
@@ -21,6 +21,7 @@ const connectionString =
 const pool = new Pool({ connectionString })
 
 class ControllableArtifactProvider implements ArtifactStorageProvider {
+  readonly identifier = "google-cloud-storage"
   readonly deleted: string[] = []
   readonly uploads: Array<{
     bytes: Buffer
@@ -38,6 +39,10 @@ class ControllableArtifactProvider implements ArtifactStorageProvider {
     this.deleted.push(key)
   }
 
+  async read() {
+    return Buffer.alloc(0)
+  }
+
   async upload(input: {
     bytes: Buffer
     customId: string
@@ -50,6 +55,31 @@ class ControllableArtifactProvider implements ArtifactStorageProvider {
     }
     const key = `${randomUUID()}-${this.uploads.length}`
     return { key, url: `https://files.example.test/${key}` }
+  }
+}
+
+class DeterministicArtifactProvider implements ArtifactStorageProvider {
+  readonly identifier = "google-cloud-storage"
+  readonly preserveUploadsOnRollback = true
+  readonly deleted: string[] = []
+  readonly uploads: string[] = []
+  private failed = false
+
+  async delete({ key }: { key: string }) {
+    this.deleted.push(key)
+  }
+
+  async read() {
+    return Buffer.alloc(0)
+  }
+
+  async upload({ customId }: Parameters<ArtifactStorageProvider["upload"]>[0]) {
+    this.uploads.push(customId)
+    if (this.uploads.length === 2 && !this.failed) {
+      this.failed = true
+      throw new Error("artifact set upload failed")
+    }
+    return { key: `artifacts/${customId}` }
   }
 }
 
@@ -136,6 +166,69 @@ afterAll(async () => {
 })
 
 describe("Artifact service", () => {
+  test("atomically binds a ready pending upload and recovers the exact retry", async () => {
+    const context = await createCommercialTarget("Pending binding")
+    const user = await pool.query<{ id: string }>(
+      `INSERT INTO identity.users (name, email) VALUES ($1, $2) RETURNING id`,
+      ["Pending upload user", `pending-${randomUUID()}@example.test`]
+    )
+    const bytes = Buffer.from("artifact-alpha")
+    const digest = createHash("sha256").update(bytes).digest("hex")
+    const pending = await pool.query<{ id: string }>(
+      `
+        INSERT INTO core.pending_artifact_uploads (
+          id, organization_id, owner_user_id, intent, expected_byte_size,
+          original_file_name, media_type, provider_key, status, expires_at,
+          confirmed_offset, completed_byte_size, completed_sha256,
+          temporary_generation
+        ) VALUES ($7, $1, $2, $3, $4, 'customer-drawing.pdf', 'application/pdf',
+          $5, 'ready', now() + interval '1 day', $4, $4, $6, '42')
+        RETURNING id
+      `,
+      [
+        context.organizationId,
+        user.rows[0]!.id,
+        { enquiryId: context.enquiryId, kind: "test" },
+        bytes.byteLength,
+        `pending-artifact-uploads/${randomUUID()}`,
+        digest,
+        randomUUID(),
+      ]
+    )
+    const provider = new ControllableArtifactProvider()
+    const service = createArtifactService({ connectionString, provider })
+    const input = storeInput(context, {
+      actorUserId: user.rows[0]!.id,
+      bytes,
+      idempotencyKey: `pending-binding:${pending.rows[0]!.id}`,
+      pendingUploadId: pending.rows[0]!.id,
+    })
+
+    try {
+      const first = await service.store(input)
+      const bound = await pool.query<{
+        final_artifact_id: string
+        final_target_id: string
+        status: string
+      }>(
+        `SELECT status, final_artifact_id, final_target_id
+         FROM core.pending_artifact_uploads WHERE id = $1`,
+        [pending.rows[0]!.id]
+      )
+      expect(bound.rows[0]).toEqual({
+        final_artifact_id: first.id,
+        final_target_id: context.target.id,
+        status: "finalized",
+      })
+
+      const retried = await service.store(input)
+      expect(retried.id).toBe(first.id)
+      expect(provider.uploads).toHaveLength(1)
+    } finally {
+      await service.close()
+    }
+  })
+
   test("stores canonical logical and physical metadata for a Commercial Enquiry drawing", async () => {
     const context = await createCommercialTarget("First")
     const provider = new ControllableArtifactProvider()
@@ -156,7 +249,7 @@ describe("Artifact service", () => {
           "361ed25c3e60cacb463301889b040c27ae41ddea7a6445ee82a2221b64c3a35f",
         version: 1,
       })
-      expect(artifact.publicUrl).toMatch(/^https:\/\/files\.example\.test\//)
+      expect(artifact.publicUrl).toBeNull()
       expect(provider.uploads).toHaveLength(1)
       expect(provider.uploads[0]?.bytes.equals(bytes)).toBe(true)
     } finally {
@@ -330,7 +423,8 @@ describe("Artifact service", () => {
         {
           fileName: "sales-answer.pdf",
           isCurrent: true,
-          publicUrl: expect.stringMatching(/^https:\/\/files\.example\.test\//),
+          provider: "google-cloud-storage",
+          providerKey: expect.any(String),
           purpose: "sales_clarification",
           version: 2,
         },
@@ -351,9 +445,8 @@ describe("Artifact service", () => {
           {
             fileName: `${purpose}.pdf`,
             isCurrent: true,
-            publicUrl: expect.stringMatching(
-              /^https:\/\/files\.example\.test\//
-            ),
+            provider: "google-cloud-storage",
+            providerKey: expect.any(String),
             purpose,
           },
         ])
@@ -556,6 +649,51 @@ describe("Artifact service", () => {
     }
   })
 
+  test("persists the configured private provider and safely reuses deterministic uploads after rollback", async () => {
+    const context = await createCommercialTarget("Private provider")
+    const provider = new DeterministicArtifactProvider()
+    const service = createArtifactService({ connectionString, provider })
+    const pdf = storeInput(context, {
+      idempotencyKey: `private-pdf:${context.target.id}`,
+      purpose: "issued_pdf",
+    })
+    const workbook = storeInput(context, {
+      bytes: Buffer.from("private-workbook"),
+      fileName: "private.xlsx",
+      idempotencyKey: `private-xlsx:${context.target.id}`,
+      mediaType:
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      purpose: "issued_xlsx",
+    })
+
+    try {
+      await expect(service.storeSet([pdf, workbook])).rejects.toThrow(
+        "artifact set upload failed"
+      )
+      expect(provider.deleted).toEqual([])
+
+      const stored = await service.storeSet([pdf, workbook])
+      expect(stored).toMatchObject([
+        { provider: "google-cloud-storage", publicUrl: null },
+        { provider: "google-cloud-storage", publicUrl: null },
+      ])
+      const physicalObjects = await pool.query<{
+        provider: string
+        public_url: string | null
+      }>(
+        `SELECT provider, public_url FROM core.file_objects
+         WHERE organization_id = $1 ORDER BY provider_key`,
+        [context.organizationId]
+      )
+      expect(physicalObjects.rows).toEqual([
+        { provider: "google-cloud-storage", public_url: null },
+        { provider: "google-cloud-storage", public_url: null },
+      ])
+    } finally {
+      await service.close()
+    }
+  })
+
   test("replaces the current drawing, retains superseded history, and rejects unavailable bytes", async () => {
     const context = await createCommercialTarget("History")
     const provider = new ControllableArtifactProvider()
@@ -601,13 +739,27 @@ describe("Artifact service", () => {
         },
       ])
       await expect(
+        service.getBound({
+          actorUserId: null,
+          artifactId: first.id,
+          organizationId: context.organizationId,
+          purpose: "drawing",
+          target: context.target,
+        })
+      ).resolves.toMatchObject({
+        id: first.id,
+        isCurrent: false,
+        lifecycleState: "superseded",
+      })
+      await expect(
         workflow.getCurrentDrawing({
           enquiryItemId: context.target.id,
           organizationId: context.organizationId,
         })
       ).resolves.toMatchObject({
         id: second.id,
-        publicUrl: second.publicUrl,
+        provider: "google-cloud-storage",
+        providerKey: second.providerKey,
       })
       await expect(
         workflow.listDrawingHistory({

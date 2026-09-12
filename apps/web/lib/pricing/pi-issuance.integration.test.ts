@@ -24,6 +24,7 @@ const connectionString =
 const pool = new Pool({ connectionString })
 
 class PiArtifactProvider implements ArtifactStorageProvider {
+  readonly identifier = "uploadthing"
   readonly bytesByUrl = new Map<string, Buffer>()
   readonly deleted: string[] = []
   readonly uploads: Array<{ mediaType: string; url: string }> = []
@@ -32,6 +33,17 @@ class PiArtifactProvider implements ArtifactStorageProvider {
 
   async delete({ key }: { key: string }) {
     this.deleted.push(key)
+  }
+
+  async read({ key }: { key: string }) {
+    return (
+      this.bytesByUrl.get(`https://files.example.test/${key}`) ??
+      Buffer.alloc(0)
+    )
+  }
+
+  async resolveLegacyPublicUrl({ key }: { key: string }) {
+    return `https://files.example.test/${key}`
   }
 
   async upload(input: Parameters<ArtifactStorageProvider["upload"]>[0]) {
@@ -222,7 +234,9 @@ describe("sent PI document-set issuance", () => {
       ]) {
         const context = await createDraftPi(`Failure ${mediaType}`)
         const provider = new PiArtifactProvider(mediaType)
-        await expect(issuePi(context, provider)).rejects.toThrow("upload failed")
+        await expect(issuePi(context, provider)).rejects.toThrow(
+          "upload failed"
+        )
         const order = await reader.getPurchaseOrder(context.purchaseOrderId)
         expect(order.invoices[0]).toMatchObject({ status: "Draft" })
         await expect(
@@ -267,8 +281,12 @@ describe("sent PI document-set issuance", () => {
         context.invoiceId,
         proformaInvoiceXlsxArtifactPurpose
       )
-      const pdfBytes = provider.bytesByUrl.get(issuedPdf!.publicUrl)!
-      const xlsxBytes = provider.bytesByUrl.get(issuedXlsx!.publicUrl)!
+      const pdfBytes = provider.bytesByUrl.get(
+        `https://files.example.test/${issuedPdf!.providerKey}`
+      )!
+      const xlsxBytes = provider.bytesByUrl.get(
+        `https://files.example.test/${issuedXlsx!.providerKey}`
+      )!
       expect(pdfBytes.subarray(0, 4).toString()).toBe("%PDF")
       const workbook = XLSX.read(xlsxBytes)
       expect(
@@ -303,8 +321,16 @@ describe("sent PI document-set issuance", () => {
           proformaInvoiceXlsxArtifactPurpose
         )
       ).resolves.toEqual(issuedXlsx)
-      expect(provider.bytesByUrl.get(issuedPdf!.publicUrl)).toEqual(pdfBytes)
-      expect(provider.bytesByUrl.get(issuedXlsx!.publicUrl)).toEqual(xlsxBytes)
+      expect(
+        provider.bytesByUrl.get(
+          `https://files.example.test/${issuedPdf!.providerKey}`
+        )
+      ).toEqual(pdfBytes)
+      expect(
+        provider.bytesByUrl.get(
+          `https://files.example.test/${issuedXlsx!.providerKey}`
+        )
+      ).toEqual(xlsxBytes)
       expect(provider.uploads).toHaveLength(2)
     } finally {
       await repository.close()

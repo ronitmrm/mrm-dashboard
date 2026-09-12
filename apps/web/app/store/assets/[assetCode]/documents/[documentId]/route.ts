@@ -1,12 +1,14 @@
 import { createStoreRepository } from "@workspace/db"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
+import {
+  artifactDeliveryErrorResponse,
+  createArtifactDeliveryResponse,
+} from "@/lib/artifact-delivery"
 import { requireCapability } from "@/lib/auth/require-capability"
-import { userAttachmentDownloadHeaders } from "@/lib/user-attachment-security"
-import { readUserAttachment } from "@/lib/user-attachment-storage"
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ assetCode: string; documentId: string }> }
 ) {
   const { assetCode, documentId } = await params
@@ -24,19 +26,16 @@ export async function GET(
       documentId,
       organizationId,
     })
-    if (file.publicUrl) {
-      return Response.redirect(file.publicUrl, 307)
-    }
-    if (!file.storageKey) {
-      throw new Error("Store document is unavailable.")
-    }
-    const attachment = await readUserAttachment(file.storageKey)
-    return new Response(attachment.body, {
-      headers: userAttachmentDownloadHeaders(
-        file.fileName,
-        attachment.byteSize
-      ),
+    return await createArtifactDeliveryResponse(request, file, {
+      download: true,
     })
+  } catch (error) {
+    const delivery = artifactDeliveryErrorResponse(error, {
+      failed: "Store document could not be loaded. Please try again.",
+      unavailable: "Store document is unavailable.",
+    })
+    if (delivery) return delivery
+    throw error
   } finally {
     await repository.close()
   }

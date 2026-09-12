@@ -181,7 +181,7 @@ describe("Administration Artifact ledger", () => {
         totalArtifacts: 3,
         totalPages: 2,
         totals: {
-          allowanceBytes: 2 * 1024 * 1024 * 1024,
+          allowanceBytes: 5 * 1024 * 1024 * 1024,
           livePhysicalObjects: 1,
           logicalArtifacts: 3,
           uniqueLiveBytes: 14,
@@ -293,7 +293,7 @@ describe("Administration Artifact ledger", () => {
     }
   })
 
-  test("keeps a provider-deletion failure visible without hiding its still-live public URL", async () => {
+  test("keeps a provider-deletion failure visible through its application route", async () => {
     const organizationId = await seedOrganization("Failed deletion ledger")
     const artifact = await seedArtifact({
       byteSize: 24,
@@ -323,7 +323,8 @@ describe("Administration Artifact ledger", () => {
           {
             fileName: "retry-delete.pdf",
             providerState: "deletion_failed",
-            publicUrl: "https://files.example.test/retry-delete.pdf",
+            contentPath: `/administration/artifacts/${artifact.fileId}/content`,
+            providerLabel: "UploadThing",
           },
         ],
         totals: {

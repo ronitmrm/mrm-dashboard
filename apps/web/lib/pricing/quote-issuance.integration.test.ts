@@ -19,6 +19,7 @@ const connectionString =
 const pool = new Pool({ connectionString, max: 1, idleTimeoutMillis: 100 })
 
 class QuoteArtifactProvider implements ArtifactStorageProvider {
+  readonly identifier = "uploadthing"
   readonly bytesByUrl = new Map<string, Buffer>()
   readonly deleted: string[] = []
   readonly uploads: Array<{ bytes: Buffer; key: string; url: string }> = []
@@ -29,6 +30,17 @@ class QuoteArtifactProvider implements ArtifactStorageProvider {
 
   async delete({ key }: { key: string }) {
     this.deleted.push(key)
+  }
+
+  async read({ key }: { key: string }) {
+    return (
+      this.bytesByUrl.get(`https://files.example.test/${key}`) ??
+      Buffer.alloc(0)
+    )
+  }
+
+  async resolveLegacyPublicUrl({ key }: { key: string }) {
+    return `https://files.example.test/${key}`
   }
 
   async upload(input: Parameters<ArtifactStorageProvider["upload"]>[0]) {
@@ -206,7 +218,8 @@ test("builds quotation fields from the enquiry and customer records", async () =
   await pool.query(
     `UPDATE sales.customers SET contact_name = 'Customer Contact', country = 'India',
        address = '12 Industrial Road, Jamnagar 361004'
-     WHERE id = $1`, [context.customerId]
+     WHERE id = $1`,
+    [context.customerId]
   )
   await pool.query(
     `UPDATE sales.enquiries SET enquiry_number = 'ENQ-SOURCE-100',
@@ -216,7 +229,8 @@ test("builds quotation fields from the enquiry and customer records", async () =
        shipment_mode = 'Sea', packaging_terms = 'Export pallets',
        brass_material_specs = 'C36000', reports = 'Material certificate',
        taxes_and_duties = 'Buyer responsibility'
-     WHERE id = $1`, [context.enquiryId]
+     WHERE id = $1`,
+    [context.enquiryId]
   )
   await pool.query(
     `INSERT INTO sales.quote_term_templates (organization_id, term_key, label, value, sort_order, active,
@@ -230,17 +244,35 @@ test("builds quotation fields from the enquiry and customer records", async () =
   try {
     const document = await repository.getQuoteDocument(context.enquiryId)
     expect(document).toMatchObject({
-      companyName: 'Document sources Customer', customerContact: 'Customer Contact',
-      customerAddress: '12 Industrial Road, Jamnagar 361004\nIndia', buyerName: 'Enquiry Buyer',
-      customerReference: 'RFQ-CUSTOMER-987', quotationNumber: 'QTN-ENQ-SOURCE-100',
-      conversionRate: 83.25, paymentTerms: '50% advance', deliveryTerms: 'Eight weeks',
-      incoterms: 'FOB Mundra', shipmentMode: 'Sea', packagingTerms: 'Export pallets',
-      preparedBy: 'Ankit Khattar', preparedByTitle: 'Engineering Lead', terms: [
-        { label: 'Brass Material Specs', value: 'C36000', sortOrder: 1 },
-        { label: 'Reports', value: 'Material certificate', sortOrder: 2 },
-        { label: 'Taxes and Duties', value: 'Buyer responsibility', sortOrder: 3 },
+      companyName: "Document sources Customer",
+      customerContact: "Customer Contact",
+      customerAddress: "12 Industrial Road, Jamnagar 361004\nIndia",
+      buyerName: "Enquiry Buyer",
+      customerReference: "RFQ-CUSTOMER-987",
+      quotationNumber: "QTN-ENQ-SOURCE-100",
+      conversionRate: 83.25,
+      paymentTerms: "50% advance",
+      deliveryTerms: "Eight weeks",
+      incoterms: "FOB Mundra",
+      shipmentMode: "Sea",
+      packagingTerms: "Export pallets",
+      preparedBy: "Ankit Khattar",
+      preparedByTitle: "Engineering Lead",
+      terms: [
+        { label: "Brass Material Specs", value: "C36000", sortOrder: 1 },
+        { label: "Reports", value: "Material certificate", sortOrder: 2 },
+        {
+          label: "Taxes and Duties",
+          value: "Buyer responsibility",
+          sortOrder: 3,
+        },
       ],
-      lines: [expect.objectContaining({ description: 'Document sources Part', quantity: 100 })],
+      lines: [
+        expect.objectContaining({
+          description: "Document sources Part",
+          quantity: 100,
+        }),
+      ],
     })
     expect(document.documentDate.getTime()).toBeGreaterThanOrEqual(before)
     expect(document.documentDate.getTime()).toBeLessThanOrEqual(Date.now())
@@ -288,12 +320,18 @@ test("waits for every enquiry line and issues all completed lines together", asy
      WHERE enquiry_id = $1 AND line_number = 4`,
     [context.enquiryId]
   )
-  await expect(issueQuote(context, new QuoteArtifactProvider({ failUpload: true })))
-    .rejects.toThrow("quote PDF upload failed")
+  await expect(
+    issueQuote(context, new QuoteArtifactProvider({ failUpload: true }))
+  ).rejects.toThrow("quote PDF upload failed")
   const repository = createCommercialCostingRepository({ connectionString })
   try {
-    for (const id of [context.quoteItemId, ...siblings.rows.map(row => row.id)]) {
-      await expect(repository.getQuote(id)).resolves.toMatchObject({ status: "Ready" })
+    for (const id of [
+      context.quoteItemId,
+      ...siblings.rows.map((row) => row.id),
+    ]) {
+      await expect(repository.getQuote(id)).resolves.toMatchObject({
+        status: "Ready",
+      })
     }
   } finally {
     await repository.close()
@@ -303,8 +341,11 @@ test("waits for every enquiry line and issues all completed lines together", asy
     expect(document.lines).toHaveLength(4)
     issuedDocument = document
   })
-  expect(issuedDocument?.lines.map(line => line.status)).toEqual([
-    "Sent", "Sent", "Sent", "Cannot Quote",
+  expect(issuedDocument?.lines.map((line) => line.status)).toEqual([
+    "Sent",
+    "Sent",
+    "Sent",
+    "Cannot Quote",
   ])
   expect(issuedDocument?.lines[0]).toMatchObject({
     lineNumber: 1,
@@ -418,7 +459,9 @@ describe("sent Quote PDF issuance", () => {
     try {
       const issued = await repository.getQuotePdfArtifact(context.enquiryId)
       expect(issued).not.toBeNull()
-      const originalBytes = provider.bytesByUrl.get(issued!.publicUrl)
+      const originalBytes = provider.bytesByUrl.get(
+        `https://files.example.test/${issued!.providerKey}`
+      )
       expect(originalBytes?.subarray(0, 4).toString()).toBe("%PDF")
 
       await pool.query(
@@ -454,32 +497,63 @@ describe("sent Quote PDF issuance", () => {
       expect(liveDocument.lines[0]).toMatchObject({ price: 12.5 })
       const historical = await repository.getQuotePdfArtifact(context.enquiryId)
       expect(historical).toEqual(issued)
-      expect(provider.bytesByUrl.get(historical!.publicUrl)).toEqual(
-        originalBytes
-      )
+      expect(
+        provider.bytesByUrl.get(
+          `https://files.example.test/${historical!.providerKey}`
+        )
+      ).toEqual(originalBytes)
       expect(provider.uploads).toHaveLength(1)
-      await pool.query(`UPDATE sales.enquiries SET taxes_and_duties = 'Consignee pays duties',
-        reports = 'MTC included', brass_material_specs = 'C3604' WHERE id = $1`, [context.enquiryId])
-      const replacement = await pool.query<{id:string}>(`INSERT INTO sales.quote_items
+      await pool.query(
+        `UPDATE sales.enquiries SET taxes_and_duties = 'Consignee pays duties',
+        reports = 'MTC included', brass_material_specs = 'C3604' WHERE id = $1`,
+        [context.enquiryId]
+      )
+      const replacement = await pool.query<{ id: string }>(
+        `INSERT INTO sales.quote_items
         SELECT (jsonb_populate_record(NULL::sales.quote_items, to_jsonb(q) ||
           jsonb_build_object('id', gen_random_uuid(), 'status', 'Ready', 'sent_at', NULL,
             'is_active', false, 'revision', q.revision + 1, 'unit_price', 15,
             'created_at', now(), 'source_id', gen_random_uuid()::text))).*
-        FROM sales.quote_items q WHERE id = $1 RETURNING id`, [context.quoteItemId])
-      const preview = await repository.getQuoteDocument(context.enquiryId, undefined, { preview: true })
+        FROM sales.quote_items q WHERE id = $1 RETURNING id`,
+        [context.quoteItemId]
+      )
+      const preview = await repository.getQuoteDocument(
+        context.enquiryId,
+        undefined,
+        { preview: true }
+      )
       expect(preview.lines[0]?.price).toBe(15)
       expect(preview.terms).toEqual([
-        { label: 'Brass Material Specs', value: 'C3604', sortOrder: 1 },
-        { label: 'Reports', value: 'MTC included', sortOrder: 2 },
-        { label: 'Taxes and Duties', value: 'Consignee pays duties', sortOrder: 3 },
+        { label: "Brass Material Specs", value: "C3604", sortOrder: 1 },
+        { label: "Reports", value: "MTC included", sortOrder: 2 },
+        {
+          label: "Taxes and Duties",
+          value: "Consignee pays duties",
+          sortOrder: 3,
+        },
       ])
-      expect(await repository.getQuotePdfArtifact(context.enquiryId)).toEqual(issued)
-      await issueQuote({...context,quoteItemId:replacement.rows[0]!.id},provider)
-      expect(await repository.getQuotePdfArtifact(context.enquiryId,undefined,0)).toEqual(issued)
-      const revisedArtifact = await repository.getQuotePdfArtifact(context.enquiryId,undefined,1)
+      expect(await repository.getQuotePdfArtifact(context.enquiryId)).toEqual(
+        issued
+      )
+      await issueQuote(
+        { ...context, quoteItemId: replacement.rows[0]!.id },
+        provider
+      )
+      expect(
+        await repository.getQuotePdfArtifact(context.enquiryId, undefined, 0)
+      ).toEqual(issued)
+      const revisedArtifact = await repository.getQuotePdfArtifact(
+        context.enquiryId,
+        undefined,
+        1
+      )
       expect(revisedArtifact).not.toBeNull()
-      expect(revisedArtifact?.publicUrl).not.toBe(issued!.publicUrl)
-      expect((await repository.listQuotationVersions(context.enquiryId)).map(version=>version.revision)).toEqual([0,1])
+      expect(revisedArtifact?.providerKey).not.toBe(issued!.providerKey)
+      expect(
+        (await repository.listQuotationVersions(context.enquiryId)).map(
+          (version) => version.revision
+        )
+      ).toEqual([0, 1])
     } finally {
       await repository.close()
     }
@@ -517,7 +591,7 @@ describe("sent Quote PDF issuance", () => {
       ).resolves.toMatchObject({
         available: false,
         fileName: logical!.fileName,
-        publicUrl: issued!.publicUrl,
+        providerKey: issued!.providerKey,
       })
       expect(provider.uploads).toHaveLength(1)
     } finally {

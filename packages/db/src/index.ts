@@ -5,9 +5,18 @@ export {
 } from "./access-audit"
 export { createAuthorizationRepository } from "./authorization"
 export {
+  artifactUploadChunkMaxBytes,
+  ArtifactStorageError,
   createArtifactService,
+  type ArtifactByteLocator,
+  type ArtifactResumableUploadProgress,
+  type ArtifactResumableUploadProvider,
   type DeleteArtifactInput,
   type ArtifactStorageProvider,
+  type ArtifactStoredObjectProvider,
+  type ArtifactStorageErrorCode,
+  type ArtifactStorageProviderIdentifier,
+  type ServerResumableUploadSession,
 } from "./artifacts"
 export {
   artifactStorageAllowanceBytes,
@@ -15,6 +24,16 @@ export {
   type ArtifactLedgerFilters,
   type ArtifactLedgerUsage,
 } from "./artifact-ledger"
+export {
+  createArtifactStorageMigrationRepository,
+  createArtifactStorageMigrationService,
+  type ArtifactSourceCleanup,
+  type ArtifactStorageMigrationInventory,
+  type ArtifactStorageMigrationObject,
+  type ArtifactStorageMigrationRepository,
+  type ArtifactStorageMigrationResult,
+  type ArtifactStorageReadiness,
+} from "./artifact-storage-migration"
 export { createCatalogMasterRepository } from "./catalog-masters"
 export {
   type BoundedCommercialResult,
@@ -78,6 +97,12 @@ export {
 } from "./dashboard-read-model"
 export { createDashboardReadModelRepository } from "./dashboard-read-model-repository"
 export { createMaintenanceRepository } from "./maintenance"
+export {
+  createPendingArtifactUploadRepository,
+  PendingArtifactUploadNotFoundError,
+  type PendingArtifactUploadRecord,
+  type PendingArtifactUploadStatus,
+} from "./pending-artifact-uploads"
 export {
   authorizeMaintenanceRequestPhotoTarget,
   createMaintenanceRequestRepository,
@@ -210,7 +235,10 @@ export {
   type QuoteCostingInput,
 } from "./pricing-calculation"
 export { identitySchema } from "./schema"
-export { customerRevisionParameterColumns, type CustomerRevisionParameters } from "./commercial-revision-parameters"
+export {
+  customerRevisionParameterColumns,
+  type CustomerRevisionParameters,
+} from "./commercial-revision-parameters"
 export { DuplicateMasterError } from "./master-duplicate"
 export { priceMasterProcesses, type PriceMaster } from "./price-master"
 export type { QuotationVersion } from "./quotation-versions"

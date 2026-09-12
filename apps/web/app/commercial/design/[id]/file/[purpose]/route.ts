@@ -5,8 +5,10 @@ import {
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
-import { userAttachmentResponseHeaders } from "@/lib/user-attachment-security"
-import { readUserAttachment } from "@/lib/user-attachment-storage"
+import {
+  artifactDeliveryErrorResponse,
+  createArtifactDeliveryResponse,
+} from "@/lib/artifact-delivery"
 import { parseDesignBomAttachmentPurpose } from "@/lib/commercial-attachment"
 
 const purposes = new Set(["cad", "customer_marked", "internal_drawing"])
@@ -17,7 +19,11 @@ export async function GET(
 ) {
   await requireCapability("pricing.design.read", "/commercial/design")
   const { id, purpose } = await params
-  if (!purposes.has(purpose) && !/^customer_drawing_[a-f0-9-]{36}$/.test(purpose) && !parseDesignBomAttachmentPurpose(purpose)) {
+  if (
+    !purposes.has(purpose) &&
+    !/^customer_drawing_[a-f0-9-]{36}$/.test(purpose) &&
+    !parseDesignBomAttachmentPurpose(purpose)
+  ) {
     return new Response("Design attachment was not found.", { status: 404 })
   }
   const connectionString = readAuthEnvironment().connectionString
@@ -45,18 +51,16 @@ export async function GET(
         status: 410,
       })
     }
-    if (attachment.publicUrl) {
-      return Response.redirect(attachment.publicUrl, 307)
-    }
-    const file = await readUserAttachment(attachment.storageKey)
-    return new Response(file.body, {
-      headers: userAttachmentResponseHeaders(
-        attachment.fileName,
-        file.byteSize,
-        attachment.mediaType,
-        new URL(request.url).searchParams.has("preview")
-      ),
+    return await createArtifactDeliveryResponse(request, attachment, {
+      download: !new URL(request.url).searchParams.has("preview"),
     })
+  } catch (error) {
+    const delivery = artifactDeliveryErrorResponse(error, {
+      failed: "Design attachment could not be loaded. Please try again.",
+      unavailable: "Design attachment is deleted or unavailable.",
+    })
+    if (delivery) return delivery
+    throw error
   } finally {
     await workflow.close()
     await customers.close()

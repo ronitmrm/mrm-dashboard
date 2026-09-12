@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto"
 import { Client, Pool, type Notification } from "pg"
 import { afterAll, beforeAll, expect, test } from "vitest"
 
+import { resetTestDatabase } from "../../../scripts/test-database-safety"
+
 import publishedChecksums from "../migrations/published-checksums.json"
 
 import { createCatalogMasterRepository } from "./catalog-masters"
@@ -55,6 +57,7 @@ const expectedCanonicalTables = [
   "audit.record_reversals",
   "catalog.bom_lines",
   "catalog.design_processes",
+  "catalog.drawing_revisions",
   "catalog.drawings",
   "catalog.item_aliases",
   "catalog.item_categories",
@@ -63,6 +66,7 @@ const expectedCanonicalTables = [
   "catalog.machine_types",
   "catalog.machines",
   "catalog.material_grades",
+  "catalog.product_design_revisions",
   "catalog.rod_types",
   "catalog.website_applications",
   "catalog.website_certifications",
@@ -73,9 +77,12 @@ const expectedCanonicalTables = [
   "core.files",
   "core.number_sequences",
   "core.organizations",
+  "core.pending_artifact_uploads",
   "maintenance.checklist_items",
   "maintenance.definitions",
   "maintenance.machine_schedules",
+  "maintenance.request_events",
+  "maintenance.requests",
   "maintenance.task_results",
   "maintenance.tasks",
   "manufacturing.dispatch_approval_events",
@@ -128,6 +135,7 @@ const expectedCanonicalTables = [
   "recruitment.combined_roles",
   "recruitment.departments",
   "recruitment.designations",
+  "recruitment.employment_letters",
   "recruitment.interviews",
   "recruitment.job_posts",
   "recruitment.posts",
@@ -292,15 +300,9 @@ async function representativeUpgradeFingerprint() {
   return result.rows[0]!.fingerprint
 }
 
-async function resetDisposableDatabase() {
-  for (const schema of expectedSchemas) {
-    await pool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`)
-  }
-}
-
 beforeAll(async () => {
   assertDisposableLocalDatabase(connectionString)
-  await resetDisposableDatabase()
+  await resetTestDatabase(pool, connectionString)
 })
 
 afterAll(async () => {
@@ -502,7 +504,7 @@ test("a representative managed 0038 database upgrades with runtime access and ca
 test("dashboard floor migration queues one refresh per organization", async () => {
   const organizationId = "00000000-0000-4000-8000-000000000059"
 
-  await resetDisposableDatabase()
+  await resetTestDatabase(pool, connectionString)
   await migrateDatabase({
     connectionString,
     through: "0058_dashboard_route_master_projection.sql",
@@ -565,7 +567,7 @@ test("dashboard floor migration queues one refresh per organization", async () =
 }, 20_000)
 
 test("an empty database migrates into the MRMPL bounded contexts", async () => {
-  await resetDisposableDatabase()
+  await resetTestDatabase(pool, connectionString)
   await migrateDatabase({ connectionString })
 
   const result = await pool.query<{ schema_name: string }>(
@@ -1720,6 +1722,7 @@ test("foundation includes provenance, conflict review, and durable work tables",
     "derived.refresh_job_attempts",
     "derived.refresh_jobs",
     "derived.refresh_watermarks",
+    "migration.artifact_source_cleanups",
     "migration.artifacts",
     "migration.convex_documents",
     "migration.file_conflicts",

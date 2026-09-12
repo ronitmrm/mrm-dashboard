@@ -23,11 +23,15 @@ import {
   requireCapability,
 } from "@/lib/auth/require-capability"
 import { requiredText } from "@/lib/form-data"
-import { createUploadThingArtifactProvider } from "@/lib/uploadthing-artifact-provider"
-import { validateUserAttachment } from "@/lib/user-attachment-security"
+import { createGoogleCloudArtifactProvider } from "@/lib/google-cloud-artifact-provider"
+import {
+  consumePendingArtifactUpload,
+  pendingUploadAuthorizationForUser,
+  pendingUploadIds,
+  preparePendingArtifactUploadForFinalAction,
+} from "@/lib/pending-artifact-upload-server"
 
 const requestsPath = "/maintenance/requests"
-const maximumPhotoBytes = 10 * 1024 * 1024
 const maximumPhotoCount = 8
 
 function category(value: FormDataEntryValue | null): MaintenanceCategory {
@@ -46,37 +50,27 @@ function priority(value: FormDataEntryValue | null): MaintenancePriority {
   return result as MaintenancePriority
 }
 
-function requestPhotos(formData: FormData) {
-  const files = formData
-    .getAll("photos")
-    .filter((file): file is File => file instanceof File && file.size > 0)
-  if (files.length > maximumPhotoCount) {
-    throw new Error(`Attach no more than ${maximumPhotoCount} photos.`)
-  }
-  return files.map((file) => {
-    if (file.size > maximumPhotoBytes) {
-      throw new Error("Each Maintenance photo must be 10 MB or smaller.")
-    }
-    return file
-  })
-}
-
 export async function submitMaintenanceRequestAction(formData: FormData) {
   const session = await requireAuthenticatedSession(requestsPath)
-  const files = requestPhotos(formData)
-  const preparedPhotos = await Promise.all(
-    files.map(async (file) => {
-      const bytes = Buffer.from(await file.arrayBuffer())
-      return {
-        bytes,
-        ...validateUserAttachment({
-          bytes,
-          fileName: file.name,
-          purpose: "maintenance-photo",
-        }),
-      }
-    })
-  )
+  const uploadIds = pendingUploadIds(formData, "photos")
+  if (uploadIds.length > maximumPhotoCount) {
+    throw new Error(`Attach no more than ${maximumPhotoCount} photos.`)
+  }
+  const pendingAuthorization = uploadIds.length
+    ? await pendingUploadAuthorizationForUser(session.user.id)
+    : null
+  if (pendingAuthorization) {
+    for (const [index, uploadId] of uploadIds.entries()) {
+      await preparePendingArtifactUploadForFinalAction({
+        authorization: pendingAuthorization,
+        expectedIntent: {
+          index: index + 1,
+          kind: "maintenance-request-photo",
+        },
+        uploadId,
+      })
+    }
+  }
   const repository = createMaintenanceRequestRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
@@ -96,15 +90,23 @@ export async function submitMaintenanceRequestAction(formData: FormData) {
     await repository.close()
   }
 
-  if (preparedPhotos.length) {
+  if (uploadIds.length) {
     const artifacts = createArtifactService({
       connectionString: readAuthEnvironment().connectionString,
-      provider: createUploadThingArtifactProvider(),
+      provider: createGoogleCloudArtifactProvider(),
     })
     try {
-      for (const [index, photo] of preparedPhotos.entries()) {
+      const retain = async (
+        photo: {
+          bytes: Buffer
+          fileName: string
+          mediaType: string
+          pendingUploadId?: string
+        },
+        index: number
+      ) => {
         const sha256 = createHash("sha256").update(photo.bytes).digest("hex")
-        await artifacts.store({
+        return artifacts.store({
           actorUserId: session.user.id,
           authorizeTarget: (client, { isRetry }) =>
             authorizeMaintenanceRequestPhotoTarget(
@@ -121,15 +123,45 @@ export async function submitMaintenanceRequestAction(formData: FormData) {
           idempotencyKey: [
             "maintenance-request-photo",
             request.id,
-            index + 1,
+            index,
             sha256,
           ].join(":"),
           mediaType: photo.mediaType,
           organizationId,
           origin: "uploaded",
-          purpose: `request-photo:${index + 1}`,
+          pendingUploadId: photo.pendingUploadId,
+          purpose: `request-photo:${index}`,
           target: { id: request.id, schema: "maintenance", table: "requests" },
         })
+      }
+      if (pendingAuthorization) {
+        for (const [index, uploadId] of uploadIds.entries()) {
+          const photoIndex = index + 1
+          await consumePendingArtifactUpload({
+            authorization: pendingAuthorization,
+            expectedIntent: {
+              index: photoIndex,
+              kind: "maintenance-request-photo",
+            },
+            finalize: async (photo) => {
+              const artifact = await retain(photo, photoIndex)
+              return {
+                binding: {
+                  artifactId: artifact.id,
+                  purpose: `request-photo:${photoIndex}`,
+                  target: {
+                    id: request.id,
+                    schema: "maintenance",
+                    table: "requests",
+                  },
+                },
+                value: undefined,
+              }
+            },
+            recover: () => undefined,
+            uploadId,
+          })
+        }
       }
     } finally {
       await artifacts.close()

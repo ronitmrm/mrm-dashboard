@@ -30,6 +30,7 @@ describe("protected server boundaries", () => {
       (path) => relativeAppPath(path) !== "api/auth/[...all]/route.ts"
     )
     const guards = [
+      "authenticatePendingUploadRequest(",
       "requireCapability(",
       "requireHrPage(",
       "requireProductionPage(",
@@ -39,6 +40,10 @@ describe("protected server boundaries", () => {
     ]
     const authenticatedAccountOnlyBoundaries = new Map([
       ["home/actions.ts", "requireAuthenticatedSession("],
+      [
+        "maintenance/requests/[id]/photos/[photoId]/route.ts",
+        "requireAuthenticatedSession(",
+      ],
     ])
     const missing: string[] = []
 

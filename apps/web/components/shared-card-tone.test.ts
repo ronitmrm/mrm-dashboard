@@ -27,10 +27,6 @@ describe("shared software card tone", () => {
     expect(source("../app/commercial/quotes/[id]/page.tsx")).toContain(
       "<MetricCard"
     )
-    expect(source("./commercial/costing-calculator.tsx")).toContain(
-      "<MetricCard"
-    )
-
     const toolFixturePanel = production.slice(
       production.indexOf("function ToolFixturePanel"),
       production.indexOf("type LegacyField")

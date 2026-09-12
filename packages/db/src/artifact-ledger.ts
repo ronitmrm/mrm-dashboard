@@ -1,6 +1,7 @@
 import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
+import type { ArtifactStorageProviderIdentifier } from "./artifacts"
 
-export const artifactStorageAllowanceBytes = 2 * 1024 * 1024 * 1024
+export const artifactStorageAllowanceBytes = 5 * 1024 * 1024 * 1024
 
 export type ArtifactLedgerFilters = {
   dateFrom?: string
@@ -43,7 +44,7 @@ type LedgerRow = {
   object_lifecycle_state: "available" | "deleted" | "deletion_failed"
   origin: "generated" | "legacy" | "uploaded"
   physical_reference_count: string
-  public_url: string | null
+  provider: ArtifactStorageProviderIdentifier
   purposes: string[]
   sha256: string
   total_count: string
@@ -58,6 +59,12 @@ function normalizedOptional(value: string | undefined) {
 function positiveInteger(value: number, fallback: number, maximum: number) {
   if (!Number.isInteger(value) || value < 1) return fallback
   return Math.min(value, maximum)
+}
+
+function artifactProviderLabel(provider: ArtifactStorageProviderIdentifier) {
+  return provider === "google-cloud-storage"
+    ? "Google Cloud Storage"
+    : "UploadThing"
 }
 
 const moduleExpression = `CASE usage.target_schema
@@ -157,6 +164,50 @@ export function createArtifactLedgerRepository(options: RepositoryPoolOptions) {
       throw new Error(
         "Artifact ledger Organization is not assigned to this user."
       )
+    },
+
+    async getForDelivery(input: {
+      artifactId: string
+      organizationId: string
+    }) {
+      const result = await pool.query<{
+        available: boolean
+        byte_size: string
+        file_name: string
+        media_type: string | null
+        physical_object_id: string
+        provider: ArtifactStorageProviderIdentifier
+        provider_key: string
+        sha256: string
+      }>(
+        `
+          SELECT file.file_name, file.media_type,
+            file.physical_object_id, object.provider, object.provider_key,
+            object.byte_size::text AS byte_size, object.sha256,
+            (file.lifecycle_state <> 'deleted'
+              AND object.lifecycle_state <> 'deleted') AS available
+          FROM core.files file
+          JOIN core.file_objects object ON object.id = file.physical_object_id
+          WHERE file.organization_id = $1 AND file.id = $2
+            AND file.source_system = 'artifact-service'
+          LIMIT 1
+        `,
+        [input.organizationId, input.artifactId]
+      )
+      const row = result.rows[0]
+      return row
+        ? {
+            available: row.available,
+            byteSize: Number(row.byte_size),
+            fileName: row.file_name,
+            mediaType: row.media_type,
+            physicalObjectId: row.physical_object_id,
+            provider: row.provider,
+            providerKey: row.provider_key,
+            sha256: row.sha256,
+            storageKey: null,
+          }
+        : null
     },
 
     async list(input: ArtifactLedgerFilters) {
@@ -265,11 +316,7 @@ export function createArtifactLedgerRepository(options: RepositoryPoolOptions) {
             deleted_by.name AS deleted_by_name,
             deleted_by.email AS deleted_by_email,
             object.lifecycle_state AS object_lifecycle_state,
-            CASE
-              WHEN file.lifecycle_state = 'deleted'
-                OR object.lifecycle_state = 'deleted' THEN NULL
-              ELSE object.public_url
-            END AS public_url,
+            object.provider,
             usages.modules, usages.purposes, usages.usages,
             (
               SELECT count(*)::text
@@ -334,6 +381,11 @@ export function createArtifactLedgerRepository(options: RepositoryPoolOptions) {
           actorName: row.actor_name,
           byteSize: Number(row.byte_size),
           createdAt: row.created_at.toISOString(),
+          contentPath:
+            row.lifecycle_state === "deleted" ||
+            row.object_lifecycle_state === "deleted"
+              ? null
+              : `/administration/artifacts/${row.id}/content`,
           deletedAt: row.deleted_at?.toISOString() ?? null,
           deletedByEmail: row.deleted_by_email,
           deletedByName: row.deleted_by_name,
@@ -351,7 +403,7 @@ export function createArtifactLedgerRepository(options: RepositoryPoolOptions) {
               ? ("pdf" as const)
               : ("none" as const),
           providerState: row.object_lifecycle_state,
-          publicUrl: row.public_url,
+          providerLabel: artifactProviderLabel(row.provider),
           purposes: row.purposes,
           sha256: row.sha256,
           updatedAt: row.updated_at.toISOString(),

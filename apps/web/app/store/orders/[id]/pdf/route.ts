@@ -1,10 +1,14 @@
 import { createStoreRepository } from "@workspace/db"
 
+import {
+  artifactDeliveryErrorResponse,
+  createArtifactDeliveryResponse,
+} from "@/lib/artifact-delivery"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   await requireCapability("store.purchase_register.read", "/store/orders")
@@ -24,5 +28,16 @@ export async function GET(
   if (!artifact.available) {
     return new Response("Purchase Order PDF is unavailable.", { status: 410 })
   }
-  return Response.redirect(artifact.publicUrl, 307)
+  try {
+    return await createArtifactDeliveryResponse(request, artifact, {
+      download: new URL(request.url).searchParams.has("download"),
+    })
+  } catch (error) {
+    const delivery = artifactDeliveryErrorResponse(error, {
+      failed: "Purchase Order PDF could not be loaded. Please try again.",
+      unavailable: "Purchase Order PDF is unavailable.",
+    })
+    if (delivery) return delivery
+    throw error
+  }
 }

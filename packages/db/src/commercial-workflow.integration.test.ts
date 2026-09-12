@@ -27,9 +27,19 @@ let organizationCode: string
 let organizationId: string
 
 class ImportReviewArtifactProvider implements ArtifactStorageProvider {
+  readonly identifier = "uploadthing"
+
   constructor(private readonly failUpload = false) {}
 
   async delete() {}
+
+  async read() {
+    return Buffer.alloc(0)
+  }
+
+  async resolveLegacyPublicUrl({ key }: { key: string }) {
+    return `https://files.example.test/${key}`
+  }
 
   async upload() {
     if (this.failUpload) throw new Error("Import source upload failed.")
@@ -88,7 +98,9 @@ afterAll(async () => {
 describe("PostgreSQL enquiry-to-design workflow", () => {
   test("retains enquiry quotation terms through create and edit", async () => {
     const enquiry = await repository.createEnquiry({
-      customerId, organizationId, receivedOn: "2026-09-09",
+      customerId,
+      organizationId,
+      receivedOn: "2026-09-09",
       commercialTerms: {
         brassMaterialSpecs: "C36000",
         reports: "Material certificate",
@@ -96,15 +108,19 @@ describe("PostgreSQL enquiry-to-design workflow", () => {
       },
     })
     expect((await repository.getEnquiry(enquiry.id)).enquiry).toMatchObject({
-      brassMaterialSpecs: "C36000", reports: "Material certificate",
+      brassMaterialSpecs: "C36000",
+      reports: "Material certificate",
       taxesAndDuties: "Buyer responsibility",
     })
     await repository.updateEnquiry({
-      enquiryId: enquiry.id, customerId, organizationId,
+      enquiryId: enquiry.id,
+      customerId,
+      organizationId,
       commercialTerms: { reports: "Inspection report" },
     })
     expect((await repository.getEnquiry(enquiry.id)).enquiry).toMatchObject({
-      brassMaterialSpecs: "C36000", reports: "Inspection report",
+      brassMaterialSpecs: "C36000",
+      reports: "Inspection report",
       taxesAndDuties: "Buyer responsibility",
     })
   })
@@ -169,7 +185,7 @@ describe("PostgreSQL enquiry-to-design workflow", () => {
         "Import review was not found"
       )
 
-      const source = await artifacts.store(storeInput)
+      await artifacts.store(storeInput)
 
       expect(
         await artifacts.listHistory({
@@ -184,7 +200,6 @@ describe("PostgreSQL enquiry-to-design workflow", () => {
         {
           sourceFile: {
             fileName: "enquiry-lines.csv",
-            publicUrl: source.publicUrl,
           },
         }
       )

@@ -1,3 +1,4 @@
+import { PendingRetainedUploadForm } from "@/components/pending-retained-upload-form"
 import { randomUUID } from "node:crypto"
 
 import { createStoreRepository, storeUnitId } from "@workspace/db"
@@ -870,7 +871,7 @@ export default async function StoreAssetWorkspacePage({
                     : document.fileName || "Recorded document"}
                 </p>
               </div>
-              {document.storageKey ? (
+              {document.available ? (
                 <Button asChild size="sm" variant="outline">
                   <a
                     href={`/store/assets/${encodeURIComponent(asset.assetCode)}/documents/${document.id}`}
@@ -1043,8 +1044,14 @@ function StoreItemWorkspace({
                 </p>
               )}
               {canUploadDrawing ? (
-                <form
+                <PendingRetainedUploadForm
                   action={uploadStoreItemDrawingAction}
+                  uploads={[
+                    {
+                      field: "asset_drawing",
+                      intent: { kind: "store-item-drawing", itemTypeId: item.id },
+                    },
+                  ]}
                   className="grid max-w-xl gap-3 sm:grid-cols-[1fr_auto] sm:items-end"
                   encType="multipart/form-data"
                 >
@@ -1064,7 +1071,7 @@ function StoreItemWorkspace({
                   <Button type="submit">
                     {drawing ? "Replace" : "Upload"}
                   </Button>
-                </form>
+                </PendingRetainedUploadForm>
               ) : null}
             </CardContent>
  </SectionCard>
@@ -1131,8 +1138,14 @@ function StoreItemWorkspace({
                             </span>
                           )}
                           {canUploadQuote ? (
-                            <form
+                            <PendingRetainedUploadForm
                               action={uploadStoreSupplierQuoteAction}
+                              uploads={[
+                                {
+                                  field: "supplier_quote",
+                                  intent: { kind: "store-supplier-quote", supplierPriceId: price.id },
+                                },
+                              ]}
                               className="flex gap-2"
                               encType="multipart/form-data"
                             >
@@ -1151,7 +1164,7 @@ function StoreItemWorkspace({
                               <Button size="sm" type="submit" variant="outline">
                                 {price.quoteDocumentId ? "Replace" : "Upload"}
                               </Button>
-                            </form>
+                            </PendingRetainedUploadForm>
                           ) : null}
                         </div>
                   </TableCell>

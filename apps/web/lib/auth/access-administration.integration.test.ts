@@ -418,7 +418,7 @@ describe("access administration", () => {
       expect(snapshot.users).toContainEqual(
         expect.objectContaining({
           id: administrator.user.id,
-          roleKeys: ["sales-marketing"],
+          roleKeys: ["administrator", "sales-marketing"],
         })
       )
       const audit = await pool.query<{

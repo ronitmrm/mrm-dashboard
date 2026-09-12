@@ -1,10 +1,15 @@
 ---
 title: Add UploadThing object storage and an Artifacts ledger
-status: implemented
+status: superseded
 target: feat/object-storage
 ---
 
 ## Implementation status
+
+This specification is the historical UploadThing implementation record. The
+approved [private GCS design](./private-google-cloud-artifacts.md) supersedes its
+runtime and public-byte delivery. GCS-only code is implemented locally; live
+migration, deployment, and acceptance remain pending.
 
 Completed through the expand-migrate-contract sequence on
 `feat/object-storage`. New retained Commercial, Recruitment, and Store uploads,

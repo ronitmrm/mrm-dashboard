@@ -5,6 +5,7 @@ import path from "node:path"
 
 import {
   authorizeCommercialAttachmentTarget,
+  authorizeImportReviewArtifactTarget,
   createArtifactService,
   createCommercialWorkflowRepository,
   prepareImportReviewArtifactTarget,
@@ -25,18 +26,24 @@ import { requireCapability } from "@/lib/auth/require-capability"
 import { commercialTaskCapabilities } from "@/lib/auth/task-capabilities"
 import {
   type CommercialArtifactPurpose,
-  commercialAttachmentLimitBytes,
   designBomAttachmentFieldName,
   designBomAttachmentPurpose,
   type DesignAttachmentKind,
-  validateCommercialAttachment,
 } from "@/lib/commercial-attachment"
 import { optionalText, requiredText } from "@/lib/form-data"
 import {
   technicalReviewChecklistFromFormData,
   technicalReviewReturnPath,
 } from "@/lib/pricing/technical-review"
-import { createUploadThingArtifactProvider } from "@/lib/uploadthing-artifact-provider"
+import { createGoogleCloudArtifactProvider } from "@/lib/google-cloud-artifact-provider"
+import type { PendingUploadIntent } from "@/lib/artifact-upload-contract"
+import {
+  consumePendingArtifactUpload,
+  pendingUploadAuthorizationForUser,
+  pendingUploadId,
+  pendingUploadIds,
+  preparePendingArtifactUploadForFinalAction,
+} from "@/lib/pending-artifact-upload-server"
 
 import {
   parseEnquiryImportFile,
@@ -87,9 +94,7 @@ async function withWorkflow<T>(
   }
 }
 
-async function persistAttachment(
-  file: File,
-  input: {
+async function persistAttachment(input: {
     authorization: CommercialAttachmentAuthorization
     capability: string
     enquiryId: string
@@ -98,63 +103,107 @@ async function persistAttachment(
     purpose?: CommercialArtifactPurpose
     targetId: string
     targetTable?: "design_tasks" | "enquiry_items"
-  }
-) {
-  if (file.size > commercialAttachmentLimitBytes) {
-    throw new Error("Drawing files must not exceed 25 MB.")
-  }
+    uploadId: string
+    uploadIntent: PendingUploadIntent
+  }) {
   const session = await requireCapability(
     input.capability,
     `${enquiriesPath}/${input.enquiryId}`
   )
-  const bytes = Buffer.from(await file.arrayBuffer())
-  const { fileName, mediaType, purpose } = validateCommercialAttachment({
-    bytes,
-    declaredMediaType: file.type,
-    fileName: file.name,
-    purpose: input.purpose ?? "drawing",
-  })
-  const linkPurpose = input.linkPurpose ?? purpose
-  const sha256 = createHash("sha256").update(bytes).digest("hex")
-  const service = createArtifactService({
-    connectionString: readAuthEnvironment().connectionString,
-    provider: createUploadThingArtifactProvider(),
-  })
-  try {
-    return await service.store({
-      actorUserId: session.user.id,
-      authorizeTarget: (client, { isRetry }) =>
-        authorizeCommercialAttachmentTarget(client, input.authorization, {
-          actorUserId: session.user.id,
-          requireOpenState: !isRetry,
-        }),
-      bytes,
-      fileName,
-      idempotencyKey: [
-        "commercial-attachment",
-        input.targetTable ?? "enquiry_items",
-        input.targetId,
-        linkPurpose,
-        fileName,
-        sha256,
-      ].join(":"),
-      mediaType,
-      organizationId: input.organizationId,
-      origin: "uploaded",
-      purpose: linkPurpose,
-      supersedesPurposes:
-        purpose === "drawing" || purpose === "sales_clarification"
-          ? ["drawing", "sales_clarification"]
-          : undefined,
-      target: {
-        id: input.targetId,
-        schema: "sales",
-        table: input.targetTable ?? "enquiry_items",
-      },
+  const retain = async (source: {
+    bytes: Buffer
+    fileName: string
+    mediaType: string
+    pendingUploadId?: string
+    purpose: CommercialArtifactPurpose
+  }) => {
+    const linkPurpose = input.linkPurpose ?? source.purpose
+    const sha256 = createHash("sha256").update(source.bytes).digest("hex")
+    const service = createArtifactService({
+      connectionString: readAuthEnvironment().connectionString,
+      provider: createGoogleCloudArtifactProvider(),
     })
-  } finally {
-    await service.close()
+    try {
+      return await service.store({
+        actorUserId: session.user.id,
+        authorizeTarget: (client, { isRetry }) =>
+          authorizeCommercialAttachmentTarget(client, input.authorization, {
+            actorUserId: session.user.id,
+            requireOpenState: !isRetry,
+          }),
+        bytes: source.bytes,
+        fileName: source.fileName,
+        idempotencyKey: [
+          "commercial-attachment",
+          input.targetTable ?? "enquiry_items",
+          input.targetId,
+          linkPurpose,
+          source.fileName,
+          sha256,
+        ].join(":"),
+        mediaType: source.mediaType,
+        organizationId: input.organizationId,
+        origin: "uploaded",
+        pendingUploadId: source.pendingUploadId,
+        purpose: linkPurpose,
+        supersedesPurposes:
+          source.purpose === "drawing" ||
+          source.purpose === "sales_clarification"
+            ? ["drawing", "sales_clarification"]
+            : undefined,
+        target: {
+          id: input.targetId,
+          schema: "sales",
+          table: input.targetTable ?? "enquiry_items",
+        },
+      })
+    } finally {
+      await service.close()
+    }
   }
+  return consumePendingArtifactUpload({
+      authorization: await pendingUploadAuthorizationForUser(session.user.id),
+      expectedIntent: input.uploadIntent,
+      finalize: async (source) => {
+        const purpose = input.purpose ?? "drawing"
+        const artifact = await retain({ ...source, purpose })
+        const linkPurpose = input.linkPurpose ?? purpose
+        return {
+          binding: {
+            artifactId: artifact.id,
+            purpose: linkPurpose,
+            target: {
+              id: input.targetId,
+              schema: "sales",
+              table: input.targetTable ?? "enquiry_items",
+            },
+          },
+          value: artifact,
+        }
+      },
+      recover: async (binding) => {
+        const service = createArtifactService({
+          connectionString: readAuthEnvironment().connectionString,
+        })
+        try {
+          return await service.getBound({
+            actorUserId: session.user.id,
+            artifactId: binding.artifactId,
+            authorizeTarget: (client, { isRetry }) =>
+              authorizeCommercialAttachmentTarget(client, input.authorization, {
+                actorUserId: session.user.id,
+                requireOpenState: !isRetry,
+              }),
+            organizationId: input.organizationId,
+            purpose: binding.purpose,
+            target: binding.target,
+          })
+        } finally {
+          await service.close()
+        }
+      },
+      uploadId: input.uploadId,
+  })
 }
 
 export async function createEnquiryAction(formData: FormData) {
@@ -215,6 +264,23 @@ export async function importEnquiryRegisterAction(formData: FormData) {
 export async function addEnquiryItemAction(formData: FormData) {
   const enquiryId = requiredText(formData, "enquiry_id")
   const organizationId = requiredText(formData, "organization_id")
+  const drawingUploadId = pendingUploadId(formData, "drawing_file")
+  const drawingIntent = {
+    enquiryId,
+    kind: "commercial-enquiry-item" as const,
+    operation: "create" as const,
+  }
+  if (drawingUploadId) {
+    const session = await requireCapability(
+      commercialTaskCapabilities.addEnquiryItem,
+      `${enquiriesPath}/${enquiryId}`
+    )
+    await preparePendingArtifactUploadForFinalAction({
+      authorization: await pendingUploadAuthorizationForUser(session.user.id),
+      expectedIntent: drawingIntent,
+      uploadId: drawingUploadId,
+    })
+  }
   const line = await withWorkflow(
     commercialTaskCapabilities.addEnquiryItem,
     `${enquiriesPath}/${enquiryId}`,
@@ -232,19 +298,20 @@ export async function addEnquiryItemAction(formData: FormData) {
         targetPrice: numeric(formData, "target_price"),
       })
   )
-  const drawing = formData.get("drawing_file")
-  if (drawing instanceof File && drawing.size > 0) {
-    await persistAttachment(drawing, {
-      authorization: {
+  if (drawingUploadId) {
+    await persistAttachment({
+        authorization: {
+          enquiryId,
+          enquiryItemId: line.id,
+          kind: "enquiry_item",
+          organizationId,
+        },
+        capability: commercialTaskCapabilities.addEnquiryItem,
         enquiryId,
-        enquiryItemId: line.id,
-        kind: "enquiry_item",
         organizationId,
-      },
-      capability: commercialTaskCapabilities.addEnquiryItem,
-      enquiryId,
-      organizationId,
-      targetId: line.id,
+        targetId: line.id,
+        uploadId: drawingUploadId,
+      uploadIntent: drawingIntent,
     })
   }
   revalidatePath(enquiriesPath)
@@ -336,19 +403,26 @@ export async function updateEnquiryItemAction(formData: FormData) {
         targetPrice: numeric(formData, "target_price"),
       })
   )
-  const drawing = formData.get("drawing_file")
-  if (drawing instanceof File && drawing.size > 0) {
-    await persistAttachment(drawing, {
-      authorization: {
+  const drawingUploadId = pendingUploadId(formData, "drawing_file")
+  if (drawingUploadId) {
+    await persistAttachment({
+        authorization: {
+          enquiryId,
+          enquiryItemId,
+          kind: "enquiry_item",
+          organizationId,
+        },
+        capability: commercialTaskCapabilities.updateEnquiryItem,
         enquiryId,
-        enquiryItemId,
-        kind: "enquiry_item",
         organizationId,
+        targetId: enquiryItemId,
+        uploadId: drawingUploadId,
+        uploadIntent: {
+          enquiryId,
+          enquiryItemId,
+          kind: "commercial-enquiry-item",
+          operation: "update",
       },
-      capability: commercialTaskCapabilities.updateEnquiryItem,
-      enquiryId,
-      organizationId,
-      targetId: enquiryItemId,
     })
   }
   revalidatePath(enquiriesPath)
@@ -399,21 +473,28 @@ export async function completeSalesClarificationAction(formData: FormData) {
   const enquiryId = requiredText(formData, "enquiry_id")
   const enquiryItemId = requiredText(formData, "enquiry_item_id")
   const organizationId = requiredText(formData, "organization_id")
-  const drawing = formData.get("drawing_file")
-  if (drawing instanceof File && drawing.size > 0) {
-    await persistAttachment(drawing, {
-      authorization: {
-        clarificationTaskId,
+  const drawingUploadId = pendingUploadId(formData, "drawing_file")
+  if (drawingUploadId) {
+    await persistAttachment({
+        authorization: {
+          clarificationTaskId,
+          enquiryId,
+          enquiryItemId,
+          kind: "sales_clarification",
+          organizationId,
+        },
+        capability: commercialTaskCapabilities.completeSalesClarification,
         enquiryId,
-        enquiryItemId,
-        kind: "sales_clarification",
         organizationId,
+        purpose: "sales_clarification",
+        targetId: enquiryItemId,
+        uploadId: drawingUploadId,
+        uploadIntent: {
+          clarificationTaskId,
+          enquiryId,
+          enquiryItemId,
+          kind: "commercial-sales-clarification",
       },
-      capability: commercialTaskCapabilities.completeSalesClarification,
-      enquiryId,
-      organizationId,
-      purpose: "sales_clarification",
-      targetId: enquiryItemId,
     })
   }
   await withWorkflow(
@@ -471,13 +552,30 @@ export async function saveDesignAction(formData: FormData) {
   const customerDrawingFileIds = formData.has("customer_drawings_present")
     ? formData.getAll("customer_drawing_file_ids").filter((value): value is string => typeof value === "string")
     : undefined
-  for (const file of formData.getAll("customer_drawing_files")) {
-    if (!(file instanceof File) || !file.size) continue
-    const stored = await persistAttachment(file, {
-      authorization: { designId, enquiryId, enquiryItemId, kind: "design", organizationId },
+  for (const uploadId of pendingUploadIds(formData, "customer_drawing_files")) {
+    const stored = await persistAttachment({
+      authorization: {
+        designId,
+        enquiryId,
+        enquiryItemId,
+        kind: "design",
+        organizationId,
+      },
       capability: commercialTaskCapabilities.saveDesign,
-      enquiryId, organizationId, purpose: "customer_drawing",
-      linkPurpose: `customer_drawing_${randomUUID()}`, targetId: designId, targetTable: "design_tasks",
+      enquiryId,
+      linkPurpose: `customer_drawing_${randomUUID()}`,
+      organizationId,
+      purpose: "customer_drawing",
+      targetId: designId,
+      targetTable: "design_tasks",
+      uploadId,
+      uploadIntent: {
+        designId,
+        enquiryId,
+        enquiryItemId,
+        kind: "commercial-design-attachment",
+        purpose: "customer_drawing",
+      },
     })
     customerDrawingFileIds?.push(stored.id)
   }
@@ -575,22 +673,30 @@ export async function saveDesignAction(formData: FormData) {
     ["cad_file", "cad"],
   ] as const
   for (const [field, purpose] of attachmentFiles) {
-    const file = formData.get(field)
-    if (file instanceof File && file.size > 0) {
-      await persistAttachment(file, {
-        authorization: {
-          designId,
+    const uploadId = pendingUploadId(formData, field)
+    if (uploadId) {
+      await persistAttachment({
+          authorization: {
+            designId,
+            enquiryId,
+            enquiryItemId,
+            kind: "design",
+            organizationId,
+          },
+          capability: commercialTaskCapabilities.saveDesign,
           enquiryId,
-          enquiryItemId,
-          kind: "design",
           organizationId,
+          purpose,
+          targetId: designId,
+          targetTable: "design_tasks",
+          uploadId,
+          uploadIntent: {
+            designId,
+            enquiryId,
+            enquiryItemId,
+            kind: "commercial-design-attachment",
+            purpose,
         },
-        capability: commercialTaskCapabilities.saveDesign,
-        enquiryId,
-        organizationId,
-        purpose,
-        targetId: designId,
-        targetTable: "design_tasks",
       })
     }
   }
@@ -601,28 +707,39 @@ export async function saveDesignAction(formData: FormData) {
   ] as const satisfies readonly DesignAttachmentKind[]
   for (const line of bomLines) {
     for (const kind of bomAttachmentKinds) {
-      const file = formData.get(
-        designBomAttachmentFieldName({ kind, lineNumber: line.lineNumber })
-      )
-      if (file instanceof File && file.size > 0) {
-        await persistAttachment(file, {
-          authorization: {
-            designId,
+      const fieldName = designBomAttachmentFieldName({
+        kind,
+        lineNumber: line.lineNumber,
+      })
+      const uploadId = pendingUploadId(formData, fieldName)
+      if (uploadId) {
+        await persistAttachment({
+            authorization: {
+              designId,
+              enquiryId,
+              enquiryItemId,
+              kind: "design",
+              organizationId,
+            },
+            capability: commercialTaskCapabilities.saveDesign,
             enquiryId,
-            enquiryItemId,
-            kind: "design",
+            linkPurpose: designBomAttachmentPurpose({
+              kind,
+              lineNumber: line.lineNumber,
+            }),
             organizationId,
+            purpose: kind,
+            targetId: designId,
+            targetTable: "design_tasks",
+            uploadId,
+            uploadIntent: {
+              bomLineNumber: line.lineNumber,
+              designId,
+              enquiryId,
+              enquiryItemId,
+              kind: "commercial-design-attachment",
+              purpose: kind,
           },
-          capability: commercialTaskCapabilities.saveDesign,
-          enquiryId,
-          linkPurpose: designBomAttachmentPurpose({
-            kind,
-            lineNumber: line.lineNumber,
-          }),
-          organizationId,
-          purpose: kind,
-          targetId: designId,
-          targetTable: "design_tasks",
         })
       }
     }
@@ -781,93 +898,131 @@ export async function requestDesignClarificationAction(formData: FormData) {
   revalidatePath("/commercial/technical-review")
 }
 
-export async function prepareCostingAction(formData: FormData) {
-  const enquiryId = requiredText(formData, "enquiry_id")
-  await withWorkflow(
-    commercialTaskCapabilities.prepareCosting,
-    `${enquiriesPath}/${enquiryId}`,
-    (workflow, actorUserId) =>
-      workflow.prepareCostingFromDesign(
-        requiredText(formData, "enquiry_item_id"),
-        actorUserId
-      )
-  )
-  revalidatePath(`${enquiriesPath}/${enquiryId}`)
-  revalidatePath("/commercial/pricing")
-  revalidatePath("/commercial/product-costing")
-}
-
 export async function importEnquiryLinesAction(formData: FormData) {
   const enquiryId = requiredText(formData, "enquiry_id")
   const organizationId = requiredText(formData, "organization_id")
-  const file = formData.get("template_file")
-  if (!(file instanceof File) || file.size === 0) {
-    throw new Error("Import file is required.")
-  }
-  const buffer = Buffer.from(await file.arrayBuffer())
-  const rows = parseEnquiryImportFile(buffer, file.name)
-  if (!rows.length) {
-    throw new Error("Template has no line items.")
-  }
-  const importKey = createHash("sha256")
-    .update(JSON.stringify(rows.map((row) => row.rawValues)))
-    .update(enquiryId)
-    .digest("hex")
+  const uploadId = pendingUploadId(formData, "template_file")
+  if (!uploadId) throw new Error("Import file is required.")
   const session = await requireCapability(
     commercialTaskCapabilities.importEnquiryLines,
     `${enquiriesPath}/${enquiryId}`
   )
-  const reviewId = uuidFromSha256(importKey)
-  const fileName = path.basename(file.name).replace(/[<>:"/\\|?*\r\n]+/g, "_")
-  const extension = path.extname(fileName).toLowerCase()
-  const mediaType =
-    extension === ".csv"
-      ? "text/csv"
-      : extension === ".xls"
-        ? "application/vnd.ms-excel"
-        : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-  const sourceSha256 = createHash("sha256").update(buffer).digest("hex")
-  const artifacts = createArtifactService({
-    connectionString: readAuthEnvironment().connectionString,
-    provider: createUploadThingArtifactProvider(),
-  })
-  try {
-    await artifacts.store({
-      actorUserId: session.user.id,
-      authorizeTarget: (client, { isRetry }) =>
-        prepareImportReviewArtifactTarget(
-          client,
-          {
-            actorUserId: session.user.id,
-            enquiryId,
-            importKey,
-            organizationId,
-            reviewId,
-            rows,
-          },
-          { isRetry }
-        ),
-      bytes: buffer,
-      fileName,
-      idempotencyKey: [
-        "enquiry-import-review-source",
-        reviewId,
-        fileName,
-        sourceSha256,
-      ].join(":"),
-      mediaType,
-      organizationId,
-      origin: "uploaded",
-      purpose: "import_source",
-      target: {
-        id: reviewId,
-        schema: "sales",
-        table: "enquiry_import_reviews",
-      },
+  const retain = async (source: {
+    bytes: Buffer
+    fileName: string
+    organizationId: string
+    pendingUploadId?: string
+  }) => {
+    const rows = parseEnquiryImportFile(source.bytes, source.fileName)
+    if (!rows.length) throw new Error("Template has no line items.")
+    const importKey = createHash("sha256")
+      .update(JSON.stringify(rows.map((row) => row.rawValues)))
+      .update(enquiryId)
+      .digest("hex")
+    const reviewId = uuidFromSha256(importKey)
+    const fileName = path
+      .basename(source.fileName)
+      .replace(/[<>:"/\\|?*\r\n]+/g, "_")
+    const extension = path.extname(fileName).toLowerCase()
+    const mediaType =
+      extension === ".csv"
+        ? "text/csv"
+        : extension === ".xls"
+          ? "application/vnd.ms-excel"
+          : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    const sourceSha256 = createHash("sha256").update(source.bytes).digest("hex")
+    const artifacts = createArtifactService({
+      connectionString: readAuthEnvironment().connectionString,
+      provider: createGoogleCloudArtifactProvider(),
     })
-  } finally {
-    await artifacts.close()
+    try {
+      const artifact = await artifacts.store({
+        actorUserId: session.user.id,
+        authorizeTarget: (client, { isRetry }) =>
+          prepareImportReviewArtifactTarget(
+            client,
+            {
+              actorUserId: session.user.id,
+              enquiryId,
+              importKey,
+              organizationId: source.organizationId,
+              reviewId,
+              rows,
+            },
+            { isRetry }
+          ),
+        bytes: source.bytes,
+        fileName,
+        idempotencyKey: [
+          "enquiry-import-review-source",
+          reviewId,
+          fileName,
+          sourceSha256,
+        ].join(":"),
+        mediaType,
+        organizationId: source.organizationId,
+        origin: "uploaded",
+        pendingUploadId: source.pendingUploadId,
+        purpose: "import_source",
+        target: {
+          id: reviewId,
+          schema: "sales",
+          table: "enquiry_import_reviews",
+        },
+      })
+      return { artifact, reviewId }
+    } finally {
+      await artifacts.close()
+    }
   }
+  const reviewId = await consumePendingArtifactUpload({
+        authorization: await pendingUploadAuthorizationForUser(session.user.id),
+        expectedIntent: { enquiryId, kind: "commercial-enquiry-import" },
+        finalize: async (source) => {
+          const retained = await retain(source)
+          return {
+            binding: {
+              artifactId: retained.artifact.id,
+              purpose: "import_source",
+              target: {
+                id: retained.reviewId,
+                schema: "sales",
+                table: "enquiry_import_reviews",
+              },
+            },
+            value: retained.reviewId,
+          }
+        },
+        recover: async (binding) => {
+          const artifacts = createArtifactService({
+            connectionString: readAuthEnvironment().connectionString,
+          })
+          try {
+            await artifacts.getBound({
+              actorUserId: session.user.id,
+              artifactId: binding.artifactId,
+              authorizeTarget: (client) =>
+                authorizeImportReviewArtifactTarget(
+                  client,
+                  {
+                    actorUserId: session.user.id,
+                    enquiryId,
+                    organizationId,
+                    reviewId: binding.target.id,
+                  },
+                  { requireOpenState: false }
+                ),
+              organizationId,
+              purpose: binding.purpose,
+              target: binding.target,
+            })
+            return binding.target.id
+          } finally {
+            await artifacts.close()
+          }
+        },
+    uploadId,
+  })
   revalidatePath(`${enquiriesPath}/${enquiryId}`)
   redirect(`${enquiriesPath}/${enquiryId}/import-review/${reviewId}`)
 }

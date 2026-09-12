@@ -1,13 +1,15 @@
 import { createStoreRepository } from "@workspace/db"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
+import {
+  artifactDeliveryErrorResponse,
+  createArtifactDeliveryResponse,
+} from "@/lib/artifact-delivery"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { masterCapability } from "@/lib/auth/master-capabilities"
-import { userAttachmentDownloadHeaders } from "@/lib/user-attachment-security"
-import { readUserAttachment } from "@/lib/user-attachment-storage"
 
 export async function GET(
-  _request: Request,
+  request: Request,
   {
     params,
   }: {
@@ -15,7 +17,10 @@ export async function GET(
   }
 ) {
   const { documentId, supplierPriceId } = await params
-  await requireCapability(masterCapability("SUPPLIER_PRICE", "read"), "/store/assets")
+  await requireCapability(
+    masterCapability("SUPPLIER_PRICE", "read"),
+    "/store/assets"
+  )
   const repository = createStoreRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
@@ -26,15 +31,16 @@ export async function GET(
       organizationId,
       supplierPriceId,
     })
-    if (file.publicUrl) return Response.redirect(file.publicUrl, 307)
-    if (!file.storageKey) throw new Error("Supplier quote is unavailable.")
-    const attachment = await readUserAttachment(file.storageKey)
-    return new Response(attachment.body, {
-      headers: userAttachmentDownloadHeaders(
-        file.fileName,
-        attachment.byteSize
-      ),
+    return await createArtifactDeliveryResponse(request, file, {
+      download: true,
     })
+  } catch (error) {
+    const delivery = artifactDeliveryErrorResponse(error, {
+      failed: "Supplier quote could not be loaded. Please try again.",
+      unavailable: "Supplier quote is unavailable.",
+    })
+    if (delivery) return delivery
+    throw error
   } finally {
     await repository.close()
   }

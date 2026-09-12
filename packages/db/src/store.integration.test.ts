@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto"
 import { Pool } from "pg"
 import { afterAll, beforeAll, describe, expect, test } from "vitest"
 
+import { resetTestDatabase } from "../../../scripts/test-database-safety"
 import {
   createArtifactService,
   type ArtifactStorageProvider,
@@ -31,9 +32,18 @@ let legacyAssetId: string
 let legacyAssetCode: string
 
 class StoreArtifactProvider implements ArtifactStorageProvider {
+  readonly identifier = "uploadthing"
   readonly uploads: Array<{ bytes: Buffer; name: string }> = []
 
   async delete() {}
+
+  async read() {
+    return Buffer.alloc(0)
+  }
+
+  async resolveLegacyPublicUrl({ key }: { key: string }) {
+    return `https://files.example.test/${key}`
+  }
 
   async upload(input: Parameters<ArtifactStorageProvider["upload"]>[0]) {
     this.uploads.push({ bytes: input.bytes, name: input.name })
@@ -81,6 +91,7 @@ const storeIssuedPdf: Parameters<
 }
 
 beforeAll(async () => {
+  await resetTestDatabase(pool, connectionString)
   await migrateDatabase({
     connectionString,
     through: "0068_store_module.sql",
@@ -292,7 +303,9 @@ describe("Store requests", () => {
         })
       ).resolves.toMatchObject({
         fileName: "drawing-v2.pdf",
-        publicUrl: replacement.publicUrl,
+        physicalObjectId: expect.any(String),
+        provider: "uploadthing",
+        providerKey: replacement.providerKey,
         storageKey: replacement.providerKey,
       })
       const drawings = await store.listItemTypeDrawings(organizationId)
@@ -438,7 +451,9 @@ describe("Store requests", () => {
         })
       ).resolves.toMatchObject({
         fileName: "guarantee-v2.pdf",
-        publicUrl: replacement.publicUrl,
+        physicalObjectId: expect.any(String),
+        provider: "uploadthing",
+        providerKey: replacement.providerKey,
         storageKey: replacement.providerKey,
       })
       const independentRows = await pool.query<{ count: string }>(
@@ -461,8 +476,11 @@ describe("Store requests", () => {
           organizationId,
         })
       ).resolves.toMatchObject({
+        byteSize: null,
         fileName: "legacy-drawing.pdf",
-        publicUrl: null,
+        physicalObjectId: null,
+        provider: null,
+        providerKey: null,
         storageKey: "store/drawings/legacy-drawing.pdf",
       })
       const legacyGuarantee = await pool.query<{ id: string }>(
@@ -484,8 +502,11 @@ describe("Store requests", () => {
           organizationId,
         })
       ).resolves.toMatchObject({
+        byteSize: null,
         fileName: "legacy-guarantee.pdf",
-        publicUrl: null,
+        physicalObjectId: null,
+        provider: null,
+        providerKey: null,
         storageKey: "store/legacy-guarantee.pdf",
       })
       expect(first.id).not.toBe(replacement.id)
@@ -788,8 +809,7 @@ describe("Store requests", () => {
       storeIssuedPdf,
     })
     const order = (await store.listPurchaseOrders(organizationId)).find(
-      (candidate) =>
-        candidate.purchaseOrderId === createdOrder.orders[0]!.id
+      (candidate) => candidate.purchaseOrderId === createdOrder.orders[0]!.id
     )!
 
     await store.receiveStock({
@@ -1243,9 +1263,40 @@ describe("Store requests", () => {
         organizationId,
       })
     ).toEqual({
+      byteSize: null,
       fileName: "gauge-drawing.pdf",
-      publicUrl: null,
+      mediaType: null,
+      physicalObjectId: null,
+      provider: null,
+      providerKey: null,
+      sha256: null,
       storageKey: `store/drawings/${suffix}-gauge.pdf`,
+    })
+  })
+
+  test("returns overview metrics equivalent to the existing Store lists", async () => {
+    const istToday = "9999-12-31"
+    const [items, requests, assets, locations, metrics] = await Promise.all([
+      store.listItemTypes(organizationId),
+      store.listRequisitions({ organizationId }),
+      store.listAssets({ organizationId }),
+      store.listLocations(organizationId),
+      store.overviewMetrics({ istToday, organizationId }),
+    ])
+
+    expect(metrics).toEqual({
+      itemTypes: items.length,
+      locations: locations.length,
+      lowStock: items.filter(
+        (item) => Number(item.availableStock) <= Number(item.minimumStock)
+      ).length,
+      maintenanceDue: assets.filter(
+        (asset) => asset.nextDueOn && asset.nextDueOn <= istToday
+      ).length,
+      openRequests: requests.rows.filter(({ status }) =>
+        ["Pending", "Partially Issued"].includes(status)
+      ).length,
+      physicalAssets: assets.length,
     })
   })
 })

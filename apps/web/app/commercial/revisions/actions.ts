@@ -16,11 +16,12 @@ import { requireCapability } from "@/lib/auth/require-capability"
 import { commercialTaskCapabilities } from "@/lib/auth/task-capabilities"
 import { ecnDesignHref, ecnHref } from "@/lib/pricing/ecn-routes"
 import { optionalText, requiredText } from "@/lib/form-data"
+import { createGoogleCloudArtifactProvider } from "@/lib/google-cloud-artifact-provider"
 import {
-  commercialAttachmentLimitBytes,
-  validateCommercialAttachment,
-} from "@/lib/commercial-attachment"
-import { createUploadThingArtifactProvider } from "@/lib/uploadthing-artifact-provider"
+  consumePendingArtifactUpload,
+  pendingUploadAuthorizationForUser,
+  pendingUploadId,
+} from "@/lib/pending-artifact-upload-server"
 
 const revisionsPath = "/commercial/revisions"
 const ecnsPath = "/commercial/ecns"
@@ -55,66 +56,111 @@ function selectedValues(formData: FormData, name: string) {
     .filter(Boolean)
 }
 
-async function persistEcnDrawing(
-  file: File,
-  input: {
+async function persistEcnDrawing(input: {
     engineeringChangeNoteId: string
     organizationId: string
-  }
-) {
-  if (file.size > commercialAttachmentLimitBytes) {
-    throw new Error("Drawing files must not exceed 25 MB.")
-  }
+    uploadId: string
+  }) {
   const session = await requireCapability(
     commercialTaskCapabilities.completeEngineeringChangeDesign,
     ecnDesignHref(input.engineeringChangeNoteId)
   )
-  const bytes = Buffer.from(await file.arrayBuffer())
-  const { fileName, mediaType } = validateCommercialAttachment({
-    bytes,
-    declaredMediaType: file.type,
-    fileName: file.name,
-    purpose: "drawing",
-  })
-  const sha256 = createHash("sha256").update(bytes).digest("hex")
-  const artifacts = createArtifactService({
-    connectionString: readAuthEnvironment().connectionString,
-    provider: createUploadThingArtifactProvider(),
-  })
-  try {
-    return await artifacts.store({
-      actorUserId: session.user.id,
-      authorizeTarget: (client, { isRetry }) =>
-        authorizeCommercialAttachmentTarget(
-          client,
-          {
-            engineeringChangeNoteId: input.engineeringChangeNoteId,
-            kind: "engineering_change",
-            organizationId: input.organizationId,
-          },
-          { requireOpenState: !isRetry }
-        ),
-      bytes,
-      fileName,
-      idempotencyKey: [
-        "ecn-drawing",
-        input.engineeringChangeNoteId,
-        fileName,
-        sha256,
-      ].join(":"),
-      mediaType,
-      organizationId: input.organizationId,
-      origin: "uploaded",
-      purpose: "drawing_revision",
-      target: {
-        id: input.engineeringChangeNoteId,
-        schema: "sales",
-        table: "engineering_change_notes",
-      },
+  const retain = async (source: {
+    bytes: Buffer
+    fileName: string
+    mediaType: string
+    pendingUploadId?: string
+  }) => {
+    const sha256 = createHash("sha256").update(source.bytes).digest("hex")
+    const artifacts = createArtifactService({
+      connectionString: readAuthEnvironment().connectionString,
+      provider: createGoogleCloudArtifactProvider(),
     })
-  } finally {
-    await artifacts.close()
+    try {
+      return await artifacts.store({
+        actorUserId: session.user.id,
+        authorizeTarget: (client, { isRetry }) =>
+          authorizeCommercialAttachmentTarget(
+            client,
+            {
+              engineeringChangeNoteId: input.engineeringChangeNoteId,
+              kind: "engineering_change",
+              organizationId: input.organizationId,
+            },
+            { requireOpenState: !isRetry }
+          ),
+        bytes: source.bytes,
+        fileName: source.fileName,
+        idempotencyKey: [
+          "ecn-drawing",
+          input.engineeringChangeNoteId,
+          source.fileName,
+          sha256,
+        ].join(":"),
+        mediaType: source.mediaType,
+        organizationId: input.organizationId,
+        origin: "uploaded",
+        pendingUploadId: source.pendingUploadId,
+        purpose: "drawing_revision",
+        target: {
+          id: input.engineeringChangeNoteId,
+          schema: "sales",
+          table: "engineering_change_notes",
+        },
+      })
+    } finally {
+      await artifacts.close()
+    }
   }
+  return consumePendingArtifactUpload({
+      authorization: await pendingUploadAuthorizationForUser(session.user.id),
+      expectedIntent: {
+        engineeringChangeNoteId: input.engineeringChangeNoteId,
+        kind: "commercial-ecn-drawing",
+      },
+      finalize: async (source) => {
+        const artifact = await retain(source)
+        return {
+          binding: {
+            artifactId: artifact.id,
+            purpose: "drawing_revision",
+            target: {
+              id: input.engineeringChangeNoteId,
+              schema: "sales",
+              table: "engineering_change_notes",
+            },
+          },
+          value: artifact,
+        }
+      },
+      recover: async (binding) => {
+        const artifacts = createArtifactService({
+          connectionString: readAuthEnvironment().connectionString,
+        })
+        try {
+          return await artifacts.getBound({
+            actorUserId: session.user.id,
+            artifactId: binding.artifactId,
+            authorizeTarget: (client, { isRetry }) =>
+              authorizeCommercialAttachmentTarget(
+                client,
+                {
+                  engineeringChangeNoteId: input.engineeringChangeNoteId,
+                  kind: "engineering_change",
+                  organizationId: input.organizationId,
+                },
+                { requireOpenState: !isRetry }
+              ),
+            organizationId: input.organizationId,
+            purpose: binding.purpose,
+            target: binding.target,
+          })
+        } finally {
+          await artifacts.close()
+        }
+      },
+      uploadId: input.uploadId,
+  })
 }
 
 function optionalBomLines(formData: FormData) {
@@ -429,14 +475,14 @@ export async function completeEngineeringChangeDesignAction(
     "engineering_change_note_id"
   )
   const bomLines = optionalBomLines(formData)
-  const drawingFile = formData.get("drawing_file")
-  const uploadedDrawing =
-    drawingFile instanceof File && drawingFile.size > 0
-      ? await persistEcnDrawing(drawingFile, {
-          engineeringChangeNoteId,
-          organizationId: requiredText(formData, "organization_id"),
-        })
-      : null
+  const uploadId = pendingUploadId(formData, "drawing_file")
+  const uploadedDrawing = uploadId
+    ? await persistEcnDrawing({
+        engineeringChangeNoteId,
+        organizationId: requiredText(formData, "organization_id"),
+        uploadId,
+      })
+    : null
   const drawingRevisionRequested =
     formData.has("drawing_revision_requested") || uploadedDrawing !== null
   const drawingRequirement =

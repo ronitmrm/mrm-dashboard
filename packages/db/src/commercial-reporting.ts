@@ -607,6 +607,57 @@ function monthKeys(now = new Date()) {
   })
 }
 
+type DashboardStatsRow = {
+  customers: string
+  enquiries: string
+  monthly_quoted: string
+  ordered: string
+  pending_costing: string
+  pending_followups: string
+  p_prices: string
+  quoted: string
+}
+
+async function readDashboardStats(
+  client: Pick<PoolClient, "query">,
+  organizationId: string
+) {
+  const result = await client.query<DashboardStatsRow>(
+    `
+      SELECT
+        (SELECT COUNT(*) FROM sales.customers WHERE organization_id = $1) customers,
+        (SELECT COUNT(*) FROM sales.enquiries WHERE organization_id = $1) enquiries,
+        (SELECT COUNT(*) FROM sales.quote_items
+          WHERE organization_id = $1 AND status = 'Sent'
+            AND sent_at >= date_trunc('month', CURRENT_TIMESTAMP)) monthly_quoted,
+        (SELECT COUNT(*) FROM sales.quote_items
+          WHERE organization_id = $1 AND status = 'Draft') pending_costing,
+        (SELECT COUNT(*) FROM sales.quote_items
+          WHERE organization_id = $1 AND status = 'Sent') quoted,
+        (SELECT COUNT(*) FROM sales.quote_items
+          WHERE organization_id = $1 AND status = 'Accepted') ordered,
+        (SELECT COUNT(*) FROM sales.quote_items
+          WHERE organization_id = $1 AND status = 'Accepted'
+            AND is_active) p_prices,
+        (SELECT COUNT(*) FROM sales.followups
+          WHERE organization_id = $1 AND status = 'Pending'
+            AND due_on <= CURRENT_DATE) pending_followups
+    `,
+    [organizationId]
+  )
+  const stats = result.rows[0]!
+  return {
+    customers: Number(stats.customers),
+    enquiries: Number(stats.enquiries),
+    monthlyQuoted: Number(stats.monthly_quoted),
+    ordered: Number(stats.ordered),
+    pendingCosting: Number(stats.pending_costing),
+    pendingFollowups: Number(stats.pending_followups),
+    pPrices: Number(stats.p_prices),
+    quoted: Number(stats.quoted),
+  }
+}
+
 export function createCommercialReportingRepository(
   options: RepositoryPoolOptions
 ) {
@@ -615,33 +666,15 @@ export function createCommercialReportingRepository(
   return {
     close,
 
+    async dashboardStats(input: { organizationId: string }) {
+      return readDashboardStats(pool, input.organizationId)
+    },
+
     async dashboard(input: { organizationId: string }) {
       const client = await pool.connect()
       try {
         await client.query("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ")
-        const statsResult = await client.query(
-          `
-            SELECT
-              (SELECT COUNT(*) FROM sales.customers WHERE organization_id = $1) customers,
-              (SELECT COUNT(*) FROM sales.enquiries WHERE organization_id = $1) enquiries,
-              (SELECT COUNT(*) FROM sales.quote_items
-                WHERE organization_id = $1 AND status = 'Sent'
-                  AND sent_at >= date_trunc('month', CURRENT_TIMESTAMP)) monthly_quoted,
-              (SELECT COUNT(*) FROM sales.quote_items
-                WHERE organization_id = $1 AND status = 'Draft') pending_costing,
-              (SELECT COUNT(*) FROM sales.quote_items
-                WHERE organization_id = $1 AND status = 'Sent') quoted,
-              (SELECT COUNT(*) FROM sales.quote_items
-                WHERE organization_id = $1 AND status = 'Accepted') ordered,
-              (SELECT COUNT(*) FROM sales.quote_items
-                WHERE organization_id = $1 AND status = 'Accepted'
-                  AND is_active) p_prices,
-              (SELECT COUNT(*) FROM sales.followups
-                WHERE organization_id = $1 AND status = 'Pending'
-                  AND due_on <= CURRENT_DATE) pending_followups
-          `,
-          [input.organizationId]
-        )
+        const stats = await readDashboardStats(client, input.organizationId)
         const monthlyRows = await client.query<{
           quote_count: string
           month_key: string
@@ -759,7 +792,6 @@ export function createCommercialReportingRepository(
         )
         let cumulative = 0
         await client.query("COMMIT")
-        const stats = statsResult.rows[0]!
         return {
           customerPareto: customers.rows.map((row) => {
             cumulative += Number(row.count)
@@ -785,16 +817,7 @@ export function createCommercialReportingRepository(
             count: Number(row.count),
             label: row.label,
           })),
-          stats: {
-            customers: Number(stats.customers),
-            enquiries: Number(stats.enquiries),
-            monthlyQuoted: Number(stats.monthly_quoted),
-            ordered: Number(stats.ordered),
-            pendingCosting: Number(stats.pending_costing),
-            pendingFollowups: Number(stats.pending_followups),
-            pPrices: Number(stats.p_prices),
-            quoted: Number(stats.quoted),
-          },
+          stats,
           workflowLoad: [
             { count: Number(workflow.sales), label: "Sales Pending Work" },
             { count: Number(workflow.technical), label: "Technical Review" },

@@ -31,9 +31,14 @@ import {
   resolveStoreRequestDepartment,
   storeRequestFormPolicy,
 } from "@/lib/store-request-policy"
-import { validateUserAttachment } from "@/lib/user-attachment-security"
-import { createUploadThingArtifactProvider } from "@/lib/uploadthing-artifact-provider"
+import { createGoogleCloudArtifactProvider } from "@/lib/google-cloud-artifact-provider"
 import { buildStorePurchaseOrderPdf } from "@/lib/store/purchase-order-pdf"
+import {
+  consumePendingArtifactUpload,
+  pendingUploadAuthorizationForUser,
+  pendingUploadId,
+  preparePendingArtifactUploadForFinalAction,
+} from "@/lib/pending-artifact-upload-server"
 
 const storePath = "/store"
 const holderTypes = [
@@ -243,35 +248,22 @@ export async function createStoreSupplierAction(formData: FormData) {
 }
 
 
-async function saveSupplierQuote(upload: FormDataEntryValue | null) {
-  if (!(upload instanceof File) || upload.size === 0) return null
-  if (upload.size > 10 * 1024 * 1024) {
-    throw new Error("Supplier quote must be 10 MB or smaller.")
-  }
-  const bytes = Buffer.from(await upload.arrayBuffer())
-  const validated = validateUserAttachment({
-    bytes,
-    fileName: upload.name,
-    purpose: "supplier-quote",
-  })
-  return { bytes, fileName: validated.fileName, mediaType: "application/pdf" }
-}
-
 async function storeSupplierQuoteArtifact(input: {
   actorUserId: string
   bytes: Buffer
   fileName: string
   mediaType: string
   organizationId: string
+  pendingUploadId?: string
   supplierPriceId: string
 }) {
   const artifacts = createArtifactService({
     connectionString: readAuthEnvironment().connectionString,
-    provider: createUploadThingArtifactProvider(),
+    provider: createGoogleCloudArtifactProvider(),
   })
   try {
     const sha256 = createHash("sha256").update(input.bytes).digest("hex")
-    await artifacts.store({
+    return await artifacts.store({
       actorUserId: input.actorUserId,
       authorizeTarget: (client) =>
         authorizeStoreSupplierPriceArtifactTarget(client, input),
@@ -286,6 +278,7 @@ async function storeSupplierQuoteArtifact(input: {
       mediaType: input.mediaType,
       organizationId: input.organizationId,
       origin: "uploaded",
+      pendingUploadId: input.pendingUploadId,
       purpose: "supplier_quote",
       target: {
         id: input.supplierPriceId,
@@ -304,10 +297,25 @@ export async function createStoreSupplierPriceAction(formData: FormData) {
       masterCapability("SUPPLIER_PRICE", "save"),
       storePath
     )
-    const savedQuote = await saveSupplierQuote(formData.get("supplier_quote"))
+    const quoteUploadId = pendingUploadId(formData, "supplier_quote")
+    const quoteIntent = {
+      itemTypeId: requiredText(formData, "item_type_id"),
+      kind: "store-supplier-quote" as const,
+      supplierId: requiredText(formData, "supplier_id"),
+    }
     await withStore(
       masterCapability("SUPPLIER_PRICE", "save"),
       async (repository, actorUserId, organizationId) => {
+        const pendingAuthorization = quoteUploadId
+          ? await pendingUploadAuthorizationForUser(actorUserId)
+          : null
+        if (quoteUploadId && pendingAuthorization) {
+          await preparePendingArtifactUploadForFinalAction({
+            authorization: pendingAuthorization,
+            expectedIntent: quoteIntent,
+            uploadId: quoteUploadId,
+          })
+        }
         const price = await repository.createSupplierPrice({
           rejectDuplicates: true,
           actorUserId,
@@ -318,12 +326,32 @@ export async function createStoreSupplierPriceAction(formData: FormData) {
           unitPrice: requiredText(formData, "unit_price"),
           validFrom: optionalText(formData, "valid_from"),
         })
-        if (savedQuote) {
-          await storeSupplierQuoteArtifact({
-            ...savedQuote,
-            actorUserId,
-            organizationId,
-            supplierPriceId: price.id,
+        if (quoteUploadId && pendingAuthorization) {
+          await consumePendingArtifactUpload({
+            authorization: pendingAuthorization,
+            expectedIntent: quoteIntent,
+            finalize: async (source) => {
+              const artifact = await storeSupplierQuoteArtifact({
+                ...source,
+                actorUserId,
+                organizationId,
+                supplierPriceId: price.id,
+              })
+              return {
+                binding: {
+                  artifactId: artifact.id,
+                  purpose: "supplier_quote",
+                  target: {
+                    id: price.id,
+                    schema: "store",
+                    table: "supplier_prices",
+                  },
+                },
+                value: undefined,
+              }
+            },
+            recover: () => undefined,
+            uploadId: quoteUploadId,
           })
         }
       }
@@ -335,17 +363,45 @@ export async function createStoreSupplierPriceAction(formData: FormData) {
 
 export async function uploadStoreSupplierQuoteAction(formData: FormData) {
   await requireCapability(masterCapability("SUPPLIER_PRICE", "save"), storePath)
-  const savedQuote = await saveSupplierQuote(formData.get("supplier_quote"))
-  if (!savedQuote) throw new Error("Select a Supplier quote PDF to upload.")
+  const quoteUploadId = pendingUploadId(formData, "supplier_quote")
+  if (!quoteUploadId) {
+    throw new Error("Select a Supplier quote PDF to upload.")
+  }
   await withStore(
     masterCapability("SUPPLIER_PRICE", "save"),
-    (_repository, actorUserId, organizationId) =>
-      storeSupplierQuoteArtifact({
-        ...savedQuote,
-        actorUserId,
-        organizationId,
-        supplierPriceId: requiredText(formData, "supplier_price_id"),
+    async (_repository, actorUserId, organizationId) => {
+      const supplierPriceId = requiredText(formData, "supplier_price_id")
+      const authorization = await pendingUploadAuthorizationForUser(actorUserId)
+      await consumePendingArtifactUpload({
+          authorization,
+          expectedIntent: {
+            kind: "store-supplier-quote",
+            supplierPriceId,
+          },
+          finalize: async (source) => {
+            const artifact = await storeSupplierQuoteArtifact({
+              ...source,
+              actorUserId,
+              organizationId,
+              supplierPriceId,
+            })
+            return {
+              binding: {
+                artifactId: artifact.id,
+                purpose: "supplier_quote",
+                target: {
+                  id: supplierPriceId,
+                  schema: "store",
+                  table: "supplier_prices",
+                },
+              },
+              value: undefined,
+            }
+          },
+          recover: () => undefined,
+        uploadId: quoteUploadId,
       })
+    }
   )
   revalidatePath("/store/assets/[assetCode]", "page")
   revalidateStore()
@@ -461,11 +517,37 @@ export async function createStoreAssetNameAction(formData: FormData) {
 export async function createStoreItemTypeAction(formData: FormData) {
   return withMasterSaveFeedback(async () => {
     await requireCapability(masterCapability("ITEM_TYPE", "save"), storePath)
-    const savedDrawing = await saveAssetDrawing(formData.get("asset_drawing"))
+    const drawingUploadId = pendingUploadId(formData, "asset_drawing")
+    const masterId = optionalText(formData, "master_id")
+    const drawingIntent = {
+      ...(masterId ? { itemTypeId: masterId } : {}),
+      kind: "store-item-drawing" as const,
+    }
     await withStore(
       masterCapability("ITEM_TYPE", "save"),
       async (repository, actorUserId, organizationId) => {
-        const masterId = optionalText(formData, "master_id")
+        const pendingAuthorization = drawingUploadId
+          ? await pendingUploadAuthorizationForUser(actorUserId)
+          : null
+        if (drawingUploadId && pendingAuthorization) {
+          await preparePendingArtifactUploadForFinalAction({
+            ...(masterId
+              ? {
+                  allowFinalizedBinding: {
+                    purpose: "asset_drawing",
+                    target: {
+                      id: masterId,
+                      schema: "store",
+                      table: "item_types",
+                    },
+                  },
+                }
+              : {}),
+            authorization: pendingAuthorization,
+            expectedIntent: drawingIntent,
+            uploadId: drawingUploadId,
+          })
+        }
         const input = {
           actorUserId,
           assetCategoryId: requiredText(formData, "asset_category_id"),
@@ -484,12 +566,32 @@ export async function createStoreItemTypeAction(formData: FormData) {
               ...input,
               rejectDuplicates: true,
             })
-        if (savedDrawing) {
-          await storeItemDrawingArtifact({
-            ...savedDrawing,
-            actorUserId,
-            itemTypeId: item.id,
-            organizationId,
+        if (drawingUploadId && pendingAuthorization) {
+          await consumePendingArtifactUpload({
+            authorization: pendingAuthorization,
+            expectedIntent: drawingIntent,
+            finalize: async (source) => {
+              const artifact = await storeItemDrawingArtifact({
+                ...source,
+                actorUserId,
+                itemTypeId: item.id,
+                organizationId,
+              })
+              return {
+                binding: {
+                  artifactId: artifact.id,
+                  purpose: "asset_drawing",
+                  target: {
+                    id: item.id,
+                    schema: "store",
+                    table: "item_types",
+                  },
+                },
+                value: undefined,
+              }
+            },
+            recover: () => undefined,
+            uploadId: drawingUploadId,
           })
         }
       }
@@ -499,24 +601,6 @@ export async function createStoreItemTypeAction(formData: FormData) {
 }
 
 
-async function saveAssetDrawing(upload: FormDataEntryValue | null) {
-  if (!(upload instanceof File) || upload.size === 0) return null
-  if (upload.size > 10 * 1024 * 1024) {
-    throw new Error("Asset drawing must be 10 MB or smaller.")
-  }
-  const allowedTypes = new Set(["application/pdf", "image/jpeg", "image/png"])
-  if (!allowedTypes.has(upload.type)) {
-    throw new Error("Asset drawing must be a PDF, JPG, or PNG file.")
-  }
-  const bytes = Buffer.from(await upload.arrayBuffer())
-  const validated = validateUserAttachment({
-    bytes,
-    fileName: upload.name,
-    purpose: "drawing",
-  })
-  return { bytes, fileName: validated.fileName, mediaType: validated.mediaType }
-}
-
 async function storeItemDrawingArtifact(input: {
   actorUserId: string
   bytes: Buffer
@@ -524,14 +608,15 @@ async function storeItemDrawingArtifact(input: {
   itemTypeId: string
   mediaType: string
   organizationId: string
+  pendingUploadId?: string
 }) {
   const artifacts = createArtifactService({
     connectionString: readAuthEnvironment().connectionString,
-    provider: createUploadThingArtifactProvider(),
+    provider: createGoogleCloudArtifactProvider(),
   })
   try {
     const sha256 = createHash("sha256").update(input.bytes).digest("hex")
-    await artifacts.store({
+    return await artifacts.store({
       actorUserId: input.actorUserId,
       authorizeTarget: (client) =>
         authorizeStoreItemTypeArtifactTarget(client, input),
@@ -546,6 +631,7 @@ async function storeItemDrawingArtifact(input: {
       mediaType: input.mediaType,
       organizationId: input.organizationId,
       origin: "uploaded",
+      pendingUploadId: input.pendingUploadId,
       purpose: "asset_drawing",
       target: {
         id: input.itemTypeId,
@@ -560,17 +646,42 @@ async function storeItemDrawingArtifact(input: {
 
 export async function uploadStoreItemDrawingAction(formData: FormData) {
   await requireCapability(masterCapability("ITEM_TYPE", "save"), storePath)
-  const savedDrawing = await saveAssetDrawing(formData.get("asset_drawing"))
-  if (!savedDrawing) throw new Error("Select an Asset drawing to upload.")
+  const drawingUploadId = pendingUploadId(formData, "asset_drawing")
+  if (!drawingUploadId) {
+    throw new Error("Select an Asset drawing to upload.")
+  }
   await withStore(
     masterCapability("ITEM_TYPE", "save"),
-    (_repository, actorUserId, organizationId) =>
-      storeItemDrawingArtifact({
-        ...savedDrawing,
-        actorUserId,
-        itemTypeId: requiredText(formData, "item_type_id"),
-        organizationId,
+    async (_repository, actorUserId, organizationId) => {
+      const itemTypeId = requiredText(formData, "item_type_id")
+      const authorization = await pendingUploadAuthorizationForUser(actorUserId)
+      await consumePendingArtifactUpload({
+          authorization,
+          expectedIntent: { itemTypeId, kind: "store-item-drawing" },
+          finalize: async (source) => {
+            const artifact = await storeItemDrawingArtifact({
+              ...source,
+              actorUserId,
+              itemTypeId,
+              organizationId,
+            })
+            return {
+              binding: {
+                artifactId: artifact.id,
+                purpose: "asset_drawing",
+                target: {
+                  id: itemTypeId,
+                  schema: "store",
+                  table: "item_types",
+                },
+              },
+              value: undefined,
+            }
+          },
+          recover: () => undefined,
+        uploadId: drawingUploadId,
       })
+    }
   )
   revalidateStore()
 }
@@ -724,29 +835,26 @@ export async function issueStoreRequisitionAction(formData: FormData) {
   revalidateStore()
 }
 
-async function saveGuaranteeCard(upload: FormDataEntryValue | null) {
-  if (!(upload instanceof File) || upload.size === 0) return null
-  if (upload.size > 10 * 1024 * 1024) {
-    throw new Error("Guarantee card must be 10 MB or smaller.")
-  }
-  const allowedTypes = new Set(["application/pdf", "image/jpeg", "image/png"])
-  if (!allowedTypes.has(upload.type)) {
-    throw new Error("Guarantee card must be a PDF, JPG, or PNG file.")
-  }
-  const bytes = Buffer.from(await upload.arrayBuffer())
-  const validated = validateUserAttachment({
-    bytes,
-    fileName: upload.name,
-    purpose: "purchase-order",
-  })
-  return { bytes, fileName: validated.fileName, mediaType: validated.mediaType }
-}
-
 export async function receiveStoreStockAction(formData: FormData) {
-  const savedFile = await saveGuaranteeCard(formData.get("guarantee_card"))
+  const guaranteeUploadId = pendingUploadId(formData, "guarantee_card")
+  const purchaseOrderLineId = requiredText(formData, "purchase_order_line_id")
+  const guaranteeIntent = {
+    kind: "store-guarantee-card" as const,
+    purchaseOrderLineId,
+  }
   await withStore(
     "store.receipts.receive",
     async (repository, actorUserId, organizationId) => {
+      const pendingAuthorization = guaranteeUploadId
+        ? await pendingUploadAuthorizationForUser(actorUserId)
+        : null
+      if (guaranteeUploadId && pendingAuthorization) {
+        await preparePendingArtifactUploadForFinalAction({
+          authorization: pendingAuthorization,
+          expectedIntent: guaranteeIntent,
+          uploadId: guaranteeUploadId,
+        })
+      }
       const [requestContext, location] = await Promise.all([
         repository.requisitionRequestContext({
           organizationId,
@@ -763,47 +871,73 @@ export async function receiveStoreStockAction(formData: FormData) {
         billNumber: optionalText(formData, "bill_number"),
         locationId: location.id,
         organizationId,
-        purchaseOrderLineId: requiredText(
-          formData,
-          "purchase_order_line_id"
-        ),
+        purchaseOrderLineId,
         quantity: positiveNumber(formData, "quantity"),
         receivedBy: requestContext.requesterEmail,
         warrantyUntil: optionalText(formData, "warranty_until"),
       })
-      if (savedFile) {
+      if (guaranteeUploadId && pendingAuthorization) {
         const artifacts = createArtifactService({
           connectionString: readAuthEnvironment().connectionString,
-          provider: createUploadThingArtifactProvider(),
+          provider: createGoogleCloudArtifactProvider(),
         })
         try {
-          const sha256 = createHash("sha256")
-            .update(savedFile.bytes)
-            .digest("hex")
-          await artifacts.store({
-            actorUserId,
-            authorizeTarget: (client) =>
-              authorizeStoreReceiptArtifactTarget(client, {
-                organizationId,
-                receiptId: received.receiptId,
-              }),
-            bytes: savedFile.bytes,
-            fileName: savedFile.fileName,
-            idempotencyKey: [
-              "store-guarantee-card",
-              received.receiptId,
-              savedFile.fileName,
-              sha256,
-            ].join(":"),
-            mediaType: savedFile.mediaType,
-            organizationId,
-            origin: "uploaded",
-            purpose: "guarantee_card",
-            target: {
-              id: received.receiptId,
-              schema: "store",
-              table: "receipts",
-            },
+          const retain = async (source: {
+            bytes: Buffer
+            fileName: string
+            mediaType: string
+            pendingUploadId?: string
+          }) => {
+            const sha256 = createHash("sha256")
+              .update(source.bytes)
+              .digest("hex")
+            return artifacts.store({
+              actorUserId,
+              authorizeTarget: (client) =>
+                authorizeStoreReceiptArtifactTarget(client, {
+                  organizationId,
+                  receiptId: received.receiptId,
+                }),
+              bytes: source.bytes,
+              fileName: source.fileName,
+              idempotencyKey: [
+                "store-guarantee-card",
+                received.receiptId,
+                source.fileName,
+                sha256,
+              ].join(":"),
+              mediaType: source.mediaType,
+              organizationId,
+              origin: "uploaded",
+              pendingUploadId: source.pendingUploadId,
+              purpose: "guarantee_card",
+              target: {
+                id: received.receiptId,
+                schema: "store",
+                table: "receipts",
+              },
+            })
+          }
+          await consumePendingArtifactUpload({
+              authorization: pendingAuthorization,
+              expectedIntent: guaranteeIntent,
+              finalize: async (source) => {
+                const artifact = await retain(source)
+                return {
+                  binding: {
+                    artifactId: artifact.id,
+                    purpose: "guarantee_card",
+                    target: {
+                      id: received.receiptId,
+                      schema: "store",
+                      table: "receipts",
+                    },
+                  },
+                  value: undefined,
+                }
+              },
+              recover: () => undefined,
+            uploadId: guaranteeUploadId,
           })
         } finally {
           await artifacts.close()
@@ -829,7 +963,7 @@ export async function createStorePurchaseOrdersAction(formData: FormData) {
   ) => {
     const artifacts = createArtifactService({
       connectionString: readAuthEnvironment().connectionString,
-      provider: createUploadThingArtifactProvider(),
+      provider: createGoogleCloudArtifactProvider(),
     })
     try {
       return await repository.createPurchaseOrdersFromSelection({
@@ -862,7 +996,7 @@ export async function createStoreRepairPurchaseOrderAction(formData: FormData) {
   ) => {
     const artifacts = createArtifactService({
       connectionString: readAuthEnvironment().connectionString,
-      provider: createUploadThingArtifactProvider(),
+      provider: createGoogleCloudArtifactProvider(),
     })
     try {
       return await repository.createRepairPurchaseOrder({

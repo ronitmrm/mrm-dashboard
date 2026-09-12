@@ -3,7 +3,7 @@
 This runbook applies only to historical rows whose bytes still live below
 `LOCAL_FILE_STORAGE_PATH`. The application can read those paths but has no
 local create, replace, or delete interface. Every new retained file uses the
-shared Artifact service and UploadThing.
+shared Artifact service and private GCS.
 
 PostgreSQL remains canonical for historical metadata, ownership, entity links,
 sizes, MIME types, and SHA-256 values. Keep a matching filesystem backup until

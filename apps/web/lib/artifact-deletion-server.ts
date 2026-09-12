@@ -10,7 +10,7 @@ import {
   requireAuthenticatedSession,
   requireCapability,
 } from "./auth/require-capability"
-import { createUploadThingArtifactProvider } from "./uploadthing-artifact-provider"
+import { createGoogleCloudArtifactProvider } from "./google-cloud-artifact-provider"
 
 export type ArtifactDeletionRequest = {
   artifactId: string
@@ -89,7 +89,7 @@ export function deleteArtifactForUser(
     connectionString: readAuthEnvironment().connectionString,
     createArtifactService,
     createLedgerRepository: createArtifactLedgerRepository,
-    provider: createUploadThingArtifactProvider(),
+    provider: createGoogleCloudArtifactProvider(),
   })
 }
 

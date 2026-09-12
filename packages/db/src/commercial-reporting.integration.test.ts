@@ -469,6 +469,8 @@ describe("commercial drawing, website, and analytics parity", () => {
     )
 
     const dashboard = await repository.dashboard({ organizationId })
+    const dashboardStats = await repository.dashboardStats({ organizationId })
+    expect(dashboardStats).toEqual(dashboard.stats)
     expect(dashboard.stats).toMatchObject({
       customers: 1,
       enquiries: 1,

@@ -1,5 +1,6 @@
 import type { PoolClient, QueryResultRow } from "pg"
 
+import type { ArtifactStorageProviderIdentifier } from "./artifacts"
 import {
   maintenanceManagerTransition,
   maintenanceTradeTransition,
@@ -15,6 +16,7 @@ import {
 
 export type MaintenanceRequestPhoto = {
   fileName: string
+  id: string
   url: string
 }
 
@@ -150,7 +152,12 @@ const requestSelect = `
   LEFT JOIN identity.users assignee ON assignee.id = request.assigned_to_user_id
   LEFT JOIN LATERAL (
     SELECT jsonb_agg(
-      jsonb_build_object('fileName', file.file_name, 'url', object.public_url)
+      jsonb_build_object(
+        'fileName', file.file_name,
+        'id', file.id,
+        'url', '/maintenance/requests/' || request.id::text ||
+          '/photos/' || file.id::text
+      )
       ORDER BY link.created_at, link.id
     ) AS photos
     FROM core.file_links link
@@ -213,6 +220,59 @@ export function createMaintenanceRequestRepository(
 
     async requesterContext(input: { organizationId: string; userId: string }) {
       return requesterContextWithClient(pool, input)
+    },
+
+    async getRequestPhoto(input: {
+      organizationId: string
+      photoId: string
+      requestId: string
+    }) {
+      const result = await pool.query<{
+        available: boolean
+        byte_size: string | null
+        file_name: string
+        media_type: string | null
+        physical_object_id: string | null
+        provider: ArtifactStorageProviderIdentifier | null
+        provider_key: string | null
+        sha256: string | null
+        storage_key: string | null
+      }>(
+        `SELECT file.file_name, file.media_type, file.storage_key,
+           file.physical_object_id, object.provider, object.provider_key,
+           coalesce(object.byte_size, file.byte_size)::text AS byte_size,
+           coalesce(object.sha256, file.sha256) AS sha256,
+           (file.lifecycle_state <> 'deleted' AND (
+             file.physical_object_id IS NULL
+             OR object.lifecycle_state = 'available'
+           )) AS available
+         FROM core.file_links link
+         JOIN core.files file ON file.id = link.file_id
+         LEFT JOIN core.file_objects object ON object.id = file.physical_object_id
+         WHERE link.organization_id = $1
+           AND link.target_schema = 'maintenance'
+           AND link.target_table = 'requests'
+           AND link.target_id = $2
+           AND link.file_id = $3
+           AND link.purpose LIKE 'request-photo:%'
+           AND link.is_current
+         LIMIT 1`,
+        [input.organizationId, input.requestId, input.photoId]
+      )
+      const row = result.rows[0]
+      return row
+        ? {
+            available: row.available,
+            byteSize: row.byte_size === null ? null : Number(row.byte_size),
+            fileName: row.file_name,
+            mediaType: row.media_type,
+            physicalObjectId: row.physical_object_id,
+            provider: row.provider,
+            providerKey: row.provider_key,
+            sha256: row.sha256,
+            storageKey: row.storage_key,
+          }
+        : null
     },
 
     async submitRequest(input: {
@@ -278,6 +338,7 @@ export function createMaintenanceRequestRepository(
 
     async listRequests(input: {
       organizationId: string
+      requestId?: string
       scope:
         | { kind: "manager" }
         | { departments: readonly string[]; kind: "department" }
@@ -297,9 +358,12 @@ export function createMaintenanceRequestRepository(
         scopeClause = `AND request.final_category = $2
           AND request.status IN ('Approved', 'In Progress', 'Completed')`
       }
+      const requestIdClause = input.requestId
+        ? `AND request.id = $${values.push(input.requestId)}`
+        : ""
       const result = await pool.query<RequestRecord>(
         `${requestSelect}
-         WHERE request.organization_id = $1 ${scopeClause}
+         WHERE request.organization_id = $1 ${scopeClause} ${requestIdClause}
          ORDER BY
            CASE COALESCE(request.final_priority, request.requested_priority)
              WHEN 'Urgent' THEN 0 ELSE 1 END,

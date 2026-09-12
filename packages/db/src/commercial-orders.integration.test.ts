@@ -28,9 +28,18 @@ let customerId: string
 let organizationId: string
 
 class PurchaseOrderArtifactProvider implements ArtifactStorageProvider {
+  readonly identifier = "uploadthing"
   readonly uploads: Buffer[] = []
 
   async delete() {}
+
+  async read() {
+    return Buffer.alloc(0)
+  }
+
+  async resolveLegacyPublicUrl({ key }: { key: string }) {
+    return `https://files.example.test/${key}`
+  }
 
   async upload(input: Parameters<ArtifactStorageProvider["upload"]>[0]) {
     this.uploads.push(input.bytes)
@@ -56,9 +65,10 @@ async function markProformaInvoiceSent(proformaInvoiceId: string) {
           schema: "sales",
           table: "proforma_invoices",
         }
-        const authorizeTarget = (client: Parameters<
-          typeof authorizeProformaInvoiceArtifactTarget
-        >[0], { isRetry }: { isRetry: boolean }) =>
+        const authorizeTarget = (
+          client: Parameters<typeof authorizeProformaInvoiceArtifactTarget>[0],
+          { isRetry }: { isRetry: boolean }
+        ) =>
           authorizeProformaInvoiceArtifactTarget(
             client,
             { organizationId, proformaInvoiceId },
@@ -281,8 +291,11 @@ describe("commercial purchase orders and proforma invoices", () => {
     await createSentQuote({ customerPartCode: otherCode, itemId, price: 12.5 })
     const pricing = createCommercialCostingRepository({ connectionString })
     const readStatus = async (partCode: string) => {
-      const result = await pricing.listPricingRegisterForExport("MRMPL", { query: partCode })
-      return result.find((row) => row.customerPartCode === partCode)?.lifecycleStatus
+      const result = await pricing.listPricingRegisterForExport("MRMPL", {
+        query: partCode,
+      })
+      return result.find((row) => row.customerPartCode === partCode)
+        ?.lifecycleStatus
     }
     expect(await readStatus(code)).toBe("Q")
     const order = await repository.createPurchaseOrder({
@@ -605,7 +618,9 @@ describe("commercial purchase orders and proforma invoices", () => {
         byteSize: newestBytes.byteLength,
         fileName: "customer-po-v2.pdf",
         mediaType: "application/pdf",
-        publicUrl: newest.publicUrl,
+        physicalObjectId: expect.any(String),
+        provider: "uploadthing",
+        providerKey: newest.providerKey,
       })
       expect((await repository.getPurchaseOrder(order.id)).fileName).toBe(
         "customer-po-v2.pdf"
@@ -638,7 +653,9 @@ describe("commercial purchase orders and proforma invoices", () => {
       byteSize: 12,
       fileName: "legacy-po.pdf",
       mediaType: "application/pdf",
-      publicUrl: null,
+      physicalObjectId: null,
+      provider: null,
+      providerKey: null,
       sha256: "abc123",
       storageKey,
     })

@@ -1,3 +1,4 @@
+import { PendingRetainedUploadForm } from "@/components/pending-retained-upload-form"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 
@@ -166,8 +167,17 @@ export default async function CandidateWorkspacePage({
             <CardTitle>Edit Candidate</CardTitle>
           </CardHeader>
           <CardContent>
-            <form
+            <PendingRetainedUploadForm
               action={saveCandidateAction}
+              uploads={[
+                {
+                  field: "resume",
+                  intent: {
+                    kind: "recruitment-candidate-resume",
+                    candidateId: candidate.id,
+                  },
+                },
+              ]}
               className="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
             >
               <input name="candidate_id" type="hidden" value={candidate.id} />
@@ -309,7 +319,7 @@ export default async function CandidateWorkspacePage({
               <Button className="md:col-span-2 xl:col-span-3" type="submit">
                 Save Candidate Changes
               </Button>
-            </form>
+            </PendingRetainedUploadForm>
           </CardContent>
         </SectionCard>
       ) : null}

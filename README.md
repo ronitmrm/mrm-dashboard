@@ -113,11 +113,13 @@ The complete mapping, reconciliation, cutover, and rollback contract is in
 ## Artifact storage
 
 PostgreSQL stores canonical file metadata, checksums, ownership, and entity
-links. Every retained upload and issued Quote, PI, or Store Purchase Order now
-writes through the shared Artifact service to UploadThing and requires the
-server-only `UPLOADTHING_TOKEN`. UploadThing objects are `public-read`: app
-authorization protects upload and URL discovery, but possession of a public URL
-is sufficient to read its bytes until final-reference deletion.
+links. Every retained upload and issued Quote, PI, or Store Purchase Order writes
+through the shared Artifact service to private Google Cloud Storage. Reads stay
+behind application authorization and exact size/SHA verification; the web
+runtime has no UploadThing SDK or token dependency. Historical UploadThing
+provider labels remain in PostgreSQL until the guarded migration is complete.
+See the [migration runbook](docs/codebase/artifact-storage-migration.md) before
+deploying the GCS-only runtime against an existing database.
 
 `LOCAL_FILE_STORAGE_PATH` is a read-only compatibility root for historical
 metadata that still names local bytes. No runtime interface creates or deletes

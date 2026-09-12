@@ -2,7 +2,7 @@ import type { ArtifactLedgerFilters } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
- SectionCard,
+  SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -12,7 +12,7 @@ import {
 import { Input } from "@workspace/ui/components/input"
 import { SearchableSelect } from "@workspace/ui/components/searchable-select"
 import {
- OperationalTable,
+  OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -29,6 +29,7 @@ import {
 } from "lucide-react"
 
 import { ArtifactDeleteControl } from "./artifact-delete-control"
+import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
 
 type Ledger = Awaited<
   ReturnType<
@@ -113,19 +114,22 @@ export function ArtifactLedgerView({
         aria-label="Artifact storage summary"
         className="grid gap-2 sm:grid-cols-3"
       >
-        <MetricCard tone="information"
+        <MetricCard
+          tone="information"
           description={`${ledger.totals.livePhysicalObjects} live physical object${ledger.totals.livePhysicalObjects === 1 ? "" : "s"}`}
           icon={<HardDrive className="size-4" aria-hidden="true" />}
           label="Unique live storage"
           value={`${byteSize(ledger.totals.uniqueLiveBytes)} of ${byteSize(ledger.totals.allowanceBytes)}`}
         />
-        <MetricCard tone="brand"
+        <MetricCard
+          tone="brand"
           description="Uploaded and generated records"
           icon={<Files className="size-4" aria-hidden="true" />}
           label="Logical Artifacts"
           value={ledger.totals.logicalArtifacts.toLocaleString("en-IN")}
         />
-        <MetricCard tone="accent"
+        <MetricCard
+          tone="accent"
           description={`${ledger.totalArtifacts.toLocaleString("en-IN")} match the current filters`}
           icon={<Search className="size-4" aria-hidden="true" />}
           label="Filtered results"
@@ -133,7 +137,12 @@ export function ArtifactLedgerView({
         />
       </section>
 
- <SectionCard>
+      <p className="text-xs text-muted-foreground">
+        The 5 GB-months allowance is advisory. Storage counts each live physical
+        object once, even when multiple records reference it.
+      </p>
+
+      <SectionCard>
         <CardHeader>
           <CardTitle>Search and filters</CardTitle>
           <CardDescription>
@@ -219,9 +228,9 @@ export function ArtifactLedgerView({
             </div>
           </form>
         </CardContent>
- </SectionCard>
+      </SectionCard>
 
- <SectionCard>
+      <SectionCard>
         <CardHeader>
           <CardTitle>Artifact ledger</CardTitle>
           <CardDescription>
@@ -230,7 +239,7 @@ export function ArtifactLedgerView({
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 px-0">
- <OperationalTable className="min-w-[1120px]">
+          <OperationalTable className="min-w-[1120px]">
             <TableHeader>
               <TableRow>
                 <TableHead>Artifact</TableHead>
@@ -267,9 +276,12 @@ export function ArtifactLedgerView({
                         {label(artifact.lifecycleState)}
                       </Badge>
                       <Badge variant="outline">{label(artifact.origin)}</Badge>
-                      <Badge variant="outline">
-                        Provider {label(artifact.providerState)}
-                      </Badge>
+                      <Badge variant="outline">{artifact.providerLabel}</Badge>
+                      {artifact.providerState !== "available" ? (
+                        <Badge variant="outline">
+                          Provider {label(artifact.providerState)}
+                        </Badge>
+                      ) : null}
                     </div>
                   </TableCell>
                   <TableCell className="max-w-96 whitespace-normal">
@@ -323,27 +335,29 @@ export function ArtifactLedgerView({
                   </TableCell>
                   <TableCell>
                     <div className="flex justify-end gap-1">
-                      {artifact.publicUrl ? (
+                      {artifact.contentPath &&
+                      artifact.lifecycleState !== "deleted" ? (
                         <>
                           <Button asChild size="xs" variant="outline">
-                            <a
-                              href={artifact.publicUrl}
-                              rel="noreferrer"
-                              target="_blank"
+                            <AttachmentViewerLink
+                              href={artifact.contentPath}
+                              fileName={artifact.fileName}
+                              mediaType={artifact.mediaType}
+                              byteSize={artifact.byteSize}
                             >
-                              <ExternalLink aria-hidden="true" />
+                              <ExternalLink aria-hidden="true" data-icon />
                               {artifact.previewKind === "none"
                                 ? "Open"
                                 : "Preview"}
-                            </a>
+                            </AttachmentViewerLink>
                           </Button>
                           <Button asChild size="xs" variant="ghost">
                             <a
                               download={artifact.fileName}
-                              href={artifact.publicUrl}
+                              href={`${artifact.contentPath}?download=1`}
                             >
-                              <FileDown aria-hidden="true" />
-                              Download
+                              <FileDown aria-hidden="true" data-icon />
+                              Download Original
                             </a>
                           </Button>
                         </>
@@ -376,7 +390,7 @@ export function ArtifactLedgerView({
                 </TableRow>
               ) : null}
             </TableBody>
- </OperationalTable>
+          </OperationalTable>
           <div className="flex items-center justify-between gap-3 px-6">
             <p className="text-xs text-muted-foreground">
               Page {ledger.page} of {ledger.totalPages} ·{" "}
@@ -405,7 +419,7 @@ export function ArtifactLedgerView({
             </div>
           </div>
         </CardContent>
- </SectionCard>
+      </SectionCard>
     </div>
   )
 }

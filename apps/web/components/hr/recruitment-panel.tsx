@@ -1,3 +1,5 @@
+import { PendingRetainedUploadForm } from "@/components/pending-retained-upload-form"
+import type { RetainedUploadRegistration } from "@/lib/pending-retained-upload-client"
 import Link from "next/link"
 import type { hrMasterControls } from "@/app/hr/master-access"
 
@@ -121,6 +123,7 @@ function PanelForm({
   panelId,
   masterView,
   title,
+  uploads,
 }: {
   action: (formData: FormData) => Promise<void>
   children: React.ReactNode
@@ -128,25 +131,35 @@ function PanelForm({
   panelId: string
   masterView?: "dataEntry" | "masterTables"
   title: string
+  uploads?: readonly RetainedUploadRegistration[]
 }) {
+  const fields = (
+    <>
+      <input name="panel" type="hidden" value={panelId} />
+      {masterView ? (
+        <input name="master_view" type="hidden" value={masterView} />
+      ) : null}
+      <FieldGroup className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {children}
+      </FieldGroup>
+    </>
+  )
   return (
- <SectionCard>
+    <SectionCard>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
         <CardDescription>{description}</CardDescription>
       </CardHeader>
       <CardContent>
-        <form action={action}>
-          <input name="panel" type="hidden" value={panelId} />
-          {masterView ? (
-            <input name="master_view" type="hidden" value={masterView} />
-          ) : null}
-          <FieldGroup className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {children}
-          </FieldGroup>
-        </form>
+        {uploads ? (
+          <PendingRetainedUploadForm action={action} uploads={uploads}>
+            {fields}
+          </PendingRetainedUploadForm>
+        ) : (
+          <form action={action}>{fields}</form>
+        )}
       </CardContent>
- </SectionCard>
+    </SectionCard>
   )
 }
 
@@ -852,6 +865,9 @@ function LogCandidatePanel({
       {canWrite && showDataEntry ? (
         <PanelForm
           action={saveCandidateAction}
+          uploads={[
+            { field: "resume", intent: { kind: "recruitment-candidate-resume" } },
+          ]}
           description="Phone Number Is The Duplicate-Safe Candidate Identity."
           masterView={activeView}
           panelId="candidatesPanel"
