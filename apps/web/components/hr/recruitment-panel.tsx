@@ -618,6 +618,7 @@ function CombinedRolePanel({
       ) : null}
       {showMasterTables ? (
         <EditableCombinedRolesTable
+          canDelete={masterControls.delete}
           canWrite={masterControls.update}
           combinedRoles={combinedRoles}
           masterView={activeView}

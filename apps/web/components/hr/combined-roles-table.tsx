@@ -8,7 +8,7 @@ import type {
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
- SectionCard,
+  SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -29,7 +29,7 @@ import {
   SheetTitle,
 } from "@workspace/ui/components/sheet"
 import {
- OperationalTable,
+  OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -37,11 +37,14 @@ import {
   TableRow,
 } from "@workspace/ui/components/table"
 import { useExcelTable } from "@workspace/ui/hooks/use-excel-table"
-import { Pencil } from "lucide-react"
+import { Pencil, Trash2 } from "lucide-react"
 import Link from "next/link"
 import { useMemo, useState } from "react"
 
-import { updateCombinedRoleAction } from "@/app/hr/actions"
+import {
+  deleteCombinedRoleAction,
+  updateCombinedRoleAction,
+} from "@/app/hr/actions"
 import { CombinedPostPicker } from "@/components/hr/combined-post-picker"
 import { ExcelColumnFilter } from "@workspace/ui/components/excel-column-filter"
 
@@ -54,12 +57,14 @@ function CombinedStatusBadge({ status }: { status: string }) {
 }
 
 export function CombinedRolesTable({
+  canDelete = false,
   canWrite,
   combinedRoles,
   masterView,
   posts,
   templates,
 }: {
+  canDelete?: boolean
   canWrite: boolean
   combinedRoles: RecruitmentCombinedRoleRow[]
   masterView?: "dataEntry" | "masterTables"
@@ -175,6 +180,7 @@ export function CombinedRolesTable({
     })),
   })
   const visibleRoles = table.visibleRows
+  const showActions = canWrite || canDelete
 
   return (
     <Sheet
@@ -183,7 +189,7 @@ export function CombinedRolesTable({
       }}
       open={editingRole !== null}
     >
- <SectionCard>
+      <SectionCard>
         <CardHeader>
           <CardTitle>Combined Roles</CardTitle>
           <CardDescription>
@@ -191,7 +197,7 @@ export function CombinedRolesTable({
             Active Groups
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-2 min-w-0">
+        <CardContent className="min-w-0 space-y-2">
           <div className="flex justify-end">
             <Button
               disabled={!table.hasFilters}
@@ -203,7 +209,7 @@ export function CombinedRolesTable({
               Clear All Filters
             </Button>
           </div>
- <OperationalTable>
+          <OperationalTable>
             <TableHeader>
               <TableRow>
                 <TableHead>Combined Code</TableHead>
@@ -212,7 +218,7 @@ export function CombinedRolesTable({
                 <TableHead>Primary Post</TableHead>
                 <TableHead>Job Template</TableHead>
                 <TableHead>Status</TableHead>
-                {canWrite ? (
+                {showActions ? (
                   <TableHead className="text-right">Actions</TableHead>
                 ) : null}
               </TableRow>
@@ -225,7 +231,7 @@ export function CombinedRolesTable({
                     />
                   </TableHead>
                 ))}
-                {canWrite ? <TableHead /> : null}
+                {showActions ? <TableHead /> : null}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -265,18 +271,62 @@ export function CombinedRolesTable({
                     <TableCell>
                       <CombinedStatusBadge status={role.status} />
                     </TableCell>
-                    {canWrite ? (
+                    {showActions ? (
                       <TableCell className="text-right">
-                        <Button
-                          disabled={role.status !== "Active"}
-                          onClick={() => startEditing(role)}
-                          size="sm"
-                          type="button"
-                          variant="outline"
-                        >
-                          <Pencil data-icon="inline-start" />
-                          Edit
-                        </Button>
+                        <div className="flex justify-end gap-2">
+                          {canWrite ? (
+                            <Button
+                              disabled={role.status !== "Active"}
+                              onClick={() => startEditing(role)}
+                              size="sm"
+                              type="button"
+                              variant="outline"
+                            >
+                              <Pencil data-icon="inline-start" />
+                              Edit
+                            </Button>
+                          ) : null}
+                          {canDelete ? (
+                            <form
+                              action={deleteCombinedRoleAction}
+                              onSubmit={(event) => {
+                                if (
+                                  !window.confirm(
+                                    `Delete combined role ${role.vacancyCode ?? role.name}? Individual approved posts and employee assignments will be retained. This cannot be undone.`
+                                  )
+                                )
+                                  event.preventDefault()
+                              }}
+                            >
+                              <input
+                                name="panel"
+                                type="hidden"
+                                value="combinedRolesPanel"
+                              />
+                              <input
+                                name="combined_role_id"
+                                type="hidden"
+                                value={role.id}
+                              />
+                              {masterView ? (
+                                <input
+                                  name="master_view"
+                                  type="hidden"
+                                  value={masterView}
+                                />
+                              ) : null}
+                              <Button
+                                aria-label={`Delete ${role.vacancyCode ?? role.name}`}
+                                size="sm"
+                                type="submit"
+                                variant="destructive"
+                              >
+                                <Trash2 data-icon="inline-start" />
+                                Delete
+                              </Button>
+                            </form>
+                          ) : null}
+                        </div>
                       </TableCell>
                     ) : null}
                   </TableRow>
@@ -285,7 +335,7 @@ export function CombinedRolesTable({
                 <TableRow>
                   <TableCell
                     className="py-10 text-center text-muted-foreground"
-                    colSpan={canWrite ? 7 : 6}
+                    colSpan={showActions ? 7 : 6}
                   >
                     {combinedRoles.length
                       ? "No Combined Roles Match The Selected Filters."
@@ -294,9 +344,9 @@ export function CombinedRolesTable({
                 </TableRow>
               )}
             </TableBody>
- </OperationalTable>
+          </OperationalTable>
         </CardContent>
- </SectionCard>
+      </SectionCard>
 
       {editingRole ? (
         <SheetContent className="!w-full overflow-y-auto sm:!w-[40rem] sm:!max-w-[40rem]">

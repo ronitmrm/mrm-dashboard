@@ -2416,6 +2416,23 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       })
     },
 
+    async deleteCombinedRole(
+      input: MutationContext & { combinedRoleId: string }
+    ) {
+      return transaction(pool, async (client) => {
+        const combinedRoleId = required(input.combinedRoleId, "Combined role")
+        await client.query(
+          `SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))`,
+          [recruitmentAdvisoryLockKey([input.organizationId, "combined-roles"])]
+        )
+        await client.query(
+          `SELECT recruitment.delete_combined_role($1, $2, $3)`,
+          [input.organizationId, combinedRoleId, input.actorUserId ?? null]
+        )
+        return { id: combinedRoleId }
+      })
+    },
+
     async updateCombinedRole(
       input: MutationContext & {
         combinedRoleId: string

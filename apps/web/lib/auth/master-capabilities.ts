@@ -52,7 +52,7 @@ export function supportedMasterActions(
   if (master.master === "approved_posts")
     return ["read", "create", "update", "delete"]
   if (master.master === "combined_approved_posts")
-    return ["read", "create", "update"]
+    return ["read", "create", "update", "delete"]
   if (master.master === "employee_assignments")
     return ["read", "save", "import"]
   const actions: MasterAction[] = ["read", "save"]

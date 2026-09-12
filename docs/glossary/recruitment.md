@@ -1,5 +1,15 @@
 # Recruitment
 
+## Combined Approved Post Deletion
+
+Deleting a combined role removes the grouping, not its individual Approved Posts
+or employee assignments. Member posts regain their individual vacancy codes;
+job templates remain available with their combined-role link cleared. The audit
+log retains the deleted grouping and membership. Any linked Job Post (including
+closed jobs) or pending replacement blocks deletion, preserving recruitment
+history and atomic appointment workflows. Deletion requires the independent
+Combined Approved Posts delete permission.
+
 ## Candidate Assignment
 
 Search Candidate shows candidate profiles before a job is selected. HR may select
