@@ -114,7 +114,8 @@ export function readGoogleCloudArtifactEnvironment(
     "must be a valid Google Cloud bucket name"
   )
 
-  if (environment.VERCEL !== "1") {
+  const localOidcToken = environment.VERCEL_OIDC_TOKEN?.trim()
+  if (environment.VERCEL !== "1" && !localOidcToken) {
     return {
       bucketName,
       projectId,
@@ -199,7 +200,7 @@ export function createGoogleCloudArtifactProvider(
     !dependencies.storageClient
   ) {
     throw new Error(
-      "Non-Vercel Google Cloud Artifact access requires an explicit authenticated storage client."
+      "Local Google Cloud Artifact access requires VERCEL_OIDC_TOKEN. Run `pnpm artifact:auth:refresh`, restart the dev server, or inject an explicit authenticated storage client for operator tooling."
     )
   }
   let storageClient = dependencies.storageClient

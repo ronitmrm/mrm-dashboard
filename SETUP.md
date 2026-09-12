@@ -13,6 +13,7 @@ Redis is disposable acceleration state.
 
 - Node.js 20.19 through 24
 - pnpm (`pnpm -v` should succeed)
+- Vercel CLI access to team `mrm-general` and project `mrm-dashboard`
 - Docker Engine with Docker Compose for the local-container topology
 - Neon and Upstash accounts plus their CLIs for the managed topology
 
@@ -36,6 +37,31 @@ openssl rand -base64 32
 Use that output as `BETTER_AUTH_SECRET`. Keep the same secret between restarts
 and never commit `.env.local`.
 
+## Local Artifact authentication
+
+The local web app uses a short-lived Vercel **Development** OIDC token to access
+the configured private GCS bucket. Each developer must log in to the Vercel CLI
+with an account authorized for `mrm-general/mrm-dashboard`, then run the refresh
+from the web package:
+
+```bash
+vercel login
+cd apps/web
+pnpm artifact:auth:refresh
+```
+
+The command pulls only the Vercel Development environment into a mode-0700
+temporary directory, validates its Development token, and merges only the six
+`GCS_*` settings plus `VERCEL_OIDC_TOKEN` into the gitignored `.env.local`. It
+preserves every other local value and comment and removes the temporary export.
+It never copies `VERCEL=1`, database/auth settings, or `[SENSITIVE]` values.
+
+Development tokens expire after 12 hours. Rerun the command when prompted and
+restart the dev server so its process reads the refreshed token. Local web
+development needs no gcloud login, ADC, or service-account key. Token claim
+checks in the helper prevent an obvious wrong environment/project from being
+saved; Google/Vercel federation performs the actual signature authorization.
+
 ## Option A: local Docker services
 
 Set these values in `apps/web/.env.local`:
@@ -44,9 +70,7 @@ Set these values in `apps/web/.env.local`:
 DATABASE_URL=postgres://mrmpl:mrmpl@localhost:5434/mrmpl
 TEST_DATABASE_URL=postgres://mrmpl:mrmpl@localhost:5434/mrmpl_test
 REDIS_URL=redis://localhost:6380
-# Private retained Artifact storage.
-GCS_PROJECT_ID=replace-with-your-project-id
-GCS_BUCKET_NAME=replace-with-your-private-bucket
+# Private Artifact settings are populated by `pnpm artifact:auth:refresh`.
 # Optional read-only compatibility root for historical local-file rows.
 LOCAL_FILE_STORAGE_PATH=/absolute/path/to/mrm-dashboard/local-data
 BETTER_AUTH_SECRET=replace-with-the-generated-secret
@@ -57,9 +81,9 @@ NEXT_PUBLIC_APP_URL=http://localhost:3001
 Leave `MRM_MANAGED_RUNTIME`, the role-specific managed database URLs, and the
 Upstash REST variables empty.
 
-Operator CLIs authenticate GCS through their explicit gcloud OAuth client; the
-application runtime does not probe Application Default Credentials. Hosted
-Vercel uses the workload-identity configuration documented in
+The local and hosted web runtime use Vercel workload identity; operator-only
+migration/cleanup CLIs retain their explicit gcloud OAuth client. No application
+path probes Application Default Credentials. Configuration is documented in
 `docs/codebase/google-cloud-artifacts-setup.md`. `LOCAL_FILE_STORAGE_PATH` is
 optional for fresh installs and must never receive new application writes.
 
@@ -119,8 +143,8 @@ pnpm services:down
 ## Option B: Neon and Upstash
 
 The managed launcher obtains short-lived Neon connection strings and Upstash
-REST credentials from authenticated CLIs. It does not write provider
-credentials to `.env.local`.
+REST credentials from authenticated CLIs. It does not fetch or overwrite GCS
+provider credentials; run `artifact:auth:refresh` separately as described above.
 
 Authenticate and link this checkout to the existing Neon project:
 

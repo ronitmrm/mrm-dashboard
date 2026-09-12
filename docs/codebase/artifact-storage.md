@@ -30,7 +30,10 @@ overwrite, verifies exact bytes after upload, reads exact bytes, and fences
 deletion to the observed object generation. PostgreSQL accepts
 `google-cloud-storage` rows with a nullable transitional public URL. Operator
 scripts inject a short-lived gcloud CLI OAuth client; they do not require ADC or
-change the web runtime authentication mode.
+change the web runtime authentication mode. Local web processes instead select
+the same lazy Vercel OIDC/custom-audience path when `VERCEL_OIDC_TOKEN` is
+present; they do not set `VERCEL=1` or use gcloud. Refresh local credentials from
+`apps/web` with `pnpm artifact:auth:refresh` and restart the dev server.
 
 `core.pending_artifact_uploads` durably owns each authenticated browser upload.
 It records a random upload ID, owner, Organization, normalized workflow intent,
@@ -67,11 +70,14 @@ The user-created target is Google Cloud project
 `project-b3e69f72-3e13-4f13-98b`, numeric project `185282230283`, and bucket
 `mrm-erp-gcp-1`; runtime code has no hard-coded defaults. Vercel project
 `mrm-general/mrm-dashboard` has production only; GitHub staging has no deployed
-preview/staging environment. No local ADC is available. Production-only
-federation, bucket IAM/settings, and Vercel environment variables are configured
-and inspected. Vercel Production is confirmed to use Neon project
+preview/staging environment. No local ADC is available. Federation accepts only
+the exact Production and Development subjects; bucket IAM/settings and the
+Production and Development Vercel environments are configured and inspected. A
+real Development-token provider probe passed exact synthetic write/read,
+anonymous 403, deletion, and confirmed absence without gcloud, ADC, or an
+injected client. Vercel Production is confirmed to use Neon project
 `steep-mouse-42175009`, branch `br-polished-voice-axsmr68e` (`staging`),
-database `neondb`; actual application token exchange and traffic remain
+database `neondb`; deployed application exchange and browser traffic remain
 unverified.
 See [GCS configuration](./google-cloud-artifacts-setup.md). Environment names are
 `GCS_PROJECT_ID`, `GCS_BUCKET_NAME`,
