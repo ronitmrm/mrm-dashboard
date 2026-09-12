@@ -191,16 +191,25 @@ async function pullVercelDevelopmentEnvironment(
   let executable = "vercel"
   let arguments_ = vercelArguments
   if (process.platform === "win32") {
-    // pnpm supplies its own entry point to this operator-only command.
+    // pnpm may supply a standalone executable or a Node.js entry point.
     // eslint-disable-next-line turbo/no-undeclared-env-vars
     const packageManagerPath = process.env.npm_execpath
-    if (!packageManagerPath || !/\.(?:c?js|mjs)$/i.test(packageManagerPath)) {
+    if (
+      !packageManagerPath ||
+      !/\.(?:exe|c?js|mjs)$/i.test(packageManagerPath)
+    ) {
       throw new Error(
         "Run this command through pnpm so the Vercel CLI can start on Windows."
       )
     }
-    executable = process.execPath
-    arguments_ = [packageManagerPath, "exec", "vercel", ...vercelArguments]
+    const standalone = /\.exe$/i.test(packageManagerPath)
+    executable = standalone ? packageManagerPath : process.execPath
+    arguments_ = [
+      ...(standalone ? [] : [packageManagerPath]),
+      "exec",
+      "vercel",
+      ...vercelArguments,
+    ]
   }
 
   try {

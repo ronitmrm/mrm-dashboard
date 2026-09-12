@@ -52,7 +52,9 @@ The real `pnpm artifact:auth:refresh` command also passed on this checkout. It
 saved the Development token, preserved unrelated environment values and hosted
 mode, and retained mode 0600. Focused provider/delivery/deletion tests passed
 13/13, web typecheck and affected lint/format passed. Windows command dispatch
-is implemented; this verification ran on Linux.
+supports both standalone `pnpm.exe` and JavaScript pnpm launchers. On 2026-09-12,
+the real refresh command also passed on Windows with standalone pnpm; it had
+previously rejected that valid launcher before starting Vercel.
 
 ## Identity and permissions
 
