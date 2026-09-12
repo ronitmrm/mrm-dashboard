@@ -3203,10 +3203,19 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       return transaction(pool, async (client) => {
         const target = await client.query<{
           combined_role_id: string | null
+          has_pending_replacement: boolean
           post_id: string
         }>(
           `
             SELECT selected.combined_role_id,
+              EXISTS (
+                SELECT 1 FROM recruitment.post_replacements replacement
+                JOIN recruitment.posts member ON member.id = replacement.post_id
+                WHERE replacement.organization_id = selected.organization_id
+                  AND replacement.status = 'Pending'
+                  AND (member.id = selected.id OR
+                    (combined.id IS NOT NULL AND member.combined_role_id = combined.id))
+              ) AS has_pending_replacement,
               COALESCE(primary_post.id, selected.id) AS post_id
             FROM recruitment.posts selected
             LEFT JOIN recruitment.combined_roles combined
@@ -3224,6 +3233,11 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         )
         const targetPost = target.rows[0]
         if (!targetPost) throw new Error("Approved post was not found.")
+        if (targetPost.has_pending_replacement) {
+          throw new Error(
+            "This post already has an appointed replacement. Record Did Not Join if the candidate does not join; the existing job will reopen."
+          )
+        }
         const existing = await client.query(
           `
             SELECT 1
