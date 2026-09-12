@@ -1,3 +1,15 @@
+import {
+  access,
+  mkdtemp,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { dirname, join } from "node:path"
+import { parseEnv } from "node:util"
+
 import { describe, expect, test, vi } from "vitest"
 
 vi.mock("server-only", () => ({}))
@@ -7,6 +19,7 @@ import {
   googleCloudArtifactObjectKey,
   readGoogleCloudArtifactEnvironment,
 } from "./google-cloud-artifact-provider"
+import { refreshArtifactOidcEnvironment } from "../scripts/refresh-artifact-oidc"
 
 const localEnvironment = {
   GCS_BUCKET_NAME: "mrm-artifacts-test",
@@ -33,6 +46,20 @@ function storageWith(file: ReturnType<typeof googleFile>) {
   }
 }
 
+function developmentToken(expiresAt: Date) {
+  const encode = (value: object) =>
+    Buffer.from(JSON.stringify(value)).toString("base64url")
+  return `${encode({ alg: "RS256", typ: "JWT" })}.${encode({
+    aud: "https://vercel.com/mrm-general",
+    environment: "development",
+    exp: Math.floor(expiresAt.getTime() / 1000),
+    iss: "https://oidc.vercel.com/mrm-general",
+    owner: "mrm-general",
+    project: "mrm-dashboard",
+    sub: "owner:mrm-general:project:mrm-dashboard:environment:development",
+  })}.test-signature`
+}
+
 describe("Google Cloud Artifact provider", () => {
   test("requires an operator client locally and validates Vercel workload identity", () => {
     expect(readGoogleCloudArtifactEnvironment(localEnvironment)).toMatchObject({
@@ -41,7 +68,7 @@ describe("Google Cloud Artifact provider", () => {
       workloadIdentity: { kind: "operator-client-required" },
     })
     expect(() => createGoogleCloudArtifactProvider(localEnvironment)).toThrow(
-      "requires an explicit authenticated storage client"
+      "pnpm artifact:auth:refresh"
     )
     expect(() =>
       readGoogleCloudArtifactEnvironment({
@@ -71,6 +98,128 @@ describe("Google Cloud Artifact provider", () => {
           "https://iam.googleapis.com/projects/123456789/locations/global/workloadIdentityPools/mrm-artifact-pool/providers/vercel-production",
       },
     })
+  })
+
+  test("uses a local Development token through the existing custom-audience OIDC supplier", async () => {
+    const target = googleFile()
+    const { storageClient } = storageWith(target)
+    const getOidcToken = vi.fn().mockResolvedValue("exchanged-subject-token")
+    let getSubjectToken: (() => Promise<string>) | undefined
+    const createExternalAccountClient = vi.fn((options: unknown) => {
+      getSubjectToken = (
+        options as {
+          subject_token_supplier: { getSubjectToken(): Promise<string> }
+        }
+      ).subject_token_supplier.getSubjectToken
+      return {} as never
+    })
+    const createStorageClient = vi.fn(() => storageClient)
+    const environment = {
+      ...localEnvironment,
+      GCS_PROJECT_NUMBER: "123456789",
+      GCS_SERVICE_ACCOUNT_EMAIL:
+        "artifact-runtime@mrm-artifacts-test.iam.gserviceaccount.com",
+      GCS_WORKLOAD_IDENTITY_POOL_ID: "mrm-artifact-pool",
+      GCS_WORKLOAD_IDENTITY_PROVIDER_ID: "vercel-production",
+      VERCEL_OIDC_TOKEN: "header.payload.signature",
+    }
+
+    expect(readGoogleCloudArtifactEnvironment(environment)).toMatchObject({
+      workloadIdentity: { kind: "vercel-oidc" },
+    })
+    const provider = createGoogleCloudArtifactProvider(environment, {
+      createExternalAccountClient: createExternalAccountClient as never,
+      createStorageClient,
+      getOidcToken,
+    })
+
+    await expect(provider.read({ key: "artifacts/local" })).resolves.toEqual(
+      Buffer.from("drawing")
+    )
+    expect(createExternalAccountClient).toHaveBeenCalledOnce()
+    expect(createStorageClient).toHaveBeenCalledOnce()
+    await expect(getSubjectToken?.()).resolves.toBe("exchanged-subject-token")
+    expect(getOidcToken).toHaveBeenCalledWith({
+      audience:
+        "https://iam.googleapis.com/projects/123456789/locations/global/workloadIdentityPools/mrm-artifact-pool/providers/vercel-production",
+    })
+  })
+
+  test("refreshes only Artifact auth values and rejects an incomplete pull before writing", async () => {
+    const appDirectory = await mkdtemp(join(tmpdir(), "mrm-oidc-test-"))
+    const localPath = join(appDirectory, ".env.local")
+    const now = new Date("2026-09-12T12:00:00.000Z")
+    const expiresAt = new Date("2026-09-13T00:00:00.000Z")
+    const token = developmentToken(expiresAt)
+    const pulledContent = [
+      'GCS_PROJECT_ID="project-b3e69f72-3e13-4f13-98b"',
+      'GCS_BUCKET_NAME="mrm-erp-gcp-1"',
+      'GCS_PROJECT_NUMBER="185282230283"',
+      'GCS_WORKLOAD_IDENTITY_POOL_ID="mrm-vercel"',
+      'GCS_WORKLOAD_IDENTITY_PROVIDER_ID="mrm-dashboard"',
+      'GCS_SERVICE_ACCOUNT_EMAIL="mrm-artifacts@project-b3e69f72-3e13-4f13-98b.iam.gserviceaccount.com"',
+      `VERCEL_OIDC_TOKEN="${token}"`,
+      'VERCEL="1"',
+      'WEB_DATABASE_URL="[SENSITIVE]"',
+      "",
+    ].join("\n")
+    const output: string[] = []
+    let pulledDirectory: string | undefined
+
+    try {
+      await writeFile(
+        localPath,
+        "# keep this comment\nCUSTOM_SETTING=preserved\nGCS_BUCKET_NAME=old-bucket\n",
+        { mode: 0o600 }
+      )
+      await refreshArtifactOidcEnvironment({
+        appDirectory,
+        dependencies: {
+          now: () => now,
+          pullEnvironment: async (targetPath) => {
+            pulledDirectory = dirname(targetPath)
+            await writeFile(targetPath, pulledContent, { mode: 0o600 })
+          },
+          writeOutput: (message) => output.push(message),
+        },
+      })
+
+      const updated = await readFile(localPath, "utf8")
+      const parsed = parseEnv(updated)
+      expect(updated).toContain("# keep this comment")
+      expect(parsed.CUSTOM_SETTING).toBe("preserved")
+      expect(parsed.GCS_BUCKET_NAME).toBe("mrm-erp-gcp-1")
+      expect(parsed.VERCEL_OIDC_TOKEN).toBe(token)
+      expect(parsed.VERCEL).toBeUndefined()
+      expect(parsed.WEB_DATABASE_URL).toBeUndefined()
+      expect(output.join("\n")).toContain(expiresAt.toISOString())
+      expect(output.join("\n")).not.toContain(token)
+      await expect(access(pulledDirectory!)).rejects.toMatchObject({
+        code: "ENOENT",
+      })
+      if (process.platform !== "win32") {
+        expect((await stat(localPath)).mode & 0o777).toBe(0o600)
+      }
+
+      await expect(
+        refreshArtifactOidcEnvironment({
+          appDirectory,
+          dependencies: {
+            now: () => now,
+            pullEnvironment: (targetPath) =>
+              writeFile(
+                targetPath,
+                pulledContent.replace(/^VERCEL_OIDC_TOKEN=.*\n/m, ""),
+                { mode: 0o600 }
+              ),
+            writeOutput: (message) => output.push(message),
+          },
+        })
+      ).rejects.toThrow("VERCEL_OIDC_TOKEN is missing")
+      expect(await readFile(localPath, "utf8")).toBe(updated)
+    } finally {
+      await rm(appDirectory, { force: true, recursive: true })
+    }
   })
 
   test("stores and verifies exact bytes under an opaque immutable key", async () => {
