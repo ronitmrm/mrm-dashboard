@@ -857,7 +857,7 @@ export function createArtifactStorageMigrationRepository(input: {
       return "deleted" as const
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined)
-      await pool
+      await client
         .query(
           `
             UPDATE core.file_objects
