@@ -164,10 +164,20 @@ export function listRecruitableApprovedPosts<
     combinedRoleId?: string | null
     isPrimaryCombinedPost?: boolean
     postCode: string
+    replacementAppointments?: readonly { status: string }[]
     status: string
   },
   Job extends { postCode: string | null; status: string },
 >(posts: readonly Post[], jobs: readonly Job[]) {
+  const reservedTargets = new Set(
+    posts
+      .filter((post) =>
+        post.replacementAppointments?.some(
+          (appointment) => appointment.status === "Pending"
+        )
+      )
+      .map((post) => post.combinedRoleId ?? post.postCode)
+  )
   const postsWithOpenJobs = new Set(
     jobs
       .filter((job) => job.status === "Open" && job.postCode)
@@ -178,6 +188,7 @@ export function listRecruitableApprovedPosts<
     (post) =>
       (post.status === "Vacant" || post.status === "Resigned") &&
       (!post.combinedRoleId || post.isPrimaryCombinedPost) &&
+      !reservedTargets.has(post.combinedRoleId ?? post.postCode) &&
       !postsWithOpenJobs.has(post.postCode)
   )
 }

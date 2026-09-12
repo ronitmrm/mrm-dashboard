@@ -12,6 +12,13 @@ Combined Approved Posts delete permission.
 
 ## Candidate Assignment
 
+An Approved Post reserved for an appointed replacement is unavailable for a new
+Job Post, even while its outgoing employee remains Resigned. A reservation on
+any member makes the entire combined role unavailable. Filled or Appointed posts
+also remain unavailable. Closing the recruitment job does not release an
+appointment. HR must explicitly record Did Not Join to cancel that reservation
+and reopen the same job; it does not create a duplicate recruitment opening.
+
 Search Candidate shows candidate profiles before a job is selected. HR may select
 candidates first and then an Open job, or select the job first. Choosing or changing
 the job retains eligible selections; candidates with an active application for
