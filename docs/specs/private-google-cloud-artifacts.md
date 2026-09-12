@@ -2,8 +2,10 @@
 
 Status: Provider, private delivery, pending-upload transport and forms, and
 controlled migration tooling are implemented locally. Retained submissions are
-upload-ID-only. Production cloud configuration is saved; deployment, live
-migration, application acceptance, and contract removal have not started.
+upload-ID-only, and the local runtime/package set is GCS-only. Production cloud
+configuration is saved and all 36 available UploadThing files have verified GCS
+copies; deployment, live locator migration, application acceptance, and
+destructive database-column contraction have not started.
 Date: 2026-09-09.
 Revalidated: 2026-09-11 against staging `2bf5572` after rebase.
 Source: [GitHub issue #88](https://github.com/ronitmrm/mrm-dashboard/issues/88).
@@ -50,9 +52,11 @@ delivery specification; this document does not claim the migration is deployed.
   not remove that hosting limit. Stream authenticated download responses to
   preserve larger existing files; verify bytes before starting delivery and
   retain the issue's no-range-request scope.
-- Copy, verify, atomically commit the GCS locator and pending source-cleanup
-  record, then delete the source and record completion. Source deletion failure
-  keeps migration explicitly incomplete.
+- Copy, verify, and atomically commit the GCS locator and pending source-cleanup
+  record. The application and migration CLI remain UploadThing-token-free;
+  remove each committed old source through separately authorized operator
+  tooling or the UploadThing dashboard. Record completion only when the exact
+  old URL returns 404/410; ambiguity keeps migration incomplete.
 - Deterministic object reuse makes the current unconditional rollback cleanup
   unsafe: a failed transaction can delete an object another operation reused.
   Verified uploaded bytes must remain safely reusable after a database failure;
@@ -115,9 +119,9 @@ the accepted storage architecture or the holiday cutover decision.
   headers. Verify preview with the accepted full-response/no-range design;
   do not regress to iframe or browser-plugin-only rendering. Follow the
   [golden UI pattern](../codebase/ui-golden-patterns.md).
-- **Existing PDF proxy:** the quotation PDF route already fetches retained
-  UploadThing bytes server-side. Replace that provider fetch with the shared
-  private reader; changing redirects alone would miss this consumer.
+- **Existing PDF proxy baseline:** before this work, the quotation PDF route
+  fetched retained UploadThing bytes server-side. The implemented route now uses
+  the shared private reader; redirect-only discovery would have missed it.
 
 ## Acceptance additions to #88
 
@@ -140,10 +144,20 @@ the accepted storage architecture or the holiday cutover decision.
 
 ## Verification still needed
 
-- Confirm the user-selected Vercel Production database before treating the
-  read-only Neon inventory as the live cutover inventory. The current inspected
-  branch reports 38 live UploadThing physical objects (7,419,132 bytes) and 51
-  logical files (48 current, 3 superseded), with no metadata anomalies.
+- Vercel Production is confirmed to use Neon project
+  `steep-mouse-42175009`, branch `br-polished-voice-axsmr68e` (`staging`),
+  database `neondb`. Read-only preflight reports 38 live UploadThing physical
+  objects (7,419,132 bytes) and 51 logical files (48 current, 3 superseded).
+  Thirty-six source objects (7,419,078 bytes) fetched and matched exactly. Root's
+  separately authorized one-off copy placed those 36 exact objects in private
+  GCS, verified every readback and object count, and confirmed anonymous access
+  returns 403 without changing source objects or database rows. Database
+  locators still name UploadThing. Two current 27-byte business-drawing records
+  have invalid `example.test`
+  source URLs and no matching UploadThing object; their recorded payloads can be
+  recovered from repository evidence, but the full original PDFs are absent.
+  Preserve their IDs/links and block cutover pending recovery/security
+  resolution. Production also lacks 0138 and 0139.
 - Production project identity, team issuer configuration, exact subject trust,
   bucket permissions/settings, and six production environment variables are
   now configured and inspected; see [GCS setup](../codebase/google-cloud-artifacts-setup.md).
@@ -201,5 +215,5 @@ the accepted storage architecture or the holiday cutover decision.
 
 The canonical [Artifact glossary](../glossary/artifacts.md), access definitions,
 and [ADR 0007](../adr/0007-private-artifact-delivery.md) describe the approved
-target. The storage architecture and UploadThing implementation specification
-still describe the current provider until the new implementation is verified.
+target. Historical UploadThing identifiers and public URLs remain migration and
+audit evidence; they are not an application runtime provider.

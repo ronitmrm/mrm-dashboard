@@ -5,9 +5,10 @@ Date: 2026-07-18
 Status: Approved classification; retention durations require business approval
 
 Artifact handling below records the approved target for
-[issue #88](./specs/private-google-cloud-artifacts.md). The current UploadThing
-public-read exposure persists until verified cutover; the new private boundary
-must not be reported as deployed before acceptance.
+[issue #88](./specs/private-google-cloud-artifacts.md). The current deployed
+UploadThing public-read exposure persists until verified cutover. The local
+GCS-only runtime must not be deployed before every live legacy locator is
+migrated and reconciled; the private boundary is not deployed acceptance.
 
 ## Classes
 

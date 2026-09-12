@@ -8,12 +8,15 @@ import {
   readGoogleCloudArtifactEnvironment,
 } from "../lib/google-cloud-artifact-provider"
 import { readWebPostgresEnvironment } from "../lib/postgres-runtime"
-import { createUploadThingArtifactProvider } from "../lib/uploadthing-artifact-provider"
 import { createOperatorGoogleCloudStorage } from "./operator-google-cloud-storage"
 
 const mutationAcknowledgement = "--acknowledge-paused-artifact-writes"
 const modes = ["inventory", "migrate", "reconcile", "verify"] as const
 type Mode = (typeof modes)[number]
+const sourceCleanup = {
+  completion: "recorded-source-url-returns-404-or-410",
+  deletion: "external-uploadthing-dashboard",
+} as const
 
 function arguments_(values: string[]) {
   const modeArgument = values.find((value) => value.startsWith("--mode="))
@@ -60,10 +63,17 @@ function inventoryIncomplete(
   )
 }
 
+function operatorConnectionString() {
+  // Operator-only CLI input; intentionally excluded from the web/Turbo runtime.
+  // eslint-disable-next-line turbo/no-undeclared-env-vars
+  const explicit = process.env.OPERATOR_DATABASE_URL?.trim()
+  return explicit || readWebPostgresEnvironment().connectionString
+}
+
 async function main() {
   const options = arguments_(process.argv.slice(2))
   const repository = createArtifactStorageMigrationRepository({
-    connectionString: readWebPostgresEnvironment().connectionString,
+    connectionString: operatorConnectionString(),
   })
   try {
     if (options.mode === "inventory") {
@@ -73,6 +83,7 @@ async function main() {
           integrityVerification: "not-run",
           inventory,
           mode: options.mode,
+          sourceCleanup,
         })}\n`
       )
       if (inventoryIncomplete(inventory)) process.exitCode = 2
@@ -88,13 +99,12 @@ async function main() {
     const service = createArtifactStorageMigrationService({
       destinationProvider,
       repository,
-      sourceProvider: createUploadThingArtifactProvider(),
     })
 
     if (options.mode === "verify") {
       const readiness = await service.verifyReadiness()
       process.stdout.write(
-        `${JSON.stringify({ mode: options.mode, readiness })}\n`
+        `${JSON.stringify({ mode: options.mode, readiness, sourceCleanup })}\n`
       )
       if (!readiness.complete) process.exitCode = 2
       return
@@ -106,7 +116,7 @@ async function main() {
         : await service.reconcile({ limit: options.limit })
     const inventory = await repository.inventory()
     process.stdout.write(
-      `${JSON.stringify({ inventory, mode: options.mode, result })}\n`
+      `${JSON.stringify({ inventory, mode: options.mode, result, sourceCleanup })}\n`
     )
     if (
       result.failures.length > 0 ||

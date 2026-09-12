@@ -170,7 +170,7 @@ price history, bill, warranty, and guarantee documents.
 not to an individual Unit ID. Every Physical Asset of that Store Item Type sees
 the same current drawing. The file is limited to 10 MB and uses the shared
 Artifact lifecycle. Replacements retain immutable superseded versions, and
-exact bytes may reuse one Organization-scoped UploadThing object without
+exact bytes may reuse one Organization-scoped physical object without
 merging logical drawing links. Historical Store document rows remain readable.
 
 **Asset Movement**: An immutable change in the holder of one Non Consumable
