@@ -146,6 +146,12 @@ The managed launcher obtains short-lived Neon connection strings and Upstash
 REST credentials from authenticated CLIs. It does not fetch or overwrite GCS
 provider credentials; run `artifact:auth:refresh` separately as described above.
 
+Use `sslmode=verify-full` in managed PostgreSQL URLs, including the direct
+`WORKER_LISTENER_DATABASE_URL`. This explicitly preserves certificate and hostname
+verification and avoids the `pg` warning about upcoming SSL-mode changes. The
+launcher already requests this mode for CLI-generated URLs; saved `.env.local`
+URLs take precedence and must use it too.
+
 Authenticate and link this checkout to the existing Neon project:
 
 ```bash
