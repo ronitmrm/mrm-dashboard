@@ -340,7 +340,7 @@ function sameCleanupPair(
 export function createArtifactStorageMigrationRepository(input: {
   connectionString: string
 }) {
-  const pool = new Pool({ connectionString: input.connectionString })
+  const pool = new Pool({ connectionString: input.connectionString, max: 1 })
 
   async function schemaStatus() {
     const result = await pool.query<{ available: boolean }>(
@@ -459,7 +459,8 @@ export function createArtifactStorageMigrationRepository(input: {
         !validSha ||
         !validSize ||
         !validKey ||
-        !validProviderLocator
+        (!validProviderLocator &&
+          (object.lifecycle_state !== "deleted" || liveReferences > 0))
       ) {
         blockers.push({
           code: "invalid-physical-locator",

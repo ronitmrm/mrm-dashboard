@@ -1,10 +1,12 @@
 # Artifact storage migration runbook
 
-All 36 files present in UploadThing have verified private GCS copies. Production
-database locators still point to UploadThing, and two additional business-drawing
-records have no UploadThing source.
-The local application is now GCS-only, so it must not be deployed until every
-live legacy locator is migrated. Migration changes physical locators only.
+On 2026-09-12, the user approved the Production maintenance cutover. All 36
+recoverable files (7,419,078 bytes) now have private GCS locators and verified
+copies. UploadThing confirmed deletion of their 36 old source objects. The two
+previously waived stale drawing records were retired with before/after audit
+events; their drawing references, original locators, and history remain intact.
+The application is GCS-only. Deployment requires exact old-URL reconciliation
+and a passing readiness check. Migration changes physical locators only.
 Logical Artifact IDs, links, versions,
 current/superseded/deleted state, issued references, audit history,
 Organization-scoped fingerprints, and `core.files.storage_key` remain intact.
@@ -22,8 +24,8 @@ Organization-scoped fingerprints, and `core.files.storage_key` remain intact.
 3. Apply additive expand migrations `0137_google_cloud_artifact_storage_expand.sql`,
    `0138_pending_artifact_uploads.sql`, and
    `0139_artifact_source_cleanups.sql`, in order while the old deployment is
-   paused. The confirmed Production database currently has neither 0138 nor
-   0139. Use normal operator `gcloud auth`; commands inject that OAuth client
+   paused. Production applied 0137–0140 during the approved 2026-09-12 window.
+   Use normal operator `gcloud auth`; commands inject that OAuth client
    and never probe ADC.
 4. Run inventory, migrate verified legacy bytes, remove the committed old
    objects with separately approved operator tooling or the UploadThing
@@ -32,12 +34,23 @@ Organization-scoped fingerprints, and `core.files.storage_key` remain intact.
    any live legacy locator, pending cleanup, or metadata blocker remains.
 5. Deploy and accept the GCS-only application. Vercel reports `main` as
    `productionGitBranch` and deployment
-   `dpl_tf9hN7UUwYtDpVvs33eBcD7VRh2f` as READY; this local
-   `refactor/sept-26` branch is not deployed. Verify Production WIF,
+   `dpl_tf9hN7UUwYtDpVvs33eBcD7VRh2f` as the pre-cutover baseline. Verify Production WIF,
    authorized/unauthorized application byte traffic, and browser workflows
    while Artifact writes remain paused. Resume only after acceptance.
 
 ## Commands
+
+The Windows cutover used an ignored one-off driver composing the existing
+migration repository/service with the app's Development OIDC provider. It
+verified existing GCS copies byte-for-byte before committing locators. The
+Neon plugin supplied the operator credential; the ordinary migration role
+does not have file-table access. The repository uses one connection to respect
+restricted operator role limits. Credentials and the driver are not deployed.
+
+Recovery branch `backup-pre-release-99-gcs-20260912` (`br-morning-sound-axoqwock`)
+preserves the database before migrations and locator changes. Retain it through
+release acceptance. Restoring the old database alone would restore unavailable
+UploadThing locators, so recovery must account for the retained GCS copies.
 
 The one-off operator configuration is stored outside the repository at
 `~/.config/mrm/artifact-operator.env` (mode 0600). It provides
@@ -147,7 +160,11 @@ live acceptance, remove the old Vercel UploadThing secret and schedule the separ
 coordinated destructive contraction of the transitional `public_url` column.
 No automatic `DROP public_url` migration is included.
 
-The 2026-09-12 read-only Production preflight confirms 38 live UploadThing
+## Historical preflight and rehearsal evidence
+
+The following results predate the approved cutover described above.
+
+The 2026-09-12 read-only Production preflight confirmed 38 live UploadThing
 physical objects (7,419,132 bytes) and 51 logical files (48 current, 3
 superseded). Thirty-six sources totaling 7,419,078 bytes were fetched and matched
 to their recorded size/SHA. A separately authorized one-off copy used the
