@@ -1,12 +1,12 @@
 import "server-only"
 
-import type {
-  ArtifactStoredObjectProvider,
-  ArtifactStorageProviderIdentifier,
+import {
+  ArtifactStorageError,
+  type ArtifactStoredObjectProvider,
+  type ArtifactStorageProviderIdentifier,
 } from "@workspace/db"
 
 import { createGoogleCloudArtifactProvider } from "./google-cloud-artifact-provider"
-import { createUploadThingArtifactProvider } from "./uploadthing-artifact-provider"
 
 function lazyProvider(
   identifier: ArtifactStorageProviderIdentifier,
@@ -29,7 +29,11 @@ function lazyProvider(
 export function createStoredArtifactProvider(
   identifier: ArtifactStorageProviderIdentifier
 ) {
-  return identifier === "google-cloud-storage"
-    ? lazyProvider(identifier, () => createGoogleCloudArtifactProvider())
-    : lazyProvider(identifier, () => createUploadThingArtifactProvider())
+  if (identifier !== "google-cloud-storage") {
+    throw new ArtifactStorageError(
+      "provider-failure",
+      "The retained file uses a storage provider that is unavailable after cutover."
+    )
+  }
+  return lazyProvider(identifier, () => createGoogleCloudArtifactProvider())
 }

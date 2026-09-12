@@ -1,9 +1,9 @@
 # Artifact storage architecture
 
-This page describes the private GCS write target, provider-independent private
-delivery, and the server half of the pending-upload transport. Browser form
-wiring, historical-object migration, deployed acceptance, and live cutover
-remain pending under the approved
+This page describes the private GCS runtime, authenticated delivery, and the
+pending-upload transport. Browser form wiring and guarded migration tooling are
+implemented locally. Production migration, deployment acceptance, and live
+cutover remain pending under the approved
 [private GCS target](../specs/private-google-cloud-artifacts.md).
 
 Runtime Artifact metadata is canonical in PostgreSQL. `core.file_objects`
@@ -15,13 +15,13 @@ logical references.
 
 `packages/db/src/artifacts.ts` owns hashing, Organization-scoped deduplication,
 idempotency, version replacement, link lifecycle, transactions, and manual
-deletion state. `apps/web/lib/artifact-storage-providers.ts` lazily dispatches
-the stored provider for read/delete, so an UploadThing row does not require GCS
-configuration and vice versa. All newly created physical objects use GCS;
-Organization-scoped byte deduplication may intentionally reuse a matching
-historical UploadThing object. UploadThing remains a read/delete-only
-compatibility adapter for historical rows. Missing provider configuration fails
-closed; it never falls back to another provider or to local writes.
+deletion state. `apps/web/lib/artifact-storage-providers.ts` now exposes only
+private GCS. Historical `uploadthing` provider identifiers remain valid ledger
+and migration evidence, but the application runtime refuses those locators; it
+has no UploadThing SDK, token, read, or delete adapter. Therefore every live
+historical object must be migrated before this GCS-only application is deployed.
+Missing or historical provider configuration fails closed; it never falls back
+to another provider or to local writes.
 
 `apps/web/lib/google-cloud-artifact-provider.ts` implements the private target
 with `@google-cloud/storage` 8.1.0. It validates configuration, uses request-lazy
@@ -52,9 +52,9 @@ The browser-safe contract is in `apps/web/lib/artifact-upload-contract.ts`:
 Responses expose only `{ uploadId, confirmedOffset, state }`, where state is
 `uploading`, `ready`, `finalized`, or `abandoned`. The GCS key, resumable-session
 URI, tokens, hashes, and provider errors stay server-only. Final forms use
-`${field}_upload_id`; repeated Maintenance photos repeat that field. Existing
-server actions temporarily retain their raw `File` fallback until the separate
-browser adapter/form slice lands, so this intermediate tree is not deployable.
+`${field}_upload_id`; repeated Maintenance photos repeat that field. Retained
+server actions are upload-ID-only and centrally reject nonempty raw `File`
+submissions.
 
 Finalization reauthorizes the original workflow target before provider access,
 then stores the verified bytes through the original Artifact authorization and
@@ -69,7 +69,10 @@ The user-created target is Google Cloud project
 `mrm-general/mrm-dashboard` has production only; GitHub staging has no deployed
 preview/staging environment. No local ADC is available. Production-only
 federation, bucket IAM/settings, and Vercel environment variables are configured
-and inspected; actual application token exchange and traffic remain unverified.
+and inspected. Vercel Production is confirmed to use Neon project
+`steep-mouse-42175009`, branch `br-polished-voice-axsmr68e` (`staging`),
+database `neondb`; actual application token exchange and traffic remain
+unverified.
 See [GCS configuration](./google-cloud-artifacts-setup.md). Environment names are
 `GCS_PROJECT_ID`, `GCS_BUCKET_NAME`,
 `GCS_PROJECT_NUMBER`, `GCS_WORKLOAD_IDENTITY_POOL_ID`,
@@ -111,10 +114,11 @@ cleanup to at most that many eligible rows; valid limits are 1 through 500.
 Cleanup uses the operator gcloud login, serializes against upload operations,
 retries failed finalized-object cleanup, and is restricted to the temporary
 namespace. It does not delete retained Artifacts or ledger rows.
-UploadThing remains `public-read` during transition, but its URL is resolved and
-read only on the server. The ledger's current advisory allowance is 5 GB-months.
-Capacity reporting is advisory; the application does not change plans or delete
-objects automatically.
+The current deployed application and unmigrated historical sources remain on
+UploadThing until the coordinated cutover. The GCS-only runtime must not be
+deployed first: it cannot deliver or delete those historical locators. The
+ledger's current advisory allowance is 5 GB-months. Capacity reporting is
+advisory; the application does not change plans or delete objects automatically.
 
 Operator/provider acceptance on 2026-09-11 passed against the real bucket: a
 25 MiB temporary upload completed in seven chunks of at most 4 MiB with

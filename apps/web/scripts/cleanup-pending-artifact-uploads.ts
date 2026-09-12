@@ -19,8 +19,12 @@ function cleanupLimit(arguments_: string[]) {
 
 async function main() {
   const limit = cleanupLimit(process.argv.slice(2))
+  // Operator-only configuration; never consumed by the web runtime.
+  // eslint-disable-next-line turbo/no-undeclared-env-vars
+  const operatorConnectionString = process.env.OPERATOR_DATABASE_URL?.trim()
   const repository = createPendingArtifactUploadRepository({
-    connectionString: readWebPostgresEnvironment().connectionString,
+    connectionString:
+      operatorConnectionString || readWebPostgresEnvironment().connectionString,
   })
   try {
     const configuration = readGoogleCloudArtifactEnvironment()

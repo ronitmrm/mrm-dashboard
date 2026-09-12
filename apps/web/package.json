@@ -4,8 +4,8 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "artifact:storage:migrate": "node --conditions=react-server --env-file-if-exists=.env.local --import tsx scripts/migrate-artifact-storage.ts",
-    "artifact:uploads:cleanup": "node --conditions=react-server --env-file-if-exists=.env.local --import tsx scripts/cleanup-pending-artifact-uploads.ts",
+    "artifact:storage:migrate": "node --conditions=react-server --import tsx scripts/migrate-artifact-storage.ts",
+    "artifact:uploads:cleanup": "node --conditions=react-server --import tsx scripts/cleanup-pending-artifact-uploads.ts",
     "dev": "next dev --webpack -p 3001",
     "drawing:baseline": "node --conditions=react-server --env-file=.env.local --import tsx scripts/migrate-legacy-drawing-baseline.ts",
     "auth:provision-admin": "tsx scripts/provision-initial-administrator.ts",
@@ -37,7 +37,6 @@
     "react-dom": "19.2.4",
     "react-pdf": "^10.5.0",
     "server-only": "0.0.1",
-    "uploadthing": "7.7.4",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {

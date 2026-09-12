@@ -5,11 +5,7 @@ import { afterAll, beforeAll, describe, expect, test } from "vitest"
 
 import { resetTestDatabase } from "../../../scripts/test-database-safety"
 
-import {
-  ArtifactStorageError,
-  type ArtifactStorageProvider,
-  type ArtifactStoredObjectProvider,
-} from "./artifacts"
+import { ArtifactStorageError, type ArtifactStorageProvider } from "./artifacts"
 import {
   createArtifactStorageMigrationRepository,
   createArtifactStorageMigrationService,
@@ -21,38 +17,26 @@ const connectionString =
   "postgresql://mrmpl:mrmpl@127.0.0.1:5434/mrmpl_test"
 const pool = new Pool({ connectionString })
 
-class LegacyProvider implements ArtifactStoredObjectProvider {
-  readonly identifier = "uploadthing"
+class LegacySource {
   readonly objects = new Map<string, Buffer>()
   readonly publicStatuses = new Map<string, number>()
-  deleteCalls = 0
-  failDeletes = false
-  retainPublicCopyAfterDelete = false
   readCalls = 0
 
-  async delete({ key }: { key: string }) {
-    this.deleteCalls += 1
-    if (this.failDeletes) throw new Error("synthetic source deletion failure")
-    this.objects.delete(key)
-    if (!this.retainPublicCopyAfterDelete) {
-      for (const url of this.publicStatuses.keys()) {
-        this.publicStatuses.set(url, 410)
-      }
-    }
-  }
-
-  async read({ key }: { key: string }) {
+  fetch: typeof fetch = async (input, init) => {
     this.readCalls += 1
-    const bytes = this.objects.get(key)
-    if (!bytes) {
-      throw new ArtifactStorageError("not-found", "Synthetic source missing.")
-    }
-    return Buffer.from(bytes)
-  }
-
-  fetch: typeof fetch = async (input) => {
-    const status = this.publicStatuses.get(String(input)) ?? 404
-    return new Response(status === 200 ? "cached bytes" : null, { status })
+    expect(init).toEqual(
+      expect.objectContaining({ cache: "no-store", redirect: "manual" })
+    )
+    const url = String(input)
+    const status = this.publicStatuses.get(url) ?? 404
+    const bytes = status === 200 ? this.objects.get(url) : undefined
+    const body = bytes
+      ? (bytes.buffer.slice(
+          bytes.byteOffset,
+          bytes.byteOffset + bytes.byteLength
+        ) as ArrayBuffer)
+      : null
+    return new Response(body, { status })
   }
 }
 
@@ -102,8 +86,8 @@ async function seedLegacyObject(label: string) {
     [`MIG-${suffix}`, `${label} migration organization`]
   )
   const organizationId = organization.rows[0]!.id
-  const providerKey = `legacy/${suffix}`
-  const publicUrl = `https://legacy.example.test/${suffix}`
+  const providerKey = `file-${suffix}`
+  const publicUrl = `https://app.ufs.sh/f/${providerKey}`
   const object = await pool.query<{ id: string }>(
     `
       INSERT INTO core.file_objects (
@@ -195,8 +179,8 @@ describe("Artifact storage migration", () => {
   test("migrates one shared physical object once without changing logical records", async () => {
     const seeded = await seedLegacyObject("shared")
     const before = await logicalSnapshot(seeded.physicalObjectId)
-    const source = new LegacyProvider()
-    source.objects.set(seeded.providerKey, seeded.bytes)
+    const source = new LegacySource()
+    source.objects.set(seeded.publicUrl, seeded.bytes)
     source.publicStatuses.set(seeded.publicUrl, 200)
     const destination = new DestinationProvider()
     const repository = createArtifactStorageMigrationRepository({
@@ -206,19 +190,22 @@ describe("Artifact storage migration", () => {
       destinationProvider: destination,
       fetchImplementation: source.fetch,
       repository,
-      sourceProvider: source,
     })
 
     try {
       const result = await service.migrateBatch({ limit: 10 })
 
       expect(result).toMatchObject({
-        failures: [],
+        failures: [
+          {
+            code: "source-still-public",
+            physicalObjectId: seeded.physicalObjectId,
+          },
+        ],
         migrated: 1,
-        reconciledCleanups: 1,
+        reconciledCleanups: 0,
       })
-      expect(source.readCalls).toBe(1)
-      expect(source.deleteCalls).toBe(1)
+      expect(source.readCalls).toBe(2)
       expect(destination.customIds).toEqual([
         `${seeded.organizationId}:${seeded.sha256}:${seeded.bytes.byteLength}`,
       ])
@@ -240,8 +227,14 @@ describe("Artifact storage migration", () => {
       )
       expect(cleanup.rows[0]).toEqual({
         attempt_count: 1,
-        last_error: null,
-        status: "complete",
+        last_error: "source-still-public",
+        status: "pending",
+      })
+
+      source.publicStatuses.set(seeded.publicUrl, 410)
+      await expect(service.reconcile({ limit: 10 })).resolves.toMatchObject({
+        failures: [],
+        reconciledCleanups: 1,
       })
     } finally {
       await repository.close()
@@ -251,11 +244,9 @@ describe("Artifact storage migration", () => {
   test("retries ambiguous source cleanup and a completion commit gap without recopying", async () => {
     const seeded = await seedLegacyObject("recovery")
     const before = await logicalSnapshot(seeded.physicalObjectId)
-    const source = new LegacyProvider()
-    source.objects.set(seeded.providerKey, seeded.bytes)
+    const source = new LegacySource()
+    source.objects.set(seeded.publicUrl, seeded.bytes)
     source.publicStatuses.set(seeded.publicUrl, 200)
-    source.failDeletes = true
-    source.retainPublicCopyAfterDelete = true
     const destination = new DestinationProvider()
     const repository = createArtifactStorageMigrationRepository({
       connectionString,
@@ -277,20 +268,18 @@ describe("Artifact storage migration", () => {
       destinationProvider: destination,
       fetchImplementation: source.fetch,
       repository: faultedRepository,
-      sourceProvider: source,
     })
 
     try {
       const first = await service.migrateBatch({ limit: 10 })
       expect(first.failures).toEqual([
         {
-          code: "source-cleanup-failed",
+          code: "source-still-public",
           physicalObjectId: seeded.physicalObjectId,
         },
       ])
 
-      source.failDeletes = false
-      source.retainPublicCopyAfterDelete = false
+      source.publicStatuses.set(seeded.publicUrl, 410)
       failCompletionCommit = true
       const second = await service.reconcile({ limit: 10 })
       expect(second.failures).toEqual([

@@ -71,7 +71,7 @@ below.
   invalidation verification, but losing Redis must not lose a canonical write,
   authorization assignment, durable refresh request, or read-model version.
 - New retained uploads and official issued documents use the shared Artifact
-  service and UploadThing. Historical metadata without a physical Artifact
+  service and private GCS. Historical metadata without a physical Artifact
   object may still read from `LOCAL_FILE_STORAGE_PATH`; the application has no
   local write or delete interface.
 - HR recruitment source JSON is imported through `packages/migration` into the

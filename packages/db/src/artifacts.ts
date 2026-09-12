@@ -211,15 +211,12 @@ function targetLockKey(input: StoreArtifactInput) {
 export function createArtifactService(input: {
   connectionString: string
   provider?: ArtifactStorageProvider
-  compatibilityProviders?: readonly ArtifactStoredObjectProvider[]
 }) {
   const pool = new Pool({ connectionString: input.connectionString })
 
   function providerFor(identifier: ArtifactStorageProviderIdentifier) {
-    const provider = [
-      input.provider,
-      ...(input.compatibilityProviders ?? []),
-    ].find((candidate) => candidate?.identifier === identifier)
+    const provider =
+      input.provider?.identifier === identifier ? input.provider : undefined
     if (!provider) {
       throw new Error(
         `Artifact storage provider '${identifier}' is unavailable.`

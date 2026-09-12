@@ -6,7 +6,6 @@ import {
   ArtifactStorageError,
   type ArtifactStorageProvider,
   type ArtifactStorageProviderIdentifier,
-  type ArtifactStoredObjectProvider,
 } from "./artifacts"
 
 const destinationProvider = "google-cloud-storage" as const
@@ -159,12 +158,29 @@ function isLifecycle(value: string): value is ObjectLifecycle {
   )
 }
 
-function validSourcePublicUrl(value: string | null): value is string {
-  if (!value) return false
+function validSourcePublicUrl(
+  value: string | null,
+  providerKey: string
+): value is string {
+  if (!value || !providerKey || providerKey.trim() !== providerKey) return false
   try {
     const url = new URL(value)
+    const sourceHost =
+      url.hostname === "utfs.io" ||
+      (url.hostname.endsWith(".ufs.sh") && url.hostname !== "ufs.sh")
+    const encodedKey = url.pathname.startsWith("/f/")
+      ? url.pathname.slice(3)
+      : null
     return (
-      url.protocol === "https:" && !url.username && !url.password && !url.hash
+      url.protocol === "https:" &&
+      sourceHost &&
+      !url.port &&
+      !url.username &&
+      !url.password &&
+      !url.hash &&
+      !url.search &&
+      encodedKey !== null &&
+      decodeURIComponent(encodedKey) === providerKey
     )
   } catch {
     return false
@@ -434,7 +450,7 @@ export function createArtifactStorageMigrationRepository(input: {
       const validKey = object.provider_key.trim().length > 0
       const validProviderLocator =
         (object.provider === sourceProvider &&
-          validSourcePublicUrl(object.public_url)) ||
+          validSourcePublicUrl(object.public_url, object.provider_key)) ||
         (object.provider === destinationProvider && object.public_url === null)
 
       if (
@@ -483,7 +499,12 @@ export function createArtifactStorageMigrationRepository(input: {
       const cleanup = cleanupByObject.get(object.id)
       if (
         cleanup &&
-        (cleanup.expected_sha256 !== object.sha256 ||
+        (cleanup.source_provider !== sourceProvider ||
+          !validSourcePublicUrl(
+            cleanup.source_public_url,
+            cleanup.source_provider_key
+          ) ||
+          cleanup.expected_sha256 !== object.sha256 ||
           cleanup.expected_byte_size !== object.byte_size ||
           cleanup.destination_provider !== object.provider ||
           cleanup.destination_provider_key !== object.provider_key ||
@@ -622,7 +643,8 @@ export function createArtifactStorageMigrationRepository(input: {
       object.provider !== sourceProvider ||
       object.lifecycleState !== "available" ||
       object.liveReferenceCount < 1 ||
-      !destinationProviderKey
+      !destinationProviderKey ||
+      !validSourcePublicUrl(object.publicUrl, object.providerKey)
     ) {
       return { status: "discrepancy" }
     }
@@ -889,38 +911,85 @@ function failureCode(error: unknown, operation: string) {
   return `${operation}-failed`
 }
 
-async function deleteAndConfirmUnavailable(
-  provider: ArtifactStoredObjectProvider,
-  key: string,
+async function fetchLegacySource(
   publicUrl: string | null,
+  providerKey: string,
   fetchImplementation: typeof fetch
 ) {
-  if (
-    provider.identifier === sourceProvider &&
-    !validSourcePublicUrl(publicUrl)
-  ) {
+  if (!validSourcePublicUrl(publicUrl, providerKey)) {
     throw new Error("Artifact source public URL is invalid.")
   }
+  try {
+    const response = await fetchImplementation(publicUrl, {
+      cache: "no-store",
+      redirect: "manual",
+      signal: AbortSignal.timeout(15_000),
+    })
+    if (response.status === 404 || response.status === 410) {
+      await response.body?.cancel().catch(() => undefined)
+      throw new ArtifactStorageError(
+        "not-found",
+        "The Artifact source was not found."
+      )
+    }
+    if (!response.ok) {
+      await response.body?.cancel().catch(() => undefined)
+      throw new ArtifactStorageError(
+        "provider-failure",
+        "The Artifact source returned a failed response."
+      )
+    }
+    return Buffer.from(await response.arrayBuffer())
+  } catch (error) {
+    if (error instanceof ArtifactStorageError) throw error
+    throw new ArtifactStorageError(
+      "provider-failure",
+      "The Artifact source could not be read.",
+      { cause: error }
+    )
+  }
+}
+
+async function legacySourceUnavailable(
+  publicUrl: string | null,
+  providerKey: string,
+  fetchImplementation: typeof fetch
+) {
+  if (!validSourcePublicUrl(publicUrl, providerKey)) {
+    throw new Error("Artifact source public URL is invalid.")
+  }
+  let response: Response
+  try {
+    response = await fetchImplementation(publicUrl, {
+      cache: "no-store",
+      redirect: "manual",
+      signal: AbortSignal.timeout(15_000),
+    })
+  } catch (error) {
+    throw new ArtifactStorageError(
+      "provider-failure",
+      "Artifact source availability could not be confirmed.",
+      { cause: error }
+    )
+  }
+  await response.body?.cancel().catch(() => undefined)
+  if (response.status === 404 || response.status === 410) return true
+  if (response.ok) return false
+  throw new ArtifactStorageError(
+    "provider-failure",
+    "Artifact source availability response was ambiguous."
+  )
+}
+
+async function deleteAndConfirmProviderUnavailable(
+  provider: ArtifactStorageProvider,
+  key: string
+) {
   let deletionError: unknown
   try {
     await provider.delete({ key })
   } catch (error) {
     deletionError = error
-  }
-  if (provider.identifier === sourceProvider) {
-    let response: Response
-    try {
-      response = await fetchImplementation(publicUrl!, {
-        cache: "no-store",
-        redirect: "manual",
-        signal: AbortSignal.timeout(15_000),
-      })
-    } catch (error) {
-      throw deletionError ?? error
-    }
-    await response.body?.cancel().catch(() => undefined)
-    if (response.status === 404 || response.status === 410) return
-    throw deletionError ?? new Error("Artifact source remains available.")
   }
   try {
     await provider.read({ key })
@@ -937,15 +1006,11 @@ export function createArtifactStorageMigrationService(input: {
   destinationProvider: ArtifactStorageProvider
   fetchImplementation?: typeof fetch
   repository: ArtifactStorageMigrationRepository
-  sourceProvider: ArtifactStoredObjectProvider
 }) {
   if (input.destinationProvider.identifier !== destinationProvider) {
     throw new Error(
       "Artifact migration destination must be Google Cloud Storage."
     )
-  }
-  if (input.sourceProvider.identifier !== sourceProvider) {
-    throw new Error("Artifact migration source must be UploadThing.")
   }
   const fetchImplementation = input.fetchImplementation ?? fetch
 
@@ -959,6 +1024,13 @@ export function createArtifactStorageMigrationService(input: {
   }
 
   async function reconcileCleanup(cleanup: ArtifactSourceCleanup) {
+    if (
+      cleanup.sourceProvider !== sourceProvider ||
+      !validSourcePublicUrl(cleanup.sourcePublicUrl, cleanup.sourceProviderKey)
+    ) {
+      await recordCleanupFailure(cleanup, "invalid-source-metadata")
+      return "invalid-source-metadata"
+    }
     let pairIsCurrent: boolean
     try {
       pairIsCurrent = await input.repository.cleanupPairIsCurrent(cleanup)
@@ -993,12 +1065,15 @@ export function createArtifactStorageMigrationService(input: {
       return "destination-integrity-failure"
     }
     try {
-      await deleteAndConfirmUnavailable(
-        input.sourceProvider,
-        cleanup.sourceProviderKey,
+      const unavailable = await legacySourceUnavailable(
         cleanup.sourcePublicUrl,
+        cleanup.sourceProviderKey,
         fetchImplementation
       )
+      if (!unavailable) {
+        await recordCleanupFailure(cleanup, "source-still-public")
+        return "source-still-public"
+      }
     } catch (error) {
       const code = failureCode(error, "source-cleanup")
       await recordCleanupFailure(cleanup, code)
@@ -1036,7 +1111,7 @@ export function createArtifactStorageMigrationService(input: {
         object.lifecycleState !== "available" ||
         object.liveReferenceCount < 1 ||
         !object.providerKey.trim() ||
-        !validSourcePublicUrl(object.publicUrl) ||
+        !validSourcePublicUrl(object.publicUrl, object.providerKey) ||
         !/^[a-f0-9]{64}$/.test(object.sha256)
       ) {
         failures.push({
@@ -1047,7 +1122,11 @@ export function createArtifactStorageMigrationService(input: {
       }
       let bytes: Buffer
       try {
-        bytes = await input.sourceProvider.read({ key: object.providerKey })
+        bytes = await fetchLegacySource(
+          object.publicUrl,
+          object.providerKey,
+          fetchImplementation
+        )
       } catch (error) {
         failures.push({
           code: failureCode(error, "source-read"),
@@ -1154,20 +1233,27 @@ export function createArtifactStorageMigrationService(input: {
       : []
     let recoveredDeletions = 0
     for (const object of orphans) {
-      const provider =
-        object.provider === sourceProvider
-          ? input.sourceProvider
-          : input.destinationProvider
       try {
         const result = await input.repository.recoverDeletionFailedObject(
           object,
-          () =>
-            deleteAndConfirmUnavailable(
-              provider,
-              object.providerKey,
-              object.publicUrl,
-              fetchImplementation
+          async () => {
+            if (object.provider === sourceProvider) {
+              if (
+                !(await legacySourceUnavailable(
+                  object.publicUrl,
+                  object.providerKey,
+                  fetchImplementation
+                ))
+              ) {
+                throw new Error("Artifact source remains publicly available.")
+              }
+              return
+            }
+            await deleteAndConfirmProviderUnavailable(
+              input.destinationProvider,
+              object.providerKey
             )
+          }
         )
         if (result === "deleted") recoveredDeletions += 1
         else {
