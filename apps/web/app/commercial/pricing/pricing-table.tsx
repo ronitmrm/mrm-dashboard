@@ -45,6 +45,10 @@ const widePricingColumns = new Set([
 ])
 
 const mediumPricingColumns = new Set([
+  "Rejection (INR/kg)",
+  "Total - A (INR/kg)",
+  "Profit - B (INR/kg)",
+  "Total - A + B (INR/kg)",
   "Change Date",
   "Customer Part Code",
   "Customer",

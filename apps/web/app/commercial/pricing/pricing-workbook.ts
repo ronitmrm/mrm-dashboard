@@ -1,5 +1,8 @@
 import type { createCommercialCostingRepository } from "@workspace/db"
-import { isForgingCostApplicable } from "@workspace/db/pricing-calculation"
+import {
+  calculateProductProcessCost,
+  isForgingCostApplicable,
+} from "@workspace/db/pricing-calculation"
 import * as XLSX from "xlsx"
 
 export type PricingRegisterRow = Awaited<
@@ -99,6 +102,66 @@ function isCustomerPackageSummary(row: PricingRegisterRow) {
   return Boolean(row.quoteNumber) && isPackageOrAssembly(row)
 }
 
+function packageTotalsPerKg(row: PricingRegisterRow) {
+  const product = row.product
+  const weight100Pcs = Number(product.weight100Pcs)
+  if (!Number.isFinite(weight100Pcs) || weight100Pcs <= 0) return null
+  const { processCostPerKg } = calculateProductProcessCost({
+    annealing: Number(product.annealing ?? 0),
+    assemblyOperationCost: Number(product.assemblyOperationCost ?? 0),
+    buffing: Number(product.buffing ?? 0),
+    checking: Number(product.checking ?? 0),
+    deburring: Number(product.deburring ?? 0),
+    machiningCost: Number(product.machiningCost ?? 0),
+    marking: Number(product.marking ?? 0),
+    overheadCost: Number(product.overheadCost ?? 0),
+    plating: Number(product.plating ?? 0),
+    sealant: Number(product.sealant ?? 0),
+    washing: Number(product.washing ?? 0),
+    weight100Pcs,
+  })
+  const rejectionCost = processCostPerKg * Number(product.rejectionPercent ?? 0)
+  const totalA =
+    processCostPerKg +
+    rejectionCost +
+    Number(row.quoteInputs.packingCost ?? 0) +
+    Number(row.quoteInputs.shippingCost ?? 0)
+  const profitB = totalA * Number(row.quoteInputs.profitPercent ?? 0)
+  const totalAPlusB = totalA + profitB
+  const piecesPerKg = 1000 / weight100Pcs
+  const rateInr = totalAPlusB / piecesPerKg
+  const childQuoteTotal = row.calculation.childQuoteTotal
+  const totalRateInr =
+    childQuoteTotal == null ? undefined : Number(childQuoteTotal) + rateInr
+  const conversionRate = Number(row.quoteInputs.conversionRate)
+  return {
+    rejectionCost,
+    totalA,
+    profitB,
+    totalAPlusB,
+    piecesPerKg,
+    rateInr,
+    totalRateInr,
+    rateUsd:
+      totalRateInr !== undefined && conversionRate > 0
+        ? totalRateInr / conversionRate
+        : undefined,
+  }
+}
+
+function directTotalsPerKg(row: PricingRegisterRow) {
+  const piecesPerKg = Number(row.calculation.piecesPerKg)
+  if (!Number.isFinite(piecesPerKg) || piecesPerKg <= 0) return null
+  return Object.fromEntries(
+    ["rejectionCost", "totalA", "profitB", "totalAPlusB"].map((key) => [
+      key,
+      row.calculation[key] == null
+        ? undefined
+        : Number(row.calculation[key]) * piecesPerKg,
+    ])
+  )
+}
+
 const packageNotApplicableColumns = [
   "Blank Piece Weight ( gm )",
   "Scrap Rate (INR/kg)",
@@ -161,10 +224,10 @@ export const pricingFormulaHeaders = [
   "Scrap Return Price ( Inc. Burning Loss )",
   "Scrap Return Price",
   "Total Rods Cost",
-  "Rejection",
-  "Total - A",
-  "Profit - B",
-  "Total - A + B",
+  "Rejection (INR/kg)",
+  "Total - A (INR/kg)",
+  "Profit - B (INR/kg)",
+  "Total - A + B (INR/kg)",
   "Rate / PCS In INR",
   "Total Rate / PCS In INR",
   "BOM Component Cost (INR/pc)",
@@ -198,10 +261,18 @@ export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
   const product = row.product
   const context = row.productContext
   const inputs = row.quoteInputs
-  const calculation = row.calculation
   const isCustomerPrice = Boolean(row.quoteNumber)
   const isPackageOrAssemblyRow = isPackageOrAssembly(row)
   const isPackageSummary = isCustomerPackageSummary(row)
+  const packageCalculation = isPackageSummary ? packageTotalsPerKg(row) : null
+  const calculation = packageCalculation
+    ? { ...row.calculation, ...packageCalculation }
+    : row.calculation
+  const totalsPerKg = isPackageSummary
+    ? packageCalculation
+    : isDirectPricing(product)
+      ? directTotalsPerKg(row)
+      : calculation
   const quoteStatus =
     isCustomerPrice && row.componentDepth === 0 && row.customerPartCode?.trim()
       ? row.lifecycleStatus === "P"
@@ -319,10 +390,18 @@ export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
     ),
     "Scrap Return Price": customerValue(calculation, "scrapReturnPrice"),
     "Total Rods Cost": customerValue(calculation, "totalRodsCost"),
-    Rejection: customerValue(calculation, "rejectionCost"),
-    "Total - A": customerValue(calculation, "totalA"),
-    "Profit - B": customerValue(calculation, "profitB"),
-    "Total - A + B": customerValue(calculation, "totalAPlusB"),
+    "Rejection (INR/kg)": totalsPerKg
+      ? customerValue(totalsPerKg, "rejectionCost")
+      : "-",
+    "Total - A (INR/kg)": totalsPerKg
+      ? customerValue(totalsPerKg, "totalA")
+      : "-",
+    "Profit - B (INR/kg)": totalsPerKg
+      ? customerValue(totalsPerKg, "profitB")
+      : "-",
+    "Total - A + B (INR/kg)": totalsPerKg
+      ? customerValue(totalsPerKg, "totalAPlusB")
+      : "-",
     "Rate / PCS In INR": customerValue(calculation, "rateInr"),
     "Total Rate / PCS In INR": isPackageSummary
       ? customerValue(calculation, "rateInr")

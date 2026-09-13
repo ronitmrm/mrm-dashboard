@@ -375,6 +375,17 @@ applied once to the final INR total. The parent never applies rejection or profi
 to the combined component value. Nested Package and Assembly prices follow the
 same rule recursively. Product Parameter Costing separately rolls up component
 base costs plus the unadjusted parent process cost per piece.
+In the Pricing register and its Excel export, Package/Assembly Rejection,
+Total A, Profit B and A+B are displayed in INR/kg, matching Derived List rows.
+These parent intermediates are calculated from the saved Product process inputs
+and customer packing, shipping, rejection and profit inputs: rejection/kg =
+process/kg × rejection%; A/kg = process/kg + rejection/kg + packing/kg +
+shipping/kg; B/kg = A/kg × profit%; A+B/kg = A/kg + B/kg. Divide by unrounded
+Pieces/kg for the parent's INR/piece amount, then add BOM component prices.
+Missing or invalid package weight leaves per-kg intermediates unavailable (`-`).
+Saved quotation amounts and component rejection/profit rules remain unchanged.
+Direct Purchase List intermediates, saved per piece, are converted to INR/kg
+using their saved Pieces/kg for these same register columns.
 _Avoid_: Applying parent rejection or profit to component prices, flattening all
 rejection/profit into one package-wide percentage.
 

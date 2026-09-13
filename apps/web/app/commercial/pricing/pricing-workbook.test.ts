@@ -124,10 +124,10 @@ describe("Pricing spreadsheet workbook", () => {
       "Scrap Return Price ( Inc. Burning Loss )",
       "Scrap Return Price",
       "Total Rods Cost",
-      "Rejection",
-      "Total - A",
-      "Profit - B",
-      "Total - A + B",
+      "Rejection (INR/kg)",
+      "Total - A (INR/kg)",
+      "Profit - B (INR/kg)",
+      "Total - A + B (INR/kg)",
       "Rate / PCS In INR",
       "Total Rate / PCS In INR",
       "BOM Component Cost (INR/pc)",
@@ -186,6 +186,14 @@ describe("Pricing spreadsheet workbook", () => {
   test("shows WORKING direct prices in Direct columns and hides machining", () => {
     const directRow: PricingRegisterRow = {
       ...row,
+      calculation: {
+        ...row.calculation,
+        piecesPerKg: 100,
+        totalA: 0.8,
+        profitB: 0.16,
+        totalAPlusB: 0.96,
+        rejectionCost: 0.04,
+      },
       product: {
         ...row.product,
         directPurchasePricePerKg: 0,
@@ -201,6 +209,8 @@ describe("Pricing spreadsheet workbook", () => {
       "Direct (INR/pc)": "0.77",
       "M/c Cost (INR/kg)": "-",
       "M/c Cost (INR/pc)": "-",
+      "Total - A (INR/kg)": "80.00",
+      "Profit - B (INR/kg)": "16.00",
     })
   })
 
@@ -548,6 +558,39 @@ describe("Pricing spreadsheet workbook", () => {
       "Scrap Rate (INR/kg)": "-",
       "Total Package Price Including BOM Component Cost (INR/pc)": "68.42",
       "Total Rate / PCS In INR": "14.01",
+      "Total - A (INR/kg)": "-",
+    })
+  })
+
+  test("calculates package totals per kg from inputs, then matches its per-piece rate", () => {
+    const packageRow: PricingRegisterRow = {
+      ...row,
+      itemType: "Package",
+      product: {
+        assemblyOperationCost: 5,
+        overheadCost: 10,
+        weight100Pcs: 15,
+        rejectionPercent: 0.01,
+      },
+      quoteInputs: { packingCost: 10, shippingCost: 6, profitPercent: 0.08 },
+      calculation: { totalA: 999, profitB: 999, rateInr: 0.50463 },
+    }
+    expect(toPricingViewRow(packageRow)).toMatchObject({
+      "Rejection (INR/kg)": "0.15",
+      "Total - A (INR/kg)": "31.15",
+      "Profit - B (INR/kg)": "2.49",
+      "Total - A + B (INR/kg)": "33.64",
+      "Rate / PCS In INR": "0.50",
+    })
+    const revised = {
+      ...packageRow,
+      product: { ...packageRow.product, assemblyOperationCost: 10 },
+    }
+    expect(toPricingViewRow(revised)["Total - A (INR/kg)"]).toBe("36.20")
+    expect(toPricingViewRow(revised)["Rate / PCS In INR"]).toBe("0.59")
+    const sheet = buildPricingWorkbook([packageRow]).Sheets["Pricing View"]!
+    expect(XLSX.utils.sheet_to_json(sheet)[0]).toMatchObject({
+      "Total - A (INR/kg)": "31.15",
     })
   })
 
