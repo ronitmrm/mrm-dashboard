@@ -83,7 +83,12 @@ Quality Inspection Parameter Master is production-unit-scoped even though the
 three quality code masters above are company-wide.
 
 Setup Name Master, Route Master, Cycle Time Master, and Tooling Master are
-production-unit masters. Route Master selects Setup Name and Machine Family;
+production-unit masters. Route Master selects Setup Name and Machine Family.
+Machine Type is fetched from Machine Master for that family in the selected
+production unit, displayed read-only, and derived again on save/import. All
+machines in a family must agree on its type; missing or conflicting types must
+be corrected in Machine Master before saving a route setup.
+Route Master does not accept an independently entered Machine Type;
 Cycle Time Master and Tooling Master select an existing Route Master Line and
 cannot redefine its identity.
 

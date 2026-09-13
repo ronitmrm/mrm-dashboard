@@ -8,6 +8,32 @@ import { createRecruitmentRepository } from "./recruitment"
 
 afterEach(() => vi.restoreAllMocks())
 
+test("route setup saves fetch Machine Type from the selected unit's Machine Master", async () => {
+  const pool = new Pool()
+  const query = vi.fn(async (sql: string, values?: unknown[]) => ({
+    rows: sql.includes("FROM catalog.machines")
+      ? [{ machineFamily: String(values?.[2]), machineType: "Drilling" }]
+      : [{ id: "existing" }],
+  }))
+  vi.spyOn(pool, "connect").mockImplementation(
+    async () => ({ query, release: vi.fn() }) as unknown as PoolClient
+  )
+  await createDashboardPlanningRepository({ pool }).upsertRouteOption({
+    organizationId: "organization", itemUid: "P1", routeCode: "1",
+    productionFloorCode: "cnc", machineFamily: "D5",
+    sourcePayload: { machineType: "Incorrect" },
+    setups: [{ setupNumber: 1, sequence: 1, operationCode: "Drill" }],
+  })
+  expect(query).toHaveBeenCalledWith(
+    expect.stringContaining("FROM catalog.machines"), ["organization", "existing", "D5"]
+  )
+  expect(query).toHaveBeenCalledWith(
+    expect.stringContaining("UPDATE manufacturing.operation_setups"),
+    expect.arrayContaining([expect.objectContaining({ machineFamily: "D5", machineType: "Drilling" })])
+  )
+  await pool.end()
+})
+
 test("Website Field options reject case variants within the same field", async () => {
   const pool = new Pool()
   const query = vi.fn(async (sql: string) => ({

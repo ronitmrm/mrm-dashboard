@@ -10,6 +10,7 @@ import {
   type RepositoryPoolOptions,
 } from "./postgres-runtime"
 import {
+  machineTypeForFamily,
   validConfirmedPrioritySetupNumbers,
   workOrderIdentityMatches,
 } from "./planning-rules"
@@ -979,6 +980,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
       productionFloorCode?: string
       replaceSetups?: boolean
       requireSetupNameMaster?: boolean
+      machineFamily?: string
       routeCode: string
       sourcePayload?: unknown
       setups: Array<{
@@ -1026,7 +1028,26 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           `,
           [itemId, routeCode, productionFloorCode]
         )
-        const sourcePayload = input.sourcePayload ?? input
+        const sourcePayload = {
+          ...(typeof input.sourcePayload === "object" && input.sourcePayload !== null
+            && !Array.isArray(input.sourcePayload) ? input.sourcePayload : input),
+        }
+        if (input.machineFamily !== undefined) {
+          const machineFamily = requiredText(input.machineFamily, "Machine Family")
+          const machines = await client.query<{ machineFamily: string; machineType: string }>(
+            `SELECT source_payload->>'machineFamily' AS "machineFamily",
+                    source_payload->>'machineType' AS "machineType"
+             FROM catalog.machines
+             WHERE organization_id = $1 AND production_floor_id = $2 AND active
+               AND lower(btrim(source_payload->>'machineFamily')) = lower($3)`,
+            [input.organizationId, productionFloorId, machineFamily]
+          )
+          const machineType = machineTypeForFamily(machines.rows, machineFamily)
+          if (!machineType) throw new Error(
+            "Machine Family must have one consistent Machine Type in Machine Master for this Production Unit."
+          )
+          Object.assign(sourcePayload, { machineFamily, machineUsed: machineFamily, machineType })
+        }
         const route = existing.rows[0]
           ? await client.query<{ id: string }>(
               `
