@@ -229,6 +229,9 @@ export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
     "Customer Part Code": isCustomerPrice
       ? dashIfEmpty(row.customerPartCode)
       : "-",
+    "Package Customer Code (search only)": isCustomerPrice
+      ? dashIfEmpty(row.rootCustomerPartCode)
+      : "-",
     "Price Rev": isCustomerPrice ? row.revision : "-",
     Under: dashIfEmpty(row.parentUid),
     "BOM Qty": row.componentQuantity.toFixed(2),
@@ -367,6 +370,7 @@ export const pricingHeaders = Object.keys(
     currency: "",
     customerId: "",
     customerPartCode: null,
+    rootCustomerPartCode: null,
     customerUid: "",
     enquiryDescription: "",
     enquiryNumber: null,

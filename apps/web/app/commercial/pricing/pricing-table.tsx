@@ -37,6 +37,7 @@ import {
 } from "./pricing-table-state"
 
 const widePricingColumns = new Set([
+  "Package Customer Code (search only)",
   "Description",
   "MRMPL Product Description",
   "Enquiry Description",
@@ -166,6 +167,11 @@ export function PricingTable({
           { tone: "brand", label: "On This Page", value: visibleRows.length }
         ]}
       />
+      <p className="text-xs text-muted-foreground">
+        Filter Package Customer Code (search only) to find a part and all its BOM
+        components. This is the top-level part’s code, not a code assigned to each
+        component. Customer Part Code shows each row’s own code.
+      </p>
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
         <div className="flex items-center gap-2">
           <span

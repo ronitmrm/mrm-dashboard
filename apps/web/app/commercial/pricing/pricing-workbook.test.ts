@@ -1,5 +1,9 @@
 import { describe, expect, test } from "vitest"
 import * as XLSX from "xlsx"
+import {
+  filterPricingTableRows,
+  pricingFilterColumns,
+} from "./pricing-table-state"
 
 import {
   buildPricingWorkbook,
@@ -27,6 +31,7 @@ const row: PricingRegisterRow = {
   currency: "USD",
   customerId: "customer-id",
   customerPartCode: "PART-1",
+  rootCustomerPartCode: "PART-1",
   customerUid: "C001",
   enquiryDescription: "Valve",
   enquiryNumber: "ENQ-1",
@@ -62,6 +67,49 @@ const row: PricingRegisterRow = {
 }
 
 describe("Pricing spreadsheet workbook", () => {
+  test("finds an entire package by search-only code without assigning it to components", () => {
+    const packageRow = {
+      ...row,
+      customerPartCode: "00068-0302",
+      rootCustomerPartCode: "00068-0302",
+      itemType: "Package",
+    }
+    const source = [
+      packageRow,
+      {
+        ...packageRow,
+        itemType: "Assembly",
+        componentDepth: 1,
+        customerPartCode: null,
+      },
+      {
+        ...packageRow,
+        itemType: "List",
+        componentDepth: 2,
+        customerPartCode: "CHILD-OWN",
+      },
+      { ...row, quoteNumber: "", rootCustomerPartCode: null },
+    ]
+    const rows = source.map((entry, index) => ({
+      customerId: entry.customerId,
+      rowKey: String(index),
+      values: toPricingViewRow(entry),
+    }))
+    const header = "Package Customer Code (search only)"
+    const columns = pricingFilterColumns(rows, pricingHeaders)
+    const matching = filterPricingTableRows(rows, columns, {
+      [pricingHeaders.indexOf(header)]: ["00068-0302"],
+    })
+    expect(matching.map((entry) => entry.rowKey)).toEqual(["0", "1", "2"])
+    expect(matching.map((entry) => entry.values["Customer Part Code"])).toEqual(
+      ["00068-0302", "-", "CHILD-OWN"]
+    )
+    const exported = XLSX.utils.sheet_to_json(
+      buildPricingWorkbook(source).Sheets["Pricing View"]!
+    )
+    expect(exported).toEqual(rows.map((entry) => entry.values))
+  })
+
   test("omits BOM Level and identifies every displayed pricing formula", () => {
     expect(pricingHeaders).not.toContain("BOM Level")
     expect(pricingFormulaHeaders).toEqual([

@@ -539,6 +539,11 @@ BOM component rows inherit the package context and may omit it. A component sold
 separately is a root line with its own Customer Part Code. BOM hierarchy depth
 remains internal structural metadata and is not displayed as a Pricing column.
 Product Base rows never invent customer or Quote values.
+Pricing's **Package Customer Code (search only)** repeats the top-level quoted
+part's customer code on that row and all its BOM descendants, including nested
+assemblies. Filter this column to find the complete group. It is a lookup aid,
+not a customer-code assignment to the components; **Customer Part Code** remains
+each row's own code. Product Base rows show `-` in the search-only column.
 Pricing presents Q/P once and does not expose migration-diagnostic completeness
 or missing-value columns.
 

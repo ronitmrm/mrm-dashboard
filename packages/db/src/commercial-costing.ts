@@ -298,6 +298,7 @@ const pricingRegisterRow = (row: PricingRegisterDatabaseRow) => {
     currency: row.currency,
     customerId: row.customer_id,
     customerPartCode: row.customer_part_code,
+    rootCustomerPartCode: row.quote_number ? row.root_customer_part_code : null,
     customerUid: row.customer_uid,
     enquiryDescription: row.enquiry_description,
     enquiryNumber:
