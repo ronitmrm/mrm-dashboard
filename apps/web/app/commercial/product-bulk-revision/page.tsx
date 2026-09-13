@@ -20,8 +20,10 @@ import { requireCapability } from "@/lib/auth/require-capability"
 
 import { createBulkPriceRevisionAction } from "../revisions/actions"
 import { BulkRevisionRequestStatus } from "../revisions/bulk-revision-request-status"
+import { BulkRevisionEntry } from "../revisions/bulk-revision-entry"
 
 export const dynamic = "force-dynamic"
+export const maxDuration = 300
 
 function localDate() {
   const now = new Date()
@@ -61,9 +63,6 @@ export default async function ProductBulkRevisionPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Button asChild variant="outline">
-            <Link href="/commercial/pricing/update">Update From Excel</Link>
-          </Button>
-          <Button asChild variant="outline">
             <Link href="/commercial/product-costing">
               Product Costing Queue
             </Link>
@@ -89,63 +88,65 @@ export default async function ProductBulkRevisionPage() {
         />
       </section>
 
-      <SectionCard>
-        <CardHeader>
-          <CardTitle>Start A Product Revision</CardTitle>
-          <CardDescription>
-            Record why one or more product cost parameters need revision. Each
-            product code is selected once in Product Parameter Costing.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {summary.organizationId ? (
-            <form
-              action={createBulkPriceRevisionAction}
-              className="grid gap-4 md:grid-cols-[16rem_1fr_auto] md:items-end"
-            >
-              <input
-                name="organization_id"
-                type="hidden"
-                value={summary.organizationId}
-              />
-              <input
-                name="revision_route"
-                type="hidden"
-                value="Product Parameter Bulk Revision"
-              />
-              <Field>
-                <FieldLabel htmlFor="product-revision-effective">
-                  Effective Date
-                </FieldLabel>
-                <Input
-                  defaultValue={localDate()}
-                  id="product-revision-effective"
-                  name="effective_on"
-                  required
-                  type="date"
+      <BulkRevisionEntry>
+        <SectionCard>
+          <CardHeader>
+            <CardTitle>Start A Product Revision</CardTitle>
+            <CardDescription>
+              Record why one or more product cost parameters need revision. Each
+              product code is selected once in Product Parameter Costing.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {summary.organizationId ? (
+              <form
+                action={createBulkPriceRevisionAction}
+                className="grid gap-4 md:grid-cols-[16rem_1fr_auto] md:items-end"
+              >
+                <input
+                  name="organization_id"
+                  type="hidden"
+                  value={summary.organizationId}
                 />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="product-revision-reason">
-                  Reason
-                </FieldLabel>
-                <Textarea
-                  className="min-h-10"
-                  id="product-revision-reason"
-                  name="reason"
-                  required
-                  rows={1}
+                <input
+                  name="revision_route"
+                  type="hidden"
+                  value="Product Parameter Bulk Revision"
                 />
-              </Field>
-              <Button type="submit">Send To Product Costing</Button>
-            </form>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              The MRMPL organization must be loaded first.
-            </p>
-          )}
-        </CardContent>
-      </SectionCard>
+                <Field>
+                  <FieldLabel htmlFor="product-revision-effective">
+                    Effective Date
+                  </FieldLabel>
+                  <Input
+                    defaultValue={localDate()}
+                    id="product-revision-effective"
+                    name="effective_on"
+                    required
+                    type="date"
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="product-revision-reason">
+                    Reason
+                  </FieldLabel>
+                  <Textarea
+                    className="min-h-10"
+                    id="product-revision-reason"
+                    name="reason"
+                    required
+                    rows={1}
+                  />
+                </Field>
+                <Button type="submit">Send To Product Costing</Button>
+              </form>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                The MRMPL organization must be loaded first.
+              </p>
+            )}
+          </CardContent>
+        </SectionCard>
+      </BulkRevisionEntry>
       <BulkRevisionRequestStatus origin="product" />
     </div>
   )

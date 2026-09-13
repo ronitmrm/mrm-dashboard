@@ -23,7 +23,9 @@ import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { createBulkPriceRevisionAction } from "../revisions/actions"
 import { BulkRevisionRequestStatus } from "../revisions/bulk-revision-request-status"
+import { BulkRevisionEntry } from "../revisions/bulk-revision-entry"
 export const dynamic = "force-dynamic"
+export const maxDuration = 300
 function localDate() {
   const now = new Date()
   const year = now.getFullYear()
@@ -67,9 +69,6 @@ export default async function CustomerBulkRevisionPage({
         actions={
           <>
             <Button asChild variant="outline">
-              <Link href="/commercial/pricing/update">Update From Excel</Link>
-            </Button>
-            <Button asChild variant="outline">
               <Link href="/commercial/customer-costing">
                 Customer Parameter Costing
               </Link>
@@ -95,7 +94,7 @@ export default async function CustomerBulkRevisionPage({
         />
       </section>
 
-      <div className="grid gap-6">
+      <BulkRevisionEntry>
         <SectionCard>
           <CardHeader>
             <CardTitle>Start A Customer Revision</CardTitle>
@@ -178,7 +177,7 @@ export default async function CustomerBulkRevisionPage({
             )}
           </CardContent>
         </SectionCard>
-      </div>
+      </BulkRevisionEntry>
       <BulkRevisionRequestStatus origin="customer" />
     </div>
   )
