@@ -1,17 +1,15 @@
 # Agent Rules: MRMPL Dashboard
 
+- DO NOT mutate this file unless explicitly instructued to do so by the user.
 - This repo is meant to be iterated on by non-technical users through AI agents. Keep changes boring, traceable, and easy to verify.
 - Save the handoff docs in this directory under `./.handoff/`. Create it if not present and add it to .gitignore as well.
 - While running powershell commands, run this for execution policy bypass: `Set-ExecutionPolicy Bypass -Scope Process -Force`.
 - Be extremely concise when responding to me. Sacrifice grammar for the sake of concision.
-- find the skill `tdd` and follow the test driven development approach highlighted in that skill. if you don't find the said skill, don't bother.
-- **Be smart with your choice of following `tdd` approach given a task; not every task requires an over engineered solution. trivial UI changes for example do not need 3 tests that validate the change. prefer being quick with the implementation, especially when given a targeted request.**
 - reach for the `neon`, `upstash` and `gh` cli's when needed.
 - For Neon work, always use the installed Neon Postgres plugin instead of the Neon CLI.
 - When starting local server/s, opt for the managed config by default, unless specified otherwise by the user.
-- On this Linux VM, the installed Docker Engine may run isolated PostgreSQL and Redis containers for tests and performance benchmarks (authorized 2026-09-08). Use dedicated test databases, bind published ports to localhost, and remove containers and test volumes created for the task after testing. Keep existing containers and application databases untouched.
 - Managed application configuration remains the default for development. The Docker test allowance does not authorize installing virtualization platforms, changing Windows optional features, or changing firmware virtualization settings.
-Never commit `AGENTS.override.md`, and always commit `AGENTS.md`. Do not add `AGENTS.override.md` to `.gitignore` either.
+- Never commit `AGENTS.override.md`, and always commit `AGENTS.md`. Do not add `AGENTS.override.md` to `.gitignore` either.
 
 ## Code Architecture Best Practices
 
@@ -23,8 +21,6 @@ Never commit `AGENTS.override.md`, and always commit `AGENTS.md`. Do not add `AG
   - `any` is the enemy. inferred types are our friend. our system should adapt to changes instead of requiring changes everywhere.
   - if your TS code looks like a python dev wrote it, it is bad TS code.
   - write typescript in ways that Matt Pocock and Theo would be proud of.
-
-### A note about TESTS: tests are good! having said that, endless smoke tests, regression tests, etc. are wasteful. write less tests, but good tests that do not leave you in doubt about the integrity of the changes you made. when UI testing - reach for the in-app browser first. there is a high chance that the user is using the codex desktop app. if the in-app browser is missing, settle for the `agent-browser` cli.
 
 ## Project Shape
 
@@ -51,6 +47,39 @@ Never commit `AGENTS.override.md`, and always commit `AGENTS.md`. Do not add `AG
 - Keep the MRMPL logo asset at `apps/web/public/mrm-green.svg`.
 - Preserve light/dark mode, responsive layouts, and browser-persisted workbook filters.
 - Keep dashboard UI data-dense and operational; avoid marketing-page patterns.
+
+## Failure Modes
+1. Failing to truly understand the intent and only fixing surface issues.
+2. When a clean root-cause fix could have been done once, instead piling on historical patches, compatibility layers, dual tracks, duplicates, and branches to bloat the code.
+3. Over-designing for rare cases, increasing daily maintenance costs.
+4. Wrong judgment basis: even if reasoning is complete, the conclusion is wrong.
+5. Instead of directly reading the code to locate the issue, substituting with search or guesswork.
+6. Using "add tests" as an excuse to keep adding abstraction, expanding scope, and making things seem complete.
+
+## Testing
+Tests only serve to verify the current changes.
+Tests are not responsible for filling historical coverage gaps or designing future test systems.
+
+1. Prioritize running existing tests related to this change.
+2. If existing tests can prove the change is correct, do not add new tests.
+3. Only add new tests in the following two cases:
+   - This change modified behavior, but existing tests don't cover it
+   - User explicitly requires adding tests
+4. New tests cover at most 1 main path of the actual change this time, and if necessary, add 1 key failure path.
+5. Prohibit expanding test scope for completeness.
+6. Prohibit using the opportunity to fill tests for unrelated modules.
+7. Prohibit introducing new test frameworks, tools, or infrastructure.
+8. Prohibit writing large snapshots, parameterized matrices, or end-to-end suites.
+9. Prohibit writing tests for boundaries not required by the current needs.
+10. Prohibit modifying tests first and then forcing product behavior to become more complex.
+11. Prohibit using green tests as a reason to continue adding abstraction.
+
+Before adding any test, must be able to answer:
+- Which accepted requirement is this test verifying
+- If removed, can existing tests no longer detect this regression
+- Is it more complex than the implementation itself
+
+If test code is longer or more convoluted than the implementation code, default to considering it over-engineering; delete the test or shrink the implementation.
 
 ## Agent Working Memory
 
