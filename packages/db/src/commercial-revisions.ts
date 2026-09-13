@@ -2602,10 +2602,8 @@ async function preparePricingInputUpdate(
         throw new Error("Unsupported pricing input.")
       const name = entry[0]
       const oldValue = source.values[name]
-      if (oldValue === undefined)
-        throw new Error(
-          `${source.uid}: ${entry[1].label} is not applicable to this product. Leave the cell blank.`
-        )
+      // The current BOM/process selections determine applicability, not Excel.
+      if (oldValue === undefined) continue
       if (Math.abs(value - oldValue) < 1e-10) continue
       validatePricingInput(field, value, upload.scope)
       changes.push({

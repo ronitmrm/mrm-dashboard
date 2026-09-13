@@ -2,7 +2,7 @@ import { createCommercialRevisionsRepository } from "@workspace/db"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { xlsxResponse } from "@/lib/xlsx-response"
-import { writePricingInputWorkbook } from "../input-workbook"
+import { buildPricingInputWorkbook } from "../input-workbook"
 
 export const maxDuration = 300
 
@@ -15,7 +15,8 @@ export async function GET() {
     .listPricingInputTemplate("MRMPL")
     .finally(() => repository.close())
   return xlsxResponse(
-    writePricingInputWorkbook(rows),
-    "mrmpl-pricing-input-update.xlsx"
+    buildPricingInputWorkbook(rows),
+    "mrmpl-pricing-input-update.xlsx",
+    { compression: true }
   )
 }

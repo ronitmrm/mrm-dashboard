@@ -67,7 +67,7 @@ function setup() {
 }
 
 describe("pricing input revision", () => {
-  it("blanks and rejects non-applicable package inputs even when uploaded as zero", async () => {
+  it("finds no changes when only non-applicable package inputs are edited", async () => {
     const { repository, product, query } = setup()
     product.item_type = "Package"
     product.pricing_method = "Derived"
@@ -79,15 +79,12 @@ describe("pricing input revision", () => {
     expect(productRow.values.sealant).toBeUndefined()
     expect(customerRow.values.scrap_rate).toBeUndefined()
     expect(customerRow.values.purchase_times).toBeUndefined()
-    productRow.values.sealant = 0
-    await expect(
-      repository.previewPricingInputUpdate("MRMPL", rows)
-    ).rejects.toThrow("Sealant (INR/kg) is not applicable")
-    delete productRow.values.sealant
+    productRow.values.checking = 100
+    productRow.values.sealant = 100
     customerRow.values.scrap_rate = 0
     await expect(
       repository.previewPricingInputUpdate("MRMPL", rows)
-    ).rejects.toThrow("Scrap Rate (INR/kg) is not applicable")
+    ).rejects.toThrow("No input changes found")
     expect(query.mock.calls.some(([sql]) => sql.startsWith("INSERT"))).toBe(
       false
     )
@@ -97,7 +94,12 @@ describe("pricing input revision", () => {
     const { repository, query } = setup()
     const rows = await repository.listPricingInputTemplate("MRMPL")
     rows.find((row) => row.scope === "customer")!.values.shipping_cost = 6
+    rows.find((row) => row.scope === "customer")!.values.scrap_rate = 100
+    rows.find((row) => row.scope === "product")!.values.checking = 100
     const preview = await repository.previewPricingInputUpdate("MRMPL", rows)
+    expect(preview.changes.map((change) => change.field)).toEqual([
+      "shipping_cost",
+    ])
     expect(preview.prices[0]!.newPrice).toBeCloseTo(0.023544, 9)
     expect(query.mock.calls.some(([sql]) => sql.startsWith("INSERT"))).toBe(
       false
