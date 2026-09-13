@@ -1,15 +1,18 @@
 import * as XLSX from "xlsx"
 
 export function xlsxResponse(
-  workbook: XLSX.WorkBook,
+  workbook: XLSX.WorkBook | Uint8Array,
   fileName: string,
   options: { compression?: boolean } = {}
 ) {
-  const output = XLSX.write(workbook, {
-    bookType: "xlsx",
-    type: "buffer",
-    compression: options.compression,
-  }) as Buffer
+  const output =
+    workbook instanceof Uint8Array
+      ? workbook
+      : (XLSX.write(workbook, {
+          bookType: "xlsx",
+          type: "buffer",
+          compression: options.compression,
+        }) as Buffer)
   return new Response(
     output.buffer.slice(
       output.byteOffset,

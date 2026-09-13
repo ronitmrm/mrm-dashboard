@@ -2424,6 +2424,14 @@ function pricingInputVersion(value: unknown) {
 function productAcceptsPricingInput(product: ProductRow, field: string) {
   const direct = product.pricing_method === "Direct Purchase"
   const parent = ["Package", "Assembly"].includes(product.item_type)
+  if (field === "scrap_rate" || field === "purchase_times")
+    return !parent && !direct
+  if (
+    pricingInputEntries.some(
+      ([key, definition]) => key === field && definition.scope === "customer"
+    )
+  )
+    return true
   if (field === "direct_purchase_price_per_piece") return direct
   if (
     [
@@ -2542,7 +2550,11 @@ async function pricingInputState(
       calculatedPrice: asNumber(quote.approved_price_usd),
       values: Object.fromEntries(
         pricingInputEntries
-          .filter(([, field]) => field.scope === "customer")
+          .filter(
+            ([key, field]) =>
+              field.scope === "customer" &&
+              productAcceptsPricingInput(product, key)
+          )
           .map(([key]) => [key, asNumber(record(quote)[key])])
       ),
     })
@@ -2592,7 +2604,7 @@ async function preparePricingInputUpdate(
       const oldValue = source.values[name]
       if (oldValue === undefined)
         throw new Error(
-          `${source.uid}: ${field} is not applicable to this product.`
+          `${source.uid}: ${entry[1].label} is not applicable to this product. Leave the cell blank.`
         )
       if (Math.abs(value - oldValue) < 1e-10) continue
       validatePricingInput(field, value, upload.scope)
