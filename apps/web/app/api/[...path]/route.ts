@@ -163,7 +163,7 @@ const dataEntryTemplateFields: Record<string, string[]> = {
     "productionUnit",
     "machineFamily",
     "machineType",
-    "machineName",
+    "Machine Size",
     "location",
     "status",
     "remarks",

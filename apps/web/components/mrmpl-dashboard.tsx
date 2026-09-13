@@ -567,7 +567,7 @@ const dataEntrySpecs: DataEntrySpec[] = [
       },
       { name: "machineFamily", label: "Machine Family", required: true },
       { name: "machineType", label: "Machine Type", required: true },
-      { name: "machineName", label: "Machine Name" },
+      { name: "machineName", label: "Machine Size" },
       {
         name: "location",
         label: "Machine Location Within Unit",
@@ -10013,7 +10013,7 @@ function MachineMasterPanel({
                     <TableHead>Machine No.</TableHead>
                     <TableHead>Machine Family</TableHead>
                     <TableHead>Machine Type</TableHead>
-                    <TableHead>Machine Name</TableHead>
+                    <TableHead>Machine Size</TableHead>
                     <TableHead>Production Unit</TableHead>
                     <TableHead>Machine Location</TableHead>
                     <TableHead>Status</TableHead>
@@ -10125,7 +10125,7 @@ function MachineMasterPanel({
               value={selectedMachine.machineType}
             />
             <TileField
-              label="Machine Name"
+              label="Machine Size"
               value={selectedMachine.machineName}
             />
             <TileField

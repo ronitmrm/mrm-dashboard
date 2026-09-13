@@ -26,6 +26,7 @@ export function machineMasterImportPayload(
     fallbackProductionFloor
   return {
     ...row,
+    machineName: importedField(row, ["machineSize", "machineName"]),
     productionFloorCode:
       parseProductionFloorCode(requestedProductionFloor) ??
       text(requestedProductionFloor),
