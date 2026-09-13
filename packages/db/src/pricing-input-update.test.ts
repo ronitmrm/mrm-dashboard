@@ -67,6 +67,32 @@ function setup() {
 }
 
 describe("pricing input revision", () => {
+  it("blanks and rejects non-applicable package inputs even when uploaded as zero", async () => {
+    const { repository, product, query } = setup()
+    product.item_type = "Package"
+    product.pricing_method = "Derived"
+    product.source_payload = { processesRequired: ["Assembly"] }
+    const rows = await repository.listPricingInputTemplate("MRMPL")
+    const productRow = rows.find((row) => row.scope === "product")!
+    const customerRow = rows.find((row) => row.scope === "customer")!
+    expect(productRow.values.assembly_operation_cost).toBe(0)
+    expect(productRow.values.sealant).toBeUndefined()
+    expect(customerRow.values.scrap_rate).toBeUndefined()
+    expect(customerRow.values.purchase_times).toBeUndefined()
+    productRow.values.sealant = 0
+    await expect(
+      repository.previewPricingInputUpdate("MRMPL", rows)
+    ).rejects.toThrow("Sealant (INR/kg) is not applicable")
+    delete productRow.values.sealant
+    customerRow.values.scrap_rate = 0
+    await expect(
+      repository.previewPricingInputUpdate("MRMPL", rows)
+    ).rejects.toThrow("Scrap Rate (INR/kg) is not applicable")
+    expect(query.mock.calls.some(([sql]) => sql.startsWith("INSERT"))).toBe(
+      false
+    )
+  })
+
   it("previews and publishes the same recalculated price with audited history", async () => {
     const { repository, query } = setup()
     const rows = await repository.listPricingInputTemplate("MRMPL")

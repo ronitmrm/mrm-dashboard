@@ -582,6 +582,14 @@ columns are ignored and Excel formulas in inputs are rejected. Blank retains the
 current input; zero is explicit where valid. Percent inputs use percentage points
 (1 means 1%).
 
+Non-applicable input cells are blank and locked in the download. Applicability
+comes from the current product's pricing method, item type and approved process
+selections, never from a zero cost. Scrap rate and purchase times apply only to
+derived List items. Upload validation rejects any nonblank value (including zero)
+for a non-applicable input, even if Excel protection was removed. Applicable
+zero-cost inputs remain editable. Excel sheets may be unprotected without a
+password to remove unwanted rows; keep both sheets and their headers.
+
 The software validates row versions, input applicability and calculation
 prerequisites, then previews old/new prices including affected package ancestors.
 Apply revalidates the exact preview against current data in one transaction,

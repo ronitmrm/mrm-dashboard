@@ -5,6 +5,7 @@ import {
   type PricingInputUploadRow,
 } from "@workspace/db"
 import * as XLSX from "xlsx"
+import { strFromU8, strToU8, unzipSync, zipSync } from "fflate"
 
 const sheets = [
   ["Product Inputs", "product"],
@@ -44,7 +45,10 @@ export function buildPricingInputWorkbook(rows: PricingInputTemplateRow[]) {
         "Percent columns: enter 1 for 1%, or type 1%. FX and piece weight must be greater than zero.",
       ],
       [
-        "Blank non-applicable product inputs must stay blank. Do not enter Excel formulas in input columns.",
+        "Non-applicable inputs are blank and locked. Applicable inputs, including zero, are editable. Do not enter Excel formulas.",
+      ],
+      [
+        "To remove rows: Review > Unprotect Sheet (no password). Keep both sheets and headers. Upload still rejects non-applicable inputs.",
       ],
       [
         "Calculated columns are reference snapshots, ignored on upload. Software recalculates from inputs.",
@@ -95,9 +99,63 @@ export function buildPricingInputWorkbook(rows: PricingInputTemplateRow[]) {
       wch: index < 2 ? 38 : index === 3 ? 40 : 26,
     }))
     sheet["!autofilter"] = { ref: sheet["!ref"]! }
+    sheet["!protect"] = {
+      autoFilter: false,
+      selectLockedCells: false,
+      selectUnlockedCells: false,
+    }
     XLSX.utils.book_append_sheet(workbook, sheet, name)
   }
   return workbook
+}
+
+export function writePricingInputWorkbook(rows: PricingInputTemplateRow[]) {
+  const workbook = buildPricingInputWorkbook(rows)
+  const files = unzipSync(
+    XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }) as Buffer
+  )
+  // SheetJS CE writes sheet protection but not per-cell protection styles.
+  // Append one unlocked style; Excel's default style keeps all other cells locked.
+  const styles = strFromU8(files["xl/styles.xml"]!)
+  const count = Number(styles.match(/<cellXfs count="(\d+)"/)?.[1])
+  if (!Number.isInteger(count) || count < 1)
+    throw new Error("Missing workbook cell styles.")
+  files["xl/styles.xml"] = strToU8(
+    styles
+      .replace(/<cellXfs count="\d+"/, `<cellXfs count="${count + 1}"`)
+      .replace(
+        "</cellXfs>",
+        '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyProtection="1"><protection locked="0"/></xf></cellXfs>'
+      )
+  )
+  for (const [name, scope] of sheets) {
+    const fields = pricingInputEntries.filter(
+      ([, field]) => field.scope === scope
+    )
+    const editable = new Set<string>()
+    rows
+      .filter((row) => row.scope === scope)
+      .forEach((row, r) => {
+        fields.forEach(([key], c) => {
+          if (row.values[key] !== undefined)
+            editable.add(
+              XLSX.utils.encode_cell({
+                r: r + 1,
+                c: identityHeaders.length + c,
+              })
+            )
+        })
+      })
+    const path = `xl/worksheets/sheet${workbook.SheetNames.indexOf(name) + 1}.xml`
+    files[path] = strToU8(
+      strFromU8(files[path]!).replace(/<c\b[^>]*>/g, (tag) => {
+        const address = tag.match(/\br="([A-Z]+\d+)"/)?.[1]
+        if (!address || !editable.has(address)) return tag
+        return tag.replace(/ s="\d+"/, "").replace(/>$/, ` s="${count}">`)
+      })
+    )
+  }
+  return zipSync(files, { level: 6 })
 }
 
 export function parsePricingInputWorkbook(
