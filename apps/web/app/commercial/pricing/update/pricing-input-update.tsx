@@ -93,7 +93,8 @@ export function PricingInputUpdate() {
           <p className="text-sm text-muted-foreground">
             Edit only Input columns. Blank keeps the current value; 0 explicitly
             clears a cost where allowed. Enter 1 for 1%. Keep row IDs and
-            versions unchanged. Non-applicable inputs stay blank.
+            versions unchanged. Values in non-applicable cells are ignored based
+            on the part&apos;s BOM/process selections and pricing method.
           </p>
           <Button asChild variant="outline" className="w-fit">
             <a href="/commercial/pricing/update/template.xlsx">

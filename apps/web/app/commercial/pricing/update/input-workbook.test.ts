@@ -1,11 +1,9 @@
 import { describe, expect, it } from "vitest"
 import * as XLSX from "xlsx"
-import { strFromU8, unzipSync } from "fflate"
 import type { PricingInputTemplateRow } from "@workspace/db"
 import {
   buildPricingInputWorkbook,
   parsePricingInputWorkbook,
-  writePricingInputWorkbook,
 } from "./input-workbook"
 
 const rows: PricingInputTemplateRow[] = [
@@ -57,31 +55,11 @@ function cell(sheet: XLSX.WorkSheet, header: string) {
 }
 
 describe("pricing input workbook", () => {
-  it("exports locked non-applicable cells and unlocked valid inputs", () => {
-    const output = writePricingInputWorkbook(rows)
-    const files = unzipSync(output)
-    const styles = strFromU8(files["xl/styles.xml"]!)
-    const unlocked = Number(styles.match(/<cellXfs count="(\d+)"/)![1]) - 1
-    expect(styles).toContain('<protection locked="0"/>')
-    const xml = strFromU8(files["xl/worksheets/sheet2.xml"]!)
-    const sheet = buildPricingInputWorkbook(rows).Sheets["Product Inputs"]!
-    const editable = cell(sheet, "Input | Assembly (INR/kg)")
-    const blocked = cell(sheet, "Input | Sealant (INR/kg)")
-    expect(xml).toContain("<sheetProtection")
-    expect(xml.match(new RegExp(`<c r="${editable}"[^>]*>`))![0]).toContain(
-      `s="${unlocked}"`
-    )
-    expect(xml.match(new RegExp(`<c r="${blocked}"[^>]*>`))![0]).not.toContain(
-      `s="${unlocked}"`
-    )
-    expect(
-      parsePricingInputWorkbook(Buffer.from(output)).map((row) => row.values)
-    ).toEqual(rows.map((row) => row.values))
-  })
-
   it("imports inputs by stable ID, preserves blank/zero semantics and ignores calculated prices", () => {
     const workbook = buildPricingInputWorkbook(rows)
     const sheet = workbook.Sheets["Customer Inputs"]!
+    expect(sheet["!protect"]).toBeUndefined()
+    expect(workbook.Sheets["Product Inputs"]!["!protect"]).toBeUndefined()
     sheet[cell(sheet, "Input | Packing (INR/kg)")] = { t: "n", v: 0 }
     delete sheet[cell(sheet, "Input | Shipping (INR/kg)")]
     sheet[cell(sheet, "Input | Profit (%)")] = { t: "s", v: "10%" }
