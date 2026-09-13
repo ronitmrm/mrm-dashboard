@@ -1,4 +1,11 @@
-import { randomUUID } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
+import {
+  pricingInputEntries,
+  validatePricingInput,
+  type PricingInputUploadRow,
+  type PricingInputTemplateRow,
+  type PricingInputValues,
+} from "./pricing-input-fields"
 
 import type { PoolClient } from "pg"
 
@@ -112,6 +119,15 @@ type ProductRow = {
   washing: string
   weight_100_pcs: string
 }
+
+const pricingProductColumns = `id, uid, description, item_type, pricing_method, production_type,
+  weight_100_pcs, pieces_per_kg, casting, burning_loss_percent, rejection_percent,
+  direct_purchase_price_per_piece, alloy_premium, extrusion_cost, forging_cost,
+  machining_cost, machining_price_per_piece, washing, checking, marking, plating,
+  annealing, deburring, buffing, sealant, assembly_operation_cost, overhead_cost,
+  product_cost_inr, remarks, row_version, updated_at,
+  jsonb_build_object('productType', source_payload->'productType',
+    'processesRequired', source_payload->'processesRequired') AS source_payload`
 
 type QuoteOverride = Map<string, number>
 
@@ -621,7 +637,8 @@ function revisedCalculation(
   productInput: ProductRow,
   components: ComponentRow[],
   revisedChildren: Map<string, RevisedQuote>,
-  override?: QuoteOverride
+  override?: QuoteOverride,
+  calculateFromInputs = false
 ) {
   const oldPrice = asNumber(quote.approved_price_usd, asNumber(quote.rate_usd))
   const product = productWithOverrides(productInput, override)
@@ -656,16 +673,18 @@ function revisedCalculation(
       (fieldName) => override?.has(fieldName)
     )
     const process = calculateProductProcessCost(productProcessInput(product))
-    const processBase = hasProductProcessOverride
-      ? process.processCostPerPiece
-      : storedProcessBase
+    const processBase =
+      calculateFromInputs || hasProductProcessOverride
+        ? process.processCostPerPiece
+        : storedProcessBase
     const storedPiecesPerKg = asNumber(
       quote.snapshot_product_json.piecesPerKg,
       asNumber(product.pieces_per_kg, process.piecesPerKg)
     )
-    const piecesPerKg = hasProductProcessOverride
-      ? process.piecesPerKg
-      : storedPiecesPerKg
+    const piecesPerKg =
+      calculateFromInputs || hasProductProcessOverride
+        ? process.piecesPerKg
+        : storedPiecesPerKg
     const rejectionPercent = asNumber(product.rejection_percent)
     const packageCosting = calculatePackageRevisionCostingFromBase({
       childQuoteTotal,
@@ -750,7 +769,8 @@ function revisedCalculation(
 
   const directPurchaseCost = asNumber(product.direct_purchase_price_per_piece)
   const isDirectPurchase =
-    product.pricing_method === "Direct Purchase" && directPurchaseCost > 0
+    product.pricing_method === "Direct Purchase" &&
+    (calculateFromInputs || directPurchaseCost > 0)
   const assembledPartInr = asNumber(quote.assembled_part_inr)
   if (isDirectPurchase) {
     const direct = calculateStoredProductRevisionCosting({
@@ -761,7 +781,9 @@ function revisedCalculation(
         "packing_cost",
         quote.packing_cost
       ),
-      piecesPerKg: asNumber(product.pieces_per_kg),
+      piecesPerKg: calculateFromInputs
+        ? 1000 / asNumber(product.weight_100_pcs)
+        : asNumber(product.pieces_per_kg),
       profitPercent: profit,
       rejectionPercent: asNumber(product.rejection_percent),
       shippingCostPerKg: overrideNumber(
@@ -1117,13 +1139,16 @@ async function createBulkRevisedQuotes(
   client: PoolClient,
   input: {
     actorUserId?: string | null
+    calculateFromInputs?: boolean
     affectedQuoteIds: Set<string>
     overrides: Map<string, QuoteOverride>
     roots: string[]
     sourceRecordId: string
   }
 ) {
-  const graph = await loadQuoteGraph(client, input.roots, true)
+  const graph = await loadQuoteGraph(client, input.roots, true, {
+    calculateFromInputs: input.calculateFromInputs,
+  })
   const cache = new Map<string, RevisedQuote>()
   const records: Array<{
     id: string
@@ -1189,7 +1214,8 @@ async function createBulkRevisedQuotes(
       product,
       components,
       children,
-      override
+      override,
+      input.calculateFromInputs
     )
     const revisedProduct = productWithOverrides(product, override)
     const revision =
@@ -1227,7 +1253,16 @@ async function createBulkRevisedQuotes(
       rate: asNumber(revised.calculation.rateInr, revised.totalRateInr),
       total: revised.totalRateInr,
       rejection: asNumber(revised.calculation.rejectionCost),
-      product: productSnapshot(revisedProduct),
+      product: productSnapshot(
+        input.calculateFromInputs
+          ? {
+              ...revisedProduct,
+              pieces_per_kg: String(
+                1000 / asNumber(revisedProduct.weight_100_pcs)
+              ),
+            }
+          : revisedProduct
+      ),
       calculation: revised.calculation,
       payload: {
         appliedOverrides: override ? Object.fromEntries(override) : {},
@@ -1295,7 +1330,7 @@ async function createBulkRevisedQuotes(
        calculation_version, product_snapshot, calculation_json, created_by_user_id,
        source_system, source_table, source_id, source_payload)
      SELECT e.snapshot_id, s.organization_id, e.id, s.item_uid, s.description, s.item_type,
-       s.production_type, s.weight_100_pcs, s.pieces_per_kg, s.material_rate, s.material_cost,
+       s.production_type, ${input.calculateFromInputs ? "(e.product->>'weight100Pcs')::numeric, (e.product->>'piecesPerKg')::numeric" : "s.weight_100_pcs, s.pieces_per_kg"}, s.material_rate, s.material_cost,
        s.conversion_cost, s.packaging_cost, s.shipping_cost,
        COALESCE((e.product->>'overheadCost')::numeric,0), e.rejection, e.total, e.total,
        s.calculation_version, e.product, e.calculation, $2, 'mrm-dashboard',
@@ -2063,7 +2098,8 @@ async function recalculateProductBaseAndAncestors(
 async function loadQuoteGraph(
   client: PoolClient,
   rootQuoteItemIds: string[],
-  lockQuotes = false
+  lockQuotes = false,
+  options: { products?: ProductRow[]; calculateFromInputs?: boolean } = {}
 ): Promise<QuoteGraph> {
   const quotes = await client.query<QuoteRow & { next_revision: number }>(
     `
@@ -2087,10 +2123,10 @@ async function loadQuoteGraph(
         quote.shipping_cost, quote.overhead_cost_input, quote.purchase_times,
         quote.profit_percent, quote.conversion_rate,
         quote.assembled_part_inr, quote.rate_inr, quote.total_rate_inr,
-        quote.rate_usd, quote.approved_price_usd, quote.calculation_json,
+        quote.rate_usd, quote.approved_price_usd, ${options.calculateFromInputs ? "'{}'::jsonb" : "quote.calculation_json"} AS calculation_json,
         quote.price_lineage_key, snapshot.id AS snapshot_id,
-        snapshot.product_snapshot AS snapshot_product_json,
-        snapshot.calculation_json AS snapshot_calculation_json,
+        ${options.calculateFromInputs ? "'{}'::jsonb" : "snapshot.product_snapshot"} AS snapshot_product_json,
+        ${options.calculateFromInputs ? "'{}'::jsonb" : "snapshot.calculation_json"} AS snapshot_calculation_json,
         revisions.next_revision
       FROM quote_tree
       JOIN sales.quote_items quote ON quote.id = quote_tree.quote_item_id
@@ -2101,6 +2137,7 @@ async function loadQuoteGraph(
         FROM sales.quote_items GROUP BY organization_id, quote_number
       ) revisions ON revisions.organization_id = quote.organization_id
         AND revisions.quote_number = quote.quote_number
+      ORDER BY quote.id
       ${lockQuotes ? "FOR UPDATE OF quote" : ""}
     `,
     [rootQuoteItemIds]
@@ -2125,10 +2162,12 @@ async function loadQuoteGraph(
     `,
     [quoteIds]
   )
-  const products = await client.query<ProductRow>(
-    "SELECT * FROM catalog.items WHERE id = ANY($1::uuid[])",
-    [productIds]
-  )
+  const products = options.products
+    ? { rows: options.products }
+    : await client.query<ProductRow>(
+        `SELECT ${options.calculateFromInputs ? pricingProductColumns : "*"} FROM catalog.items WHERE id = ANY($1::uuid[])`,
+        [productIds]
+      )
   const componentsByQuoteId = new Map<string, ComponentRow[]>()
   for (const component of components.rows) {
     const current = componentsByQuoteId.get(component.quote_item_id) ?? []
@@ -2194,6 +2233,7 @@ function previewRevisedQuoteFromGraph(
   graph: QuoteGraph,
   input: {
     affectedQuoteIds: Set<string>
+    calculateFromInputs?: boolean
     cache: Map<string, { newPrice: number; newProfitPercent: number }>
     overrides: Map<string, QuoteOverride>
     quoteItemId: string
@@ -2234,7 +2274,8 @@ function previewRevisedQuoteFromGraph(
     product,
     components,
     revisedChildren,
-    input.overrides.get(input.quoteItemId)
+    input.overrides.get(input.quoteItemId),
+    input.calculateFromInputs
   )
   const result = {
     newPrice: revised.totalRateUsd,
@@ -2374,6 +2415,310 @@ function previewPreparedProductRevisionPrice(
     overrides,
     quoteItemId,
   })
+}
+
+function pricingInputVersion(value: unknown) {
+  return createHash("sha256").update(JSON.stringify(value)).digest("hex")
+}
+
+function productAcceptsPricingInput(product: ProductRow, field: string) {
+  const direct = product.pricing_method === "Direct Purchase"
+  const parent = ["Package", "Assembly"].includes(product.item_type)
+  if (field === "direct_purchase_price_per_piece") return direct
+  if (
+    [
+      "casting",
+      "burning_loss_percent",
+      "alloy_premium",
+      "extrusion_cost",
+    ].includes(field)
+  )
+    return !parent && !direct
+  if (field === "forging_cost")
+    return (
+      !parent &&
+      !direct &&
+      isForgingCostApplicable(
+        String(
+          product.source_payload.productType ?? product.production_type ?? ""
+        )
+      )
+    )
+  if (direct && !["weight_100_pcs", "rejection_percent"].includes(field))
+    return false
+  if (isBulkRevisionField(field) && lockedBulkProcessFields.has(field))
+    return productAllowsBulkProcessField(product, field)
+  return true
+}
+
+async function pricingInputState(
+  client: PoolClient,
+  organizationCode: string,
+  lock = false
+) {
+  const organization = await client.query<{ id: string }>(
+    "SELECT id FROM core.organizations WHERE code = $1",
+    [organizationCode]
+  )
+  const organizationId = organization.rows[0]?.id
+  if (!organizationId) throw new Error("Organization not found.")
+  const products = await client.query<ProductRow>(
+    `SELECT ${pricingProductColumns} FROM catalog.items WHERE organization_id = $1 AND lifecycle_status <> 'D' ORDER BY id ${lock ? "FOR UPDATE" : ""}`,
+    [organizationId]
+  )
+  const active = await client.query<{ id: string }>(
+    `SELECT id FROM sales.quote_items WHERE organization_id = $1 AND is_active
+      AND status IN ('Sent', 'Accepted') ORDER BY id ${lock ? "FOR UPDATE" : ""}`,
+    [organizationId]
+  )
+  const roots = await topLevelAffectedQuoteIds(
+    client,
+    new Set(active.rows.map((row) => row.id))
+  )
+  const graph = await loadQuoteGraph(client, roots, lock, {
+    products: products.rows,
+    calculateFromInputs: true,
+  })
+  const customers = await client.query<{ id: string; company_name: string }>(
+    "SELECT id, company_name FROM sales.customers WHERE organization_id = $1",
+    [organizationId]
+  )
+  const customerNames = new Map(
+    customers.rows.map((row) => [row.id, row.company_name])
+  )
+  const packageCodes = new Map<string, Set<string>>()
+  for (const root of roots) {
+    const code = graph.quotesById.get(root)?.customer_part_code
+    if (!code) continue
+    const path = new Set([root])
+    for (const id of path) {
+      const codes = packageCodes.get(id) ?? new Set<string>()
+      codes.add(code)
+      packageCodes.set(id, codes)
+      for (const component of graph.componentsByQuoteId.get(id) ?? []) {
+        if (component.child_quote_item_id)
+          path.add(component.child_quote_item_id)
+      }
+    }
+  }
+  const rows: PricingInputTemplateRow[] = products.rows.map((product) => ({
+    scope: "product",
+    id: product.id,
+    version: pricingInputVersion(product),
+    uid: product.uid,
+    description: product.description,
+    itemType: product.item_type,
+    pricingMethod: product.pricing_method,
+    customer: "Shared across customers",
+    customerPartCode: "",
+    calculatedPrice: asNumber(product.product_cost_inr),
+    values: Object.fromEntries(
+      pricingInputEntries
+        .filter(
+          ([key, field]) =>
+            field.scope === "product" &&
+            productAcceptsPricingInput(product, key)
+        )
+        .map(([key]) => [key, asNumber(record(product)[key])])
+    ),
+  }))
+  for (const quote of graph.quotesById.values()) {
+    const product = graph.productsById.get(quote.item_id)
+    if (!product) throw new Error("Quote product is unavailable.")
+    rows.push({
+      scope: "customer",
+      id: quote.id,
+      version: pricingInputVersion(quote),
+      uid: product.uid,
+      description: product.description,
+      itemType: product.item_type,
+      pricingMethod: product.pricing_method,
+      customer: customerNames.get(quote.customer_id) ?? "",
+      customerPartCode: quote.customer_part_code ?? "",
+      packageCustomerCode: [...(packageCodes.get(quote.id) ?? [])]
+        .sort()
+        .join(", "),
+      quoteNumber: quote.quote_number,
+      calculatedPrice: asNumber(quote.approved_price_usd),
+      values: Object.fromEntries(
+        pricingInputEntries
+          .filter(([, field]) => field.scope === "customer")
+          .map(([key]) => [key, asNumber(record(quote)[key])])
+      ),
+    })
+  }
+  return { organizationId, products: products.rows, graph, roots, rows }
+}
+
+async function preparePricingInputUpdate(
+  client: PoolClient,
+  organizationCode: string,
+  uploads: PricingInputUploadRow[],
+  lock = false
+) {
+  if (!uploads.length || uploads.length > 20000)
+    throw new Error("Upload between 1 and 20,000 input rows.")
+  const state = await pricingInputState(client, organizationCode, lock)
+  const current = new Map(
+    state.rows.map((row) => [`${row.scope}:${row.id}`, row])
+  )
+  const seen = new Set<string>()
+  const changes: Array<{
+    scope: "product" | "customer"
+    id: string
+    uid: string
+    customer: string
+    field: string
+    label: string
+    oldValue: number
+    newValue: number
+  }> = []
+  const productChanges = new Map<string, PricingInputValues>()
+  const overrides = new Map<string, QuoteOverride>()
+  for (const upload of uploads) {
+    const key = `${upload.scope}:${upload.id}`
+    const source = current.get(key)
+    if (!source || source.version !== upload.version)
+      throw new Error(
+        `A row is stale or unavailable (${upload.id}). Download a fresh template.`
+      )
+    if (seen.has(key)) throw new Error(`Duplicate input row: ${source.uid}.`)
+    seen.add(key)
+    for (const [field, value] of Object.entries(upload.values)) {
+      const entry = pricingInputEntries.find(([name]) => name === field)
+      if (!entry || entry[1].scope !== upload.scope)
+        throw new Error("Unsupported pricing input.")
+      const name = entry[0]
+      const oldValue = source.values[name]
+      if (oldValue === undefined)
+        throw new Error(
+          `${source.uid}: ${field} is not applicable to this product.`
+        )
+      if (Math.abs(value - oldValue) < 1e-10) continue
+      validatePricingInput(field, value, upload.scope)
+      changes.push({
+        scope: upload.scope,
+        id: upload.id,
+        uid: source.uid,
+        customer: source.customer,
+        field,
+        label: pricingInputEntries.find(([key]) => key === name)![1].label,
+        oldValue,
+        newValue: value,
+      })
+      if (upload.scope === "product") {
+        productChanges.set(upload.id, {
+          ...productChanges.get(upload.id),
+          [name]: value,
+        })
+      } else {
+        const override = overrides.get(upload.id) ?? new Map<string, number>()
+        override.set(name, value)
+        overrides.set(upload.id, override)
+      }
+    }
+  }
+  if (!changes.length)
+    throw new Error(
+      "No input changes found. Edit an Input column; calculated columns are ignored."
+    )
+  for (const [id, values] of productChanges) {
+    const product = state.graph.productsById.get(id)!
+    if (!((values.weight_100_pcs ?? asNumber(product.weight_100_pcs)) > 0)) {
+      throw new Error(
+        `${product.uid}: enter a valid piece weight before updating its costing inputs.`
+      )
+    }
+  }
+  const affected = new Set(overrides.keys())
+  for (const quote of state.graph.quotesById.values()) {
+    if (productChanges.has(quote.item_id)) affected.add(quote.id)
+  }
+  // Propagate changed components through every active package path, once per node.
+  const parents = new Map<string, Set<string>>()
+  for (const [parentId, components] of state.graph.componentsByQuoteId) {
+    for (const component of components) {
+      if (!component.child_quote_item_id) continue
+      const ids =
+        parents.get(component.child_quote_item_id) ?? new Set<string>()
+      ids.add(parentId)
+      parents.set(component.child_quote_item_id, ids)
+    }
+  }
+  for (const id of affected) {
+    for (const parentId of parents.get(id) ?? []) affected.add(parentId)
+    for (const component of state.graph.componentsByQuoteId.get(id) ?? []) {
+      if (!component.child_quote_item_id)
+        throw new Error(
+          `A package component (${component.component_uid}) has no linked customer price. Complete its costing before importing.`
+        )
+      affected.add(component.child_quote_item_id)
+    }
+  }
+  for (const [id, product] of state.graph.productsById) {
+    const updated = {
+      ...product,
+      ...Object.fromEntries(
+        Object.entries(productChanges.get(id) ?? {}).map(([key, value]) => [
+          key,
+          String(value),
+        ])
+      ),
+    }
+    if (productChanges.has(id))
+      updated.pieces_per_kg = String(1000 / Number(updated.weight_100_pcs))
+    state.graph.productsById.set(id, updated)
+  }
+  const cache = new Map<
+    string,
+    { newPrice: number; newProfitPercent: number }
+  >()
+  const prices = []
+  for (const id of affected) {
+    const quote = quoteFromGraph(state.graph, id)
+    const product = state.graph.productsById.get(quote.item_id)!
+    if (!(asNumber(product.weight_100_pcs) > 0))
+      throw new Error(
+        `${product.uid}: valid piece weight is required to calculate the price.`
+      )
+    if (
+      !(
+        overrideNumber(
+          overrides.get(id),
+          "conversion_rate",
+          quote.conversion_rate
+        ) > 0
+      )
+    )
+      throw new Error(`${product.uid}: positive conversion rate is required.`)
+    const revised = previewRevisedQuoteFromGraph(state.graph, {
+      affectedQuoteIds: affected,
+      calculateFromInputs: true,
+      cache,
+      overrides,
+      quoteItemId: id,
+    })
+    if (!Number.isFinite(revised.newPrice) || revised.newPrice < 0)
+      throw new Error(`${product.uid}: calculation produced an invalid price.`)
+    const source = current.get(`customer:${id}`)!
+    prices.push({
+      id,
+      uid: product.uid,
+      customer: source.customer,
+      customerPartCode: source.customerPartCode,
+      packageCustomerCode: source.packageCustomerCode ?? "",
+      quoteNumber: source.quoteNumber ?? "",
+      oldPrice: source.calculatedPrice,
+      newPrice: revised.newPrice,
+    })
+  }
+  const token = pricingInputVersion({
+    rows: state.rows,
+    components: [...state.graph.componentsByQuoteId],
+    changes,
+    prices,
+  })
+  return { state, changes, productChanges, overrides, affected, prices, token }
 }
 
 export function createCommercialRevisionsRepository(
@@ -2523,6 +2868,248 @@ export function createCommercialRevisionsRepository(
     close,
 
     ...bulkRevisionHistoryReader(pool),
+
+    async listPricingInputTemplate(organizationCode: string) {
+      return transaction(pool, async (client) => {
+        await client.query(
+          "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY"
+        )
+        return (await pricingInputState(client, organizationCode)).rows
+      })
+    },
+
+    async previewPricingInputUpdate(
+      organizationCode: string,
+      rows: PricingInputUploadRow[]
+    ) {
+      return transaction(pool, async (client) => {
+        await client.query(
+          "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY"
+        )
+        const prepared = await preparePricingInputUpdate(
+          client,
+          organizationCode,
+          rows
+        )
+        return {
+          changes: prepared.changes,
+          prices: prepared.prices,
+          token: prepared.token,
+        }
+      })
+    },
+
+    async applyPricingInputUpdate(input: {
+      organizationCode: string
+      rows: PricingInputUploadRow[]
+      previewToken: string
+      reason: string
+      actorUserId: string
+    }) {
+      if (!input.reason.trim())
+        throw new Error("Enter a reason for the pricing update.")
+      if (!/^[a-f0-9]{64}$/.test(input.previewToken))
+        throw new Error("Preview the workbook before applying it.")
+      return transaction(pool, async (client) => {
+        await client.query("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
+        await client.query("SET LOCAL lock_timeout = '5s'")
+        await client.query(
+          "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+          [`pricing-input:${input.organizationCode}`]
+        )
+        const previous = await client.query<{
+          id: string
+          revision_number: string
+        }>(
+          `SELECT revision.id, revision.revision_number FROM sales.bulk_price_revisions revision
+           JOIN core.organizations organization ON organization.id = revision.organization_id
+           WHERE organization.code = $1 AND revision.source_table = 'pricing_input_updates' AND revision.source_id = $2`,
+          [input.organizationCode, input.previewToken]
+        )
+        if (previous.rows[0])
+          return {
+            id: previous.rows[0].id,
+            revisionNumber: previous.rows[0].revision_number,
+          }
+        const prepared = await preparePricingInputUpdate(
+          client,
+          input.organizationCode,
+          input.rows,
+          true
+        )
+        if (prepared.token !== input.previewToken)
+          throw new Error(
+            "Pricing changed since your preview. Preview the workbook again before applying."
+          )
+        const { state, changes, productChanges, affected, overrides } = prepared
+        const revisionNumber = await nextRevisionNumber(
+          client,
+          state.organizationId,
+          "BPR"
+        )
+        const id = randomUUID()
+        await client.query(
+          `INSERT INTO sales.bulk_price_revisions
+            (id, organization_id, revision_number, status, reason, effective_on, revision_route,
+             applied_at, completed_at, created_by_user_id, updated_by_user_id,
+             source_system, source_table, source_id, source_payload)
+           VALUES ($1,$2,$3,'Pending Costing',$4,current_date,$5,NULL,NULL,$6,$6,
+             'mrm-dashboard','pricing_input_updates',$7,$8)`,
+          [
+            id,
+            state.organizationId,
+            revisionNumber,
+            input.reason.trim(),
+            productChanges.size
+              ? "Product Parameter Bulk Revision"
+              : "Customer Parameter Bulk Revision",
+            input.actorUserId,
+            input.previewToken,
+            { inputChanges: changes, previewToken: input.previewToken },
+          ]
+        )
+        for (const [productId, values] of productChanges) {
+          const entries = Object.entries(values)
+          // Columns come exclusively from the validated pricing input allowlist.
+          await client.query(
+            `UPDATE catalog.items SET ${entries.map(([key], index) => `${key} = $${index + 1}`).join(", ")},
+             updated_at=now(), row_version=row_version+1, updated_by_user_id=$${entries.length + 1}
+             WHERE id=$${entries.length + 2} AND organization_id=$${entries.length + 3}`,
+            [
+              ...entries.map(([, value]) => value),
+              input.actorUserId,
+              productId,
+              state.organizationId,
+            ]
+          )
+        }
+        if (productChanges.size)
+          await recalculateProductBaseAndAncestors(
+            client,
+            [...productChanges.keys()],
+            input.actorUserId
+          )
+        const { cache } = await createBulkRevisedQuotes(client, {
+          actorUserId: input.actorUserId,
+          calculateFromInputs: true,
+          affectedQuoteIds: affected,
+          overrides,
+          roots: state.roots.filter((root) => affected.has(root)),
+          sourceRecordId: id,
+        })
+        for (const price of prepared.prices) {
+          const published = cache.get(price.id)
+          if (
+            !published ||
+            Math.abs(published.newPrice - price.newPrice) > 1e-9
+          ) {
+            throw new Error(
+              "Calculated prices differ from the preview. No changes were applied; preview again."
+            )
+          }
+        }
+        const productsAfter = await client.query<{
+          id: string
+          product_cost_inr: string
+        }>(
+          "SELECT id, product_cost_inr FROM catalog.items WHERE id = ANY($1::uuid[])",
+          [[...productChanges.keys()]]
+        )
+        const productPrices = new Map(
+          productsAfter.rows.map((row) => [
+            row.id,
+            asNumber(row.product_cost_inr),
+          ])
+        )
+        const sources = new Map(
+          state.rows.map((row) => [`${row.scope}:${row.id}`, row])
+        )
+        const evidence = changes.map((change) => {
+          const source = sources.get(`${change.scope}:${change.id}`)!
+          return {
+            ...change,
+            productItemId:
+              change.scope === "product"
+                ? change.id
+                : state.graph.quotesById.get(change.id)!.item_id,
+            productUid: source.uid,
+            oldParameterValue: change.oldValue,
+            prior_id: change.scope === "customer" ? change.id : null,
+            replacement_id:
+              change.scope === "customer"
+                ? (cache.get(change.id)?.replacementQuoteItemId ?? null)
+                : null,
+            old_price: source.calculatedPrice,
+            new_price:
+              change.scope === "customer"
+                ? cache.get(change.id)!.newPrice
+                : productPrices.get(change.id),
+          }
+        })
+        const explicitQuoteChanges = new Set(
+          changes
+            .filter((change) => change.scope === "customer")
+            .map((change) => change.id)
+        )
+        for (const [quoteId, revised] of cache) {
+          if (explicitQuoteChanges.has(quoteId)) continue
+          const source = sources.get(`customer:${quoteId}`)!
+          evidence.push({
+            scope: "customer",
+            id: quoteId,
+            uid: source.uid,
+            customer: source.customer,
+            field: "derived_parent_refresh",
+            label: "Recalculated from inputs",
+            oldValue: 0,
+            newValue: 0,
+            productItemId: state.graph.quotesById.get(quoteId)!.item_id,
+            productUid: source.uid,
+            oldParameterValue: 0,
+            prior_id: quoteId,
+            replacement_id: revised.replacementQuoteItemId,
+            old_price: source.calculatedPrice,
+            new_price: revised.newPrice,
+          })
+        }
+        await client.query(
+          `INSERT INTO sales.bulk_price_revision_changes (organization_id, bulk_price_revision_id,
+             prior_quote_item_id, replacement_quote_item_id, old_price, new_price, field_name,
+             field_label, new_value, applied_at, preview_json, created_by_user_id,
+             source_system, source_table, source_id, source_payload)
+           SELECT $2,$3,e.prior_id,e.replacement_id,e.old_price,e.new_price,e.field,e.label,e."newValue",
+             now(),to_jsonb(e),$4,'mrm-dashboard','pricing_input_updates',gen_random_uuid()::text,to_jsonb(e)
+           FROM jsonb_to_recordset($1::jsonb) AS e(prior_id uuid,replacement_id uuid,old_price numeric,
+              new_price numeric,field text,label text,"newValue" numeric,scope text,id text,uid text,"oldValue" numeric,
+              "productItemId" uuid,"productUid" text,"oldParameterValue" numeric)`,
+          [
+            JSON.stringify(evidence),
+            state.organizationId,
+            id,
+            input.actorUserId,
+          ]
+        )
+        await client.query(
+          `UPDATE sales.bulk_price_revisions SET status='Completed', applied_at=now(), completed_at=now(),
+           updated_at=now(), row_version=row_version+1 WHERE id=$1`,
+          [id]
+        )
+        await writeAuditEvent(client, {
+          actorUserId: input.actorUserId,
+          organizationId: state.organizationId,
+          targetId: id,
+          targetTable: "bulk_price_revisions",
+          eventType: "pricing_input_update.completed",
+          metadata: {
+            revisionNumber,
+            inputChangeCount: changes.length,
+            revisedQuoteCount: cache.size,
+            previewToken: input.previewToken,
+          },
+        })
+        return { id, revisionNumber }
+      })
+    },
 
     async listBulkPriceRevisions(organizationCode: string) {
       const result = await pool.query<{

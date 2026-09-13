@@ -65,11 +65,16 @@ export default async function CustomerBulkRevisionPage({
       <PageHeader
         title="Customer Parameter Bulk Revision"
         actions={
-          <Button asChild variant="outline">
-            <Link href="/commercial/customer-costing">
-              Customer Parameter Costing
-            </Link>
-          </Button>
+          <>
+            <Button asChild variant="outline">
+              <Link href="/commercial/pricing/update">Update From Excel</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/commercial/customer-costing">
+                Customer Parameter Costing
+              </Link>
+            </Button>
+          </>
         }
       />
       <section className="grid gap-3 sm:grid-cols-3">

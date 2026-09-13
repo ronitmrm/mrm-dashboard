@@ -59,9 +59,16 @@ export default async function ProductBulkRevisionPage() {
             from Product Parameter Costing.
           </p>
         </div>
-        <Button asChild variant="outline">
-          <Link href="/commercial/product-costing">Product Costing Queue</Link>
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="outline">
+            <Link href="/commercial/pricing/update">Update From Excel</Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href="/commercial/product-costing">
+              Product Costing Queue
+            </Link>
+          </Button>
+        </div>
       </section>
 
       <section className="grid gap-3 sm:grid-cols-3">

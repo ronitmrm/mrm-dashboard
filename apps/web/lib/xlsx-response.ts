@@ -1,9 +1,14 @@
 import * as XLSX from "xlsx"
 
-export function xlsxResponse(workbook: XLSX.WorkBook, fileName: string) {
+export function xlsxResponse(
+  workbook: XLSX.WorkBook,
+  fileName: string,
+  options: { compression?: boolean } = {}
+) {
   const output = XLSX.write(workbook, {
     bookType: "xlsx",
     type: "buffer",
+    compression: options.compression,
   }) as Buffer
   return new Response(
     output.buffer.slice(

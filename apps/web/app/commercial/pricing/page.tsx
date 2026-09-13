@@ -1,6 +1,8 @@
 import { createCommercialCostingRepository } from "@workspace/db"
+import Link from "next/link"
+import { Button } from "@workspace/ui/components/button"
 import {
- SectionCard,
+  SectionCard,
   CardAction,
   CardContent,
   CardHeader,
@@ -34,10 +36,13 @@ export default async function PricingPage() {
 
   return (
     <FullPageWorkspace className="h-[calc(100svh-var(--header-height))] grid-rows-[minmax(0,1fr)] content-stretch overflow-hidden">
- <SectionCard className="min-h-0">
+      <SectionCard className="min-h-0">
         <CardHeader className="shrink-0">
           <CardTitle>Pricing</CardTitle>
           <CardAction>
+            <Button asChild variant="outline">
+              <Link href="/commercial/pricing/update">Update From Excel</Link>
+            </Button>
             <DataDownloadButton href="/commercial/pricing/export.xlsx" />
           </CardAction>
         </CardHeader>
@@ -47,7 +52,7 @@ export default async function PricingPage() {
             rows={tableRows}
           />
         </CardContent>
- </SectionCard>
+      </SectionCard>
     </FullPageWorkspace>
   )
 }

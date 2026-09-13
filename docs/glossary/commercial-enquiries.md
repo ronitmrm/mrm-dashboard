@@ -572,3 +572,22 @@ stored and are not duplicated in the register.
 Drawing History change. Each entry identifies the Part, time, user, and the
 before and after drawing values, including Drawing Number, Revision, Revision
 Date, laminated quantities, and remarks.
+
+**Pricing Input Update**: A controlled Excel import for revised prices from inputs.
+Product Inputs has one stable Product ID per shared product; changes affect all
+active customer prices using it. Customer Inputs has one stable quote-item ID per
+customer price or BOM component. Customer codes are reference text only, never
+matching or assignment keys. Only labelled input columns are accepted; calculated
+columns are ignored and Excel formulas in inputs are rejected. Blank retains the
+current input; zero is explicit where valid. Percent inputs use percentage points
+(1 means 1%).
+
+The software validates row versions, input applicability and calculation
+prerequisites, then previews old/new prices including affected package ancestors.
+Apply revalidates the exact preview against current data in one transaction,
+records an audited completed bulk revision and recalculates Product base costs
+and customer prices using canonical costing functions. Superseded snapshots and
+issued documents remain intact. This does not delete trial revisions, send
+documents or import calculated totals. Apply explicitly accepts the listed prices
+across affected customers and requires revision creation, staging and completion
+capabilities.
