@@ -10006,8 +10006,8 @@ function MachineMasterPanel({
                 </Link>
               </Button>
             </div>
-            <div className="rounded-lg border min-w-0">
-              <OperationalTable containerClassName="max-h-[72vh]">
+            <div className="min-w-0">
+              <OperationalTable containerClassName="max-h-[72vh] rounded-lg border">
                 <TableHeader className="sticky top-0 z-10 bg-background">
                   <TableRow>
                     <TableHead>Machine No.</TableHead>
@@ -10308,8 +10308,9 @@ function MachineMasterPanel({
             </div>
           ) : null}
           {machineSchedules.length ? (
-            <div className="rounded-lg border min-w-0">
+            <div className="min-w-0">
               <OperationalTable
+                containerClassName="rounded-lg border"
                 onFilteredRowCountChange={(visible) =>
                   setVisibleScheduleCount(visible)
                 }
@@ -10415,8 +10416,8 @@ function MachineMasterPanel({
             />
           </div>
           {filteredHistory.length ? (
-            <div className="rounded-lg border min-w-0">
-              <OperationalTable>
+            <div className="min-w-0">
+              <OperationalTable containerClassName="rounded-lg border">
                 <TableHeader className="sticky top-0 z-10 bg-background">
                   <TableRow>
                     <TableHead>Date</TableHead>
