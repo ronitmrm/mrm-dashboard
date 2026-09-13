@@ -76,7 +76,7 @@ export function productionMasterSnapshot(
       ])
     if (master === "route") {
       lookup("setupNameMasterRows", ["setupName"])
-      lookup("machinePlanningRows", ["machineFamily"])
+      lookup("machinePlanningRows", ["machineFamily", "machineType"])
     }
     if (master === "maintenance_master")
       lookup("maintenanceChecklistMasterRows", [

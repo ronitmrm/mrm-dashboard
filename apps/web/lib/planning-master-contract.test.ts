@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { machineTypeForFamily } from "@workspace/db/planning-rules"
 
 import {
   machineFamilyOptions,
@@ -20,6 +21,17 @@ const routeRows = [
 ]
 
 describe("planning master contract", () => {
+  it("fetches the family's shared machine type and leaves conflicts unresolved", () => {
+    const machines = [
+      { machineFamily: "D5", machineType: "Drilling" },
+      { machineFamily: " d5 ", machineType: "Drilling" },
+      { machineFamily: "T1", machineType: "Turning" },
+    ]
+    expect(machineTypeForFamily(machines, "D5")).toBe("Drilling")
+    expect(machineTypeForFamily(machines, "T1")).toBe("Turning")
+    expect(machineTypeForFamily(machines, "")).toBe("")
+    expect(machineTypeForFamily([...machines, { machineFamily: "D5", machineType: "Turning" }], "D5")).toBe("")
+  })
   it("offers route identities and master-backed dropdown values", () => {
     expect(routeMasterLineOptions(routeRows)).toEqual([
       {

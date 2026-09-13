@@ -61,6 +61,7 @@ describe("independent master permissions", () => {
         ],
       },
       productionControl: {
+        machinePlanningRows: [{ machineFamily: "D5", machineType: "Drilling", internalNote: "private" }],
         toolingMasterRows: [{ fixture: "F1" }],
         routeMasterRows: [
           {
@@ -102,6 +103,12 @@ describe("independent master permissions", () => {
       { partNo: "P1", setupNo: "S1", setupName: "TURN" },
     ])
     expect(edit.productionControl).not.toHaveProperty("workOrders")
+    const routeEdit = productionMasterSnapshot(source, new Set([
+      "masters.cnc.route.read", "masters.cnc.route.save",
+    ]), "cnc")
+    expect(routeEdit.productionControl.machinePlanningRows).toEqual([
+      { machineFamily: "D5", machineType: "Drilling" },
+    ])
   })
   it("keeps supplier contact details out of a category page and a price form's reference list", () => {
     const data = {

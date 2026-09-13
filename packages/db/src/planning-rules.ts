@@ -1,3 +1,18 @@
+export function machineTypeForFamily(
+  rows: readonly Record<string, unknown>[],
+  family: unknown
+) {
+  const key = String(family ?? "").trim().toLowerCase()
+  if (!key) return ""
+  const types = new Map<string, string>()
+  for (const row of rows) {
+    if (String(row.machineFamily ?? "").trim().toLowerCase() !== key) continue
+    const type = String(row.machineType ?? "").trim()
+    types.set(type.toLowerCase(), type)
+  }
+  return types.size === 1 ? [...types.values()][0]! : ""
+}
+
 export type SourcePlannerDecision = Record<string, unknown> & {
   createdAt: string;
   source: "source-workbook";

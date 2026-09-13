@@ -607,6 +607,7 @@ async function savePlanningMasterEntry(
       productionFloorCode: text(payload.productionFloorCode),
       replaceSetups: false,
       requireSetupNameMaster: true,
+      machineFamily: text(payload.machineFamily),
       routeCode,
       setups: [
         {

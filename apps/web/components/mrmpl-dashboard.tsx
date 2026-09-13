@@ -254,6 +254,7 @@ import {
   jobCardWorkspaceHref,
 } from "@/lib/unified-navigation"
 import { normalizeUserEnteredPayload } from "@workspace/db/user-entry-text"
+import { machineTypeForFamily } from "@workspace/db/planning-rules"
 import {
   machineFamilyOptions,
   planningMasterPayload,
@@ -11231,7 +11232,6 @@ function DataEntryForm({
   ])
   const routeMachineFamilies = machineFamilyOptions([
     ...asArray(productionControl.machinePlanningRows),
-    ...asArray(productionControl.routeMasterRows),
   ])
   const lockedFields = new Set(
     defaults.__editingMaster ? immutableMasterFields(spec.entryType) : []
@@ -11242,7 +11242,9 @@ function DataEntryForm({
         ? { ...field, options: ["", ...setupNames] }
         : spec.entryType === "route" && field.name === "machineFamily"
           ? { ...field, options: ["", ...routeMachineFamilies] }
-          : field
+          : spec.entryType === "route" && field.name === "machineType"
+            ? { ...field, readOnly: true }
+            : field
     const withOptions =
       spec.entryType === "tooling" &&
       toolingAssetCodes.length &&
@@ -11320,6 +11322,11 @@ function DataEntryForm({
           title={`Save ${spec.title}`}
           fields={resolvedFields}
           defaults={resolvedDefaults}
+          deriveValues={spec.entryType === "route" ? (values) => ({
+            machineType: machineTypeForFamily(
+              asArray(productionControl.machinePlanningRows), values.machineFamily
+            ),
+          }) : undefined}
           buttonLabel={`Save ${spec.title}`}
           onSubmit={async (body) => {
             await submitAction("data-entry", {
@@ -13469,14 +13476,18 @@ function LegacyActionForm({
   defaults = {},
   buttonLabel,
   onSubmit,
+  deriveValues,
 }: {
   title: string
   fields: LegacyField[]
   defaults?: Record<string, unknown>
   buttonLabel: string
   onSubmit: (body: Record<string, unknown>) => void | Promise<void>
+  deriveValues?: (values: Record<string, unknown>) => Record<string, string>
 }) {
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [values, setValues] = useState(defaults)
+  const derivedValues = deriveValues?.(values) ?? {}
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -13484,8 +13495,9 @@ function LegacyActionForm({
     const form = event.currentTarget
     setIsSubmitting(true)
     try {
-      await onSubmit(formPayload(new FormData(form), fields))
+      await onSubmit({ ...formPayload(new FormData(form), fields), ...derivedValues })
       form.reset()
+      setValues(defaults)
     } finally {
       setIsSubmitting(false)
     }
@@ -13514,6 +13526,11 @@ function LegacyActionForm({
                     field.options[0]
                   }
                   required={field.required}
+                  onChange={(event) => {
+                    if (deriveValues) setValues((current) => ({
+                      ...current, [field.name]: event.target.value,
+                    }))
+                  }}
                 >
                   {field.options.map((option) => (
                     <option key={option} value={option}>
@@ -13542,7 +13559,9 @@ function LegacyActionForm({
                   min={field.min}
                   step={field.step}
                   readOnly={field.readOnly}
-                  defaultValue={str(defaults[field.name])}
+                  {...(field.name in derivedValues
+                    ? { value: derivedValues[field.name] }
+                    : { defaultValue: str(defaults[field.name]) })}
                 />
               )}
             </Field>
