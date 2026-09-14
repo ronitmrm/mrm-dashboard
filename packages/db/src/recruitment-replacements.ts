@@ -11,6 +11,8 @@ export type ReplacementAppointment = {
   outgoingEmployeeName: string | null
   outgoingEmployeeCode: string | null
   outgoingLastWorkingDate: string | null
+  outgoingJoiningDate?: string | null
+  outgoingStillEmployed?: boolean
 }
 
 type AssignmentTarget = {
@@ -71,10 +73,10 @@ export async function applyReplacementAssignment(
     }
     if (event === "Replacement Joined") {
       if (
-        targets.some((post) => post.status !== "Resigned" || !post.can_replace)
+        targets.some((post) => post.status !== "Resigned" || !post.last_working_date)
       ) {
         throw new Error(
-          "Confirm replacement joining only after the outgoing employee's last working date."
+          "The outgoing employee must be Resigned with a recorded last working date."
         )
       }
       const employeeCode =

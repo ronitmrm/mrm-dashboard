@@ -71,19 +71,7 @@ test.each(["non-joining", "joining"])(
     )
     expect(workspace?.job.status).toBe("Closed")
     expect(workspace?.applications[0]?.canRecordDidNotJoin).toBe(true)
-    await expect(
-      repository.assignEmployee({
-        organizationId: f.organizationId,
-        postId: f.postIds[0]!,
-        employeeEvent: "Replacement Joined",
-        employeeCode: "205",
-      })
-    ).rejects.toThrow("last working date")
     if (outcome === "joining") {
-      await pool.query(
-        "UPDATE recruitment.posts SET last_working_date=current_date-1 WHERE id=ANY($1::uuid[])",
-        [f.postIds]
-      )
       await repository.assignEmployee({
         organizationId: f.organizationId,
         postId: f.postIds[0]!,
@@ -103,6 +91,7 @@ test.each(["non-joining", "joining"])(
               status: "Joined",
               outgoingEmployeeName: "Outgoing Employee",
               outgoingEmployeeCode: "104",
+              outgoingStillEmployed: true,
             }),
           ],
         })

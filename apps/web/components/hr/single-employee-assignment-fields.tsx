@@ -218,6 +218,12 @@ export function SingleEmployeeAssignmentFields({
           employee and last working date will remain unchanged.
         </FieldDescription>
       ) : null}
+      {pendingReplacement ? (
+        <FieldDescription>
+          Select Confirm Replacement Joined and enter {pendingReplacement.employeeName}'s own Employee ID.
+          Both employees remain listed until the outgoing employee's last working date.
+        </FieldDescription>
+      ) : null}
       {selected?.post.replacementAppointments?.length ? (
         <Field>
           <FieldLabel>Replacement History</FieldLabel>

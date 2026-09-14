@@ -1173,7 +1173,10 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
               'completedAt', replacement.completed_at::date::text,
               'outgoingEmployeeName', replacement.outgoing_assignment ->> 'employee_name',
               'outgoingEmployeeCode', replacement.outgoing_assignment ->> 'employee_code',
-              'outgoingLastWorkingDate', replacement.outgoing_assignment ->> 'last_working_date'
+              'outgoingLastWorkingDate', replacement.outgoing_assignment ->> 'last_working_date',
+              'outgoingJoiningDate', replacement.outgoing_assignment ->> 'joining_date',
+              'outgoingStillEmployed', replacement.status = 'Joined'
+                AND (replacement.outgoing_assignment ->> 'last_working_date')::date >= current_date
             ) ORDER BY replacement.created_at DESC, replacement.id)
             FROM recruitment.post_replacements replacement
             WHERE replacement.post_id = post.id AND replacement.organization_id = post.organization_id),

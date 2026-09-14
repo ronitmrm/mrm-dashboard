@@ -75,9 +75,9 @@ describe("assignEmployee", () => {
     {
       event: "Replacement Joined",
       canReplace: false,
-      expectedError: "only after the outgoing employee's last working date",
-      expectedStatus: "Resigned",
-      replacementStatus: "Pending",
+      expectedError: null,
+      expectedStatus: "Occupied",
+      replacementStatus: "Joined",
     },
     {
       event: "Replacement Joined",

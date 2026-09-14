@@ -66,9 +66,11 @@ candidate's pending reservation and reopens the same job; the outgoing employee
 is unchanged. Confirming Replacement Joined retains the application link for
 employment history. Candidate reservations are cancelled through Did Not Join.
 HR may cancel a manual pending appointment without affecting the outgoing employee.
-After the outgoing Last Working Date, HR explicitly confirms Replacement Joined
-with the incoming employee's numeric Employee ID. The outgoing assignment is
-retained in replacement history and the incoming employee becomes Occupied.
+HR explicitly confirms Replacement Joined with the incoming employee's own
+numeric Employee ID, including during the outgoing employee's notice period.
+The outgoing assignment is retained in replacement history and the incoming
+employee becomes Occupied. Employee Master shows both employees during handover;
+the outgoing row disappears after its Last Working Date, while history remains.
 There is no automatic joining and the outgoing Employee ID is never reused.
 Combined jobs reserve and confirm their linked posts atomically.
 
