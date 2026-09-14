@@ -70,6 +70,12 @@ export const personalDashboardNavigation = {
   label: "Dashboard",
 } as const
 
+export const brandingNavigation = [
+  { href: "/branding/sop", icon: ListChecks, label: "SOPs" },
+  { href: "/branding/notice", icon: FilePenLine, label: "Notices" },
+  { href: "/branding/policy", icon: ScrollText, label: "Policies" },
+] as const
+
 export function dashboardTabHref(
   tab: DashboardTabId,
   productionFloorCode?: ProductionFloorCode

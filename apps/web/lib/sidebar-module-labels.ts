@@ -1,4 +1,5 @@
 export const sidebarModuleLabels = {
+  branding: "Branding",
   accessAdministration: "Access Administration",
   costing: "Costing",
   dashboard: "Dashboard",
@@ -52,6 +53,8 @@ export function sidebarModuleForPermission(
   }
 
   switch (storedModule) {
+    case "branding":
+      return sidebarModuleLabels.branding
     case "administration":
     case "artifacts":
       return sidebarModuleLabels.accessAdministration
@@ -85,6 +88,9 @@ export function sidebarSubmoduleForPermission(
   }
 
   const mappings = [
+    ["branding.sop.", "SOPs"],
+    ["branding.notice.", "Notices"],
+    ["branding.policy.", "Policies"],
     ["administration.", "Access Administration"],
     ["artifacts.", "Artifacts"],
     ["pricing.dashboard.", "Pricing"],

@@ -28,6 +28,7 @@ import { UserAccountFooter } from "@/components/user-account-footer"
 import type { UnifiedNavigationAccess } from "@/lib/auth/unified-navigation-access"
 import {
   administrationNavigation,
+  brandingNavigation,
   commercialMasterNavigation,
   commercialNavigation,
   dashboardNavigation,
@@ -99,6 +100,7 @@ export function CommercialShell({
       ...hrMasterNavigation,
       ...hrNavigation,
       ...administrationNavigation,
+      ...brandingNavigation,
       ...storeNavigation,
     ].find((item) =>
       navigationHrefMatches(pathname, searchParams, item.href)

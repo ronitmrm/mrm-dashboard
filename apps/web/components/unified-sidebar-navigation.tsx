@@ -10,6 +10,7 @@ import {
 import { usePathname, useSearchParams } from "next/navigation"
 import {
   BriefcaseBusiness,
+  Palette,
   Boxes,
   Calculator,
   ChevronRight,
@@ -57,6 +58,7 @@ import {
 } from "@/lib/sidebar-accordion"
 import {
   administrationNavigation,
+  brandingNavigation,
   commercialCostingNavigation,
   commercialMasterDataWorkspaceNavigation,
   commercialOperationalEntryNavigation,
@@ -103,6 +105,7 @@ function defaultExpandedSections(
       ({ href }) => pathname === href || pathname.startsWith(`${href}/`)
     )
   return {
+    branding: pathname.startsWith("/branding"),
     costing:
       pathname.startsWith("/commercial") &&
       !onCommercialMasterData &&
@@ -227,6 +230,13 @@ export function UnifiedSidebarNavigation({
     visibleHrNavigation,
     normalizedMenuSearch,
     "hr recruitment"
+  )
+  const filteredBrandingNavigation = filterNavigationItems(
+    brandingNavigation.filter((item) =>
+      navigationAccess.brandingHrefs?.includes(item.href)
+    ),
+    normalizedMenuSearch,
+    "branding sop notice policy documents"
   )
   const filteredStoreNavigation = filterNavigationItems(
     visibleStoreNavigation,
@@ -600,6 +610,37 @@ export function UnifiedSidebarNavigation({
         </NavigationSection>
       ) : null}
 
+      {filteredBrandingNavigation.length ? (
+        <NavigationSection
+          icon={Palette}
+          isActive={pathname.startsWith("/branding")}
+          label={sidebarModuleLabels.branding}
+          onOpenChange={(open) => {
+            if (!normalizedMenuSearch) setSectionOpen("branding", open)
+          }}
+          open={normalizedMenuSearch ? true : expandedSections.branding}
+        >
+          {filteredBrandingNavigation.map((item) => (
+            <SidebarMenuSubItem key={item.href}>
+              <SidebarMenuSubButton
+                asChild
+                className={submoduleButtonClassName}
+                isActive={navigationHrefMatches(
+                  pathname,
+                  searchParams,
+                  item.href
+                )}
+              >
+                <a href={item.href}>
+                  <item.icon aria-hidden="true" />
+                  <span>{item.label}</span>
+                </a>
+              </SidebarMenuSubButton>
+            </SidebarMenuSubItem>
+          ))}
+        </NavigationSection>
+      ) : null}
+
       {filteredCommercialNavigation.length ? (
         <NavigationSection
           icon={Calculator}
@@ -752,6 +793,7 @@ export function UnifiedSidebarNavigation({
       !filteredHrNavigation.length &&
       !filteredMaintenanceNavigation.length &&
       !filteredStoreNavigation.length &&
+      !filteredBrandingNavigation.length &&
       !filteredCommercialNavigation.length &&
       !filteredMasterDataNavigation.length &&
       !filteredOperationalEntryNavigation.length &&

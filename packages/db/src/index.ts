@@ -243,3 +243,9 @@ export { DuplicateMasterError } from "./master-duplicate"
 export { priceMasterProcesses, type PriceMaster } from "./price-master"
 export type { QuotationVersion } from "./quotation-versions"
 export * from "./pricing-input-fields"
+export {
+  createBrandingRepository,
+  type BrandingDocument,
+  type BrandingRevision,
+  type BrandingRegisterRow,
+} from "./branding"

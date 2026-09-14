@@ -62,7 +62,7 @@ describe("unified navigation", () => {
     )
     const nativeLinks = source.match(/<a href=\{item\.href\}>/g) ?? []
 
-    expect(nativeLinks).toHaveLength(5)
+    expect(nativeLinks).toHaveLength(6)
     expect(source).toContain(
       "<a href={productionNavigationHref(item.id, floor.code)}>"
     )
