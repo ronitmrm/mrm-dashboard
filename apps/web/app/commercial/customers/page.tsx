@@ -403,7 +403,7 @@ export default async function CustomersPage({
                         <TableCell data-filter-value={customer.companyName ?? ""}>{customer.companyName}</TableCell>
                         <TableCell data-filter-value={customer.email ?? ""}>{customer.email || "—"}</TableCell>
                         <TableCell data-filter-value={customer.phone ?? ""}>{customer.phone || "—"}</TableCell>
-                        <TableCell data-filter-value={customer.address ?? ""}><span className="whitespace-pre-line">{customer.address || "â€”"}</span></TableCell>
+                        <TableCell data-filter-value={customer.address ?? ""}><span className="whitespace-pre-line">{customer.address || "—"}</span></TableCell>
                         <TableCell data-filter-value={customer.country ?? ""}>{customer.country || "—"}</TableCell>
                         <TableCell data-filter-value={customer.defaultBuyerName ?? ""}>{customer.defaultBuyerName || "—"}</TableCell>
                         <TableCell data-filter-value={customer.defaultIncoterms ?? ""}>{customer.defaultIncoterms || "—"}</TableCell>
