@@ -386,11 +386,23 @@ export async function deleteEnquiryAction(formData: FormData) {
 export async function deleteEnquiryLinesAction(formData: FormData) {
   const enquiryId = requiredText(formData, "enquiry_id")
   const itemIds = formData.getAll("enquiry_item_ids").map(String)
-  await withWorkflow(
+  const result = await withWorkflow(
     commercialTaskCapabilities.deleteEnquiry,
     `${enquiriesPath}/${enquiryId}`,
-    (workflow, actorUserId) => workflow.deleteEnquiryItems(enquiryId, itemIds, actorUserId)
+    async (workflow, actorUserId) => {
+      try {
+        return await workflow.deleteEnquiryItems(enquiryId, itemIds, actorUserId)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : ""
+        if (/^(Select at least|Selected enquiry|Design or costing)/.test(message)) {
+          return { error: message }
+        }
+        console.error("Enquiry line deletion failed", error)
+        return { error: "Could not delete the selected lines. Please retry or contact your administrator." }
+      }
+    }
   )
+  if ("error" in result) return result
   revalidatePath(enquiriesPath, "layout")
   revalidatePath(technicalReviewPath)
   redirect(`${enquiriesPath}/${enquiryId}`)

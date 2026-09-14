@@ -139,7 +139,7 @@ export function CommercialShell({
         </SidebarFooter>
         <SidebarRail />
       </Sidebar>
-      <SidebarInset>
+      <SidebarInset className="min-w-0">
         <header className="sticky top-0 z-10 flex h-(--header-height) items-center gap-3 border-b bg-card/95 px-4 backdrop-blur lg:px-6">
           <SidebarTrigger />
           <Separator className="h-5" orientation="vertical" />
@@ -153,7 +153,7 @@ export function CommercialShell({
             Postgresql
           </Badge>
         </header>
-        <main className="@container/main flex flex-1 flex-col gap-6 p-4 lg:p-6">
+        <main className="@container/main flex min-w-0 flex-1 flex-col gap-6 p-4 lg:p-6">
           {children}
         </main>
       </SidebarInset>

@@ -2755,13 +2755,15 @@ export function createCommercialWorkflowRepository(
             ) THEN technical_handover_at ELSE NULL END,
             updated_at = now(), row_version = row_version + 1 WHERE id = $1
         `, [enquiryId])
-        for (const itemId of ids) {
-          await writeAuditEvent(client, {
-            actorUserId, eventType: "enquiry_item.deleted",
-            organizationId: enquiry.rows[0].organization_id,
-            targetId: itemId, targetTable: "enquiry_items",
-          })
-        }
+        await client.query(`
+          INSERT INTO audit.events (
+            organization_id, event_type, target_schema, target_table, target_id,
+            actor_user_id, metadata, source_system, source_table, source_id
+          )
+          SELECT $1, 'enquiry_item.deleted', 'sales', 'enquiry_items', item_id,
+            $2, '{}'::jsonb, 'mrm-dashboard', 'workflow_events', gen_random_uuid()::text
+          FROM unnest($3::uuid[]) AS item_id
+        `, [enquiry.rows[0].organization_id, actorUserId ?? null, ids])
         return { deleted: ids.length }
       })
     },
