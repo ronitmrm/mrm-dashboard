@@ -7,6 +7,7 @@ export type ReplacementAppointment = {
   employeeCode: string | null
   status: "Pending" | "Joined" | "Cancelled"
   appointedAt: string
+  joiningDate?: string | null
   completedAt: string | null
   outgoingEmployeeName: string | null
   outgoingEmployeeCode: string | null

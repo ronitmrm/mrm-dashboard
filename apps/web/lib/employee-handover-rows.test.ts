@@ -17,6 +17,20 @@ it("shows both employee identities during handover and removes only the outgoing
       outgoingLastWorkingDate: "2026-09-26", outgoingStillEmployed: true,
     }],
   }
+  const pendingRows = employeeHandoverRows([{
+    ...post, employeeName: "Dhruv", employeeCode: "69", status: "Resigned",
+    lastWorkingDate: "2026-09-26",
+    replacementAppointments: [{ ...post.replacementAppointments![0]!,
+      status: "Pending", employeeCode: null, joiningDate: "2026-09-15",
+      completedAt: null, outgoingStillEmployed: false,
+    }],
+  }])
+  expect(pendingRows).toHaveLength(2)
+  expect(pendingRows[0]).toMatchObject({ employeeName: "Dhruv", employeeCode: "69", status: "Resigned" })
+  expect(pendingRows[1]).toMatchObject({
+    id: "pending:replacement", postCode: "OCMM-AS-1", employeeName: "Narendra",
+    employeeCode: null, status: "Appointed", joiningDate: "2026-09-15", lastWorkingDate: null,
+  })
   expect(employeeHandoverRows([post]).map(({ employeeCode }) => employeeCode)).toEqual(["205", "69"])
   post.replacementAppointments![0]!.outgoingStillEmployed = false
   expect(employeeHandoverRows([post])).toEqual([post])

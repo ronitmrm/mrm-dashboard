@@ -1172,6 +1172,10 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
               'employeeName', replacement.employee_name,
               'employeeCode', replacement.employee_code, 'status', replacement.status,
               'appointedAt', replacement.created_at::date::text,
+              'joiningDate', (SELECT application.joining_date::text
+                FROM recruitment.applications application
+                WHERE application.id = replacement.application_id
+                  AND application.organization_id = replacement.organization_id),
               'completedAt', replacement.completed_at::date::text,
               'outgoingEmployeeName', replacement.outgoing_assignment ->> 'employee_name',
               'outgoingEmployeeCode', replacement.outgoing_assignment ->> 'employee_code',

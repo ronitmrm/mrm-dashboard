@@ -267,7 +267,7 @@ export function ApprovedPostsTable({
                         {employeeManagement ? (
                           <TableCell>
                             <Checkbox
-                              disabled={row.id.startsWith("outgoing:")}
+                              disabled={row.id.startsWith("outgoing:") || row.id.startsWith("pending:")}
                               aria-label={`Select ${row.postCode}`}
                               checked={selectedEmployeePost?.id === row.id}
                               onCheckedChange={(checked) =>
@@ -315,7 +315,7 @@ export function ApprovedPostsTable({
                         {showActions ? (
                           <TableCell>
                             <div className="flex justify-end gap-2">
-                              {row.id.startsWith("outgoing:") ? <span className="text-sm text-muted-foreground">Serving notice</span> : employeeManagement ? (
+                              {row.id.startsWith("pending:") ? <span className="text-sm text-muted-foreground">Pending joining</span> : row.id.startsWith("outgoing:") ? <span className="text-sm text-muted-foreground">Serving notice</span> : employeeManagement ? (
                                 <Button
                                   onClick={() => {
                                     setSelectedEmployeePost(row)
@@ -331,7 +331,7 @@ export function ApprovedPostsTable({
                                     : "Employee"}
                                 </Button>
                               ) : null}
-                              {!row.id.startsWith("outgoing:") && (canWrite || canDelete || canCreateJob) ? (
+                              {!row.id.startsWith("outgoing:") && !row.id.startsWith("pending:") && (canWrite || canDelete || canCreateJob) ? (
                                 <>
                                   {canCreateJob && (row.status === "Vacant" ||
                                     row.status === "Resigned") &&
