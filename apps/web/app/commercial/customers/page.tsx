@@ -50,6 +50,7 @@ import {
 } from "@/lib/external-master-workspace"
 import { pageBounds } from "@/lib/page-bounds"
 import { commercialTermOptions } from "@/lib/commercial-term-options"
+import { countryNames } from "@/lib/countries"
 
 import {
   createCustomerAction,
@@ -259,7 +260,15 @@ export default async function CustomersPage({
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="new-country">Country</FieldLabel>
-                  <Input id="new-country" defaultValue={editingCustomer?.country ?? ""} name="country" />
+                  <NativeSelect id="new-country" className="w-full" defaultValue={editingCustomer?.country ?? ""} name="country" searchPlaceholder="Search countries...">
+                    <NativeSelectOption value="">Select Country</NativeSelectOption>
+                    {editingCustomer?.country && !countryNames.includes(editingCustomer.country) ? (
+                      <NativeSelectOption value={editingCustomer.country}>{editingCustomer.country} (Current Value)</NativeSelectOption>
+                    ) : null}
+                    {countryNames.map((country) => (
+                      <NativeSelectOption key={country} value={country}>{country}</NativeSelectOption>
+                    ))}
+                  </NativeSelect>
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="new-status">Status</FieldLabel>

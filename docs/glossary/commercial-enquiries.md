@@ -1,5 +1,10 @@
 # Commercial Enquiries
 
+**Customer Country Catalog**: Customer Data Entry offers a searchable list of ISO
+3166-1 countries and territories using English display names. Existing saved
+country text remains selectable until explicitly replaced; the catalog does not
+rewrite historical customer values. Country remains optional.
+
 **Enquiry Excel View Totals**: Enquiry Lines and Quote PDF Sent count all workflow
 lines visible to the user across all pages, before table filters. Quote PDF Sent
 counts lines whose selected current quote has been sent. Table filters apply to
