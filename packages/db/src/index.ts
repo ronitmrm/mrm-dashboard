@@ -249,3 +249,4 @@ export {
   type BrandingRevision,
   type BrandingRegisterRow,
 } from "./branding"
+export { createOrderAcceptanceRepository } from "./order-acceptance"

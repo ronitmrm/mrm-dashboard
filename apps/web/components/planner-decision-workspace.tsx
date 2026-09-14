@@ -40,6 +40,7 @@ type PlannerDecisionPanels = {
 }
 
 type PlannerDecisionWorkspaceProps = {
+  orderAcceptanceHref?: string
   activeAction: PlannerDecisionAction | null
   activeView: PlannerDecisionView
   historyCount: number
@@ -88,6 +89,7 @@ const actionChoices = [
 }>
 
 export function PlannerDecisionWorkspace({
+  orderAcceptanceHref,
   activeAction,
   activeView,
   historyCount,
@@ -176,6 +178,7 @@ export function PlannerDecisionWorkspace({
               </div>
             </div>
             <div className="grid gap-3 @3xl/planner:grid-cols-2">
+              {orderAcceptanceHref ? <a href={orderAcceptanceHref} className="grid gap-2 rounded-lg border bg-background p-4 text-left hover:bg-muted/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><span className="font-semibold">Order Acceptance Planning</span><span className="text-sm text-muted-foreground">Review Proposed Orders, collect RM dates and select feasible lines before Purchase confirms the PO.</span><span className="text-xs font-medium text-primary">Open Proposed Orders</span></a> : null}
               {actionChoices.map((choice) => {
                 const Icon = choice.icon
                 return (
