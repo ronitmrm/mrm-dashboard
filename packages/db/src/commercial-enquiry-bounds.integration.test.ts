@@ -278,6 +278,7 @@ describe("bounded enquiry repositories", () => {
     ).resolves.toEqual({
       coverage: { limit: 200, returned: 0, truncated: false },
       rows: [],
+      summary: { enquiries: 0, lines: 0, dueFollowups: 0 },
     })
 
     const exact = await repository.listEnquiriesBounded(exactOrganizationCode)
@@ -381,6 +382,13 @@ describe("bounded enquiry repositories", () => {
     expect(Buffer.byteLength(JSON.stringify(overflow))).toBeLessThan(
       1024 * 1024
     )
+  })
+
+  test("pages enquiry registers with totals across pages", async () => {
+    const page = await repository.listEnquiriesBounded(exportOrganizationCode, 15, undefined, 15)
+    expect(page.rows).toHaveLength(15)
+    expect(page.rows[0]?.enquiryNumber).toBe("EXPORT-0486")
+    expect(page.summary).toEqual({ enquiries: 501, lines: 501, dueFollowups: 1 })
   })
 
   test("pages through enquiry Excel lines beyond the first 200", async () => {

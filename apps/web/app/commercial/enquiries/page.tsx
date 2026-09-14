@@ -1,4 +1,6 @@
 import Link from "next/link"
+import { redirect } from "next/navigation"
+import { pageBounds } from "@/lib/page-bounds"
 
 import {
   createCommercialMasterRepository,
@@ -28,7 +30,6 @@ import { readAuthEnvironment } from "@/lib/auth/auth"
 import { MetricSummary } from "@/components/ui/golden-patterns"
 import { istDateValue } from "@/lib/date-time"
 import { requireCapability } from "@/lib/auth/require-capability"
-import { BoundedResultNotice } from "@/components/bounded-result-notice"
 import { DataDownloadButton } from "@/components/data-download-button"
 import {
   MasterDataCsvDownloadButton,
@@ -46,13 +47,22 @@ export const dynamic = "force-dynamic"
 export default async function EnquiriesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ operationalView?: string }>
+  searchParams: Promise<{ operationalView?: string; page?: string; operationalUnit?: string; operationalMain?: string; operationalSub?: string }>
 }) {
   const session = await requireCapability(
     "pricing.enquiries.read",
     "/commercial/enquiries"
   )
-  const requestedView = (await searchParams).operationalView
+  const params = await searchParams
+  const bounds = pageBounds(params.page, 15)
+  const requestedView = params.operationalView
+  const pageHref = (page: number) => {
+    const query = new URLSearchParams({ operationalView: "masterTables", page: String(page) })
+    for (const key of ["operationalUnit", "operationalMain", "operationalSub"] as const) {
+      if (params[key]) query.set(key, params[key])
+    }
+    return `/commercial/enquiries?${query}`
+  }
   const operationalView =
     requestedView === "masterTables" ? "masterTables" : "dataEntry"
   const connectionString = readAuthEnvironment().connectionString
@@ -68,9 +78,9 @@ export default async function EnquiriesPage({
           await customerRepository.organizationIdForCode("MRMPL")
         const [customerRows, enquiries, masters] = await Promise.all([
           customerRepository.listForOrganization("MRMPL"),
-          workflow.listEnquiriesBounded("MRMPL", 200, {
+          workflow.listEnquiriesBounded("MRMPL", bounds.limit, {
             originatingSalespersonUserId: session.user.id,
-          }),
+          }, bounds.offset),
           masterRepository.snapshot(resolvedOrganizationId),
         ])
         return {
@@ -86,6 +96,9 @@ export default async function EnquiriesPage({
       }
     })()
   const enquiries = enquiryResult.rows
+  const totalCount = enquiryResult.summary.enquiries
+  const totalPages = Math.max(1, Math.ceil(totalCount / bounds.limit))
+  if (operationalView === "masterTables" && bounds.page > totalPages) redirect(pageHref(totalPages))
   const today = istDateValue()
   const termOptions = commercialTermOptions(masterSnapshot.commercialTerms)
 
@@ -117,23 +130,20 @@ export default async function EnquiriesPage({
 
       {operationalView === "masterTables" ? (
         <MetricSummary
-          scope="Your loaded enquiry register · before table filters"
+          scope="Your enquiry register · all pages · before table filters"
           items={[
             {
               label: "Enquiries",
-              value: enquiries.length,
+              value: totalCount,
               tone: "information"
             },
             { tone: "brand",
               label: "Enquiry Lines",
-              value: enquiries.reduce((total, row) => total + row.itemCount, 0)
+              value: enquiryResult.summary.lines
             },
             {
               label: "Due Follow-ups",
-              value: enquiries.reduce(
-                (total, row) => total + row.dueFollowupCount,
-                0
-              ),
+              value: enquiryResult.summary.dueFollowups,
               tone: "warning"
             }
           ]}
@@ -169,16 +179,18 @@ export default async function EnquiriesPage({
 
       {operationalView === "masterTables" ? (
  <SectionCard>
-          <CardHeader>
-            <CardTitle>Enquiry Register</CardTitle>
-            <BoundedResultNotice
-              coverage={enquiryResult.coverage}
-              section="Enquiries"
-            />
-          </CardHeader>
           <CardContent>
-            <div className="overflow-hidden rounded-3xl border">
- <OperationalTable>
+            <OperationalTable containerClassName="rounded-md border" toolbarStart={<>
+              <h3 className="font-semibold">Enquiry Register</h3>
+              <div className="order-last mt-2 flex w-full flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
+                <span>Showing {enquiries.length ? bounds.offset + 1 : 0}–{Math.min(bounds.offset + enquiries.length, totalCount)} Of {totalCount} Enquiries</span>
+                <div className="flex items-center gap-2">
+                  {bounds.page > 1 ? <Button asChild size="sm" variant="outline"><Link href={pageHref(bounds.page - 1)}>Previous</Link></Button> : <Button disabled size="sm" variant="outline">Previous</Button>}
+                  <span>Page {bounds.page} Of {totalPages}</span>
+                  {bounds.page < totalPages ? <Button asChild size="sm" variant="outline"><Link href={pageHref(bounds.page + 1)}>Next</Link></Button> : <Button disabled size="sm" variant="outline">Next</Button>}
+                </div>
+              </div>
+            </>}>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Enq</TableHead>
@@ -240,7 +252,6 @@ export default async function EnquiriesPage({
                   )}
                 </TableBody>
  </OperationalTable>
-            </div>
           </CardContent>
  </SectionCard>
       ) : null}

@@ -6750,9 +6750,21 @@ export function createCommercialWorkflowRepository(
     async listEnquiriesBounded(
       organizationCode: string,
       requestedLimit = 200,
-      scope?: SalesWorkScope
+      scope?: SalesWorkScope,
+      offset = 0
     ) {
+      if (!Number.isSafeInteger(offset) || offset < 0) throw new Error("Invalid enquiry page offset.")
       const limit = operationalRootLimit(requestedLimit)
+      const totals = await pool.query<{ enquiries: string; lines: string; due: string }>(`
+        SELECT count(*)::text AS enquiries,
+          coalesce(sum((SELECT count(*) FROM sales.enquiry_items item WHERE item.enquiry_id = enquiry.id)), 0)::text AS lines,
+          coalesce(sum((SELECT count(*) FROM sales.followups followup WHERE followup.enquiry_id = enquiry.id AND followup.status = 'Pending' AND followup.due_on <= current_date)), 0)::text AS due
+        FROM sales.enquiries enquiry
+        JOIN core.organizations organization ON organization.id = enquiry.organization_id
+        JOIN sales.customers customer ON customer.id = enquiry.customer_id
+        WHERE lower(organization.code) = lower($1)
+          AND ($2::uuid IS NULL OR enquiry.created_by_user_id = $2 OR (SELECT identity.has_administrative_access($2)))
+      `, [organizationCode.trim(), scope?.originatingSalespersonUserId ?? null])
       const roots = await pool.query<EnquiryRootDatabaseRow>(
         `
           SELECT enquiry.id, enquiry.organization_id,
@@ -6769,19 +6781,27 @@ export function createCommercialWorkflowRepository(
           WHERE lower(organization.code) = lower($1)
             AND ($3::uuid IS NULL OR enquiry.created_by_user_id = $3 OR (SELECT identity.has_administrative_access($3)))
           ORDER BY enquiry.created_at DESC, enquiry.id DESC
-          LIMIT $2
+          LIMIT $2 OFFSET $4
         `,
         [
           organizationCode.trim(),
           limit + 1,
           scope?.originatingSalespersonUserId ?? null,
+          offset,
         ]
       )
       const rows = await enquiryRowsWithRelations(
         pool,
         roots.rows.slice(0, limit)
       )
-      return boundedResult(rows, limit, roots.rows.length > limit)
+      return {
+        ...boundedResult(rows, limit, roots.rows.length > limit),
+        summary: {
+          enquiries: Number(totals.rows[0]?.enquiries ?? 0),
+          lines: Number(totals.rows[0]?.lines ?? 0),
+          dueFollowups: Number(totals.rows[0]?.due ?? 0),
+        },
+      }
     },
 
     async listEnquirySpreadsheetBounded(
