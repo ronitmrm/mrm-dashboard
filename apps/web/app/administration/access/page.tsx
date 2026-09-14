@@ -119,6 +119,7 @@ export default async function AccessAdministrationPage({
   return (
     <>
       <MetricSummary
+        layout="fill"
         scope="Full Employee Master · Includes appointed and departed employees · Unaffected by filters · Non-employee accounts excluded"
         items={[
           {

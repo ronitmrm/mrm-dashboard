@@ -35,6 +35,7 @@ function MetricSummary({
   items,
   scope,
   className,
+  layout = "bounded",
 }: {
   items: readonly Pick<
     ComponentProps<typeof MetricCard>,
@@ -42,6 +43,7 @@ function MetricSummary({
   >[]
   scope: string
   className?: string
+  layout?: "bounded" | "fill"
 }) {
   return (
     <section
@@ -49,7 +51,14 @@ function MetricSummary({
       className={cn("grid min-w-0 shrink-0 gap-2", className)}
       data-slot="metric-summary"
     >
-      <div className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))] gap-3">
+      <div
+        className={cn(
+          "grid min-w-0 gap-3",
+          layout === "fill"
+            ? "grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))]"
+            : "grid-cols-[repeat(auto-fill,min(100%,16rem))]"
+        )}
+      >
         {items.map((item) => (
           <MetricCard
             {...item}

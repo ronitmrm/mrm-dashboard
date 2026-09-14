@@ -222,7 +222,7 @@ export default async function HrRecruitmentPage({
       activeItem.panelId !== "interviewWorkspacePanel" ? (
         <section
           aria-label="HR overview"
-          className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))] gap-3"
+          className="grid min-w-0 grid-cols-[repeat(auto-fill,min(100%,16rem))] gap-3"
         >
           {(
             [
