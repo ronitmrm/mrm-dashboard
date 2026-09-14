@@ -334,11 +334,12 @@ export default async function CustomersPage({
 
       {showMasterTables ? (
  <SectionCard>
-          <CardHeader>
-            <CardTitle>Customers</CardTitle>
-          </CardHeader>
           <CardContent>
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
+            <OperationalTable
+              containerClassName="rounded-md border"
+              toolbarStart={<>
+                <h3 className="font-semibold">Customers</h3>
+            <div className="order-last mt-2 flex w-full flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
               <span>
                 Showing {visibleCustomers.length ? bounds.offset + 1 : 0}–
                 {Math.min(bounds.offset + visibleCustomers.length, totalCount)}{" "}
@@ -384,8 +385,8 @@ export default async function CustomersPage({
                 )}
               </div>
             </div>
-            <div className="rounded-3xl border min-w-0">
- <OperationalTable>
+              </>}
+            >
                 <TableHeader>
                   <TableRow>
                     <TableHead data-filterable="true">Customer Id</TableHead>
@@ -440,7 +441,6 @@ export default async function CustomersPage({
                   )}
                 </TableBody>
  </OperationalTable>
-            </div>
           </CardContent>
  </SectionCard>
       ) : null}
