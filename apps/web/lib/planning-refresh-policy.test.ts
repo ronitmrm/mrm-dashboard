@@ -30,6 +30,8 @@ describe("planning refresh policy", () => {
   });
 
   it("leaves master and structural imports for manual recalculation", () => {
+    expect(shouldQueuePlanningRefresh("data-import", { entryType: "maintenance_checklist_master" })).toBe(true);
+    expect(shouldQueuePlanningRefresh("data-entry", { entryType: "maintenance_checklist_master" })).toBe(true);
     expect(shouldQueuePlanningRefresh("data-entry", { entryType: "machine_master" })).toBe(false);
     expect(shouldQueuePlanningRefresh("data-entry", { entryType: "route" })).toBe(false);
     expect(shouldQueuePlanningRefresh("data-entry", { entryType: "cycle" })).toBe(false);
@@ -38,6 +40,7 @@ describe("planning refresh policy", () => {
 
   it("tells users whether recalculation was queued, unnecessary, or left manual", () => {
     expect(planningRefreshStatusMessage(true)).toBe("Planning recalculation queued.");
+    expect(planningRefreshStatusMessage(true, "data-import", { entryType: "maintenance_checklist_master" })).toBe("Master table refresh queued.");
     expect(planningRefreshStatusMessage(false)).toBe("Use Recalculate planning after master changes.");
     expect(planningRefreshStatusMessage(false, "data-entry", {
       entryType: "shop_floor_status",

@@ -5,8 +5,26 @@ import { createStoreRepository } from "./store"
 import { createDashboardPlanningRepository } from "./dashboard-planning"
 import { createQualityRepository } from "./quality"
 import { createRecruitmentRepository } from "./recruitment"
+import { createMaintenanceRepository } from "./maintenance"
 
 afterEach(() => vi.restoreAllMocks())
+
+test("saving a maintenance checklist queues its master table refresh before commit", async () => {
+  const pool = new Pool()
+  const query = vi.fn(async () => ({ rows: [{ id: "saved", inserted: true }] }))
+  vi.spyOn(pool, "connect").mockImplementation(
+    async () => ({ query, release: vi.fn() }) as unknown as PoolClient
+  )
+  await createMaintenanceRepository({ pool }).upsertChecklistItem({
+    organizationId: "organization", checklistCode: "MC001", checklistTitle: "Monthly",
+    item: { itemKey: "1", sequence: 1, prompt: "Clean", inputType: "checkbox", required: true },
+    payload: { checklistCode: "MC001", sequence: 1 },
+  })
+  expect(query).toHaveBeenCalledWith(expect.stringContaining("INSERT INTO derived.refresh_jobs"), expect.any(Array))
+  expect(query).toHaveBeenCalledWith(expect.stringContaining("INSERT INTO derived.outbox_events"), expect.any(Array))
+  expect(query).toHaveBeenLastCalledWith("COMMIT")
+  await pool.end()
+})
 
 test("route setup saves fetch Machine Type from the selected unit's Machine Master", async () => {
   const pool = new Pool()

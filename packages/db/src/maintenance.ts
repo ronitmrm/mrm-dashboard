@@ -2,6 +2,7 @@ import { assertMasterAvailable } from "./master-duplicate"
 import { randomUUID } from "node:crypto"
 
 import type { PoolClient } from "pg"
+import { queueDashboardRefresh } from "./dashboard-refresh-queue"
 
 import {
   repositoryPool,
@@ -540,6 +541,7 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
           `,
           [definition.rows[0].id, normalizedItem.itemKey]
         )
+        await queueDashboardRefresh(client, input.organizationId)
         return { ...itemResult.rows[0]!, code }
       })
     },
