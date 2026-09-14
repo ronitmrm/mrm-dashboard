@@ -1,4 +1,6 @@
 import { assertMasterAvailable } from "./master-duplicate"
+import { insertOfferRevision } from "./recruitment-employment-letter-repository"
+import type { OfferLetterDetails, PreparedEmploymentLetter } from "./recruitment-employment-letters"
 import { randomUUID } from "node:crypto"
 
 import type { Pool, PoolClient } from "pg"
@@ -3779,14 +3781,19 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       )
     },
 
-    async changeCandidateJoiningDate(
-      input: MutationContext & {
+    async reviseCandidateAppointment(
+      input: MutationContext & CandidateAppointmentTermsInput & {
         applicationId: string
         joiningDate: string
+        previousLetterId: string
+        issuedOn: string
+        details: Omit<OfferLetterDetails, "salaryAfterProbationMinimum" | "salaryAfterProbationMaximum">
+        renderPdf: (letter: PreparedEmploymentLetter) => Promise<Uint8Array>
         previousJoiningDate: string
         reason: string
       }
     ) {
+      const terms = candidateAppointmentTerms({ ...input, willingToJoin: true })
       const joiningDate = required(input.joiningDate, "Joining date")
       const reason = required(input.reason, "Reason for correction")
       const date = new Date(`${joiningDate}T00:00:00Z`)
@@ -3797,9 +3804,12 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         const result = await client.query<{
           id: string; candidate_id: string; job_id: string; post_id: string | null;
           status: string; willing_to_join: boolean | null; joining_date: string | null;
+          salary_before_probation: string | null; salary_after_probation_minimum: string | null; salary_after_probation_maximum: string | null;
         }>(
           `SELECT application.id, application.candidate_id, application.status,
              application.willing_to_join, application.joining_date::text,
+             application.salary_before_probation, application.salary_after_probation_minimum,
+             application.salary_after_probation_maximum,
              job.id AS job_id, job.post_id
            FROM recruitment.applications application
            JOIN recruitment.job_posts job ON job.id = application.job_post_id
@@ -3811,7 +3821,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         const application = result.rows[0]
         if (!application) throw new Error("Candidate application was not found.")
         if (application.status !== "Approved" || application.willing_to_join !== true || !application.joining_date) {
-          throw new Error("Only an accepted pending appointment can have its joining date corrected.")
+          throw new Error("Only an accepted pending appointment can be corrected.")
         }
         if (application.joining_date !== input.previousJoiningDate) {
           throw new Error("The joining date has changed. Refresh and try again.")
@@ -3844,14 +3854,23 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
               !posts.rows.some((post) => post.id === row.post_id && post.status === "Resigned"))
           ) : posts.rows.some((post) => post.status !== "Appointed" ||
             optional(post.employee_code) || post.appointed_application_id !== application.id))) {
-          throw new Error("The employee has joined or the original appointment is no longer reserved. No dates were changed.")
+          throw new Error("The employee has joined or the original appointment is no longer reserved. No appointment details were changed.")
         }
-        if (joiningDate === application.joining_date) return { id: application.id, jobId: application.job_id }
+        const revisedOffer = await insertOfferRevision(client, {
+          ...input, joiningDate, reason,
+          salary: terms.salaryBeforeProbation!,
+          details: { ...input.details,
+            salaryAfterProbationMinimum: terms.salaryAfterProbationMinimum!,
+            salaryAfterProbationMaximum: terms.salaryAfterProbationMaximum! },
+        })
         await client.query(
           `UPDATE recruitment.applications SET joining_date = $1::date,
+             salary_before_probation = $5, salary_after_probation_minimum = $6,
+             salary_after_probation_maximum = $7,
              updated_by_user_id = $2, updated_at = now(), row_version = row_version + 1
            WHERE id = $3 AND organization_id = $4`,
-          [joiningDate, input.actorUserId ?? null, application.id, input.organizationId]
+          [joiningDate, input.actorUserId ?? null, application.id, input.organizationId,
+            terms.salaryBeforeProbation, terms.salaryAfterProbationMinimum, terms.salaryAfterProbationMaximum]
         )
         if (!pendingReplacement) await client.query(
           `UPDATE recruitment.posts SET joining_date = $1::date,
@@ -3863,19 +3882,23 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           `INSERT INTO recruitment.candidate_events (
              organization_id, candidate_id, job_post_id, application_id, event_type,
              title, notes, occurred_at, actor_user_id, source_system, source_table, source_id
-           ) VALUES ($1,$2,$3,$4,'Joining Date Corrected',
-             'Joining date corrected',$5,now(),$6,'mrm-dashboard','joining-date-correction',$7)`,
+           ) VALUES ($1,$2,$3,$4,'Appointment Corrected',
+             'Appointment and offer corrected',$5,now(),$6,'mrm-dashboard','appointment-correction',$7)`,
           [input.organizationId, application.candidate_id, application.job_id, application.id,
-            `${application.joining_date} to ${joiningDate}. ${reason}`, input.actorUserId ?? null, randomUUID()]
+            `${application.joining_date} to ${joiningDate}. Offer ${revisedOffer.reference} replaces ${revisedOffer.previousReference}. ${reason}`, input.actorUserId ?? null, randomUUID()]
         )
         await audit(client, {
-          ...input, eventType: "recruitment.application.joining_date_corrected",
-          beforeState: { joiningDate: application.joining_date },
-          afterState: { joiningDate },
+          ...input, eventType: "recruitment.application.appointment_corrected",
+          beforeState: { joiningDate: application.joining_date,
+            salaryBeforeProbation: application.salary_before_probation,
+            salaryAfterProbationMinimum: application.salary_after_probation_minimum,
+            salaryAfterProbationMaximum: application.salary_after_probation_maximum,
+            letterId: input.previousLetterId },
+          afterState: { ...terms, letterId: revisedOffer.id },
           metadata: { reason, postIds: posts.rows.map((post) => post.id), pendingReplacement },
           targetId: application.id, targetTable: "applications",
         })
-        return { id: application.id, jobId: application.job_id }
+        return { id: application.id, jobId: application.job_id, letterId: revisedOffer.id }
       })
     },
 

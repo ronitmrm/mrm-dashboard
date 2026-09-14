@@ -300,6 +300,7 @@ export default async function JobWorkspacePage({
                                 letter.applicationId === application.id &&
                                 letter.fileAvailable
                             )
+                            .slice(0, 1)
                             .map((letter) => (
                               <Button
                                 asChild
@@ -367,6 +368,15 @@ export default async function JobWorkspacePage({
                           <CandidateApplicationActions
                             applicationId={application.id}
                             candidateName={application.candidateName}
+                            appointmentDefaults={(() => {
+                              const offer = offerLetters.find((letter) => letter.applicationId === application.id)
+                              return offer ? {
+                                offer,
+                                salaryBeforeProbation: application.salaryBeforeProbation,
+                                salaryAfterProbationMinimum: application.salaryAfterProbationMinimum,
+                                salaryAfterProbationMaximum: application.salaryAfterProbationMaximum,
+                              } : undefined
+                            })()}
                             canRecordDidNotJoin={
                               application.canRecordDidNotJoin &&
                               grants.includes(

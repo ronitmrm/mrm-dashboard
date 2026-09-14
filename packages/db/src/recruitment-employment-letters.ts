@@ -95,7 +95,8 @@ function time(value: string, label: string) {
 
 function date(value: string, label: string) {
   const normalized = value.trim()
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized))
+  const parsed = new Date(`${normalized}T00:00:00Z`)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized) || Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== normalized)
     throw new Error(`${label} is required.`)
   return normalized
 }
