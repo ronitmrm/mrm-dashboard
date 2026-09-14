@@ -1144,7 +1144,7 @@ describe("PostgreSQL enquiry-to-design workflow", () => {
     )
   })
 
-  test("deletes selected handed-over intake lines and protects started work", async () => {
+  test("allows Sales corrections through Technical Review and locks lines at Start Design", async () => {
     const enquiry = await repository.createEnquiry({
       customerId, organizationId, receivedOn: "2026-09-14",
       commercialTerms: { currency: "USD", conversionRate: 83.25, incoterms: "FOB",
@@ -1155,6 +1155,7 @@ describe("PostgreSQL enquiry-to-design workflow", () => {
     const second = await repository.addEnquiryItem({ enquiryId: enquiry.id, organizationId,
       customerPartCode: "DELETE-2", description: "Second line" })
     await repository.handOverToTechnicalReview(enquiry.id)
+    await repository.updateTechnicalReview({ enquiryItemId: first.id, checklist: {}, status: "Feasible" })
     await expect(repository.deleteEnquiryItems(enquiry.id, [first.id])).resolves.toEqual({ deleted: 1 })
     expect((await repository.getEnquiry(enquiry.id)).items.map(line => line.id)).toEqual([second.id])
     await repository.deleteEnquiryItems(enquiry.id, [second.id])
@@ -1162,8 +1163,22 @@ describe("PostgreSQL enquiry-to-design workflow", () => {
     const replacement = await repository.addEnquiryItem({ enquiryId: enquiry.id, organizationId,
       customerPartCode: "CORRECTED", description: "Replacement line" })
     await repository.handOverToTechnicalReview(enquiry.id)
-    await pool.query("UPDATE sales.enquiry_items SET reviewed_at = now() WHERE id = $1", [replacement.id])
-    await expect(repository.deleteEnquiryItems(enquiry.id, [replacement.id])).rejects.toThrow("downstream work")
+    await repository.updateTechnicalReview({ enquiryItemId: replacement.id, checklist: {}, status: "Feasible" })
+    await repository.updateEnquiryItem({ enquiryItemId: replacement.id, customerPartCode: "CORRECTED", description: "Sales correction after review" })
+    expect((await repository.getEnquiry(enquiry.id)).items[0]!.technicalReviewStatus).toBe("Pending Review")
+    await repository.updateTechnicalReview({ enquiryItemId: replacement.id, checklist: {}, status: "Feasible" })
+    await repository.startDesignWork({ enquiryItemId: replacement.id })
+    const unstarted = await repository.addEnquiryItem({ enquiryId: enquiry.id, organizationId,
+      customerPartCode: "UNSTARTED", description: "Other line" })
+    const snapshot = await repository.getEnquiry(enquiry.id)
+    expect(snapshot.items.map(line => line.intakeEditable)).toEqual([false, true])
+    await expect(repository.updateEnquiryItem({ enquiryItemId: replacement.id,
+      customerPartCode: "CHANGED", description: "Blocked correction" })).rejects.toThrow("Design or costing has started")
+    await expect(repository.deleteEnquiryItems(enquiry.id, [replacement.id, unstarted.id])).rejects.toThrow("Design or costing has started")
+    await expect(repository.updateEnquiry({ enquiryId: enquiry.id, customerId, organizationId,
+      remarks: "Blocked shared change" })).rejects.toThrow("Design or costing has started")
+    await repository.updateEnquiryItem({ enquiryItemId: unstarted.id, customerPartCode: "UNSTARTED", description: "Still editable" })
+    await repository.deleteEnquiryItems(enquiry.id, [unstarted.id])
     expect((await repository.getEnquiry(enquiry.id)).items).toHaveLength(1)
   })
 

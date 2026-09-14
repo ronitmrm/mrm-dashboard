@@ -222,7 +222,8 @@ export default async function DesignTaskDetailPage({
           <CardTitle>Choose Next Step</CardTitle>
           <CardDescription>
             Review all ordered products and Customer-specific quoted products,
-            or proceed to the separate Design form for this part.
+            or start Design for this part. Starting Design locks Sales changes
+            to this line until the current work is completed and a revision is requested.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-3">
@@ -242,7 +243,7 @@ export default async function DesignTaskDetailPage({
               type="hidden"
               value={selectedItem.enquiryItemId}
             />
-            <Button type="submit">Open Design Form</Button>
+            <Button type="submit">{selectedItem.designStatus === "Pending Design" ? "Start Design" : "Continue Design"}</Button>
           </form>
         </CardContent>
  </SectionCard>

@@ -27,11 +27,20 @@ readable and selectable when editing historical records.
 commercial terms and line items before downstream work. Its line register opens
 one selected line for editing and does not expose Technical Review or Design
 inputs.
-Sales may delete selected intake lines, including all lines, after handover while
-no Technical Review, Design, quotation, clarification, or revision work exists
-for those lines. Deletion preserves the enquiry and records an audit event.
+Sales may edit or delete selected intake lines, including all lines, after
+handover and Technical Review until Start Design is used on each line. Opening
+a page or saving Technical Review does not start work. A Sales correction resets
+that line to Pending Review and clears its previous review and unused Design
+preparation. Other lines remain unchanged. Deletion preserves the enquiry and
+records an audit event.
 Deleting the last line returns the enquiry to Draft so Sales can upload corrected
-items and hand them over again. Started downstream work cannot be deleted this way.
+items and hand them over again. Start Design permanently locks that line's Sales
+inputs, drawings and deletion. For Commercial Requotes that skip Design, starting
+costing locks the line instead. Locked lines complete their current workflow
+before Request Revision; returning a clarification does not unlock Sales inputs.
+Sales may still reply to a clarification without changing the line or its drawings.
+Shared enquiry terms lock when any line starts work. Unstarted lines remain
+individually editable, even while other lines are locked.
 Once quotation work exists, the enquiry opens as a read-only register summary.
 An open revision exposes term editing; Add Line belongs to editable intake, and
 completed line corrections remain read-only. Request Revision is the entry point
@@ -55,9 +64,10 @@ Technical revisions use a linked controlled ECN, including quoted products with 
 released design, then Design approval, Product Costing and Customer Costing.
 Original Design Tasks, sent quote snapshots and issued PDF bytes are retained.
 Full-enquiry issuance remains blocked until every requested line is ready; issuing
-the revised PDF completes the request. Non-price terms may be corrected before an
-order without restarting costing; Incoterms, Packaging and Currency changes require
-customer repricing. A request does not create another enquiry or grant permissions.
+the revised PDF completes the request. Revision requests require the affected
+lines' current quotation costing to be complete. Terms-only revisions avoid
+restarting costing; Incoterms, Packaging and Currency changes require customer
+repricing. A request does not create another enquiry or grant permissions.
 
 **Commercial Requote**: Sales selects an existing matched Product for a new
 commercial price without a technical change. The Enquiry line retains that Product
@@ -76,6 +86,8 @@ _Avoid_: Feasible means Design started.
 Enquiry line. It shows the complete Technical Review in a structured form and
 offers separate actions to search the Current Portfolio or open the Design form.
 Portfolio search occurs on the Current Portfolio page, not inside the task.
+Start Design opens the editable form and is the Sales-lock boundary; Start Task
+and viewing the read-only detail are not that boundary.
 
 **Product Design Dossier**: The current approved design definition owned by one
 controlled Product. It combines Product classification and material/process

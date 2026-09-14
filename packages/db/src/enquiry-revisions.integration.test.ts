@@ -116,12 +116,16 @@ test("quotation revisions preserve original terms and share one number across en
   expect((await workflow.listSalesSentQuoteQueue(f.code)).map(row=>row.quoteRevision)).toEqual([1,0])
 })
 
-test("pricing-term edits close old follow-ups when they reopen customer costing", async () => {
+test("pricing-term edits require a revision after work starts and close old follow-ups", async () => {
   const f = await fixture()
   for (const quote of await createCommercialCostingRepository({ pool }).listQuotes(f.code)) {
     await workflow.createFollowup({ organizationId: f.organization_id, enquiryId: f.enquiry_id,
       quoteItemId: quote.id, dueOn: "2026-11-01" })
   }
+  await expect(workflow.updateEnquiry({ enquiryId: f.enquiry_id, organizationId: f.organization_id,
+    customerId: f.customer_id, commercialTerms: { currency: "EUR" } })).rejects.toThrow("request a revision")
+  await workflow.requestEnquiryRevision({ enquiryId: f.enquiry_id, kind: "Pricing",
+    reason: "Change currency", enquiryItemIds: f.lineIds })
   await workflow.updateEnquiry({ enquiryId: f.enquiry_id, organizationId: f.organization_id,
     customerId: f.customer_id, commercialTerms: { currency: "EUR" } })
   const followups = await workflow.listFollowups(f.code)

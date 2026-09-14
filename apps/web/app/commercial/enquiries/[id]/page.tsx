@@ -153,7 +153,9 @@ export default async function EnquiryDetailPage({
     versions={loaded.quotations} selected={selectedQuotation} drawings={loaded.quoteDrawings} action={canRequestRevision && selectedQuotation.id===currentQuotation?.id
       ? <RequestRevision enquiryId={id} lines={snapshot.items} disabled={loaded.revisions.some(revision=>revision.status==='Open')}/> : null}/>
   const canEditIntake = canRequestRevision && snapshot.enquiry.intakeEditable
-  const canDeleteLines = snapshot.enquiry.intakeEditable && (await listGrantedCapabilities(session.user.id, ['pricing.enquiries.delete'])).length > 0
+  const canDeleteLines = snapshot.items.some(item => item.intakeEditable) && (await listGrantedCapabilities(session.user.id, ['pricing.enquiries.delete'])).length > 0
+  const canEditSelectedLine = Boolean(selectedItem?.intakeEditable) && (await listGrantedCapabilities(session.user.id, ['pricing.enquiries.items.update'])).length > 0
+  const canAddLines = canRequestRevision && snapshot.enquiry.addLinesAllowed
   const canEditTerms = canRequestRevision && (canEditIntake || loaded.revisions.some(revision=>revision.status==='Open'))
   const drawingHistory = new Map(loaded.drawingHistoryEntries)
   const customerRepository = createCustomerRepository({ connectionString })
@@ -196,7 +198,7 @@ export default async function EnquiryDetailPage({
               {snapshot.enquiry.enquiryNumber}
             </h2>
             <Badge variant="secondary">{snapshot.enquiry.currentStage}</Badge>
-            {canRequestRevision?<RequestRevision enquiryId={id} lines={snapshot.items} disabled={loaded.revisions.some(revision=>revision.status==='Open')}/>:null}
+            {canRequestRevision?<RequestRevision enquiryId={id} lines={snapshot.items} disabled={!snapshot.enquiry.revisionAllowed || loaded.revisions.some(revision=>revision.status==='Open')}/>:null}
           </div>
         </div>
         <DownloadAllDrawings enquiryId={id} query="draft=true" available={loaded.quoteDrawings.length > 0} />
@@ -217,7 +219,7 @@ export default async function EnquiryDetailPage({
         <CardHeader>
           <CardTitle>Enquiry Register Details</CardTitle>
           <CardDescription>
-            {canEditTerms ? 'Update the enquiry details for the current work.' : 'Use Request Revision to make changes.'}
+            {canEditTerms ? 'Check all details before submitting. Sales can make changes through Technical Review, until Design starts.' : 'Design or costing has started. Complete the current work, then use Request Revision.'}
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-5">
@@ -375,7 +377,7 @@ export default async function EnquiryDetailPage({
         </CardContent>
  </SectionCard>
 
- {canEditIntake ? <SectionCard>
+ {canAddLines ? <SectionCard>
         <CardHeader>
           <CardTitle>Add Line Item</CardTitle>
           <CardDescription>
@@ -616,7 +618,7 @@ export default async function EnquiryDetailPage({
               <input type="hidden" name="enquiry_id" value={id} />
               {canDeleteLines ? <div className="mb-3 flex flex-wrap items-center gap-3">
                 <Button type="submit" variant="destructive" size="sm">Delete Selected Lines</Button>
-                <p className="text-sm text-muted-foreground">Select some or all lines. Lines with downstream work cannot be deleted.</p>
+                <p className="text-sm text-muted-foreground">Select some or all unstarted lines. Lines lock when Design or costing starts.</p>
               </div> : null}
             <div className="rounded-md border min-w-0">
  <OperationalTable
@@ -642,7 +644,7 @@ export default async function EnquiryDetailPage({
                   {snapshot.items.length ? (
                     snapshot.items.map((item) => (
                       <TableRow key={item.id}>
-                        {canDeleteLines ? <TableCell><input type="checkbox" name="enquiry_item_ids" value={item.id} aria-label={`Select line ${item.lineNumber}`} /></TableCell> : null}
+                        {canDeleteLines ? <TableCell><input type="checkbox" name="enquiry_item_ids" value={item.id} disabled={!item.intakeEditable} aria-label={`Select line ${item.lineNumber}`} /></TableCell> : null}
                         <TableCell>{item.lineNumber}</TableCell>
                         <TableCell className="font-medium">
                           {item.customerPartCode || "—"}
@@ -668,7 +670,7 @@ export default async function EnquiryDetailPage({
                                 query: { line: item.id },
                               }}
                             >
-                              Open
+                              {item.intakeEditable ? "Open" : "View (Locked)"}
                             </Link>
                           </Button>
                         </TableCell>
@@ -723,7 +725,8 @@ export default async function EnquiryDetailPage({
                   },
                 ]}
               >
-                <fieldset disabled={!canEditIntake}>
+                {!selectedItem.intakeEditable ? <p className="mb-4 text-sm text-muted-foreground">This line is locked because Design or costing has started. Complete the current work, then request a revision.</p> : null}
+                <fieldset disabled={!canEditSelectedLine}>
                 <input type="hidden" name="enquiry_id" value={id} />
                 <input
                   type="hidden"
@@ -841,7 +844,7 @@ export default async function EnquiryDetailPage({
                     </Field>
                   </div>
                   <div className="flex flex-wrap gap-3">
-                    {canEditIntake ? <Button type="submit">Update Line</Button> : null}
+                    {canEditSelectedLine ? <Button type="submit">Update Line</Button> : null}
                     {selectedItem.drawingFileId ? (
                       <Button asChild type="button" variant="outline">
                         <AttachmentViewerLink
