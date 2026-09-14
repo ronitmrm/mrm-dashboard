@@ -73,6 +73,7 @@ export function productionMasterSnapshot(
         "setupNo",
         "setupName",
         "machineFamily",
+        "machineType",
       ])
     if (master === "route") {
       lookup("setupNameMasterRows", ["setupName"])
