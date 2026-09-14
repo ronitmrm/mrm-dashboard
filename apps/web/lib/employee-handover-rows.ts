@@ -4,7 +4,19 @@ export function employeeHandoverRows(posts: RecruitmentPostRow[]) {
   return posts.flatMap((post) => [
     post,
     ...(post.replacementAppointments ?? []).flatMap((replacement) =>
-      replacement.status === "Joined" && replacement.outgoingStillEmployed
+      replacement.status === "Pending"
+        ? [{
+            ...post,
+            id: `pending:${replacement.id}`,
+            employeeName: replacement.employeeName,
+            employeeCode: replacement.employeeCode,
+            joiningDate: replacement.joiningDate ?? null,
+            lastWorkingDate: null,
+            status: "Appointed",
+            joiningConfirmationDue: false,
+            replacementAppointments: [],
+          }]
+        : replacement.status === "Joined" && replacement.outgoingStillEmployed
         ? [{
             ...post,
             id: `outgoing:${replacement.id}`,

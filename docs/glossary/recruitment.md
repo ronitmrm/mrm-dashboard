@@ -64,6 +64,11 @@ A Resigned employee's Approved Post may reserve one incoming employee while the
 outgoing employee serves notice. This reservation does not add approved headcount
 or replace the current employee, Employee ID, or Last Working Date.
 
+Employee Master shows the outgoing employee and the pending replacement as
+separate rows. The incoming row is Appointed until HR confirms joining, with
+its agreed joining date when available and its own Employee ID only. Both rows
+refer to the same Approved Post; Approved Posts remains one headcount row.
+
 Employee Assignment's Appointed event and accepted Job Candidate Appointment
 details record the replacement separately. Candidate reservations retain their
 application link and agreed joining terms. Did Not Join cancels only that
