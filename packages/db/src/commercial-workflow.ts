@@ -6792,9 +6792,11 @@ export function createCommercialWorkflowRepository(
     ) {
       if (!Number.isSafeInteger(offset) || offset < 0) throw new Error("Invalid enquiry page offset.")
       const limit = operationalRootLimit(requestedLimit)
-      const rows = await pool.query<EnquirySpreadsheetDatabaseRow>(
-        `
+      type SpreadsheetRow = EnquirySpreadsheetDatabaseRow & { total_lines: string; sent_lines: string }
+      const query = `
           SELECT enquiry_item.id AS enquiry_item_id,
+            count(*) OVER ()::text AS total_lines,
+            count(selected_quote.sent_at) OVER ()::text AS sent_lines,
             enquiry.id AS enquiry_id, enquiry.enquiry_number,
             enquiry.received_on::text, customer.customer_uid,
             customer.company_name, enquiry.source, enquiry.priority,
@@ -6933,7 +6935,8 @@ export function createCommercialWorkflowRepository(
           ORDER BY enquiry.created_at DESC, enquiry.id DESC,
             enquiry_item.line_number, enquiry_item.id
           LIMIT $2 OFFSET $4
-        `,
+        `
+      const rows = await pool.query<SpreadsheetRow>(query,
         [
           organizationCode.trim(),
           limit + 1,
@@ -6941,11 +6944,13 @@ export function createCommercialWorkflowRepository(
           offset,
         ]
       )
-      return boundedResult(
-        rows.rows.slice(0, limit).map(enquirySpreadsheetItemFromRow),
-        limit,
-        rows.rows.length > limit
-      )
+      const totals = rows.rows[0] ?? (offset > 0
+        ? (await pool.query<SpreadsheetRow>(query, [organizationCode.trim(), 1, scope?.originatingSalespersonUserId ?? null, 0])).rows[0]
+        : undefined)
+      return {
+        ...boundedResult(rows.rows.slice(0, limit).map(enquirySpreadsheetItemFromRow), limit, rows.rows.length > limit),
+        summary: { enquiryLines: Number(totals?.total_lines ?? 0), quotePdfSent: Number(totals?.sent_lines ?? 0) },
+      }
     },
 
     async listTechnicalReviewQueueBounded(

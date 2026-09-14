@@ -7,8 +7,6 @@ import { Button } from "@workspace/ui/components/button"
 import {
  SectionCard,
   CardContent,
-  CardHeader,
-  CardTitle,
 } from "@workspace/ui/components/card"
 import {
  OperationalTable,
@@ -68,16 +66,16 @@ export default async function EnquiryExcelViewPage({ searchParams }: {
       </section>
 
       <MetricSummary
-        scope={`Your workflow lines · page ${bounds.page} · filters apply to this page`}
+        scope="Your workflow lines · all pages · before table filters"
         items={[
           {
             label: "Enquiry Lines",
-            value: result.rows.length,
+            value: result.summary.enquiryLines,
             tone: "information"
           },
           {
             label: "Quote PDF Sent",
-            value: result.rows.filter((row) => row.quotePdfSentAt).length,
+            value: result.summary.quotePdfSent,
             description: "Lines with a sent quote PDF",
             tone: "positive"
           }
@@ -85,13 +83,10 @@ export default async function EnquiryExcelViewPage({ searchParams }: {
       />
 
  <SectionCard>
-        <CardHeader>
-          <CardTitle>Workflow Line Register</CardTitle>
-        </CardHeader>
         <CardContent>
-          <div className="rounded-md border min-w-0">
  <OperationalTable
-              containerClassName="max-h-[72vh]"
+              toolbarStart={<h3 className="font-semibold">Workflow Line Register</h3>}
+              containerClassName="max-h-[72vh] rounded-md border"
               excelFilters
               filterStorageKey="mrmpl:commercial:enquiry-excel-view:filters:v1"
               className="min-w-[2300px]"
@@ -228,7 +223,6 @@ export default async function EnquiryExcelViewPage({ searchParams }: {
                 ) : null}
               </TableBody>
  </OperationalTable>
-          </div>
         </CardContent>
  </SectionCard>
     </div>

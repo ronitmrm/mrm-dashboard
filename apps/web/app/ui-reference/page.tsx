@@ -230,6 +230,7 @@ export default async function UiReferencePage() {
         </CardHeader>
         <CardContent>
           <OperationalTable
+            toolbarStart={<h3 className="font-semibold">Job register</h3>}
             filterStorageKey="mrmpl:ui-reference:operational-table"
             containerClassName="max-h-96 rounded-lg border"
           >
