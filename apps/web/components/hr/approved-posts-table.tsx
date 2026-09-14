@@ -435,84 +435,6 @@ export function ApprovedPostsTable({
           </CardContent>
  </SectionCard>
 
-        {employeeView ? (
- <SectionCard>
-            <CardHeader>
-              <CardTitle>Employee Letter Register</CardTitle>
-              <CardDescription>
-                Offer, Appointment, And Experience Letters Stay With The
-                Employee Even After The Approved Post Is Filled Again.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="rounded-lg border min-w-0">
- <OperationalTable>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Employee ID</TableHead>
-                      <TableHead>Employee / Candidate</TableHead>
-                      <TableHead>Letter</TableHead>
-                      <TableHead>Reference</TableHead>
-                      <TableHead>Issued</TableHead>
-                      <TableHead>Post</TableHead>
-                      <TableHead className="text-right">File</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {employmentLetters.length ? (
-                      employmentLetters.map((letter) => (
-                        <TableRow key={letter.id}>
-                          <TableCell className="font-mono">
-                            {letter.employeeCode ?? "Pending Joining"}
-                          </TableCell>
-                          <TableCell>{letter.employeeName}</TableCell>
-                          <TableCell className="capitalize">
-                            {letter.letterType}
-                          </TableCell>
-                          <TableCell className="font-mono">
-                            {letter.referenceNumber}
-                          </TableCell>
-                          <TableCell>{letter.issuedOn}</TableCell>
-                          <TableCell className="font-mono">
-                            {letter.postCode ?? "—"}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {letter.fileAvailable ? (
-                              <Button asChild size="sm" variant="outline">
-                                <AttachmentViewerLink
-                                  fileName={`${letter.referenceNumber}-${letter.letterType}-letter.pdf`}
-                                  href={`/hr/employment-letters/${letter.id}/download`}
-                                  mediaType="application/pdf"
-                                >
-                                  <FileText data-icon="inline-start" />
-                                  View PDF
-                                </AttachmentViewerLink>
-                              </Button>
-                            ) : (
-                              <Badge variant="destructive">
-                                Generation Incomplete
-                              </Badge>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell
-                          className="py-10 text-center text-muted-foreground"
-                          colSpan={7}
-                        >
-                          No Employment Letters Have Been Generated.
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
- </OperationalTable>
-              </div>
-            </CardContent>
- </SectionCard>
-        ) : null}
-
         {editingPost ? (
           <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
             <form
@@ -638,8 +560,8 @@ export function ApprovedPostsTable({
               <div>
                 <p className="font-medium">Employment Letters</p>
                 <p className="text-sm text-muted-foreground">
-                  Generated PDFs Use The Employee Master Identity And Stay In
-                  The Letter Register.
+                  View And Download Offer, Appointment, And
+                  Experience Letters Here.
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
