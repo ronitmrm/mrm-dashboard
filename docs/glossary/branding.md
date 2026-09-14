@@ -4,12 +4,18 @@ Branding contains SOPs, Notices, and Policies. Safety signage is outside scope.
 
 - Each type has an independent, organization-wide sequence: MRM-SOP-0001,
   MRM-NTC-0001, MRM-POL-0001. Numbers are assigned on first issue, never reused,
-  never reset by year. Revisions retain the number and use R00, R01, etc.
+  never reset by year. SOP and policy revisions retain the number and use R00,
+  R01, etc. Notices are issued once, without revision labels or a revision flow;
+  corrections require a new notice with a new number. Existing retained PDFs
+  remain available and are never rewritten.
 - A document has at most one editable draft. Issuing freezes its original inputs,
   language content, author, issue date, template version, and exact PDF bytes.
-  No approval stage exists. Creating the next revision copies the previous issue;
+  No approval stage exists. For SOPs and policies, creating the next revision copies the previous issue;
   its change reason is required. The latest issued revision remains current until
   its replacement is issued. Issued revisions cannot be updated or deleted.
+- Register cards count distinct documents across all pages for the selected type:
+  total, issued at least once, and unissued drafts. SOPs/policies additionally
+  count issued documents with a revision draft. Issued is not an approval status.
 - Every type supports English, Hindi, Gujarati, and combinations. Selected
   languages must have reviewed content before issue. AI may arrange, rewrite,
   and translate supplied facts; it must flag gaps rather than invent facts,

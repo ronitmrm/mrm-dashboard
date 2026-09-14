@@ -49,7 +49,7 @@ function fonts() {
 const logo = `<svg width="32" height="32" viewBox="0 0 112.66 112.67" xmlns="http://www.w3.org/2000/svg"><path fill="#006A49" d="M101.39,0H11.27C5.04,0,0,5.01,0,11.18v50.79h112.66V11.18c0-6.17-5.04-11.18-11.27-11.18Z"/><path fill="#006A49" d="M0,101.16c0,6.36,5.04,11.51,11.27,11.51h90.13c6.22,0,11.27-5.16,11.27-11.51v-11.02H0v11.02Z"/></svg>`
 export async function brandingHtml(input: BrandingPdfInput) {
   const e = escapeBrandingHtml
-  const reference = `${input.number} · ${revisionLabel(input.revision)}`
+  const reference = `${input.number}${input.type === "notice" ? "" : ` · ${revisionLabel(input.revision)}`}`
   const styles = await fonts()
   const html = `<!doctype html><html><head><meta charset="utf-8"><style>${styles}
     *{box-sizing:border-box}html{-webkit-print-color-adjust:exact;print-color-adjust:exact}

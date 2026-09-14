@@ -38,7 +38,7 @@ export function BrandingDocumentTable({
             "Name",
             "Department",
             "Languages",
-            "Revision",
+            ...(type === "notice" ? [] : ["Revision"]),
             "Status",
             "Effective date",
             "Author",
@@ -70,13 +70,15 @@ export function BrandingDocumentTable({
                   )
                   .join(", ")}
               </TableCell>
-              <TableCell>{revisionLabel(row.revision)}</TableCell>
+              {type !== "notice" ? (
+                <TableCell>{revisionLabel(row.revision)}</TableCell>
+              ) : null}
               <TableCell>
                 <StatusBadge
                   tone={row.state === "issued" ? "positive" : "neutral"}
                   value={row.state === "issued" ? "Issued" : "Draft"}
                 />
-                {row.state === "issued" && row.hasDraft ? (
+                {type !== "notice" && row.state === "issued" && row.hasDraft ? (
                   <span className="ml-2 text-xs text-muted-foreground">
                     Revision draft
                   </span>
@@ -93,7 +95,7 @@ export function BrandingDocumentTable({
           ))
         ) : (
           <TableRow>
-            <TableCell colSpan={9}>
+            <TableCell colSpan={type === "notice" ? 8 : 9}>
               <StandardState
                 variant="empty"
                 title="No documents yet"

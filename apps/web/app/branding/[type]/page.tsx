@@ -10,7 +10,11 @@ import {
 } from "@workspace/ui/components/tabs"
 import { BrandingDocumentTable } from "@/components/branding/document-table"
 import { BrandingDocumentEditor } from "@/components/branding/document-editor"
-import { PageHeader, ActionToolbar } from "@/components/ui/golden-patterns"
+import {
+  PageHeader,
+  ActionToolbar,
+  MetricSummary,
+} from "@/components/ui/golden-patterns"
 import { brandingType, withBranding } from "@/lib/branding/server"
 import { brandingCapability } from "@/lib/auth/branding-capabilities"
 import { listGrantedCapabilities } from "@/lib/auth/require-capability"
@@ -46,7 +50,43 @@ export default async function BrandingRegisterPage({
       <PageHeader
         title={brandingTypeLabels[type]}
         icon={Palette}
-        description="Create branded documents and retain every issued revision."
+        description={
+          type === "notice"
+            ? "Create and issue branded notices."
+            : "Create branded documents and retain every issued revision."
+        }
+      />
+      <MetricSummary
+        scope={`All ${brandingTypeLabels[type].toLowerCase()} · across all pages, before table filters`}
+        items={[
+          {
+            label: `Total ${brandingTypeLabels[type]}`,
+            value: register.summary.total,
+            tone: "information",
+          },
+          {
+            label: "Issued",
+            value: register.summary.issued,
+            tone: "positive",
+            description: "Documents issued at least once",
+          },
+          {
+            label: "Drafts",
+            value: register.summary.drafts,
+            tone: "warning",
+            description: "Awaiting first issue",
+          },
+          ...(type === "notice"
+            ? []
+            : [
+                {
+                  label: "Revisions in progress",
+                  value: register.summary.revisionsInProgress,
+                  tone: "information" as const,
+                  description: "Issued documents with an open draft",
+                },
+              ]),
+        ]}
       />
       <Tabs defaultValue="records" className="min-w-0">
         <TabsList>

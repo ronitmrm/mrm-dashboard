@@ -24,7 +24,7 @@ export async function GET(
       "Cache-Control": "private, no-store",
       "Content-Disposition": attachmentContentDisposition(
         request.url,
-        `${pdf.number}-${revisionLabel(pdf.revision)}.pdf`
+        `${pdf.number}${type === "notice" ? "" : `-${revisionLabel(pdf.revision)}`}.pdf`
       ),
       "X-Content-Type-Options": "nosniff",
     },

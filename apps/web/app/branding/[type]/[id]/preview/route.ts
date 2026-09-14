@@ -18,6 +18,8 @@ export async function GET(
   const draft = document?.revisions.find(
     (revision) => revision.state === "draft"
   )
+  if (type === "notice" && document?.number)
+    return new Response("Issued notices do not have drafts", { status: 404 })
   if (!draft?.content.translations.length || !document)
     return new Response("No draft content to preview", { status: 404 })
   const bytes = await generateBrandingPdf({
