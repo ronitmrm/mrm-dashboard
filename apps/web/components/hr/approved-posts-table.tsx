@@ -62,6 +62,7 @@ import { APPROVED_POST_FILTER_COLUMNS } from "@/components/hr/approved-post-filt
 import { SingleEmployeeAssignmentFields } from "@/components/hr/single-employee-assignment-fields"
 import { EmployeeLetterDialog } from "@/components/hr/employee-letter-dialog"
 import { MetricSummary } from "@/components/ui/golden-patterns"
+import { employeeHandoverRows } from "@/lib/employee-handover-rows"
 
 type TemplateOption = Pick<
   RecruitmentTemplateRow,
@@ -118,8 +119,9 @@ export function ApprovedPostsTable({
   )
   const showActions = canWrite || canDelete || canCreateJob || employeeManagement
   const columnCount = 10 + (employeeManagement ? 1 : 0) + (showActions ? 1 : 0)
+  const rows = employeeView ? employeeHandoverRows(posts) : posts
   const table = useExcelTable({
-    rows: posts,
+    rows,
     columns: APPROVED_POST_FILTER_COLUMNS.map(({ key, label }) => ({
       key,
       label,
@@ -160,7 +162,7 @@ export function ApprovedPostsTable({
         items={[
           {
             label: "Approved Posts",
-            value: filteredPosts.length,
+            value: new Set(filteredPosts.map((post) => post.postCode)).size,
             tone: "information"
           },
           {
@@ -194,7 +196,7 @@ export function ApprovedPostsTable({
                 {employeeView ? "Employee Master" : "Approved Posts"}
               </CardTitle>
               <CardDescription>
-                {hasFilters
+                {employeeView ? `${filteredPosts.length} of ${rows.length} employee assignment rows` : hasFilters
                   ? `Showing ${filteredPosts.length} of ${posts.length} sanctioned staffing positions`
                   : `${posts.length} sanctioned staffing positions`}
               </CardDescription>
@@ -265,6 +267,7 @@ export function ApprovedPostsTable({
                         {employeeManagement ? (
                           <TableCell>
                             <Checkbox
+                              disabled={row.id.startsWith("outgoing:")}
                               aria-label={`Select ${row.postCode}`}
                               checked={selectedEmployeePost?.id === row.id}
                               onCheckedChange={(checked) =>
@@ -312,7 +315,7 @@ export function ApprovedPostsTable({
                         {showActions ? (
                           <TableCell>
                             <div className="flex justify-end gap-2">
-                              {employeeManagement ? (
+                              {row.id.startsWith("outgoing:") ? <span className="text-sm text-muted-foreground">Serving notice</span> : employeeManagement ? (
                                 <Button
                                   onClick={() => {
                                     setSelectedEmployeePost(row)
@@ -328,7 +331,7 @@ export function ApprovedPostsTable({
                                     : "Employee"}
                                 </Button>
                               ) : null}
-                              {canWrite || canDelete || canCreateJob ? (
+                              {!row.id.startsWith("outgoing:") && (canWrite || canDelete || canCreateJob) ? (
                                 <>
                                   {canCreateJob && (row.status === "Vacant" ||
                                     row.status === "Resigned") &&
