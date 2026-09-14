@@ -27,7 +27,9 @@ Use `OperationalTable` for comparable records, scanning, filtering, sorting, sel
 Use `PageHeader` once per dashboard screen. Put primary and secondary page actions in its `actions` slot or an adjacent `ActionToolbar`. Use `FormSection` to group related fields and `FormGrid` for responsive field layout.
 
 Use `MetricSummary` from `apps/web/components/ui/golden-patterns.tsx` for a
-full-width, responsive row of register counts. It composes `MetricCard`, formats
+left-aligned, wrapping row of register counts. Cards are 16rem wide, shrinking
+to the available width on narrow screens; small groups leave unused space to
+the right instead of stretching across the page. It composes `MetricCard`, formats
 numbers consistently, and requires a visible scope label. Use existing authorized
 page data; do not add global reads just to populate cards. Distinguish loaded,
 paginated, search-matching and table-filtered records. Count distinct entities
@@ -133,7 +135,7 @@ Record a new exception in this document before merging it. Prefer extending an e
 
 Access Administration uses the existing shell title for page identity. At the
 user's request, omit its duplicate body banner and use a full-width summary-card
-row above the workspace tabs.
+row above the workspace tabs via `MetricSummary layout="fill"`.
 
 ## Enforcement and extension
 
