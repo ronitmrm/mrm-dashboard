@@ -19,6 +19,7 @@ let machineSourceId: string
 let coverageOrganizationId: string
 
 const coverageCases = [
+  ["data_entry", "setup_name_master", 1000],
   ["data_entry", "cycle", 500],
   ["data_entry", "employee", 1000],
   ["data_entry", "first_piece_inspection_report", 2500],

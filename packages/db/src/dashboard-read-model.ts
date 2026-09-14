@@ -81,6 +81,7 @@ export type CorrectionCandidateSource = Pick<
 >
 
 const legacyEntryTypes = [
+  "setup_name_master",
   "machine_master",
   "dispatch",
   "rejection_classification",
@@ -129,6 +130,7 @@ const productionDashboardContinuityFields = [
 ] as const
 
 const dataEntrySourceBudgets: Record<string, number> = {
+  setup_name_master: 1000,
   cycle: 500,
   employee: 1000,
   first_piece_inspection_report: 2500,

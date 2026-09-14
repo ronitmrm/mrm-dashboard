@@ -263,6 +263,7 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
   }
 
   const routeRows = entryRows(byType, "route");
+  const setupNameMasterRows = entryRows(byType, "setup_name_master");
   const cycleRows = entryRows(byType, "cycle");
   const toolingRows = entryRows(byType, "tooling");
   const workOrderRows = entryRows(byType, "work_order");
@@ -295,6 +296,7 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
     : normalizedProductionEntries(input.productionEntries);
 
   const snapshot = buildProductionAnalysis({
+    setupNameMasterRows,
     productionRows,
     employees,
     departments,
@@ -342,6 +344,13 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
   });
 
   if (
+    setupNameMasterRows.length ||
+    planningHolidayRows.length ||
+    maintenanceMasterRows.length ||
+    qualityParameterMasterRows.length ||
+    rejectionTypeMasterRows.length ||
+    rejectionReasonMasterRows.length ||
+    rejectionRemarkMasterRows.length ||
     productionRows.length ||
     routeRows.length ||
     cycleRows.length ||
@@ -363,6 +372,7 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
 }
 
 function buildProductionAnalysis({
+  setupNameMasterRows,
   productionRows,
   employees,
   departments,
@@ -410,6 +420,7 @@ function buildProductionAnalysis({
 }: {
   productionRows: ProductionRow[];
   employees: Map<string, string>;
+  setupNameMasterRows: Record<string, unknown>[];
   departments: Map<string, string>;
   attendanceRecords: AttendanceRecord[];
   trainingRecords: TrainingRecord[];
@@ -730,6 +741,7 @@ function buildProductionAnalysis({
     allMonths.set(key, label);
   }
   const productionControl = buildProductionControl({
+    setupNameMasterRows,
     productionRows,
     routeRows,
     cycleRows,
@@ -917,6 +929,7 @@ function buildProductionAnalysis({
 }
 
 function buildProductionControl({
+  setupNameMasterRows,
   productionRows,
   routeRows,
   cycleRows,
@@ -955,6 +968,7 @@ function buildProductionControl({
   previousProductionDashboardRows,
 }: {
   productionRows: ProductionRow[];
+  setupNameMasterRows: Record<string, unknown>[];
   routeRows: Record<string, unknown>[];
   cycleRows: Record<string, unknown>[];
   toolingRows: Record<string, unknown>[];
@@ -1307,6 +1321,7 @@ function buildProductionControl({
     routeChangeRows: routeChanges,
     routeChangeImpacts: [],
     routeMasterRows: dedupedRouteRows.map(routeMasterTableRow),
+    setupNameMasterRows,
     cycleMasterRows: [...latestMasterRows(cycleRows).values()].map(cycleMasterTableRow),
     toolingMasterRows: [...latestMasterRows(toolingRows).values()].map(toolingMasterTableRow),
     employeeMasterRows: employeeRows.map(employeeMasterTableRow),
