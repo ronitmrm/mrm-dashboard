@@ -3194,6 +3194,7 @@ function PlannerDecisionConsole({
 
   return (
     <PlannerDecisionWorkspace
+      orderAcceptanceHref={`/order-acceptance?floor=${productionFloorFromLocation()}`}
       activeAction={activeAction}
       activeView={activeView}
       historyCount={history.length}

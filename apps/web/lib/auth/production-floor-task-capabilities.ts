@@ -10,6 +10,11 @@ import {
 } from "./production-floor-capabilities"
 
 export const productionFloorTaskDefinitions = {
+  order_acceptance: {
+    label: "Manage Proposed Orders",
+    legacyCapability: "planning.order_acceptance.write",
+    tab: "productionControlTab",
+  },
   dispatch_approval: {
     label: "Approve dispatch",
     legacyCapability: "operations.dispatch.write",
