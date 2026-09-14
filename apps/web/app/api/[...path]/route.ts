@@ -930,7 +930,7 @@ async function post(request: NextRequest, context: RouteContext) {
           })
       )
       return json(
-        await withPlanningRefresh(path, body, {
+        await withPlanningRefresh(request, path, body, {
           ...result,
           rowsUpdated: 1,
           message: "Route option saved.",
@@ -981,7 +981,7 @@ async function post(request: NextRequest, context: RouteContext) {
           })
       )
       return json(
-        await withPlanningRefresh(path, body, {
+        await withPlanningRefresh(request, path, body, {
           ...result,
           rowsUpdated: 1,
           jobCards: body.target ? [body.target] : [],
@@ -1014,7 +1014,7 @@ async function post(request: NextRequest, context: RouteContext) {
           })
       )
       return json(
-        await withPlanningRefresh(path, body, {
+        await withPlanningRefresh(request, path, body, {
           ...result,
           message: "Machine issue saved.",
         })
@@ -1044,7 +1044,7 @@ async function post(request: NextRequest, context: RouteContext) {
           })
       )
       return json(
-        await withPlanningRefresh(path, body, {
+        await withPlanningRefresh(request, path, body, {
           ...result,
           message: "Plan override saved.",
         })
@@ -1073,7 +1073,7 @@ async function post(request: NextRequest, context: RouteContext) {
           })
       )
       return json(
-        await withPlanningRefresh(path, body, {
+        await withPlanningRefresh(request, path, body, {
           ...result,
           oldOption: body.changeAfterSetup || "",
           newOption: body.newOption || "",
@@ -1116,7 +1116,7 @@ async function post(request: NextRequest, context: RouteContext) {
           })
       )
       return json(
-        await withPlanningRefresh(path, body, {
+        await withPlanningRefresh(request, path, body, {
           ...result,
           message: "Job card completion saved.",
         })
@@ -1130,7 +1130,7 @@ async function post(request: NextRequest, context: RouteContext) {
         recordId: text(body.recordId || body.targetId),
       })
       return json(
-        await withPlanningRefresh(path, body, {
+        await withPlanningRefresh(request, path, body, {
           ...result,
           message: "Entry reversed. Live status recalculated.",
         })
@@ -1160,7 +1160,7 @@ async function post(request: NextRequest, context: RouteContext) {
           deleteCapability
         )
         return json(
-          await withPlanningRefresh(path, body, {
+          await withPlanningRefresh(request, path, body, {
             ...result,
             message: result.replacementId
               ? "Master references moved and the duplicate was deleted."
@@ -1190,11 +1190,11 @@ async function post(request: NextRequest, context: RouteContext) {
           entryType,
           payload
         )
-        return json({
+        return json(await withPlanningRefresh(request, path, body, {
           ...result,
           rowsUpdated: 1,
           savedText: "Saved to PostgreSQL.",
-        })
+        }))
       }
       if (entryType === "production_session_start") {
         const result = await withProductionRepository(
@@ -1223,7 +1223,7 @@ async function post(request: NextRequest, context: RouteContext) {
             })
         )
         return json(
-          await withPlanningRefresh(path, body, {
+          await withPlanningRefresh(request, path, body, {
             ...result,
             rowsUpdated: 1,
             savedText: "Production session started.",
@@ -1253,7 +1253,7 @@ async function post(request: NextRequest, context: RouteContext) {
             })
         )
         return json(
-          await withPlanningRefresh(path, body, {
+          await withPlanningRefresh(request, path, body, {
             ...result,
             rowsUpdated: 1,
             savedText: "Production session closed.",
@@ -1385,7 +1385,7 @@ async function post(request: NextRequest, context: RouteContext) {
             })
         )
         return json(
-          await withPlanningRefresh(path, body, {
+          await withPlanningRefresh(request, path, body, {
             ...result,
             rowsUpdated: 1,
             savedText: "Saved production card.",
@@ -1410,7 +1410,7 @@ async function post(request: NextRequest, context: RouteContext) {
             })
         )
         return json(
-          await withPlanningRefresh(path, body, {
+          await withPlanningRefresh(request, path, body, {
             ...result,
             rowsUpdated: 1,
             savedText: "Saved raw-material receipt.",
@@ -1434,7 +1434,7 @@ async function post(request: NextRequest, context: RouteContext) {
             })
         )
         return json(
-          await withPlanningRefresh(path, body, {
+          await withPlanningRefresh(request, path, body, {
             ...result,
             rowsUpdated: 1,
             savedText: "Saved shop-floor status.",
@@ -1464,7 +1464,7 @@ async function post(request: NextRequest, context: RouteContext) {
             })
         )
         return json(
-          await withPlanningRefresh(path, body, {
+          await withPlanningRefresh(request, path, body, {
             ...result,
             rowsUpdated: 1,
             savedText: "Saved production output.",
@@ -1538,7 +1538,7 @@ async function post(request: NextRequest, context: RouteContext) {
         }
       )
       return json(
-        await withPlanningRefresh(path, body, {
+        await withPlanningRefresh(request, path, body, {
           inserted,
           duplicatesSkipped: importBatch.duplicateCount,
           message: importMessage(
@@ -1569,7 +1569,7 @@ async function post(request: NextRequest, context: RouteContext) {
             savePlanningMasterEntry(planningContext, entryType, payload, true)
         )
         return json(
-          await withPlanningRefresh(path, body, {
+          await withPlanningRefresh(request, path, body, {
             ...result,
             rowsUpdated: 1,
             savedText:
@@ -1610,7 +1610,7 @@ async function post(request: NextRequest, context: RouteContext) {
         await importAutoCodedMasterRows(entryType, importedRows, (payload) =>
           executePostgresOperationalEntry(request, entryType, payload, "import")
         )
-        return json({
+        return json(await withPlanningRefresh(request, path, body, {
           inserted: importedRows.length,
           duplicatesSkipped: importBatch.duplicateCount,
           message: importMessage(
@@ -1620,7 +1620,7 @@ async function post(request: NextRequest, context: RouteContext) {
           ),
           ok: true,
           rowsUpdated: importedRows.length,
-        })
+        }))
       }
       if (postgresMasterEntryTypes.has(entryType)) {
         const fileName = String(body.fileName || "")
@@ -1693,7 +1693,7 @@ async function post(request: NextRequest, context: RouteContext) {
           }
         )
         return json(
-          await withPlanningRefresh(path, body, {
+          await withPlanningRefresh(request, path, body, {
             inserted,
             duplicatesSkipped: importBatch.duplicateCount,
             message:
@@ -1729,11 +1729,20 @@ async function post(request: NextRequest, context: RouteContext) {
 }
 
 async function withPlanningRefresh(
+  request: NextRequest,
   path: string,
   body: Record<string, unknown>,
   payload: Record<string, unknown>
 ) {
   if (!shouldQueuePlanningRefresh(path, body)) return payload
+  if (path === "data-entry" || path === "data-import") {
+    const masterCapability = productionMasterCapability(
+      String(body.entryType || ""),
+      path === "data-import" ? "import" : "save",
+      plainRecord(body.payload).productionFloorCode ?? body.productionFloorCode
+    )
+    if (masterCapability) await requestPostgresDashboardRefresh(request, masterCapability)
+  }
   return {
     ...payload,
     planningRefresh: {

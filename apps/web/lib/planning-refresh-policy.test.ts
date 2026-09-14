@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { productionMasterTableEntryTypes } from "./production-master-tables";
 
 import { planningRefreshStatusMessage, shouldQueuePlanningRefresh, shouldRefreshStalePlanningSnapshot, stalePlanningRefreshKey } from "./planning-refresh-policy";
 
@@ -29,15 +30,17 @@ describe("planning refresh policy", () => {
     expect(shouldQueuePlanningRefresh("reverse-entry", { targetTable: "dataEntries", entryType: "first_piece_inspection_report" })).toBe(false);
   });
 
-  it("leaves master and structural imports for manual recalculation", () => {
+  it("automatically refreshes every production master save and upload", () => {
+    for (const entryType of productionMasterTableEntryTypes) {
+      expect(shouldQueuePlanningRefresh("data-entry", { entryType })).toBe(true);
+      expect(shouldQueuePlanningRefresh("data-import", { entryType })).toBe(true);
+      expect(planningRefreshStatusMessage(true, "data-import", { entryType })).toBe("Master table refresh queued.");
+    }
     expect(shouldQueuePlanningRefresh("data-import", { entryType: "maintenance_master" })).toBe(true);
     expect(shouldQueuePlanningRefresh("data-entry", { entryType: "maintenance_master" })).toBe(true);
     expect(shouldQueuePlanningRefresh("data-import", { entryType: "maintenance_checklist_master" })).toBe(true);
     expect(shouldQueuePlanningRefresh("data-entry", { entryType: "maintenance_checklist_master" })).toBe(true);
-    expect(shouldQueuePlanningRefresh("data-entry", { entryType: "machine_master" })).toBe(false);
-    expect(shouldQueuePlanningRefresh("data-entry", { entryType: "route" })).toBe(false);
-    expect(shouldQueuePlanningRefresh("data-entry", { entryType: "cycle" })).toBe(false);
-    expect(shouldQueuePlanningRefresh("data-import", { entryType: "work_order" })).toBe(false);
+    expect(shouldQueuePlanningRefresh("data-import", { entryType: "work_order" })).toBe(true);
   });
 
   it("tells users whether recalculation was queued, unnecessary, or left manual", () => {

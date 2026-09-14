@@ -345,7 +345,10 @@ function floorRows(rows: JsonRecord[], floorCode: ProductionFloorCode) {
   return rows.filter((row) => productionFloorCodeForRecord(row) === floorCode)
 }
 
-const companyWideQualityEntryTypes = new Set([
+const companyWideMasterEntryTypes = new Set([
+  "setup_checklist_master",
+  "maintenance_checklist_master",
+  "maintenance_master",
   "rejection_type_master",
   "rejection_reason_master",
   "rejection_remark_master",
@@ -358,7 +361,7 @@ export function dashboardDataEntriesForFloor<Row extends JsonRecord>(
   return rows.filter(
     (row) =>
       (typeof row.entryType === "string" &&
-        companyWideQualityEntryTypes.has(row.entryType)) ||
+        companyWideMasterEntryTypes.has(row.entryType)) ||
       productionFloorCodeForRecord(row) === floorCode
   )
 }
