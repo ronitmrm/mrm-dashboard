@@ -61,8 +61,8 @@ export default async function OperationalEntrySelectionPage({
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">
           {view === "masterTables"
-            ? "Operational Table Selection"
-            : "Operational Entry Module"}
+            ? "View Records"
+            : "Data Entry"}
         </h1>
       </div>
       {value(query.error) === "invalid-selection" ? (

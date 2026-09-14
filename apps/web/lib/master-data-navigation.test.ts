@@ -34,7 +34,7 @@ describe("master data navigation", () => {
       {
         destination: "/masters?view=masterTables",
         id: "masterTablesTab",
-        title: "Master Tables",
+        title: "View Records",
       },
     ])
   })
@@ -216,12 +216,12 @@ describe("master data navigation", () => {
       {
         destination: "/masters?view=masterTables",
         id: "masterTablesTab",
-        title: "Master Tables",
+        title: "View Records",
       },
     ])
   })
 
-  it("opens Master Tables for a Candidate Entry-only HR user", () => {
+  it("opens View Records for a Candidate Entry-only HR user", () => {
     expect(
       masterDataFallbackLinks({
         administration: false,
@@ -234,7 +234,7 @@ describe("master data navigation", () => {
       {
         destination: "/masters?view=masterTables",
         id: "masterTablesTab",
-        title: "Master Tables",
+        title: "View Records",
       },
     ])
   })
@@ -259,7 +259,7 @@ describe("master data navigation", () => {
       {
         destination: "/masters?view=masterTables",
         id: "masterTablesTab",
-        title: "Master Tables",
+        title: "View Records",
       },
     ])
   })
@@ -284,7 +284,7 @@ describe("master data navigation", () => {
       {
         destination: "/masters?view=masterTables",
         id: "masterTablesTab",
-        title: "Master Tables",
+        title: "View Records",
       },
     ])
   })
@@ -323,7 +323,7 @@ describe("master data navigation", () => {
       {
         destination: "/masters?view=masterTables",
         id: "masterTablesTab",
-        title: "Master Tables",
+        title: "View Records",
       },
     ])
   })
@@ -348,7 +348,7 @@ describe("master data navigation", () => {
       {
         destination: "/masters?view=masterTables",
         id: "masterTablesTab",
-        title: "Master Tables",
+        title: "View Records",
       },
     ])
   })

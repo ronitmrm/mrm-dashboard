@@ -275,7 +275,7 @@ export function UnifiedSidebarNavigation({
       destination: "/masters",
       icon: Database,
       id: "masterSelection" as const,
-      title: "Master Selection" as const,
+      title: "Data Entry" as const,
     },
     ...masterDataNavigationLinks(navigationAccess, {
       entryType: activeMasterEntryType,

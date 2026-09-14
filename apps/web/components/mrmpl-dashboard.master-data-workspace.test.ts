@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 
 describe("Master Data workspace", () => {
-  it("shows Data Entry and Master Tables as two views of one module", () => {
+  it("shows Data Entry and View Records as two views of one module", () => {
     const source = readFileSync(
       new URL("./mrmpl-dashboard.tsx", import.meta.url),
       "utf8"
@@ -18,8 +18,8 @@ describe("Master Data workspace", () => {
     expect(source).toContain("entryType={bulkEntryType}")
     expect(source).toContain("onEntryTypeChange={onMasterEntryTypeChange}")
     expect(tabsSource).toContain("Data Entry")
-    expect(tabsSource).toContain("Master Table")
-    expect(tabsSource).toContain("Back to Master Selection")
+    expect(tabsSource).toContain("View Records")
+    expect(tabsSource).toContain("Back to Modules")
     expect(tabsSource).toContain(
       "masterSelectionHref(selection, props.activeView)"
     )
@@ -68,14 +68,14 @@ describe("Master Data workspace", () => {
     expect(tablePanelSource).toMatch(
       /onExport=\{\(\) =>\s*downloadMasterTableCsv/
     )
-    expect(tabsSource).toContain("Back to Master Selection")
+    expect(tabsSource).toContain("Back to Modules")
     expect(tabsSource).toContain("Export")
     const toolbarSource = tabsSource.slice(
       tabsSource.indexOf(
         '<div className="flex flex-wrap items-center border-b">'
       )
     )
-    expect(toolbarSource.indexOf("Back to Master Selection")).toBeLessThan(
+    expect(toolbarSource.indexOf("Back to Modules")).toBeLessThan(
       toolbarSource.indexOf('aria-label="Master Data views"')
     )
     expect(

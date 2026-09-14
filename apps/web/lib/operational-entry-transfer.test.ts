@@ -12,7 +12,7 @@ describe("Operational Entry transfer toolbar", () => {
     ).toBe("csvImport")
   })
 
-  it("shows export only in Entry Tables", () => {
+  it("shows export only in View Records", () => {
     expect(
       operationalEntryTransferAction("masterTables", {
         csvImport: true,

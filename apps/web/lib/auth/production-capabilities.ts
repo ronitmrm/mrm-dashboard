@@ -45,9 +45,9 @@ export const productionPageLabels: Record<
   machinistTasksTab: "Machinist",
   maintenanceTab: "Mechanical",
   masterGapsTab: "Part Readiness",
-  masterTablesTab: "Master Table",
+  masterTablesTab: "View Records",
   operationalEntryTab: "Data Entry",
-  operationalTablesTab: "Entry Tables",
+  operationalTablesTab: "View Records",
   planningControlTab: "Planning Control",
   productionControlTab: "Planner Actions",
   productionDashboardTab: "Production Dashboard",
@@ -81,12 +81,12 @@ const modules: Record<keyof typeof productionPageCapabilities, string> = {
 const universalSubmodules: Partial<
   Record<keyof typeof productionPageCapabilities, string>
 > = {
-  dataEntryTab: "Master Selection",
+  dataEntryTab: "Data Entry",
   machineMasterTab: sidebarModuleLabels.machines,
   maintenanceTab: "Mechanical",
-  masterTablesTab: "Master Tables",
-  operationalEntryTab: "Entry Selection",
-  operationalTablesTab: "Entry Tables",
+  masterTablesTab: "View Records",
+  operationalEntryTab: "Data Entry",
+  operationalTablesTab: "View Records",
   productionDashboardTab: sidebarModuleLabels.productionDashboard,
 }
 

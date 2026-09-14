@@ -192,7 +192,7 @@ describe("Production operational page loading", () => {
     expect(tablePanel).toContain(
       "operationalEntrySelectionFromContext(searchParams)"
     )
-    expect(tabsSource).toContain("Back to Operational Entry Selection")
+    expect(tabsSource).toContain("Back to Modules")
     expect(tabsSource).toContain("withOperationalEntrySelectionContext")
     expect(tabsSource).not.toContain("operationalEntrySelectionSummary")
     expect(tabsSource.indexOf("<nav")).toBeLessThan(

@@ -52,7 +52,7 @@ export function OperationalWorkspaceTabs({
         href={operationalEntrySelectionHref(selection, activeView)}
       >
         <ArrowLeft className="size-4" />
-        Back to Operational Entry Selection
+        Back to Modules
       </Link>
       <nav
         aria-label="Operational Entry views"
@@ -83,7 +83,7 @@ export function OperationalWorkspaceTabs({
           href={lockedMasterTablesHref}
           role="tab"
         >
-          Entry Tables
+          View Records
         </Link>
       </nav>
       <div className="ml-auto flex items-center gap-2">

@@ -39,9 +39,9 @@ describe("Operational Workspace tabs", () => {
       })
     )
 
-    const back = html.indexOf("Back to Operational Entry Selection")
+    const back = html.indexOf("Back to Modules")
     const dataEntry = html.indexOf("Data Entry")
-    const entryTables = html.indexOf("Entry Tables")
+    const entryTables = html.indexOf("View Records")
     const download = html.indexOf("Download CSV")
     const upload = html.indexOf("Upload CSV")
 

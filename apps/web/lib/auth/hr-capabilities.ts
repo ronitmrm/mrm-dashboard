@@ -10,7 +10,7 @@ export const hrPageAccess = [
     module: sidebarModuleLabels.masterData,
     navigation: true,
     readPermissionKey: item.requiredCapability,
-    submodule: "Master Selection",
+    submodule: "Data Entry",
   })),
   ...hrNavigation.map((item) => ({
     href: item.href,

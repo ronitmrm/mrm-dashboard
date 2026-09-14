@@ -22,6 +22,10 @@ The authenticated living reference is `/ui-reference`. Check it in light and dar
 
 ## Selection rules
 
+Master Data and Operational Entry use **Data Entry** for forms and **View Records**
+for saved records. Module chooser back links say **Back to Modules**. Keep route
+and permission identifiers stable when changing these display labels.
+
 Use `OperationalTable` for comparable records, scanning, filtering, sorting, selection, totals, or spreadsheet-like work. Use `MetricCard` only for one prominent measure with optional comparison, status, icon, or compact chart. Use `SectionCard` for related controls, narrative content, forms, or a table shell. Never use cards as decorative wrappers around every element.
 
 Use `PageHeader` once per dashboard screen. Put primary and secondary page actions in its `actions` slot or an adjacent `ActionToolbar`. Use `FormSection` to group related fields and `FormGrid` for responsive field layout.

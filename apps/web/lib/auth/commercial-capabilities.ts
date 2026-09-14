@@ -74,7 +74,7 @@ export const commercialPageAccess = [
     "/commercial/enquiries",
     commercialCapabilities.enquiries,
     sidebarModuleLabels.operationalEntry,
-    "Entry Selection"
+    "Data Entry"
   ),
   page(
     "commercial.enquiry_excel_view",
@@ -168,7 +168,7 @@ export const commercialPageAccess = [
     "/commercial/orders",
     commercialCapabilities.purchaseOrders,
     sidebarModuleLabels.operationalEntry,
-    "Entry Selection"
+    "Data Entry"
   ),
   page(
     "commercial.product-bulk-revision",

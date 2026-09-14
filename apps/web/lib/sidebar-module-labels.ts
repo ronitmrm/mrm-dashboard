@@ -78,10 +78,10 @@ export function sidebarSubmoduleForPermission(
   fallbackLabel: string
 ) {
   if (startsWithAny(permissionKey, masterDataPermissionPrefixes)) {
-    return "Master Selection"
+    return "Data Entry"
   }
   if (startsWithAny(permissionKey, operationalEntryPermissionPrefixes)) {
-    return "Entry Selection"
+    return "Data Entry"
   }
 
   const mappings = [
@@ -123,8 +123,8 @@ export function sidebarSubmoduleForPermission(
     ["hr.candidates.events.", "Conversation History"],
     ["hr.candidates.applications.", "Conversation History"],
     ["hr.candidates.appointments.", "Interview Workspace"],
-    ["hr.candidates.save", "Master Selection"],
-    ["hr.candidates.assign", "Master Selection"],
+    ["hr.candidates.save", "Data Entry"],
+    ["hr.candidates.assign", "Data Entry"],
     ["hr.interview_schedule.", "Interview Schedule"],
     ["hr.interviews.schedule", "Interview Schedule"],
     ["hr.interviews.record", "Interview Workspace"],
