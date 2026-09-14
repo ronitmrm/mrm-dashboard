@@ -26,6 +26,7 @@
     "vitest": "4.1.10"
   },
   "exports": {
+    "./quality-parameter-code": "./src/quality-parameter-code.ts",
     ".": "./src/index.ts",
     "./commercial-design-domain": "./src/commercial-design-domain.ts",
     "./dashboard-analysis": "./src/legacy-dashboard-analysis.ts",

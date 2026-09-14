@@ -1,3 +1,4 @@
+import { qualityParameterCode } from "./quality-parameter-code";
 import { buildDashboardSnapshot, type AttendanceRecord, type DashboardFilters, type ProductionEntry, type TrainingRecord } from "./dashboard-domain";
 import { isActivePlannerDecision, isPlanningWorkday, machineCodeMatches, priorityLabel, priorityScore, sourcePlannerDecisions } from "./planning-rules";
 
@@ -277,7 +278,10 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
   const rejectionRemarkMasterRows = latestEntryRowsByKey(entryRows(byType, "rejection_remark_master"), rejectionMasterEntryKey);
   const setupChecklistSessionRows = latestEntryRowsByKey(entryRows(byType, "setup_checklist_session"), setupChecklistSessionEntryKey);
   const productionCardRows = latestEntryRowsByKey(entryRows(byType, "production_card"), productionCardEntryKey);
-  const qualityParameterMasterRows = latestEntryRowsByKey(entryRows(byType, "quality_parameter_master"), qualityParameterMasterEntryKey);
+  const qualityParameterMasterRows = latestEntryRowsByKey(
+    entryRows(byType, "quality_parameter_master").map(row => ({ ...row, code: qualityParameterCode(row) })),
+    qualityParameterMasterEntryKey,
+  );
   const hourlyQualityCheckRows = latestEntryRowsByKey(entryRows(byType, "hourly_quality_check"), hourlyQualityCheckEntryKey);
   const maintenanceMasterRows = latestEntryRowsByKey(entryRows(byType, "maintenance_master"), maintenanceMasterEntryKey);
   const maintenanceChecklistMasterRows = latestEntryRowsByKey(entryRows(byType, "maintenance_checklist_master"), maintenanceChecklistMasterEntryKey);

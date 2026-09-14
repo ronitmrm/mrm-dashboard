@@ -1,3 +1,4 @@
+import { qualityParameterCode } from "@workspace/db/quality-parameter-code"
 import { setupChecklistItemAppliesToPhase } from "./shop-floor-workflow"
 import { istDateValue } from "./date-time"
 
@@ -68,17 +69,6 @@ function itemKey(item: Payload) {
   return (
     text(item.itemKey) ||
     `${text(item.sequence)}|${text(item.checkPoint || item.prompt)}`
-  )
-}
-
-function qualityParameterCode(payload: Payload) {
-  return (
-    text(payload.code || payload.parameterCode) ||
-    [payload.parameterName || payload.description, payload.specification]
-      .map(text)
-      .filter(Boolean)
-      .join("|") ||
-    text(payload.uid)
   )
 }
 

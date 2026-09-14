@@ -3,6 +3,25 @@ import { describe, expect, test } from "vitest"
 import { buildLegacyDashboardSnapshot } from "./legacy-dashboard-analysis"
 
 describe("legacy dashboard route selections", () => {
+  test("retains all uploaded dimensions when parameter codes are generated", () => {
+    const dimensions = [
+      { parameterName: "Total Length", specification: 15 },
+      { parameterName: "Thread Length", specification: 15 },
+      { parameterName: "Thread", specification: "1/4 nptf" },
+    ]
+    const snapshot = buildLegacyDashboardSnapshot({
+      workbookName: "PostgreSQL", productionEntries: [],
+      dataEntries: dimensions.map((dimension) => ({
+        entryType: "quality_parameter_master", createdAt: "2026-09-14T07:47:12Z",
+        payload: { partNo: "M68B", optionNumber: 1, setupNo: 1, sequence: 1, ...dimension },
+      })),
+    })
+    expect(snapshot.productionControl).toHaveProperty("qualityParameterMasterRows",
+      dimensions.map((dimension) => expect.objectContaining({
+        ...dimension, code: `${dimension.parameterName}|${dimension.specification}`,
+      }))
+    )
+  })
   test("recognizes the PostgreSQL planning payload after an option is saved", () => {
     const createdAt = "2026-08-12T10:00:00.000Z"
     const snapshot = buildLegacyDashboardSnapshot({
