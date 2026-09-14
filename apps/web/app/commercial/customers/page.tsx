@@ -112,6 +112,7 @@ export default async function CustomersPage({
   searchParams: Promise<{
     masterView?: string | string[]
     page?: string | string[]
+    edit?: string
   }>
 }) {
   const params = await searchParams
@@ -383,20 +384,20 @@ export default async function CustomersPage({
                     <TableHead data-filterable="true">Packaging</TableHead>
                     <TableHead data-filterable="true">Currency</TableHead>
                     <TableHead data-filterable="true">Status</TableHead>
-                    {canUpdateCustomers ? <TableHead>Action</TableHead> : null}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {visibleCustomers.length ? (
                     visibleCustomers.map((customer) => {
                       const formId = `customer-${customer.id}`
+                      const editing = canUpdateCustomers && params.edit === customer.id
                       return (
                         <TableRow key={customer.id}>
                           <TableCell
-                            className="font-medium"
+                            className="sticky left-0 z-10 bg-background font-medium"
                             data-filter-value={customer.customerUid}
                           >
-                            {canUpdateCustomers ? (
+                            {editing ? (
                               <form action={updateCustomerAction} id={formId}>
                                 <input
                                   name="customer_id"
@@ -406,9 +407,15 @@ export default async function CustomersPage({
                               </form>
                             ) : null}
                             {customer.customerUid}
+                            {canUpdateCustomers ? <div className="mt-2 flex gap-2">
+                              {editing ? <>
+                                <Button form={formId} size="sm" type="submit">Save</Button>
+                                <Button asChild size="sm" variant="outline"><a href={externalMasterViewHref(customersPath, "masterTables", { page: String(bounds.page) })}>Cancel</a></Button>
+                              </> : <Button asChild size="sm" variant="outline"><a href={externalMasterViewHref(customersPath, "masterTables", { page: String(bounds.page), edit: customer.id })}>Edit</a></Button>}
+                            </div> : null}
                           </TableCell>
                           <TableCell data-filter-value={customer.companyName}>
-                            {canUpdateCustomers ? (
+                            {editing ? (
                               <Field className="min-w-52">
                                 <FieldLabel
                                   className="sr-only"
@@ -429,7 +436,7 @@ export default async function CustomersPage({
                             )}
                           </TableCell>
                           <TableCell data-filter-value={customer.email ?? ""}>
-                            {canUpdateCustomers ? (
+                            {editing ? (
                               <Field className="min-w-52">
                                 <FieldLabel
                                   className="sr-only"
@@ -450,7 +457,7 @@ export default async function CustomersPage({
                             )}
                           </TableCell>
                           <TableCell data-filter-value={customer.phone ?? ""}>
-                            {canUpdateCustomers ? (
+                            {editing ? (
                               <Field className="min-w-44">
                                 <FieldLabel
                                   className="sr-only"
@@ -470,7 +477,7 @@ export default async function CustomersPage({
                             )}
                           </TableCell>
                           <TableCell data-filter-value={customer.address ?? ""}>
-                            {canUpdateCustomers ? (
+                            {editing ? (
                               <Textarea
                                 aria-label="Customer address"
                                 defaultValue={customer.address ?? ""}
@@ -480,7 +487,7 @@ export default async function CustomersPage({
                             ) : <span className="whitespace-pre-line">{customer.address || "â€”"}</span>}
                           </TableCell>
                           <TableCell data-filter-value={customer.country ?? ""}>
-                            {canUpdateCustomers ? (
+                            {editing ? (
                               <Field className="min-w-36">
                                 <FieldLabel
                                   className="sr-only"
@@ -502,7 +509,7 @@ export default async function CustomersPage({
                           <TableCell
                             data-filter-value={customer.defaultBuyerName ?? ""}
                           >
-                            {canUpdateCustomers ? (
+                            {editing ? (
                               <CustomerDefaultSelect
                                 customerUid={customer.customerUid}
                                 defaultValue={customer.defaultBuyerName}
@@ -518,7 +525,7 @@ export default async function CustomersPage({
                           <TableCell
                             data-filter-value={customer.defaultIncoterms ?? ""}
                           >
-                            {canUpdateCustomers ? (
+                            {editing ? (
                               <CustomerDefaultSelect
                                 customerUid={customer.customerUid}
                                 defaultValue={customer.defaultIncoterms}
@@ -536,7 +543,7 @@ export default async function CustomersPage({
                               customer.defaultPaymentTerms ?? ""
                             }
                           >
-                            {canUpdateCustomers ? (
+                            {editing ? (
                               <CustomerDefaultSelect
                                 customerUid={customer.customerUid}
                                 defaultValue={customer.defaultPaymentTerms}
@@ -554,7 +561,7 @@ export default async function CustomersPage({
                               customer.defaultShipmentMode ?? ""
                             }
                           >
-                            {canUpdateCustomers ? (
+                            {editing ? (
                               <CustomerDefaultSelect
                                 customerUid={customer.customerUid}
                                 defaultValue={customer.defaultShipmentMode}
@@ -572,7 +579,7 @@ export default async function CustomersPage({
                               customer.defaultPackagingTerms ?? ""
                             }
                           >
-                            {canUpdateCustomers ? (
+                            {editing ? (
                               <CustomerDefaultSelect
                                 customerUid={customer.customerUid}
                                 defaultValue={customer.defaultPackagingTerms}
@@ -588,7 +595,7 @@ export default async function CustomersPage({
                           <TableCell
                             data-filter-value={customer.defaultCurrency ?? ""}
                           >
-                            {canUpdateCustomers ? (
+                            {editing ? (
                               <CustomerDefaultSelect
                                 customerUid={customer.customerUid}
                                 defaultValue={customer.defaultCurrency}
@@ -602,7 +609,7 @@ export default async function CustomersPage({
                             )}
                           </TableCell>
                           <TableCell data-filter-value={customer.status}>
-                            {canUpdateCustomers ? (
+                            {editing ? (
                               <Field className="min-w-32">
                                 <FieldLabel
                                   className="sr-only"
@@ -631,18 +638,6 @@ export default async function CustomersPage({
                               </Badge>
                             )}
                           </TableCell>
-                          {canUpdateCustomers ? (
-                            <TableCell>
-                              <Button
-                                form={formId}
-                                size="sm"
-                                type="submit"
-                                variant="outline"
-                              >
-                                Save
-                              </Button>
-                            </TableCell>
-                          ) : null}
                         </TableRow>
                       )
                     })
@@ -650,7 +645,7 @@ export default async function CustomersPage({
                     <TableRow>
                       <TableCell
                         className="h-32 text-center text-muted-foreground"
-                        colSpan={canUpdateCustomers ? 13 : 12}
+                        colSpan={13}
                       >
                         No Customers Have Been Loaded Into Postgresql Yet.
                       </TableCell>

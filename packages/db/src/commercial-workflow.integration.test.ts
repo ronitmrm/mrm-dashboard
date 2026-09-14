@@ -1144,6 +1144,29 @@ describe("PostgreSQL enquiry-to-design workflow", () => {
     )
   })
 
+  test("deletes selected handed-over intake lines and protects started work", async () => {
+    const enquiry = await repository.createEnquiry({
+      customerId, organizationId, receivedOn: "2026-09-14",
+      commercialTerms: { currency: "USD", conversionRate: 83.25, incoterms: "FOB",
+        paymentTerms: "Net 30", packagingTerms: "Export", shipmentMode: "Sea" },
+    })
+    const first = await repository.addEnquiryItem({ enquiryId: enquiry.id, organizationId,
+      customerPartCode: "DELETE-1", description: "Incorrect line" })
+    const second = await repository.addEnquiryItem({ enquiryId: enquiry.id, organizationId,
+      customerPartCode: "DELETE-2", description: "Second line" })
+    await repository.handOverToTechnicalReview(enquiry.id)
+    await expect(repository.deleteEnquiryItems(enquiry.id, [first.id])).resolves.toEqual({ deleted: 1 })
+    expect((await repository.getEnquiry(enquiry.id)).items.map(line => line.id)).toEqual([second.id])
+    await repository.deleteEnquiryItems(enquiry.id, [second.id])
+    expect((await repository.getEnquiry(enquiry.id)).enquiry.technicalHandoverStatus).toBe("Draft")
+    const replacement = await repository.addEnquiryItem({ enquiryId: enquiry.id, organizationId,
+      customerPartCode: "CORRECTED", description: "Replacement line" })
+    await repository.handOverToTechnicalReview(enquiry.id)
+    await pool.query("UPDATE sales.enquiry_items SET reviewed_at = now() WHERE id = $1", [replacement.id])
+    await expect(repository.deleteEnquiryItems(enquiry.id, [replacement.id])).rejects.toThrow("downstream work")
+    expect((await repository.getEnquiry(enquiry.id)).items).toHaveLength(1)
+  })
+
   test("preserves Sales match decisions, dedicated queues, and chained follow-ups", async () => {
     const suffix = Date.now().toString(36)
     const enquiry = await repository.createEnquiry({

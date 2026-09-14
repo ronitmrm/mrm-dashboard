@@ -27,6 +27,11 @@ readable and selectable when editing historical records.
 commercial terms and line items before downstream work. Its line register opens
 one selected line for editing and does not expose Technical Review or Design
 inputs.
+Sales may delete selected intake lines, including all lines, after handover while
+no Technical Review, Design, quotation, clarification, or revision work exists
+for those lines. Deletion preserves the enquiry and records an audit event.
+Deleting the last line returns the enquiry to Draft so Sales can upload corrected
+items and hand them over again. Started downstream work cannot be deleted this way.
 Once quotation work exists, the enquiry opens as a read-only register summary.
 An open revision exposes term editing; Add Line belongs to editable intake, and
 completed line corrections remain read-only. Request Revision is the entry point

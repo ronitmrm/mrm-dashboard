@@ -383,6 +383,19 @@ describe("bounded enquiry repositories", () => {
     )
   })
 
+  test("pages through enquiry Excel lines beyond the first 200", async () => {
+    const secondPage = await repository.listEnquirySpreadsheetBounded(
+      exportOrganizationCode, 200, undefined, 200
+    )
+    expect(secondPage.rows[0]?.enquiryNumber).toBe("EXPORT-0301")
+    expect(secondPage.rows.at(-1)?.enquiryNumber).toBe("EXPORT-0102")
+    const lastPage = await repository.listEnquirySpreadsheetBounded(
+      exportOrganizationCode, 200, undefined, 400
+    )
+    expect(lastPage.rows).toHaveLength(101)
+    expect(lastPage.coverage.truncated).toBe(false)
+  })
+
   test("preserves the Pricing workflow-status precedence in Excel View", async () => {
     const result = await repository.listEnquirySpreadsheetBounded(
       statusOrganizationCode

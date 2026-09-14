@@ -20,7 +20,7 @@ import {
 } from "@workspace/ui/components/table"
 
 import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
-import { BoundedResultNotice } from "@/components/bounded-result-notice"
+import { pageBounds } from "@/lib/page-bounds"
 import { DataDownloadButton } from "@/components/data-download-button"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { MetricSummary } from "@/components/ui/golden-patterns"
@@ -34,7 +34,10 @@ const numberFormat = new Intl.NumberFormat("en-IN", {
   maximumFractionDigits: 4,
 })
 
-export default async function EnquiryExcelViewPage() {
+export default async function EnquiryExcelViewPage({ searchParams }: {
+  searchParams: Promise<{ page?: string | string[] }>
+}) {
+  const bounds = pageBounds((await searchParams).page, 200)
   const session = await requireCapability(
     "pricing.enquiries.read",
     "/commercial/enquiries/excel-view"
@@ -43,9 +46,9 @@ export default async function EnquiryExcelViewPage() {
     connectionString: readAuthEnvironment().connectionString,
   })
   const result = await workflow
-    .listEnquirySpreadsheetBounded("MRMPL", 200, {
+    .listEnquirySpreadsheetBounded("MRMPL", bounds.limit, {
       originatingSalespersonUserId: session.user.id,
-    })
+    }, bounds.offset)
     .finally(() => workflow.close())
 
   return (
@@ -57,14 +60,15 @@ export default async function EnquiryExcelViewPage() {
         <div className="flex flex-wrap gap-2 pt-2">
           <DataDownloadButton href="/commercial/enquiries/register/export.xlsx" />
         </div>
-        <BoundedResultNotice
-          coverage={result.coverage}
-          section="Enquiry Excel view"
-        />
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="text-sm text-muted-foreground">Page {bounds.page} · {result.rows.length} lines on this page</p>
+          {bounds.page > 1 ? <Button asChild size="sm" variant="outline"><Link href={`?page=${bounds.page - 1}`}>Previous</Link></Button> : null}
+          {result.coverage.truncated ? <Button asChild size="sm" variant="outline"><Link href={`?page=${bounds.page + 1}`}>Next</Link></Button> : null}
+        </div>
       </section>
 
       <MetricSummary
-        scope="Your loaded workflow lines · before table filters"
+        scope={`Your workflow lines · page ${bounds.page} · filters apply to this page`}
         items={[
           {
             label: "Enquiry Lines",
