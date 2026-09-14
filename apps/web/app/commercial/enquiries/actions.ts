@@ -383,6 +383,19 @@ export async function deleteEnquiryAction(formData: FormData) {
   redirect(enquiriesPath)
 }
 
+export async function deleteEnquiryLinesAction(formData: FormData) {
+  const enquiryId = requiredText(formData, "enquiry_id")
+  const itemIds = formData.getAll("enquiry_item_ids").map(String)
+  await withWorkflow(
+    commercialTaskCapabilities.deleteEnquiry,
+    `${enquiriesPath}/${enquiryId}`,
+    (workflow, actorUserId) => workflow.deleteEnquiryItems(enquiryId, itemIds, actorUserId)
+  )
+  revalidatePath(enquiriesPath, "layout")
+  revalidatePath(technicalReviewPath)
+  redirect(`${enquiriesPath}/${enquiryId}`)
+}
+
 export async function updateEnquiryItemAction(formData: FormData) {
   const enquiryId = requiredText(formData, "enquiry_id")
   const enquiryItemId = requiredText(formData, "enquiry_item_id")

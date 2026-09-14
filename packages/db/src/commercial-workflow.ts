@@ -2704,6 +2704,59 @@ export function createCommercialWorkflowRepository(
       })
     },
 
+    async deleteEnquiryItems(enquiryId: string, itemIds: string[], actorUserId?: string | null) {
+      const ids = [...new Set(itemIds)]
+      if (!ids.length) throw new Error("Select at least one enquiry line to delete.")
+      return transaction(pool, async (client) => {
+        const enquiry = await client.query<{ organization_id: string }>(`
+          SELECT organization_id FROM sales.enquiries
+          WHERE id = $1 AND ($2::uuid IS NULL OR created_by_user_id = $2
+            OR (SELECT identity.has_administrative_access($2))) FOR UPDATE
+        `, [enquiryId, actorUserId ?? null])
+        if (!enquiry.rows[0]) throw new Error("ENQ was not found.")
+        // Lock lines before checking downstream work: Technical Review locks these too.
+        const lines = await client.query<{ id: string }>(`
+          SELECT id FROM sales.enquiry_items
+          WHERE enquiry_id = $1 AND id = ANY($2::uuid[]) ORDER BY id FOR UPDATE
+        `, [enquiryId, ids])
+        if (lines.rows.length !== ids.length) throw new Error("Selected enquiry lines were not found.")
+        const blocked = await client.query<{ id: string }>(`
+          SELECT line.id FROM sales.enquiry_items line
+          WHERE line.id = ANY($1::uuid[]) AND (
+            line.reviewed_at IS NOT NULL
+            OR line.technical_review_status NOT IN ('Pending Review', 'Need Sales Confirmation')
+            OR EXISTS (SELECT 1 FROM sales.design_tasks task WHERE task.enquiry_item_id = line.id)
+            OR EXISTS (SELECT 1 FROM sales.quote_items quote WHERE quote.enquiry_item_id = line.id)
+            OR EXISTS (SELECT 1 FROM sales.clarification_tasks task WHERE task.enquiry_item_id = line.id)
+            OR EXISTS (SELECT 1 FROM sales.enquiry_revision_lines revision WHERE revision.enquiry_item_id = line.id)
+          ) LIMIT 1
+        `, [ids])
+        if (blocked.rows.length) throw new Error("Selected lines cannot be deleted after downstream work has started.")
+        await client.query(`DELETE FROM core.file_links
+          WHERE target_schema = 'sales' AND target_table = 'enquiry_items'
+            AND target_id = ANY($1::uuid[])`, [ids])
+        await client.query("DELETE FROM sales.enquiry_items WHERE id = ANY($1::uuid[])", [ids])
+        await client.query(`
+          UPDATE sales.enquiries SET
+            technical_handover_status = CASE WHEN EXISTS (
+              SELECT 1 FROM sales.enquiry_items WHERE enquiry_id = $1
+            ) THEN technical_handover_status ELSE 'Draft' END,
+            technical_handover_at = CASE WHEN EXISTS (
+              SELECT 1 FROM sales.enquiry_items WHERE enquiry_id = $1
+            ) THEN technical_handover_at ELSE NULL END,
+            updated_at = now(), row_version = row_version + 1 WHERE id = $1
+        `, [enquiryId])
+        for (const itemId of ids) {
+          await writeAuditEvent(client, {
+            actorUserId, eventType: "enquiry_item.deleted",
+            organizationId: enquiry.rows[0].organization_id,
+            targetId: itemId, targetTable: "enquiry_items",
+          })
+        }
+        return { deleted: ids.length }
+      })
+    },
+
     async deleteEnquiry(enquiryId: string, actorUserId?: string | null) {
       return transaction(pool, async (client) => {
         const current = await client.query<{
@@ -6809,8 +6862,10 @@ export function createCommercialWorkflowRepository(
     async listEnquirySpreadsheetBounded(
       organizationCode: string,
       requestedLimit = 200,
-      scope?: SalesWorkScope
+      scope?: SalesWorkScope,
+      offset = 0
     ) {
+      if (!Number.isSafeInteger(offset) || offset < 0) throw new Error("Invalid enquiry page offset.")
       const limit = operationalRootLimit(requestedLimit)
       const rows = await pool.query<EnquirySpreadsheetDatabaseRow>(
         `
@@ -6952,12 +7007,13 @@ export function createCommercialWorkflowRepository(
             AND enquiry_item.linked_enquiry_item_id IS NULL
           ORDER BY enquiry.created_at DESC, enquiry.id DESC,
             enquiry_item.line_number, enquiry_item.id
-          LIMIT $2
+          LIMIT $2 OFFSET $4
         `,
         [
           organizationCode.trim(),
           limit + 1,
           scope?.originatingSalespersonUserId ?? null,
+          offset,
         ]
       )
       return boundedResult(

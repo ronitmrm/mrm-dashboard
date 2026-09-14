@@ -56,6 +56,7 @@ import {
   addEnquiryItemAction,
   applyEnquiryImportReviewAction,
   deleteEnquiryAction,
+  deleteEnquiryLinesAction,
   handOverEnquiryAction,
   importEnquiryLinesAction,
   updateEnquiryAction,
@@ -152,6 +153,7 @@ export default async function EnquiryDetailPage({
     versions={loaded.quotations} selected={selectedQuotation} drawings={loaded.quoteDrawings} action={canRequestRevision && selectedQuotation.id===currentQuotation?.id
       ? <RequestRevision enquiryId={id} lines={snapshot.items} disabled={loaded.revisions.some(revision=>revision.status==='Open')}/> : null}/>
   const canEditIntake = canRequestRevision && snapshot.enquiry.intakeEditable
+  const canDeleteLines = snapshot.enquiry.intakeEditable && (await listGrantedCapabilities(session.user.id, ['pricing.enquiries.delete'])).length > 0
   const canEditTerms = canRequestRevision && (canEditIntake || loaded.revisions.some(revision=>revision.status==='Open'))
   const drawingHistory = new Map(loaded.drawingHistoryEntries)
   const customerRepository = createCustomerRepository({ connectionString })
@@ -610,13 +612,21 @@ export default async function EnquiryDetailPage({
         </div>
  <SectionCard id="quotation-parts">
           <CardContent className="pt-6">
+            <form action={deleteEnquiryLinesAction}>
+              <input type="hidden" name="enquiry_id" value={id} />
+              {canDeleteLines ? <div className="mb-3 flex flex-wrap items-center gap-3">
+                <Button type="submit" variant="destructive" size="sm">Delete Selected Lines</Button>
+                <p className="text-sm text-muted-foreground">Select some or all lines. Lines with downstream work cannot be deleted.</p>
+              </div> : null}
             <div className="rounded-md border min-w-0">
  <OperationalTable
                 excelFilters
+                filteredSelection={canDeleteLines ? { checkboxName: "enquiry_item_ids" } : undefined}
                 filterStorageKey="mrmpl:commercial:enquiry-lines:filters:v1"
               >
                 <TableHeader>
                   <TableRow>
+                    {canDeleteLines ? <TableHead>Select</TableHead> : null}
                     <TableHead>Line</TableHead>
                     <TableHead>Part</TableHead>
                     <TableHead>Description</TableHead>
@@ -632,6 +642,7 @@ export default async function EnquiryDetailPage({
                   {snapshot.items.length ? (
                     snapshot.items.map((item) => (
                       <TableRow key={item.id}>
+                        {canDeleteLines ? <TableCell><input type="checkbox" name="enquiry_item_ids" value={item.id} aria-label={`Select line ${item.lineNumber}`} /></TableCell> : null}
                         <TableCell>{item.lineNumber}</TableCell>
                         <TableCell className="font-medium">
                           {item.customerPartCode || "—"}
@@ -667,7 +678,7 @@ export default async function EnquiryDetailPage({
                     <TableRow>
                       <TableCell
                         className="py-10 text-center text-muted-foreground"
-                        colSpan={9}
+                        colSpan={canDeleteLines ? 10 : 9}
                       >
                         Add at least one line before handing the enquiry to
                         Technical Review.
@@ -677,6 +688,7 @@ export default async function EnquiryDetailPage({
                 </TableBody>
  </OperationalTable>
             </div>
+            </form>
           </CardContent>
  </SectionCard>
 
