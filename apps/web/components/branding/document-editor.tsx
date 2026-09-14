@@ -341,7 +341,7 @@ export function BrandingDocumentEditor({
             })}
           </div>
         </FormSection>
-        {documentId ? (
+        {documentId && type !== "notice" ? (
           <FormSection title="Revision notes">
             <div className="grid gap-2">
               <Label htmlFor="change-reason">Reason for change</Label>

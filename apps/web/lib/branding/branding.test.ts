@@ -5,7 +5,7 @@ import {
   revisionLabel,
   validateBrandingIssue,
 } from "@workspace/db/branding-domain"
-import { escapeBrandingHtml } from "./pdf"
+import { brandingHtml, escapeBrandingHtml } from "./pdf"
 
 const content = {
   title: "Notice",
@@ -33,7 +33,7 @@ const content = {
   ],
 }
 describe("Branding issue contract", () => {
-  it("retains three-language content with independent numbers and revision references", () => {
+  it("retains three-language content with independent numbers and no notice revision label", async () => {
     const parsed = parseBrandingContent(content, "notice")
     expect(() => validateBrandingIssue(parsed, 1)).not.toThrow()
     expect(parsed.translations[1]?.title).toBe("बैठक")
@@ -44,6 +44,17 @@ describe("Branding issue contract", () => {
       brandingNumber("policy", 1),
     ]).toEqual(["MRM-SOP-0001", "MRM-NTC-0001", "MRM-POL-0001"])
     expect(revisionLabel(1)).toBe("R01")
+    const notice = await brandingHtml({
+      content: parsed,
+      number: brandingNumber("notice", 1),
+      type: "notice",
+      revision: 0,
+      issuedAt: "2026-09-14",
+      authorName: "Author",
+    })
+    const header = notice.header.replace(/<style>[\s\S]*?<\/style>/g, "")
+    expect(header).toContain("MRM-NTC-0001")
+    expect(header).not.toContain("R00")
     expect(escapeBrandingHtml('<script>"text"</script>')).toBe(
       "&lt;script&gt;&quot;text&quot;&lt;/script&gt;"
     )

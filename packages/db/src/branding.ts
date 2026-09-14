@@ -53,6 +53,25 @@ export function createBrandingRepository(options: RepositoryPoolOptions) {
       return result.rows[0].id
     },
     async list(organizationId: string, type: BrandingType, page = 1) {
+      const summary = (
+        await pool.query<{
+          total: number
+          issued: number
+          drafts: number
+          revisionsInProgress: number
+        }>(
+          `SELECT count(*)::integer AS total,
+        count(*) FILTER (WHERE issued)::integer AS issued,
+        count(*) FILTER (WHERE NOT issued)::integer AS drafts,
+        count(*) FILTER (WHERE issued AND draft AND type <> 'notice')::integer AS "revisionsInProgress"
+        FROM (SELECT d.type,
+          EXISTS(SELECT 1 FROM branding.revisions r WHERE r.document_id = d.id AND r.state = 'issued') AS issued,
+          EXISTS(SELECT 1 FROM branding.revisions r WHERE r.document_id = d.id AND r.state = 'draft') AS draft
+          FROM branding.documents d WHERE d.organization_id = $1 AND d.type = $2
+        ) documents`,
+          [organizationId, type]
+        )
+      ).rows[0]!
       const result = await pool.query<BrandingRegisterRow>(
         `SELECT d.id, d.type, d.number,
         r.content->>'title' AS title, r.content->>'department' AS department,
@@ -67,6 +86,7 @@ export function createBrandingRepository(options: RepositoryPoolOptions) {
         [organizationId, type, (page - 1) * 100]
       )
       return {
+        summary,
         rows: result.rows.slice(0, 100),
         hasNext: result.rows.length > 100,
       }
@@ -113,6 +133,16 @@ export function createBrandingRepository(options: RepositoryPoolOptions) {
           )
         ).rows[0]
         if (!document) throw new Error("Document not found.")
+        if (input.type === "notice" && input.documentId) {
+          const issued = await client.query(
+            "SELECT 1 FROM branding.revisions WHERE document_id = $1 AND state = 'issued' LIMIT 1",
+            [documentId]
+          )
+          if (issued.rowCount)
+            throw new Error(
+              "Issued notices cannot be revised. Create a new notice."
+            )
+        }
         if (input.documentId) {
           const result = await client.query(
             `UPDATE branding.revisions SET content = $1, version = version + 1,
@@ -140,6 +170,8 @@ export function createBrandingRepository(options: RepositoryPoolOptions) {
       userId: string
       userName: string
     }) {
+      if (input.type === "notice")
+        throw new Error("Notices do not have revisions. Create a new notice.")
       return withTransaction(pool, async (client) => {
         const document = (
           await client.query(
@@ -202,6 +234,10 @@ export function createBrandingRepository(options: RepositoryPoolOptions) {
         ).rows[0]
         if (!revision) throw new Error("Revision not found.")
         if (revision.state === "issued") return revision.id
+        if (input.type === "notice" && document.number)
+          throw new Error(
+            "Issued notices cannot be revised. Create a new notice."
+          )
         if (revision.version !== input.version)
           throw new Error("This draft changed. Reload and review before issue.")
         const content = parseBrandingContent(revision.content, input.type)

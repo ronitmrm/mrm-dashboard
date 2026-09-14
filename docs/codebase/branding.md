@@ -29,6 +29,10 @@
   in all three languages; Copy Source does not claim to translate it.
 - Registers load 100 records per page; column filters apply to that page and
   persist in the browser. Detail history retains every issued revision.
+- Summary cards use organization/type-scoped aggregate counts across all pages,
+  independently of table filters. Notices have no new revision flow: repository
+  writes enforce one issue, while earlier retained PDFs remain accessible.
+  Notice PDFs and register rows omit revision labels; SOPs/policies retain them.
 
 Verification: run the four root checks in AGENTS.md. For PDF changes, render and
 inspect multilingual samples and long documents. Test migration/lifecycle writes

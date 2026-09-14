@@ -56,15 +56,20 @@ export default async function BrandingDocumentPage({
     })
   )
   if (!document?.revisions.length) notFound()
+  const availableRevisions = document.revisions.filter(
+    (revision) =>
+      type !== "notice" || !document.number || revision.state === "issued"
+  )
   const selectedId = (await searchParams).revision
   const selected = selectedId
-    ? document.revisions.find((revision) => revision.id === selectedId)
-    : document.revisions[0]
+    ? availableRevisions.find((revision) => revision.id === selectedId)
+    : availableRevisions[0]
   if (!selected) notFound()
-  const draft = document.revisions.find(
+  const draft = availableRevisions.find(
     (revision) => revision.state === "draft"
   )
-  const fileName = `${document.number ?? "Draft"}-${revisionLabel(selected.revision)}.pdf`
+  const reference = `${document.number ?? "Number assigned on first issue"}${type === "notice" ? "" : ` · ${revisionLabel(selected.revision)}`}`
+  const fileName = `${document.number ?? "Draft"}${type === "notice" ? "" : `-${revisionLabel(selected.revision)}`}.pdf`
   const pdfHref =
     selected.state === "issued"
       ? `/branding/${type}/${id}/revisions/${selected.id}/pdf`
@@ -74,7 +79,7 @@ export default async function BrandingDocumentPage({
       <PageHeader
         title={selected.content.title}
         icon={FileText}
-        description={`${document.number ?? "Number assigned on first issue"} · ${revisionLabel(selected.revision)}`}
+        description={reference}
         badge={
           <StatusBadge
             tone={selected.state === "issued" ? "positive" : "neutral"}
@@ -100,7 +105,7 @@ export default async function BrandingDocumentPage({
                 </AttachmentViewerLink>
               </Button>
             ) : null}
-            {canWrite && !draft ? (
+            {canWrite && !draft && type !== "notice" ? (
               <BrandingIssueControls
                 type={type}
                 documentId={id}
@@ -120,13 +125,19 @@ export default async function BrandingDocumentPage({
             <TabsTrigger value="edit">Data Entry</TabsTrigger>
           ) : null}
           <TabsTrigger value="content">Saved Content</TabsTrigger>
-          <TabsTrigger value="history">Revision History</TabsTrigger>
+          {type !== "notice" ||
+          document.revisions.filter((revision) => revision.state === "issued")
+            .length > 1 ? (
+            <TabsTrigger value="history">
+              {type === "notice" ? "Earlier PDFs" : "Revision History"}
+            </TabsTrigger>
+          ) : null}
         </TabsList>
         {selected.state === "draft" && canWrite ? (
           <TabsContent value="edit">
             <p className="mb-4 text-sm text-muted-foreground">
               Save changes before previewing or issuing. Issue PDF freezes the
-              saved revision.
+              saved document.
             </p>
             <BrandingDocumentEditor
               key={`${selected.id}:${selected.version}`}
@@ -141,7 +152,7 @@ export default async function BrandingDocumentPage({
           {canWrite && draft?.id === selected.id ? (
             <ActionToolbar>
               <span className="text-sm text-muted-foreground">
-                Issue this saved revision after reviewing its text and PDF.
+                Issue this saved document after reviewing its text and PDF.
               </span>
               <BrandingIssueControls
                 type={type}
@@ -194,13 +205,17 @@ export default async function BrandingDocumentPage({
             filterStorageKey={`branding:${id}:revisions`}
             containerClassName="max-h-[60vh] rounded-lg border"
             toolbarStart={
-              <span className="text-sm font-medium">Revision history</span>
+              <span className="text-sm font-medium">
+                {type === "notice"
+                  ? "Retained PDFs from earlier issues"
+                  : "Revision history"}
+              </span>
             }
           >
             <TableHeader>
               <TableRow>
                 {[
-                  "Revision",
+                  ...(type === "notice" ? [] : ["Revision"]),
                   "Name",
                   "Status",
                   "Author",
@@ -213,48 +228,54 @@ export default async function BrandingDocumentPage({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {document.revisions.map((revision) => (
-                <TableRow key={revision.id}>
-                  <TableCell>{revisionLabel(revision.revision)}</TableCell>
-                  <TableCell>
-                    <Link
-                      className="font-medium text-primary hover:underline"
-                      href={`/branding/${type}/${id}?revision=${revision.id}`}
-                    >
-                      {revision.content.title}
-                    </Link>
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge
-                      value={revision.state === "issued" ? "Issued" : "Draft"}
-                      tone={
-                        revision.state === "issued" ? "positive" : "neutral"
-                      }
-                    />
-                  </TableCell>
-                  <TableCell>{revision.authorName}</TableCell>
-                  <TableCell>
-                    {revision.issuedAt?.slice(0, 10) ?? "—"}
-                  </TableCell>
-                  <TableCell className="max-w-96 whitespace-pre-wrap">
-                    {revision.content.changeReason || "Initial issue"}
-                  </TableCell>
-                  <TableCell>
-                    {revision.state === "issued" ? (
-                      <AttachmentViewerLink
-                        className="text-primary hover:underline"
-                        href={`/branding/${type}/${id}/revisions/${revision.id}/pdf`}
-                        fileName={`${document.number}-${revisionLabel(revision.revision)}.pdf`}
-                        mediaType="application/pdf"
+              {document.revisions
+                .filter(
+                  (revision) => type !== "notice" || revision.state === "issued"
+                )
+                .map((revision) => (
+                  <TableRow key={revision.id}>
+                    {type !== "notice" ? (
+                      <TableCell>{revisionLabel(revision.revision)}</TableCell>
+                    ) : null}
+                    <TableCell>
+                      <Link
+                        className="font-medium text-primary hover:underline"
+                        href={`/branding/${type}/${id}?revision=${revision.id}`}
                       >
-                        Open PDF
-                      </AttachmentViewerLink>
-                    ) : (
-                      "—"
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
+                        {revision.content.title}
+                      </Link>
+                    </TableCell>
+                    <TableCell>
+                      <StatusBadge
+                        value={revision.state === "issued" ? "Issued" : "Draft"}
+                        tone={
+                          revision.state === "issued" ? "positive" : "neutral"
+                        }
+                      />
+                    </TableCell>
+                    <TableCell>{revision.authorName}</TableCell>
+                    <TableCell>
+                      {revision.issuedAt?.slice(0, 10) ?? "—"}
+                    </TableCell>
+                    <TableCell className="max-w-96 whitespace-pre-wrap">
+                      {revision.content.changeReason || "Initial issue"}
+                    </TableCell>
+                    <TableCell>
+                      {revision.state === "issued" ? (
+                        <AttachmentViewerLink
+                          className="text-primary hover:underline"
+                          href={`/branding/${type}/${id}/revisions/${revision.id}/pdf`}
+                          fileName={`${document.number}-${revisionLabel(revision.revision)}.pdf`}
+                          mediaType="application/pdf"
+                        >
+                          Open PDF
+                        </AttachmentViewerLink>
+                      ) : (
+                        "—"
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
             </TableBody>
           </OperationalTable>
         </TabsContent>
