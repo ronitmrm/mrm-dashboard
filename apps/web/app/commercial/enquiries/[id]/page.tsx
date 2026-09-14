@@ -1,4 +1,5 @@
 import { PendingRetainedUploadForm } from "@/components/pending-retained-upload-form"
+import { MasterEntryForm } from "@/components/master-entry-form"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import { DownloadAllDrawings, QuotationDrawingsCell, QuotationHistory, QuotationTabs } from "../quotation-history"
@@ -183,7 +184,7 @@ export default async function EnquiryDetailPage({
   const termOptions = commercialTermOptions(masterSnapshot.commercialTerms)
 
   return (
-    <div className="grid gap-6">
+    <div className="grid min-w-0 w-full gap-6">
       {currentQuotation ? <QuotationTabs enquiryId={id} versions={loaded.quotations} selected={currentQuotation.revision}/> : null}
       <section className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="grid gap-2">
@@ -614,14 +615,14 @@ export default async function EnquiryDetailPage({
         </div>
  <SectionCard id="quotation-parts">
           <CardContent className="pt-6">
-            <form action={deleteEnquiryLinesAction}>
+            <MasterEntryForm action={deleteEnquiryLinesAction} className="min-w-0">
               <input type="hidden" name="enquiry_id" value={id} />
               {canDeleteLines ? <div className="mb-3 flex flex-wrap items-center gap-3">
                 <Button type="submit" variant="destructive" size="sm">Delete Selected Lines</Button>
                 <p className="text-sm text-muted-foreground">Select some or all unstarted lines. Lines lock when Design or costing starts.</p>
               </div> : null}
-            <div className="rounded-md border min-w-0">
  <OperationalTable
+                containerClassName="rounded-md border"
                 excelFilters
                 filteredSelection={canDeleteLines ? { checkboxName: "enquiry_item_ids" } : undefined}
                 filterStorageKey="mrmpl:commercial:enquiry-lines:filters:v1"
@@ -689,8 +690,7 @@ export default async function EnquiryDetailPage({
                   )}
                 </TableBody>
  </OperationalTable>
-            </div>
-            </form>
+            </MasterEntryForm>
           </CardContent>
  </SectionCard>
 
