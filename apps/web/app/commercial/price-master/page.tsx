@@ -59,7 +59,7 @@ export default async function PriceMasterPage({
   return (
     <div className="grid gap-4">
       <Button asChild variant="ghost" className="w-fit">
-        <Link href="/masters?unit=universal">Back to Master Selection</Link>
+        <Link href="/masters?unit=universal">Back to Modules</Link>
       </Button>
       <PageHeader
         title="Price Master"

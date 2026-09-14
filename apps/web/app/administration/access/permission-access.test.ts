@@ -173,7 +173,7 @@ const permissions = [
   {
     key: "operations.master_tables.read",
     module: "operations",
-    name: "View Master Tables",
+    name: "View Records",
   },
   {
     key: "operations.operational_entry.read",
@@ -295,7 +295,7 @@ describe("permission access table", () => {
       label: "Customers",
       module: "Master Data",
       readPermissionKeys: ["pricing.customers.read"],
-      submodule: "Master Selection",
+      submodule: "Data Entry",
       supportedLevels: ["none", "view", "custom"],
     })
     expect(rows).toContainEqual({
@@ -405,14 +405,14 @@ describe("permission access table", () => {
     expect(rows.find(({ id }) => id === "page:hr.mastersPanel")).toMatchObject({
       label: "Masters",
       module: "Master Data",
-      submodule: "Master Selection",
+      submodule: "Data Entry",
     })
     expect(
       rows.find(({ id }) => id === "hr.approved_posts.create")
     ).toMatchObject({
       label: "Save Approved Post",
       module: "Master Data",
-      submodule: "Master Selection",
+      submodule: "Data Entry",
     })
   })
 
@@ -443,7 +443,7 @@ describe("permission access table", () => {
       rows.find(({ id }) => id === "page:commercial.enquiries")
     ).toMatchObject({
       module: "Operational Entry",
-      submodule: "Entry Selection",
+      submodule: "Data Entry",
     })
     expect(
       rows.find(({ id }) => id === "page:commercial.enquiry_excel_view")
@@ -461,14 +461,14 @@ describe("permission access table", () => {
     ).toMatchObject({
       label: "Data Entry",
       module: "Master Data",
-      submodule: "Master Selection",
+      submodule: "Data Entry",
     })
     expect(
       rows.find(({ id }) => id === "page:production.masterTablesTab")
     ).toMatchObject({
-      label: "Master Table",
+      label: "View Records",
       module: "Master Data",
-      submodule: "Master Tables",
+      submodule: "View Records",
     })
     expect(
       rows.find(({ id }) => id === "page:production.operationalEntryTab")
@@ -591,7 +591,7 @@ describe("permission access table", () => {
       label: "Add Customer",
       module: "Master Data",
       readPermissionKeys: [],
-      submodule: "Master Selection",
+      submodule: "Data Entry",
       supportedLevels: ["none", "full", "custom"],
     })
   })

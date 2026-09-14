@@ -25,7 +25,7 @@ export function operationalEntryPermissionKey(
   return `entries.${unit}.${entry}.${action}`
 }
 
-// Entry Selection and Entry Tables share one independently granted unit/entry.
+// Data Entry and View Records share one independently granted unit/entry.
 export const scopedOperationalEntries = productionFloors.flatMap((floor) =>
   productionOperationalEntries.map((entry) => ({
     unit: floor.code,

@@ -152,7 +152,7 @@ export default async function MastersPage({
               <CardHeader>
                 <CardTitle>Add A Master</CardTitle>
                 <CardDescription>
-                  Add a new entry. To change an existing entry, use Master Table.
+                  Add a new entry. To change an existing entry, use View Records.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -187,7 +187,7 @@ export default async function MastersPage({
           <CardHeader>
             <div className="flex items-center justify-between gap-3">
               <div>
-                <CardTitle>Commercial Master Tables</CardTitle>
+                <CardTitle>Commercial Records</CardTitle>
               </div>
             </div>
           </CardHeader>

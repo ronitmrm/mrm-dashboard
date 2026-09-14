@@ -13,7 +13,7 @@ export default function MasterSelectionError({ reset }: { reset: () => void }) {
   return (
  <SectionCard className="mx-auto max-w-xl">
       <CardHeader>
-        <CardTitle>Master Selection could not be loaded</CardTitle>
+        <CardTitle>Data Entry could not be loaded</CardTitle>
         <CardDescription>
           The master relationships were not loaded, so no fallback selection was
           assumed.

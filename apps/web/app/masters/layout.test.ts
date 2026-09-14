@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs"
 
 import { describe, expect, it } from "vitest"
 
-describe("Master Selection layout", () => {
+describe("Data Entry layout", () => {
   it("uses the complete application shell", () => {
     const source = readFileSync(
       new URL("./layout.tsx", import.meta.url),

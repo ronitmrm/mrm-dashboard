@@ -87,7 +87,7 @@ describe("Production master table rows", () => {
     ])
   })
 
-  it("shows checklist data in the universal Master Tables workspace", () => {
+  it("shows checklist data in the universal View Records workspace", () => {
     expect(checklistWorkspaceEntryTypes).toEqual([
       "setup_checklist_master",
       "maintenance_checklist_master",

@@ -9059,7 +9059,7 @@ function OperationalTablesPanel({
     return (
       <SectionCard>
         <CardHeader>
-          <CardTitle>Entry Tables</CardTitle>
+          <CardTitle>View Records</CardTitle>
           <CardDescription>
             No Operational Entry Definitions Are Configured.
           </CardDescription>
@@ -9097,7 +9097,7 @@ function OperationalTablesPanel({
       />
       <SectionCard>
         <CardHeader>
-          <CardTitle>Entry Tables</CardTitle>
+          <CardTitle>View Records</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-3 @4xl/main:grid-cols-[minmax(220px,320px)_minmax(220px,320px)_minmax(260px,1fr)]">
           {!selectionLocked ? (
@@ -9338,7 +9338,7 @@ function MasterTablesPanel({
     return (
       <SectionCard>
         <CardHeader>
-          <CardTitle>Master Tables</CardTitle>
+          <CardTitle>View Records</CardTitle>
           <CardDescription>
             No Master Definitions Are Configured.
           </CardDescription>

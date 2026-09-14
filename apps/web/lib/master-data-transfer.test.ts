@@ -12,7 +12,7 @@ describe("Master Data transfer toolbar", () => {
     ).toBe("csvImport")
   })
 
-  it("shows export only in Master Table", () => {
+  it("shows export only in View Records", () => {
     expect(
       masterDataTransferAction("masterTables", {
         csvImport: true,

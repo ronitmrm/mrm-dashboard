@@ -82,7 +82,7 @@ export function MasterDataViewTabs(props: MasterDataViewTabsProps) {
           href={masterSelectionHref(selection, props.activeView)}
         >
           <ArrowLeft className="size-4" />
-          Back to Master Selection
+          Back to Modules
         </Link>
         <nav
           aria-label="Master Data views"
@@ -111,7 +111,7 @@ export function MasterDataViewTabs(props: MasterDataViewTabsProps) {
             href={masterTablesHref}
             role="tab"
           >
-            Master Table
+            View Records
           </Link>
         </nav>
         <div className="ml-auto flex items-center gap-2">

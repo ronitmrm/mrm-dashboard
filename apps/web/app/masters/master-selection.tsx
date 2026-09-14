@@ -114,8 +114,8 @@ export function MasterSelection({
           <div>
             <CardTitle>
               {view === "masterTables"
-                ? "Master Table Selection"
-                : "Master Selection"}
+                ? "View Records"
+                : "Data Entry"}
             </CardTitle>
           </div>
         </div>

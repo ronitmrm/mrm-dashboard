@@ -65,7 +65,7 @@ export default async function MasterSelectionPage({
     <FullPageWorkspace>
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">
-          {view === "masterTables" ? "Master Table Selection" : "Master Module"}
+          {view === "masterTables" ? "View Records" : "Data Entry"}
         </h1>
       </div>
       {value(query.error) === "invalid-selection" ? (

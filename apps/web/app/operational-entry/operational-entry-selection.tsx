@@ -122,8 +122,8 @@ export function OperationalEntrySelection({
           <div>
             <CardTitle>
               {view === "masterTables"
-                ? "Operational Table Selection"
-                : "Operational Entry Selection"}
+                ? "View Records"
+                : "Data Entry"}
             </CardTitle>
           </div>
         </div>

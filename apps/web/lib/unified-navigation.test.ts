@@ -115,7 +115,7 @@ describe("unified navigation", () => {
       masterDataNavigation.map(({ id, title }) => ({ id, title }))
     ).toEqual([
       { id: "dataEntryTab", title: "Data Entry" },
-      { id: "masterTablesTab", title: "Master Tables" },
+      { id: "masterTablesTab", title: "View Records" },
     ])
     expect(
       operationalEntryNavigation.map(({ href, id, title }) => ({
@@ -127,12 +127,12 @@ describe("unified navigation", () => {
       {
         href: "/operational-entry",
         id: "operationalEntryTab",
-        title: "Entry Selection",
+        title: "Data Entry",
       },
       {
         href: "/operational-entry?view=masterTables",
         id: "operationalTablesTab",
-        title: "Entry Tables",
+        title: "View Records",
       },
     ])
     expect(productionCapabilityForTab("operationalTablesTab")).toBe(

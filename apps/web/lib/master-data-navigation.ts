@@ -12,7 +12,7 @@ export type ExternalMasterDataOption = {
 export type MasterDataFallbackLink = {
   destination: string
   id: "dataEntryTab" | "masterTablesTab"
-  title: "Data Entry" | "Master Tables"
+  title: "Data Entry" | "View Records"
 }
 
 export const companyWideMasterEntryTypes = [
@@ -82,7 +82,7 @@ export function masterDataFallbackLinks(
     {
       destination: "/masters?view=masterTables",
       id: "masterTablesTab",
-      title: "Master Tables",
+      title: "View Records",
     },
   ]
   return links
@@ -117,14 +117,14 @@ export function masterDataNavigationLinks(
   }
 ): MasterDataFallbackLink[] {
   void _context
-  if (access.masterReadKeys?.length) return [{ destination: "/masters?view=masterTables", id: "masterTablesTab", title: "Master Tables" }]
+  if (access.masterReadKeys?.length) return [{ destination: "/masters?view=masterTables", id: "masterTablesTab", title: "View Records" }]
   if (!access.operations) return masterDataFallbackLinks(access)
 
   const links: MasterDataFallbackLink[] = [
     {
       destination: "/masters?view=masterTables",
       id: "masterTablesTab",
-      title: "Master Tables",
+      title: "View Records",
     },
   ]
   return links.filter(
