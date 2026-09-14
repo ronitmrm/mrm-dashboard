@@ -389,11 +389,18 @@ describe("bounded enquiry repositories", () => {
     )
     expect(secondPage.rows[0]?.enquiryNumber).toBe("EXPORT-0301")
     expect(secondPage.rows.at(-1)?.enquiryNumber).toBe("EXPORT-0102")
+    expect(secondPage.summary).toEqual({ enquiryLines: 501, quotePdfSent: 0 })
     const lastPage = await repository.listEnquirySpreadsheetBounded(
       exportOrganizationCode, 200, undefined, 400
     )
     expect(lastPage.rows).toHaveLength(101)
     expect(lastPage.coverage.truncated).toBe(false)
+    expect(lastPage.summary).toEqual(secondPage.summary)
+    const emptyPage = await repository.listEnquirySpreadsheetBounded(
+      exportOrganizationCode, 200, undefined, 600
+    )
+    expect(emptyPage.rows).toHaveLength(0)
+    expect(emptyPage.summary).toEqual(secondPage.summary)
   })
 
   test("preserves the Pricing workflow-status precedence in Excel View", async () => {

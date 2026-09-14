@@ -1,5 +1,10 @@
 # Commercial Enquiries
 
+**Enquiry Excel View Totals**: Enquiry Lines and Quote PDF Sent count all workflow
+lines visible to the user across all pages, before table filters. Quote PDF Sent
+counts lines whose selected current quote has been sent. Table filters apply to
+the loaded page only.
+
 **Customer Commercial Defaults**: The buyer, Incoterms, payment terms, shipment
 mode, packaging, and currency normally used for a Customer. A new Enquiry copies
 these defaults, while that Enquiry may select different active Commercial Master

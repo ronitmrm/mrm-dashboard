@@ -43,6 +43,10 @@ existing dashboard cards; do not duplicate them.
 
 `OperationalTable` owns the shared density, sticky header, scrolling boundary, Excel-style column filters, faceted options, natural sorting, clear-all control, filtered bulk selection, selected-row treatment, and empty/loading/error presentation.
 
+Use `toolbarStart` for a register heading beside Clear All Filters, above the
+table border. Keep the border on `containerClassName` so it encloses only the
+scrolling table.
+
 Filters persist in browser storage. Pass a descriptive `filterStorageKey` for important or conditionally mounted tables. Otherwise the table derives a page-scoped key. Keep `filterMode="external"` only when a feature's shared table adapter owns filtering and persistence.
 
 Multi-row selection tables must expose **Select All (matching count)**. Use

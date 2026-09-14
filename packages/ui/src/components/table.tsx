@@ -40,6 +40,7 @@ import {
 
 type OperationalTableProps = React.ComponentProps<"table"> & {
   containerClassName?: string
+  toolbarStart?: React.ReactNode
   excelFilters?: boolean
   filteredSelection?: {
     checkboxName: string
@@ -185,6 +186,7 @@ function sameColumns(left: TableFilterColumn[], right: TableFilterColumn[]) {
 function OperationalTable({
   className,
   containerClassName,
+  toolbarStart,
   excelFilters = true,
   filteredSelection,
   filterMode = "dom",
@@ -518,11 +520,12 @@ function OperationalTable({
             )
           : null
       })}
-      {columns.length ? (
+      {columns.length || toolbarStart ? (
         <div
           data-slot="table-toolbar"
-          className="flex flex-wrap items-center gap-2 pb-2"
+          className={cn("flex flex-wrap items-center gap-2", toolbarStart ? "pb-4" : "pb-2")}
         >
+          {toolbarStart}
           {filteredSelection ? (
             <Button
               aria-label={`${filteredSelection.label ?? "Select All"} (${selectionState.selectableCount})`}
