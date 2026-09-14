@@ -9,6 +9,23 @@ import { createMaintenanceRepository } from "./maintenance"
 
 afterEach(() => vi.restoreAllMocks())
 
+test("saving a maintenance definition queues its master table refresh before commit", async () => {
+  const pool = new Pool()
+  const query = vi.fn(async () => ({ rows: [{ id: "saved", inserted: true }] }))
+  vi.spyOn(pool, "connect").mockImplementation(
+    async () => ({ query, release: vi.fn() }) as unknown as PoolClient
+  )
+  await createMaintenanceRepository({ pool }).upsertDefinition({
+    organizationId: "organization", code: "MM001", name: "Monthly Maintenance",
+    frequencyDays: 30, items: [], payload: { maintenanceCode: "MM001" },
+  })
+  expect(query).toHaveBeenCalledWith(expect.stringContaining("'mrm-dashboard', 'dataEntries'"), expect.any(Array))
+  expect(query).toHaveBeenCalledWith(expect.stringContaining("INSERT INTO derived.refresh_jobs"), expect.any(Array))
+  expect(query).toHaveBeenCalledWith(expect.stringContaining("INSERT INTO derived.outbox_events"), expect.any(Array))
+  expect(query).toHaveBeenLastCalledWith("COMMIT")
+  await pool.end()
+})
+
 test("saving a maintenance checklist queues its master table refresh before commit", async () => {
   const pool = new Pool()
   const query = vi.fn(async () => ({ rows: [{ id: "saved", inserted: true }] }))
