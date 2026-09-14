@@ -200,6 +200,8 @@ import { plannerActionHistoryRows } from "@/lib/planner-action-history"
 import { plannerPendingMachineIssueRows } from "@/lib/planner-pending-review"
 import {
   duplicateQualityParameterCombination,
+  hasNonNumericQualityTolerance,
+  normalizeQualityParameterInputType,
   mergeQualityInspectionParameterRows,
 } from "@/lib/quality-parameter-set"
 import {
@@ -11632,7 +11634,9 @@ function QualityParameterMasterForm({
   ) {
     setDrafts((current) =>
       current.map((draft) =>
-        draft.draftId === draftId ? { ...draft, [field]: value } : draft
+        draft.draftId === draftId
+          ? { ...draft, [field]: value, inputType: qualityParameterInputType({ ...draft, [field]: value }) }
+          : draft
       )
     )
   }
@@ -11916,10 +11920,7 @@ function QualityParameterMasterForm({
                     <TableCell>
                       <Input
                         className="h-8 min-w-24"
-                        type={draft.inputType === "number" ? "number" : "text"}
-                        step={
-                          draft.inputType === "number" ? "0.001" : undefined
-                        }
+                        type="text"
                         value={draft.tolerancePlus}
                         onChange={(event) =>
                           updateDraft(
@@ -11933,10 +11934,7 @@ function QualityParameterMasterForm({
                     <TableCell>
                       <Input
                         className="h-8 min-w-24"
-                        type={draft.inputType === "number" ? "number" : "text"}
-                        step={
-                          draft.inputType === "number" ? "0.001" : undefined
-                        }
+                        type="text"
                         value={draft.toleranceMinus}
                         onChange={(event) =>
                           updateDraft(
@@ -11959,7 +11957,7 @@ function QualityParameterMasterForm({
                           )
                         }
                       >
-                        <option value="number">Number</option>
+                        <option value="number" disabled={hasNonNumericQualityTolerance(draft)}>Number</option>
                         <option value="text">Text</option>
                         <option value="pass_fail">Ok / Not Ok</option>
                       </SearchableSelect>
@@ -15755,10 +15753,8 @@ function qualityParameterName(row: DashboardPayload) {
 }
 
 function qualityParameterInputType(row: DashboardPayload) {
-  const inputType = str(row.inputType).toLowerCase()
-  if (inputType === "pass_fail" || inputType === "pass/fail") return "pass_fail"
-  if (inputType === "text") return "text"
-  return "number"
+  const inputType = normalizeQualityParameterInputType(row.inputType)
+  return inputType === "number" && hasNonNumericQualityTolerance(row) ? "text" : inputType
 }
 
 function qualityParameterTolerance(row: DashboardPayload) {

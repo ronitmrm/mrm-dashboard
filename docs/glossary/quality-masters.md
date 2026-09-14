@@ -5,6 +5,11 @@ company-wide masters. Their Production Unit is **Full Software / Not
 Applicable**. Quality Inspection Parameter Master remains scoped to one
 Production Unit.
 
+Dimension tolerances may contain numeric values or text such as L1/L3.
+Text tolerances must remain visible and require Text or Ok / Not Ok input;
+Number cannot be selected or saved while either tolerance is non-numeric.
+Imported `ok/not ok` values mean Ok / Not Ok, not Number.
+
 ## Generated master codes
 
 Rejection Type, Defect / Downtime Reason, Rejection Remark, Setup Checklist,
