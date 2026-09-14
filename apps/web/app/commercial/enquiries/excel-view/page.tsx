@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { redirect } from "next/navigation"
 import { quotationRevisionLabel } from "@/lib/pricing/quotation-revision"
 
 import { createCommercialWorkflowRepository } from "@workspace/db"
@@ -48,6 +49,11 @@ export default async function EnquiryExcelViewPage({ searchParams }: {
       originatingSalespersonUserId: session.user.id,
     }, bounds.offset)
     .finally(() => workflow.close())
+  const totalCount = result.summary.enquiryLines
+  const totalPages = Math.max(1, Math.ceil(totalCount / bounds.limit))
+  if (bounds.page > totalPages) {
+    redirect(`/commercial/enquiries/excel-view?page=${totalPages}`)
+  }
 
   return (
     <div className="grid gap-6">
@@ -57,11 +63,6 @@ export default async function EnquiryExcelViewPage({ searchParams }: {
         </h2>
         <div className="flex flex-wrap gap-2 pt-2">
           <DataDownloadButton href="/commercial/enquiries/register/export.xlsx" />
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <p className="text-sm text-muted-foreground">Page {bounds.page} · {result.rows.length} lines on this page</p>
-          {bounds.page > 1 ? <Button asChild size="sm" variant="outline"><Link href={`?page=${bounds.page - 1}`}>Previous</Link></Button> : null}
-          {result.coverage.truncated ? <Button asChild size="sm" variant="outline"><Link href={`?page=${bounds.page + 1}`}>Next</Link></Button> : null}
         </div>
       </section>
 
@@ -85,7 +86,34 @@ export default async function EnquiryExcelViewPage({ searchParams }: {
  <SectionCard>
         <CardContent>
  <OperationalTable
-              toolbarStart={<h3 className="font-semibold">Workflow Line Register</h3>}
+              toolbarStart={
+                <>
+                  <h3 className="font-semibold">Workflow Line Register</h3>
+                  <div className="order-last mt-2 flex w-full flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
+                    <span>
+                      Showing {result.rows.length ? bounds.offset + 1 : 0}–
+                      {Math.min(bounds.offset + result.rows.length, totalCount)} Of {totalCount} Enquiry Lines
+                    </span>
+                    <div className="flex items-center gap-2">
+                      {bounds.page > 1 ? (
+                        <Button asChild size="sm" variant="outline">
+                          <Link href={`?page=${bounds.page - 1}`}>Previous</Link>
+                        </Button>
+                      ) : (
+                        <Button disabled size="sm" variant="outline">Previous</Button>
+                      )}
+                      <span>Page {bounds.page} Of {totalPages}</span>
+                      {bounds.page < totalPages ? (
+                        <Button asChild size="sm" variant="outline">
+                          <Link href={`?page=${bounds.page + 1}`}>Next</Link>
+                        </Button>
+                      ) : (
+                        <Button disabled size="sm" variant="outline">Next</Button>
+                      )}
+                    </div>
+                  </div>
+                </>
+              }
               containerClassName="max-h-[72vh] rounded-md border"
               excelFilters
               filterStorageKey="mrmpl:commercial:enquiry-excel-view:filters:v1"
