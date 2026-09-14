@@ -94,6 +94,25 @@ test("Website Field options reject case variants within the same field", async (
   await pool.end()
 })
 
+test("tooling can explicitly record that no special asset is required", async () => {
+  const pool = new Pool()
+  const query = vi.fn(async (sql: string) => ({ rows:
+    sql.includes("FROM manufacturing.operation_tooling") ? [] : [{ id: "saved", operation_setup_id: "setup", inserted: true }],
+  }))
+  vi.spyOn(pool, "connect").mockImplementation(
+    async () => ({ query, release: vi.fn() }) as unknown as PoolClient
+  )
+  await expect(createDashboardPlanningRepository({ pool }).upsertToolingBatch([{
+    organizationId: "organization", itemUid: "part", routeCode: "1",
+    setupNumber: 1, productionFloorCode: "cnc", toolCode: null,
+    rejectDuplicates: true, sourcePayload: { fixture: "", tooling: "", foamTool: "" },
+  }])).resolves.toMatchObject([{ id: "saved" }])
+  expect(query).not.toHaveBeenCalledWith(expect.stringContaining("FROM store.item_types"), expect.anything())
+  expect(query).toHaveBeenCalledWith(expect.stringContaining("INSERT INTO manufacturing.operation_tooling"), expect.arrayContaining([null, { fixture: "", tooling: "", foamTool: "" }]))
+  expect(query).toHaveBeenCalledWith("COMMIT")
+  await pool.end()
+})
+
 test("a tooling save rolls back all its lines when a later tool already exists", async () => {
   const pool = new Pool()
   let toolingReads = 0

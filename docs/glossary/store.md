@@ -192,3 +192,8 @@ existing Tooling Asset Code for a specific Route Master Line and identifies it
 as fixture, tooling, or foam tooling. Quantity is not part of this master. It
 does not assign, reserve, issue, or move a physical Store unit, and it does not
 change Store stock or its holder.
+
+A Route Master Line may explicitly require no special tooling. Fixture,
+Tooling and Foam Tool can all be Not Required; saving still records the
+completed tooling master for planning readiness. This record has no Asset Code
+and does not create a Store asset or a physical tool requirement.
