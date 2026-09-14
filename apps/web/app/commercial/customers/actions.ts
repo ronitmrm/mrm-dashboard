@@ -4,6 +4,9 @@ import { withMasterSaveFeedback } from "@/lib/master-save-feedback"
 
 import { createCustomerRepository } from "@workspace/db"
 import { revalidatePath } from "next/cache"
+import { redirect } from "next/navigation"
+import { externalMasterViewHref } from "@/lib/external-master-workspace"
+import { pageBounds } from "@/lib/page-bounds"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
@@ -170,4 +173,7 @@ export async function updateCustomerAction(formData: FormData) {
       })
   )
   revalidatePath(customersPath)
+  redirect(externalMasterViewHref(customersPath, "masterTables", {
+    page: String(pageBounds(formData.get("page"), 15).page),
+  }))
 }

@@ -419,6 +419,13 @@ export function createCustomerRepository(options: RepositoryPoolOptions) {
         .orderBy(asc(customers.customerUid), asc(customers.id))
     },
 
+    async getForOrganization(organizationId: string, customerId: string) {
+      const [customer] = await database.select().from(customers).where(
+        and(eq(customers.organizationId, organizationId), eq(customers.id, customerId))
+      ).limit(1)
+      return customer ?? null
+    },
+
     async listPageForOrganization(
       organizationCode: string,
       options: { limit: number; offset: number }
