@@ -8,12 +8,20 @@ const dependencies = vi.hoisted(() => ({
   organizationIdForCode: vi.fn(),
   upsertRawMaterialReceipt: vi.fn(),
   upsertRawMaterialReceipts: vi.fn(),
+  executePostgresOperationalEntry: vi.fn(),
+  isPostgresOperationalEntryType: vi.fn(),
+  requestRefresh: vi.fn(),
 }))
 
 vi.mock("@workspace/db", async (importOriginal) => ({
   DuplicateMasterError: (await importOriginal<typeof import("@workspace/db")>()).DuplicateMasterError,
   createAuthorizationRepository: () => ({
     listAllGrantedCapabilities: dependencies.listAllGrantedCapabilities,
+  }),
+  createDashboardReadModelRepository: () => ({
+    close: dependencies.close,
+    organizationIdForCode: dependencies.organizationIdForCode,
+    requestRefresh: dependencies.requestRefresh,
   }),
   createProductionShopFloorRepository: () => ({
     close: dependencies.close,
@@ -61,7 +69,8 @@ vi.mock(
 )
 
 vi.mock("@/lib/postgres-operational-entry-server", () => ({
-  isPostgresOperationalEntryType: () => false,
+  isPostgresOperationalEntryType: dependencies.isPostgresOperationalEntryType,
+  executePostgresOperationalEntry: dependencies.executePostgresOperationalEntry,
   OperationalEntryError: class OperationalEntryError extends Error {
     status = 500
   },
@@ -103,9 +112,29 @@ describe("production entry mutation API authorization", () => {
     dependencies.organizationIdForCode.mockResolvedValue("organization-1")
     dependencies.upsertRawMaterialReceipt.mockResolvedValue({ ok: true })
     dependencies.upsertRawMaterialReceipts.mockResolvedValue({ ok: true })
+    dependencies.isPostgresOperationalEntryType.mockReturnValue(false)
   })
 
   afterEach(() => vi.restoreAllMocks())
+
+  it("refreshes after the last checklist upload row using the import permission alone", async () => {
+    dependencies.listAllGrantedCapabilities.mockResolvedValue(["masters.universal.setup_checklist_master.import"])
+    dependencies.isPostgresOperationalEntryType.mockReturnValue(true)
+    dependencies.executePostgresOperationalEntry.mockResolvedValue({ code: "SC001" })
+    dependencies.requestRefresh.mockResolvedValue({ queued: true })
+    const response = await post("data-import", {
+      entryType: "setup_checklist_master", productionFloorCode: "cnc",
+      fileName: "checklist.csv",
+      fileBase64: Buffer.from("checklistTitle,sequence,stepDescription\nSetup,1,Clean\nSetup,2,Check\n").toString("base64"),
+    })
+    expect(response.status).toBe(200)
+    expect(dependencies.executePostgresOperationalEntry).toHaveBeenCalledTimes(2)
+    expect(dependencies.requestRefresh).toHaveBeenCalledWith("organization-1")
+    expect(dependencies.requestRefresh.mock.invocationCallOrder[0]).toBeGreaterThan(
+      dependencies.executePostgresOperationalEntry.mock.invocationCallOrder[1]!
+    )
+    expect(await response.json()).toMatchObject({ inserted: 2, planningRefresh: { mode: "queued", ok: true } })
+  })
 
   it("requires authentication and the matching action, entry and unit before either mutation", async () => {
     dependencies.getSession.mockResolvedValue(null)

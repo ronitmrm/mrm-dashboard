@@ -178,11 +178,12 @@ export async function readPostgresDashboardStatus(request: NextRequest) {
   )
 }
 
-export async function requestPostgresDashboardRefresh(request: NextRequest) {
+export async function requestPostgresDashboardRefresh(request: NextRequest, capability = "operations.dashboard.read") {
   return withDashboardReadRepository(
     request,
     ({ organizationId, repository }) =>
-      repository.requestRefresh(organizationId)
+      repository.requestRefresh(organizationId),
+    capability
   )
 }
 

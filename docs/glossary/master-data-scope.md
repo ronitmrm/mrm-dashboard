@@ -31,6 +31,9 @@ viewed Production Unit to these records.
 
 The company-wide masters are:
 
+- Setup Checklist Master;
+- Maintenance Checklist Master;
+- Maintenance Schedule Master;
 - Rejection Type Master;
 - Rejection Remark Master;
 - Defect / Downtime Reason Master;
@@ -51,6 +54,11 @@ uniform **Upload CSV** action. Every selected Master Table workspace provides
 one uniform **Export** action for that table. CSV upload is never available in
 Master Table view; imports remain write-authorized Data Entry operations, while
 exports remain read-authorized table operations.
+
+Successful production master saves and uploads automatically queue a dashboard
+refresh. Their tables update when the refresh completes, without a separate
+Recalculate Planning action. Universal checklists and maintenance schedules
+are available in every Production Unit; unit-owned masters stay scoped to their unit.
 
 Master Tables opens only after Unit, Main Master, and Sub Master are chosen on
 **Master Table Selection**. The selected table and Unit stay locked. Changing
