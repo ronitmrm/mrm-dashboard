@@ -3,6 +3,21 @@ import { describe, expect, test } from "vitest"
 import { operationalEntryPlan } from "./postgres-operational-entry"
 
 describe("PostgreSQL operational entry mapping", () => {
+  test("preserves letter tolerances for imported Ok / Not Ok parameters", () => {
+    expect(operationalEntryPlan("quality_parameter_master", {
+      partNo: "M68B", setupNo: 1, parameterName: "Thread",
+      specification: "1/4 nptf", tolerancePlus: "L1", toleranceMinus: "L3",
+      inputType: "ok/not ok",
+    })).toMatchObject({ input: {
+      inputType: "pass_fail", dataType: "boolean",
+      payload: { tolerancePlus: "L1", toleranceMinus: "L3" },
+    } })
+  })
+  test("rejects Number input with letter tolerances", () => {
+    expect(() => operationalEntryPlan("quality_parameter_master", {
+      parameterName: "Thread", tolerancePlus: "L1", toleranceMinus: "L3", inputType: "number",
+    })).toThrow("Text tolerances require Text or Ok / Not Ok input")
+  })
   test("preserves numeric quality tolerances and five first-piece samples", () => {
     expect(
       operationalEntryPlan("quality_parameter_master", {

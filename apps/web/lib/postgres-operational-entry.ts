@@ -1,4 +1,5 @@
 import { qualityParameterCode } from "@workspace/db/quality-parameter-code"
+import { hasNonNumericQualityTolerance, normalizeQualityParameterInputType } from "./quality-parameter-set"
 import { setupChecklistItemAppliesToPhase } from "./shop-floor-workflow"
 import { istDateValue } from "./date-time"
 
@@ -76,7 +77,10 @@ function parameterPlan(payload: Payload) {
   const nominalValue = numberOrUndefined(payload.specification)
   const plus = numberOrUndefined(payload.tolerancePlus)
   const minus = numberOrUndefined(payload.toleranceMinus)
-  const inputType = text(payload.inputType || "number").toLowerCase()
+  const inputType = normalizeQualityParameterInputType(payload.inputType)
+  if (inputType === "number" && hasNonNumericQualityTolerance(payload)) {
+    throw new Error("Text tolerances require Text or Ok / Not Ok input, not Number.")
+  }
   const dataType =
     inputType === "number"
       ? "numeric"
