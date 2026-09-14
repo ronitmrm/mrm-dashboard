@@ -68,6 +68,7 @@ describe("independent master permissions", () => {
             partNo: "P1",
             setupNo: "S1",
             setupName: "TURN",
+            machineType: "Cnc",
             internalNote: "private",
           },
         ],
@@ -100,7 +101,7 @@ describe("independent master permissions", () => {
       "cnc"
     )
     expect(edit.productionControl.routeMasterRows).toEqual([
-      { partNo: "P1", setupNo: "S1", setupName: "TURN" },
+      { partNo: "P1", setupNo: "S1", setupName: "TURN", machineType: "Cnc" },
     ])
     expect(edit.productionControl).not.toHaveProperty("workOrders")
     const routeEdit = productionMasterSnapshot(source, new Set([
