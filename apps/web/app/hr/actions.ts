@@ -750,6 +750,25 @@ export async function withdrawCandidateApplicationAction(formData: FormData) {
   )
 }
 
+export async function changeCandidateJoiningDateAction(formData: FormData) {
+  await mutate(
+    formData,
+    hrTaskCapabilities.completeCandidateAppointment,
+    async (repository, context) => {
+      const result = await repository.changeCandidateJoiningDate({
+        ...context,
+        applicationId: value(formData, "application_id"),
+        joiningDate: value(formData, "joining_date"),
+        previousJoiningDate: value(formData, "previous_joining_date"),
+        reason: value(formData, "reason"),
+      })
+      revalidatePath(`/hr/jobs/${result.jobId}`)
+      revalidatePath("/hr/candidates", "layout")
+    },
+    "Joining date corrected. Previously issued offer letters retain their original date."
+  )
+}
+
 export async function recordCandidateDidNotJoinAction(formData: FormData) {
   await mutate(
     formData,

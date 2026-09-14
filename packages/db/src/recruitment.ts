@@ -3776,6 +3776,106 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       )
     },
 
+    async changeCandidateJoiningDate(
+      input: MutationContext & {
+        applicationId: string
+        joiningDate: string
+        previousJoiningDate: string
+        reason: string
+      }
+    ) {
+      const joiningDate = required(input.joiningDate, "Joining date")
+      const reason = required(input.reason, "Reason for correction")
+      const date = new Date(`${joiningDate}T00:00:00Z`)
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(joiningDate) || Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== joiningDate) {
+        throw new Error("Enter a valid joining date.")
+      }
+      return transaction(pool, async (client) => {
+        const result = await client.query<{
+          id: string; candidate_id: string; job_id: string; post_id: string | null;
+          status: string; willing_to_join: boolean | null; joining_date: string | null;
+        }>(
+          `SELECT application.id, application.candidate_id, application.status,
+             application.willing_to_join, application.joining_date::text,
+             job.id AS job_id, job.post_id
+           FROM recruitment.applications application
+           JOIN recruitment.job_posts job ON job.id = application.job_post_id
+           WHERE application.id = $1 AND application.organization_id = $2
+             AND job.organization_id = $2
+           FOR UPDATE OF application, job`,
+          [required(input.applicationId, "Candidate application"), input.organizationId]
+        )
+        const application = result.rows[0]
+        if (!application) throw new Error("Candidate application was not found.")
+        if (application.status !== "Approved" || application.willing_to_join !== true || !application.joining_date) {
+          throw new Error("Only an accepted pending appointment can have its joining date corrected.")
+        }
+        if (application.joining_date !== input.previousJoiningDate) {
+          throw new Error("The joining date has changed. Refresh and try again.")
+        }
+        const posts = await client.query<{
+          id: string; status: string; employee_code: string | null; appointed_application_id: string | null;
+        }>(
+          `SELECT post.id, post.status, post.employee_code, post.appointed_application_id
+           FROM recruitment.posts post WHERE post.organization_id = $2 AND (
+             post.appointed_application_id = $1 OR post.id = $3::uuid OR post.id IN (
+               SELECT link.post_id FROM recruitment.combined_role_posts link
+               JOIN recruitment.posts primary_post ON primary_post.combined_role_id = link.combined_role_id
+               WHERE primary_post.id = $3::uuid AND primary_post.organization_id = $2
+             )
+           ) ORDER BY post.id FOR UPDATE OF post`,
+          [application.id, input.organizationId, application.post_id]
+        )
+        const reservations = await client.query<{ post_id: string; application_id: string | null }>(
+          `SELECT post_id, application_id FROM recruitment.post_replacements
+           WHERE organization_id = $1 AND status = 'Pending'
+             AND (application_id = $2 OR post_id = ANY($3::uuid[]))
+           ORDER BY post_id FOR UPDATE`,
+          [input.organizationId, application.id, posts.rows.map((post) => post.id)]
+        )
+        const pendingReplacement = reservations.rows.length > 0
+        if (!posts.rows.length || !posts.rows.some((post) => post.id === application.post_id) ||
+          (pendingReplacement ? (
+            reservations.rows.length !== posts.rows.length ||
+            reservations.rows.some((row) => row.application_id !== application.id ||
+              !posts.rows.some((post) => post.id === row.post_id && post.status === "Resigned"))
+          ) : posts.rows.some((post) => post.status !== "Appointed" ||
+            optional(post.employee_code) || post.appointed_application_id !== application.id))) {
+          throw new Error("The employee has joined or the original appointment is no longer reserved. No dates were changed.")
+        }
+        if (joiningDate === application.joining_date) return { id: application.id, jobId: application.job_id }
+        await client.query(
+          `UPDATE recruitment.applications SET joining_date = $1::date,
+             updated_by_user_id = $2, updated_at = now(), row_version = row_version + 1
+           WHERE id = $3 AND organization_id = $4`,
+          [joiningDate, input.actorUserId ?? null, application.id, input.organizationId]
+        )
+        if (!pendingReplacement) await client.query(
+          `UPDATE recruitment.posts SET joining_date = $1::date,
+             updated_by_user_id = $2, updated_at = now(), row_version = row_version + 1
+           WHERE id = ANY($3::uuid[]) AND organization_id = $4`,
+          [joiningDate, input.actorUserId ?? null, posts.rows.map((post) => post.id), input.organizationId]
+        )
+        await client.query(
+          `INSERT INTO recruitment.candidate_events (
+             organization_id, candidate_id, job_post_id, application_id, event_type,
+             title, notes, occurred_at, actor_user_id, source_system, source_table, source_id
+           ) VALUES ($1,$2,$3,$4,'Joining Date Corrected',
+             'Joining date corrected',$5,now(),$6,'mrm-dashboard','joining-date-correction',$7)`,
+          [input.organizationId, application.candidate_id, application.job_id, application.id,
+            `${application.joining_date} to ${joiningDate}. ${reason}`, input.actorUserId ?? null, randomUUID()]
+        )
+        await audit(client, {
+          ...input, eventType: "recruitment.application.joining_date_corrected",
+          beforeState: { joiningDate: application.joining_date },
+          afterState: { joiningDate },
+          metadata: { reason, postIds: posts.rows.map((post) => post.id), pendingReplacement },
+          targetId: application.id, targetTable: "applications",
+        })
+        return { id: application.id, jobId: application.job_id }
+      })
+    },
+
     async recordCandidateDidNotJoin(
       input: MutationContext & { applicationId: string; didNotJoinOn: string; reason: string }
     ) {

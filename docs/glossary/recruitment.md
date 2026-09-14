@@ -25,6 +25,17 @@ the job retains eligible selections; candidates with an active application for
 that job are excluded, and the form reports any removed selections. Assignment
 requires both an Open job and at least one selected candidate.
 
+## Joining Date Correction
+
+HR may correct an accepted appointment's planned joining date from the job's
+applicant actions until the employee joins. The appointment-completion permission
+is required. A reason and the previous date are retained in candidate history and
+the audit log. The application and all directly reserved Appointed posts change
+atomically; pending replacement reservations use the application's date and leave
+the outgoing employee untouched. Joined or superseded appointments cannot be
+changed here. Issued offer letters retain their original date and PDF as historical
+evidence; this action does not revise an issued letter.
+
 ## Did Not Join
 
 An accepted candidate appointment that did not result in joining. HR records
