@@ -1,5 +1,9 @@
 # Commercial Enquiries
 
+**Enquiry Register Pagination**: View Records shows 15 enquiries per page. The
+Enquiries, Enquiry Lines and Due Follow-ups cards cover all enquiries visible to
+the user, before pagination and table filters. Table filters apply to the current page.
+
 **Customer Country Catalog**: Customer Data Entry offers a searchable list of ISO
 3166-1 countries and territories using English display names. Existing saved
 country text remains selectable until explicitly replaced; the catalog does not
