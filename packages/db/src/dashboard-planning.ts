@@ -633,7 +633,7 @@ type ToolingMasterInput = {
   routeCode: string
   setupNumber: number
   sourcePayload?: unknown
-  toolCode: string
+  toolCode: string | null
 }
 
 async function upsertToolingClient(
@@ -648,8 +648,8 @@ async function upsertToolingClient(
     input.setupNumber,
     normalizeProductionFloorCode(input.productionFloorCode)
   )
-  const requestedToolCode = requiredText(input.toolCode, "Asset code")
-  const toolingAsset = await client.query<{ type_code: string }>(
+  const requestedToolCode = input.toolCode === null ? null : requiredText(input.toolCode, "Asset code")
+  const toolingAsset = requestedToolCode === null ? null : await client.query<{ type_code: string }>(
     `
             SELECT type_code
             FROM store.item_types
@@ -659,12 +659,12 @@ async function upsertToolingClient(
           `,
     [input.organizationId, requestedToolCode]
   )
-  if (!toolingAsset.rows[0]) {
+  if (toolingAsset && !toolingAsset.rows[0]) {
     throw new Error(
       "Create the tooling Asset Code in Store first, then reference it in Tooling Master."
     )
   }
-  const toolCode = toolingAsset.rows[0].type_code
+  const toolCode = toolingAsset?.rows[0]?.type_code ?? null
   const quantity = input.quantity ?? 1
   if (!(quantity > 0)) throw new Error("Tool quantity must be positive.")
   await businessKeyLock(
@@ -675,7 +675,7 @@ async function upsertToolingClient(
   const existing = await client.query<{ id: string }>(
     `
             SELECT id FROM manufacturing.operation_tooling
-            WHERE operation_setup_id = $1 AND lower(tool_code) = lower($2)
+            WHERE operation_setup_id = $1 AND lower(tool_code) IS NOT DISTINCT FROM lower($2::text)
             FOR UPDATE
           `,
     [operationSetupId, toolCode]

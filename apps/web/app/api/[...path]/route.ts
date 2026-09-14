@@ -653,10 +653,10 @@ async function savePlanningMasterEntry(
         type: "Foam tool",
       },
     ].filter((row): row is { code: string; type: string } => Boolean(row.code))
-    if (!toolingRows.length) {
-      throw new RouteError(400, "At least one fixture or tool is required.")
-    }
-    const inputs = toolingRows.map((row) => ({
+    const requirements = toolingRows.length
+      ? toolingRows
+      : [{ code: null, type: "No special tooling required" }]
+    const inputs = requirements.map((row) => ({
       rejectDuplicates,
       actorUserId,
       description: optionalText(payload.remarks) || row.type,

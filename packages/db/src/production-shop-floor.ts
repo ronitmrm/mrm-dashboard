@@ -1816,6 +1816,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
               ) ORDER BY tool.tool_code) AS rows
               FROM manufacturing.operation_tooling tool
               WHERE tool.operation_setup_id = setup.id AND tool.active
+                AND tool.tool_code IS NOT NULL
             ) tooling ON true
             LEFT JOIN LATERAL (
               SELECT jsonb_agg(jsonb_build_object(
