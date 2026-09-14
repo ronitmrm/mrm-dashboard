@@ -750,22 +750,39 @@ export async function withdrawCandidateApplicationAction(formData: FormData) {
   )
 }
 
-export async function changeCandidateJoiningDateAction(formData: FormData) {
+export async function reviseCandidateAppointmentAction(formData: FormData) {
+  await requireCapability("masters.universal.employee_assignments.read", hrReturnPath(formData))
   await mutate(
     formData,
     hrTaskCapabilities.completeCandidateAppointment,
     async (repository, context) => {
-      const result = await repository.changeCandidateJoiningDate({
+      const result = await repository.reviseCandidateAppointment({
         ...context,
         applicationId: value(formData, "application_id"),
         joiningDate: value(formData, "joining_date"),
         previousJoiningDate: value(formData, "previous_joining_date"),
+        previousLetterId: value(formData, "previous_letter_id"),
+        salaryBeforeProbation: value(formData, "salary_before_probation"),
+        salaryAfterProbationMinimum: value(formData, "salary_after_probation_minimum"),
+        salaryAfterProbationMaximum: value(formData, "salary_after_probation_maximum"),
+        issuedOn: value(formData, "offer_issued_on"),
+        details: {
+          dutyStartTime: value(formData, "offer_duty_start_time"),
+          dutyEndTime: value(formData, "offer_duty_end_time"),
+          payPeriod: value(formData, "offer_pay_period") === "day" ? "day" : "month",
+          postalAddress: value(formData, "offer_postal_address"),
+          probationLength: Number(value(formData, "offer_probation_length")),
+          probationUnit: value(formData, "offer_probation_unit") === "days" ? "days" : "months",
+          signatoryDesignation: value(formData, "offer_signatory_designation"),
+          signatoryName: value(formData, "offer_signatory_name"),
+        },
+        renderPdf: buildEmploymentLetterPdf,
         reason: value(formData, "reason"),
       })
       revalidatePath(`/hr/jobs/${result.jobId}`)
       revalidatePath("/hr/candidates", "layout")
     },
-    "Joining date corrected. Previously issued offer letters retain their original date."
+    "Appointment corrected and updated Offer Letter PDF generated. Previous offers remain in candidate history."
   )
 }
 

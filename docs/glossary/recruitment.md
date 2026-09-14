@@ -25,16 +25,21 @@ the job retains eligible selections; candidates with an active application for
 that job are excluded, and the form reports any removed selections. Assignment
 requires both an Open job and at least one selected candidate.
 
-## Joining Date Correction
+## Appointment and Offer Correction
 
-HR may correct an accepted appointment's planned joining date from the job's
-applicant actions until the employee joins. The appointment-completion permission
-is required. A reason and the previous date are retained in candidate history and
-the audit log. The application and all directly reserved Appointed posts change
-atomically; pending replacement reservations use the application's date and leave
-the outgoing employee untouched. Joined or superseded appointments cannot be
-changed here. Issued offer letters retain their original date and PDF as historical
-evidence; this action does not revise an issued letter.
+HR may edit an accepted pending appointment's joining date, salary before and
+after probation, salary period, duty timings, probation terms, postal address,
+offer date and signatory from the job's applicant actions. Appointment-completion
+and employee-record read permissions are required. The form starts with the
+current appointment and latest offer details. Candidate identity and job assignment
+continue to come from their masters; withdrawal uses the separate lifecycle action.
+
+Saving requires a reason and generates a new offer with its own reference and PDF.
+The application, all directly reserved Appointed post dates, new PDF and correction
+history save atomically. Failed validation or PDF generation changes nothing.
+Pending replacements use the application's date and leave the outgoing employee
+untouched. Joined, superseded and stale appointments cannot be corrected here.
+The latest offer is shown first; previous issued PDFs remain available as history.
 
 ## Did Not Join
 

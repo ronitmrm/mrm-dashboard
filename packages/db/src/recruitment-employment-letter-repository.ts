@@ -1,4 +1,5 @@
 import type { PoolClient } from "pg"
+import { createHash } from "node:crypto"
 
 import {
   prepareEmploymentLetter,
@@ -36,6 +37,103 @@ export type RecruitmentEmploymentLetterRow = {
 type Context = {
   actorUserId?: string | null
   organizationId: string
+}
+
+export async function insertOfferRevision(
+  client: PoolClient,
+  input: Context & {
+    applicationId: string
+    previousLetterId: string
+    joiningDate: string
+    salary: number
+    details: OfferLetterDetails
+    issuedOn: string
+    reason: string
+    renderPdf: (letter: PreparedEmploymentLetter) => Promise<Uint8Array>
+  }
+) {
+  const result = await client.query<{
+    id: string
+    post_id: string | null
+    employee_name: string
+    department: string
+    designation: string
+    reference_number: string
+  }>(
+    `SELECT id, post_id, employee_name, department, designation, reference_number
+     FROM recruitment.employment_letters
+     WHERE organization_id = $1 AND application_id = $2 AND letter_type = 'offer'
+     ORDER BY created_at DESC, id DESC LIMIT 1 FOR UPDATE`,
+    [input.organizationId, input.applicationId]
+  )
+  const previous = result.rows[0]
+  if (!previous || previous.id !== input.previousLetterId) {
+    throw new Error(
+      "The offer has changed. Refresh and reopen Edit Appointment & Offer."
+    )
+  }
+  const sequence = await client.query<{ value: string }>(
+    "SELECT nextval('recruitment.employment_letter_reference_seq')::text AS value"
+  )
+  const letter = prepareEmploymentLetter({
+    type: "offer",
+    applicationStatus: "Approved",
+    willingToJoin: true,
+    identity: {
+      employeeName: previous.employee_name,
+      employeeCode: null,
+      department: previous.department,
+      designation: previous.designation,
+      joiningDate: input.joiningDate,
+    },
+    details: input.details,
+    issuedOn: input.issuedOn,
+    ordinal: Number(sequence.rows[0]!.value),
+    salary: input.salary,
+  })
+  const bytes = Buffer.from(await input.renderPdf(letter))
+  if (!bytes.length)
+    throw new Error("The revised Offer Letter PDF could not be generated.")
+  const stored = await client.query<{ id: string }>(
+    `INSERT INTO recruitment.employment_letters (
+       organization_id, letter_type, application_id, post_id, employee_name,
+       employee_code, designation, department, joining_date, reference_number,
+       issued_on, details, pdf_bytes, pdf_file_name, pdf_sha256, generated_at,
+       created_by_user_id, updated_by_user_id, source_system, source_table, source_id,
+       supersedes_letter_id
+     ) VALUES ($1,'offer',$2,$3,$4,NULL,$5,$6,$7::date,$8,$9::date,$10,
+       $11,$12,$13,now(),$14,$14,'mrm-dashboard','employment_letters',$15,$16)
+     RETURNING id`,
+    [
+      input.organizationId,
+      input.applicationId,
+      previous.post_id,
+      letter.identity.employeeName,
+      letter.identity.designation,
+      letter.identity.department,
+      letter.identity.joiningDate,
+      letter.reference,
+      letter.issuedOn,
+      JSON.stringify({
+        ...letter.details,
+        salaryBeforeProbation: letter.salary,
+        supersedesLetterId: previous.id,
+        supersedesReference: previous.reference_number,
+        correctionReason: input.reason,
+      }),
+      bytes,
+      `${letter.reference}-offer-letter.pdf`,
+      createHash("sha256").update(bytes).digest("hex"),
+      input.actorUserId ?? null,
+      `${input.organizationId}:offer:${input.applicationId}:revision:${previous.id}`,
+      previous.id,
+    ]
+  )
+  return {
+    id: stored.rows[0]!.id,
+    reference: letter.reference,
+    previousReference: previous.reference_number,
+  }
 }
 
 export type IssueEmploymentLetterInput =
@@ -155,7 +253,7 @@ export function createRecruitmentEmploymentLetterRepository(
          WHERE letter.organization_id = $1
            AND application.${scope.column} = $2
            AND letter.letter_type = 'offer'
-         ORDER BY letter.issued_on DESC, letter.created_at DESC`,
+         ORDER BY letter.created_at DESC, letter.id DESC`,
       [organizationId, required(scope.id, "Offer Letter Scope")]
     )
     return result.rows.map((row) => ({
@@ -240,7 +338,7 @@ export function createRecruitmentEmploymentLetterRepository(
          FROM recruitment.employment_letters letter
          LEFT JOIN recruitment.posts post ON post.id = letter.post_id
          WHERE letter.organization_id = $1
-         ORDER BY letter.issued_on DESC, letter.created_at DESC
+         ORDER BY letter.created_at DESC, letter.id DESC
          LIMIT 2000`,
         [organizationId]
       )

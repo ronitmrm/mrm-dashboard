@@ -8,41 +8,64 @@ import {
 } from "@workspace/ui/components/native-select"
 import { Textarea } from "@workspace/ui/components/textarea"
 import { useId, useState } from "react"
+import type {
+  OfferLetterDetails,
+  RecruitmentEmploymentLetterRow,
+} from "@workspace/db"
+
+export type CandidateAppointmentDefaults = {
+  salaryBeforeProbation: number | null
+  salaryAfterProbationMinimum: number | null
+  salaryAfterProbationMaximum: number | null
+  offer: RecruitmentEmploymentLetterRow
+}
 
 export function CandidateAppointmentFields({
   defaultJoiningDate = "",
+  defaults,
 }: {
+  defaults?: CandidateAppointmentDefaults
   defaultJoiningDate?: string
 }) {
   const fieldId = useId()
-  const [willingToJoin, setWillingToJoin] = useState("")
+  const [willingToJoin, setWillingToJoin] = useState(defaults ? "yes" : "")
+
+  function detail(key: keyof OfferLetterDetails) {
+    const value = defaults?.offer.details[key]
+    return typeof value === "string" || typeof value === "number" ? value : ""
+  }
 
   return (
     <div className="grid gap-4 rounded-2xl border bg-muted/20 p-4">
       <div>
-        <p className="font-medium">Appointment Confirmation</p>
+        <p className="font-medium">
+          {defaults ? "Appointment Terms" : "Appointment Confirmation"}
+        </p>
         <p className="text-sm text-muted-foreground">
-          Confirm The Candidate&apos;s Willingness Before Creating The
-          Appointment.
+          {defaults
+            ? "Correct the terms below and generate an updated offer."
+            : "Confirm the candidate’s willingness before creating the appointment."}
         </p>
       </div>
-      <Field>
-        <FieldLabel htmlFor={`${fieldId}-willing-to-join`}>
-          Is The Candidate Willing To Join?
-        </FieldLabel>
-        <NativeSelect
-          className="w-full"
-          id={`${fieldId}-willing-to-join`}
-          name="willing_to_join"
-          onChange={(event) => setWillingToJoin(event.target.value)}
-          required
-          value={willingToJoin}
-        >
-          <NativeSelectOption value="">Select Yes Or No</NativeSelectOption>
-          <NativeSelectOption value="yes">Yes</NativeSelectOption>
-          <NativeSelectOption value="no">No</NativeSelectOption>
-        </NativeSelect>
-      </Field>
+      {!defaults ? (
+        <Field>
+          <FieldLabel htmlFor={`${fieldId}-willing-to-join`}>
+            Is The Candidate Willing To Join?
+          </FieldLabel>
+          <NativeSelect
+            className="w-full"
+            id={`${fieldId}-willing-to-join`}
+            name="willing_to_join"
+            onChange={(event) => setWillingToJoin(event.target.value)}
+            required
+            value={willingToJoin}
+          >
+            <NativeSelectOption value="">Select Yes Or No</NativeSelectOption>
+            <NativeSelectOption value="yes">Yes</NativeSelectOption>
+            <NativeSelectOption value="no">No</NativeSelectOption>
+          </NativeSelect>
+        </Field>
+      ) : null}
 
       {willingToJoin === "yes" ? (
         <>
@@ -76,6 +99,7 @@ export function CandidateAppointmentFields({
                   inputMode="decimal"
                   min="1"
                   name="salary_before_probation"
+                  defaultValue={defaults?.salaryBeforeProbation ?? ""}
                   placeholder="15000"
                   required
                   step="0.01"
@@ -101,6 +125,7 @@ export function CandidateAppointmentFields({
                     inputMode="decimal"
                     min="1"
                     name="salary_after_probation_minimum"
+                    defaultValue={defaults?.salaryAfterProbationMinimum ?? ""}
                     placeholder="15000"
                     required
                     step="0.01"
@@ -117,6 +142,7 @@ export function CandidateAppointmentFields({
                     inputMode="decimal"
                     min="1"
                     name="salary_after_probation_maximum"
+                    defaultValue={defaults?.salaryAfterProbationMaximum ?? ""}
                     placeholder="20000"
                     required
                     step="0.01"
@@ -141,6 +167,7 @@ export function CandidateAppointmentFields({
                 <Input
                   id={`${fieldId}-offer-issued-on`}
                   name="offer_issued_on"
+                  defaultValue={defaults?.offer.issuedOn ?? ""}
                   required
                   type="date"
                 />
@@ -150,7 +177,7 @@ export function CandidateAppointmentFields({
                   Salary Period
                 </FieldLabel>
                 <NativeSelect
-                  defaultValue="month"
+                  defaultValue={detail("payPeriod") || "month"}
                   id={`${fieldId}-offer-pay-period`}
                   name="offer_pay_period"
                   required
@@ -170,6 +197,7 @@ export function CandidateAppointmentFields({
                 <Input
                   id={`${fieldId}-duty-start`}
                   name="offer_duty_start_time"
+                  defaultValue={detail("dutyStartTime")}
                   required
                   type="time"
                 />
@@ -181,6 +209,7 @@ export function CandidateAppointmentFields({
                 <Input
                   id={`${fieldId}-duty-end`}
                   name="offer_duty_end_time"
+                  defaultValue={detail("dutyEndTime")}
                   required
                   type="time"
                 />
@@ -193,6 +222,7 @@ export function CandidateAppointmentFields({
               <Textarea
                 id={`${fieldId}-offer-address`}
                 name="offer_postal_address"
+                defaultValue={detail("postalAddress")}
                 placeholder="House / Street&#10;City, District&#10;State - PIN"
                 required
                 rows={3}
@@ -207,6 +237,7 @@ export function CandidateAppointmentFields({
                   id={`${fieldId}-probation-length`}
                   min="1"
                   name="offer_probation_length"
+                  defaultValue={detail("probationLength")}
                   required
                   type="number"
                 />
@@ -216,7 +247,7 @@ export function CandidateAppointmentFields({
                   Probation Unit
                 </FieldLabel>
                 <NativeSelect
-                  defaultValue="months"
+                  defaultValue={detail("probationUnit") || "months"}
                   id={`${fieldId}-probation-unit`}
                   name="offer_probation_unit"
                   required
@@ -232,7 +263,9 @@ export function CandidateAppointmentFields({
                   Signatory Name
                 </FieldLabel>
                 <Input
-                  defaultValue="Ankit Khattar"
+                  defaultValue={
+                    defaults ? detail("signatoryName") : "Ankit Khattar"
+                  }
                   id={`${fieldId}-offer-signatory`}
                   name="offer_signatory_name"
                   required
@@ -245,6 +278,7 @@ export function CandidateAppointmentFields({
                 <Input
                   id={`${fieldId}-offer-signatory-designation`}
                   name="offer_signatory_designation"
+                  defaultValue={detail("signatoryDesignation")}
                   required
                 />
               </Field>

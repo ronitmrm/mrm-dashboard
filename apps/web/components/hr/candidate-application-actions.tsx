@@ -13,13 +13,17 @@ import {
 import { Textarea } from "@workspace/ui/components/textarea"
 import { Input } from "@workspace/ui/components/input"
 import { useFormStatus } from "react-dom"
-import { CalendarDays, UserCheck, UserX } from "lucide-react"
+import { Pencil, UserCheck, UserX } from "lucide-react"
 
 import {
   withdrawCandidateApplicationAction,
   recordCandidateDidNotJoinAction,
-  changeCandidateJoiningDateAction,
+  reviseCandidateAppointmentAction,
 } from "@/app/hr/actions"
+import {
+  CandidateAppointmentFields,
+  type CandidateAppointmentDefaults,
+} from "@/components/hr/candidate-appointment-fields"
 import { CandidateAppointmentDialog } from "@/components/hr/candidate-appointment-dialog"
 import { StandardDrawerContent } from "@/components/ui/golden-patterns"
 import { formatIstDate, istDateValue } from "@/lib/date-time"
@@ -33,11 +37,11 @@ function DidNotJoinSubmitButton({ disabled }: { disabled: boolean }) {
   )
 }
 
-function JoiningDateSubmitButton() {
+function OfferRevisionSubmitButton() {
   const { pending } = useFormStatus()
   return (
     <Button type="submit" disabled={pending}>
-      {pending ? "Saving…" : "Save Joining Date"}
+      {pending ? "Saving…" : "Save And Generate Updated PDF"}
     </Button>
   )
 }
@@ -49,6 +53,7 @@ export function CandidateApplicationActions({
   canRecordDidNotJoin = false,
   canWithdraw,
   defaultJoiningDate,
+  appointmentDefaults,
   panelId,
   returnJobId,
 }: {
@@ -58,6 +63,7 @@ export function CandidateApplicationActions({
   canRecordDidNotJoin?: boolean
   canWithdraw: boolean
   defaultJoiningDate: string | null
+  appointmentDefaults?: CandidateAppointmentDefaults
   panelId?: string
   returnJobId?: string
 }) {
@@ -70,21 +76,21 @@ export function CandidateApplicationActions({
 
   return (
     <div className="flex justify-end gap-2">
-      {canRecordDidNotJoin ? (
+      {canRecordDidNotJoin && appointmentDefaults ? (
         <Sheet>
           <SheetTrigger asChild>
             <Button size="sm" type="button" variant="outline">
-              <CalendarDays data-icon="inline-start" />
-              Change Joining Date
+              <Pencil data-icon="inline-start" />
+              Edit Appointment & Offer
             </Button>
           </SheetTrigger>
           <StandardDrawerContent
-            className="w-full overflow-y-auto sm:max-w-xl"
-            title="Change Joining Date"
-            description={`Correct ${candidateName}'s planned joining date. Previously issued offer letters retain their original date.`}
+            className="w-full overflow-y-auto sm:max-w-2xl"
+            title="Edit Appointment & Offer"
+            description={`Correct ${candidateName}'s appointment terms. Saving creates an updated PDF and keeps earlier offers in history.`}
           >
             <form
-              action={changeCandidateJoiningDateAction}
+              action={reviseCandidateAppointmentAction}
               className="px-6 pb-6"
             >
               <input
@@ -104,18 +110,15 @@ export function CandidateApplicationActions({
                 <input name="panel" type="hidden" value={panelId} />
               ) : null}
               <FieldGroup>
-                <Field>
-                  <FieldLabel htmlFor={`joining-date-${applicationId}`}>
-                    Joining Date
-                  </FieldLabel>
-                  <Input
-                    id={`joining-date-${applicationId}`}
-                    name="joining_date"
-                    type="date"
-                    required
-                    defaultValue={defaultJoiningDate ?? ""}
-                  />
-                </Field>
+                <input
+                  name="previous_letter_id"
+                  type="hidden"
+                  value={appointmentDefaults.offer.id}
+                />
+                <CandidateAppointmentFields
+                  defaultJoiningDate={defaultJoiningDate ?? ""}
+                  defaults={appointmentDefaults}
+                />
                 <Field>
                   <FieldLabel htmlFor={`joining-reason-${applicationId}`}>
                     Reason for Correction
@@ -127,7 +130,7 @@ export function CandidateApplicationActions({
                     rows={3}
                   />
                 </Field>
-                <JoiningDateSubmitButton />
+                <OfferRevisionSubmitButton />
               </FieldGroup>
             </form>
           </StandardDrawerContent>
