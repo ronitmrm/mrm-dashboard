@@ -431,7 +431,7 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
               source_system, source_table, source_id, source_payload
             )
             VALUES ($1, $2, $3, $4, 'day', $5, $6, $7, $8, $9,
-              $10, $10, 'mrm-dashboard', 'maintenance_master', $11, $12)
+              $10, $10, 'mrm-dashboard', 'dataEntries', $11, $12)
             ON CONFLICT (organization_id, lower(code))
             DO UPDATE SET name = EXCLUDED.name,
               description = EXCLUDED.description,
@@ -442,6 +442,7 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
               frequency_basis = EXCLUDED.frequency_basis,
               estimated_minutes = EXCLUDED.estimated_minutes,
               updated_by_user_id = EXCLUDED.updated_by_user_id,
+              source_table = EXCLUDED.source_table,
               source_payload = EXCLUDED.source_payload,
               updated_at = now(), row_version = maintenance.definitions.row_version + 1
             RETURNING id
@@ -467,6 +468,7 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
           items: input.items,
           organizationId: input.organizationId,
         })
+        await queueDashboardRefresh(client, input.organizationId)
         return result.rows[0]!
       })
     },

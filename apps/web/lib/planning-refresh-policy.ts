@@ -9,6 +9,7 @@ const autoRefreshActionPaths = new Set([
 ]);
 
 const autoRefreshDataEntryTypes = new Set([
+  "maintenance_master",
   "maintenance_checklist_master",
   "rm_inward",
   "production_session_close",
@@ -44,7 +45,7 @@ export function shouldQueuePlanningRefresh(path: string, body: Record<string, un
 }
 
 export function planningRefreshStatusMessage(autoRefresh: boolean, path = "", body: Record<string, unknown> = {}) {
-  if (autoRefresh && text(body.entryType) === "maintenance_checklist_master") return "Master table refresh queued.";
+  if (autoRefresh && ["maintenance_master", "maintenance_checklist_master"].includes(text(body.entryType))) return "Master table refresh queued.";
   if (autoRefresh) return "Planning recalculation queued.";
   if (isWorkflowProgressChange(path, body)) return "Planning recalculation not required for this workflow step.";
   return "Use Recalculate planning after master changes.";
