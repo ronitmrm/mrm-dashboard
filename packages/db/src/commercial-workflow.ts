@@ -85,6 +85,33 @@ type SalesWorkScope = {
 
 type TechnicalChecklist = Record<string, boolean>
 
+// Keep Sales UI, edits, deletion and drawing uploads on the same work boundary.
+// Audit evidence keeps a started Design locked even if its status is later reset.
+function salesIntakeLockedSql(line: "item" | "line" | "enquiry_item") {
+  return `(
+    EXISTS (SELECT 1 FROM sales.design_tasks design
+      WHERE design.enquiry_item_id = ${line}.id AND (
+        COALESCE(design.design_status, 'Pending Design') NOT IN ('Pending', 'Pending Design', 'Not Required')
+        OR design.next_stage_status IN ('Product Costing', 'Changes Required', 'Started', 'Quoted')
+        OR EXISTS (SELECT 1 FROM audit.events event
+          WHERE event.target_schema = 'sales' AND event.target_table = 'design_tasks'
+            AND event.target_id = design.id AND event.event_type = 'design.started')
+      ))
+    OR EXISTS (SELECT 1 FROM sales.quote_items quote WHERE quote.enquiry_item_id = ${line}.id)
+    OR EXISTS (SELECT 1 FROM sales.enquiry_revision_lines revision WHERE revision.enquiry_item_id = ${line}.id)
+  )`
+}
+
+async function assertSalesLineUnstarted(client: PoolClient, enquiryItemId: string) {
+  const result = await client.query<{ locked: boolean }>(`
+    SELECT ${salesIntakeLockedSql("line")} AS locked
+    FROM sales.enquiry_items line WHERE line.id = $1
+  `, [enquiryItemId])
+  if (!result.rows[0] || result.rows[0].locked) {
+    throw new Error("Design or costing has started. Complete the current work, then request a revision.")
+  }
+}
+
 type EnquirySpreadsheetDatabaseRow = {
   buyer_name: string | null
   company_name: string
@@ -2069,6 +2096,7 @@ export async function authorizeCommercialAttachmentTarget(
     if (!target.rows[0]) {
       throw new Error("Sales clarification attachment target was not found.")
     }
+    if (options.requireOpenState) await assertSalesLineUnstarted(client, input.enquiryItemId)
     return
   }
 
@@ -2135,6 +2163,7 @@ export async function authorizeCommercialAttachmentTarget(
   if (!target.rows[0]) {
     throw new Error("Enquiry attachment target was not found.")
   }
+  if (options.requireOpenState) await assertSalesLineUnstarted(client, input.enquiryItemId)
 }
 
 export function createCommercialWorkflowRepository(
@@ -2516,6 +2545,8 @@ export function createCommercialWorkflowRepository(
         if (!customer.rows[0]) {
           throw new Error("Customer was not found in this organization.")
         }
+        await client.query("SELECT id FROM sales.enquiries WHERE id = $1 FOR UPDATE", [input.enquiryId])
+        await client.query("SELECT id FROM sales.enquiry_items WHERE enquiry_id = $1 ORDER BY id FOR UPDATE", [input.enquiryId])
         const current = await client.query<{
           buyer_name: string | null
           customer_id: string
@@ -2535,11 +2566,8 @@ export function createCommercialWorkflowRepository(
           source: string
           status: string
           technical_handover_status: string
-          open_sales_clarification_count: string
           po_line_count: string
           quote_item_count: string
-          technical_started_count: string
-          design_task_count: string
         }>(
           `
             SELECT enquiry.buyer_name, enquiry.customer_id, enquiry.conversion_rate::text,
@@ -2564,27 +2592,7 @@ export function createCommercialWorkflowRepository(
                 JOIN sales.quote_items quote
                   ON quote.id = po_line.quote_item_id
                 WHERE quote.enquiry_id = enquiry.id
-              ) AS po_line_count,
-              (
-                SELECT count(*)::text
-                FROM sales.enquiry_items enquiry_item
-                WHERE enquiry_item.enquiry_id = enquiry.id
-                  AND enquiry_item.reviewed_at IS NOT NULL
-              ) AS technical_started_count,
-              (
-                SELECT count(*)::text
-                FROM sales.design_tasks design
-                JOIN sales.enquiry_items enquiry_item
-                  ON enquiry_item.id = design.enquiry_item_id
-                WHERE enquiry_item.enquiry_id = enquiry.id
-              ) AS design_task_count,
-              (
-                SELECT count(*)::text
-                FROM sales.clarification_tasks clarification
-                WHERE clarification.enquiry_id = enquiry.id
-                  AND clarification.target_stage = 'Sales'
-                  AND clarification.status = 'Open'
-              ) AS open_sales_clarification_count
+              ) AS po_line_count
             FROM sales.enquiries enquiry
             WHERE enquiry.id = $1 AND enquiry.organization_id = $2
               AND ($3::uuid IS NULL OR enquiry.created_by_user_id = $3 OR (SELECT identity.has_administrative_access($3)))
@@ -2604,10 +2612,14 @@ export function createCommercialWorkflowRepository(
           (terms?.packagingTerms !== undefined && terms.packagingTerms !== row.packaging_terms) ||
           (terms?.currency !== undefined && terms.currency !== row.currency)
         if (pricingTermsChanged && openRevision?.kind === 'Terms') throw new Error("Incoterms, Packaging and Currency need a Pricing revision.")
-        const canEditAfterHandover =
-          Number(row.open_sales_clarification_count) > 0 ||
-          (Number(row.technical_started_count) === 0 &&
-            Number(row.design_task_count) === 0)
+        const workStarted = Boolean((await client.query(`
+          SELECT 1 FROM sales.enquiry_items line
+          WHERE line.enquiry_id = $1 AND ${salesIntakeLockedSql("line")} LIMIT 1
+        `, [input.enquiryId])).rowCount)
+        if (workStarted && !openRevision) {
+          throw new Error("Design or costing has started. Complete the current work, then request a revision.")
+        }
+        const canEditAfterHandover = !workStarted
         const salesTermsOnly = (row.sales_terms_editable || !pricingTermsChanged || Boolean(openRevision)) && Number(row.po_line_count) === 0 &&
           input.customerId === row.customer_id && (input.receivedOn ?? row.received_on) === row.received_on &&
           (input.status ?? row.status) === row.status && (input.source ?? row.source) === row.source &&
@@ -2722,19 +2734,16 @@ export function createCommercialWorkflowRepository(
         if (lines.rows.length !== ids.length) throw new Error("Selected enquiry lines were not found.")
         const blocked = await client.query<{ id: string }>(`
           SELECT line.id FROM sales.enquiry_items line
-          WHERE line.id = ANY($1::uuid[]) AND (
-            line.reviewed_at IS NOT NULL
-            OR line.technical_review_status NOT IN ('Pending Review', 'Need Sales Confirmation')
-            OR EXISTS (SELECT 1 FROM sales.design_tasks task WHERE task.enquiry_item_id = line.id)
-            OR EXISTS (SELECT 1 FROM sales.quote_items quote WHERE quote.enquiry_item_id = line.id)
-            OR EXISTS (SELECT 1 FROM sales.clarification_tasks task WHERE task.enquiry_item_id = line.id)
-            OR EXISTS (SELECT 1 FROM sales.enquiry_revision_lines revision WHERE revision.enquiry_item_id = line.id)
-          ) LIMIT 1
+          WHERE line.id = ANY($1::uuid[]) AND ${salesIntakeLockedSql("line")} LIMIT 1
         `, [ids])
-        if (blocked.rows.length) throw new Error("Selected lines cannot be deleted after downstream work has started.")
+        if (blocked.rows.length) throw new Error("Design or costing has started on selected lines. Complete the current work, then request a revision.")
         await client.query(`DELETE FROM core.file_links
-          WHERE target_schema = 'sales' AND target_table = 'enquiry_items'
-            AND target_id = ANY($1::uuid[])`, [ids])
+          WHERE target_schema = 'sales' AND (
+            (target_table = 'enquiry_items' AND target_id = ANY($1::uuid[]))
+            OR (target_table = 'design_tasks' AND target_id IN (
+              SELECT id FROM sales.design_tasks WHERE enquiry_item_id = ANY($1::uuid[])
+            )))`, [ids])
+        await client.query("DELETE FROM sales.design_tasks WHERE enquiry_item_id = ANY($1::uuid[])", [ids])
         await client.query("DELETE FROM sales.enquiry_items WHERE id = ANY($1::uuid[])", [ids])
         await client.query(`
           UPDATE sales.enquiries SET
@@ -2847,162 +2856,56 @@ export function createCommercialWorkflowRepository(
         throw new Error("Part and description are required.")
       }
       return transaction(pool, async (client) => {
+        await client.query("SELECT id FROM sales.enquiry_items WHERE id = $1 FOR UPDATE", [input.enquiryItemId])
         const current = await client.query<{
           customer_part_code: string
           description: string
-          design_blocked: boolean
-          enquiry_id: string
-          open_sales_clarification_count: string
           organization_id: string
-          po_line_count: string
-          quote_item_count: string
-          technical_handover_status: string
-          technical_review_status: string
-        }>(
-          `
-            SELECT enquiry_item.organization_id, enquiry_item.enquiry_id,
-              enquiry_item.customer_part_code, enquiry_item.description,
-              enquiry_item.technical_review_status,
-              enquiry.technical_handover_status,
-              (
-                SELECT count(*)::text FROM sales.quote_items quote
-                WHERE quote.enquiry_item_id = enquiry_item.id
-              ) AS quote_item_count,
-              (
-                SELECT count(*)::text
-                FROM sales.purchase_order_lines po_line
-                JOIN sales.quote_items quote
-                  ON quote.id = po_line.quote_item_id
-                WHERE quote.enquiry_item_id = enquiry_item.id
-              ) AS po_line_count,
-              EXISTS (
-                SELECT 1 FROM sales.design_tasks design
-                WHERE design.enquiry_item_id = enquiry_item.id
-                  AND (
-                    design.next_stage_status IN (
-                      'Product Costing', 'Product Costing Complete',
-                      'Started', 'Quoted'
-                    )
-                    OR design.design_status IN ('Started', 'Quoted')
-                  )
-              ) AS design_blocked,
-              (
-                SELECT count(*)::text
-                FROM sales.clarification_tasks clarification
-                WHERE clarification.enquiry_item_id = enquiry_item.id
-                  AND clarification.target_stage = 'Sales'
-                  AND clarification.status = 'Open'
-              ) AS open_sales_clarification_count
-            FROM sales.enquiry_items enquiry_item
-            JOIN sales.enquiries enquiry ON enquiry.id = enquiry_item.enquiry_id
-            WHERE enquiry_item.id = $1
-              AND ($2::uuid IS NULL OR enquiry.created_by_user_id = $2 OR (SELECT identity.has_administrative_access($2)))
-            FOR UPDATE OF enquiry_item
-          `,
-          [input.enquiryItemId, input.actorUserId ?? null]
-        )
+        }>(`
+          SELECT enquiry_item.organization_id,
+            enquiry_item.customer_part_code, enquiry_item.description
+          FROM sales.enquiry_items enquiry_item
+          JOIN sales.enquiries enquiry ON enquiry.id = enquiry_item.enquiry_id
+          WHERE enquiry_item.id = $1
+            AND ($2::uuid IS NULL OR enquiry.created_by_user_id = $2
+              OR (SELECT identity.has_administrative_access($2)))
+        `, [input.enquiryItemId, input.actorUserId ?? null])
         const row = current.rows[0]
         if (!row) {
           throw new Error("Line item was not found.")
         }
-        const editableTechnicalStatuses = new Set([
-          "Pending Review",
-          "Need Clarification",
-          "Need Sales Confirmation",
-          "Not Feasible",
-        ])
-        const canEdit =
-          Number(row.quote_item_count) === 0 &&
-          Number(row.po_line_count) === 0 &&
-          (row.technical_handover_status !== "Handed Over" ||
-            (!row.design_blocked &&
-              (Number(row.open_sales_clarification_count) > 0 ||
-                editableTechnicalStatuses.has(row.technical_review_status))))
-        if (!canEdit) {
-          throw new Error(
-            "This line cannot be edited after downstream work has started."
-          )
-        }
-        const handedOver = row.technical_handover_status === "Handed Over"
+        await assertSalesLineUnstarted(client, input.enquiryItemId)
         const updated = await client.query<{
           customer_part_code: string
           id: string
           technical_review_status: string
-        }>(
-          `
-            UPDATE sales.enquiry_items
-            SET customer_part_code = $1, description = $2, grade = $3,
-              quantity = $4, target_price = $5, drawing_reference = $6,
-              remarks = $7, status = 'Open',
-              technical_review_status = CASE WHEN $8
-                THEN 'Pending Review' ELSE technical_review_status END,
-              technical_checklist = CASE WHEN $8
-                THEN '{}'::jsonb ELSE technical_checklist END,
-              missing_information = CASE WHEN $8
-                THEN NULL ELSE missing_information END,
-              feasibility_reason = CASE WHEN $8
-                THEN NULL ELSE feasibility_reason END,
-              technical_remarks = CASE WHEN $8
-                THEN NULL ELSE technical_remarks END,
-              reviewed_at = CASE WHEN $8 THEN NULL ELSE reviewed_at END,
-              updated_by_user_id = $9, updated_at = now(),
-              row_version = row_version + 1
-            WHERE id = $10
-            RETURNING id, customer_part_code, technical_review_status
-          `,
-          [
-            customerPartCode,
-            description,
-            input.grade ?? null,
-            input.quantity ?? 0,
-            input.targetPrice ?? 0,
-            input.drawingReference ?? null,
-            input.remarks ?? null,
-            handedOver,
-            input.actorUserId ?? null,
-            input.enquiryItemId,
-          ]
-        )
-        if (handedOver) {
-          await client.query(
-            `
-              UPDATE sales.clarification_tasks
-              SET status = 'Resolved',
-                response = COALESCE(response, 'Line corrected by Sales'),
-                resolved_at = now(), updated_at = now(),
-                row_version = row_version + 1
-              WHERE enquiry_item_id = $1
-                AND target_stage = 'Sales'
-                AND status = 'Open'
-            `,
-            [input.enquiryItemId]
-          )
-          await client.query(
-            `
-              DELETE FROM sales.design_bom_lines
-              WHERE design_task_id IN (
-                SELECT id FROM sales.design_tasks
-                WHERE enquiry_item_id = $1
-              )
-            `,
-            [input.enquiryItemId]
-          )
-          await client.query(
-            `
-              UPDATE sales.design_tasks
-              SET status = 'Pending', portfolio_match_status = NULL,
-                matched_product_id = NULL,
-                design_status = 'Pending Design',
-                quoted_part_uid = NULL, item_type = NULL,
-                design_bom_completed = 'No',
-                next_stage_status = 'Not Started',
-                actual_completion_date = NULL, updated_at = now(),
-                updated_by_user_id = $2, row_version = row_version + 1
-              WHERE enquiry_item_id = $1
-            `,
-            [input.enquiryItemId, input.actorUserId ?? null]
-          )
-        }
+        }>(`
+          UPDATE sales.enquiry_items
+          SET customer_part_code = $1, description = $2, grade = $3,
+            quantity = $4, target_price = $5, drawing_reference = $6,
+            remarks = $7, status = 'Open', technical_review_status = 'Pending Review',
+            technical_checklist = '{}'::jsonb, missing_information = NULL,
+            feasibility_reason = NULL, technical_remarks = NULL, reviewed_at = NULL,
+            item_id = NULL, linked_enquiry_item_id = NULL, link_type = NULL,
+            updated_by_user_id = $8, updated_at = now(), row_version = row_version + 1
+          WHERE id = $9
+          RETURNING id, customer_part_code, technical_review_status
+        `, [customerPartCode, description, input.grade ?? null, input.quantity ?? 0,
+          input.targetPrice ?? 0, input.drawingReference ?? null, input.remarks ?? null,
+          input.actorUserId ?? null, input.enquiryItemId])
+        await client.query(`
+          UPDATE sales.clarification_tasks SET status = 'Resolved',
+            response = COALESCE(response, 'Line corrected by Sales'),
+            resolved_at = now(), updated_at = now(), row_version = row_version + 1
+          WHERE enquiry_item_id = $1 AND target_stage = 'Sales' AND status = 'Open'
+        `, [input.enquiryItemId])
+        await client.query(`
+          DELETE FROM core.file_links WHERE target_schema = 'sales'
+            AND target_table = 'design_tasks' AND target_id IN (
+              SELECT id FROM sales.design_tasks WHERE enquiry_item_id = $1
+            )
+        `, [input.enquiryItemId])
+        await client.query("DELETE FROM sales.design_tasks WHERE enquiry_item_id = $1", [input.enquiryItemId])
         await writeAuditEvent(client, {
           actorUserId: input.actorUserId,
           eventType: "enquiry_item.corrected",
@@ -4311,6 +4214,22 @@ export function createCommercialWorkflowRepository(
         if (!taskRow) {
           throw new Error("Sales clarification task is required.")
         }
+        const workStarted = (await client.query<{ locked: boolean }>(`
+          SELECT ${salesIntakeLockedSql("line")} AS locked
+          FROM sales.enquiry_items line WHERE line.id = $1
+        `, [input.enquiryItemId])).rows[0]!.locked
+        if (workStarted && (
+          (input.customerPartCode !== undefined && input.customerPartCode.trim() !== taskRow.customer_part_code) ||
+          (input.description !== undefined && input.description.trim() !== taskRow.description) ||
+          (input.grade !== undefined && input.grade !== taskRow.grade) ||
+          (input.quantity !== undefined && input.quantity !== Number(taskRow.quantity)) ||
+          (input.targetPrice !== undefined && input.targetPrice !== Number(taskRow.target_price)) ||
+          (input.drawingReference !== undefined && input.drawingReference !== taskRow.drawing_reference) ||
+          (input.remarks !== undefined && input.remarks !== taskRow.remarks) ||
+          (input.salesMatchDecision !== undefined && input.salesMatchDecision !== "new")
+        )) {
+          throw new Error("Design or costing has started. Reply to the clarification without changing line inputs; use a revision after completion for changes.")
+        }
         const decision = input.salesMatchDecision ?? "new"
         const isCommercialMatch = decision.startsWith("quote:")
         const isTechnicalRevision = decision.startsWith("technical:")
@@ -4318,108 +4237,110 @@ export function createCommercialWorkflowRepository(
           isCommercialMatch || isTechnicalRevision
             ? decision.slice(decision.indexOf(":") + 1)
             : null
-        const matchedQuote = quoteItemId
-          ? await client.query<{
-              item_type: string | null
-              product_id: string
-            }>(
-              `
-                SELECT quote.item_id AS product_id, item.item_type
-                FROM sales.quote_items quote
-                JOIN catalog.items item ON item.id = quote.item_id
-                WHERE quote.id = $1 AND quote.customer_id = $2
-                  AND quote.status IN (
-                    'Draft', 'Ready', 'Sent', 'Accepted', 'Ordered'
-                  )
-              `,
-              [quoteItemId, taskRow.customer_id]
-            )
-          : null
-        if (quoteItemId && !matchedQuote?.rows[0]) {
-          throw new Error("Selected match was not found for this customer.")
-        }
-        const matched = matchedQuote?.rows[0]
-        const technicalReviewStatus =
-          matched && isCommercialMatch
-            ? "Duplicate / Existing Product"
-            : "Pending Review"
-        await client.query(
-          `
-            UPDATE sales.enquiry_items
-            SET customer_part_code = $1, description = $2, grade = $3,
-              quantity = $4, target_price = $5, drawing_reference = $6,
-              remarks = $7, technical_review_status = $8,
-              item_id = CASE WHEN $9 THEN $10 ELSE item_id END,
-              link_type = CASE
-                WHEN $9 THEN 'Matched Quote - Commercial Requote'
-                WHEN $11 THEN 'Matched Quote - Technical Revision'
-                ELSE link_type
-              END,
-              revision_type = CASE WHEN $11
-                THEN 'Technical Revision' ELSE revision_type END,
-              revision_reason = CASE WHEN $11
-                THEN COALESCE($12, revision_reason) ELSE revision_reason END,
-              updated_by_user_id = $13, updated_at = now(),
-              row_version = row_version + 1
-            WHERE id = $14
-          `,
-          [
-            input.customerPartCode?.trim() || taskRow.customer_part_code,
-            input.description?.trim() || taskRow.description,
-            input.grade === undefined ? taskRow.grade : input.grade,
-            input.quantity ?? Number(taskRow.quantity),
-            input.targetPrice ??
-              (taskRow.target_price === null
-                ? null
-                : Number(taskRow.target_price)),
-            input.drawingReference === undefined
-              ? taskRow.drawing_reference
-              : input.drawingReference,
-            input.remarks === undefined ? taskRow.remarks : input.remarks,
-            technicalReviewStatus,
-            Boolean(matched && isCommercialMatch),
-            matched?.product_id ?? null,
-            Boolean(matched && isTechnicalRevision),
-            input.response ?? null,
-            input.actorUserId ?? null,
-            input.enquiryItemId,
-          ]
-        )
-        if (matched && isCommercialMatch) {
+        if (!workStarted) {
+          const matchedQuote = quoteItemId
+            ? await client.query<{
+                item_type: string | null
+                product_id: string
+              }>(
+                `
+                  SELECT quote.item_id AS product_id, item.item_type
+                  FROM sales.quote_items quote
+                  JOIN catalog.items item ON item.id = quote.item_id
+                  WHERE quote.id = $1 AND quote.customer_id = $2
+                    AND quote.status IN (
+                      'Draft', 'Ready', 'Sent', 'Accepted', 'Ordered'
+                    )
+                `,
+                [quoteItemId, taskRow.customer_id]
+              )
+            : null
+          if (quoteItemId && !matchedQuote?.rows[0]) {
+            throw new Error("Selected match was not found for this customer.")
+          }
+          const matched = matchedQuote?.rows[0]
+          const technicalReviewStatus =
+            matched && isCommercialMatch
+              ? "Duplicate / Existing Product"
+              : "Pending Review"
           await client.query(
             `
-              INSERT INTO sales.design_tasks (
-                organization_id, enquiry_item_id, status,
-                portfolio_match_status, matched_product_id, design_status,
-                item_type, design_bom_completed, next_stage_status,
-                assigned_date, actual_completion_date, source_system,
-                source_table, source_id, source_payload
-              )
-              VALUES (
-                $1, $2, 'Completed', 'Matches Existing Portfolio', $3,
-                'Not Required', $4, 'Yes', 'Product Costing Complete',
-                now(), now(), 'mrm-dashboard', 'design_tasks', $5, $6
-              )
-              ON CONFLICT (enquiry_item_id) DO UPDATE SET
-                status = 'Completed',
-                portfolio_match_status = EXCLUDED.portfolio_match_status,
-                matched_product_id = EXCLUDED.matched_product_id,
-                design_status = EXCLUDED.design_status,
-                item_type = EXCLUDED.item_type,
-                design_bom_completed = EXCLUDED.design_bom_completed,
-                next_stage_status = EXCLUDED.next_stage_status,
-                actual_completion_date = now(), updated_at = now(),
-                row_version = sales.design_tasks.row_version + 1
+              UPDATE sales.enquiry_items
+              SET customer_part_code = $1, description = $2, grade = $3,
+                quantity = $4, target_price = $5, drawing_reference = $6,
+                remarks = $7, technical_review_status = $8,
+                item_id = CASE WHEN $9 THEN $10 ELSE item_id END,
+                link_type = CASE
+                  WHEN $9 THEN 'Matched Quote - Commercial Requote'
+                  WHEN $11 THEN 'Matched Quote - Technical Revision'
+                  ELSE link_type
+                END,
+                revision_type = CASE WHEN $11
+                  THEN 'Technical Revision' ELSE revision_type END,
+                revision_reason = CASE WHEN $11
+                  THEN COALESCE($12, revision_reason) ELSE revision_reason END,
+                updated_by_user_id = $13, updated_at = now(),
+                row_version = row_version + 1
+              WHERE id = $14
             `,
             [
-              taskRow.organization_id,
+              input.customerPartCode?.trim() || taskRow.customer_part_code,
+              input.description?.trim() || taskRow.description,
+              input.grade === undefined ? taskRow.grade : input.grade,
+              input.quantity ?? Number(taskRow.quantity),
+              input.targetPrice ??
+                (taskRow.target_price === null
+                  ? null
+                  : Number(taskRow.target_price)),
+              input.drawingReference === undefined
+                ? taskRow.drawing_reference
+                : input.drawingReference,
+              input.remarks === undefined ? taskRow.remarks : input.remarks,
+              technicalReviewStatus,
+              Boolean(matched && isCommercialMatch),
+              matched?.product_id ?? null,
+              Boolean(matched && isTechnicalRevision),
+              input.response ?? null,
+              input.actorUserId ?? null,
               input.enquiryItemId,
-              matched.product_id,
-              matched.item_type ?? "List",
-              `sales-match:${input.enquiryItemId}`,
-              { quoteItemId },
             ]
           )
+          if (matched && isCommercialMatch) {
+            await client.query(
+              `
+                INSERT INTO sales.design_tasks (
+                  organization_id, enquiry_item_id, status,
+                  portfolio_match_status, matched_product_id, design_status,
+                  item_type, design_bom_completed, next_stage_status,
+                  assigned_date, actual_completion_date, source_system,
+                  source_table, source_id, source_payload
+                )
+                VALUES (
+                  $1, $2, 'Completed', 'Matches Existing Portfolio', $3,
+                  'Not Required', $4, 'Yes', 'Product Costing Complete',
+                  now(), now(), 'mrm-dashboard', 'design_tasks', $5, $6
+                )
+                ON CONFLICT (enquiry_item_id) DO UPDATE SET
+                  status = 'Completed',
+                  portfolio_match_status = EXCLUDED.portfolio_match_status,
+                  matched_product_id = EXCLUDED.matched_product_id,
+                  design_status = EXCLUDED.design_status,
+                  item_type = EXCLUDED.item_type,
+                  design_bom_completed = EXCLUDED.design_bom_completed,
+                  next_stage_status = EXCLUDED.next_stage_status,
+                  actual_completion_date = now(), updated_at = now(),
+                  row_version = sales.design_tasks.row_version + 1
+              `,
+              [
+                taskRow.organization_id,
+                input.enquiryItemId,
+                matched.product_id,
+                matched.item_type ?? "List",
+                `sales-match:${input.enquiryItemId}`,
+                { quoteItemId },
+              ]
+            )
+          }
         }
         const resolved = await client.query<{
           id: string
@@ -6482,6 +6403,7 @@ export function createCommercialWorkflowRepository(
           throw new Error("ENQ was not found.")
         }
         const items = await client.query<{
+          intake_locked: boolean
           customer_part_code: string | null
           customer_recost_required: boolean
           revision_stage: string | null
@@ -6506,6 +6428,7 @@ export function createCommercialWorkflowRepository(
         }>(
           `
             SELECT item.id, item.line_number, item.customer_part_code,
+              ${salesIntakeLockedSql("item")} AS intake_locked,
               item.customer_recost_required, item.revision_stage,
               (SELECT CASE WHEN quote.sent_at IS NOT NULL THEN 'Sent' ELSE quote.status END
                 FROM sales.quote_items quote WHERE quote.enquiry_item_id = item.id AND quote.status <> 'Superseded'
@@ -6582,10 +6505,11 @@ export function createCommercialWorkflowRepository(
             targetStage: row.target_stage,
           })),
           enquiry: {
-            intakeEditable: !items.rows.some(line => line.quote_status) &&
-              (enquiry.rows[0].technical_handover_status !== 'Handed Over' ||
-                items.rows.every(line => line.technical_review_status === 'Pending Review' && !line.design_status) ||
-                clarifications.rows.some(task => task.status === 'Open' && task.target_stage === 'Sales')),
+            intakeEditable: items.rows.every(line => !line.intake_locked),
+            addLinesAllowed: !items.rows.some(line => line.quote_status),
+            revisionAllowed: items.rows.length > 0 && items.rows.every(line =>
+              ["Not Feasible", "NotFeasible"].includes(line.technical_review_status) ||
+              ["Ready", "Sent", "Accepted", "Ordered"].includes(line.quote_status ?? "")),
             currentStage: items.rows.some(line => line.revision_stage === 'Design') ? 'Design' :
               items.rows.some(line => line.revision_stage === 'Product Costing') ? 'Product Costing' :
               items.rows.some(line => line.revision_stage === 'Sales') ? 'Sales — Terms Revision' :
@@ -6620,6 +6544,7 @@ export function createCommercialWorkflowRepository(
           },
           importReviews,
           items: items.rows.map((row) => ({
+            intakeEditable: !row.intake_locked,
             customerPartCode: row.customer_part_code,
             description: row.description,
             designStatus: row.design_status,

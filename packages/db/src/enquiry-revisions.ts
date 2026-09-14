@@ -137,9 +137,9 @@ export function enquiryRevisionMethods(pool: Pool) {
           (input.kind !== "Terms" && lines.rows.length !== selected.length)
         )
           throw new Error("Select valid enquiry lines for revision.")
-        if (input.kind === "Terms" && lines.rows.some((line) => !line.quote_id || line.customer_recost_required))
+        if (lines.rows.some((line) => !line.quote_id || line.customer_recost_required))
           throw new Error(
-            "Complete pending lines first, or update terms directly on the enquiry."
+            "Complete pending lines first. Request a revision after the current quotation costing is complete."
           )
         if (
           input.kind === "Pricing" &&
