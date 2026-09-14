@@ -1,7 +1,7 @@
 "use client"
 
 import { Button } from "@workspace/ui/components/button"
-import { Field, FieldLabel } from "@workspace/ui/components/field"
+import { Field, FieldGroup, FieldLabel } from "@workspace/ui/components/field"
 import {
   Sheet,
   SheetContent,
@@ -13,11 +13,12 @@ import {
 import { Textarea } from "@workspace/ui/components/textarea"
 import { Input } from "@workspace/ui/components/input"
 import { useFormStatus } from "react-dom"
-import { UserCheck, UserX } from "lucide-react"
+import { CalendarDays, UserCheck, UserX } from "lucide-react"
 
 import {
   withdrawCandidateApplicationAction,
   recordCandidateDidNotJoinAction,
+  changeCandidateJoiningDateAction,
 } from "@/app/hr/actions"
 import { CandidateAppointmentDialog } from "@/components/hr/candidate-appointment-dialog"
 import { StandardDrawerContent } from "@/components/ui/golden-patterns"
@@ -28,6 +29,15 @@ function DidNotJoinSubmitButton({ disabled }: { disabled: boolean }) {
   return (
     <Button type="submit" disabled={pending || disabled}>
       {pending ? "Recording…" : "Record Did Not Join And Reopen Job"}
+    </Button>
+  )
+}
+
+function JoiningDateSubmitButton() {
+  const { pending } = useFormStatus()
+  return (
+    <Button type="submit" disabled={pending}>
+      {pending ? "Saving…" : "Save Joining Date"}
     </Button>
   )
 }
@@ -60,6 +70,69 @@ export function CandidateApplicationActions({
 
   return (
     <div className="flex justify-end gap-2">
+      {canRecordDidNotJoin ? (
+        <Sheet>
+          <SheetTrigger asChild>
+            <Button size="sm" type="button" variant="outline">
+              <CalendarDays data-icon="inline-start" />
+              Change Joining Date
+            </Button>
+          </SheetTrigger>
+          <StandardDrawerContent
+            className="w-full overflow-y-auto sm:max-w-xl"
+            title="Change Joining Date"
+            description={`Correct ${candidateName}'s planned joining date. Previously issued offer letters retain their original date.`}
+          >
+            <form
+              action={changeCandidateJoiningDateAction}
+              className="px-6 pb-6"
+            >
+              <input
+                name="application_id"
+                type="hidden"
+                value={applicationId}
+              />
+              <input
+                name="previous_joining_date"
+                type="hidden"
+                value={defaultJoiningDate ?? ""}
+              />
+              {returnJobId ? (
+                <input name="return_job_id" type="hidden" value={returnJobId} />
+              ) : null}
+              {panelId ? (
+                <input name="panel" type="hidden" value={panelId} />
+              ) : null}
+              <FieldGroup>
+                <Field>
+                  <FieldLabel htmlFor={`joining-date-${applicationId}`}>
+                    Joining Date
+                  </FieldLabel>
+                  <Input
+                    id={`joining-date-${applicationId}`}
+                    name="joining_date"
+                    type="date"
+                    required
+                    defaultValue={defaultJoiningDate ?? ""}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor={`joining-reason-${applicationId}`}>
+                    Reason for Correction
+                  </FieldLabel>
+                  <Textarea
+                    id={`joining-reason-${applicationId}`}
+                    name="reason"
+                    required
+                    rows={3}
+                  />
+                </Field>
+                <JoiningDateSubmitButton />
+              </FieldGroup>
+            </form>
+          </StandardDrawerContent>
+        </Sheet>
+      ) : null}
       {canRecordDidNotJoin ? (
         <Sheet>
           <SheetTrigger asChild>

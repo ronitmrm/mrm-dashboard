@@ -15,6 +15,53 @@ import {
   recruitmentAdvisoryLockKey,
 } from "./recruitment-codes"
 
+describe("changeCandidateJoiningDate", () => {
+  test("corrects all reserved posts and records the old date without rewriting letters", async () => {
+    const query = vi.fn(async (sql: string) => {
+      if (sql.includes("FROM recruitment.applications application")) return { rows: [{
+        id: "application-1", candidate_id: "candidate-1", job_id: "job-1",
+        post_id: "post-1", status: "Approved", willing_to_join: true, joining_date: "2026-11-03",
+      }] }
+      if (sql.includes("FROM recruitment.posts post")) return { rows: [
+        { id: "post-1", status: "Appointed", employee_code: null, appointed_application_id: "application-1" },
+        { id: "post-2", status: "Appointed", employee_code: null, appointed_application_id: "application-1" },
+      ] }
+      return { rows: [], rowCount: 1 }
+    })
+    const client = { query, release: vi.fn() } as unknown as PoolClient
+    const repository = createRecruitmentRepository({ pool: { connect: vi.fn(async () => client) } as unknown as Pool })
+    await repository.changeCandidateJoiningDate({ organizationId: "org-1", applicationId: "application-1",
+      joiningDate: "2026-10-03", previousJoiningDate: "2026-11-03", reason: "Wrong month entered" })
+    expect(query).toHaveBeenCalledWith(expect.stringContaining("UPDATE recruitment.posts"),
+      ["2026-10-03", null, ["post-1", "post-2"], "org-1"])
+    expect(query).toHaveBeenCalledWith(expect.stringContaining("UPDATE recruitment.applications"),
+      ["2026-10-03", null, "application-1", "org-1"])
+    expect(query).toHaveBeenCalledWith(expect.stringContaining("INSERT INTO recruitment.candidate_events"),
+      expect.arrayContaining(["2026-11-03 to 2026-10-03. Wrong month entered"]))
+    expect(query.mock.calls.some(([sql]) => sql.includes("employment_letters"))).toBe(false)
+    expect(query).toHaveBeenCalledWith("COMMIT")
+  })
+
+  test("rejects a joined employee without changing dates", async () => {
+    const query = vi.fn(async (sql: string) => {
+      if (sql.includes("FROM recruitment.applications application")) return { rows: [{
+        id: "application-1", candidate_id: "candidate-1", job_id: "job-1",
+        post_id: "post-1", status: "Approved", willing_to_join: true, joining_date: "2026-11-03",
+      }] }
+      if (sql.includes("FROM recruitment.posts post")) return { rows: [
+        { id: "post-1", status: "Occupied", employee_code: "104", appointed_application_id: "application-1" },
+      ] }
+      return { rows: [], rowCount: 1 }
+    })
+    const client = { query, release: vi.fn() } as unknown as PoolClient
+    const repository = createRecruitmentRepository({ pool: { connect: vi.fn(async () => client) } as unknown as Pool })
+    await expect(repository.changeCandidateJoiningDate({ organizationId: "org-1", applicationId: "application-1",
+      joiningDate: "2026-10-03", previousJoiningDate: "2026-11-03", reason: "Wrong month entered" })).rejects.toThrow("employee has joined")
+    expect(query.mock.calls.some(([sql]) => sql.includes("UPDATE recruitment."))).toBe(false)
+    expect(query).toHaveBeenCalledWith("ROLLBACK")
+  })
+})
+
 describe("assignEmployee", () => {
   test.each([
     {
