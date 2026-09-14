@@ -1,4 +1,5 @@
 import { administrationPageAccess } from "./administration-capabilities"
+import { brandingPageAccess } from "./branding-capabilities"
 import { commercialPageAccess } from "./commercial-capabilities"
 import { storePageAccess } from "./store-capabilities"
 import { hrPageAccess } from "./hr-capabilities"
@@ -10,6 +11,7 @@ import { productionFloorPageSlugs } from "./production-floor-capabilities"
 import type { PageAccessDefinition } from "./page-access-types"
 
 export const pageAccessCatalog: readonly PageAccessDefinition[] = [
+  ...brandingPageAccess,
   ...administrationPageAccess,
   ...commercialPageAccess,
   ...storePageAccess,

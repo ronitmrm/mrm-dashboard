@@ -1,4 +1,5 @@
 export const sidebarSectionIds = [
+  "branding",
   "costing",
   "hr",
   "masterData",

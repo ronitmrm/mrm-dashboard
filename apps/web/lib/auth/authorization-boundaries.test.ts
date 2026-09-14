@@ -37,6 +37,7 @@ describe("protected server boundaries", () => {
       "authorizedDashboardSession(",
       "authorizePostgresDashboardEvents(",
       "withDashboardReadRepository(",
+      "withBranding(",
     ]
     const authenticatedAccountOnlyBoundaries = new Map([
       ["home/actions.ts", "requireAuthenticatedSession("],
@@ -60,6 +61,12 @@ describe("protected server boundaries", () => {
     }
 
     expect(missing).toEqual([])
+    const brandingGuard = await readFile(
+      new URL("../branding/server.ts", import.meta.url),
+      "utf8"
+    )
+    expect(brandingGuard).toContain('brandingCapability(type, "read")')
+    expect(brandingGuard).toContain('brandingCapability(type, "write")')
   })
 
   it("pins narrow capabilities at representative sensitive boundaries", async () => {

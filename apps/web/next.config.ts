@@ -13,6 +13,7 @@ const appDir = path.dirname(fileURLToPath(import.meta.url))
 const workspaceRoot = path.join(appDir, "../..")
 
 const nextConfig: NextConfig = {
+  serverExternalPackages: ["@sparticuz/chromium", "puppeteer-core"],
   experimental: {
     proxyClientMaxBodySize: Math.max(
       maxDashboardProxyRequestBytes,
@@ -41,6 +42,10 @@ const nextConfig: NextConfig = {
   },
   outputFileTracingRoot: workspaceRoot,
   outputFileTracingIncludes: {
+    "/branding/**": [
+      "./lib/branding/assets/**/*",
+      "./node_modules/@sparticuz/chromium/bin/**/*",
+    ],
     "/commercial/**": ["./lib/pricing/assets/**/*"],
   },
   turbopack: {
