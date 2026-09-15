@@ -371,9 +371,10 @@ describe("sent Quote PDF issuance", () => {
       connectionString,
     })
     try {
+      // Whole quotations start at 00, independently of each part's price revision.
       await expect(
         draftRepository.getQuoteDocument(draft.enquiryId)
-      ).resolves.toMatchObject({ revision: 1 })
+      ).resolves.toMatchObject({ revision: 0 })
       await expect(
         draftRepository.getQuotePdfArtifact(draft.enquiryId)
       ).resolves.toBeNull()
