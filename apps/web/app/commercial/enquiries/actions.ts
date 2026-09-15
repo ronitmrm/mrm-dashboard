@@ -374,13 +374,27 @@ export async function requestEnquiryRevisionAction(formData: FormData) {
 
 export async function deleteEnquiryAction(formData: FormData) {
   const enquiryId = requiredText(formData, "enquiry_id")
-  await withWorkflow(
+  const result = await withWorkflow(
     commercialTaskCapabilities.deleteEnquiry,
     `${enquiriesPath}/${enquiryId}`,
-    (workflow, actorUserId) => workflow.deleteEnquiry(enquiryId, actorUserId)
+    async (workflow, actorUserId) => {
+      try {
+        return await workflow.deleteEnquiry(enquiryId, actorUserId)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : ""
+        if (message === "ENQ was not found." || message === "This enquiry cannot be deleted after downstream work has started.") {
+          return { error: message }
+        }
+        console.error("Enquiry deletion failed", error)
+        return { error: "Could not delete the enquiry. Please retry or contact your administrator." }
+      }
+    }
   )
-  revalidatePath(enquiriesPath)
-  redirect(enquiriesPath)
+  if ("error" in result) return result
+  revalidatePath(enquiriesPath, "layout")
+  revalidatePath(technicalReviewPath)
+  revalidatePath(designPath)
+  redirect(`${enquiriesPath}?operationalView=masterTables`)
 }
 
 export async function deleteEnquiryLinesAction(formData: FormData) {
@@ -456,14 +470,26 @@ export async function updateEnquiryItemAction(formData: FormData) {
 
 export async function handOverEnquiryAction(formData: FormData) {
   const enquiryId = requiredText(formData, "enquiry_id")
-  await withWorkflow(
+  const result = await withWorkflow(
     commercialTaskCapabilities.handOverEnquiry,
     `${enquiriesPath}/${enquiryId}`,
-    (workflow, actorUserId) =>
-      workflow.handOverToTechnicalReview(enquiryId, actorUserId)
+    async (workflow, actorUserId) => {
+      try {
+        return await workflow.handOverToTechnicalReview(enquiryId, actorUserId)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : ""
+        if (/^(Add at least one line item|Resolve pending Sales confirmation|Complete commercial terms|ENQ was not found)/.test(message)) {
+          return { error: message }
+        }
+        console.error("Enquiry handover failed", error)
+        return { error: "Could not send the enquiry to Technical Review. Check the saved terms and retry." }
+      }
+    }
   )
+  if ("error" in result) return result
   revalidatePath(enquiriesPath)
   revalidatePath(`${enquiriesPath}/${enquiryId}`)
+  revalidatePath(technicalReviewPath)
   redirect(`${enquiriesPath}?operationalView=masterTables`)
 }
 
