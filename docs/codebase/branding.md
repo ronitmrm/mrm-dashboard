@@ -1,6 +1,6 @@
 # Branding implementation
 
-## Shared SOP/Policy book (v4, 2026-09-15)
+## Shared SOP/Policy book (v5, 2026-09-15)
 
 - `book-editor.tsx` composes the same heading/details editor for both types.
   Tiptap StarterKit is loaded only in the book editor; its schema is restricted
@@ -23,7 +23,12 @@
   A separately rendered frame is embedded on every internal page because repeated
   Chromium PDF calls can omit font-based header/footer templates. Content is
   embedded onto fresh output pages to isolate graphics state before frame stamping.
-- Newly issued SOP/Policy PDFs record `mrm-book-v4`. Frozen issued PDFs are unchanged.
+- Reference proportions: fitted large cover title, uppercase details title without
+  a duplicate running header, centered index title, 14pt body, green hierarchy,
+  hanging lists, and readable footer metadata. Details retain the footer; index
+  and content also receive the running header. Attribution names/designations
+  occupy separate rows when supplied; no approval names are invented.
+- Newly issued SOP/Policy PDFs record `mrm-book-v5`. Frozen issued PDFs are unchanged.
   No database migration or change to automatic document sequences is required.
 
 The older template descriptions below are historical where superseded by v4.
