@@ -1,5 +1,33 @@
 # Branding implementation
 
+## Shared SOP/Policy book (v4, 2026-09-15)
+
+- `book-editor.tsx` composes the same heading/details editor for both types.
+  Tiptap StarterKit is loaded only in the book editor; its schema is restricted
+  to paragraphs, text emphasis, and nested bullet/numbered lists. Lists support
+  indent/outdent and restart/continue within a sibling group.
+  Normalize `editor.getJSON()` through JSON serialization before storing client
+  state: ProseMirror's null-prototype attributes otherwise become temporary client
+  references across React Server Actions, failing when the parser reads `start`.
+- `branding-rich-text.ts` validates the portable JSON subset at the server boundary
+  and escapes all text when rendering. `richBody` is authoritative when present;
+  the parser derives the legacy `body` summary. Existing plain-text drafts need no
+  migration. Heading children are bounded to four levels and 100 total per language.
+  Introduction and printed attribution fields live in each translation's details.
+- `brandingOutline` supplies identical numbering/order to the editor, saved view
+  and PDF. Parent headings can have children without their own body. Notice/WI
+  reject book-only fields and keep their existing layout and issue behavior.
+- `book-pdf.ts` renders cover/details/index/continuous content. Chromium outlines
+  resolve heading locations after actual pagination; the index is rendered again
+  using its final page count. Each language starts printed numbering at details=1.
+  A separately rendered frame is embedded on every internal page because repeated
+  Chromium PDF calls can omit font-based header/footer templates. Content is
+  embedded onto fresh output pages to isolate graphics state before frame stamping.
+- Newly issued SOP/Policy PDFs record `mrm-book-v4`. Frozen issued PDFs are unchanged.
+  No database migration or change to automatic document sequences is required.
+
+The older template descriptions below are historical where superseded by v4.
+
 - Standalone published registers: `/registers/sop`, `/registers/work-instruction`,
   `/registers/policy`. Each has a direct main-sidebar entry outside Branding and
   is available to every authenticated user without a Branding capability grant.

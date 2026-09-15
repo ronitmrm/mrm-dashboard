@@ -9,9 +9,21 @@ per document, with its published metadata and PDF. Unissued documents, draft
 changes, and history are not shown. A revision draft does not replace the current
 published version. Branding remains the authoring and retained-history workspace.
 
-- SOPs and policies have a cover page, automatic index with actual page numbers,
-  and ordered topics (heading/body). Each topic starts on a fresh page; long bodies
-  continue across pages. Each selected language gets its own cover/index/content.
+- SOPs and policies share one format: cover, document details, automatic index,
+  then continuously flowing numbered headings and nested subheadings. Each language
+  has its own book. The cover is unnumbered; details starts at printed page 1.
+  Headings may have body text, child headings, or both. Subheading groups support
+  hierarchical, local or no numbering; authors choose which subheadings appear in
+  the index. Index references use rendered printed page numbers. A heading can
+  explicitly start a new page; short sections otherwise share pages.
+  Bodies and introductions support paragraphs, bold/italic/underline, bullet and
+  numbered lists with independently styled nested lists. List numbering continues
+  across page breaks. Details include prepared-by text and optional printed
+  issued/reviewed/approved-by names and designations; these are author-entered
+  attributions, not an approval workflow. The revision remains the version.
+  The Sales & Marketing Procedure reference (2026-09-15) governs the cream cover
+  with green frame, green headings, black body and compact header/footer. Existing
+  issued PDFs remain frozen. Existing draft plain text remains editable.
 - Work Instructions use MRM-WI-0001 numbering and the same single-issue lifecycle
   as notices. They contain multiple ordered heading/body sections, no cover or
   index, and must fit one A4 page including all selected languages. The editor starts

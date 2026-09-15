@@ -5,6 +5,8 @@ import {
   parseBrandingContent,
   revisionLabel,
   validateBrandingIssue,
+  brandingOutline,
+  brandingRichTextHtml,
 } from "@workspace/db/branding-domain"
 import { brandingHtml, escapeBrandingHtml } from "./pdf"
 
@@ -34,6 +36,128 @@ const content = {
   ],
 }
 describe("Branding issue contract", () => {
+  it("round-trips nested SOP/Policy headings and independently numbered and bulleted bodies", () => {
+    const paragraph = (text: string) => ({
+      type: "paragraph",
+      content: [{ type: "text", text, marks: [{ type: "bold" }] }],
+    })
+    const richBody = {
+      type: "doc",
+      content: [
+        {
+          type: "orderedList",
+          attrs: { start: 8 },
+          content: [
+            {
+              type: "listItem",
+              content: [
+                paragraph("Coordinate internally:"),
+                {
+                  type: "bulletList",
+                  content: [
+                    {
+                      type: "listItem",
+                      content: [paragraph("Purchase & Production")],
+                    },
+                  ],
+                },
+              ],
+            },
+            { type: "listItem", content: [paragraph("Next responsibility")] },
+          ],
+        },
+      ],
+    }
+    const draft = {
+      ...content,
+      languages: ["en"],
+      translations: [
+        {
+          language: "en",
+          title: "Procedure",
+          details: {
+            introduction: {
+              type: "doc",
+              content: [paragraph("About this document")],
+            },
+            preparedBy: "Sales",
+            attributions: [],
+          },
+          sections: [
+            {
+              heading: "Input & Output",
+              body: "",
+              childNumbering: "local",
+              children: [
+                {
+                  heading: "Input",
+                  body: "Legacy plain text",
+                  includeInIndex: false,
+                },
+              ],
+            },
+            {
+              heading: "Responsibilities",
+              body: "ignored derived text",
+              richBody,
+              pageBreakBefore: true,
+            },
+          ],
+        },
+      ],
+    }
+    const parsed = parseBrandingContent(draft, "sop")
+    expect(
+      parseBrandingContent(JSON.parse(JSON.stringify(parsed)), "sop")
+    ).toEqual(parsed)
+    expect(parseBrandingContent(draft, "policy").translations).toEqual(
+      parsed.translations
+    )
+    expect(() => validateBrandingIssue(parsed, 0)).not.toThrow()
+    const outline = brandingOutline(parsed.translations[0]!.sections)
+    expect(outline.map(({ label }) => label)).toEqual([
+      "1. Input & Output",
+      "1. Input",
+      "2. Responsibilities",
+    ])
+    expect(outline[1]!.section.body).toBe("Legacy plain text")
+    expect(outline[1]!.section.includeInIndex).toBe(false)
+    const section = outline[2]!.section
+    expect(section.body).toBe(
+      "Coordinate internally:\nPurchase & Production\nNext responsibility"
+    )
+    expect(section.pageBreakBefore).toBe(true)
+    expect(brandingRichTextHtml(section.richBody!)).toBe(
+      '<ol start="8"><li><p><strong>Coordinate internally:</strong></p><ul><li><p><strong>Purchase &amp; Production</strong></p></li></ul></li><li><p><strong>Next responsibility</strong></p></li></ol>'
+    )
+  })
+  it("rejects unsupported rich-text nodes at the save boundary", () => {
+    expect(() =>
+      parseBrandingContent(
+        {
+          ...content,
+          languages: ["en"],
+          translations: [
+            {
+              language: "en",
+              title: "Policy",
+              sections: [
+                {
+                  heading: "Purpose",
+                  body: "",
+                  richBody: {
+                    type: "doc",
+                    content: [{ type: "script", text: "alert(1)" }],
+                  },
+                },
+              ],
+            },
+          ],
+        },
+        "policy"
+      )
+    ).toThrow("Unsupported document text format")
+  })
   it("retains three-language content with independent numbers and no notice revision label", async () => {
     const parsed = parseBrandingContent(content, "notice")
     expect(() => validateBrandingIssue(parsed, 1)).not.toThrow()

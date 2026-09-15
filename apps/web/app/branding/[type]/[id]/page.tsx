@@ -1,3 +1,4 @@
+import { BrandingBookContent } from "@/components/branding/book-content"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import { ArrowLeft, FileText } from "lucide-react"
@@ -186,39 +187,45 @@ export default async function BrandingDocumentPage({
           {selected.content.translations.map((translation) => (
             <FormSection key={translation.language} title={translation.title}>
               <div lang={translation.language} className="grid gap-4">
-                {translation.sections.map((section, index) => (
-                  <section key={index}>
-                    {section.layout === "visual-guide" ? (
-                      <p className="mb-2 text-sm font-medium">
-                        {section.assessment === "bad"
-                          ? "Bad · fixed red cross"
-                          : "Good · fixed green tick"}
+                {type === "sop" || type === "policy" ? (
+                  <BrandingBookContent translation={translation} />
+                ) : (
+                  translation.sections.map((section, index) => (
+                    <section key={index}>
+                      {section.layout === "visual-guide" ? (
+                        <p className="mb-2 text-sm font-medium">
+                          {section.assessment === "bad"
+                            ? "Bad · fixed red cross"
+                            : "Good · fixed green tick"}
+                        </p>
+                      ) : section.layout && section.layout !== "text" ? (
+                        <p className="mb-2 text-sm font-medium">
+                          Step{" "}
+                          {brandingStepNumber(translation.language, index + 1)}
+                        </p>
+                      ) : null}
+                      {section.picture ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- Bounded private document picture.
+                        <img
+                          src={section.picture}
+                          alt={
+                            section.heading ||
+                            `Picture for step ${brandingStepNumber(translation.language, index + 1)}`
+                          }
+                          className="mb-2 max-h-64 max-w-full rounded-md border object-contain"
+                        />
+                      ) : null}
+                      {section.heading ? (
+                        <h3 className="mb-2 font-semibold">
+                          {section.heading}
+                        </h3>
+                      ) : null}
+                      <p className="text-sm break-words whitespace-pre-wrap">
+                        {section.body}
                       </p>
-                    ) : section.layout && section.layout !== "text" ? (
-                      <p className="mb-2 text-sm font-medium">
-                        Step{" "}
-                        {brandingStepNumber(translation.language, index + 1)}
-                      </p>
-                    ) : null}
-                    {section.picture ? (
-                      // eslint-disable-next-line @next/next/no-img-element -- Bounded private document picture.
-                      <img
-                        src={section.picture}
-                        alt={
-                          section.heading ||
-                          `Picture for step ${brandingStepNumber(translation.language, index + 1)}`
-                        }
-                        className="mb-2 max-h-64 max-w-full rounded-md border object-contain"
-                      />
-                    ) : null}
-                    {section.heading ? (
-                      <h3 className="mb-2 font-semibold">{section.heading}</h3>
-                    ) : null}
-                    <p className="text-sm break-words whitespace-pre-wrap">
-                      {section.body}
-                    </p>
-                  </section>
-                ))}
+                    </section>
+                  ))
+                )}
               </div>
             </FormSection>
           ))}

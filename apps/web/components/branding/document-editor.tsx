@@ -1,5 +1,6 @@
 "use client"
 import { useState, useTransition } from "react"
+import dynamic from "next/dynamic"
 import { useRouter } from "next/navigation"
 import { Save } from "lucide-react"
 import {
@@ -31,6 +32,8 @@ import {
 } from "@/components/ui/golden-patterns"
 import { saveBrandingDraft } from "@/app/branding/actions"
 
+const BrandingBookEditor = dynamic(() => import("./book-editor"))
+
 function visualGuidePair(sections: BrandingSection[] = []): BrandingSection[] {
   return (["bad", "good"] as const).map((assessment, index) => {
     const existing =
@@ -57,6 +60,7 @@ export function BrandingDocumentEditor({
   version?: number
   initial?: BrandingContent
 }) {
+  const book = type === "sop" || type === "policy"
   const router = useRouter()
   const [content, setContent] = useState<BrandingContent>(() => {
     const base: BrandingContent = initial ?? {
@@ -70,19 +74,27 @@ export function BrandingDocumentEditor({
       translations: [],
       changeReason: "",
     }
-    if (type !== "work-instruction") return base
+    if (type === "notice") return base
     return {
       ...base,
       translations: base.languages.map((language) => {
         const existing = base.translations.find(
           (entry) => entry.language === language
         )
+        const sourceSections = book
+          ? brandingFields[type]
+              .filter((field) => base.inputs[field]?.trim())
+              .map((field) => ({ heading: field, body: base.inputs[field]! }))
+          : []
         return {
+          ...existing,
           language,
-          title: base.title,
+          title: existing?.title ?? base.title,
           sections: existing?.sections.length
             ? existing.sections
-            : [{ heading: "", body: "" }],
+            : sourceSections.length
+              ? sourceSections
+              : [{ heading: "", body: "" }],
         }
       }),
     }
@@ -101,7 +113,7 @@ export function BrandingDocumentEditor({
         : current.languages.filter((value) => value !== language),
       translations:
         checked &&
-        type === "work-instruction" &&
+        type !== "notice" &&
         !current.translations.some((entry) => entry.language === language)
           ? [
               ...current.translations,
@@ -137,7 +149,7 @@ export function BrandingDocumentEditor({
   }
   return (
     <form
-      className="grid w-full min-w-0 max-w-5xl gap-5"
+      className="grid w-full max-w-5xl min-w-0 gap-5"
       onSubmit={(event) => {
         event.preventDefault()
         setError("")
@@ -252,7 +264,7 @@ export function BrandingDocumentEditor({
             </fieldset>
           </FormGrid>
         </FormSection>
-        {type !== "work-instruction" ? (
+        {type === "notice" ? (
           <FormSection
             title="Source text"
             description="Enter your facts in normal text. Use Not applicable where a section does not apply."
@@ -288,12 +300,14 @@ export function BrandingDocumentEditor({
               ? visualGuide
                 ? "Visual Guide is locked to Bad Picture + Bad Text and Good Picture + Good Text for each language."
                 : "Choose a format for each section, then add its heading, body and picture where required."
-              : "Review each selected language before saving and issuing. Copy Source copies your text without translating it."
+              : book
+                ? "Review each selected language before saving and issuing."
+                : "Review each selected language before saving and issuing. Copy Source copies your text without translating it."
           }
         >
           <p className="mb-4 text-sm text-muted-foreground">
             {type === "sop" || type === "policy"
-              ? "The PDF adds a cover and an automatic index for each selected language. Add topics below in reading order; each topic begins on a new page."
+              ? "Each language has a cover, details page, automatic index and flowing content. Add headings and subheadings below; choose bullets or numbering within each body."
               : type === "work-instruction"
                 ? "The section count sets the picture and text-box sizes on one page. Fonts shrink inside those fixed boxes. Review the draft PDF and edit the text if needed."
                 : "The notice prints your section headings and bodies in the reference layout. Use one heading/body per language for a simple notice. Titles stay in the register. The assigned notice number prints at the top-right. Preserve any required line breaks; all content must fit one page."}
@@ -342,222 +356,265 @@ export function BrandingDocumentEditor({
                           />
                         </div>
                       ) : null}
-                      {translation.sections.map((section, index) => (
-                        <div className="grid gap-2" key={index}>
-                          {!visualGuide ? (
-                            <div className="flex gap-2">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                disabled={index === 0}
-                                aria-label={`Move section ${index + 1} up`}
-                                onClick={() => {
-                                  const sections = [...translation.sections]
-                                  ;[sections[index - 1], sections[index]] = [
-                                    sections[index]!,
-                                    sections[index - 1]!,
-                                  ]
-                                  updateTranslation({ sections })
-                                }}
-                              >
-                                Move Up
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                disabled={
-                                  index === translation.sections.length - 1
-                                }
-                                aria-label={`Move section ${index + 1} down`}
-                                onClick={() => {
-                                  const sections = [...translation.sections]
-                                  ;[sections[index], sections[index + 1]] = [
-                                    sections[index + 1]!,
-                                    sections[index]!,
-                                  ]
-                                  updateTranslation({ sections })
-                                }}
-                              >
-                                Move Down
-                              </Button>
-                            </div>
-                          ) : null}
-                          {type === "work-instruction" ? (
-                            <>
+                      {book ? (
+                        <BrandingBookEditor
+                          translation={translation}
+                          onChange={updateTranslation}
+                          disabled={pending}
+                        />
+                      ) : (
+                        <>
+                          {translation.sections.map((section, index) => (
+                            <div className="grid gap-2" key={index}>
                               {!visualGuide ? (
-                                <>
-                                  <Label
-                                    htmlFor={`format-${language}-${index}`}
-                                  >
-                                    Format {index + 1}
-                                  </Label>
-                                  <NativeSelect
-                                    id={`format-${language}-${index}`}
-                                    value={section.layout ?? "text"}
-                                    onChange={(event) => {
-                                      if (
-                                        event.target.value === "visual-guide"
-                                      ) {
-                                        if (
-                                          content.translations.some(
-                                            (entry) => entry.sections.length > 2
-                                          )
-                                        ) {
-                                          setError(
-                                            "Visual Guide has two fixed entries. Keep at most two sections per language before selecting it."
-                                          )
-                                          return
-                                        }
-                                        setError("")
-                                        setContent((current) => ({
-                                          ...current,
-                                          translations:
-                                            current.translations.map(
-                                              (entry) => ({
-                                                ...entry,
-                                                sections: visualGuidePair(
-                                                  entry.sections
-                                                ),
-                                              })
-                                            ),
-                                        }))
-                                        return
-                                      }
-                                      updateTranslation({
-                                        sections: translation.sections.map(
-                                          (entry, at) =>
-                                            at === index
-                                              ? {
-                                                  ...entry,
-                                                  layout: event.target
-                                                    .value as WorkInstructionLayout,
-                                                  ...(event.target.value ===
-                                                  "text"
-                                                    ? { picture: undefined }
-                                                    : {}),
-                                                }
-                                              : entry
-                                        ),
-                                      })
+                                <div className="flex gap-2">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    disabled={index === 0}
+                                    aria-label={`Move section ${index + 1} up`}
+                                    onClick={() => {
+                                      const sections = [...translation.sections]
+                                      ;[sections[index - 1], sections[index]] =
+                                        [sections[index]!, sections[index - 1]!]
+                                      updateTranslation({ sections })
                                     }}
                                   >
-                                    <NativeSelectOption value="text">
-                                      Heading + body
-                                    </NativeSelectOption>
-                                    <NativeSelectOption value="text-on-picture">
-                                      Text on picture
-                                    </NativeSelectOption>
-                                    <NativeSelectOption value="picture-left">
-                                      Picture left + body right
-                                    </NativeSelectOption>
-                                    <NativeSelectOption value="visual-guide">
-                                      Visual guide · Good / Bad
-                                    </NativeSelectOption>
-                                  </NativeSelect>
-                                </>
-                              ) : (
-                                <p className="text-sm font-medium">
-                                  Visual Guide -{" "}
-                                  {section.assessment === "bad"
-                                    ? "Bad - fixed red cross"
-                                    : "Good - fixed green tick"}
-                                </p>
-                              )}
-                              {section.layout && section.layout !== "text" ? (
-                                <>
-                                  {section.layout !== "visual-guide" ? (
-                                    <p className="text-sm text-muted-foreground">
-                                      Step{" "}
-                                      {brandingStepNumber(language, index + 1)}{" "}
-                                      · Numbered automatically. Heading is
-                                      optional.
-                                    </p>
-                                  ) : null}
-                                  <Label
-                                    htmlFor={`picture-${language}-${index}`}
-                                  >
-                                    {visualGuide
-                                      ? `${section.assessment === "bad" ? "Bad" : "Good"} Picture`
-                                      : `Picture ${index + 1}`}
-                                  </Label>
-                                  <Input
-                                    id={`picture-${language}-${index}`}
-                                    type="file"
-                                    accept="image/jpeg,image/png,image/webp"
-                                    onChange={async (event) => {
-                                      const file = event.target.files?.[0]
-                                      event.target.value = ""
-                                      if (!file) return
-                                      setPicturePending(true)
-                                      setError("")
-                                      try {
-                                        const picture =
-                                          await prepareBrandingPicture(file)
-                                        updateTranslation({
-                                          sections: translation.sections.map(
-                                            (entry, at) =>
-                                              at === index
-                                                ? { ...entry, picture }
-                                                : entry
-                                          ),
-                                        })
-                                      } catch (error) {
-                                        setError(
-                                          error instanceof Error
-                                            ? error.message
-                                            : "The picture could not be loaded."
-                                        )
-                                      } finally {
-                                        setPicturePending(false)
-                                      }
+                                    Move Up
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    disabled={
+                                      index === translation.sections.length - 1
+                                    }
+                                    aria-label={`Move section ${index + 1} down`}
+                                    onClick={() => {
+                                      const sections = [...translation.sections]
+                                      ;[sections[index], sections[index + 1]] =
+                                        [sections[index + 1]!, sections[index]!]
+                                      updateTranslation({ sections })
                                     }}
-                                  />
-                                  {section.picture ? (
+                                  >
+                                    Move Down
+                                  </Button>
+                                </div>
+                              ) : null}
+                              {type === "work-instruction" ? (
+                                <>
+                                  {!visualGuide ? (
                                     <>
-                                      {/* eslint-disable-next-line @next/next/no-img-element -- Bounded private data URL; no image optimizer request. */}
-                                      <img
-                                        src={section.picture}
-                                        alt={`Picture for section ${index + 1}`}
-                                        className="max-h-48 max-w-full rounded-md border object-contain"
-                                      />
-                                      <Button
-                                        type="button"
-                                        variant="ghost"
-                                        className="w-fit"
-                                        onClick={() =>
+                                      <Label
+                                        htmlFor={`format-${language}-${index}`}
+                                      >
+                                        Format {index + 1}
+                                      </Label>
+                                      <NativeSelect
+                                        id={`format-${language}-${index}`}
+                                        value={section.layout ?? "text"}
+                                        onChange={(event) => {
+                                          if (
+                                            event.target.value ===
+                                            "visual-guide"
+                                          ) {
+                                            if (
+                                              content.translations.some(
+                                                (entry) =>
+                                                  entry.sections.length > 2
+                                              )
+                                            ) {
+                                              setError(
+                                                "Visual Guide has two fixed entries. Keep at most two sections per language before selecting it."
+                                              )
+                                              return
+                                            }
+                                            setError("")
+                                            setContent((current) => ({
+                                              ...current,
+                                              translations:
+                                                current.translations.map(
+                                                  (entry) => ({
+                                                    ...entry,
+                                                    sections: visualGuidePair(
+                                                      entry.sections
+                                                    ),
+                                                  })
+                                                ),
+                                            }))
+                                            return
+                                          }
                                           updateTranslation({
                                             sections: translation.sections.map(
                                               (entry, at) =>
                                                 at === index
                                                   ? {
                                                       ...entry,
-                                                      picture: undefined,
+                                                      layout: event.target
+                                                        .value as WorkInstructionLayout,
+                                                      ...(event.target.value ===
+                                                      "text"
+                                                        ? { picture: undefined }
+                                                        : {}),
                                                     }
                                                   : entry
                                             ),
                                           })
-                                        }
+                                        }}
                                       >
-                                        Remove Picture
-                                      </Button>
+                                        <NativeSelectOption value="text">
+                                          Heading + body
+                                        </NativeSelectOption>
+                                        <NativeSelectOption value="text-on-picture">
+                                          Text on picture
+                                        </NativeSelectOption>
+                                        <NativeSelectOption value="picture-left">
+                                          Picture left + body right
+                                        </NativeSelectOption>
+                                        <NativeSelectOption value="visual-guide">
+                                          Visual guide · Good / Bad
+                                        </NativeSelectOption>
+                                      </NativeSelect>
+                                    </>
+                                  ) : (
+                                    <p className="text-sm font-medium">
+                                      Visual Guide -{" "}
+                                      {section.assessment === "bad"
+                                        ? "Bad - fixed red cross"
+                                        : "Good - fixed green tick"}
+                                    </p>
+                                  )}
+                                  {section.layout &&
+                                  section.layout !== "text" ? (
+                                    <>
+                                      {section.layout !== "visual-guide" ? (
+                                        <p className="text-sm text-muted-foreground">
+                                          Step{" "}
+                                          {brandingStepNumber(
+                                            language,
+                                            index + 1
+                                          )}{" "}
+                                          · Numbered automatically. Heading is
+                                          optional.
+                                        </p>
+                                      ) : null}
+                                      <Label
+                                        htmlFor={`picture-${language}-${index}`}
+                                      >
+                                        {visualGuide
+                                          ? `${section.assessment === "bad" ? "Bad" : "Good"} Picture`
+                                          : `Picture ${index + 1}`}
+                                      </Label>
+                                      <Input
+                                        id={`picture-${language}-${index}`}
+                                        type="file"
+                                        accept="image/jpeg,image/png,image/webp"
+                                        onChange={async (event) => {
+                                          const file = event.target.files?.[0]
+                                          event.target.value = ""
+                                          if (!file) return
+                                          setPicturePending(true)
+                                          setError("")
+                                          try {
+                                            const picture =
+                                              await prepareBrandingPicture(file)
+                                            updateTranslation({
+                                              sections:
+                                                translation.sections.map(
+                                                  (entry, at) =>
+                                                    at === index
+                                                      ? { ...entry, picture }
+                                                      : entry
+                                                ),
+                                            })
+                                          } catch (error) {
+                                            setError(
+                                              error instanceof Error
+                                                ? error.message
+                                                : "The picture could not be loaded."
+                                            )
+                                          } finally {
+                                            setPicturePending(false)
+                                          }
+                                        }}
+                                      />
+                                      {section.picture ? (
+                                        <>
+                                          {/* eslint-disable-next-line @next/next/no-img-element -- Bounded private data URL; no image optimizer request. */}
+                                          <img
+                                            src={section.picture}
+                                            alt={`Picture for section ${index + 1}`}
+                                            className="max-h-48 max-w-full rounded-md border object-contain"
+                                          />
+                                          <Button
+                                            type="button"
+                                            variant="ghost"
+                                            className="w-fit"
+                                            onClick={() =>
+                                              updateTranslation({
+                                                sections:
+                                                  translation.sections.map(
+                                                    (entry, at) =>
+                                                      at === index
+                                                        ? {
+                                                            ...entry,
+                                                            picture: undefined,
+                                                          }
+                                                        : entry
+                                                  ),
+                                              })
+                                            }
+                                          >
+                                            Remove Picture
+                                          </Button>
+                                        </>
+                                      ) : null}
                                     </>
                                   ) : null}
                                 </>
                               ) : null}
-                            </>
-                          ) : null}
-                          {!visualGuide ? (
-                            <>
-                              <Label htmlFor={`heading-${language}-${index}`}>
-                                {type === "work-instruction"
-                                  ? `Heading ${index + 1}${section.layout && section.layout !== "text" ? " (optional)" : ""}`
-                                  : `Section ${index + 1} heading`}
+                              {!visualGuide ? (
+                                <>
+                                  <Label
+                                    htmlFor={`heading-${language}-${index}`}
+                                  >
+                                    {type === "work-instruction"
+                                      ? `Heading ${index + 1}${section.layout && section.layout !== "text" ? " (optional)" : ""}`
+                                      : `Section ${index + 1} heading`}
+                                  </Label>
+                                  <Input
+                                    id={`heading-${language}-${index}`}
+                                    lang={language}
+                                    maxLength={200}
+                                    value={section.heading}
+                                    onChange={(event) =>
+                                      updateTranslation({
+                                        sections: translation.sections.map(
+                                          (entry, at) =>
+                                            at === index
+                                              ? {
+                                                  ...entry,
+                                                  heading: event.target.value,
+                                                }
+                                              : entry
+                                        ),
+                                      })
+                                    }
+                                  />
+                                </>
+                              ) : null}
+                              <Label htmlFor={`body-${language}-${index}`}>
+                                {visualGuide
+                                  ? `${section.assessment === "bad" ? "Bad" : "Good"} Text`
+                                  : type === "work-instruction"
+                                    ? `Body ${index + 1}`
+                                    : `Section ${index + 1} text`}
                               </Label>
-                              <Input
-                                id={`heading-${language}-${index}`}
+                              <Textarea
+                                id={`body-${language}-${index}`}
                                 lang={language}
-                                maxLength={200}
-                                value={section.heading}
+                                rows={5}
+                                maxLength={12000}
+                                value={section.body}
                                 onChange={(event) =>
                                   updateTranslation({
                                     sections: translation.sections.map(
@@ -565,87 +622,63 @@ export function BrandingDocumentEditor({
                                         at === index
                                           ? {
                                               ...entry,
-                                              heading: event.target.value,
+                                              body: event.target.value,
                                             }
                                           : entry
                                     ),
                                   })
                                 }
                               />
-                            </>
-                          ) : null}
-                          <Label htmlFor={`body-${language}-${index}`}>
-                            {visualGuide
-                              ? `${section.assessment === "bad" ? "Bad" : "Good"} Text`
-                              : type === "work-instruction"
-                                ? `Body ${index + 1}`
-                                : `Section ${index + 1} text`}
-                          </Label>
-                          <Textarea
-                            id={`body-${language}-${index}`}
-                            lang={language}
-                            rows={5}
-                            maxLength={12000}
-                            value={section.body}
-                            onChange={(event) =>
-                              updateTranslation({
-                                sections: translation.sections.map(
-                                  (entry, at) =>
-                                    at === index
-                                      ? { ...entry, body: event.target.value }
-                                      : entry
-                                ),
-                              })
-                            }
-                          />
+                              {!visualGuide ? (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  className="w-fit"
+                                  disabled={
+                                    type === "work-instruction" &&
+                                    translation.sections.length === 1
+                                  }
+                                  aria-label={`Remove ${brandingLanguageLabels[language]} section ${index + 1}`}
+                                  onClick={() =>
+                                    updateTranslation({
+                                      sections: translation.sections.filter(
+                                        (_, at) => at !== index
+                                      ),
+                                    })
+                                  }
+                                >
+                                  {type === "work-instruction"
+                                    ? "Remove Section"
+                                    : "Remove Section"}
+                                </Button>
+                              ) : null}
+                            </div>
+                          ))}
                           {!visualGuide ? (
                             <Button
                               type="button"
-                              variant="ghost"
+                              variant="outline"
                               className="w-fit"
-                              disabled={
-                                type === "work-instruction" &&
-                                translation.sections.length === 1
-                              }
-                              aria-label={`Remove ${brandingLanguageLabels[language]} section ${index + 1}`}
+                              disabled={translation.sections.length >= 20}
                               onClick={() =>
                                 updateTranslation({
-                                  sections: translation.sections.filter(
-                                    (_, at) => at !== index
-                                  ),
+                                  sections: [
+                                    ...translation.sections,
+                                    {
+                                      heading: "",
+                                      body: "",
+                                    },
+                                  ],
                                 })
                               }
                             >
                               {type === "work-instruction"
-                                ? "Remove Section"
-                                : "Remove Section"}
+                                ? "Add Section"
+                                : "Add Section"}
                             </Button>
                           ) : null}
-                        </div>
-                      ))}
-                      {!visualGuide ? (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="w-fit"
-                          disabled={translation.sections.length >= 20}
-                          onClick={() =>
-                            updateTranslation({
-                              sections: [
-                                ...translation.sections,
-                                {
-                                  heading: "",
-                                  body: "",
-                                },
-                              ],
-                            })
-                          }
-                        >
-                          {type === "work-instruction"
-                            ? "Add Section"
-                            : "Add Section"}
-                        </Button>
-                      ) : null}
+                        </>
+                      )}
                     </>
                   ) : (
                     <Button

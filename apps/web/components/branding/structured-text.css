@@ -1,0 +1,31 @@
+.branding-prose {
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+}
+.branding-prose p {
+  margin: 0 0 0.65em;
+  white-space: pre-wrap;
+}
+.branding-prose ul,
+.branding-prose ol {
+  padding-left: 1.75em;
+  margin: 0.5em 0;
+}
+.branding-prose ul {
+  list-style-type: disc;
+}
+.branding-prose ol {
+  list-style-type: decimal;
+}
+.branding-prose li > p {
+  margin-bottom: 0.25em;
+}
+.branding-prose strong {
+  font-weight: 700;
+}
+.branding-prose em {
+  font-style: italic;
+}
+.branding-prose u {
+  text-decoration: underline;
+}
