@@ -77,3 +77,5 @@ Branding contains SOPs, Notices, Policies, and Work Instructions. Safety signage
   the agreed cover/index/topic structure for SOPs and policies.
 - Per-type View and Save/Issue capabilities govern pages, actions and PDFs.
   There is no anonymous PDF delivery or automatic distribution.
+
+- Visual Guide has exactly two fixed entries per selected language: Bad Picture/Bad Text and Good Picture/Good Text. Symbols, order and format are locked; only pictures and captions are editable. It cannot mix with other Work Instruction formats.

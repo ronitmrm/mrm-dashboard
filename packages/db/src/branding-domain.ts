@@ -185,6 +185,21 @@ export function parseBrandingContent(
     sections.some((section) => section.layout || section.picture)
   )
     throw new Error("Picture formats are only available for Work Instructions.")
+  if (
+    sections.some((section) => section.layout === "visual-guide") &&
+    translations.some(
+      ({ sections }) =>
+        sections.length !== 2 ||
+        sections[0]?.assessment !== "bad" ||
+        sections[1]?.assessment !== "good" ||
+        sections.some(
+          (section) => section.layout !== "visual-guide" || section.heading
+        )
+    )
+  )
+    throw new Error(
+      "Visual Guide requires exactly one fixed Bad and Good picture/text pair per language, without headings or other formats."
+    )
   if (sections.filter((section) => section.picture).length > 20)
     throw new Error("A Work Instruction supports up to 20 pictures.")
   if (

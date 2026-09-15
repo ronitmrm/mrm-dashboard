@@ -99,6 +99,18 @@ describe("Branding issue contract", () => {
       "work-instruction"
     )
     expect(() => validateBrandingIssue(parsed, 0)).not.toThrow()
+    expect(() =>
+      parseBrandingContent(
+        {
+          ...parsed,
+          translations: parsed.translations.map((entry) => ({
+            ...entry,
+            sections: entry.sections.slice(0, 1),
+          })),
+        },
+        "work-instruction"
+      )
+    ).toThrow("exactly one fixed Bad and Good")
     const result = await brandingHtml({
       content: parsed,
       type: "work-instruction",
