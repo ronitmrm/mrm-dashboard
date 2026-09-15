@@ -2,6 +2,7 @@
 
 import {
   Children,
+  Fragment,
   useEffect,
   useRef,
   useState,
@@ -363,6 +364,24 @@ export function UnifiedSidebarNavigation({
     window.dispatchEvent(new Event(stateChangedEvent))
   }
 
+  const publishedRegisterItems = filterNavigationItems(
+    publishedRegisterNavigation,
+    normalizedMenuSearch,
+    "published documents registers"
+  ).map((item) => (
+    <SidebarMenuItem key={item.href}>
+      <SidebarMenuButton
+        asChild
+        isActive={navigationHrefMatches(pathname, searchParams, item.href)}
+      >
+        <a href={item.href}>
+          <item.icon aria-hidden="true" />
+          <span>{item.label}</span>
+        </a>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  ))
+
   return (
     <>
       <div className="sticky top-0 z-10 bg-sidebar px-3 pt-1 pb-2">
@@ -611,30 +630,6 @@ export function UnifiedSidebarNavigation({
         </NavigationSection>
       ) : null}
 
-      <SidebarMenu>
-        {filterNavigationItems(
-          publishedRegisterNavigation,
-          normalizedMenuSearch,
-          "published documents registers"
-        ).map((item) => (
-          <SidebarMenuItem key={item.href}>
-            <SidebarMenuButton
-              asChild
-              isActive={navigationHrefMatches(
-                pathname,
-                searchParams,
-                item.href
-              )}
-            >
-              <a href={item.href}>
-                <item.icon aria-hidden="true" />
-                <span>{item.label}</span>
-              </a>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        ))}
-      </SidebarMenu>
-
       {filteredBrandingNavigation.length ? (
         <NavigationSection
           icon={Palette}
@@ -747,40 +742,51 @@ export function UnifiedSidebarNavigation({
         )
       })}
 
+      {!filteredUniversalProductionNavigation.some(
+        (item) => item.id === "productionDashboardTab"
+      ) ? (
+        <SidebarMenu>{publishedRegisterItems}</SidebarMenu>
+      ) : null}
+
       {filteredUniversalProductionNavigation.length ? (
         <SidebarGroup className="px-3 py-0.5">
           <SidebarGroupContent>
             <SidebarMenu>
               {filteredUniversalProductionNavigation.map((item) => (
-                <SidebarMenuItem key={item.id}>
-                  <SidebarMenuButton
-                    asChild
-                    className={topLevelButtonClassName}
-                    isActive={activeDashboardTab === item.id}
-                  >
-                    {onDashboardTabSelect ? (
-                      <button
-                        onClick={() =>
-                          onDashboardTabSelect(item.id, activeProductionFloor)
-                        }
-                        type="button"
-                      >
-                        <item.icon aria-hidden="true" />
-                        <span>{item.title}</span>
-                      </button>
-                    ) : (
-                      <a
-                        href={universalProductionNavigationHref(
-                          item.id,
-                          activeProductionFloor
-                        )}
-                      >
-                        <item.icon aria-hidden="true" />
-                        <span>{item.title}</span>
-                      </a>
-                    )}
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
+                <Fragment key={item.id}>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      asChild
+                      className={topLevelButtonClassName}
+                      isActive={activeDashboardTab === item.id}
+                    >
+                      {onDashboardTabSelect ? (
+                        <button
+                          onClick={() =>
+                            onDashboardTabSelect(item.id, activeProductionFloor)
+                          }
+                          type="button"
+                        >
+                          <item.icon aria-hidden="true" />
+                          <span>{item.title}</span>
+                        </button>
+                      ) : (
+                        <a
+                          href={universalProductionNavigationHref(
+                            item.id,
+                            activeProductionFloor
+                          )}
+                        >
+                          <item.icon aria-hidden="true" />
+                          <span>{item.title}</span>
+                        </a>
+                      )}
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  {item.id === "productionDashboardTab"
+                    ? publishedRegisterItems
+                    : null}
+                </Fragment>
               ))}
             </SidebarMenu>
           </SidebarGroupContent>
