@@ -58,6 +58,7 @@ export const workInstructionLayouts = [
   "text",
   "text-on-picture",
   "picture-left",
+  "visual-guide",
 ] as const
 export type WorkInstructionLayout = (typeof workInstructionLayouts)[number]
 export const brandingPictureMaxLength = 400000
@@ -66,6 +67,7 @@ export type BrandingSection = {
   body: string
   layout?: WorkInstructionLayout
   picture?: string
+  assessment?: "good" | "bad"
 }
 export type BrandingTranslation = {
   language: BrandingLanguage
@@ -123,6 +125,12 @@ export function parseBrandingTranslations(
             : workInstructionLayouts.find((layout) => layout === section.layout)
         if (section.layout !== undefined && !layout)
           throw new Error("Section format is invalid.")
+        if (
+          layout === "visual-guide" &&
+          section.assessment !== "good" &&
+          section.assessment !== "bad"
+        )
+          throw new Error("Choose Good or Bad for each visual guide picture.")
         const picture =
           section.picture === undefined
             ? undefined
@@ -137,6 +145,9 @@ export function parseBrandingTranslations(
           body: text(section.body, "Section"),
           ...(layout ? { layout } : {}),
           ...(picture && layout && layout !== "text" ? { picture } : {}),
+          ...(layout === "visual-guide"
+            ? { assessment: section.assessment as "good" | "bad" }
+            : {}),
         }
       }),
     }

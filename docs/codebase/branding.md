@@ -73,6 +73,12 @@ An all-`picture-left` document uses one column of equal-height rows, matching
 MRM-QA-015-093: 40% framed picture, 60% rounded green caption, automatic steps.
 Mixed layouts retain the existing count-based grid; captions never expand rows.
 
+WI v7 adds `visual-guide` sections with a validated `assessment` of `good` or `bad`.
+An all-visual document renders A4 landscape, full-width equal-height rows and
+uncropped comparison pictures. Tick/cross SVG paths and green/red colours are
+fixed in the renderer; captions remain editable and fit independently. Symbols
+replace step numbers in this layout and never depend on text or uploaded artwork.
+
 The text layout follows the Washing & Drying text poster. The editor
 normalizes each selected language to at least one heading/body pair, with one
 shared title synchronized on save. Source-copy fields are hidden only for WI.

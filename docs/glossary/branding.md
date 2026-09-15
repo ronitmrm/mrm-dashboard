@@ -15,8 +15,8 @@ Branding contains SOPs, Notices, Policies, and Work Instructions. Safety signage
   automatically fits the available space, with proportional headings. The author
   reviews the generated draft and shortens text if needed; small text does not
   block generation. Never expand to a second page.
-  Sections offer exactly three formats: heading/body, text on picture (a green
-  caption overlapping its lower edge), and picture left/body right. No picture-only
+  Sections offer four formats: heading/body, text on picture (a green
+  caption overlapping its lower edge), picture left/body right, and visual guide. No picture-only
   format exists. Picture sections form a count-based grid on one page (four use
   two columns and two rows). Every picture/caption box is fixed before fitting
   each caption's font; text length never increases its box. Mixed formats and
@@ -29,6 +29,11 @@ Branding contains SOPs, Notices, Policies, and Work Instructions. Safety signage
   When all sections use picture-left/body-right, follow the Weigh Scale Calibration
   reference: full-width stacked rows, approximately 40% picture and 60% green text
   box. The number of sections fixes equal row heights; captions fit independently.
+  An all-visual-guide document follows visual checking.pdf: one landscape page of
+  comparison rows, complete picture on the left, fixed red cross for Bad or green
+  tick for Good, and editable text in the matching colour. The author selects
+  Good/Bad; symbol artwork and colours cannot be edited. Visual rows replace step
+  numbers with symbols. Row count sets dimensions before fonts fit the text boxes.
 
 - Each type has an independent, organization-wide sequence: MRM-SOP-0001,
   MRM-NTC-0001, MRM-POL-0001. Numbers are assigned on first issue, never reused,

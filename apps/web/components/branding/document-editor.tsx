@@ -89,7 +89,19 @@ export function BrandingDocumentEditor({
               {
                 language,
                 title: current.title,
-                sections: [{ heading: "", body: "" }],
+                sections: [
+                  {
+                    heading: "",
+                    body: "",
+                    ...(current.translations[0]?.sections[0]?.layout ===
+                    "visual-guide"
+                      ? {
+                          layout: "visual-guide" as const,
+                          assessment: "good" as const,
+                        }
+                      : {}),
+                  },
+                ],
               },
             ]
           : current.translations.filter(
@@ -372,6 +384,14 @@ export function BrandingDocumentEditor({
                                               ...entry,
                                               layout: event.target
                                                 .value as WorkInstructionLayout,
+                                              ...(event.target.value ===
+                                              "visual-guide"
+                                                ? {
+                                                    assessment:
+                                                      entry.assessment ??
+                                                      "good",
+                                                  }
+                                                : {}),
                                               ...(event.target.value === "text"
                                                 ? { picture: undefined }
                                                 : {}),
@@ -390,14 +410,62 @@ export function BrandingDocumentEditor({
                                 <NativeSelectOption value="picture-left">
                                   Picture left + body right
                                 </NativeSelectOption>
+                                <NativeSelectOption value="visual-guide">
+                                  Visual guide · Good / Bad
+                                </NativeSelectOption>
                               </NativeSelect>
+                              {section.layout === "visual-guide" ? (
+                                <>
+                                  <Label
+                                    htmlFor={`assessment-${language}-${index}`}
+                                  >
+                                    Assessment {index + 1}
+                                  </Label>
+                                  <NativeSelect
+                                    id={`assessment-${language}-${index}`}
+                                    value={section.assessment ?? "good"}
+                                    onChange={(event) =>
+                                      updateTranslation({
+                                        sections: translation.sections.map(
+                                          (entry, at) =>
+                                            at === index
+                                              ? {
+                                                  ...entry,
+                                                  assessment:
+                                                    event.target.value === "bad"
+                                                      ? "bad"
+                                                      : "good",
+                                                }
+                                              : entry
+                                        ),
+                                      })
+                                    }
+                                  >
+                                    <NativeSelectOption value="good">
+                                      Good · fixed green tick
+                                    </NativeSelectOption>
+                                    <NativeSelectOption value="bad">
+                                      Bad · fixed red cross
+                                    </NativeSelectOption>
+                                  </NativeSelect>
+                                  <p className="text-sm text-muted-foreground">
+                                    The symbol and colour are fixed. Your
+                                    picture, heading and body are editable. Use
+                                    Visual Guide for all sections to create one
+                                    landscape page.
+                                  </p>
+                                </>
+                              ) : null}
                               {section.layout && section.layout !== "text" ? (
                                 <>
-                                  <p className="text-sm text-muted-foreground">
-                                    Step{" "}
-                                    {brandingStepNumber(language, index + 1)} ·
-                                    Numbered automatically. Heading is optional.
-                                  </p>
+                                  {section.layout !== "visual-guide" ? (
+                                    <p className="text-sm text-muted-foreground">
+                                      Step{" "}
+                                      {brandingStepNumber(language, index + 1)}{" "}
+                                      · Numbered automatically. Heading is
+                                      optional.
+                                    </p>
+                                  ) : null}
                                   <Label
                                     htmlFor={`picture-${language}-${index}`}
                                   >
@@ -547,7 +615,17 @@ export function BrandingDocumentEditor({
                           updateTranslation({
                             sections: [
                               ...translation.sections,
-                              { heading: "", body: "" },
+                              {
+                                heading: "",
+                                body: "",
+                                ...(translation.sections[0]?.layout ===
+                                "visual-guide"
+                                  ? {
+                                      layout: "visual-guide" as const,
+                                      assessment: "good" as const,
+                                    }
+                                  : {}),
+                              },
                             ],
                           })
                         }
