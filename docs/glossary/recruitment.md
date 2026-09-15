@@ -1,5 +1,13 @@
 # Recruitment
 
+## Creating a job from Employee Master
+
+Create Job first asks for a target date and an optional active Job Template.
+The selected template is copied into the new job's requirements; choosing No
+Template creates it without a template link. This does not change the Employee
+Master's template. Combined-role templates must belong to the selected combined
+role. Other job-entry paths retain their existing linked-template defaults.
+
 ## Approved Post Deletion
 
 An unassigned Approved Post outside a combined role may be deleted when all

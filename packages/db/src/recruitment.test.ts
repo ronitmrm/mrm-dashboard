@@ -970,6 +970,28 @@ describe("masters", () => {
 })
 
 describe("combined job templates", () => {
+  test("creates a job with the chosen template and target date, or explicitly no template", async () => {
+    const query = vi.fn(async (statement: string, _parameters?: readonly unknown[]) => {
+      void _parameters
+      if (statement.includes("SELECT selected.combined_role_id")) {
+        return { rows: [{ post_id: "post-1", combined_role_id: null }] }
+      }
+      if (statement.includes("FROM recruitment.job_posts job")) return { rows: [], rowCount: 0 }
+      if (statement.includes("SELECT id FROM recruitment.requirement_templates")) return { rows: [{ id: "template-1" }] }
+      if (statement.includes("INSERT INTO recruitment.job_posts")) return { rows: [{ id: "job-1" }] }
+      return { rows: [] }
+    })
+    const client = { query, release: vi.fn() } as unknown as PoolClient
+    const repository = createRecruitmentRepository({ pool: { connect: vi.fn(async () => client) } as unknown as Pool })
+    const input = { organizationId: "org-1", postId: "post-1", targetDate: "2026-10-01" }
+    await repository.createJobFromPost({ ...input, requirementTemplateCode: "JT-1" })
+    await repository.createJobFromPost({ ...input, requirementTemplateCode: "" })
+    const inserts = query.mock.calls.filter(([sql]) => sql.includes("INSERT INTO recruitment.job_posts"))
+    expect(inserts[0]?.[1]).toEqual(["2026-10-01", null, expect.any(String), "post-1", "org-1", true, "JT-1"])
+    expect(inserts[1]?.[1]?.slice(-2)).toEqual([true, null])
+    expect(query.mock.calls.find(([sql]) => sql.includes("SELECT id FROM recruitment.requirement_templates"))?.[1]).toEqual(["org-1", "JT-1", null])
+  })
+
   test("prefers the template explicitly selected on the combined posts", async () => {
     const postId = "00000000-0000-4000-8000-000000000001"
     const combinedRoleId = "00000000-0000-4000-8000-000000000002"

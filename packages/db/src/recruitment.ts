@@ -3207,7 +3207,11 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
     },
 
     async createJobFromPost(
-      input: MutationContext & { postId: string; targetDate?: string | null }
+      input: MutationContext & {
+        postId: string
+        targetDate?: string | null
+        requirementTemplateCode?: string | null
+      }
     ) {
       return transaction(pool, async (client) => {
         const target = await client.query<{
@@ -3266,6 +3270,19 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             "This approved post or combined job already has an open job."
           )
         }
+        const templateCode = optional(input.requirementTemplateCode)
+        if (templateCode) {
+          const template = await client.query(
+            `SELECT id FROM recruitment.requirement_templates
+             WHERE organization_id = $1 AND template_code = $2 AND active
+               AND (combined_role_id IS NULL OR combined_role_id = $3::uuid)
+             FOR SHARE`,
+            [input.organizationId, templateCode, targetPost.combined_role_id]
+          )
+          if (!template.rows[0]) {
+            throw new Error("Select an active job template for this post.")
+          }
+        }
         const result = await client.query<{ id: string }>(
           `
             INSERT INTO recruitment.job_posts (
@@ -3306,9 +3323,12 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
               WHERE candidate.organization_id = selected.organization_id
                 AND candidate.active
                 AND (
-                  candidate.id = post.requirement_template_id
-                  OR (combined.id IS NOT NULL
-                    AND candidate.combined_role_id = combined.id)
+                  ($6::boolean AND candidate.template_code = $7)
+                  OR (NOT $6::boolean AND (
+                    candidate.id = post.requirement_template_id
+                    OR (combined.id IS NOT NULL
+                      AND candidate.combined_role_id = combined.id)
+                  ))
                 )
               ORDER BY
                 (candidate.id = post.requirement_template_id) DESC NULLS LAST,
@@ -3333,6 +3353,8 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             randomUUID(),
             targetPost.post_id,
             input.organizationId,
+            input.requirementTemplateCode !== undefined,
+            templateCode,
           ]
         )
         if (!result.rows[0]) throw new Error("Approved post was not found.")

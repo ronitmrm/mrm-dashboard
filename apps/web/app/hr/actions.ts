@@ -375,6 +375,9 @@ export async function createJobAction(formData: FormData) {
       ...context,
       postId: value(formData, "post_id"),
       targetDate: value(formData, "target_date"),
+      requirementTemplateCode: formData.has("requirement_template_code")
+        ? value(formData, "requirement_template_code")
+        : undefined,
     })
   )
 }
