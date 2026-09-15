@@ -76,4 +76,62 @@ describe("Branding issue contract", () => {
     )
     expect(() => validateBrandingIssue(parsed, 0)).toThrow("Gujarati")
   })
+  it("retains four editable pictures and captions in a fixed two-by-two instruction grid", async () => {
+    const picture = "data:image/jpeg;base64,/9j/2Q=="
+    const parsed = parseBrandingContent(
+      {
+        ...content,
+        languages: ["en"],
+        translations: [
+          {
+            language: "en",
+            title: "Washing",
+            sections: Array.from({ length: 4 }, (_, i) => ({
+              heading: `${i + 1})`,
+              body: `Step ${i + 1}`,
+              layout: "text-on-picture",
+              picture,
+            })),
+          },
+        ],
+      },
+      "work-instruction"
+    )
+    expect(parsed.translations[0]?.sections[3]?.picture).toBe(picture)
+    const result = await brandingHtml({
+      content: parsed,
+      type: "work-instruction",
+      number: "Draft",
+      revision: 0,
+      issuedAt: "2026-09-15",
+      authorName: "Author",
+      draft: true,
+    })
+    expect(result.html.match(/<img /g)).toHaveLength(4)
+    expect(result.html).toContain(
+      "grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr))"
+    )
+    expect(result.html).toContain("Step 4")
+    expect(() =>
+      parseBrandingContent(
+        {
+          ...parsed,
+          translations: [
+            {
+              ...parsed.translations[0],
+              sections: [
+                {
+                  heading: "1",
+                  body: "Step",
+                  layout: "text-on-picture",
+                  picture: "https://example.com/private-image",
+                },
+              ],
+            },
+          ],
+        },
+        "work-instruction"
+      )
+    ).toThrow("uploaded JPEG")
+  })
 })
