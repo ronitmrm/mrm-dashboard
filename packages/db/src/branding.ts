@@ -91,6 +91,27 @@ export function createBrandingRepository(options: RepositoryPoolOptions) {
         hasNext: result.rows.length > 100,
       }
     },
+    async listPublished(organizationId: string, type: BrandingType) {
+      return (
+        await pool.query<
+          Omit<BrandingRegisterRow, "hasDraft" | "updatedAt"> & {
+            revisionId: string
+            issuedAt: string
+          }
+        >(
+          `SELECT d.id, d.type, d.number, r.id AS "revisionId",
+        r.content->>'title' AS title, r.content->>'department' AS department,
+        r.content->'languages' AS languages, r.content->>'effectiveDate' AS "effectiveDate",
+        r.revision, r.state, r.author_name AS "authorName", r.issued_at::text AS "issuedAt"
+        FROM branding.documents d JOIN LATERAL (
+          SELECT * FROM branding.revisions WHERE document_id = d.id AND state = 'issued'
+          ORDER BY revision DESC LIMIT 1
+        ) r ON true WHERE d.organization_id = $1 AND d.type = $2
+        ORDER BY d.number`,
+          [organizationId, type]
+        )
+      ).rows
+    },
     async get(organizationId: string, type: BrandingType, documentId: string) {
       const document = (
         await pool.query<BrandingDocument>(

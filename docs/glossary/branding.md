@@ -2,6 +2,12 @@
 
 Branding contains SOPs, Notices, Policies, and Work Instructions. Safety signage is outside scope.
 
+SOP Register, Work Instruction Register, and Policies Register are standalone
+main modules outside Branding. They list one latest published (issued) revision
+per document, with its published metadata and PDF. Unissued documents, draft
+changes, and history are not shown. A revision draft does not replace the current
+published version. Branding remains the authoring and retained-history workspace.
+
 - SOPs and policies have a cover page, automatic index with actual page numbers,
   and ordered topics (heading/body). Each topic starts on a fresh page; long bodies
   continue across pages. Each selected language gets its own cover/index/content.

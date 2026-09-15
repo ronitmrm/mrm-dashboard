@@ -25,12 +25,32 @@ import {
   operationalEntryNavigation,
   planningHolidayNavigation,
   productionFloorNavigation,
+  publishedRegisterNavigation,
   storeNavigation,
   storePurchaseOrderHref,
   universalProductionNavigation,
 } from "./unified-navigation"
 
 describe("unified navigation", () => {
+  it("exposes published registers outside Branding", () => {
+    expect(
+      publishedRegisterNavigation.map(({ href, label }) => ({ href, label }))
+    ).toEqual([
+      { href: "/registers/sop", label: "SOP Register" },
+      {
+        href: "/registers/work-instruction",
+        label: "Work Instruction Register",
+      },
+      { href: "/registers/policy", label: "Policies Register" },
+    ])
+    expect(
+      navigationHrefMatches(
+        "/registers/sop",
+        new URLSearchParams(),
+        "/branding/sop"
+      )
+    ).toBe(false)
+  })
   it("groups master and operational entry destinations into separate modules", () => {
     const source = readFileSync(
       new URL("../components/unified-sidebar-navigation.tsx", import.meta.url),
@@ -62,7 +82,7 @@ describe("unified navigation", () => {
     )
     const nativeLinks = source.match(/<a href=\{item\.href\}>/g) ?? []
 
-    expect(nativeLinks).toHaveLength(6)
+    expect(nativeLinks).toHaveLength(7)
     expect(source).toContain(
       "<a href={productionNavigationHref(item.id, floor.code)}>"
     )
