@@ -525,7 +525,7 @@ function ApprovedPostPanel({
           jobs={jobs}
           masterView={activeView}
           posts={posts}
-          templates={templates.filter((template) => !template.combinedRoleId)}
+          templates={templates}
         />
       ) : null}
     </>
@@ -631,6 +631,7 @@ function CombinedRolePanel({
 }
 
 function EmployeePanel({
+  canCreateJob,
   canManageEmployees,
   masterControls,
   combinedRoles,
@@ -641,6 +642,7 @@ function EmployeePanel({
   templates,
 }: Pick<
   RecruitmentPanelProps,
+  | "canCreateJob"
   | "canManageEmployees"
   | "masterControls"
   | "combinedRoles"
@@ -700,13 +702,14 @@ function EmployeePanel({
       {showMasterTables ? (
         <ApprovedPostsTable
           employeeView
+          canCreateJob={canCreateJob}
           combinedRoles={combinedRoles}
           employeeManagement={canManageEmployees}
           employmentLetters={employmentLetters}
           jobs={jobs}
           masterView={masterView}
           posts={posts}
-          templates={templates.filter((template) => !template.combinedRoleId)}
+          templates={templates}
         />
       ) : null}
     </>
@@ -1065,6 +1068,7 @@ export function RecruitmentPanel(props: RecruitmentPanelProps) {
     case "employeeMasterPanel":
       return (
         <EmployeePanel
+          canCreateJob={props.canCreateJob}
           canManageEmployees={props.canManageEmployees}
           masterControls={props.masterControls}
           combinedRoles={props.combinedRoles}

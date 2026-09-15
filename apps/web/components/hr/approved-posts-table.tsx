@@ -10,6 +10,7 @@ import type {
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import { Checkbox } from "@workspace/ui/components/checkbox"
+import { Dialog, DialogClose, DialogFooter } from "@workspace/ui/components/dialog"
 import {
  SectionCard,
   CardContent,
@@ -49,7 +50,8 @@ import {
   Trash2,
   UserRoundCog,
 } from "lucide-react"
-import { useState } from "react"
+import { useRef, useState } from "react"
+import { useFormStatus } from "react-dom"
 
 import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
 import {
@@ -61,12 +63,12 @@ import {
 import { APPROVED_POST_FILTER_COLUMNS } from "@/components/hr/approved-post-filter-columns"
 import { SingleEmployeeAssignmentFields } from "@/components/hr/single-employee-assignment-fields"
 import { EmployeeLetterDialog } from "@/components/hr/employee-letter-dialog"
-import { MetricSummary } from "@/components/ui/golden-patterns"
+import { MetricSummary, StandardDialogContent } from "@/components/ui/golden-patterns"
 import { employeeHandoverRows } from "@/lib/employee-handover-rows"
 
 type TemplateOption = Pick<
   RecruitmentTemplateRow,
-  "id" | "name" | "templateCode"
+  "id" | "name" | "templateCode" | "combinedRoleId"
 >
 
 function PostStatusBadge({ status }: { status: string }) {
@@ -79,6 +81,16 @@ function PostStatusBadge({ status }: { status: string }) {
           ? "secondary"
           : "outline"
   return <Badge variant={variant}>{status}</Badge>
+}
+
+function CreateJobSubmitButton() {
+  const { pending } = useFormStatus()
+  return (
+    <Button type="submit" disabled={pending}>
+      <BriefcaseBusiness data-icon="inline-start" />
+      {pending ? "Creating…" : "Create Job"}
+    </Button>
+  )
 }
 
 export function ApprovedPostsTable({
@@ -112,6 +124,8 @@ export function ApprovedPostsTable({
   const [selectedEmployeePost, setSelectedEmployeePost] =
     useState<RecruitmentPostRow | null>(null)
   const [employeeEditorOpen, setEmployeeEditorOpen] = useState(false)
+  const [creatingJobPost, setCreatingJobPost] = useState<RecruitmentPostRow | null>(null)
+  const createJobTrigger = useRef<HTMLButtonElement | null>(null)
   const openJobPostCodes = new Set(
     jobs
       .filter((job) => job.status === "Open" && job.postCode)
@@ -338,29 +352,13 @@ export function ApprovedPostsTable({
                                   (!row.combinedRoleId ||
                                     row.isPrimaryCombinedPost) &&
                                   !openJobPostCodes.has(row.postCode) ? (
-                                    <form action={createJobAction}>
-                                      <input
-                                        name="panel"
-                                        type="hidden"
-                                        value="approvedPostPanel"
-                                      />
-                                      {masterView ? (
-                                        <input
-                                          name="master_view"
-                                          type="hidden"
-                                          value={masterView}
-                                        />
-                                      ) : null}
-                                      <input
-                                        name="post_id"
-                                        type="hidden"
-                                        value={row.id}
-                                      />
-                                      <Button size="sm" type="submit">
+                                      <Button size="sm" type="button" onClick={(event) => {
+                                        createJobTrigger.current = event.currentTarget
+                                        setCreatingJobPost(row)
+                                      }}>
                                         <BriefcaseBusiness data-icon="inline-start" />
                                         Create Job
                                       </Button>
-                                    </form>
                                   ) : null}
                                   {canWrite ? <Button
                                     aria-label={`Edit ${row.postCode}`}
@@ -496,7 +494,7 @@ export function ApprovedPostsTable({
                     <NativeSelectOption value="">
                       No Template
                     </NativeSelectOption>
-                    {templates.map((template) => (
+                    {templates.filter((template) => !template.combinedRoleId).map((template) => (
                       <NativeSelectOption
                         key={template.id}
                         value={template.templateCode}
@@ -514,6 +512,49 @@ export function ApprovedPostsTable({
           </SheetContent>
         ) : null}
       </Sheet>
+      <Dialog open={creatingJobPost !== null} onOpenChange={(open) => {
+        if (!open) setCreatingJobPost(null)
+      }}>
+        {creatingJobPost ? (
+          <StandardDialogContent
+            title="Create Job"
+            description={`${creatingJobPost.postCode} · ${creatingJobPost.department} / ${creatingJobPost.designation}`}
+            className="sm:max-w-md"
+            onCloseAutoFocus={(event) => {
+              event.preventDefault()
+              createJobTrigger.current?.focus()
+            }}
+          >
+            <form action={async (formData) => {
+              await createJobAction(formData)
+              setCreatingJobPost(null)
+            }} className="grid gap-4">
+              <input name="panel" type="hidden" value={employeeView ? "employeeMasterPanel" : "approvedPostPanel"} />
+              {masterView ? <input name="master_view" type="hidden" value={masterView} /> : null}
+              <input name="post_id" type="hidden" value={creatingJobPost.id} />
+              <Field>
+                <FieldLabel htmlFor="create-job-template">Attach a Template (optional)</FieldLabel>
+                <NativeSelect id="create-job-template" name="requirement_template_code" className="w-full" defaultValue="">
+                  <NativeSelectOption value="">No Template</NativeSelectOption>
+                  {templates.filter((template) => !template.combinedRoleId || template.combinedRoleId === creatingJobPost.combinedRoleId).map((template) => (
+                    <NativeSelectOption key={template.id} value={template.templateCode}>
+                      {template.templateCode} / {template.name}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="create-job-target-date">Target Date</FieldLabel>
+                <Input id="create-job-target-date" name="target_date" type="date" />
+              </Field>
+              <DialogFooter>
+                <DialogClose asChild><Button type="button" variant="outline">Cancel</Button></DialogClose>
+                <CreateJobSubmitButton />
+              </DialogFooter>
+            </form>
+          </StandardDialogContent>
+        ) : null}
+      </Dialog>
       <Sheet
         onOpenChange={setEmployeeEditorOpen}
         open={employeeEditorOpen && selectedEmployeePost !== null}
