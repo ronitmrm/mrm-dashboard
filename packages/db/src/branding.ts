@@ -315,6 +315,23 @@ export function createBrandingRepository(options: RepositoryPoolOptions) {
         return revision.id
       })
     },
+    async publishedPdf(
+      organizationId: string,
+      type: BrandingType,
+      documentId: string
+    ) {
+      return (
+        (
+          await pool.query<{ pdf: Buffer; number: string; revision: number }>(
+            `SELECT r.pdf, d.number, r.revision FROM branding.documents d
+        JOIN branding.revisions r ON r.document_id = d.id
+        WHERE d.organization_id = $1 AND d.type = $2 AND d.id = $3 AND r.state = 'issued'
+        ORDER BY r.revision DESC LIMIT 1`,
+            [organizationId, type, documentId]
+          )
+        ).rows[0] ?? null
+      )
+    },
     async pdf(
       organizationId: string,
       type: BrandingType,

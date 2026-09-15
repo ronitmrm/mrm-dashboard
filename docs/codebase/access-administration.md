@@ -1,5 +1,12 @@
 # Access Administration
 
+## Published document registers
+
+SOP Register, Work Instruction Register, and Policies Register are available to
+every authenticated user. They do not require Branding role grants. Register PDF
+routes serve only the latest issued revision. Branding authoring, drafts, and
+historical PDF routes retain their per-type capability checks.
+
 ## Administrative full access
 
 Migration 0125 grants every registered capability to the assignable

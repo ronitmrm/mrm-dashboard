@@ -16,7 +16,7 @@ import {
 } from "@workspace/ui/components/table"
 import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
 import { PageHeader, MetricSummary } from "@/components/ui/golden-patterns"
-import { withBranding } from "@/lib/branding/server"
+import { withPublishedRegister } from "@/lib/branding/published-server"
 import { publishedRegisterNavigation } from "@/lib/unified-navigation"
 
 export default async function PublishedRegisterPage({
@@ -29,9 +29,8 @@ export default async function PublishedRegisterPage({
     (item) => item.type === type
   )
   if (!register) notFound()
-  const rows = await withBranding(
+  const rows = await withPublishedRegister(
     register.type,
-    "read",
     ({ repository, organizationId }) =>
       repository.listPublished(organizationId, register.type)
   )
@@ -105,7 +104,7 @@ export default async function PublishedRegisterPage({
                 <TableCell>
                   <AttachmentViewerLink
                     className="text-primary hover:underline"
-                    href={`/branding/${register.type}/${row.id}/revisions/${row.revisionId}/pdf`}
+                    href={`/registers/${register.type}/${row.id}/pdf`}
                     fileName={`${row.number}${hasRevision ? `-${revisionLabel(row.revision)}` : ""}.pdf`}
                     mediaType="application/pdf"
                   >
