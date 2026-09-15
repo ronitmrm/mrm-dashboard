@@ -3,8 +3,10 @@ import path from "node:path"
 import { existsSync } from "node:fs"
 import chromium from "@sparticuz/chromium"
 import puppeteer from "puppeteer-core"
+import type { Page } from "puppeteer-core"
 import { PDFDocument } from "pdf-lib"
 import { brandingBookHtml, generateBrandingBookPdf } from "./book-pdf"
+import { brandTypography, typeStyle } from "./typography"
 import {
   brandingStepNumber,
   brandingNoticeBody,
@@ -52,8 +54,6 @@ function fonts() {
       ["Hind", "Hind-Bold.ttf", "700"],
       ["Hind Vadodara", "HindVadodara-Regular.ttf", "400"],
       ["Hind Vadodara", "HindVadodara-Bold.ttf", "700"],
-      ["Noto Sans Gujarati", "NotoSansGujarati.ttf", "100 900"],
-      ["Noto Sans Devanagari", "NotoSansDevanagari.ttf", "100 900"],
     ].map(async ([family, file, weight]) => {
       const bytes = await readFile(
         path.join(process.cwd(), "lib/branding/assets", file!)
@@ -117,40 +117,50 @@ export async function brandingHtml(input: BrandingPdfInput) {
       header: "<span></span>",
       footer: "<span></span>",
       html: `<!doctype html><html><head><meta charset="utf-8"><style>${styles}
-      *{box-sizing:border-box}body{margin:0;font-family:'Outfit','Hind','Hind Vadodara',sans-serif;color:#050505}
-      .wi-sheet{position:fixed;inset:0;background:#006A49;--wi-size:22pt;--wi-title:36pt}
-      .wi-logo{position:absolute;left:14mm;top:10mm}.wi-logo svg{width:14mm;height:14mm}
-      .wi-number{position:absolute;right:16mm;top:7mm;color:#F7F7F2;font-size:8pt}
-      .wi-title{position:absolute;top:11mm;left:40mm;right:16mm;height:17mm;display:flex;align-items:center;justify-content:flex-end;text-align:right;color:#F7F7F2;font-size:var(--wi-title);font-weight:700;line-height:1.05}
-      .wi-title span{max-width:100%;overflow-wrap:anywhere}
-      .wi-panel{position:absolute;top:32mm;left:12mm;right:12mm;bottom:8mm;padding:10mm 9mm;border-radius:10mm;background:#F7F7F2}
-      .wi-content{font-size:var(--wi-size);line-height:1.4;font-weight:600}
-      [lang=gu]{font-family:'Hind Vadodara','Outfit',sans-serif}[lang=hi]{font-family:'Hind','Outfit',sans-serif}
-      section+section,article+article{margin-top:1.5em}h2{display:table;max-width:100%;margin:0 0 .5em;padding:.08em .28em;border-radius:.4em;background:#006A49;color:#F7F7F2;font-size:min(2em,34.45pt);line-height:1.15;font-weight:400;overflow-wrap:anywhere}
+      *{box-sizing:border-box}body{margin:0;color:#050505}
+      .wi-sheet{position:fixed;inset:12.7mm;background:#006A49;}
+      .wi-logo{position:absolute;left:3mm;top:7mm}.wi-logo svg{width:14mm;height:14mm}
+      .wi-number{position:absolute;right:3mm;top:0;color:#F7F7F2;}
+      .wi-title{position:absolute;top:8mm;left:22mm;right:3mm;height:20mm;display:flex;align-items:center;justify-content:flex-end;text-align:right;color:#F7F7F2;}
+      .wi-title span{display:block;max-width:100%;overflow-wrap:anywhere;text-wrap:balance}
+      .wi-panel{position:absolute;top:32mm;left:3mm;right:3mm;bottom:3mm;padding:6mm;border-radius:10mm;background:#F7F7F2}
+
+
+      section+section,article+article{margin-top:1.5em}h2{display:table;max-width:100%;margin:0 0 .5em;padding:.08em .28em;border-radius:.4em;background:#006A49;color:#F7F7F2;overflow-wrap:anywhere}
       p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
       .wi-pictures{background:#F7F7F2}.wi-pictures .wi-title,.wi-pictures .wi-number{color:#006A49}
-      .wi-pictures .wi-panel{top:41mm;left:21mm;right:21mm;bottom:14mm;padding:0;border-radius:0}
+      .wi-pictures .wi-panel{top:35mm;left:0;right:0;bottom:0;padding:0;border-radius:0}
       .wi-pictures .wi-content{height:100%;display:grid;grid-template-columns:repeat(${columns},minmax(0,1fr));grid-template-rows:repeat(${rows},minmax(0,1fr));gap:8mm 14mm}
       .wi-tile{position:relative;min-width:0;min-height:0;margin:0;overflow:hidden;border:1pt solid #006A49;border-radius:4mm}
-      .wi-tile img,.wi-missing{position:absolute;inset:0;width:100%;height:80%;object-fit:cover}.wi-missing{display:grid;place-items:center;font:12pt Outfit;color:#006A49}
-      .wi-caption{position:absolute;bottom:0;left:0;width:100%;height:25%;padding:2mm 3mm;background:#006A49;color:#F7F7F2;border-radius:3mm;overflow:hidden;font-size:22pt;line-height:1.15;display:flex;align-items:center}
+      .wi-tile img,.wi-missing{position:absolute;inset:0;width:100%;height:80%;object-fit:cover}.wi-missing{display:grid;place-items:center;color:#006A49}
+      .wi-caption{position:absolute;bottom:0;left:0;width:100%;height:25%;padding:2mm 3mm;background:#006A49;color:#F7F7F2;border-radius:3mm;overflow:hidden;display:flex;align-items:center}
       .wi-caption-inner{display:flex;align-items:center;gap:.4em;width:100%;min-width:0}
-      .wi-step{flex:none;font-size:1.4em;line-height:1.1}
-      .wi-caption-text{flex:1;min-width:0}.wi-caption h2{max-width:100%;font-size:1.1em;line-height:1.15;background:none;padding:0;margin:0 0 .2em;color:inherit;font-weight:700}
-      .wi-caption p{font-weight:500}
+      .wi-step{flex:none;}
+      .wi-caption-text{flex:1;min-width:0}.wi-caption h2{max-width:100%;background:none;padding:0;margin:0 0 .2em;color:inherit;}
+
       .picture-left{border:0}.picture-left img,.picture-left .wi-missing{width:40%;height:100%;border:1.5mm solid #006A49;border-radius:4mm}
       .picture-left .wi-caption{left:40%;width:60%;height:100%;border-radius:4mm;padding:3mm 5mm}
       .picture-left .wi-caption-inner{align-items:flex-start}.wi-tile.text .wi-caption-inner{display:block}
       .picture-left h2,.wi-tile.text h2{max-width:100%;margin-bottom:.4em}
       .wi-tile.text .wi-caption{height:100%}
-      .wi-visual .wi-panel{top:29mm;left:10mm;right:10mm;bottom:8mm}
+      .wi-visual .wi-panel{top:32mm;left:0;right:0;bottom:0}
       .wi-visual .wi-content{gap:0;border:1mm solid #006A49;border-radius:7mm;overflow:hidden}
       .wi-visual .wi-tile{border:0;border-radius:0}.wi-visual .wi-tile+.wi-tile{border-top:1mm solid #006A49}
       .visual-guide img,.visual-guide .wi-missing{width:54%;height:100%;object-fit:contain;padding:4mm}
       .wi-symbol{position:absolute;left:56%;top:10%;width:20%;height:80%}
       .visual-guide .wi-caption{left:78%;width:22%;height:100%;background:transparent;color:#006A49;padding:3mm 5mm 3mm 1mm;border-radius:0}
-      .visual-guide.bad .wi-caption{color:#F51524}.visual-guide .wi-caption p{font-weight:700}
-      </style></head><body><div class="wi-sheet${pictures ? " wi-pictures" : ""}${visual ? " wi-visual" : ""}"><div class="wi-logo">${pictures ? logo : logo.replaceAll("#006A49", "#F7F7F2")}</div><div class="wi-number">${e(reference)}${input.draft ? " · DRAFT" : ""}</div><div class="wi-title"><span>${e(input.content.title)}</span></div><div class="wi-panel"><main class="wi-content">${content}</main></div></div></body></html>`,
+      .visual-guide.bad .wi-caption{color:#F51524}
+
+      ${brandTypography}
+      .wi-title{${typeStyle("display")}}.wi-number{${typeStyle("caption")}}
+      .wi-content,.wi-caption{${typeStyle("body")}}
+      .wi-content h2{${typeStyle("section")}}
+      .wi-step{${typeStyle("subsection")}}
+      .wi-content [lang=hi],.wi-content [lang=gu]{line-height:1.6}
+      .wi-content [lang=hi] .wi-caption,.wi-content [lang=gu] .wi-caption{line-height:1.6}
+      .wi-content [lang=hi] h2,.wi-content [lang=gu] h2{${typeStyle("localHeading")}}
+      .wi-title[lang=hi],.wi-title[lang=gu]{${typeStyle("localHeading")}}
+      </style></head><body><div class="wi-sheet${pictures ? " wi-pictures" : ""}${visual ? " wi-visual" : ""}"><div class="wi-logo">${pictures ? logo : logo.replaceAll("#006A49", "#F7F7F2")}</div><div class="wi-number">${e(reference)}${input.draft ? " · DRAFT" : ""}</div><div class="wi-title" lang="${input.content.languages[0] ?? "en"}"><span>${e(input.content.title)}</span></div><div class="wi-panel"><main class="wi-content">${content}</main></div></div></body></html>`,
     }
   }
   if (input.type === "notice") {
@@ -163,19 +173,92 @@ export async function brandingHtml(input: BrandingPdfInput) {
       header: "<span></span>",
       footer: "<span></span>",
       html: `<!doctype html><html><head><meta charset="utf-8"><style>${styles}
-      *{box-sizing:border-box}body{margin:0;background:white;color:#231F20;font:400 21.5pt/30pt 'Outfit',sans-serif}
-      .notice-banner{position:absolute;top:32pt;left:36pt;right:36pt;height:140pt;border-radius:17pt;background:#006A49;color:white;display:flex;align-items:center;justify-content:center;font:600 100pt/1 'Outfit';letter-spacing:1.2pt}
-      .notice-date{position:absolute;top:243pt;right:60pt;font:500 20pt/28pt 'Outfit';color:#006A49}
-      .notice-number{position:absolute;top:10pt;right:36pt;font:500 11pt/14pt 'Outfit';color:#006A49}
-      .notice-content{position:absolute;top:290pt;left:55.5pt;right:55.5pt;font-size:21.5pt;line-height:1.4}
-      [lang=gu]{font-family:'Outfit','Noto Sans Gujarati',sans-serif}[lang=hi]{font-family:'Outfit','Noto Sans Devanagari',sans-serif}
-      article+article{margin-top:1.5em}
-      p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}.notice-logo{position:absolute;top:779pt;left:178pt;width:239pt;color:#006A49}
+      ${brandTypography}
+      *{box-sizing:border-box}body{margin:0;background:white;color:#050505}
+      .notice-banner{position:absolute;top:22mm;left:12.7mm;right:12.7mm;height:22mm;border-radius:4mm;background:#006A49;color:#F7F7F2;display:flex;align-items:center;justify-content:center;${typeStyle("display")}}
+      .notice-number{position:absolute;top:12.7mm;right:12.7mm;color:#006A49;${typeStyle("caption")}}
+      .notice-date{position:absolute;top:49mm;right:12.7mm;color:#006A49;${typeStyle("caption")}}
+      .notice-content{position:absolute;top:62mm;left:12.7mm;right:12.7mm;${typeStyle("body")}}
+      article+article{margin-top:1.5em}p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
+      .notice-logo{position:absolute;bottom:12.7mm;left:12.7mm;width:50mm;color:#006A49}
       </style></head><body><div class="notice-number">${e(input.draft ? "Number assigned on issue" : input.number)}</div><div class="notice-banner">NOTICE</div><div class="notice-date">${e(date || "Date pending")}</div><main class="notice-content">${translations.map((translation) => `<article lang="${translation.language}"><p>${e(brandingNoticeBody(translation.sections))}</p></article>`).join("")}</main><div class="notice-logo">${await wordmark()}</div></body></html>`,
     }
   }
-  return brandingBookHtml(input, styles, logo, await wordmark(true))
+  return brandingBookHtml(input, styles, logo, await wordmark())
 }
+export async function fitSinglePageText(
+  page: Page,
+  type: "notice" | "work-instruction"
+) {
+  await page.evaluate(() => document.fonts.ready)
+  return page.evaluate((documentType) => {
+    const root = document.documentElement
+    const check = {
+      fits() {
+        if (documentType === "notice") {
+          const body = document.querySelector<HTMLElement>(".notice-content")!
+          const logo = document.querySelector<HTMLElement>(".notice-logo")!
+          return (
+            body.getBoundingClientRect().bottom <=
+              logo.getBoundingClientRect().top - 16 &&
+            body.scrollWidth <= body.clientWidth
+          )
+        }
+        const title = document.querySelector<HTMLElement>(".wi-title")!
+        const titleText = title.querySelector("span")!
+        if (
+          titleText.getBoundingClientRect().height > title.clientHeight ||
+          title.scrollWidth > title.clientWidth
+        )
+          return false
+        const content = document.querySelector<HTMLElement>(".wi-content")!
+        const panel = document.querySelector<HTMLElement>(".wi-panel")!
+        if (
+          content.getBoundingClientRect().bottom >
+            panel.getBoundingClientRect().bottom -
+              parseFloat(getComputedStyle(panel).paddingBottom) +
+              1 ||
+          content.scrollWidth > content.clientWidth
+        )
+          return false
+        for (const caption of document.querySelectorAll<HTMLElement>(
+          ".wi-caption"
+        )) {
+          const inner = caption.querySelector<HTMLElement>(".wi-caption-inner")!
+          const style = getComputedStyle(caption)
+          const height =
+            caption.clientHeight -
+            parseFloat(style.paddingTop) -
+            parseFloat(style.paddingBottom)
+          if (
+            inner.getBoundingClientRect().height > height ||
+            inner.scrollWidth > inner.clientWidth
+          )
+            return false
+        }
+        return true
+      },
+    }
+    root.style.setProperty("--print-scale", "1")
+    if (check.fits()) return 1
+    let low = 0.001,
+      high = 1
+    root.style.setProperty("--print-scale", String(low))
+    if (!check.fits())
+      throw new Error(
+        "Too many sections to fit on one page. Remove a section or shorten the content."
+      )
+    for (let step = 0; step < 20; step++) {
+      const scale = (low + high) / 2
+      root.style.setProperty("--print-scale", String(scale))
+      if (check.fits()) low = scale
+      else high = scale
+    }
+    root.style.setProperty("--print-scale", String(low))
+    return low
+  }, type)
+}
+
 export async function generateBrandingPdf(input: BrandingPdfInput) {
   const template = await brandingHtml(input)
   const { html } = template
@@ -211,62 +294,7 @@ export async function generateBrandingPdf(input: BrandingPdfInput) {
     })
     await page.setContent(html, { waitUntil: "load", timeout: 30000 })
     if (input.type === "work-instruction") {
-      await page.evaluate(() => document.fonts.ready)
-      await page.evaluate(() => {
-        const sheet = document.querySelector<HTMLElement>(".wi-sheet")!
-        const panel = document.querySelector<HTMLElement>(".wi-panel")!
-        const content = document.querySelector<HTMLElement>(".wi-content")!
-        const title = document.querySelector<HTMLElement>(".wi-title")!
-        const titleText = title.querySelector("span")!
-        for (const target of [
-          { property: "--wi-title", min: 0.01, max: 36 },
-          ...(!sheet.classList.contains("wi-pictures")
-            ? [{ property: "--wi-size", min: 0.01, max: 22 }]
-            : []),
-        ]) {
-          let low = target.min,
-            high = target.max
-          for (let step = 0; step <= 16; step++) {
-            const size = step === 0 ? low : (low + high) / 2
-            sheet.style.setProperty(target.property, `${size}pt`)
-            const fits =
-              target.property === "--wi-title"
-                ? titleText.getBoundingClientRect().height <=
-                    title.clientHeight && title.scrollWidth <= title.clientWidth
-                : content.getBoundingClientRect().bottom <=
-                    panel.getBoundingClientRect().bottom -
-                      parseFloat(getComputedStyle(panel).paddingBottom) &&
-                  content.scrollWidth <= content.clientWidth
-            if (fits) low = size
-            else high = size
-          }
-          sheet.style.setProperty(target.property, `${low}pt`)
-        }
-        // Tile dimensions are already fixed by count. Only change the caption font.
-        for (const caption of document.querySelectorAll<HTMLElement>(
-          ".wi-caption"
-        )) {
-          const inner = caption.querySelector<HTMLElement>(".wi-caption-inner")!
-          const style = getComputedStyle(caption)
-          const height =
-            caption.clientHeight -
-            parseFloat(style.paddingTop) -
-            parseFloat(style.paddingBottom)
-          let low = 0.01,
-            high = caption.closest(".visual-guide") ? 32 : 22
-          for (let step = 0; step < 18; step++) {
-            const size = (low + high) / 2
-            caption.style.fontSize = `${size}pt`
-            if (
-              inner.getBoundingClientRect().height <= height &&
-              inner.scrollWidth <= inner.clientWidth
-            )
-              low = size
-            else high = size
-          }
-          caption.style.fontSize = `${low}pt`
-        }
-      })
+      await fitSinglePageText(page, "work-instruction")
       const bytes = await page.pdf({
         format: "A4",
         landscape: isVisualGuide(input.content),
@@ -283,26 +311,9 @@ export async function generateBrandingPdf(input: BrandingPdfInput) {
       return instructionPdf.save()
     }
     if (input.type === "notice") {
-      await page.evaluate(() => document.fonts.ready)
-      const fits = await page.evaluate(() => {
-        const body = document.querySelector<HTMLElement>(".notice-content")!
-        const logo = document.querySelector<HTMLElement>(".notice-logo")!
-        const limit = logo.getBoundingClientRect().top - 24 * (96 / 72)
-        let low = 0.1
-        let high = 21.5
-        for (let attempt = 0; attempt < 20; attempt++) {
-          const size = (low + high) / 2
-          body.style.fontSize = `${size}pt`
-          if (body.getBoundingClientRect().bottom <= limit) low = size
-          else high = size
-        }
-        body.style.fontSize = `${low}pt`
-        return body.getBoundingClientRect().bottom <= limit
-      })
-      if (!fits) throw new Error("Notice could not be fitted to one page.")
+      await fitSinglePageText(page, "notice")
       const bytes = await page.pdf({
-        width: `${595.5 / 72}in`,
-        height: `${842.25 / 72}in`,
+        format: "A4",
         printBackground: true,
         waitForFonts: true,
         margin: { top: 0, bottom: 0, left: 0, right: 0 },

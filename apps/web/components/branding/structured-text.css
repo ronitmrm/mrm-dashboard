@@ -24,8 +24,8 @@
   font-weight: 700;
 }
 .branding-prose em {
-  font-style: italic;
+  font-style: normal;
 }
 .branding-prose u {
-  text-decoration: underline;
+  text-decoration: none;
 }

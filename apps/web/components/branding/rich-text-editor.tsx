@@ -19,9 +19,23 @@ const extensions = [
     horizontalRule: false,
     link: false,
     strike: false,
+    italic: false,
+    underline: false,
     trailingNode: false,
   }),
 ]
+
+// Old drafts may contain marks from the former toolbar. Keep their text while
+// adapting them to the locked schema, including on reopening an existing draft.
+function editorContent(value: BrandingRichText): BrandingRichText {
+  return {
+    ...value,
+    ...(value.marks && {
+      marks: value.marks.filter((mark) => mark.type === "bold"),
+    }),
+    ...(value.content && { content: value.content.map(editorContent) }),
+  }
+}
 
 export default function BrandingRichTextEditor({
   value,
@@ -40,7 +54,7 @@ export default function BrandingRichTextEditor({
 }) {
   const editor = useEditor({
     extensions,
-    content: value,
+    content: editorContent(value),
     immediatelyRender: false,
     shouldRerenderOnTransaction: true,
     editable: !disabled,
@@ -58,11 +72,17 @@ export default function BrandingRichTextEditor({
     // objects, otherwise React sends a temporary client reference for list attrs.
     // The configured schema produces this subset; the server validates every save.
     onUpdate: ({ editor }) =>
-      onChange(JSON.parse(JSON.stringify(editor.getJSON())) as BrandingRichText),
+      onChange(
+        JSON.parse(JSON.stringify(editor.getJSON())) as BrandingRichText
+      ),
   })
   useEffect(() => {
-    if (editor && JSON.stringify(editor.getJSON()) !== JSON.stringify(value))
-      editor.commands.setContent(value, { emitUpdate: false })
+    const normalized = editorContent(value)
+    if (
+      editor &&
+      JSON.stringify(editor.getJSON()) !== JSON.stringify(normalized)
+    )
+      editor.commands.setContent(normalized, { emitUpdate: false })
   }, [editor, value])
   useEffect(() => {
     editor?.setEditable(!disabled)
@@ -104,16 +124,6 @@ export default function BrandingRichTextEditor({
       label: "Bold",
       active: editor.isActive("bold"),
       run: () => editor.chain().focus().toggleBold().run(),
-    },
-    {
-      label: "Italic",
-      active: editor.isActive("italic"),
-      run: () => editor.chain().focus().toggleItalic().run(),
-    },
-    {
-      label: "Underline",
-      active: editor.isActive("underline"),
-      run: () => editor.chain().focus().toggleUnderline().run(),
     },
     {
       label: "Bullets",

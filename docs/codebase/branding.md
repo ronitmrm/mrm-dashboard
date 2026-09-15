@@ -1,6 +1,12 @@
 # Branding implementation
 
-## Shared SOP/Policy book (v5, 2026-09-15)
+## Shared SOP/Policy book (v6, 2026-09-15)
+
+- `typography.ts` is the shared Brand Guide B §15.1 source for PDF font roles.
+  SOP/Policy use fixed CSS pixel baselines. Notice v8 and WI v8 use the same roles
+  multiplied by one root `--print-scale`, measured by `fitSinglePageText` against
+  every text box. No independent title/card fitting. See glossary for full table.
+  Print page scale is 100%; 12.7mm outer margins are separate from internal spacing.
 
 - `book-editor.tsx` composes the same heading/details editor for both types.
   Tiptap StarterKit is loaded only in the book editor; its schema is restricted
@@ -23,12 +29,12 @@
   A separately rendered frame is embedded on every internal page because repeated
   Chromium PDF calls can omit font-based header/footer templates. Content is
   embedded onto fresh output pages to isolate graphics state before frame stamping.
-- Reference proportions: fitted large cover title, uppercase details title without
-  a duplicate running header, centered index title, 14pt body, green hierarchy,
+- Reference layout: fixed display-size cover/details title without
+  a duplicate running header, centered index title, brand body size, green hierarchy,
   hanging lists, and readable footer metadata. Details retain the footer; index
   and content also receive the running header. Attribution names/designations
   occupy separate rows when supplied; no approval names are invented.
-- Newly issued SOP/Policy PDFs record `mrm-book-v5`. Frozen issued PDFs are unchanged.
+- Newly issued SOP/Policy PDFs record `mrm-book-v6`. Frozen issued PDFs are unchanged.
   No database migration or change to automatic document sequences is required.
 
 The older template descriptions below are historical where superseded by v4.
@@ -92,11 +98,11 @@ Cover pages count toward the index but do not display a page counter. Exact full
 wordmark SVGs were extracted from the supplied HTML guide and bundled alongside
 the fonts. Newly issued revisions record v3; existing frozen PDFs are unchanged.
 
-Notice template v7 follows the later Notice.pdf: a dedicated fixed-size one-page
-renderer with Noto Sans fonts and a measured content/footer clearance check after
+Notice template v8 follows the later Notice.pdf layout: a dedicated one-page
+renderer with the shared brand fonts and a content/footer clearance check after
 fonts load. The number prints at top-right (drafts use an unassigned placeholder);
 number/author/title are also stored as PDF metadata. User line breaks are
-preserved; all language bodies shrink together until they fit above the footer.
+preserved; all text roles/languages shrink together until they fit above the footer.
 SOP/policy use the separate book renderer.
 
 Work Instruction template v6 adds private bounded JPEG snapshots to sections;
@@ -107,7 +113,7 @@ external PDF fetches. Text retains its separate 180,000-character document limit
 Existing sections without a layout remain text. The three layouts are `text`,
 `text-on-picture`, and `picture-left`. Picture-bearing documents use a count-based
 grid with fixed cells/caption dimensions; four sections make a 2x2 grid. After
-font loading, each caption shrinks independently without changing its box. Draft
+font loading, all captions use the same document scale without changing boxes. Draft
 generation does not reject small text; authors review the result themselves.
 Pictures fill frames with proportional cropping. Step numbers are derived from
 section order per language, separately from optional picture-section headings.
@@ -120,13 +126,13 @@ Mixed layouts retain the existing count-based grid; captions never expand rows.
 WI v7 adds `visual-guide` sections with a validated `assessment` of `good` or `bad`.
 An all-visual document renders A4 landscape, full-width equal-height rows and
 uncropped comparison pictures. Tick/cross SVG paths and green/red colours are
-fixed in the renderer; captions remain editable and fit independently. Symbols
+fixed in the renderer; captions remain editable and share one text scale. Symbols
 replace step numbers in this layout and never depend on text or uploaded artwork.
 
 The text layout follows the Washing & Drying text poster. The editor
 normalizes each selected language to at least one heading/body pair, with one
 shared title synchronized on save. Notices use the dedicated single-body editor.
-The renderer fits title and body separately by binary search after fonts load,
+The renderer fits all text with one binary search after fonts load,
 measuring the actual panel space; it emits exactly one A4 page. Keep browser
 evaluation callbacks free of named nested functions because tsx inserts helpers
 that are unavailable inside Chromium. Frozen PDFs are not regenerated.
