@@ -35,8 +35,8 @@ export function BrandingDocumentEditor({
   initial?: BrandingContent
 }) {
   const router = useRouter()
-  const [content, setContent] = useState<BrandingContent>(
-    initial ?? {
+  const [content, setContent] = useState<BrandingContent>(() => {
+    const base: BrandingContent = initial ?? {
       title: "",
       department: "",
       effectiveDate: "",
@@ -47,7 +47,23 @@ export function BrandingDocumentEditor({
       translations: [],
       changeReason: "",
     }
-  )
+    if (type !== "work-instruction") return base
+    return {
+      ...base,
+      translations: base.languages.map((language) => {
+        const existing = base.translations.find(
+          (entry) => entry.language === language
+        )
+        return {
+          language,
+          title: base.title,
+          sections: existing?.sections.length
+            ? existing.sections
+            : [{ heading: "", body: "" }],
+        }
+      }),
+    }
+  })
   const [error, setError] = useState("")
   const [pending, startTransition] = useTransition()
   function languageChange(language: BrandingLanguage, checked: boolean) {
@@ -56,9 +72,21 @@ export function BrandingDocumentEditor({
       languages: checked
         ? [...current.languages, language]
         : current.languages.filter((value) => value !== language),
-      translations: current.translations.filter(
-        (entry) => checked || entry.language !== language
-      ),
+      translations:
+        checked &&
+        type === "work-instruction" &&
+        !current.translations.some((entry) => entry.language === language)
+          ? [
+              ...current.translations,
+              {
+                language,
+                title: current.title,
+                sections: [{ heading: "", body: "" }],
+              },
+            ]
+          : current.translations.filter(
+              (entry) => checked || entry.language !== language
+            ),
     }))
   }
   function prepareLanguage(language: BrandingLanguage) {
@@ -88,7 +116,16 @@ export function BrandingDocumentEditor({
               type,
               documentId,
               version,
-              content,
+              content:
+                type === "work-instruction"
+                  ? {
+                      ...content,
+                      translations: content.translations.map((translation) => ({
+                        ...translation,
+                        title: content.title,
+                      })),
+                    }
+                  : content,
             })
             if (result.error) {
               setError(result.error)
@@ -181,42 +218,48 @@ export function BrandingDocumentEditor({
             </fieldset>
           </FormGrid>
         </FormSection>
-        <FormSection
-          title="Source text"
-          description="Enter your facts in normal text. Use Not applicable where a section does not apply."
-        >
-          <div className="grid gap-4">
-            {brandingFields[type].map((field) => (
-              <div className="grid gap-2" key={field}>
-                <Label htmlFor={`source-${field}`}>{field}</Label>
-                <Textarea
-                  id={`source-${field}`}
-                  rows={3}
-                  maxLength={12000}
-                  value={content.inputs[field] ?? ""}
-                  onChange={(event) =>
-                    setContent({
-                      ...content,
-                      inputs: {
-                        ...content.inputs,
-                        [field]: event.target.value,
-                      },
-                    })
-                  }
-                />
-              </div>
-            ))}
-          </div>
-        </FormSection>
+        {type !== "work-instruction" ? (
+          <FormSection
+            title="Source text"
+            description="Enter your facts in normal text. Use Not applicable where a section does not apply."
+          >
+            <div className="grid gap-4">
+              {brandingFields[type].map((field) => (
+                <div className="grid gap-2" key={field}>
+                  <Label htmlFor={`source-${field}`}>{field}</Label>
+                  <Textarea
+                    id={`source-${field}`}
+                    rows={3}
+                    maxLength={12000}
+                    value={content.inputs[field] ?? ""}
+                    onChange={(event) =>
+                      setContent({
+                        ...content,
+                        inputs: {
+                          ...content.inputs,
+                          [field]: event.target.value,
+                        },
+                      })
+                    }
+                  />
+                </div>
+              ))}
+            </div>
+          </FormSection>
+        ) : null}
         <FormSection
           title="Document content"
-          description="Review each selected language before saving and issuing. Copy Source copies your text without translating it."
+          description={
+            type === "work-instruction"
+              ? "Enter a heading and its body in each selected language. Add Heading adds another pair."
+              : "Review each selected language before saving and issuing. Copy Source copies your text without translating it."
+          }
         >
           <p className="mb-4 text-sm text-muted-foreground">
             {type === "sop" || type === "policy"
               ? "The PDF adds a cover and an automatic index for each selected language. Add topics below in reading order; each topic begins on a new page."
               : type === "work-instruction"
-                ? "Add headings and text below. All selected languages must fit on one page; Preview PDF checks the page limit."
+                ? "The PDF automatically adjusts the heading and body font sizes to fit all selected languages on one page."
                 : "The notice prints your section headings and bodies in the reference layout. Use one heading/body per language for a simple notice. Titles and numbering stay in the register. Preserve any required line breaks; all content must fit one page."}
           </p>
           <p className="mb-4 text-sm text-muted-foreground">
@@ -247,20 +290,22 @@ export function BrandingDocumentEditor({
                   </h3>
                   {translation ? (
                     <>
-                      <div className="grid gap-2">
-                        <Label htmlFor={`title-${language}`}>
-                          Title · {brandingLanguageLabels[language]}
-                        </Label>
-                        <Input
-                          id={`title-${language}`}
-                          lang={language}
-                          value={translation.title}
-                          onChange={(event) =>
-                            updateTranslation({ title: event.target.value })
-                          }
-                          maxLength={240}
-                        />
-                      </div>
+                      {type !== "work-instruction" ? (
+                        <div className="grid gap-2">
+                          <Label htmlFor={`title-${language}`}>
+                            Title · {brandingLanguageLabels[language]}
+                          </Label>
+                          <Input
+                            id={`title-${language}`}
+                            lang={language}
+                            value={translation.title}
+                            onChange={(event) =>
+                              updateTranslation({ title: event.target.value })
+                            }
+                            maxLength={240}
+                          />
+                        </div>
+                      ) : null}
                       {translation.sections.map((section, index) => (
                         <div className="grid gap-2" key={index}>
                           <div className="flex gap-2">
@@ -300,7 +345,9 @@ export function BrandingDocumentEditor({
                             </Button>
                           </div>
                           <Label htmlFor={`heading-${language}-${index}`}>
-                            Section {index + 1} heading
+                            {type === "work-instruction"
+                              ? `Heading ${index + 1}`
+                              : `Section ${index + 1} heading`}
                           </Label>
                           <Input
                             id={`heading-${language}-${index}`}
@@ -322,7 +369,9 @@ export function BrandingDocumentEditor({
                             }
                           />
                           <Label htmlFor={`body-${language}-${index}`}>
-                            Section {index + 1} text
+                            {type === "work-instruction"
+                              ? `Body ${index + 1}`
+                              : `Section ${index + 1} text`}
                           </Label>
                           <Textarea
                             id={`body-${language}-${index}`}
@@ -345,6 +394,10 @@ export function BrandingDocumentEditor({
                             type="button"
                             variant="ghost"
                             className="w-fit"
+                            disabled={
+                              type === "work-instruction" &&
+                              translation.sections.length === 1
+                            }
                             aria-label={`Remove ${brandingLanguageLabels[language]} section ${index + 1}`}
                             onClick={() =>
                               updateTranslation({
@@ -354,7 +407,9 @@ export function BrandingDocumentEditor({
                               })
                             }
                           >
-                            Remove Section
+                            {type === "work-instruction"
+                              ? "Remove Heading"
+                              : "Remove Section"}
                           </Button>
                         </div>
                       ))}
@@ -372,7 +427,9 @@ export function BrandingDocumentEditor({
                           })
                         }
                       >
-                        Add Section
+                        {type === "work-instruction"
+                          ? "Add Heading"
+                          : "Add Section"}
                       </Button>
                     </>
                   ) : (

@@ -52,4 +52,12 @@ the fonts. Newly issued revisions record v3; existing frozen PDFs are unchanged.
 Notice template v4 follows the later Notice.pdf: a dedicated fixed-size one-page
 renderer with Noto Sans fonts and a measured content/footer clearance check after
 fonts load. Number/author/title are stored as PDF metadata. User line breaks are
-preserved; overflow is rejected. Other document types retain template v3.
+preserved; overflow is rejected. SOP/policy retain template v3.
+
+Work Instruction template v5 follows the Washing & Drying text poster. The editor
+normalizes each selected language to at least one heading/body pair, with one
+shared title synchronized on save. Source-copy fields are hidden only for WI.
+The renderer fits title and body separately by binary search after fonts load,
+measuring the actual panel space; it emits exactly one A4 page. Keep browser
+evaluation callbacks free of named nested functions because tsx inserts helpers
+that are unavailable inside Chromium. Frozen PDFs are not regenerated.

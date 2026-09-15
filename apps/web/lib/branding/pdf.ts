@@ -64,6 +64,25 @@ export async function brandingHtml(input: BrandingPdfInput) {
   const e = escapeBrandingHtml
   const reference = `${input.number}${input.type === "notice" || input.type === "work-instruction" ? "" : ` · ${revisionLabel(input.revision)}`}`
   const styles = `${await fonts()} *{-webkit-print-color-adjust:exact;print-color-adjust:exact}`
+  if (input.type === "work-instruction") {
+    return {
+      header: "<span></span>",
+      footer: "<span></span>",
+      html: `<!doctype html><html><head><meta charset="utf-8"><style>${styles}
+      *{box-sizing:border-box}body{margin:0;font-family:'Outfit','Hind','Hind Vadodara',sans-serif;color:#050505}
+      .wi-sheet{position:fixed;inset:0;background:#006A49;--wi-size:22pt;--wi-title:36pt}
+      .wi-logo{position:absolute;left:14mm;top:10mm}.wi-logo svg{width:14mm;height:14mm}
+      .wi-number{position:absolute;right:16mm;top:7mm;color:#F7F7F2;font-size:8pt}
+      .wi-title{position:absolute;top:11mm;left:40mm;right:16mm;height:17mm;display:flex;align-items:center;justify-content:flex-end;text-align:right;color:#F7F7F2;font-size:var(--wi-title);font-weight:700;line-height:1.05}
+      .wi-title span{max-width:100%;overflow-wrap:anywhere}
+      .wi-panel{position:absolute;top:32mm;left:12mm;right:12mm;bottom:8mm;padding:10mm 9mm;border-radius:10mm;background:#F7F7F2}
+      .wi-content{font-size:var(--wi-size);line-height:1.4;font-weight:600}
+      [lang=gu]{font-family:'Hind Vadodara','Outfit',sans-serif}[lang=hi]{font-family:'Hind','Outfit',sans-serif}
+      section+section,article+article{margin-top:1.5em}h2{display:table;max-width:100%;margin:0 0 .5em;padding:.08em .28em;border-radius:.4em;background:#006A49;color:#F7F7F2;font-size:min(2em,34.45pt);line-height:1.15;font-weight:400;overflow-wrap:anywhere}
+      p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
+      </style></head><body><div class="wi-sheet"><div class="wi-logo">${logo.replaceAll("#006A49", "#F7F7F2")}</div><div class="wi-number">${e(reference)}${input.draft ? " · DRAFT" : ""}</div><div class="wi-title"><span>${e(input.content.title)}</span></div><div class="wi-panel"><main class="wi-content">${input.content.translations.map((translation) => `<article lang="${translation.language}">${translation.sections.map((section) => `<section><h2>${e(section.heading)}</h2><p>${e(section.body)}</p></section>`).join("")}</article>`).join("")}</main></div></div></body></html>`,
+    }
+  }
   if (input.type === "notice") {
     const date = input.content.effectiveDate.split("-").reverse().join(" / ")
     const languageOrder = { en: 0, gu: 1, hi: 2 }
@@ -91,7 +110,6 @@ export async function brandingHtml(input: BrandingPdfInput) {
     .cover{height:296mm;padding:5mm;background:#F7F7F2}.cover-panel{height:100%;border-radius:7mm;background:#006A49;color:#F7F7F2;padding:16mm 10mm 12mm;display:flex;flex-direction:column;align-items:center}.cover-logo{width:115mm;margin:2mm 0 36mm}.cover h1{color:inherit;text-align:center;text-transform:uppercase;font-size:48pt;line-height:1.25;width:100%;margin:0}.cover-label{font-size:10pt;letter-spacing:.12em;margin-bottom:10mm}.cover-footer{margin-top:auto;display:flex;justify-content:space-between;gap:4mm;width:100%;font-size:10pt;font-weight:600}.cover-footer span{max-width:45%;overflow-wrap:anywhere}
     .topic{border:1pt solid #006A49;border-radius:4mm;padding:6mm;color:#006A49;box-decoration-break:clone}.topic h1{font-size:22pt;border-bottom:1pt solid #006A49;padding-bottom:4mm}
     .index-row{display:flex;gap:5mm;justify-content:space-between;border-bottom:1px dotted #006A49;padding:3mm 0;break-inside:avoid}.index-row span:last-child{min-width:12mm;text-align:right}
-    ${input.type === "work-instruction" ? "article+article{break-before:auto;margin-top:5mm}.eyebrow{display:none}article h1{font-size:20pt;margin-bottom:3mm}article h2{margin:0 0 2mm;border:0;padding:0}article .meta{margin-bottom:4mm}section{border:1pt solid #006A49;border-radius:3mm;padding:3mm;margin-bottom:3mm}section p{margin:0}" : ""}
     [lang=hi]{font-family:'Hind','Outfit',sans-serif}[lang=gu]{font-family:'Hind Vadodara','Outfit',sans-serif}
     .eyebrow{font:600 9pt 'Outfit';letter-spacing:.14em;color:#006A49;margin:0 0 8mm}
     h1{font-size:24pt;font-weight:800;line-height:1.3;color:#006A49;margin:0 0 6mm;overflow-wrap:anywhere}
@@ -131,6 +149,8 @@ export async function generateBrandingPdf(input: BrandingPdfInput) {
     const page = await browser.newPage()
     if (input.type === "notice")
       await page.setViewport({ width: 794, height: 1123 })
+    if (input.type === "work-instruction")
+      await page.setViewport({ width: 794, height: 1122 })
     await page.setJavaScriptEnabled(false)
     await page.setRequestInterception(true)
     page.on("request", (request) => {
@@ -139,6 +159,57 @@ export async function generateBrandingPdf(input: BrandingPdfInput) {
         : request.abort())
     })
     await page.setContent(html, { waitUntil: "load", timeout: 30000 })
+    if (input.type === "work-instruction") {
+      await page.evaluate(() => document.fonts.ready)
+      const fits = await page.evaluate(() => {
+        const sheet = document.querySelector<HTMLElement>(".wi-sheet")!
+        const panel = document.querySelector<HTMLElement>(".wi-panel")!
+        const content = document.querySelector<HTMLElement>(".wi-content")!
+        const title = document.querySelector<HTMLElement>(".wi-title")!
+        const titleText = title.querySelector("span")!
+        for (const target of [
+          { property: "--wi-title", min: 12, max: 36 },
+          { property: "--wi-size", min: 10, max: 22 },
+        ]) {
+          let low = target.min,
+            high = target.max
+          for (let step = 0; step <= 10; step++) {
+            const size = step === 0 ? low : (low + high) / 2
+            sheet.style.setProperty(target.property, `${size}pt`)
+            const fits =
+              target.property === "--wi-title"
+                ? titleText.getBoundingClientRect().height <=
+                    title.clientHeight && title.scrollWidth <= title.clientWidth
+                : content.getBoundingClientRect().bottom <=
+                    panel.getBoundingClientRect().bottom -
+                      parseFloat(getComputedStyle(panel).paddingBottom) &&
+                  content.scrollWidth <= content.clientWidth
+            if (!fits && step === 0) return false
+            if (fits) low = size
+            else high = size
+          }
+          sheet.style.setProperty(target.property, `${low}pt`)
+        }
+        return true
+      })
+      if (!fits)
+        throw new Error(
+          "Work Instruction has too much text for one readable page, even at the smallest font size. Shorten the text or split it into separate work instructions."
+        )
+      const bytes = await page.pdf({
+        format: "A4",
+        printBackground: true,
+        waitForFonts: true,
+        margin: { top: 0, bottom: 0, left: 0, right: 0 },
+      })
+      const instructionPdf = await PDFDocument.load(bytes)
+      if (instructionPdf.getPageCount() !== 1)
+        throw new Error("Work Instruction could not be fitted to one page.")
+      instructionPdf.setTitle(input.content.title)
+      instructionPdf.setSubject(input.number)
+      instructionPdf.setAuthor(input.authorName)
+      return instructionPdf.save()
+    }
     if (input.type === "notice") {
       await page.evaluate(() => document.fonts.ready)
       const fits = await page.evaluate(() => {
@@ -258,13 +329,6 @@ export async function generateBrandingPdf(input: BrandingPdfInput) {
         await append(indexPdf)
         for (const topic of topics) await append(topic)
       }
-    } else {
-      const document = await render()
-      if (input.type === "work-instruction" && document.getPageCount() !== 1)
-        throw new Error(
-          "Work Instruction exceeds one page. Shorten the text or split it into separate work instructions."
-        )
-      await append(document)
     }
     const font = await output.embedFont(StandardFonts.Helvetica)
     output.getPages().forEach((sheet, index) => {
