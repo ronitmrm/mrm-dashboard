@@ -303,17 +303,20 @@ export function BrandingDocumentEditor({
                   : "Review each selected language before saving and issuing."
             }
           >
-            <p className="mb-4 text-sm text-muted-foreground">
-              {type === "sop" || type === "policy"
-                ? "Each language has a cover, details page, automatic index and flowing content. Add headings and subheadings below; choose bullets or numbering within each body."
-                : type === "work-instruction"
-                  ? "The section count sets the picture and text-box sizes on one page. Fonts shrink inside those fixed boxes. Review the draft PDF and edit the text if needed."
-                  : "Review the draft PDF before issue."}
-            </p>
-            <p className="mb-4 text-sm text-muted-foreground">
-              Writing assistance and automatic translation are pending setup.
-              For now, enter or paste the final text in each selected language.
-            </p>
+            {book ? (
+              <>
+                <p className="mb-4 text-sm text-muted-foreground">
+                  Each language has a cover, details page, automatic index and
+                  flowing content. Add headings and subheadings below; choose
+                  bullets or numbering within each body.
+                </p>
+                <p className="mb-4 text-sm text-muted-foreground">
+                  Writing assistance and automatic translation are pending
+                  setup. For now, enter or paste the final text in each selected
+                  language.
+                </p>
+              </>
+            ) : null}
             <div className="grid gap-6">
               {content.languages.map((language) => {
                 const translation = content.translations.find(
