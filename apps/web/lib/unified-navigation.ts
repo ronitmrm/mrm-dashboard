@@ -81,6 +81,27 @@ export const brandingNavigation = [
   },
 ] as const
 
+export const publishedRegisterNavigation = [
+  {
+    href: "/registers/sop",
+    type: "sop",
+    icon: ListChecks,
+    label: "SOP Register",
+  },
+  {
+    href: "/registers/work-instruction",
+    type: "work-instruction",
+    icon: ListChecks,
+    label: "Work Instruction Register",
+  },
+  {
+    href: "/registers/policy",
+    type: "policy",
+    icon: ScrollText,
+    label: "Policies Register",
+  },
+] as const
+
 export function dashboardTabHref(
   tab: DashboardTabId,
   productionFloorCode?: ProductionFloorCode

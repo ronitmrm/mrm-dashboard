@@ -59,6 +59,7 @@ import {
 import {
   administrationNavigation,
   brandingNavigation,
+  publishedRegisterNavigation,
   commercialCostingNavigation,
   commercialMasterDataWorkspaceNavigation,
   commercialOperationalEntryNavigation,
@@ -609,6 +610,32 @@ export function UnifiedSidebarNavigation({
           ))}
         </NavigationSection>
       ) : null}
+
+      <SidebarMenu>
+        {filterNavigationItems(
+          publishedRegisterNavigation.filter((item) =>
+            navigationAccess.brandingHrefs?.includes(`/branding/${item.type}`)
+          ),
+          normalizedMenuSearch,
+          "published documents registers"
+        ).map((item) => (
+          <SidebarMenuItem key={item.href}>
+            <SidebarMenuButton
+              asChild
+              isActive={navigationHrefMatches(
+                pathname,
+                searchParams,
+                item.href
+              )}
+            >
+              <a href={item.href}>
+                <item.icon aria-hidden="true" />
+                <span>{item.label}</span>
+              </a>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        ))}
+      </SidebarMenu>
 
       {filteredBrandingNavigation.length ? (
         <NavigationSection

@@ -1,5 +1,12 @@
 # Branding implementation
 
+- Standalone published registers: `/registers/sop`, `/registers/work-instruction`,
+  `/registers/policy`. Each has a direct main-sidebar entry outside Branding and
+  reuses its document type's View permission. `listPublished` selects the latest
+  issued revision in SQL before returning metadata; drafts never enter the list.
+  All published records load for persistent table filtering. PDF actions open the
+  existing authenticated attachment viewer, without linking to document history.
+
 - Routes: `apps/web/app/branding/[type]`, types `sop`, `notice`, `policy`, `work-instruction`.
   Shared `OperationalTable`, `PageHeader`, `ActionToolbar`, forms, tabs and
   `AttachmentViewerLink` preserve the dashboard conventions.

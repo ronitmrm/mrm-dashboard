@@ -29,6 +29,7 @@ import type { UnifiedNavigationAccess } from "@/lib/auth/unified-navigation-acce
 import {
   administrationNavigation,
   brandingNavigation,
+  publishedRegisterNavigation,
   commercialMasterNavigation,
   commercialNavigation,
   dashboardNavigation,
@@ -89,10 +90,10 @@ export function CommercialShell({
     (pathname === "/commercial/price-master"
       ? { label: "Price Master" }
       : pathname === "/account/password"
-      ? { label: "Password & Security" }
-      : pathname.startsWith("/operational-entry")
-        ? { label: "Operational Entry" }
-        : productionPage) ??
+        ? { label: "Password & Security" }
+        : pathname.startsWith("/operational-entry")
+          ? { label: "Operational Entry" }
+          : productionPage) ??
     [
       personalDashboardNavigation,
       ...commercialNavigation,
@@ -101,6 +102,7 @@ export function CommercialShell({
       ...hrNavigation,
       ...administrationNavigation,
       ...brandingNavigation,
+      ...publishedRegisterNavigation,
       ...storeNavigation,
     ].find((item) =>
       navigationHrefMatches(pathname, searchParams, item.href)
