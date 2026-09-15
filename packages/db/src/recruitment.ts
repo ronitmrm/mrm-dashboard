@@ -2389,7 +2389,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             employee_code: string | null
             employee_name: string | null
             id: string
-            job_post_links: number
+            non_closed_job_post_links: number
             post_code: string
           }
         >(
@@ -2400,7 +2400,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
                 WHERE link.post_id = post.id) AS combined_role_links,
               (SELECT count(*)::int
                 FROM recruitment.job_posts job
-                WHERE job.post_id = post.id) AS job_post_links
+                WHERE job.post_id = post.id AND job.status <> 'Closed') AS non_closed_job_post_links
             FROM recruitment.posts post
             WHERE post.id = $1 AND post.organization_id = $2
             FOR UPDATE OF post
@@ -2413,7 +2413,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           combinedRoleLinks: post.combined_role_links,
           employeeCode: post.employee_code,
           employeeName: post.employee_name,
-          jobPostLinks: post.job_post_links,
+          nonClosedJobPostLinks: post.non_closed_job_post_links,
         })
         if (blocker) throw new Error(blocker)
 

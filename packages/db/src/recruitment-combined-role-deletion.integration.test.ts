@@ -56,6 +56,99 @@ test("a linked job blocks deletion and retains the combined membership", async (
   expect(await repository.listCombinedRoles(organizationId)).toEqual(before)
 })
 
+test("approved post deletion blocks open jobs and preserves closed jobs and applications", async () => {
+  const { organizationId, combinedRoleId, postIds } = await fixture()
+  await repository.deleteCombinedRole({ organizationId, combinedRoleId })
+  const postId = postIds[0]!
+  await pool.query(
+    `UPDATE recruitment.posts SET employee_name = NULL, employee_code = NULL,
+      status = 'Vacant' WHERE id = $1`,
+    [postId]
+  )
+  const jobId = randomUUID()
+  await pool.query(
+    `INSERT INTO recruitment.job_posts
+      (id, organization_id, post_id, job_number, vacancy_code, title,
+        source_system, source_table, source_id)
+      VALUES ($1::uuid,$2,$3,$1::text,'CONVENTIONAL-01','Shop Floor Assistant',
+        'test','jobs',$1::text)`,
+    [jobId, organizationId, postId]
+  )
+  await expect(
+    repository.deletePost({ organizationId, postId })
+  ).rejects.toThrow("Close the linked job post")
+  await expect(
+    pool.query(`SELECT recruitment.delete_approved_post($1,$2,NULL)`, [
+      organizationId,
+      postId,
+    ])
+  ).rejects.toThrow("Close the linked job post")
+  const candidateId = randomUUID()
+  await pool.query(
+    `INSERT INTO recruitment.candidates
+      (id, organization_id, name, phone, source_system, source_table, source_id)
+      VALUES ($1::uuid,$2,'Test candidate',$1::text,'test','candidates',$1::text)`,
+    [candidateId, organizationId]
+  )
+  await pool.query(
+    `INSERT INTO recruitment.applications
+      (organization_id, candidate_id, job_post_id, source_system, source_table, source_id)
+      VALUES ($1,$2,$3,'test','applications',$2::text)`,
+    [organizationId, candidateId, jobId]
+  )
+  await pool.query(
+    `UPDATE recruitment.job_posts SET status = 'Closed',
+    closed_on = current_date WHERE id = $1`,
+    [jobId]
+  )
+  const before = (
+    await pool.query<Record<string, unknown>>(
+      `SELECT * FROM recruitment.job_posts WHERE id = $1`,
+      [jobId]
+    )
+  ).rows[0]!
+  const applications = await pool.query<Record<string, unknown>>(
+    `SELECT * FROM recruitment.applications WHERE job_post_id = $1`,
+    [jobId]
+  )
+  await repository.deletePost({ organizationId, postId })
+  const after = (
+    await pool.query<Record<string, unknown>>(
+      `SELECT * FROM recruitment.job_posts WHERE id = $1`,
+      [jobId]
+    )
+  ).rows[0]
+  expect(after).toEqual({
+    ...before,
+    post_id: null,
+    updated_at: expect.any(Date),
+    row_version: String(Number(before.row_version) + 1),
+  })
+  expect(
+    (
+      await pool.query<Record<string, unknown>>(
+        `SELECT * FROM recruitment.applications WHERE job_post_id = $1`,
+        [jobId]
+      )
+    ).rows
+  ).toEqual(applications.rows)
+  expect(
+    (
+      await pool.query(`SELECT id FROM recruitment.posts WHERE id = $1`, [
+        postId,
+      ])
+    ).rows
+  ).toEqual([])
+  expect(await repository.listJobs(organizationId)).toEqual([
+    expect.objectContaining({
+      id: jobId,
+      title: "Shop Floor Assistant",
+      status: "Closed",
+      applicantCount: 1,
+    }),
+  ])
+})
+
 async function fixture() {
   const organizationId = randomUUID(),
     departmentId = randomUUID(),

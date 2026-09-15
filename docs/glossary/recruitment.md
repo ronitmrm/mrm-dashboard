@@ -1,5 +1,13 @@
 # Recruitment
 
+## Approved Post Deletion
+
+An unassigned Approved Post outside a combined role may be deleted when all
+linked Job Posts are Closed. Closed jobs retain their stored vacancy code,
+title, applications and history; only their Approved Post link is cleared.
+The deletion audit retains the original Approved Post and detached job IDs.
+Any linked job that is not Closed still blocks deletion.
+
 ## Combined Approved Post Deletion
 
 Deleting a combined role removes the grouping, not its individual Approved Posts
