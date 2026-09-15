@@ -51,8 +51,8 @@ export default async function BrandingRegisterPage({
         title={brandingTypeLabels[type]}
         icon={Palette}
         description={
-          type === "notice"
-            ? "Create and issue branded notices."
+          type === "notice" || type === "work-instruction"
+            ? `Create and issue branded ${brandingTypeLabels[type].toLowerCase()}.`
             : "Create branded documents and retain every issued revision."
         }
       />
@@ -76,7 +76,7 @@ export default async function BrandingRegisterPage({
             tone: "warning",
             description: "Awaiting first issue",
           },
-          ...(type === "notice"
+          ...(type === "notice" || type === "work-instruction"
             ? []
             : [
                 {

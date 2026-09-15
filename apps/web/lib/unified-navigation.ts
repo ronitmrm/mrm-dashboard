@@ -74,6 +74,11 @@ export const brandingNavigation = [
   { href: "/branding/sop", icon: ListChecks, label: "SOPs" },
   { href: "/branding/notice", icon: FilePenLine, label: "Notices" },
   { href: "/branding/policy", icon: ScrollText, label: "Policies" },
+  {
+    href: "/branding/work-instruction",
+    icon: ListChecks,
+    label: "Work Instructions",
+  },
 ] as const
 
 export function dashboardTabHref(

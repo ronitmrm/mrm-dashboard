@@ -3,6 +3,7 @@ import path from "node:path"
 import { existsSync } from "node:fs"
 import chromium from "@sparticuz/chromium"
 import puppeteer from "puppeteer-core"
+import { PDFDocument, StandardFonts, rgb } from "pdf-lib"
 import {
   brandingTypeLabels,
   revisionLabel,
@@ -49,12 +50,15 @@ function fonts() {
 const logo = `<svg width="32" height="32" viewBox="0 0 112.66 112.67" xmlns="http://www.w3.org/2000/svg"><path fill="#006A49" d="M101.39,0H11.27C5.04,0,0,5.01,0,11.18v50.79h112.66V11.18c0-6.17-5.04-11.18-11.27-11.18Z"/><path fill="#006A49" d="M0,101.16c0,6.36,5.04,11.51,11.27,11.51h90.13c6.22,0,11.27-5.16,11.27-11.51v-11.02H0v11.02Z"/></svg>`
 export async function brandingHtml(input: BrandingPdfInput) {
   const e = escapeBrandingHtml
-  const reference = `${input.number}${input.type === "notice" ? "" : ` · ${revisionLabel(input.revision)}`}`
+  const reference = `${input.number}${input.type === "notice" || input.type === "work-instruction" ? "" : ` · ${revisionLabel(input.revision)}`}`
   const styles = await fonts()
   const html = `<!doctype html><html><head><meta charset="utf-8"><style>${styles}
     *{box-sizing:border-box}html{-webkit-print-color-adjust:exact;print-color-adjust:exact}
     body{margin:0;color:#050505;background:#F7F7F2;font:11pt/1.6 'Outfit','Hind','Hind Vadodara',sans-serif}
     article+article{break-before:page}article{padding:0 2mm}
+    .cover{padding-top:45mm}.cover h1{font-size:32pt}.cover .meta{margin-top:18mm}
+    .index-row{display:flex;gap:5mm;justify-content:space-between;border-bottom:1px dotted #006A49;padding:3mm 0;break-inside:avoid}.index-row span:last-child{min-width:12mm;text-align:right}
+    ${input.type === "work-instruction" ? "article+article{break-before:auto;margin-top:5mm}.eyebrow{margin-bottom:3mm}h1{font-size:20pt;margin-bottom:3mm}h2{margin-top:3mm}.meta{margin-bottom:4mm}" : ""}
     [lang=hi]{font-family:'Hind','Outfit',sans-serif}[lang=gu]{font-family:'Hind Vadodara','Outfit',sans-serif}
     .eyebrow{font:600 9pt 'Outfit';letter-spacing:.14em;color:#006A49;margin:0 0 8mm}
     h1{font-size:24pt;font-weight:800;line-height:1.3;color:#006A49;margin:0 0 6mm;overflow-wrap:anywhere}
@@ -100,16 +104,109 @@ export async function generateBrandingPdf(input: BrandingPdfInput) {
         : request.abort())
     })
     await page.setContent(html, { waitUntil: "load", timeout: 30000 })
-    return await page.pdf({
-      format: "A4",
-      printBackground: true,
-      waitForFonts: true,
-      displayHeaderFooter: true,
-      headerTemplate: header,
-      footerTemplate: footer,
-      margin: { top: "24mm", bottom: "22mm", left: "16mm", right: "16mm" },
-      timeout: 30000,
+    const render = async (body?: string) => {
+      if (body !== undefined)
+        await page.setContent(
+          html.replace(/<body>[\s\S]*<\/body>/, () => `<body>${body}</body>`),
+          { waitUntil: "load" }
+        )
+      const bytes = await page.pdf({
+        format: "A4",
+        printBackground: true,
+        waitForFonts: true,
+        displayHeaderFooter: true,
+        headerTemplate: header,
+        footerTemplate: footer.replace(
+          / · <span class="pageNumber"><\/span> \/ <span class="totalPages"><\/span>/,
+          ""
+        ),
+        margin: { top: "24mm", bottom: "22mm", left: "16mm", right: "16mm" },
+        timeout: 30000,
+      })
+      return PDFDocument.load(bytes)
+    }
+    const output = await PDFDocument.create()
+    const append = async (document: PDFDocument) => {
+      for (const copied of await output.copyPages(
+        document,
+        document.getPageIndices()
+      ))
+        output.addPage(copied)
+    }
+    if (input.type === "sop" || input.type === "policy") {
+      const e = escapeBrandingHtml
+      for (const translation of input.content.translations) {
+        const wrap = (body: string) =>
+          `<article lang="${translation.language}">${body}</article>`
+        const cover = await render(
+          wrap(
+            `<div class="cover"><div class="eyebrow">${e(brandingTypeLabels[input.type])}${input.draft ? " · DRAFT" : ""}</div><h1>${e(translation.title)}</h1><div class="meta">${e(input.number)} · ${revisionLabel(input.revision)}<br>${e(input.content.department)}<br>Effective: ${e(input.content.effectiveDate || "Pending")}<br>${e(input.authorName)}</div></div>`
+          )
+        )
+        if (cover.getPageCount() !== 1)
+          throw new Error(
+            "Cover details are too long for one page. Shorten the title or department."
+          )
+        const topics: PDFDocument[] = []
+        for (const [index, section] of translation.sections.entries()) {
+          topics.push(
+            await render(
+              wrap(
+                `<h1>${index + 1}. ${e(section.heading)}</h1><p>${e(section.body)}</p>`
+              )
+            )
+          )
+        }
+        const indexTitle = {
+          en: "Index",
+          hi: "अनुक्रमणिका",
+          gu: "અનુક્રમણિકા",
+        }[translation.language]
+        const indexBody = (firstPage: number) => {
+          let pageNumber = firstPage
+          return wrap(
+            `<h1>${indexTitle}</h1>${translation.sections
+              .map((section, index) => {
+                const row = `<div class="index-row"><span>${index + 1}. ${e(section.heading)}</span><span>${pageNumber}</span></div>`
+                pageNumber += topics[index]!.getPageCount()
+                return row
+              })
+              .join("")}`
+          )
+        }
+        let indexPdf = await render(indexBody(9999))
+        indexPdf = await render(
+          indexBody(
+            output.getPageCount() +
+              cover.getPageCount() +
+              indexPdf.getPageCount() +
+              1
+          )
+        )
+        await append(cover)
+        await append(indexPdf)
+        for (const topic of topics) await append(topic)
+      }
+    } else {
+      const document = await render()
+      if (input.type === "work-instruction" && document.getPageCount() !== 1)
+        throw new Error(
+          "Work Instruction exceeds one page. Shorten the text or split it into separate work instructions."
+        )
+      await append(document)
+    }
+    const font = await output.embedFont(StandardFonts.Helvetica)
+    output.getPages().forEach((sheet, index) => {
+      const label = `${index + 1} / ${output.getPageCount()}`
+      sheet.drawText(label, {
+        x: (sheet.getWidth() - font.widthOfTextAtSize(label, 8)) / 2,
+        y: 16,
+        size: 8,
+        font,
+        color: rgb(0, 0.416, 0.286),
+      })
     })
+    return output.save()
   } finally {
     await browser.close()
   }

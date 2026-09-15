@@ -21,7 +21,7 @@ export function BrandingIssueControls({
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState("")
-  if (type === "notice" && !draft) return null
+  if ((type === "notice" || type === "work-instruction") && !draft) return null
   return (
     <div className="grid gap-2">
       <Button
