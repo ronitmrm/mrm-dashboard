@@ -48,3 +48,8 @@ print margins and a rounded green panel; other pages retain content margins.
 Cover pages count toward the index but do not display a page counter. Exact full
 wordmark SVGs were extracted from the supplied HTML guide and bundled alongside
 the fonts. Newly issued revisions record v3; existing frozen PDFs are unchanged.
+
+Notice template v4 follows the later Notice.pdf: a dedicated fixed-size one-page
+renderer with Noto Sans fonts and a measured content/footer clearance check after
+fonts load. Number/author/title are stored as PDF metadata. User line breaks are
+preserved; overflow is rejected. Other document types retain template v3.

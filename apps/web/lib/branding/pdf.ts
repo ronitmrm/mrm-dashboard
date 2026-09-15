@@ -38,6 +38,8 @@ function fonts() {
       ["Hind", "Hind-Bold.ttf", "700"],
       ["Hind Vadodara", "HindVadodara-Regular.ttf", "400"],
       ["Hind Vadodara", "HindVadodara-Bold.ttf", "700"],
+      ["Noto Sans Gujarati", "NotoSansGujarati.ttf", "100 900"],
+      ["Noto Sans Devanagari", "NotoSansDevanagari.ttf", "100 900"],
     ].map(async ([family, file, weight]) => {
       const bytes = await readFile(
         path.join(process.cwd(), "lib/branding/assets", file!)
@@ -62,13 +64,32 @@ export async function brandingHtml(input: BrandingPdfInput) {
   const e = escapeBrandingHtml
   const reference = `${input.number}${input.type === "notice" || input.type === "work-instruction" ? "" : ` · ${revisionLabel(input.revision)}`}`
   const styles = `${await fonts()} *{-webkit-print-color-adjust:exact;print-color-adjust:exact}`
+  if (input.type === "notice") {
+    const date = input.content.effectiveDate.split("-").reverse().join(" / ")
+    const languageOrder = { en: 0, gu: 1, hi: 2 }
+    const translations = [...input.content.translations].sort(
+      (a, b) => languageOrder[a.language] - languageOrder[b.language]
+    )
+    return {
+      header: "<span></span>",
+      footer: "<span></span>",
+      html: `<!doctype html><html><head><meta charset="utf-8"><style>${styles}
+      *{box-sizing:border-box}body{margin:0;background:white;color:#231F20;font:400 21.5pt/30pt 'Outfit',sans-serif}
+      .notice-banner{position:absolute;top:32pt;left:36pt;right:36pt;height:140pt;border-radius:17pt;background:#006A49;color:white;display:flex;align-items:center;justify-content:center;font:600 100pt/1 'Outfit';letter-spacing:1.2pt}
+      .notice-date{position:absolute;top:243pt;right:60pt;font:500 20pt/28pt 'Outfit';color:#006A49}
+      .notice-content{position:absolute;top:241pt;left:55.5pt;right:55.5pt}
+      [lang=gu]{font-family:'Outfit','Noto Sans Gujarati',sans-serif}[lang=hi]{font-family:'Outfit','Noto Sans Devanagari',sans-serif}
+      section+section,article+article{margin-top:64pt}h1{font-size:27.5pt;font-weight:700;line-height:40pt;text-align:center;margin:0 0 28pt;overflow-wrap:anywhere}article:first-child section:first-child h1{max-width:210pt;margin-left:auto;margin-right:auto}
+      p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}.notice-logo{position:absolute;top:779pt;left:178pt;width:239pt;color:#006A49}
+      </style></head><body><div class="notice-banner">NOTICE</div><div class="notice-date">${e(date || "Date pending")}</div><main class="notice-content">${translations.map((translation) => `<article lang="${translation.language}">${translation.sections.map((section) => `<section><h1>${e(section.heading)}</h1><p>${e(section.body)}</p></section>`).join("")}</article>`).join("")}</main><div class="notice-logo">${await wordmark()}</div></body></html>`,
+    }
+  }
   const html = `<!doctype html><html><head><meta charset="utf-8"><style>${styles}
     *{box-sizing:border-box}html{-webkit-print-color-adjust:exact;print-color-adjust:exact}
     body{margin:0;color:#050505;background:white;font:11pt/1.6 'Outfit','Hind','Hind Vadodara',sans-serif}
     article+article{break-before:page}article{padding:0 2mm}
     .cover{height:296mm;padding:5mm;background:#F7F7F2}.cover-panel{height:100%;border-radius:7mm;background:#006A49;color:#F7F7F2;padding:16mm 10mm 12mm;display:flex;flex-direction:column;align-items:center}.cover-logo{width:115mm;margin:2mm 0 36mm}.cover h1{color:inherit;text-align:center;text-transform:uppercase;font-size:48pt;line-height:1.25;width:100%;margin:0}.cover-label{font-size:10pt;letter-spacing:.12em;margin-bottom:10mm}.cover-footer{margin-top:auto;display:flex;justify-content:space-between;gap:4mm;width:100%;font-size:10pt;font-weight:600}.cover-footer span{max-width:45%;overflow-wrap:anywhere}
     .topic{border:1pt solid #006A49;border-radius:4mm;padding:6mm;color:#006A49;box-decoration-break:clone}.topic h1{font-size:22pt;border-bottom:1pt solid #006A49;padding-bottom:4mm}
-    .notice-banner{background:#006A49;color:white;border-radius:6mm;text-align:center;font:700 64pt/1.2 'Outfit';padding:10mm 0;margin-bottom:12mm}.notice-date{text-align:right;color:#006A49;margin-bottom:8mm}.notice article+article{break-before:auto;margin-top:8mm}.notice h1{text-align:center;color:#050505;font-size:20pt}.notice h2{border:0;padding:0;color:#050505;font-size:14pt}.notice p{font-size:14pt}.notice .meta,.notice .eyebrow{display:none}
     .index-row{display:flex;gap:5mm;justify-content:space-between;border-bottom:1px dotted #006A49;padding:3mm 0;break-inside:avoid}.index-row span:last-child{min-width:12mm;text-align:right}
     ${input.type === "work-instruction" ? "article+article{break-before:auto;margin-top:5mm}.eyebrow{display:none}article h1{font-size:20pt;margin-bottom:3mm}article h2{margin:0 0 2mm;border:0;padding:0}article .meta{margin-bottom:4mm}section{border:1pt solid #006A49;border-radius:3mm;padding:3mm;margin-bottom:3mm}section p{margin:0}" : ""}
     [lang=hi]{font-family:'Hind','Outfit',sans-serif}[lang=gu]{font-family:'Hind Vadodara','Outfit',sans-serif}
@@ -87,11 +108,8 @@ export async function brandingHtml(input: BrandingPdfInput) {
     </article>`
     )
     .join("")}</body></html>`
-  const header =
-    input.type === "notice"
-      ? "<span></span>"
-      : `<style>${styles}</style><div style="margin:0 10mm;width:100%;display:flex;border:1px solid #006A49;border-radius:12px;overflow:hidden;font:10px Outfit,Hind,'Hind Vadodara';height:94px"><div style="background:#006A49;color:white;width:29%;padding:10px;line-height:1.7">Effective: ${e(input.content.effectiveDate || "Pending")}<br>${e(reference)}<br><span style="font-size:8px;line-height:1.2;display:block;overflow-wrap:anywhere">${e(input.content.department)}</span></div><div style="background:#006A49;color:white;flex:1;text-align:center;padding:10px;border-left:1px solid white"><b>${input.type === "sop" ? "STANDARD OPERATING PROCEDURE" : e(brandingTypeLabels[input.type]).toUpperCase()}${input.draft ? " · DRAFT" : ""}</b><div style="margin-top:5px;font-size:9px;line-height:1.2;overflow-wrap:anywhere">${e(input.content.title)}</div></div><div style="width:16%;display:flex;align-items:center;justify-content:center">${logo.replaceAll('width="32" height="32"', 'width="54" height="54"')}</div></div>`
-  const footer = `<style>${styles}</style><div style="width:100%;padding:0 10mm;font:9px Outfit,Hind,'Hind Vadodara';color:#006A49">${input.type === "notice" ? `<div style="width:85mm;margin:0 auto 6mm">${await wordmark()}</div>` : ""}<div style="display:flex;justify-content:space-between"><span>${e(input.authorName)} · ${e(input.issuedAt.slice(0, 10))}</span><span>${e(reference)}${input.draft ? " · DRAFT" : ""}</span></div></div>`
+  const header = `<style>${styles}</style><div style="margin:0 10mm;width:100%;display:flex;border:1px solid #006A49;border-radius:12px;overflow:hidden;font:10px Outfit,Hind,'Hind Vadodara';height:94px"><div style="background:#006A49;color:white;width:29%;padding:10px;line-height:1.7">Effective: ${e(input.content.effectiveDate || "Pending")}<br>${e(reference)}<br><span style="font-size:8px;line-height:1.2;display:block;overflow-wrap:anywhere">${e(input.content.department)}</span></div><div style="background:#006A49;color:white;flex:1;text-align:center;padding:10px;border-left:1px solid white"><b>${input.type === "sop" ? "STANDARD OPERATING PROCEDURE" : e(brandingTypeLabels[input.type]).toUpperCase()}${input.draft ? " · DRAFT" : ""}</b><div style="margin-top:5px;font-size:9px;line-height:1.2;overflow-wrap:anywhere">${e(input.content.title)}</div></div><div style="width:16%;display:flex;align-items:center;justify-content:center">${logo.replaceAll('width="32" height="32"', 'width="54" height="54"')}</div></div>`
+  const footer = `<style>${styles}</style><div style="width:100%;padding:0 10mm;font:9px Outfit,Hind,'Hind Vadodara';color:#006A49"><div style="display:flex;justify-content:space-between"><span>${e(input.authorName)} · ${e(input.issuedAt.slice(0, 10))}</span><span>${e(reference)}${input.draft ? " · DRAFT" : ""}</span></div></div>`
   return { html, header, footer }
 }
 export async function generateBrandingPdf(input: BrandingPdfInput) {
@@ -111,6 +129,8 @@ export async function generateBrandingPdf(input: BrandingPdfInput) {
   })
   try {
     const page = await browser.newPage()
+    if (input.type === "notice")
+      await page.setViewport({ width: 794, height: 1123 })
     await page.setJavaScriptEnabled(false)
     await page.setRequestInterception(true)
     page.on("request", (request) => {
@@ -119,6 +139,34 @@ export async function generateBrandingPdf(input: BrandingPdfInput) {
         : request.abort())
     })
     await page.setContent(html, { waitUntil: "load", timeout: 30000 })
+    if (input.type === "notice") {
+      await page.evaluate(() => document.fonts.ready)
+      const fits = await page.evaluate(() => {
+        const body = document
+          .querySelector(".notice-content")!
+          .getBoundingClientRect()
+        const logo = document
+          .querySelector(".notice-logo")!
+          .getBoundingClientRect()
+        return body.bottom + 24 * (96 / 72) <= logo.top
+      })
+      if (!fits)
+        throw new Error(
+          "Notice exceeds the reference's one-page layout. Shorten the text or split it into separate notices."
+        )
+      const bytes = await page.pdf({
+        width: `${595.5 / 72}in`,
+        height: `${842.25 / 72}in`,
+        printBackground: true,
+        waitForFonts: true,
+        margin: { top: 0, bottom: 0, left: 0, right: 0 },
+      })
+      const noticePdf = await PDFDocument.load(bytes)
+      noticePdf.setTitle(input.content.title)
+      noticePdf.setSubject(`${input.number}${input.draft ? " · DRAFT" : ""}`)
+      noticePdf.setAuthor(input.authorName)
+      return noticePdf.save()
+    }
     const render = async (body?: string, cover = false) => {
       if (body !== undefined)
         await page.setContent(
@@ -138,8 +186,8 @@ export async function generateBrandingPdf(input: BrandingPdfInput) {
         margin: cover
           ? { top: 0, bottom: 0, left: 0, right: 0 }
           : {
-              top: input.type === "notice" ? "12mm" : "38mm",
-              bottom: input.type === "notice" ? "30mm" : "20mm",
+              top: "38mm",
+              bottom: "20mm",
               left: "12mm",
               right: "12mm",
             },
@@ -211,12 +259,7 @@ export async function generateBrandingPdf(input: BrandingPdfInput) {
         for (const topic of topics) await append(topic)
       }
     } else {
-      const document =
-        input.type === "notice"
-          ? await render(
-              `<div class="notice"><div class="notice-banner">NOTICE</div><div class="notice-date">${escapeBrandingHtml(input.content.effectiveDate || "Date pending")}</div>${html.match(/<body>([\s\S]*)<\/body>/)![1]}</div>`
-            )
-          : await render()
+      const document = await render()
       if (input.type === "work-instruction" && document.getPageCount() !== 1)
         throw new Error(
           "Work Instruction exceeds one page. Shorten the text or split it into separate work instructions."
