@@ -613,9 +613,7 @@ export function UnifiedSidebarNavigation({
 
       <SidebarMenu>
         {filterNavigationItems(
-          publishedRegisterNavigation.filter((item) =>
-            navigationAccess.brandingHrefs?.includes(`/branding/${item.type}`)
-          ),
+          publishedRegisterNavigation,
           normalizedMenuSearch,
           "published documents registers"
         ).map((item) => (

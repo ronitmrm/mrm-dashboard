@@ -40,6 +40,7 @@ describe("protected server boundaries", () => {
       "withBranding(",
     ]
     const authenticatedAccountOnlyBoundaries = new Map([
+      ["registers/[type]/[id]/pdf/route.ts", "withPublishedRegister("],
       ["home/actions.ts", "requireAuthenticatedSession("],
       [
         "maintenance/requests/[id]/photos/[photoId]/route.ts",

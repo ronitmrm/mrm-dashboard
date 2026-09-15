@@ -2,7 +2,10 @@
 
 - Standalone published registers: `/registers/sop`, `/registers/work-instruction`,
   `/registers/policy`. Each has a direct main-sidebar entry outside Branding and
-  reuses its document type's View permission. `listPublished` selects the latest
+  is available to every authenticated user without a Branding capability grant.
+  `withPublishedRegister` enforces sign-in and the three supported types.
+  The register PDF endpoint serves only the latest issued revision; historical
+  PDFs and authoring still require Branding permissions. `listPublished` selects the latest
   issued revision in SQL before returning metadata; drafts never enter the list.
   All published records load for persistent table filtering. PDF actions open the
   existing authenticated attachment viewer, without linking to document history.
