@@ -65,6 +65,10 @@ Existing sections without a layout remain text. The three layouts are `text`,
 grid with fixed cells/caption dimensions; four sections make a 2x2 grid. After
 font loading, each caption shrinks independently without changing its box. Draft
 generation does not reject small text; authors review the result themselves.
+Pictures fill frames with proportional cropping. Step numbers are derived from
+section order per language, separately from optional picture-section headings.
+The shared `brandingStepNumber` uses English, Hindi or Gujarati digits in the
+editor, saved content and PDF. Text-only sections still require headings on issue.
 
 The text layout follows the Washing & Drying text poster. The editor
 normalizes each selected language to at least one heading/body pair, with one

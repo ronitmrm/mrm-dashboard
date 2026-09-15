@@ -7,6 +7,15 @@ export const brandingTypes = [
 export type BrandingType = (typeof brandingTypes)[number]
 export const brandingLanguages = ["en", "hi", "gu"] as const
 export type BrandingLanguage = (typeof brandingLanguages)[number]
+export function brandingStepNumber(
+  language: BrandingLanguage,
+  position: number
+) {
+  const digits = { en: "0123456789", hi: "०१२३४५६७८९", gu: "૦૧૨૩૪૫૬૭૮૯" }[
+    language
+  ]
+  return `${String(position).replace(/\d/g, (digit) => digits[Number(digit)]!)})`
+}
 export const brandingLanguageLabels = {
   en: "English",
   hi: "Hindi",
@@ -212,7 +221,7 @@ export function validateBrandingIssue(
       !translation.sections.length ||
       translation.sections.some(
         ({ heading, body, layout, picture }) =>
-          !heading || !body || (layout && layout !== "text" && !picture)
+          !body || (layout && layout !== "text" ? !picture : !heading)
       )
     )
       throw new Error(

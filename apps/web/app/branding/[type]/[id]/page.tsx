@@ -1,7 +1,10 @@
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import { ArrowLeft, FileText } from "lucide-react"
-import { revisionLabel } from "@workspace/db/branding-domain"
+import {
+  revisionLabel,
+  brandingStepNumber,
+} from "@workspace/db/branding-domain"
 import { Button } from "@workspace/ui/components/button"
 import { StatusBadge } from "@workspace/ui/components/badge"
 import {
@@ -185,6 +188,12 @@ export default async function BrandingDocumentPage({
               <div lang={translation.language} className="grid gap-4">
                 {translation.sections.map((section, index) => (
                   <section key={index}>
+                    {section.layout && section.layout !== "text" ? (
+                      <p className="mb-2 text-sm font-medium">
+                        Step{" "}
+                        {brandingStepNumber(translation.language, index + 1)}
+                      </p>
+                    ) : null}
                     {section.picture ? (
                       // eslint-disable-next-line @next/next/no-img-element -- Bounded private document picture.
                       <img

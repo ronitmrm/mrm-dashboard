@@ -22,6 +22,10 @@ Branding contains SOPs, Notices, Policies, and Work Instructions. Safety signage
   each caption's font; text length never increases its box. Mixed formats and
   selected languages share the same page. Pictures stay attached to their section
   when reordered and are retained with saved drafts and immutable issues.
+  Picture frames are filled edge-to-edge, preserving proportions and cropping
+  excess edges. Picture sections get automatic step numbers in language-appropriate
+  digits, following section order within each language. Their heading is optional
+  and separate from the step number; their body and picture are required on issue.
 
 - Each type has an independent, organization-wide sequence: MRM-SOP-0001,
   MRM-NTC-0001, MRM-POL-0001. Numbers are assigned on first issue, never reused,
