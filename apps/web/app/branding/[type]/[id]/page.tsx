@@ -198,11 +198,16 @@ export default async function BrandingDocumentPage({
                       // eslint-disable-next-line @next/next/no-img-element -- Bounded private document picture.
                       <img
                         src={section.picture}
-                        alt={`Picture for ${section.heading}`}
+                        alt={
+                          section.heading ||
+                          `Picture for step ${brandingStepNumber(translation.language, index + 1)}`
+                        }
                         className="mb-2 max-h-64 max-w-full rounded-md border object-contain"
                       />
                     ) : null}
-                    <h3 className="mb-2 font-semibold">{section.heading}</h3>
+                    {section.heading ? (
+                      <h3 className="mb-2 font-semibold">{section.heading}</h3>
+                    ) : null}
                     <p className="text-sm break-words whitespace-pre-wrap">
                       {section.body}
                     </p>
