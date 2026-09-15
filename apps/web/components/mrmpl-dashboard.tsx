@@ -89,7 +89,6 @@ import {
 } from "@workspace/ui/components/table"
 import {
   DashboardErrorState,
-  DashboardGrid,
   DashboardLoadingSkeleton,
   PageHeader,
   DashboardSection,
@@ -3023,33 +3022,33 @@ function ProductionDashboardPanel({ payload }: { payload: DashboardPayload }) {
         title="Production Dashboard"
       />
 
-      <DashboardSection
-        description="Work-order volume and dispatch position across every production unit."
-        title="Key Performance Indicators"
-      >
-        <DashboardGrid columns="three">
-          <MetricCard
-            description="Across all production units"
-            icon={<ListChecks aria-hidden="true" />}
-            label="Total Work Orders"
-            tone="brand"
-            value={formatNumber(rows.length)}
-          />
-          <MetricCard
-            description="Awaiting dispatch completion"
-            icon={<Activity aria-hidden="true" />}
-            label="Pending Dispatch"
-            tone={pending ? "warning" : "positive"}
-            value={formatNumber(pending)}
-          />
-          <MetricCard
-            description="Completed dispatches"
-            icon={<CheckCircle2 aria-hidden="true" />}
-            label="Dispatched"
-            tone="positive"
-            value={formatNumber(dispatched)}
-          />
-        </DashboardGrid>
+      <DashboardSection title="Key Performance Indicators">
+        <MetricSummary
+          scope="Work-order volume and dispatch position across every production unit."
+          items={[
+            {
+              description: "Across all production units",
+              icon: <ListChecks aria-hidden="true" />,
+              label: "Total Work Orders",
+              tone: "brand",
+              value: rows.length,
+            },
+            {
+              description: "Awaiting dispatch completion",
+              icon: <Activity aria-hidden="true" />,
+              label: "Pending Dispatch",
+              tone: pending ? "warning" : "positive",
+              value: pending,
+            },
+            {
+              description: "Completed dispatches",
+              icon: <CheckCircle2 aria-hidden="true" />,
+              label: "Dispatched",
+              tone: "positive",
+              value: dispatched,
+            },
+          ]}
+        />
       </DashboardSection>
 
       <DashboardSection

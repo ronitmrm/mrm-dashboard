@@ -39,7 +39,7 @@ function MetricSummary({
 }: {
   items: readonly Pick<
     ComponentProps<typeof MetricCard>,
-    "label" | "value" | "description" | "tone"
+    "label" | "value" | "description" | "tone" | "icon"
   >[]
   scope: string
   className?: string
