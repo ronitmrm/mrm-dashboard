@@ -1,12 +1,4 @@
-import {
-  PDFArray,
-  PDFDict,
-  PDFDocument,
-  PDFName,
-  PDFRef,
-  StandardFonts,
-  rgb,
-} from "pdf-lib"
+import { PDFArray, PDFDict, PDFDocument, PDFName, PDFRef } from "pdf-lib"
 import type { Page } from "puppeteer-core"
 import {
   brandingOutline,
@@ -15,6 +7,7 @@ import {
   revisionLabel,
 } from "@workspace/db/branding-domain"
 import type { BrandingPdfInput } from "./pdf"
+import { brandTypography, typeStyle } from "./typography"
 
 const escape = (value: string) =>
   value.replace(
@@ -32,18 +25,37 @@ export function brandingBookHtml(
   wordmark: string
 ) {
   const styles = `${fonts}
-    *{box-sizing:border-box}body{margin:0;color:#050505;background:white;font:14pt/1.45 'Outfit','Hind','Hind Vadodara',sans-serif;overflow-wrap:anywhere}
-    [lang=hi]{font-family:'Hind','Outfit',sans-serif}[lang=gu]{font-family:'Hind Vadodara','Outfit',sans-serif}
-    h1,h2,h3,h4{break-after:avoid;line-height:1.3;margin:12mm 0 4mm;font-weight:700}h1{font-size:18pt;color:#006A49}h2{font-size:16pt;margin-left:6mm}h3{font-size:14pt}h4{font-size:14pt}
-    article>h1:first-child{margin-top:0}h2,h3,h4{margin-top:6mm}p{margin:0 0 4mm;white-space:pre-wrap;orphans:3;widows:3}
-    ul,ol{padding-left:12mm;margin:2mm 0 5mm}ul{list-style-type:disc}ol{list-style-type:decimal}li>p{margin-bottom:0}ol>li{margin-bottom:4mm}li>ul,li>ol{margin-top:4mm;margin-bottom:0;padding-left:6mm}li>p:has(+ul),li>p:has(+ol){break-after:avoid}strong{font-weight:700}
-    .new-page{break-before:page}.cover{height:296mm;background:#006A49;padding:5mm}.cover-panel{height:100%;border-radius:9mm;background:#F7F7F2;color:#006A49;padding:15mm;display:flex;flex-direction:column;align-items:center}
-    .cover-logo{width:84mm;max-width:100%;margin:0 0 43mm;flex-shrink:0}.cover h1{color:#006A49;text-align:center;text-transform:uppercase;font-size:76pt;line-height:1.12;margin:0;width:100%;flex-shrink:0;overflow-wrap:normal}.cover-footer{margin-top:auto;display:flex;justify-content:space-between;width:100%;gap:6mm;font-size:10pt;font-weight:600}.cover-draft{font-size:11pt;margin-top:5mm}
-    .details{font-size:12pt;line-height:1.3}.details h1{font-size:24pt;text-transform:uppercase;margin:0 0 15mm}.meta{margin:7mm 0 18mm}.meta p{margin:1mm 0}.attributions,.index{width:100%;border-collapse:collapse}.attributions th,.attributions td,.index th,.index td{border:.5pt solid #050505;padding:3mm;text-align:left;vertical-align:top}.attributions{text-align:center;font-size:14pt;table-layout:fixed}.attributions th,.attributions td{text-align:center}.attributions th{color:#006A49}.index-title{text-align:center;text-transform:uppercase;font-size:24pt;margin:15mm 0 4mm!important}.index{font-size:12pt}.index th{font-size:18pt;line-height:1.2}.index td{height:12mm;vertical-align:middle}.index thead{display:table-header-group}.index tr,.attributions tr{break-inside:avoid}.index th:first-child,.index td:first-child{width:17mm;text-align:center}.index th:last-child,.index td:last-child{width:23mm;text-align:center}
+${brandTypography}
+    *{box-sizing:border-box}body{margin:0;color:#050505;background:white;overflow-wrap:anywhere}
+    h1,h2,h3,h4{break-after:avoid;margin:8mm 0 4mm;color:#006A49}
+    h2,h3,h4{color:#050505;margin-top:5mm}article>h1:first-child{margin-top:0}
+    p{margin:0 0 4mm;white-space:pre-wrap;orphans:3;widows:3}
+    ul,ol{padding-left:8mm;margin:2mm 0 5mm}ul{list-style-type:disc}ol{list-style-type:decimal}
+    li>p{margin-bottom:0}ol>li{margin-bottom:3mm}li>ul,li>ol{margin-top:3mm;margin-bottom:0;padding-left:6mm}
+    li>p:has(+ul),li>p:has(+ol){break-after:avoid}.new-page{break-before:page}
+    .cover{position:fixed;inset:12.7mm;background:#006A49;padding:5mm}
+    .cover-panel{height:100%;border-radius:9mm;background:#F7F7F2;color:#006A49;padding:10mm;display:flex;flex-direction:column;align-items:center}
+    .cover-logo{width:84mm;max-width:100%;margin:0 0 40mm;flex-shrink:0}
+    .cover h1{text-align:center;margin:0;width:100%;flex-shrink:0;${typeStyle("display")}}
+    .cover-footer{margin-top:auto;display:flex;justify-content:space-between;width:100%;gap:6mm;${typeStyle("caption")}}
+    .cover-draft{${typeStyle("caption")}margin-top:5mm}
+    .details h1{${typeStyle("display")}margin:0 0 12mm}.introduction{${typeStyle("lede")}}
+    .meta{margin:7mm 0 15mm}.meta p{margin:1mm 0}
+    .attributions,.index{width:100%;border-collapse:collapse}
+    .attributions th,.attributions td,.index th,.index td{border:.5pt solid #050505;padding:3mm;text-align:left;vertical-align:top}
+    .attributions{text-align:center;table-layout:fixed}.attributions th,.attributions td{text-align:center}
+    .attributions th{color:#006A49;${typeStyle("subsection")}}
+    .index-title{text-align:center;margin:12mm 0 4mm!important}
+    .index th{${typeStyle("subsection")}}.index td{height:10mm;vertical-align:middle}
+    .index thead{display:table-header-group}.index tr,.attributions tr{break-inside:avoid}
+    .index th:first-child,.index td:first-child{width:17mm;text-align:center}
+    .index th:last-child,.index td:last-child{width:23mm;text-align:center}
+    [lang=hi] .cover h1,[lang=gu] .cover h1,[lang=hi] .details h1,[lang=gu] .details h1{${typeStyle("localHeading")}}
+    [lang=hi] .introduction,[lang=gu] .introduction{${typeStyle("localBody")}}
   `
-  const header = (title: string) =>
-    `<style>${fonts}</style><div style="margin:0 20mm 0 25mm;display:flex;align-items:center;gap:6px;color:#006A49;font:600 12pt/1.25 Outfit,Hind,'Hind Vadodara'"><div style="flex-shrink:0">${logo}</div><div style="max-width:115mm;overflow-wrap:anywhere">${escape(title)}${input.draft ? " · DRAFT" : ""}</div></div>`
-  const footer = `<style>${fonts}</style><div style="margin:0 20mm 0 25mm;border-top:1.5pt solid #050505;padding-top:5mm;color:#050505;font:11pt/1.2 Outfit">Doc. No.: ${escape(input.number)} | Rev. No.: ${revisionLabel(input.revision)} | Effective Date: ${escape(input.content.effectiveDate || "Pending")}</div>`
+  const header = (title: string, language = "en") =>
+    `<style>${fonts}</style><div style="margin:0 12.7mm;display:flex;align-items:center;gap:6px;color:#006A49;${typeStyle(language === "en" ? "subsection" : "localHeading")}"><div style="flex-shrink:0">${logo}</div><div style="overflow-wrap:anywhere">${escape(title)}${input.draft ? " · DRAFT" : ""}</div></div>`
+  const footer = `<style>${fonts}</style><div style="margin:0 12.7mm;border-top:1pt solid #050505;padding-top:3mm;color:#050505;${typeStyle("caption")}font-family:Outfit;padding-right:12mm">Doc. No.: ${escape(input.number)} | Rev. No.: ${revisionLabel(input.revision)} | Effective Date: ${escape(input.content.effectiveDate || "Pending")}</div>`
   const html = `<!doctype html><html><head><meta charset="utf-8"><style>${styles}</style></head><body></body></html>`
   return {
     html,
@@ -111,22 +123,6 @@ export async function generateBrandingBookPdf(
         ),
         { waitUntil: "load" }
       )
-      if (cover) {
-        await page.evaluate(async () => {
-          await document.fonts.ready
-          const title = document.querySelector<HTMLElement>(".cover h1")
-          if (!title) return
-          for (let size = 76; size >= 28; size--) {
-            title.style.fontSize = `${size}pt`
-            if (
-              title.getBoundingClientRect().height <= (120 * 96) / 25.4 + 1 &&
-              title.scrollWidth <= title.clientWidth + 1
-            )
-              return
-          }
-          throw new Error("Cover title is too long. Shorten the title.")
-        })
-      }
       return PDFDocument.load(
         await page.pdf({
           format: "A4",
@@ -139,10 +135,10 @@ export async function generateBrandingBookPdf(
           margin: cover
             ? { top: 0, bottom: 0, left: 0, right: 0 }
             : {
-                top: detailsPage ? "21mm" : "38mm",
-                bottom: "32mm",
-                left: "25mm",
-                right: "20mm",
+                top: detailsPage ? "12.7mm" : "30mm",
+                bottom: "25mm",
+                left: "12.7mm",
+                right: "12.7mm",
               },
           timeout: 30000,
         })
@@ -162,7 +158,7 @@ export async function generateBrandingBookPdf(
         (entry) => entry.name || entry.designation
       ) ?? []
     const detailsPdf = await render(
-      `<div class="details"><h1>${escape(translation.title)}</h1>${details ? brandingRichTextHtml(details.introduction) : ""}<div class="meta"><p><strong>Document No.:</strong> ${escape(input.number)}</p><p><strong>Revision:</strong> ${revisionLabel(input.revision)}</p><p><strong>Effective Date:</strong> ${escape(input.content.effectiveDate || "Pending")}</p><p><strong>Prepared by:</strong> ${escape(details?.preparedBy || input.content.department)}</p></div>${attributions.length ? `<table class="attributions"><thead><tr>${attributions.map((entry) => `<th>${escape(entry.role)}</th>`).join("")}</tr></thead><tbody><tr>${attributions.map((entry) => `<td>${escape(entry.name)}</td>`).join("")}</tr><tr>${attributions.map(() => "<th>Designation</th>").join("")}</tr><tr>${attributions.map((entry) => `<td>${escape(entry.designation)}</td>`).join("")}</tr></tbody></table>` : ""}</div>`,
+      `<div class="details"><h1>${escape(translation.title)}</h1><div class="introduction">${details ? brandingRichTextHtml(details.introduction) : ""}</div><div class="meta"><p><strong>Document No.:</strong> ${escape(input.number)}</p><p><strong>Revision:</strong> ${revisionLabel(input.revision)}</p><p><strong>Effective Date:</strong> ${escape(input.content.effectiveDate || "Pending")}</p><p><strong>Prepared by:</strong> ${escape(details?.preparedBy || input.content.department)}</p></div>${attributions.length ? `<table class="attributions"><thead><tr>${attributions.map((entry) => `<th>${escape(entry.role)}</th>`).join("")}</tr></thead><tbody><tr>${attributions.map((entry) => `<td>${escape(entry.name)}</td>`).join("")}</tr><tr>${attributions.map(() => "<th>Designation</th>").join("")}</tr><tr>${attributions.map((entry) => `<td>${escape(entry.designation)}</td>`).join("")}</tr></tbody></table>` : ""}</div>`,
       false,
       false,
       true
@@ -170,7 +166,7 @@ export async function generateBrandingBookPdf(
     // Render the frame once as normal page content. Chromium's repeated PDF calls
     // can omit web-font header/footer templates on the first page of a segment.
     const frame = await render(
-      `<style>body{background:transparent!important}</style><div style="position:absolute;top:14mm;left:0;right:0">${template.bookHeader(translation.title)}</div><div style="position:absolute;bottom:18mm;left:0;right:0">${template.footer}</div>`,
+      `<style>body{background:transparent!important}</style><div style="position:absolute;top:12.7mm;left:0;right:0">${template.bookHeader(translation.title, translation.language)}</div><div style="position:absolute;bottom:12.7mm;left:0;right:0">${template.footer}</div>`,
       true
     )
     const embeddedFrame = await output.embedPage(frame.getPage(0))
@@ -227,24 +223,33 @@ export async function generateBrandingBookPdf(
       detailsPdf.getPageCount() + indexPdf.getPageCount() + 1
     )
     for (let index = firstPage + 1; index < output.getPageCount(); index++) {
-      output.getPage(index).drawPage(
-        index > firstPage + detailsPdf.getPageCount()
-          ? embeddedFrame
-          : embeddedFooter
-      )
+      output
+        .getPage(index)
+        .drawPage(
+          index > firstPage + detailsPdf.getPageCount()
+            ? embeddedFrame
+            : embeddedFooter
+        )
     }
   }
-  const font = await output.embedFont(StandardFonts.Helvetica)
   for (const [index, number] of numbers) {
-    const sheet = output.getPage(index)
-    const label = String(number)
-    sheet.drawText(label, {
-      x: sheet.getWidth() - 72 - font.widthOfTextAtSize(label, 11),
-      y: 69,
-      size: 11,
-      font,
-      color: rgb(0, 0, 0),
-    })
+    await page.setContent(
+      template.html.replace(
+        "<body></body>",
+        () =>
+          `<body style="background:transparent"><div style="position:absolute;bottom:12.7mm;right:12.7mm;${typeStyle("caption")}font-family:Outfit">${number}</div></body>`
+      )
+    )
+    const numberPdf = await PDFDocument.load(
+      await page.pdf({
+        format: "A4",
+        printBackground: true,
+        omitBackground: true,
+        waitForFonts: true,
+        margin: { top: 0, bottom: 0, left: 0, right: 0 },
+      })
+    )
+    output.getPage(index).drawPage(await output.embedPage(numberPdf.getPage(0)))
   }
   output.setTitle(input.content.title)
   output.setAuthor(input.authorName)

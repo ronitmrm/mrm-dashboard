@@ -2,6 +2,33 @@
 
 Branding contains SOPs, Notices, Policies, and Work Instructions. Safety signage is outside scope.
 
+## Approved print typography (2026-09-15)
+
+All four types use MRM Brand Guide B §15.1 at 100% print scale, with 0.5-inch
+(12.7mm) clear outer margins. Header and footer sit inside those margins; body
+content additionally reserves space for them. The guide's CSS pixel baseline is
+used directly (1px = 0.75pt). No author-selected fonts or sizes, italic or underline.
+
+| Role | Font | Weight | Size | Line height | Tracking |
+| --- | --- | --- | --- | --- | --- |
+| Display/title | Outfit | 800 | 40px | 1.10 | -0.01em |
+| Section heading | Outfit | 800 | 27px | 1.10 | -0.01em |
+| Subsection | Outfit | 600 | 16px | 1.30 | 0 |
+| Introduction | Outfit | 400 | 17px | 1.60 | 0 |
+| Body | Outfit | 400 | 15px | 1.68 | 0 |
+| Caption/metadata | Outfit | 500 | 13px | 1.60 | 0 |
+| Eyebrow | Outfit | 600 | 12px | 1.30 | 0.16em |
+| Gujarati heading/body | Hind Vadodara | 700/400 | 23/15px | 1.35/1.60 | 0 |
+| Hindi heading/body | Hind | 700/400 | 23/15px | 1.35/1.60 | 0 |
+
+SOP/Policy text never shrinks; additional body content flows to further pages.
+Notice/WI text starts at these same sizes and shrinks only when necessary: one
+shared multiplier applies to every title, heading, body, caption and metadata
+field across all languages and picture cards. No independent card/font fitting.
+Layouts, pictures, margins and page scale stay fixed. The minimum text multiplier
+is 0.001; geometrically impossible layouts report an error instead of clipping.
+Existing issued PDF bytes remain immutable. Internal logos omit the tagline.
+
 SOP Register, Work Instruction Register, and Policies Register are standalone
 main modules outside Branding, available to every signed-in user regardless of
 role or Branding permissions. They list one latest published (issued) revision
@@ -16,7 +43,7 @@ published version. Branding remains the authoring and retained-history workspace
   hierarchical, local or no numbering; authors choose which subheadings appear in
   the index. Index references use rendered printed page numbers. A heading can
   explicitly start a new page; short sections otherwise share pages.
-  Bodies and introductions support paragraphs, bold/italic/underline, bullet and
+  Bodies and introductions support paragraphs, bold, bullet and
   numbered lists with independently styled nested lists. List numbering continues
   across page breaks. Details include prepared-by text and optional printed
   issued/reviewed/approved-by names and designations; these are author-entered
@@ -38,7 +65,7 @@ published version. Branding remains the authoring and retained-history workspace
   caption overlapping its lower edge), picture left/body right, and visual guide. No picture-only
   format exists. Picture sections form a count-based grid on one page (four use
   two columns and two rows). Every picture/caption box is fixed before fitting
-  each caption's font; text length never increases its box. Mixed formats and
+  the shared document text scale; text length never increases its box. Mixed formats and
   selected languages share the same page. Pictures stay attached to their section
   when reordered and are retained with saved drafts and immutable issues.
   Picture frames are filled edge-to-edge, preserving proportions and cropping
@@ -47,7 +74,7 @@ published version. Branding remains the authoring and retained-history workspace
   and separate from the step number; their body and picture are required on issue.
   When all sections use picture-left/body-right, follow the Weigh Scale Calibration
   reference: full-width stacked rows, approximately 40% picture and 60% green text
-  box. The number of sections fixes equal row heights; captions fit independently.
+  box. The number of sections fixes equal row heights; all captions share one scale.
   An all-visual-guide document follows visual checking.pdf: one landscape page of
   comparison rows, complete picture on the left, fixed red cross for Bad or green
   tick for Good, and editable text in the matching colour. The author selects
@@ -85,7 +112,7 @@ published version. Branding remains the authoring and retained-history workspace
   tagline lockup, green metadata headers and outlined topic panels, and a white
   notice with a large green banner and full footer wordmark. Notice languages
   flow together. The later Notice.pdf reference supersedes the notice design:
-  Noto Sans Gujarati/Devanagari, Outfit, white page, 100pt NOTICE banner,
+  white page and a green Notice banner, using the approved typography above,
   a footer wordmark and one free-text body per language. Notice authors include
   audience, message, actions and dates directly in that body; there are no separate
   source, heading or translated-title fields. Add Body adds another language
@@ -94,8 +121,8 @@ published version. Branding remains the authoring and retained-history workspace
   drafts show Number assigned on issue. Titles and author remain in records and
   PDF metadata.
   Gujarati precedes Hindi as in the reference; English comes first when selected.
-  No printed page counter. All language bodies share one page; body fonts and
-  spacing shrink together as needed without clipping text. Review the PDF for
+  No printed page counter. All languages share one page; all text roles use
+  the same shrink factor when required without clipping text. Review the PDF for
   readability before issue. A4 templates retain
   the agreed cover/index/topic structure for SOPs and policies.
 - Per-type View and Save/Issue capabilities govern pages, actions and PDFs.
