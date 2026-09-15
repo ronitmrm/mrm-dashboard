@@ -76,7 +76,11 @@ export async function brandingHtml(input: BrandingPdfInput) {
     const pictures = sections.some(
       (section) => section.layout && section.layout !== "text"
     )
-    const columns = sections.length === 1 ? 1 : sections.length <= 8 ? 2 : 3
+    const sideRows =
+      sections.length > 0 &&
+      sections.every((section) => section.layout === "picture-left")
+    const columns =
+      sideRows || sections.length === 1 ? 1 : sections.length <= 8 ? 2 : 3
     const rows = Math.ceil(sections.length / columns)
     const content = pictures
       ? sections
@@ -116,8 +120,8 @@ export async function brandingHtml(input: BrandingPdfInput) {
       .wi-step{flex:none;font-size:1.4em;line-height:1.1}
       .wi-caption-text{flex:1;min-width:0}.wi-caption h2{max-width:100%;font-size:1.1em;line-height:1.15;background:none;padding:0;margin:0 0 .2em;color:inherit;font-weight:700}
       .wi-caption p{font-weight:500}
-      .picture-left img,.picture-left .wi-missing{width:50%;height:100%}
-      .picture-left .wi-caption{left:50%;width:50%;height:100%;border-radius:0}
+      .picture-left{border:0}.picture-left img,.picture-left .wi-missing{width:40%;height:100%;border:1.5mm solid #006A49;border-radius:4mm}
+      .picture-left .wi-caption{left:40%;width:60%;height:100%;border-radius:4mm;padding:3mm 5mm}
       .picture-left .wi-caption-inner{align-items:flex-start}.wi-tile.text .wi-caption-inner{display:block}
       .picture-left h2,.wi-tile.text h2{max-width:100%;margin-bottom:.4em}
       .wi-tile.text .wi-caption{height:100%}

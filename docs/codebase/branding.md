@@ -69,6 +69,9 @@ Pictures fill frames with proportional cropping. Step numbers are derived from
 section order per language, separately from optional picture-section headings.
 The shared `brandingStepNumber` uses English, Hindi or Gujarati digits in the
 editor, saved content and PDF. Text-only sections still require headings on issue.
+An all-`picture-left` document uses one column of equal-height rows, matching
+MRM-QA-015-093: 40% framed picture, 60% rounded green caption, automatic steps.
+Mixed layouts retain the existing count-based grid; captions never expand rows.
 
 The text layout follows the Washing & Drying text poster. The editor
 normalizes each selected language to at least one heading/body pair, with one
