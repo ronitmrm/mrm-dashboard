@@ -372,6 +372,7 @@ export function UnifiedSidebarNavigation({
     <SidebarMenuItem key={item.href}>
       <SidebarMenuButton
         asChild
+        className={topLevelButtonClassName}
         isActive={navigationHrefMatches(pathname, searchParams, item.href)}
       >
         <a href={item.href}>
@@ -742,16 +743,19 @@ export function UnifiedSidebarNavigation({
         )
       })}
 
-      {!filteredUniversalProductionNavigation.some(
+      {publishedRegisterItems.length > 0 &&
+      !filteredUniversalProductionNavigation.some(
         (item) => item.id === "productionDashboardTab"
       ) ? (
-        <SidebarMenu>{publishedRegisterItems}</SidebarMenu>
+        <SidebarGroup className="px-3 py-0.5">
+          <SidebarMenu className="gap-3">{publishedRegisterItems}</SidebarMenu>
+        </SidebarGroup>
       ) : null}
 
       {filteredUniversalProductionNavigation.length ? (
         <SidebarGroup className="px-3 py-0.5">
           <SidebarGroupContent>
-            <SidebarMenu>
+            <SidebarMenu className="gap-3">
               {filteredUniversalProductionNavigation.map((item) => (
                 <Fragment key={item.id}>
                   <SidebarMenuItem>
@@ -796,7 +800,7 @@ export function UnifiedSidebarNavigation({
       {filteredAdministrationNavigation.length ? (
         <SidebarGroup className="px-3 py-0.5">
           <SidebarGroupContent>
-            <SidebarMenu>
+            <SidebarMenu className="gap-3">
               {filteredAdministrationNavigation.map((item) => (
                 <SidebarMenuItem key={item.href}>
                   <SidebarMenuButton
