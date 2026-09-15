@@ -51,7 +51,7 @@ the fonts. Newly issued revisions record v3; existing frozen PDFs are unchanged.
 
 Notice template v6 follows the later Notice.pdf: a dedicated fixed-size one-page
 renderer with Noto Sans fonts and a measured content/footer clearance check after
-fonts load. The number prints at top-left (drafts use an unassigned placeholder);
+fonts load. The number prints at top-right (drafts use an unassigned placeholder);
 number/author/title are also stored as PDF metadata. User line breaks are
 preserved; overflow is rejected. SOP/policy retain template v3.
 

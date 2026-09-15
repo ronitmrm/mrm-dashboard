@@ -96,7 +96,7 @@ export async function brandingHtml(input: BrandingPdfInput) {
       *{box-sizing:border-box}body{margin:0;background:white;color:#231F20;font:400 21.5pt/30pt 'Outfit',sans-serif}
       .notice-banner{position:absolute;top:32pt;left:36pt;right:36pt;height:140pt;border-radius:17pt;background:#006A49;color:white;display:flex;align-items:center;justify-content:center;font:600 100pt/1 'Outfit';letter-spacing:1.2pt}
       .notice-date{position:absolute;top:243pt;right:60pt;font:500 20pt/28pt 'Outfit';color:#006A49}
-      .notice-number{position:absolute;top:10pt;left:36pt;font:500 11pt/14pt 'Outfit';color:#006A49}
+      .notice-number{position:absolute;top:10pt;right:36pt;font:500 11pt/14pt 'Outfit';color:#006A49}
       .notice-content{position:absolute;top:241pt;left:55.5pt;right:55.5pt}
       [lang=gu]{font-family:'Outfit','Noto Sans Gujarati',sans-serif}[lang=hi]{font-family:'Outfit','Noto Sans Devanagari',sans-serif}
       section+section,article+article{margin-top:64pt}h1{font-size:27.5pt;font-weight:700;line-height:40pt;text-align:center;margin:0 0 28pt;overflow-wrap:anywhere}article:first-child section:first-child h1{max-width:210pt;margin-left:auto;margin-right:auto}
