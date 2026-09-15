@@ -102,9 +102,10 @@ cannot redefine its identity.
 
 Machine allocation, family balancing, machine switches and proposal capacity use
 the dedicated Machine Family field in the unit's Machine Master. An explicit
-family takes precedence over the machine number or name and is matched in full
-(for example, T25 and T26 are different families). Legacy records without a
-family retain number-based matching.
+family is required in every Production Unit and is matched in full (for example,
+T25 and T26 are different families). Machine numbers and names never determine
+family. Machines without a family cannot receive automatic allocations or be
+offered as compatible switch destinations or proposal capacity.
 
 **Master Identity**: The permanent system identity and generated code of one
 master record. Editing its permitted details does not create a second master

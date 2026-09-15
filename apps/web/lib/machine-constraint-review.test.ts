@@ -20,9 +20,9 @@ describe("machineConstraintQueueReview", () => {
       rescheduleAction: "shift_required",
       affectedRows: [affected],
       machineRows: [
-        { machineNo: "A510", machineType: "AUTO", status: "Active" },
-        { machineNo: "A511", machineType: "AUTO", status: "Active" },
-        { machineNo: "S710", machineType: "SECONDARY", status: "Active" },
+        { machineNo: "A510", machineFamily: "A5", machineType: "AUTO", status: "Active" },
+        { machineNo: "A511", machineFamily: "A5", machineType: "AUTO", status: "Active" },
+        { machineNo: "S710", machineFamily: "S7", machineType: "SECONDARY", status: "Active" },
       ],
       plannedRows: [
         affected,
@@ -65,7 +65,7 @@ describe("machineConstraintQueueReview", () => {
       machineNo: "A510",
       rescheduleAction: "delay",
       affectedRows: [{ jcNo: "JC-014", setupNo: "1", routeMachine: "A5", machine: "A510", machineType: "AUTO", plannedProductionStartDate: "1-July-26" }],
-      machineRows: [{ machineNo: "A511", machineType: "AUTO", status: "Active" }],
+      machineRows: [{ machineNo: "A511", machineFamily: "A5", machineType: "AUTO", status: "Active" }],
       plannedRows: [{ jcNo: "JC-999", setupNo: "1", routeMachine: "A5", machine: "A511", machineType: "AUTO", plannedProductionStartDate: "9-July-26" }],
     });
 
@@ -91,8 +91,8 @@ describe("machineConstraintQueueReview", () => {
       includeSameMachineLater: false,
       includeDownstream: false,
       machineRows: [
-        { machineNo: "A511", machineType: "AUTO", status: "Active" },
-        { machineNo: "A512", machineType: "AUTO", status: "Active" },
+        { machineNo: "A511", machineFamily: "A5", machineType: "AUTO", status: "Active" },
+        { machineNo: "A512", machineFamily: "A5", machineType: "AUTO", status: "Active" },
       ],
       plannedRows: [
         affected,
@@ -152,7 +152,7 @@ describe("machineConstraintQueueReview", () => {
       explicitDestinationMachines: ["A511"],
       includeSameMachineLater: false,
       includeDownstream: false,
-      machineRows: [{ machineNo: "A511", machineType: "AUTO", status: "Active" }],
+      machineRows: [{ machineNo: "A511", machineFamily: "A5", machineType: "AUTO", status: "Active" }],
       plannedRows: [
         affected,
         {
@@ -192,9 +192,9 @@ describe("machineConstraintQueueReview", () => {
       includeSameMachineLater: false,
       includeDownstream: false,
       machineRows: [
-        { machineNo: "DT502", machineType: "MANUAL", status: "Active" },
-        { machineNo: "SAD903", machineType: "MANUAL", status: "Active" },
-        { machineNo: "SA705", machineType: "MANUAL", status: "Active" },
+        { machineNo: "DT502", machineFamily: "DT5", machineType: "MANUAL", status: "Active" },
+        { machineNo: "SAD903", machineFamily: "SAD9", machineType: "MANUAL", status: "Active" },
+        { machineNo: "SA705", machineFamily: "SA7", machineType: "MANUAL", status: "Active" },
       ],
       plannedRows: [
         affected,

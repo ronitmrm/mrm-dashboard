@@ -48,18 +48,9 @@ const priorityScores = new Map([
 ]);
 const planningHolidayWeekdays = new Set([5]);
 
-export function machineFamilyKey(value: unknown) {
-  const normalized = text(value).toUpperCase().replace(/[^A-Z0-9]/g, "");
-  const match = normalized.match(/^([A-Z]+)(\d)/);
-  return match ? `${match[1]}${match[2]}`.toLowerCase() : normalized.toLowerCase();
-}
-
-export function machineCodeMatches(routeMachine: unknown, actualMachine: unknown, explicitFamily?: unknown) {
+export function machineFamilyMatches(routeFamily: unknown, explicitFamily: unknown) {
   const family = text(explicitFamily).toLowerCase();
-  if (family) return text(routeMachine).toLowerCase() === family;
-  const routeFamily = machineFamilyKey(routeMachine);
-  const actualFamily = machineFamilyKey(actualMachine);
-  return Boolean(routeFamily && actualFamily && routeFamily === actualFamily);
+  return Boolean(family && text(routeFamily).toLowerCase() === family);
 }
 
 export function machineMasterFamily(row: Record<string, unknown>) {

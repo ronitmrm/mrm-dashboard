@@ -134,7 +134,7 @@ describe("buildLegacyDashboardSnapshot", () => {
           entryType: "machine_master",
           createdAt: "2026-06-25T00:00:00.000Z",
           payload: {
-            machineNo: "D501",
+            machineNo: "D501", machineFamily: "D5",
             machineType: "MANUAL",
             status: "Inactive",
           },
@@ -143,7 +143,7 @@ describe("buildLegacyDashboardSnapshot", () => {
           entryType: "machine_master",
           createdAt: "2026-06-25T00:00:00.000Z",
           payload: {
-            machineNo: "C501",
+            machineNo: "C501", machineFamily: "C5",
             machineType: "AUTOMATIC",
             status: "Active",
           },
@@ -236,7 +236,7 @@ describe("buildLegacyDashboardSnapshot", () => {
           entryType: "machine_master",
           createdAt: "2026-06-25T00:00:00.000Z",
           payload: {
-            machineNo: "D501",
+            machineNo: "D501", machineFamily: "D5",
             machineType: "MANUAL",
             status: "Active",
           },
@@ -346,7 +346,7 @@ describe("buildLegacyDashboardSnapshot", () => {
             entryType: "machine_master",
             createdAt: "2026-07-01T00:00:00.000Z",
             payload: {
-              machineNo: "A510",
+              machineNo: "A510", machineFamily: "A5",
               machineType: "AUTOMATIC",
               status: "Active",
             },
@@ -430,10 +430,10 @@ describe("buildLegacyDashboardSnapshot", () => {
               loadingUnloading: 0,
             },
           },
-          ...["ADB503", "ADB504"].map((machineNo) => ({
+          ...[["ADB503", "ADB5"], ["ADB504", "ADB5"]].map(([machineNo, machineFamily]) => ({
             entryType: "machine_master",
             createdAt: "2026-07-01T00:00:00.000Z",
-            payload: { machineNo, machineType: "AUTOMATIC", status: "Active" },
+            payload: { machineNo, machineFamily, machineType: "AUTOMATIC", status: "Active" },
           })),
         ],
       })
@@ -492,10 +492,10 @@ describe("buildLegacyDashboardSnapshot", () => {
               loadingUnloading: 0,
             },
           },
-          ...["ADB503", "ADB504"].map((machineNo) => ({
+          ...[["ADB503", "ADB5"], ["ADB504", "ADB5"]].map(([machineNo, machineFamily]) => ({
             entryType: "machine_master",
             createdAt: "2026-07-01T00:00:00.000Z",
-            payload: { machineNo, machineType: "AUTOMATIC", status: "Active" },
+            payload: { machineNo, machineFamily, machineType: "AUTOMATIC", status: "Active" },
           })),
         ],
       })
@@ -575,10 +575,10 @@ describe("buildLegacyDashboardSnapshot", () => {
               loadingUnloading: 0,
             },
           },
-          ...["ADB503", "ADB504"].map((machineNo) => ({
+          ...[["ADB503", "ADB5"], ["ADB504", "ADB5"]].map(([machineNo, machineFamily]) => ({
             entryType: "machine_master",
             createdAt: "2026-07-01T00:00:00.000Z",
-            payload: { machineNo, machineType: "AUTOMATIC", status: "Active" },
+            payload: { machineNo, machineFamily, machineType: "AUTOMATIC", status: "Active" },
           })),
           {
             entryType: "shop_floor_status",
@@ -680,7 +680,7 @@ describe("buildLegacyDashboardSnapshot", () => {
             entryType: "machine_master",
             createdAt: "2026-07-01T00:00:00.000Z",
             payload: {
-              machineNo: "A510",
+              machineNo: "A510", machineFamily: "A5",
               machineType: "AUTOMATIC",
               status: "Active",
             },
@@ -689,7 +689,7 @@ describe("buildLegacyDashboardSnapshot", () => {
             entryType: "machine_master",
             createdAt: "2026-07-01T00:00:00.000Z",
             payload: {
-              machineNo: "A511",
+              machineNo: "A511", machineFamily: "A5",
               machineType: "AUTOMATIC",
               status: "Active",
             },
@@ -834,7 +834,7 @@ describe("buildLegacyDashboardSnapshot", () => {
             entryType: "machine_master",
             createdAt: "2026-07-01T00:00:00.000Z",
             payload: {
-              machineNo: "A510",
+              machineNo: "A510", machineFamily: "A5",
               machineType: "AUTOMATIC",
               status: "Active",
             },
@@ -843,7 +843,7 @@ describe("buildLegacyDashboardSnapshot", () => {
             entryType: "machine_master",
             createdAt: "2026-07-01T00:00:00.000Z",
             payload: {
-              machineNo: "A511",
+              machineNo: "A511", machineFamily: "A5",
               machineType: "AUTOMATIC",
               status: "Active",
             },
@@ -937,7 +937,7 @@ describe("buildLegacyDashboardSnapshot", () => {
             entryType: "machine_master",
             createdAt: "2026-07-01T00:00:00.000Z",
             payload: {
-              machineNo: "A510",
+              machineNo: "A510", machineFamily: "A5",
               machineType: "AUTOMATIC",
               status: "Active",
             },
@@ -1051,7 +1051,7 @@ describe("buildLegacyDashboardSnapshot", () => {
             entryType: "machine_master",
             createdAt: "2026-06-24T00:00:00.000Z",
             payload: {
-              machineNo: "ADB503",
+              machineNo: "ADB503", machineFamily: "ADB5",
               machineType: "AUTOMATIC",
               status: "Active",
             },
@@ -1060,7 +1060,7 @@ describe("buildLegacyDashboardSnapshot", () => {
             entryType: "machine_master",
             createdAt: "2026-06-24T00:00:00.000Z",
             payload: {
-              machineNo: "ADB504",
+              machineNo: "ADB504", machineFamily: "ADB5",
               machineType: "AUTOMATIC",
               status: "Active",
             },
@@ -1188,12 +1188,12 @@ describe("buildLegacyDashboardSnapshot", () => {
             },
           ]),
           ...[
-            ["A510", "AUTOMATIC"],
-            ["A511", "AUTOMATIC"],
-          ].map(([machineNo, machineType]) => ({
+            ["A510", "AUTOMATIC", "A5"],
+            ["A511", "AUTOMATIC", "A5"],
+          ].map(([machineNo, machineType, machineFamily]) => ({
             entryType: "machine_master",
             createdAt: "2026-07-01T00:00:00.000Z",
-            payload: { machineNo, machineType, status: "Active" },
+            payload: { machineNo, machineFamily, machineType, status: "Active" },
           })),
           {
             entryType: "shop_floor_status",
@@ -1315,12 +1315,12 @@ describe("buildLegacyDashboardSnapshot", () => {
           },
         },
         ...[
-          ["ADB503", "AUTOMATIC"],
-          ["ADB504", "AUTOMATIC"],
-        ].map(([machineNo, machineType]) => ({
+          ["ADB503", "AUTOMATIC", "ADB5"],
+          ["ADB504", "AUTOMATIC", "ADB5"],
+        ].map(([machineNo, machineType, machineFamily]) => ({
           entryType: "machine_master",
           createdAt: "2026-07-01T00:00:00.000Z",
-          payload: { machineNo, machineType, status: "Active" },
+          payload: { machineNo, machineFamily, machineType, status: "Active" },
         })),
       ],
     })
@@ -1421,12 +1421,12 @@ describe("buildLegacyDashboardSnapshot", () => {
             },
           },
           ...[
-            ["ADB503", "AUTOMATIC"],
-            ["ADB504", "AUTOMATIC"],
-          ].map(([machineNo, machineType]) => ({
+            ["ADB503", "AUTOMATIC", "ADB5"],
+            ["ADB504", "AUTOMATIC", "ADB5"],
+          ].map(([machineNo, machineType, machineFamily]) => ({
             entryType: "machine_master",
             createdAt: "2026-07-01T00:00:00.000Z",
-            payload: { machineNo, machineType, status: "Active" },
+            payload: { machineNo, machineFamily, machineType, status: "Active" },
           })),
           {
             entryType: "shop_floor_status",
@@ -1556,12 +1556,12 @@ describe("buildLegacyDashboardSnapshot", () => {
             },
           ]),
           ...[
-            ["ADB503", "AUTOMATIC"],
-            ["ADB504", "AUTOMATIC"],
-          ].map(([machineNo, machineType]) => ({
+            ["ADB503", "AUTOMATIC", "ADB5"],
+            ["ADB504", "AUTOMATIC", "ADB5"],
+          ].map(([machineNo, machineType, machineFamily]) => ({
             entryType: "machine_master",
             createdAt: "2026-07-01T00:00:00.000Z",
-            payload: { machineNo, machineType, status: "Active" },
+            payload: { machineNo, machineFamily, machineType, status: "Active" },
           })),
           {
             entryType: "shop_floor_status",
@@ -1680,7 +1680,7 @@ describe("buildLegacyDashboardSnapshot", () => {
             entryType: "machine_master",
             createdAt: "2026-06-24T00:00:00.000Z",
             payload: {
-              machineNo: "ADB503",
+              machineNo: "ADB503", machineFamily: "ADB5",
               machineType: "AUTOMATIC",
               status: "Active",
             },
@@ -1689,7 +1689,7 @@ describe("buildLegacyDashboardSnapshot", () => {
             entryType: "machine_master",
             createdAt: "2026-06-24T00:00:00.000Z",
             payload: {
-              machineNo: "ADB504",
+              machineNo: "ADB504", machineFamily: "ADB5",
               machineType: "AUTOMATIC",
               status: "Active",
             },
@@ -1810,7 +1810,7 @@ describe("buildLegacyDashboardSnapshot", () => {
           entryType: "machine_master",
           createdAt: "2026-06-24T00:00:00.000Z",
           payload: {
-            machineNo: "ADB503",
+            machineNo: "ADB503", machineFamily: "ADB5",
             machineType: "AUTOMATIC",
             status: "Active",
           },
@@ -1819,7 +1819,7 @@ describe("buildLegacyDashboardSnapshot", () => {
           entryType: "machine_master",
           createdAt: "2026-06-24T00:00:00.000Z",
           payload: {
-            machineNo: "ADB504",
+            machineNo: "ADB504", machineFamily: "ADB5",
             machineType: "AUTOMATIC",
             status: "Active",
           },
@@ -1912,7 +1912,7 @@ describe("buildLegacyDashboardSnapshot", () => {
           entryType: "machine_master",
           createdAt: "2026-06-24T00:00:00.000Z",
           payload: {
-            machineNo: "D301",
+            machineNo: "D301", machineFamily: "D3",
             machineType: "MANUAL",
             status: "Active",
           },
@@ -2028,14 +2028,14 @@ describe("buildLegacyDashboardSnapshot", () => {
           },
         },
         ...[
-          ["C501", "AUTOMATIC"],
-          ["C502", "AUTOMATIC"],
-          ["D301", "MANUAL"],
-        ].map(([machineNo, machineType]) => ({
+          ["C501", "AUTOMATIC", "C5"],
+          ["C502", "AUTOMATIC", "C5"],
+          ["D301", "MANUAL", "D3"],
+        ].map(([machineNo, machineType, machineFamily]) => ({
           entryType: "machine_master",
           createdAt: "2026-06-24T00:00:00.000Z",
           payload: {
-            machineNo,
+            machineNo, machineFamily,
             machineType,
             status: "Active",
           },
@@ -2115,7 +2115,7 @@ describe("buildLegacyDashboardSnapshot", () => {
           entryType: "machine_master",
           createdAt: "2026-06-23T00:00:00.000Z",
           payload: {
-            machineNo: "C501",
+            machineNo: "C501", machineFamily: "C5",
             machineType: "AUTOMATIC",
             status: "Active",
           },
@@ -2124,7 +2124,7 @@ describe("buildLegacyDashboardSnapshot", () => {
           entryType: "machine_master",
           createdAt: "2026-06-23T00:00:00.000Z",
           payload: {
-            machineNo: "C502",
+            machineNo: "C502", machineFamily: "C5",
             machineType: "AUTOMATIC",
             status: "Active",
           },
@@ -2206,7 +2206,7 @@ describe("buildLegacyDashboardSnapshot", () => {
           entryType: "machine_master",
           createdAt: "2026-06-23T00:00:00.000Z",
           payload: {
-            machineNo: "C501",
+            machineNo: "C501", machineFamily: "C5",
             machineType: "AUTOMATIC",
             status: "Active",
           },
@@ -2287,7 +2287,7 @@ describe("buildLegacyDashboardSnapshot", () => {
           entryType: "machine_master",
           createdAt: "2026-06-23T00:00:00.000Z",
           payload: {
-            machineNo: "C501",
+            machineNo: "C501", machineFamily: "C5",
             machineType: "AUTOMATIC",
             status: "Active",
           },
@@ -2400,7 +2400,7 @@ describe("buildLegacyDashboardSnapshot", () => {
           entryType: "machine_master",
           createdAt: "2026-06-23T00:00:00.000Z",
           payload: {
-            machineNo: "C501",
+            machineNo: "C501", machineFamily: "C5",
             machineType: "MANUAL",
             status: "Active",
           },
@@ -2474,7 +2474,7 @@ describe("buildLegacyDashboardSnapshot", () => {
           entryType: "machine_master",
           createdAt: "2026-06-25T00:00:00.000Z",
           payload: {
-            machineNo: "C501",
+            machineNo: "C501", machineFamily: "C5",
             machineType: "AUTOMATIC",
             status: "Active",
           },
@@ -2553,7 +2553,7 @@ describe("buildLegacyDashboardSnapshot", () => {
         entryType: "machine_master",
         createdAt: "2026-06-23T00:00:00.000Z",
         payload: {
-          machineNo: "C501",
+          machineNo: "C501", machineFamily: "C5",
           machineType: "AUTOMATIC",
           status: "Active",
         },
@@ -2652,7 +2652,7 @@ describe("buildLegacyDashboardSnapshot", () => {
           entryType: "machine_master",
           createdAt: "2026-06-23T00:00:00.000Z",
           payload: {
-            machineNo: "C501",
+            machineNo: "C501", machineFamily: "C5",
             machineType: "AUTOMATIC",
             status: "Active",
           },
@@ -2661,7 +2661,7 @@ describe("buildLegacyDashboardSnapshot", () => {
           entryType: "machine_master",
           createdAt: "2026-06-23T00:00:00.000Z",
           payload: {
-            machineNo: "C502",
+            machineNo: "C502", machineFamily: "C5",
             machineType: "AUTOMATIC",
             status: "Active",
           },
@@ -2721,7 +2721,7 @@ describe("buildLegacyDashboardSnapshot", () => {
         entryType: "machine_master",
         createdAt: "2026-06-23T00:00:00.000Z",
         payload: {
-          machineNo: "C501",
+          machineNo: "C501", machineFamily: "C5",
           machineType: "AUTOMATIC",
           status: "Active",
         },
@@ -2824,7 +2824,7 @@ describe("buildLegacyDashboardSnapshot", () => {
           entryType: "machine_master",
           createdAt: "2026-06-23T00:00:00.000Z",
           payload: {
-            machineNo: "C501",
+            machineNo: "C501", machineFamily: "C5",
             machineType: "AUTOMATIC",
             status: "Active",
           },
@@ -2882,7 +2882,7 @@ describe("buildLegacyDashboardSnapshot", () => {
             partNo: "M6",
             optionNumber: "1",
             setupNo: "1",
-            machineUsed: "C501",
+            machineUsed: "C5",
             machineType: "AUTOMATIC",
           },
         },
@@ -2893,7 +2893,7 @@ describe("buildLegacyDashboardSnapshot", () => {
             partNo: "M6",
             optionNumber: "1",
             setupNo: "2",
-            machineUsed: "C502",
+            machineUsed: "C5",
             machineType: "AUTOMATIC",
           },
         },
@@ -2923,7 +2923,7 @@ describe("buildLegacyDashboardSnapshot", () => {
           entryType: "machine_master",
           createdAt: "2026-06-24T00:00:00.000Z",
           payload: {
-            machineNo: "C501",
+            machineNo: "C501", machineFamily: "C5",
             machineType: "AUTOMATIC",
             status: "Active",
           },
@@ -2932,7 +2932,7 @@ describe("buildLegacyDashboardSnapshot", () => {
           entryType: "machine_master",
           createdAt: "2026-06-24T00:00:00.000Z",
           payload: {
-            machineNo: "C502",
+            machineNo: "C502", machineFamily: "C5",
             machineType: "AUTOMATIC",
             status: "Active",
           },
@@ -3000,7 +3000,7 @@ describe("buildLegacyDashboardSnapshot", () => {
           entryType: "machine_master",
           createdAt: "2026-06-24T00:00:00.000Z",
           payload: {
-            machineNo: "C501",
+            machineNo: "C501", machineFamily: "C5",
             machineType: "AUTOMATIC",
             status: "Active",
           },
@@ -3069,13 +3069,13 @@ describe("buildLegacyDashboardSnapshot", () => {
           },
         ]),
         ...[
-          ["C501", "AUTOMATIC"],
-          ["D301", "MANUAL"],
-        ].map(([machineNo, machineType]) => ({
+          ["C501", "AUTOMATIC", "C5"],
+          ["D301", "MANUAL", "D3"],
+        ].map(([machineNo, machineType, machineFamily]) => ({
           entryType: "machine_master",
           createdAt: "2026-06-24T00:00:00.000Z",
           payload: {
-            machineNo,
+            machineNo, machineFamily,
             machineType,
             status: "Active",
           },
@@ -3157,11 +3157,11 @@ describe("buildLegacyDashboardSnapshot", () => {
             },
           },
         ]),
-        ...["C501", "C502"].map((machineNo) => ({
+        ...[["C501", "C5"], ["C502", "C5"]].map(([machineNo, machineFamily]) => ({
           entryType: "machine_master",
           createdAt: "2026-06-23T00:00:00.000Z",
           payload: {
-            machineNo,
+            machineNo, machineFamily,
             machineType: "AUTOMATIC",
             status: "Active",
           },
@@ -3218,11 +3218,11 @@ describe("buildLegacyDashboardSnapshot", () => {
             loadingUnloading: 0,
           },
         },
-        ...["C501", "C502"].map((machineNo) => ({
+        ...[["C501", "C5"], ["C502", "C5"]].map(([machineNo, machineFamily]) => ({
           entryType: "machine_master",
           createdAt: "2026-06-23T00:00:00.000Z",
           payload: {
-            machineNo,
+            machineNo, machineFamily,
             machineType: "AUTOMATIC",
             status: "Active",
           },
@@ -3279,11 +3279,11 @@ describe("buildLegacyDashboardSnapshot", () => {
             loadingUnloading: 0,
           },
         },
-        ...["C501", "C502"].map((machineNo) => ({
+        ...[["C501", "C5"], ["C502", "C5"]].map(([machineNo, machineFamily]) => ({
           entryType: "machine_master",
           createdAt: "2026-06-23T00:00:00.000Z",
           payload: {
-            machineNo,
+            machineNo, machineFamily,
             machineType: "AUTOMATIC",
             status: "Active",
           },
@@ -3352,14 +3352,14 @@ describe("buildLegacyDashboardSnapshot", () => {
           },
         })),
         ...[
-          ["C501", "AUTOMATIC"],
-          ["D301", "AUTOMATIC"],
-          ["D302", "AUTOMATIC"],
-        ].map(([machineNo, machineType]) => ({
+          ["C501", "AUTOMATIC", "C5"],
+          ["D301", "AUTOMATIC", "D3"],
+          ["D302", "AUTOMATIC", "D3"],
+        ].map(([machineNo, machineType, machineFamily]) => ({
           entryType: "machine_master",
           createdAt: "2026-06-29T00:00:00.000Z",
           payload: {
-            machineNo,
+            machineNo, machineFamily,
             machineType,
             status: "Active",
           },
@@ -3440,11 +3440,11 @@ describe("buildLegacyDashboardSnapshot", () => {
               loadingUnloading: 0,
             },
           })),
-          ...["C501", "C502", "D301"].map((machineNo) => ({
+          ...[["C501", "C5"], ["C502", "C5"], ["D301", "D3"]].map(([machineNo, machineFamily]) => ({
             entryType: "machine_master",
             createdAt: "2026-06-29T00:00:00.000Z",
             payload: {
-              machineNo,
+              machineNo, machineFamily,
               machineType: "AUTOMATIC",
               status: "Active",
             },
@@ -3497,8 +3497,8 @@ describe("buildLegacyDashboardSnapshot", () => {
             },
           },
           ...[
-            ["1", "C501", 30],
-            ["2", "D301", 576],
+            ["1", "C5", 30],
+            ["2", "D3", 576],
           ].flatMap(([setupNo, machineUsed, cycleTime]) => [
             {
               entryType: "route",
@@ -3523,11 +3523,11 @@ describe("buildLegacyDashboardSnapshot", () => {
               },
             },
           ]),
-          ...["C501", "D301"].map((machineNo) => ({
+          ...[["C501", "C5"], ["D301", "D3"]].map(([machineNo, machineFamily]) => ({
             entryType: "machine_master",
             createdAt: "2026-06-24T00:00:00.000Z",
             payload: {
-              machineNo,
+              machineNo, machineFamily,
               machineType: "AUTOMATIC",
               status: "Active",
             },
@@ -3604,14 +3604,14 @@ describe("buildLegacyDashboardSnapshot", () => {
           },
         ]),
         ...[
-          ["C501", "AUTOMATIC"],
-          ["C502", "AUTOMATIC"],
-          ["D301", "AUTOMATIC"],
-        ].map(([machineNo, machineType]) => ({
+          ["C501", "AUTOMATIC", "C5"],
+          ["C502", "AUTOMATIC", "C5"],
+          ["D301", "AUTOMATIC", "D3"],
+        ].map(([machineNo, machineType, machineFamily]) => ({
           entryType: "machine_master",
           createdAt: "2026-06-29T00:00:00.000Z",
           payload: {
-            machineNo,
+            machineNo, machineFamily,
             machineType,
             status: "Active",
           },
@@ -3688,11 +3688,11 @@ describe("buildLegacyDashboardSnapshot", () => {
             },
           },
         ]),
-        ...["C501", "C502"].map((machineNo) => ({
+        ...[["C501", "C5"], ["C502", "C5"]].map(([machineNo, machineFamily]) => ({
           entryType: "machine_master",
           createdAt: "2026-06-23T00:00:00.000Z",
           payload: {
-            machineNo,
+            machineNo, machineFamily,
             machineType: "AUTOMATIC",
             status: "Active",
           },
@@ -3759,7 +3759,7 @@ describe("buildLegacyDashboardSnapshot", () => {
               partNo,
               optionNumber: "1",
               setupNo: "1",
-              machineUsed: "C501",
+              machineUsed: "C5",
               machineType: "AUTOMATIC",
             },
           },
@@ -3779,7 +3779,7 @@ describe("buildLegacyDashboardSnapshot", () => {
           entryType: "machine_master",
           createdAt: "2026-06-23T00:00:00.000Z",
           payload: {
-            machineNo: "C501",
+            machineNo: "C501", machineFamily: "C5",
             machineType: "AUTOMATIC",
             status: "Active",
           },
@@ -3849,7 +3849,7 @@ describe("buildLegacyDashboardSnapshot", () => {
               partNo,
               optionNumber: "1",
               setupNo: "1",
-              machineUsed: "C501",
+              machineUsed: "C5",
               machineType: "AUTOMATIC",
             },
           },
@@ -3869,7 +3869,7 @@ describe("buildLegacyDashboardSnapshot", () => {
           entryType: "machine_master",
           createdAt: "2026-06-23T00:00:00.000Z",
           payload: {
-            machineNo: "C501",
+            machineNo: "C501", machineFamily: "C5",
             machineType: "AUTOMATIC",
             status: "Active",
           },
@@ -3965,7 +3965,7 @@ describe("buildLegacyDashboardSnapshot", () => {
                 partNo,
                 optionNumber: "1",
                 setupNo: "1",
-                machineUsed: "C501",
+                machineUsed: "C5",
                 machineType: "AUTOMATIC",
               },
             },
@@ -3998,7 +3998,7 @@ describe("buildLegacyDashboardSnapshot", () => {
             entryType: "machine_master",
             createdAt: "2026-06-23T00:00:00.000Z",
             payload: {
-              machineNo: "C501",
+              machineNo: "C501", machineFamily: "C5",
               machineType: "AUTOMATIC",
               status: "Active",
             },
@@ -4087,7 +4087,7 @@ describe("buildLegacyDashboardSnapshot", () => {
               partNo,
               optionNumber: "1",
               setupNo: "1",
-              machineUsed: "C501",
+              machineUsed: "C5",
               machineType: "AUTOMATIC",
             },
           },
@@ -4120,7 +4120,7 @@ describe("buildLegacyDashboardSnapshot", () => {
           entryType: "machine_master",
           createdAt: "2026-06-23T00:00:00.000Z",
           payload: {
-            machineNo: "C501",
+            machineNo: "C501", machineFamily: "C5",
             machineType: "AUTOMATIC",
             status: "Active",
           },
@@ -4205,7 +4205,7 @@ describe("buildLegacyDashboardSnapshot", () => {
               partNo,
               optionNumber: "1",
               setupNo: "1",
-              machineUsed: "SA705",
+              machineUsed: "SA7",
               machineType: "AUTOMATIC",
             },
           },
@@ -4225,7 +4225,7 @@ describe("buildLegacyDashboardSnapshot", () => {
           entryType: "machine_master",
           createdAt: "2026-06-23T00:00:00.000Z",
           payload: {
-            machineNo: "SA705",
+            machineNo: "SA705", machineFamily: "SA7",
             machineType: "AUTOMATIC",
             status: "Active",
           },
@@ -4297,7 +4297,7 @@ describe("buildLegacyDashboardSnapshot", () => {
               partNo,
               optionNumber: "1",
               setupNo: "1",
-              machineUsed: "C501",
+              machineUsed: "C5",
               machineType: "AUTOMATIC",
             },
           },
@@ -4330,7 +4330,7 @@ describe("buildLegacyDashboardSnapshot", () => {
           entryType: "machine_master",
           createdAt: "2026-06-23T00:00:00.000Z",
           payload: {
-            machineNo: "C501",
+            machineNo: "C501", machineFamily: "C5",
             machineType: "AUTOMATIC",
             status: "Active",
           },
@@ -4417,7 +4417,7 @@ describe("buildLegacyDashboardSnapshot", () => {
               partNo,
               optionNumber: "1",
               setupNo: "1",
-              machineUsed: "C501",
+              machineUsed: "C5",
               machineType: "AUTOMATIC",
             },
           },
@@ -4440,7 +4440,7 @@ describe("buildLegacyDashboardSnapshot", () => {
             partNo: "M43",
             optionNumber: "1",
             setupNo: "2",
-            machineUsed: "TH501",
+            machineUsed: "TH5",
             machineType: "AUTOMATIC",
           },
         },
@@ -4472,7 +4472,7 @@ describe("buildLegacyDashboardSnapshot", () => {
           entryType: "machine_master",
           createdAt: "2026-06-23T00:00:00.000Z",
           payload: {
-            machineNo: "C501",
+            machineNo: "C501", machineFamily: "C5",
             machineType: "AUTOMATIC",
             status: "Active",
           },
@@ -4481,7 +4481,7 @@ describe("buildLegacyDashboardSnapshot", () => {
           entryType: "machine_master",
           createdAt: "2026-06-23T00:00:00.000Z",
           payload: {
-            machineNo: "TH501",
+            machineNo: "TH501", machineFamily: "TH5",
             machineType: "AUTOMATIC",
             status: "Active",
           },
@@ -4570,7 +4570,7 @@ describe("buildLegacyDashboardSnapshot", () => {
               partNo: "M-NO-PROD",
               optionNumber: "1",
               setupNo: "1",
-              machineUsed: "C501",
+              machineUsed: "C5",
               machineType: "AUTOMATIC",
             },
           },
@@ -4646,7 +4646,7 @@ describe("buildLegacyDashboardSnapshot", () => {
             entryType: "machine_master",
             createdAt: "2026-06-23T00:00:00.000Z",
             payload: {
-              machineNo: "C501",
+              machineNo: "C501", machineFamily: "C5",
               machineType: "AUTOMATIC",
               status: "Active",
             },
@@ -4655,7 +4655,7 @@ describe("buildLegacyDashboardSnapshot", () => {
             entryType: "machine_master",
             createdAt: "2026-06-23T00:00:00.000Z",
             payload: {
-              machineNo: "D301",
+              machineNo: "D301", machineFamily: "D3",
               machineType: "AUTOMATIC",
               status: "Active",
             },
@@ -4734,7 +4734,7 @@ describe("buildLegacyDashboardSnapshot", () => {
                 partNo,
                 optionNumber: "1",
                 setupNo: "1",
-                machineUsed: "C501",
+                machineUsed: "C5",
                 machineType: "AUTOMATIC",
               },
             },
@@ -4754,7 +4754,7 @@ describe("buildLegacyDashboardSnapshot", () => {
             entryType: "machine_master",
             createdAt: "2026-06-23T00:00:00.000Z",
             payload: {
-              machineNo: "C501",
+              machineNo: "C501", machineFamily: "C5",
               machineType: "AUTOMATIC",
               status: "Active",
             },
@@ -4823,7 +4823,7 @@ describe("buildLegacyDashboardSnapshot", () => {
                 partNo,
                 optionNumber: "1",
                 setupNo: "1",
-                machineUsed: "C501",
+                machineUsed: "C5",
                 machineType: "AUTOMATIC",
               },
             },
@@ -4856,7 +4856,7 @@ describe("buildLegacyDashboardSnapshot", () => {
             entryType: "machine_master",
             createdAt: "2026-06-23T00:00:00.000Z",
             payload: {
-              machineNo: "C501",
+              machineNo: "C501", machineFamily: "C5",
               machineType: "AUTOMATIC",
               status: "Active",
             },
@@ -4927,7 +4927,7 @@ describe("buildLegacyDashboardSnapshot", () => {
                 partNo,
                 optionNumber: "1",
                 setupNo: "1",
-                machineUsed: "ADB502",
+                machineUsed: "ADB5",
                 machineType: "AUTOMATIC",
               },
             },
@@ -4973,7 +4973,7 @@ describe("buildLegacyDashboardSnapshot", () => {
             entryType: "machine_master",
             createdAt: "2026-06-25T00:00:00.000Z",
             payload: {
-              machineNo: "ADB502",
+              machineNo: "ADB502", machineFamily: "ADB5",
               machineType: "AUTOMATIC",
               status: "Active",
             },
@@ -5050,7 +5050,7 @@ describe("buildLegacyDashboardSnapshot", () => {
                 partNo,
                 optionNumber: "1",
                 setupNo: "1",
-                machineUsed: "ADB503",
+                machineUsed: "ADB5",
                 machineType: "AUTOMATIC",
               },
             },
@@ -5097,7 +5097,7 @@ describe("buildLegacyDashboardSnapshot", () => {
             entryType: "machine_master",
             createdAt: "2026-06-25T00:00:00.000Z",
             payload: {
-              machineNo: "ADB503",
+              machineNo: "ADB503", machineFamily: "ADB5",
               machineType: "AUTOMATIC",
               status: "Active",
             },
@@ -5223,7 +5223,7 @@ describe("buildLegacyDashboardSnapshot", () => {
                 partNo,
                 optionNumber: "1",
                 setupNo: "1",
-                machineUsed: "C501",
+                machineUsed: "C5",
                 machineType: "AUTOMATIC",
               },
             },
@@ -5269,7 +5269,7 @@ describe("buildLegacyDashboardSnapshot", () => {
             entryType: "machine_master",
             createdAt: "2026-06-23T00:00:00.000Z",
             payload: {
-              machineNo: "C501",
+              machineNo: "C501", machineFamily: "C5",
               machineType: "AUTOMATIC",
               status: "Active",
             },
@@ -5376,7 +5376,7 @@ describe("buildLegacyDashboardSnapshot", () => {
               partNo,
               optionNumber: "1",
               setupNo: "1",
-              machineUsed: "C501",
+              machineUsed: "C5",
               machineType: "AUTOMATIC",
             },
           },
@@ -5409,7 +5409,7 @@ describe("buildLegacyDashboardSnapshot", () => {
           entryType: "machine_master",
           createdAt: "2026-06-23T00:00:00.000Z",
           payload: {
-            machineNo: "C501",
+            machineNo: "C501", machineFamily: "C5",
             machineType: "AUTOMATIC",
             status: "Active",
           },
@@ -5513,7 +5513,7 @@ describe("buildLegacyDashboardSnapshot", () => {
             partNo: "M42",
             optionNumber: "1",
             setupNo: "1",
-            machineUsed: "C501",
+            machineUsed: "C5",
             machineType: "AUTOMATIC",
           },
         },
@@ -5524,7 +5524,7 @@ describe("buildLegacyDashboardSnapshot", () => {
             partNo: "M42",
             optionNumber: "1",
             setupNo: "2",
-            machineUsed: "C502",
+            machineUsed: "C5",
             machineType: "AUTOMATIC",
           },
         },
@@ -5535,7 +5535,7 @@ describe("buildLegacyDashboardSnapshot", () => {
             partNo: "M43",
             optionNumber: "1",
             setupNo: "1",
-            machineUsed: "C501",
+            machineUsed: "C5",
             machineType: "AUTOMATIC",
           },
         },
@@ -5556,7 +5556,7 @@ describe("buildLegacyDashboardSnapshot", () => {
           entryType: "machine_master",
           createdAt: "2026-06-23T00:00:00.000Z",
           payload: {
-            machineNo: "C501",
+            machineNo: "C501", machineFamily: "C5",
             machineType: "AUTOMATIC",
             status: "Active",
           },
@@ -5565,7 +5565,7 @@ describe("buildLegacyDashboardSnapshot", () => {
           entryType: "machine_master",
           createdAt: "2026-06-23T00:00:00.000Z",
           payload: {
-            machineNo: "C502",
+            machineNo: "C502", machineFamily: "C5",
             machineType: "AUTOMATIC",
             status: "Active",
           },
@@ -5699,7 +5699,7 @@ describe("buildLegacyDashboardSnapshot", () => {
           entryType: "machine_master",
           createdAt: "2026-06-23T00:00:00.000Z",
           payload: {
-            machineNo: "A501",
+            machineNo: "A501", machineFamily: "A5",
             machineType: "AUTOMATIC",
             status: "Active",
           },
@@ -5708,7 +5708,7 @@ describe("buildLegacyDashboardSnapshot", () => {
           entryType: "machine_master",
           createdAt: "2026-06-23T00:00:00.000Z",
           payload: {
-            machineNo: "C501",
+            machineNo: "C501", machineFamily: "C5",
             machineType: "AUTOMATIC",
             status: "Active",
           },
@@ -5881,7 +5881,7 @@ describe("buildLegacyDashboardSnapshot", () => {
           entryType: "machine_master",
           createdAt: "2026-06-23T00:00:00.000Z",
           payload: {
-            machineNo: "A501",
+            machineNo: "A501", machineFamily: "A5",
             machineType: "AUTOMATIC",
             status: "Active",
           },
@@ -5890,7 +5890,7 @@ describe("buildLegacyDashboardSnapshot", () => {
           entryType: "machine_master",
           createdAt: "2026-06-23T00:00:00.000Z",
           payload: {
-            machineNo: "C501",
+            machineNo: "C501", machineFamily: "C5",
             machineType: "AUTOMATIC",
             status: "Active",
           },
@@ -5899,7 +5899,7 @@ describe("buildLegacyDashboardSnapshot", () => {
           entryType: "machine_master",
           createdAt: "2026-06-23T00:00:00.000Z",
           payload: {
-            machineNo: "C502",
+            machineNo: "C502", machineFamily: "C5",
             machineType: "AUTOMATIC",
             status: "Active",
           },
@@ -5960,7 +5960,7 @@ describe("buildLegacyDashboardSnapshot", () => {
             partNo: "M6",
             optionNumber: "1",
             setupNo: "1",
-            machineUsed: "C501",
+            machineUsed: "C5",
             machineType: "AUTOMATIC",
           },
         },
@@ -5971,7 +5971,7 @@ describe("buildLegacyDashboardSnapshot", () => {
             partNo: "M6",
             optionNumber: "1",
             setupNo: "2",
-            machineUsed: "C502",
+            machineUsed: "C5",
             machineType: "AUTOMATIC",
           },
         },
@@ -6001,7 +6001,7 @@ describe("buildLegacyDashboardSnapshot", () => {
           entryType: "machine_master",
           createdAt: "2026-06-24T00:00:00.000Z",
           payload: {
-            machineNo: "C501",
+            machineNo: "C501", machineFamily: "C5",
             machineType: "AUTOMATIC",
             status: "Active",
           },
@@ -6010,7 +6010,7 @@ describe("buildLegacyDashboardSnapshot", () => {
           entryType: "machine_master",
           createdAt: "2026-06-24T00:00:00.000Z",
           payload: {
-            machineNo: "C502",
+            machineNo: "C502", machineFamily: "C5",
             machineType: "AUTOMATIC",
             status: "Active",
           },
@@ -6078,7 +6078,7 @@ describe("buildLegacyDashboardSnapshot", () => {
             partNo: "MA",
             optionNumber: "1",
             setupNo: "1",
-            machineUsed: "C500",
+            machineUsed: "C5",
             machineType: "TURNING",
           },
         },
@@ -6089,7 +6089,7 @@ describe("buildLegacyDashboardSnapshot", () => {
             partNo: "MA",
             optionNumber: "1",
             setupNo: "2",
-            machineUsed: "C501",
+            machineUsed: "C5",
             machineType: "GRINDING",
           },
         },
@@ -6100,7 +6100,7 @@ describe("buildLegacyDashboardSnapshot", () => {
             partNo: "MB",
             optionNumber: "1",
             setupNo: "1",
-            machineUsed: "C501",
+            machineUsed: "C5",
             machineType: "GRINDING",
           },
         },
@@ -6141,7 +6141,7 @@ describe("buildLegacyDashboardSnapshot", () => {
           entryType: "machine_master",
           createdAt: "2026-06-25T00:00:00.000Z",
           payload: {
-            machineNo: "C500",
+            machineNo: "C500", machineFamily: "C5",
             machineType: "TURNING",
             status: "Active",
           },
@@ -6150,7 +6150,7 @@ describe("buildLegacyDashboardSnapshot", () => {
           entryType: "machine_master",
           createdAt: "2026-06-25T00:00:00.000Z",
           payload: {
-            machineNo: "C501",
+            machineNo: "C501", machineFamily: "C5",
             machineType: "GRINDING",
             status: "Active",
           },
@@ -6216,10 +6216,10 @@ describe("buildLegacyDashboardSnapshot", () => {
           },
         },
         ...[
-          ["MA", "1", "C500", "TURNING"],
-          ["MA", "2", "C501", "GRINDING"],
-          ["MB", "1", "C502", "TURNING"],
-          ["MB", "2", "C501", "GRINDING"],
+          ["MA", "1", "C5", "TURNING"],
+          ["MA", "2", "C5", "GRINDING"],
+          ["MB", "1", "C5", "TURNING"],
+          ["MB", "2", "C5", "GRINDING"],
         ].map(([partNo, setupNo, machineUsed, machineType]) => ({
           entryType: "route",
           createdAt: "2026-06-25T00:00:00.000Z",
@@ -6248,14 +6248,14 @@ describe("buildLegacyDashboardSnapshot", () => {
           },
         })),
         ...[
-          ["C500", "TURNING"],
-          ["C501", "GRINDING"],
-          ["C502", "TURNING"],
-        ].map(([machineNo, machineType]) => ({
+          ["C500", "TURNING", "C5"],
+          ["C501", "GRINDING", "C5"],
+          ["C502", "TURNING", "C5"],
+        ].map(([machineNo, machineType, machineFamily]) => ({
           entryType: "machine_master",
           createdAt: "2026-06-25T00:00:00.000Z",
           payload: {
-            machineNo,
+            machineNo, machineFamily,
             machineType,
             status: "Active",
           },
@@ -6315,7 +6315,7 @@ describe("buildLegacyDashboardSnapshot", () => {
             partNo: "M7",
             optionNumber: "1",
             setupNo,
-            machineUsed: `C50${setupNo}`,
+            machineUsed: "C5",
             machineType: "AUTOMATIC",
           },
         })),
@@ -6326,7 +6326,7 @@ describe("buildLegacyDashboardSnapshot", () => {
             partNo: "M7",
             optionNumber: "2",
             setupNo,
-            machineUsed: `C50${setupNo}`,
+            machineUsed: "C5",
             machineType: "AUTOMATIC",
           },
         })),
@@ -6355,7 +6355,7 @@ describe("buildLegacyDashboardSnapshot", () => {
           entryType: "machine_master",
           createdAt: "2026-06-24T00:00:00.000Z",
           payload: {
-            machineNo: `C50${setupNo}`,
+            machineNo: `C50${setupNo}`, machineFamily: "C5",
             machineType: "AUTOMATIC",
             status: "Active",
           },
@@ -6453,7 +6453,7 @@ describe("buildLegacyDashboardSnapshot", () => {
           entryType: "machine_master",
           createdAt: "2026-06-23T00:00:00.000Z",
           payload: {
-            machineNo: "C501",
+            machineNo: "C501", machineFamily: "C5",
             machineType: "AUTOMATIC",
             status: "Active",
           },
@@ -6498,7 +6498,7 @@ describe("buildLegacyDashboardSnapshot", () => {
             partNo: "M-FPI",
             optionNumber: "1",
             setupNo: "1",
-            machineUsed: "C901",
+            machineUsed: "C9",
             machineType: "AUTOMATIC",
           },
         },
@@ -6527,7 +6527,7 @@ describe("buildLegacyDashboardSnapshot", () => {
           entryType: "machine_master",
           createdAt: "2026-06-23T00:00:00.000Z",
           payload: {
-            machineNo: "C901",
+            machineNo: "C901", machineFamily: "C9",
             machineType: "AUTOMATIC",
             status: "Active",
           },
@@ -6669,7 +6669,7 @@ describe("buildLegacyDashboardSnapshot", () => {
         {
           entryType: "machine_master",
           createdAt: "2026-07-02T08:00:00.000Z",
-          payload: { machineNo: "C901", machineType: "CONV", status: "Active" },
+          payload: { machineNo: "C901", machineFamily: "C9", machineType: "CONV", status: "Active" },
         },
         {
           entryType: "production_card",
@@ -6865,7 +6865,7 @@ describe("buildLegacyDashboardSnapshot", () => {
           },
           ...[
             ["M10", "1", "A5", "AUTOMATIC"],
-            ["M10", "2", "TR503", "THREADING"],
+            ["M10", "2", "TR5", "THREADING"],
             ["M99", "1", "A5", "AUTOMATIC"],
           ].flatMap(([partNo, setupNo, machineUsed, machineType]) => [
             {
@@ -6892,13 +6892,13 @@ describe("buildLegacyDashboardSnapshot", () => {
             },
           ]),
           ...[
-            ["A510", "AUTOMATIC"],
-            ["A511", "AUTOMATIC"],
-            ["TR503", "THREADING"],
-          ].map(([machineNo, machineType]) => ({
+            ["A510", "AUTOMATIC", "A5"],
+            ["A511", "AUTOMATIC", "A5"],
+            ["TR503", "THREADING", "TR5"],
+          ].map(([machineNo, machineType, machineFamily]) => ({
             entryType: "machine_master",
             createdAt: "2026-07-01T00:00:00.000Z",
-            payload: { machineNo, machineType, status: "Active" },
+            payload: { machineNo, machineFamily, machineType, status: "Active" },
           })),
           {
             entryType: "shop_floor_status",
@@ -6961,10 +6961,10 @@ describe("buildLegacyDashboardSnapshot", () => {
           },
         },
         ...[
-          ["1", "C501", "TURNING", 34.56],
-          ["2", "TR502", "THREADING", 82.944],
-          ["3", "TR503", "THREADING", 82.944],
-          ["4", "TH502", "THREADING", 34.56],
+          ["1", "C5", "TURNING", 34.56],
+          ["2", "TR5", "THREADING", 82.944],
+          ["3", "TR5", "THREADING", 82.944],
+          ["4", "TH5", "THREADING", 34.56],
         ].flatMap(([setupNo, machineUsed, machineType, cycleTime]) => [
           {
             entryType: "route",
@@ -7000,15 +7000,15 @@ describe("buildLegacyDashboardSnapshot", () => {
           },
         ]),
         ...[
-          ["C501", "TURNING"],
-          ["TR502", "THREADING"],
-          ["TR503", "THREADING"],
-          ["TH502", "THREADING"],
-        ].map(([machineNo, machineType]) => ({
+          ["C501", "TURNING", "C5"],
+          ["TR502", "THREADING", "TR5"],
+          ["TR503", "THREADING", "TR5"],
+          ["TH502", "THREADING", "TH5"],
+        ].map(([machineNo, machineType, machineFamily]) => ({
           entryType: "machine_master",
           createdAt: "2026-06-27T00:00:00.000Z",
           payload: {
-            machineNo,
+            machineNo, machineFamily,
             machineType,
             status: "Active",
           },
@@ -7069,7 +7069,7 @@ describe("buildLegacyDashboardSnapshot", () => {
         entryType: "machine_master",
         createdAt: "2026-06-24T00:00:00.000Z",
         payload: {
-          machineNo: "C501",
+          machineNo: "C501", machineFamily: "C5",
           machineType: "AUTOMATIC",
           status: "Active",
         },
