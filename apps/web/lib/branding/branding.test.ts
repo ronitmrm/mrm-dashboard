@@ -56,6 +56,9 @@ describe("Branding issue contract", () => {
     const footer = notice.footer.replace(/<style>[\s\S]*?<\/style>/g, "")
     expect(footer).not.toContain("MRM-NTC-0001")
     expect(footer).not.toContain("R00")
+    expect(notice.html).toContain(
+      '<div class="notice-number">MRM-NTC-0001</div>'
+    )
     expect(notice.html).toContain("14 / 09 / 2026")
     expect(notice.html).toContain("સમય")
     expect(notice.html).toContain("समय")
