@@ -45,10 +45,23 @@ export const brandingFields = {
     "Consequences",
   ],
 } as const
+export const workInstructionLayouts = [
+  "text",
+  "text-on-picture",
+  "picture-left",
+] as const
+export type WorkInstructionLayout = (typeof workInstructionLayouts)[number]
+export const brandingPictureMaxLength = 400000
+export type BrandingSection = {
+  heading: string
+  body: string
+  layout?: WorkInstructionLayout
+  picture?: string
+}
 export type BrandingTranslation = {
   language: BrandingLanguage
   title: string
-  sections: { heading: string; body: string }[]
+  sections: BrandingSection[]
 }
 export type BrandingContent = {
   title: string
@@ -95,9 +108,26 @@ export function parseBrandingTranslations(
       title: text(item.title, "Translated title", 240),
       sections: item.sections.map((entry: unknown) => {
         const section = object(entry)
+        const layout =
+          section.layout === undefined
+            ? undefined
+            : workInstructionLayouts.find((layout) => layout === section.layout)
+        if (section.layout !== undefined && !layout)
+          throw new Error("Section format is invalid.")
+        const picture =
+          section.picture === undefined
+            ? undefined
+            : text(section.picture, "Picture", brandingPictureMaxLength)
+        if (
+          picture &&
+          !/^data:image\/jpeg;base64,\/9j\/[A-Za-z0-9+/]*={0,2}$/.test(picture)
+        )
+          throw new Error("Use an uploaded JPEG picture.")
         return {
           heading: text(section.heading, "Heading", 200),
           body: text(section.body, "Section"),
+          ...(layout ? { layout } : {}),
+          ...(picture && layout && layout !== "text" ? { picture } : {}),
         }
       }),
     }
@@ -129,6 +159,14 @@ export function parseBrandingContent(
     throw new Error("Effective date is invalid.")
   const inputs = object(item.inputs)
   const translations = parseBrandingTranslations(item.translations)
+  const sections = translations.flatMap((translation) => translation.sections)
+  if (
+    type !== "work-instruction" &&
+    sections.some((section) => section.layout || section.picture)
+  )
+    throw new Error("Picture formats are only available for Work Instructions.")
+  if (sections.filter((section) => section.picture).length > 20)
+    throw new Error("A Work Instruction supports up to 20 pictures.")
   if (
     new Set(translations.map(({ language }) => language)).size !==
       translations.length ||
@@ -149,7 +187,11 @@ export function parseBrandingContent(
     translations,
     changeReason: text(item.changeReason ?? "", "Change reason", 2000),
   }
-  if (JSON.stringify(result).length > 180000)
+  if (
+    JSON.stringify(result, (key, value: unknown) =>
+      key === "picture" ? undefined : value
+    ).length > 180000
+  )
     throw new Error("Document is too long. Split it into smaller documents.")
   return result
 }
@@ -168,7 +210,10 @@ export function validateBrandingIssue(
     if (
       !translation?.title ||
       !translation.sections.length ||
-      translation.sections.some(({ heading, body }) => !heading || !body)
+      translation.sections.some(
+        ({ heading, body, layout, picture }) =>
+          !heading || !body || (layout && layout !== "text" && !picture)
+      )
     )
       throw new Error(
         `Complete and review the ${brandingLanguageLabels[language]} content before issue.`

@@ -9,12 +9,18 @@ import {
   type BrandingContent,
   type BrandingLanguage,
   type BrandingType,
+  type WorkInstructionLayout,
 } from "@workspace/db/branding-domain"
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
 import { Textarea } from "@workspace/ui/components/textarea"
 import { Checkbox } from "@workspace/ui/components/checkbox"
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "@workspace/ui/components/native-select"
+import { prepareBrandingPicture } from "@/lib/branding/picture"
 import { StandardState } from "@workspace/ui/components/standard-state"
 import {
   ActionToolbar,
@@ -65,6 +71,7 @@ export function BrandingDocumentEditor({
     }
   })
   const [error, setError] = useState("")
+  const [picturePending, setPicturePending] = useState(false)
   const [pending, startTransition] = useTransition()
   function languageChange(language: BrandingLanguage, checked: boolean) {
     setContent((current) => ({
@@ -141,7 +148,10 @@ export function BrandingDocumentEditor({
         })
       }}
     >
-      <fieldset disabled={pending} className="grid min-w-0 gap-5">
+      <fieldset
+        disabled={pending || picturePending}
+        className="grid min-w-0 gap-5"
+      >
         <ActionToolbar>
           <Button disabled={pending} type="submit">
             <Save aria-hidden="true" />
@@ -251,7 +261,7 @@ export function BrandingDocumentEditor({
           title="Document content"
           description={
             type === "work-instruction"
-              ? "Enter a heading and its body in each selected language. Add Heading adds another pair."
+              ? "Choose a format for each section, then add its heading, body and picture where required."
               : "Review each selected language before saving and issuing. Copy Source copies your text without translating it."
           }
         >
@@ -259,7 +269,7 @@ export function BrandingDocumentEditor({
             {type === "sop" || type === "policy"
               ? "The PDF adds a cover and an automatic index for each selected language. Add topics below in reading order; each topic begins on a new page."
               : type === "work-instruction"
-                ? "The PDF automatically adjusts the heading and body font sizes to fit all selected languages on one page."
+                ? "The section count sets the picture and text-box sizes on one page. Fonts shrink inside those fixed boxes. Review the draft PDF and edit the text if needed."
                 : "The notice prints your section headings and bodies in the reference layout. Use one heading/body per language for a simple notice. Titles stay in the register. The assigned notice number prints at the top-right. Preserve any required line breaks; all content must fit one page."}
           </p>
           <p className="mb-4 text-sm text-muted-foreground">
@@ -344,6 +354,115 @@ export function BrandingDocumentEditor({
                               Move Down
                             </Button>
                           </div>
+                          {type === "work-instruction" ? (
+                            <>
+                              <Label htmlFor={`format-${language}-${index}`}>
+                                Format {index + 1}
+                              </Label>
+                              <NativeSelect
+                                id={`format-${language}-${index}`}
+                                value={section.layout ?? "text"}
+                                onChange={(event) =>
+                                  updateTranslation({
+                                    sections: translation.sections.map(
+                                      (entry, at) =>
+                                        at === index
+                                          ? {
+                                              ...entry,
+                                              layout: event.target
+                                                .value as WorkInstructionLayout,
+                                              ...(event.target.value === "text"
+                                                ? { picture: undefined }
+                                                : {}),
+                                            }
+                                          : entry
+                                    ),
+                                  })
+                                }
+                              >
+                                <NativeSelectOption value="text">
+                                  Heading + body
+                                </NativeSelectOption>
+                                <NativeSelectOption value="text-on-picture">
+                                  Text on picture
+                                </NativeSelectOption>
+                                <NativeSelectOption value="picture-left">
+                                  Picture left + body right
+                                </NativeSelectOption>
+                              </NativeSelect>
+                              {section.layout && section.layout !== "text" ? (
+                                <>
+                                  <Label
+                                    htmlFor={`picture-${language}-${index}`}
+                                  >
+                                    Picture {index + 1}
+                                  </Label>
+                                  <Input
+                                    id={`picture-${language}-${index}`}
+                                    type="file"
+                                    accept="image/jpeg,image/png,image/webp"
+                                    onChange={async (event) => {
+                                      const file = event.target.files?.[0]
+                                      event.target.value = ""
+                                      if (!file) return
+                                      setPicturePending(true)
+                                      setError("")
+                                      try {
+                                        const picture =
+                                          await prepareBrandingPicture(file)
+                                        updateTranslation({
+                                          sections: translation.sections.map(
+                                            (entry, at) =>
+                                              at === index
+                                                ? { ...entry, picture }
+                                                : entry
+                                          ),
+                                        })
+                                      } catch (error) {
+                                        setError(
+                                          error instanceof Error
+                                            ? error.message
+                                            : "The picture could not be loaded."
+                                        )
+                                      } finally {
+                                        setPicturePending(false)
+                                      }
+                                    }}
+                                  />
+                                  {section.picture ? (
+                                    <>
+                                      {/* eslint-disable-next-line @next/next/no-img-element -- Bounded private data URL; no image optimizer request. */}
+                                      <img
+                                        src={section.picture}
+                                        alt={`Picture for section ${index + 1}`}
+                                        className="max-h-48 max-w-full rounded-md border object-contain"
+                                      />
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        className="w-fit"
+                                        onClick={() =>
+                                          updateTranslation({
+                                            sections: translation.sections.map(
+                                              (entry, at) =>
+                                                at === index
+                                                  ? {
+                                                      ...entry,
+                                                      picture: undefined,
+                                                    }
+                                                  : entry
+                                            ),
+                                          })
+                                        }
+                                      >
+                                        Remove Picture
+                                      </Button>
+                                    </>
+                                  ) : null}
+                                </>
+                              ) : null}
+                            </>
+                          ) : null}
                           <Label htmlFor={`heading-${language}-${index}`}>
                             {type === "work-instruction"
                               ? `Heading ${index + 1}`
@@ -408,7 +527,7 @@ export function BrandingDocumentEditor({
                             }
                           >
                             {type === "work-instruction"
-                              ? "Remove Heading"
+                              ? "Remove Section"
                               : "Remove Section"}
                           </Button>
                         </div>
@@ -428,7 +547,7 @@ export function BrandingDocumentEditor({
                         }
                       >
                         {type === "work-instruction"
-                          ? "Add Heading"
+                          ? "Add Section"
                           : "Add Section"}
                       </Button>
                     </>

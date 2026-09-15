@@ -55,7 +55,18 @@ fonts load. The number prints at top-right (drafts use an unassigned placeholder
 number/author/title are also stored as PDF metadata. User line breaks are
 preserved; overflow is rejected. SOP/policy retain template v3.
 
-Work Instruction template v5 follows the Washing & Drying text poster. The editor
+Work Instruction template v6 adds private bounded JPEG snapshots to sections;
+the browser converts JPG/PNG/WebP uploads to metadata-free JPEGs (long edge at most
+1200px, data URL at most 400,000 characters, at most 20 pictures per document).
+They are stored in the existing authorized document JSON, with no public URLs or
+external PDF fetches. Text retains its separate 180,000-character document limit.
+Existing sections without a layout remain text. The three layouts are `text`,
+`text-on-picture`, and `picture-left`. Picture-bearing documents use a count-based
+grid with fixed cells/caption dimensions; four sections make a 2x2 grid. After
+font loading, each caption shrinks independently without changing its box. Draft
+generation does not reject small text; authors review the result themselves.
+
+The text layout follows the Washing & Drying text poster. The editor
 normalizes each selected language to at least one heading/body pair, with one
 shared title synchronized on save. Source-copy fields are hidden only for WI.
 The renderer fits title and body separately by binary search after fonts load,

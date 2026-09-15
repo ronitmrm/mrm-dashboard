@@ -12,9 +12,16 @@ Branding contains SOPs, Notices, Policies, and Work Instructions. Safety signage
   appends another pair; the last pair cannot be removed. The text wall-poster style
   follows the Washing & Drying reference: green background, cream rounded panel,
   green heading labels and the document number above the title. Body font size
-  automatically fits between 10–22pt, with proportional headings; the title fits
-  independently between 12–36pt. If even the minimum size cannot fit, request
-  shorter text or separate instructions; never clip or add a second page.
+  automatically fits the available space, with proportional headings. The author
+  reviews the generated draft and shortens text if needed; small text does not
+  block generation. Never expand to a second page.
+  Sections offer exactly three formats: heading/body, text on picture (a green
+  caption overlapping its lower edge), and picture left/body right. No picture-only
+  format exists. Picture sections form a count-based grid on one page (four use
+  two columns and two rows). Every picture/caption box is fixed before fitting
+  each caption's font; text length never increases its box. Mixed formats and
+  selected languages share the same page. Pictures stay attached to their section
+  when reordered and are retained with saved drafts and immutable issues.
 
 - Each type has an independent, organization-wide sequence: MRM-SOP-0001,
   MRM-NTC-0001, MRM-POL-0001. Numbers are assigned on first issue, never reused,

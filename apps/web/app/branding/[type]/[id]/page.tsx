@@ -185,6 +185,14 @@ export default async function BrandingDocumentPage({
               <div lang={translation.language} className="grid gap-4">
                 {translation.sections.map((section, index) => (
                   <section key={index}>
+                    {section.picture ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- Bounded private document picture.
+                      <img
+                        src={section.picture}
+                        alt={`Picture for ${section.heading}`}
+                        className="mb-2 max-h-64 max-w-full rounded-md border object-contain"
+                      />
+                    ) : null}
                     <h3 className="mb-2 font-semibold">{section.heading}</h3>
                     <p className="text-sm break-words whitespace-pre-wrap">
                       {section.body}
