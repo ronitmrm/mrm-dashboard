@@ -144,7 +144,7 @@ export default async function PurchaseOrdersPage({
         />
       ) : null}
       {operationalView === "dataEntry" ? (
- <SectionCard>
+ <SectionCard width="wide">
           <CardHeader>
             <CardTitle>Import Purchase Order</CardTitle>
             <CardDescription>

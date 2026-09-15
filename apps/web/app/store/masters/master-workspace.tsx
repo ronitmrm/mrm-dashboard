@@ -206,7 +206,7 @@ export function StoreMasterWorkspace({
   return (
     <div className="grid gap-6">
       {!selectionLocked ? (
- <SectionCard>
+ <SectionCard width="compact">
           <CardHeader>
             <CardTitle>Select Store Master</CardTitle>
           </CardHeader>
@@ -232,7 +232,7 @@ export function StoreMasterWorkspace({
       ) : null}
 
       {canManage && mode !== "table" ? (
- <SectionCard>
+ <SectionCard width={selectedMaster === "CATEGORY" ? "compact" : ["SUBCATEGORY", "ASSET_NAME"].includes(selectedMaster) ? "standard" : "wide"}>
           <CardHeader>
             <CardTitle>{selectedLabel} Data Entry</CardTitle>
           </CardHeader>

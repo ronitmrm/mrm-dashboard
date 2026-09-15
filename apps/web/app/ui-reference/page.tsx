@@ -335,6 +335,16 @@ export default async function UiReferencePage() {
         </div>
       </section>
 
+      <FormSection title="Compact master form" width="compact">
+        <Field>
+          <FieldLabel htmlFor="reference-master-name">Name</FieldLabel>
+          <Input id="reference-master-name" placeholder="Department name" />
+        </Field>
+        <ActionToolbar className="mt-5 justify-start">
+          <Button type="button">Save Name</Button>
+        </ActionToolbar>
+      </FormSection>
+
       <FormSection
         description="Responsive fields use shared controls, labels, help, validation, and disabled states."
         title="Operational form"

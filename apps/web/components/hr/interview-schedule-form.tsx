@@ -200,7 +200,7 @@ export function InterviewScheduleForm({
   )
 
   return (
- <SectionCard>
+ <SectionCard width="wide">
       <CardHeader>
         <CardTitle>Schedule Interview</CardTitle>
         <CardDescription>

@@ -286,7 +286,7 @@ export default async function WebsiteProductsPage({
       ) : null}
 
       {showDataEntry && !editing ? (
-        <SectionCard>
+        <SectionCard width="standard">
           <CardHeader>
             <CardTitle>Select Website Product</CardTitle>
           </CardHeader>
@@ -321,7 +321,7 @@ export default async function WebsiteProductsPage({
       ) : null}
 
       {showDataEntry && editing ? (
-        <SectionCard>
+        <SectionCard width="wide">
           <CardHeader>
             <CardTitle>Edit {editing.uid}</CardTitle>
             <CardDescription>

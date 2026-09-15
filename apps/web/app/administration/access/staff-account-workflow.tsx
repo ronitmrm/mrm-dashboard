@@ -168,7 +168,7 @@ function CreateStaffAccountForm({
   const unavailable = !employees.length
   const employee = matchingEmployees.length === 1 ? matchingEmployees[0] : undefined
   return (
-    <SectionCard size="sm">
+    <SectionCard width="wide" size="sm">
       <CardHeader className="border-b">
         <CardTitle>1. Select Employee &amp; Create Account</CardTitle>
         <CardAction>

@@ -329,7 +329,7 @@ export default async function SalesPage({
         ) : null}
 
         {activeView === "tasks" && selectedClarification ? (
- <SectionCard>
+ <SectionCard width="standard">
             <CardHeader>
               <CardTitle>Sales Clarification</CardTitle>
               <CardDescription>
@@ -429,7 +429,7 @@ export default async function SalesPage({
                         </div>
                         <Badge variant="outline">{task.question}</Badge>
                       </div>
-                      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                      <div className="grid gap-4 sm:grid-cols-2">
                         <Field>
                           <FieldLabel
                             htmlFor={`${task.enquiryItemId}-sales-part`}
@@ -614,7 +614,7 @@ export default async function SalesPage({
         ) : null}
 
         {activeView === "tasks" && selectedFollowup?.status === "Pending" ? (
- <SectionCard>
+ <SectionCard width="standard">
             <CardHeader>
               <CardTitle>Complete Follow-Up</CardTitle>
               <CardAction>
@@ -652,7 +652,7 @@ export default async function SalesPage({
                 />
                 <input name="status" type="hidden" value="Completed" />
                 <FieldGroup>
-                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  <div className="grid gap-4 sm:grid-cols-2">
                     <Field>
                       <FieldLabel htmlFor="task-followup-note">
                         Completion Notes

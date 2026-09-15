@@ -213,7 +213,7 @@ export default async function JobWorkspacePage({
 
       {canWrite && job.status === "Open" ? (
         <section className="grid gap-6 xl:grid-cols-2">
-          <SectionCard>
+          <SectionCard width="wide">
             <CardHeader>
               <CardTitle>Schedule Interview</CardTitle>
               <CardDescription>
@@ -226,7 +226,7 @@ export default async function JobWorkspacePage({
             </CardContent>
           </SectionCard>
 
-          <SectionCard>
+          <SectionCard width="standard">
             <CardHeader>
               <CardTitle>Record Interview Outcome</CardTitle>
               <CardDescription>

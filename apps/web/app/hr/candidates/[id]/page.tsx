@@ -162,7 +162,7 @@ export default async function CandidateWorkspacePage({
       ) : null}
 
       {canEditCandidate ? (
-        <SectionCard>
+        <SectionCard width="wide">
           <CardHeader>
             <CardTitle>Edit Candidate</CardTitle>
           </CardHeader>

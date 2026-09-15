@@ -143,14 +143,21 @@ function FormSection({
   className,
   description,
   title,
+  width = "wide",
 }: {
   children: ReactNode
   className?: string
   description?: ReactNode
   title: ReactNode
+  width?: ComponentProps<typeof SectionCard>["width"]
 }) {
   return (
-    <SectionCard className={className} data-slot="form-section" size="sm">
+    <SectionCard
+      className={className}
+      data-slot="form-section"
+      size="sm"
+      width={width}
+    >
       <CardHeader className="border-b">
         <CardTitle>{title}</CardTitle>
         {description ? <CardDescription>{description}</CardDescription> : null}
@@ -164,7 +171,7 @@ function FormGrid({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       className={cn(
-        "grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-3 [&_[data-slot=field]]:gap-1.5",
+        "grid w-full min-w-0 max-w-5xl gap-4 sm:grid-cols-2 xl:grid-cols-3 [&_[data-slot=field]]:gap-1.5",
         className
       )}
       data-slot="form-grid"

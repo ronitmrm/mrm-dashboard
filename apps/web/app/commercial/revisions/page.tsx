@@ -139,7 +139,7 @@ export default async function CommercialRevisionsPage() {
         ]}
       />
       <div className="grid gap-6 xl:grid-cols-2">
- <SectionCard>
+ <SectionCard width="wide">
           <CardHeader>
             <CardTitle>Start A Bulk Price Revision</CardTitle>
             <CardDescription>
@@ -223,7 +223,7 @@ export default async function CommercialRevisionsPage() {
           </CardContent>
  </SectionCard>
 
- <SectionCard>
+ <SectionCard width="wide">
           <CardHeader>
             <CardTitle>Open An Engineering Change Note</CardTitle>
             <CardDescription>

@@ -137,7 +137,7 @@ export function BrandingDocumentEditor({
   }
   return (
     <form
-      className="grid min-w-0 gap-5"
+      className="grid w-full min-w-0 max-w-5xl gap-5"
       onSubmit={(event) => {
         event.preventDefault()
         setError("")

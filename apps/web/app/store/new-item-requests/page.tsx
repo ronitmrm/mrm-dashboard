@@ -92,7 +92,7 @@ export default async function NewItemRequestsPage() {
       />
 
       {canSubmitRequests ? (
- <SectionCard>
+ <SectionCard width="standard">
           <CardHeader>
             <CardTitle>Request a New Item</CardTitle>
             <CardDescription>
@@ -102,7 +102,7 @@ export default async function NewItemRequestsPage() {
           </CardHeader>
           <CardContent>
             <form action={requestMissingStoreCodeAction}>
-              <FieldGroup className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <FieldGroup className="grid gap-4 sm:grid-cols-2">
                 <SelectField
                   label="Asset Type"
                   name="asset_type"

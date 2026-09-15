@@ -62,7 +62,7 @@ export function EmployeeAssignmentUpload() {
   return (
     <form
       action={bulkAssignEmployeesAction}
-      className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end"
+      className="grid w-full max-w-2xl gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"
       encType="multipart/form-data"
     >
       <input name="panel" type="hidden" value="employeeMasterPanel" />

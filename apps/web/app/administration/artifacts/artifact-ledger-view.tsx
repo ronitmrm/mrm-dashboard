@@ -142,7 +142,7 @@ export function ArtifactLedgerView({
         object once, even when multiple records reference it.
       </p>
 
-      <SectionCard>
+      <SectionCard width="wide">
         <CardHeader>
           <CardTitle>Search and filters</CardTitle>
           <CardDescription>

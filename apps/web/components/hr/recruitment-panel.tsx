@@ -139,13 +139,13 @@ function PanelForm({
       {masterView ? (
         <input name="master_view" type="hidden" value={masterView} />
       ) : null}
-      <FieldGroup className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <FieldGroup className={panelId === "mastersPanel" ? "grid gap-4 [&>*]:col-span-full [&>button]:w-fit" : "grid gap-4 md:grid-cols-2 xl:grid-cols-3 [&>button]:w-fit"}>
         {children}
       </FieldGroup>
     </>
   )
   return (
-    <SectionCard>
+    <SectionCard width={panelId === "mastersPanel" ? "compact" : "wide"}>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
         <CardDescription>{description}</CardDescription>
@@ -688,7 +688,7 @@ function EmployeePanel({
         />
       )}
       {showDataEntry && masterControls.import ? (
- <SectionCard>
+ <SectionCard width="standard">
           <CardHeader>
             <CardTitle>Bulk Employee Assignment</CardTitle>
           </CardHeader>

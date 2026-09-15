@@ -90,7 +90,7 @@ export default async function CommercialCorrectionsPage() {
       />
 
       <div className="grid gap-6 xl:grid-cols-2">
- <SectionCard>
+ <SectionCard width="standard">
           <CardHeader>
             <CardTitle>Reverse Design → Costing Handoff</CardTitle>
             <CardDescription>
@@ -134,7 +134,7 @@ export default async function CommercialCorrectionsPage() {
           </CardContent>
  </SectionCard>
 
- <SectionCard>
+ <SectionCard width="standard">
           <CardHeader>
             <CardTitle>Reverse Unused Quoted Product</CardTitle>
             <CardDescription>
@@ -210,7 +210,7 @@ export default async function CommercialCorrectionsPage() {
         </CardHeader>
         <CardContent className="grid gap-6">
           {reference.organizationId && reference.activePrices.length ? (
-            <form action={recordPricingCorrectionAction}>
+            <form action={recordPricingCorrectionAction} className="w-full max-w-5xl">
               <input
                 name="organization_id"
                 type="hidden"

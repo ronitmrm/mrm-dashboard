@@ -42,7 +42,7 @@ export default async function PasswordPage() {
         ) : null}
       </div>
 
- <SectionCard>
+ <SectionCard width="standard">
         <CardHeader>
           <CardTitle>
             {context.isAdministrator

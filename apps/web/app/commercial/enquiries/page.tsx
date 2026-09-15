@@ -151,7 +151,7 @@ export default async function EnquiriesPage({
       ) : null}
 
       {operationalView === "dataEntry" ? (
- <SectionCard>
+ <SectionCard width="wide">
           <CardHeader>
             <CardTitle>Log Enquiry</CardTitle>
             <CardDescription>

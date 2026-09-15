@@ -202,7 +202,7 @@ export default async function StoreAssetWorkspacePage({
           <>
             <StoreAssetWorkspacePane tab="movement">
               {canMove ? (
- <SectionCard>
+ <SectionCard width="standard">
             <CardHeader>
               <CardTitle>Move / Assign Asset</CardTitle>
               <CardDescription>
@@ -275,7 +275,7 @@ export default async function StoreAssetWorkspacePage({
 
             <StoreAssetWorkspacePane tab="repairs">
               {canRepair ? (
- <SectionCard>
+ <SectionCard width="standard">
             <CardHeader>
               <CardTitle>Create Repair PO</CardTitle>
               <CardDescription>
@@ -359,7 +359,7 @@ export default async function StoreAssetWorkspacePage({
               tab="maintenance"
             >
               {canMaintain ? (
- <SectionCard>
+ <SectionCard width="standard">
             <CardHeader>
               <CardTitle>Add Timetable</CardTitle>
               <CardDescription>
@@ -415,7 +415,7 @@ export default async function StoreAssetWorkspacePage({
               ) : null}
 
               {canMaintain ? (
- <SectionCard>
+ <SectionCard width="standard">
             <CardHeader>
               <CardTitle>Complete Maintenance</CardTitle>
               <CardDescription>
@@ -513,7 +513,7 @@ export default async function StoreAssetWorkspacePage({
 
         {canManageLifecycle ? (
           <StoreAssetWorkspacePane tab="lifecycle">
- <SectionCard>
+ <SectionCard width="standard">
           <CardHeader>
             <CardTitle>Asset Lifecycle</CardTitle>
             <CardDescription>
@@ -525,7 +525,7 @@ export default async function StoreAssetWorkspacePage({
           <CardContent>
             <form
               action={setStoreAssetLifecycleAction}
-              className="grid gap-4 md:grid-cols-4"
+              className="grid gap-4 sm:grid-cols-2"
             >
                   <input
                     name="asset_code"

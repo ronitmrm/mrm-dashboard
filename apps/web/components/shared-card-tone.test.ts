@@ -1,4 +1,7 @@
 import { readFileSync } from "node:fs"
+import { createElement } from "react"
+import { renderToStaticMarkup } from "react-dom/server"
+import { SectionCard } from "@workspace/ui/components/card"
 
 import { describe, expect, it } from "vitest"
 
@@ -7,6 +10,15 @@ function source(relativeUrl: string) {
 }
 
 describe("shared software card tone", () => {
+  it("bounds a compact form while retaining its semantic tone", () => {
+    const html = renderToStaticMarkup(
+      createElement(SectionCard, { width: "compact", tone: "information" }, "Form")
+    )
+    expect(html).toContain("w-full min-w-0 max-w-md justify-self-start")
+    expect(html).toContain('data-tone="information"')
+    expect(html).not.toContain(' width="compact"')
+  })
+
   it("uses the compact shared card radius and metric card style", () => {
     const card = source("../../../packages/ui/src/components/card.tsx")
 

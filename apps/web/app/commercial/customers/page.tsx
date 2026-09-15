@@ -227,7 +227,7 @@ export default async function CustomersPage({
       ) : null}
 
       {(canCreateCustomers || editingCustomer) && showDataEntry ? (
- <SectionCard>
+ <SectionCard width="wide">
           <CardHeader>
             <CardTitle>{editingCustomer ? "Edit Customer Details" : "Add Customer"}</CardTitle>
             <CardDescription>

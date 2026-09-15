@@ -236,7 +236,7 @@ export async function ProductParameterCostingView({
       ) : null}
 
       {standalone ? (
- <SectionCard id="product-cost-form">
+ <SectionCard width="wide" id="product-cost-form">
           <CardHeader>
             <CardTitle>Product Cost Parameters</CardTitle>
             <CardDescription>
