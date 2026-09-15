@@ -2494,7 +2494,7 @@ describe("recruitmentPostDeletionBlocker", () => {
         combinedRoleLinks: 0,
         employeeCode: null,
         employeeName: null,
-        jobPostLinks: 0,
+        nonClosedJobPostLinks: 0,
       })
     ).toBeNull()
   })
@@ -2505,7 +2505,7 @@ describe("recruitmentPostDeletionBlocker", () => {
         combinedRoleLinks: 0,
         employeeCode: "104",
         employeeName: "Assigned employee",
-        jobPostLinks: 0,
+        nonClosedJobPostLinks: 0,
       })
     ).toContain("employee assignment")
   })
@@ -2514,13 +2514,13 @@ describe("recruitmentPostDeletionBlocker", () => {
     expect(
       recruitmentPostDeletionBlocker({
         combinedRoleLinks: 1,
-        jobPostLinks: 0,
+        nonClosedJobPostLinks: 0,
       })
     ).toContain("combined role")
     expect(
       recruitmentPostDeletionBlocker({
         combinedRoleLinks: 0,
-        jobPostLinks: 1,
+        nonClosedJobPostLinks: 1,
       })
     ).toContain("job post")
   })

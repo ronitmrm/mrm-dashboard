@@ -39,7 +39,7 @@ export function recruitmentPostDeletionBlocker(input: {
   combinedRoleLinks: number
   employeeCode?: string | null
   employeeName?: string | null
-  jobPostLinks: number
+  nonClosedJobPostLinks: number
 }) {
   if (optionalText(input.employeeName) || optionalText(input.employeeCode)) {
     return "Remove the employee assignment before deleting this approved post."
@@ -47,8 +47,8 @@ export function recruitmentPostDeletionBlocker(input: {
   if (input.combinedRoleLinks > 0) {
     return "Edit the combined role and remove this post from it before deleting the approved post."
   }
-  if (input.jobPostLinks > 0) {
-    return "This approved post cannot be deleted because a job post is linked to it."
+  if (input.nonClosedJobPostLinks > 0) {
+    return "Close the linked job post before deleting this approved post."
   }
   return null
 }
