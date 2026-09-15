@@ -19,8 +19,8 @@
   document text, numbering and PDF issuance atomic. These PDFs are not in the
   general attachment ledger; they are retained with their document history.
 - PDF renderer: Chromium/Puppeteer, A4, bundled OFL fonts, escaped plain text,
-  no JavaScript or network requests. English/Hindi/Gujarati each start on a new
-  page. Automatic wrapping, page numbers, references and internal logo.
+  no JavaScript or network requests. SOP/policy languages each start a new book;
+  notice/WI languages flow together. Automatic wrapping, page numbers and references.
 - Linux hosting uses `@sparticuz/chromium`; Next file tracing includes its binary
   and font assets. Windows development detects installed Chrome/Edge. An explicit
   `BRANDING_CHROMIUM_PATH` can select another local browser executable.
@@ -42,3 +42,9 @@
 Verification: run the four root checks in AGENTS.md. For PDF changes, render and
 inspect multilingual samples and long documents. Test migration/lifecycle writes
 on an isolated branch; local and production normally share Neon staging.
+
+Template v3 follows the supplied PDF references (2026-09-15). Covers use zero
+print margins and a rounded green panel; other pages retain content margins.
+Cover pages count toward the index but do not display a page counter. Exact full
+wordmark SVGs were extracted from the supplied HTML guide and bundled alongside
+the fonts. Newly issued revisions record v3; existing frozen PDFs are unchanged.
