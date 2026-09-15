@@ -1,3 +1,16 @@
+import {
+  brandingRichTextPlain,
+  parseBrandingRichText,
+  type BrandingRichText,
+} from "./branding-rich-text"
+export {
+  brandingRichTextPlain,
+  parseBrandingRichText,
+  plainBrandingRichText,
+  brandingRichTextHtml,
+  type BrandingRichText,
+} from "./branding-rich-text"
+
 export const brandingTypes = [
   "sop",
   "notice",
@@ -65,6 +78,11 @@ export const brandingPictureMaxLength = 400000
 export type BrandingSection = {
   heading: string
   body: string
+  richBody?: BrandingRichText
+  children?: BrandingSection[]
+  childNumbering?: "hierarchical" | "local" | "none"
+  includeInIndex?: boolean
+  pageBreakBefore?: boolean
   layout?: WorkInstructionLayout
   picture?: string
   assessment?: "good" | "bad"
@@ -73,6 +91,47 @@ export type BrandingTranslation = {
   language: BrandingLanguage
   title: string
   sections: BrandingSection[]
+  details?: {
+    introduction: BrandingRichText
+    preparedBy: string
+    attributions: {
+      role: "Issued by" | "Reviewed by" | "Approved by"
+      name: string
+      designation: string
+    }[]
+  }
+}
+
+export function brandingOutline(
+  sections: BrandingSection[],
+  parent: number[] = [],
+  style: BrandingSection["childNumbering"] = "hierarchical"
+): {
+  section: BrandingSection
+  number: string
+  label: string
+  depth: number
+  path: number[]
+}[] {
+  return sections.flatMap((section, index) => {
+    const path = [...parent, index + 1]
+    const number =
+      style === "none"
+        ? ""
+        : style === "local"
+          ? `${index + 1}`
+          : path.join(".")
+    return [
+      {
+        section,
+        number,
+        label: `${number ? `${number}. ` : ""}${section.heading}`,
+        depth: parent.length,
+        path,
+      },
+      ...brandingOutline(section.children ?? [], path, section.childNumbering),
+    ]
+  })
 }
 export type BrandingContent = {
   title: string
@@ -112,44 +171,124 @@ export function parseBrandingTranslations(
     const language = brandingLanguages.find(
       (language) => language === item.language
     )
-    if (!language || !Array.isArray(item.sections) || item.sections.length > 20)
+    if (
+      !language ||
+      !Array.isArray(item.sections) ||
+      item.sections.length > 100
+    )
       throw new Error("Document sections are invalid.")
+    let sectionCount = 0
+    const parseSection = (entry: unknown, depth = 0): BrandingSection => {
+      if (++sectionCount > 100 || depth > 3)
+        throw new Error(
+          "Use at most 100 headings and four heading levels per language."
+        )
+      const section = object(entry)
+      const richBody =
+        section.richBody === undefined
+          ? undefined
+          : parseBrandingRichText(section.richBody)
+      if (section.children !== undefined && !Array.isArray(section.children))
+        throw new Error("Subheadings are invalid.")
+      const childNumbering = section.childNumbering
+      if (
+        childNumbering !== undefined &&
+        childNumbering !== "hierarchical" &&
+        childNumbering !== "local" &&
+        childNumbering !== "none"
+      )
+        throw new Error("Subheading numbering is invalid.")
+      for (const key of ["includeInIndex", "pageBreakBefore"]) {
+        if (section[key] !== undefined && typeof section[key] !== "boolean")
+          throw new Error("Heading options are invalid.")
+      }
+      const extras: Partial<BrandingSection> = {
+        ...(richBody ? { richBody } : {}),
+        ...(section.children
+          ? {
+              children: (section.children as unknown[]).map((child) =>
+                parseSection(child, depth + 1)
+              ),
+            }
+          : {}),
+        ...(childNumbering ? { childNumbering } : {}),
+        ...(section.includeInIndex !== undefined
+          ? { includeInIndex: section.includeInIndex as boolean }
+          : {}),
+        ...(section.pageBreakBefore !== undefined
+          ? { pageBreakBefore: section.pageBreakBefore as boolean }
+          : {}),
+      }
+      const layout =
+        section.layout === undefined
+          ? undefined
+          : workInstructionLayouts.find((layout) => layout === section.layout)
+      if (section.layout !== undefined && !layout)
+        throw new Error("Section format is invalid.")
+      if (
+        layout === "visual-guide" &&
+        section.assessment !== "good" &&
+        section.assessment !== "bad"
+      )
+        throw new Error("Choose Good or Bad for each visual guide picture.")
+      const picture =
+        section.picture === undefined
+          ? undefined
+          : text(section.picture, "Picture", brandingPictureMaxLength)
+      if (
+        picture &&
+        !/^data:image\/jpeg;base64,\/9j\/[A-Za-z0-9+/]*={0,2}$/.test(picture)
+      )
+        throw new Error("Use an uploaded JPEG picture.")
+      return {
+        ...extras,
+        heading: text(section.heading, "Heading", 200),
+        body: richBody
+          ? brandingRichTextPlain(richBody).trim()
+          : text(section.body, "Section"),
+        ...(layout ? { layout } : {}),
+        ...(picture && layout && layout !== "text" ? { picture } : {}),
+        ...(layout === "visual-guide"
+          ? { assessment: section.assessment as "good" | "bad" }
+          : {}),
+      }
+    }
+    const details =
+      item.details === undefined ? undefined : object(item.details)
+    const attributions = details?.attributions ?? []
+    if (!Array.isArray(attributions) || attributions.length > 3)
+      throw new Error("Printed attributions are invalid.")
     return {
       language,
       title: text(item.title, "Translated title", 240),
-      sections: item.sections.map((entry: unknown) => {
-        const section = object(entry)
-        const layout =
-          section.layout === undefined
-            ? undefined
-            : workInstructionLayouts.find((layout) => layout === section.layout)
-        if (section.layout !== undefined && !layout)
-          throw new Error("Section format is invalid.")
-        if (
-          layout === "visual-guide" &&
-          section.assessment !== "good" &&
-          section.assessment !== "bad"
-        )
-          throw new Error("Choose Good or Bad for each visual guide picture.")
-        const picture =
-          section.picture === undefined
-            ? undefined
-            : text(section.picture, "Picture", brandingPictureMaxLength)
-        if (
-          picture &&
-          !/^data:image\/jpeg;base64,\/9j\/[A-Za-z0-9+/]*={0,2}$/.test(picture)
-        )
-          throw new Error("Use an uploaded JPEG picture.")
-        return {
-          heading: text(section.heading, "Heading", 200),
-          body: text(section.body, "Section"),
-          ...(layout ? { layout } : {}),
-          ...(picture && layout && layout !== "text" ? { picture } : {}),
-          ...(layout === "visual-guide"
-            ? { assessment: section.assessment as "good" | "bad" }
-            : {}),
-        }
-      }),
+      sections: item.sections.map((section) => parseSection(section)),
+      ...(details
+        ? {
+            details: {
+              introduction: parseBrandingRichText(details.introduction),
+              preparedBy: text(details.preparedBy ?? "", "Prepared by", 240),
+              attributions: attributions.map((entry: unknown) => {
+                const attribution = object(entry)
+                const role = attribution.role
+                if (
+                  role !== "Issued by" &&
+                  role !== "Reviewed by" &&
+                  role !== "Approved by"
+                )
+                  throw new Error("Printed attribution role is invalid.")
+                return {
+                  role,
+                  name: text(attribution.name, "Name", 160),
+                  designation: text(
+                    attribution.designation,
+                    "Designation",
+                    160
+                  ),
+                }
+              }),
+            },
+          }
+        : {}),
     }
   })
 }
@@ -179,7 +318,31 @@ export function parseBrandingContent(
     throw new Error("Effective date is invalid.")
   const inputs = object(item.inputs)
   const translations = parseBrandingTranslations(item.translations)
-  const sections = translations.flatMap((translation) => translation.sections)
+  if (
+    type !== "sop" &&
+    type !== "policy" &&
+    translations.some((translation) => translation.sections.length > 20)
+  )
+    throw new Error("Use at most 20 sections per language.")
+  const sections = translations.flatMap((translation) =>
+    brandingOutline(translation.sections).map(({ section }) => section)
+  )
+  if (
+    type !== "sop" &&
+    type !== "policy" &&
+    (translations.some((entry) => entry.details) ||
+      sections.some(
+        (section) =>
+          section.richBody ||
+          section.children ||
+          section.childNumbering ||
+          section.includeInIndex !== undefined ||
+          section.pageBreakBefore !== undefined
+      ))
+  )
+    throw new Error(
+      "Formatted documents are only available for SOPs and Policies."
+    )
   if (
     type !== "work-instruction" &&
     sections.some((section) => section.layout || section.picture)
@@ -245,9 +408,10 @@ export function validateBrandingIssue(
     if (
       !translation?.title ||
       !translation.sections.length ||
-      translation.sections.some(
-        ({ heading, body, layout, picture }) =>
-          !body || (layout && layout !== "text" ? !picture : !heading)
+      brandingOutline(translation.sections).some(
+        ({ section: { heading, body, layout, picture, children } }) =>
+          (!body.trim() && !children?.length) ||
+          (layout && layout !== "text" ? !picture : !heading)
       )
     )
       throw new Error(
