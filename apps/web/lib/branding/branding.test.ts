@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
   brandingNumber,
+  brandingStepNumber,
   parseBrandingContent,
   revisionLabel,
   validateBrandingIssue,
@@ -87,7 +88,7 @@ describe("Branding issue contract", () => {
             language: "en",
             title: "Washing",
             sections: Array.from({ length: 4 }, (_, i) => ({
-              heading: `${i + 1})`,
+              heading: "",
               body: `Step ${i + 1}`,
               layout: "text-on-picture",
               picture,
@@ -98,6 +99,8 @@ describe("Branding issue contract", () => {
       "work-instruction"
     )
     expect(parsed.translations[0]?.sections[3]?.picture).toBe(picture)
+    expect(() => validateBrandingIssue(parsed, 0)).not.toThrow()
+    expect(brandingStepNumber("gu", 4)).toBe("૪)")
     const result = await brandingHtml({
       content: parsed,
       type: "work-instruction",
@@ -112,6 +115,8 @@ describe("Branding issue contract", () => {
       "grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr))"
     )
     expect(result.html).toContain("Step 4")
+    expect(result.html).toContain('<span class="wi-step">4)</span>')
+    expect(result.html).toContain("object-fit:cover")
     expect(() =>
       parseBrandingContent(
         {

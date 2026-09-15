@@ -6,6 +6,7 @@ import {
   brandingFields,
   brandingLanguages,
   brandingLanguageLabels,
+  brandingStepNumber,
   type BrandingContent,
   type BrandingLanguage,
   type BrandingType,
@@ -392,6 +393,11 @@ export function BrandingDocumentEditor({
                               </NativeSelect>
                               {section.layout && section.layout !== "text" ? (
                                 <>
+                                  <p className="text-sm text-muted-foreground">
+                                    Step{" "}
+                                    {brandingStepNumber(language, index + 1)} ·
+                                    Numbered automatically. Heading is optional.
+                                  </p>
                                   <Label
                                     htmlFor={`picture-${language}-${index}`}
                                   >
@@ -465,7 +471,7 @@ export function BrandingDocumentEditor({
                           ) : null}
                           <Label htmlFor={`heading-${language}-${index}`}>
                             {type === "work-instruction"
-                              ? `Heading ${index + 1}`
+                              ? `Heading ${index + 1}${section.layout && section.layout !== "text" ? " (optional)" : ""}`
                               : `Section ${index + 1} heading`}
                           </Label>
                           <Input

@@ -6,6 +6,7 @@ import puppeteer from "puppeteer-core"
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib"
 import {
   brandingTypeLabels,
+  brandingStepNumber,
   revisionLabel,
   type BrandingContent,
   type BrandingType,
@@ -66,9 +67,10 @@ export async function brandingHtml(input: BrandingPdfInput) {
   const styles = `${await fonts()} *{-webkit-print-color-adjust:exact;print-color-adjust:exact}`
   if (input.type === "work-instruction") {
     const sections = input.content.translations.flatMap((translation) =>
-      translation.sections.map((section) => ({
+      translation.sections.map((section, index) => ({
         ...section,
         language: translation.language,
+        step: brandingStepNumber(translation.language, index + 1),
       }))
     )
     const pictures = sections.some(
@@ -80,7 +82,7 @@ export async function brandingHtml(input: BrandingPdfInput) {
       ? sections
           .map(
             (section) =>
-              `<section class="wi-tile ${section.layout ?? "text"}" lang="${section.language}">${section.layout && section.layout !== "text" ? (section.picture ? `<img src="${e(section.picture)}" alt="">` : '<div class="wi-missing">Add picture</div>') : ""}<div class="wi-caption"><div class="wi-caption-inner"><h2>${e(section.heading)}</h2><p>${e(section.body)}</p></div></div></section>`
+              `<section class="wi-tile ${section.layout ?? "text"}" lang="${section.language}">${section.layout && section.layout !== "text" ? (section.picture ? `<img src="${e(section.picture)}" alt="">` : '<div class="wi-missing">Add picture</div>') : ""}<div class="wi-caption"><div class="wi-caption-inner">${section.layout && section.layout !== "text" ? `<span class="wi-step">${e(section.step)}</span>` : ""}<div class="wi-caption-text">${section.heading ? `<h2>${e(section.heading)}</h2>` : ""}<p>${e(section.body)}</p></div></div></div></section>`
           )
           .join("")
       : input.content.translations
@@ -108,14 +110,15 @@ export async function brandingHtml(input: BrandingPdfInput) {
       .wi-pictures .wi-panel{top:41mm;left:21mm;right:21mm;bottom:14mm;padding:0;border-radius:0}
       .wi-pictures .wi-content{height:100%;display:grid;grid-template-columns:repeat(${columns},minmax(0,1fr));grid-template-rows:repeat(${rows},minmax(0,1fr));gap:8mm 14mm}
       .wi-tile{position:relative;min-width:0;min-height:0;margin:0;overflow:hidden;border:1pt solid #006A49;border-radius:4mm}
-      .wi-tile img,.wi-missing{position:absolute;inset:0;width:100%;height:80%;object-fit:contain}.wi-missing{display:grid;place-items:center;font:12pt Outfit;color:#006A49}
+      .wi-tile img,.wi-missing{position:absolute;inset:0;width:100%;height:80%;object-fit:cover}.wi-missing{display:grid;place-items:center;font:12pt Outfit;color:#006A49}
       .wi-caption{position:absolute;bottom:0;left:0;width:100%;height:25%;padding:2mm 3mm;background:#006A49;color:#F7F7F2;border-radius:3mm;overflow:hidden;font-size:22pt;line-height:1.15;display:flex;align-items:center}
       .wi-caption-inner{display:flex;align-items:center;gap:.4em;width:100%;min-width:0}
-      .wi-caption h2{flex:0 1 auto;max-width:30%;font-size:1.4em;line-height:1.1;background:none;padding:0;margin:0;color:inherit}
-      .wi-caption p{flex:1;min-width:0;font-weight:500}
+      .wi-step{flex:none;font-size:1.4em;line-height:1.1}
+      .wi-caption-text{flex:1;min-width:0}.wi-caption h2{max-width:100%;font-size:1.1em;line-height:1.15;background:none;padding:0;margin:0 0 .2em;color:inherit;font-weight:700}
+      .wi-caption p{font-weight:500}
       .picture-left img,.picture-left .wi-missing{width:50%;height:100%}
       .picture-left .wi-caption{left:50%;width:50%;height:100%;border-radius:0}
-      .picture-left .wi-caption-inner,.wi-tile.text .wi-caption-inner{display:block}
+      .picture-left .wi-caption-inner{align-items:flex-start}.wi-tile.text .wi-caption-inner{display:block}
       .picture-left h2,.wi-tile.text h2{max-width:100%;margin-bottom:.4em}
       .wi-tile.text .wi-caption{height:100%}
       </style></head><body><div class="wi-sheet${pictures ? " wi-pictures" : ""}"><div class="wi-logo">${pictures ? logo : logo.replaceAll("#006A49", "#F7F7F2")}</div><div class="wi-number">${e(reference)}${input.draft ? " · DRAFT" : ""}</div><div class="wi-title"><span>${e(input.content.title)}</span></div><div class="wi-panel"><main class="wi-content">${content}</main></div></div></body></html>`,
