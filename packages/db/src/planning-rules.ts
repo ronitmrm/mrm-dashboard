@@ -54,10 +54,16 @@ export function machineFamilyKey(value: unknown) {
   return match ? `${match[1]}${match[2]}`.toLowerCase() : normalized.toLowerCase();
 }
 
-export function machineCodeMatches(routeMachine: unknown, actualMachine: unknown) {
+export function machineCodeMatches(routeMachine: unknown, actualMachine: unknown, explicitFamily?: unknown) {
+  const family = text(explicitFamily).toLowerCase();
+  if (family) return text(routeMachine).toLowerCase() === family;
   const routeFamily = machineFamilyKey(routeMachine);
   const actualFamily = machineFamilyKey(actualMachine);
   return Boolean(routeFamily && actualFamily && routeFamily === actualFamily);
+}
+
+export function machineMasterFamily(row: Record<string, unknown>) {
+  return text(row.machineFamily) || text(row["MACHINE FAMILY"]) || text(row["Machine Family"]);
 }
 
 export function isActivePlannerDecision(status: unknown) {

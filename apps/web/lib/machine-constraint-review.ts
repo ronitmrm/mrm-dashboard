@@ -1,3 +1,5 @@
+import { machineCodeMatches, machineMasterFamily } from "@workspace/db/planning-rules";
+
 export type MachineConstraintReviewRow = Record<string, unknown>;
 
 type MachineConstraintQueueReviewKind = "destination" | "same_machine_later" | "downstream";
@@ -127,12 +129,13 @@ function compatibleDestinationMachines(
       const key = machineKey(machine);
       if (!key || key === targetMachine) continue;
       const rowType = rowText(row, "machineType", "type", "TYPE", "MACHINE TYPE");
-      if (machineCodeMatches(routeMachine, machine) && machineTypeCompatible(machineType, rowType)) machines.add(machine);
+      if (machineCodeMatches(routeMachine, machine, machineMasterFamily(row)) && machineTypeCompatible(machineType, rowType)) machines.add(machine);
     }
     for (const row of plannedRows) {
       const machine = machineValue(row);
       const key = machineKey(machine);
       if (!key || key === targetMachine) continue;
+      if (machineRows.some((master) => machineKey(machineValue(master)) === key)) continue;
       const rowRoute = rowText(row, "routeMachine");
       const rowType = rowText(row, "machineType");
       if ((machineCodeMatches(routeMachine, machine) || machineCodeMatches(routeMachine, rowRoute)) && machineTypeCompatible(machineType, rowType)) machines.add(machine);
@@ -292,18 +295,6 @@ function rowText(row: MachineConstraintReviewRow, ...keys: string[]) {
 
 function machineKey(value: unknown) {
   return String(value ?? "").trim().toLowerCase();
-}
-
-function machineFamilyKey(value: unknown) {
-  const normalized = String(value ?? "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
-  const match = normalized.match(/^([A-Z]+)(\d)/);
-  return match ? `${match[1]}${match[2]}`.toLowerCase() : normalized.toLowerCase();
-}
-
-function machineCodeMatches(routeMachine: unknown, actualMachine: unknown) {
-  const routeFamily = machineFamilyKey(routeMachine);
-  const actualFamily = machineFamilyKey(actualMachine);
-  return Boolean(routeFamily && actualFamily && routeFamily === actualFamily);
 }
 
 function machineTypeCompatible(sourceType: unknown, targetType: unknown) {
