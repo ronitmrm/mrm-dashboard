@@ -3,11 +3,12 @@ import { buildLegacyDashboardSnapshot } from "@workspace/db/dashboard-analysis"
 import { compatibleDestinationMachineOptions } from "./machine-constraint-review"
 import { proposalContext } from "./order-acceptance-context"
 
-it("uses the dedicated CNC family across planning, switches and proposal capacity", () => {
+it("uses only the dedicated family across planning, switches and proposal capacity", () => {
   const machineRows = [
     { machineNo: "ACE-01", machineFamily: "T25", machineType: "CNC", status: "Active" },
     { machineNo: "ACE-02", "MACHINE FAMILY": "T25", machineType: "CNC", status: "Active" },
     { machineNo: "T2501", machineFamily: "T26", machineType: "CNC", status: "Active" },
+    { machineNo: "T2502", machineType: "CNC", status: "Active" },
   ]
   const snapshot = buildLegacyDashboardSnapshot({
     workbookName: "PostgreSQL",
@@ -26,7 +27,6 @@ it("uses the dedicated CNC family across planning, switches and proposal capacit
   expect(compatibleDestinationMachineOptions({
     affectedRows: [{ routeMachine: "T25", machineType: "CNC" }],
     machineRows,
-    plannedRows: [{ machine: "T2501", routeMachine: "T25", machineType: "CNC" }],
     sourceMachine: "ACE-01",
   })).toEqual(["ACE-02"])
   expect(proposalContext(snapshot).context.machines).toEqual([

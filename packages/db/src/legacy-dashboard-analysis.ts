@@ -1,6 +1,6 @@
 import { qualityParameterCode } from "./quality-parameter-code";
 import { buildDashboardSnapshot, type AttendanceRecord, type DashboardFilters, type ProductionEntry, type TrainingRecord } from "./dashboard-domain";
-import { isActivePlannerDecision, isPlanningWorkday, machineCodeMatches, machineMasterFamily, priorityLabel, priorityScore, sourcePlannerDecisions } from "./planning-rules";
+import { isActivePlannerDecision, isPlanningWorkday, machineFamilyMatches, machineMasterFamily, priorityLabel, priorityScore, sourcePlannerDecisions } from "./planning-rules";
 
 type DataEntry = {
   _id?: unknown;
@@ -4987,7 +4987,7 @@ function activePhysicalMachineRows(
     }))
     .filter((row) => row.machine)
     .filter((row) => isMachineActive(row.status))
-    .filter((row) => machineCodeMatches(routeMachine, row.machine, row.machineFamily))
+    .filter((row) => machineFamilyMatches(routeMachine, row.machineFamily))
     .filter((row) => !typeKey || !canonicalKey(row.machineType) || canonicalKey(row.machineType) === typeKey)
     .sort((a, b) => a.machine.localeCompare(b.machine, undefined, { numeric: true }));
 }

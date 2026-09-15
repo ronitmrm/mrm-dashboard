@@ -3738,10 +3738,9 @@ function PartMachineSwitchPlannerForm({
       compatibleDestinationMachineOptions({
         affectedRows: selectedRows,
         machineRows,
-        plannedRows,
         sourceMachine: fromMachine,
       }),
-    [fromMachine, machineRows, plannedRows, selectedRows]
+    [fromMachine, machineRows, selectedRows]
   )
   const runningRows = selectedRows.filter(machineIssueRowNeedsProducedQty)
   const queueReviewGroups = useMemo(

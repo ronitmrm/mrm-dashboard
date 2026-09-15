@@ -4,8 +4,7 @@ import {
   isActivePlannerDecision,
   validConfirmedPrioritySetupNumbers,
   workOrderIdentityMatches,
-  machineCodeMatches,
-  machineFamilyKey,
+  machineFamilyMatches,
   normalizeRescheduleAction,
   priorityScore,
   rescheduleActionLabel,
@@ -13,21 +12,12 @@ import {
   sourcePlannerDecisions,
 } from "@workspace/db/planning-rules";
 
-describe("machineFamilyKey", () => {
-  it("maps route machine family codes and concrete machine numbers to the same family", () => {
-    expect(machineFamilyKey("C5")).toBe("c5");
-    expect(machineFamilyKey("C501")).toBe("c5");
-    expect(machineFamilyKey("C502")).toBe("c5");
-  });
-
-  it("supports multi-letter machine families", () => {
-    expect(machineFamilyKey("TH5")).toBe("th5");
-    expect(machineFamilyKey("TH501")).toBe("th5");
-  });
-
-  it("matches route families to concrete machine numbers", () => {
-    expect(machineCodeMatches("ADB5", "ADB501")).toBe(true);
-    expect(machineCodeMatches("ADB5", "ADB601")).toBe(false);
+describe("machineFamilyMatches", () => {
+  it("requires a complete explicit family and never derives it from a number", () => {
+    expect(machineFamilyMatches("T25", " t25 ")).toBe(true);
+    expect(machineFamilyMatches("T25", "T26")).toBe(false);
+    expect(machineFamilyMatches("C5", "C501")).toBe(false);
+    expect(machineFamilyMatches("C5", "")).toBe(false);
   });
 });
 

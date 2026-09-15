@@ -1,4 +1,4 @@
-import { machineCodeMatches, machineMasterFamily } from "@workspace/db/planning-rules";
+import { machineFamilyMatches, machineMasterFamily } from "@workspace/db/planning-rules";
 
 export type MachineConstraintReviewRow = Record<string, unknown>;
 
@@ -51,7 +51,7 @@ export function machineConstraintQueueReview({
   if (machineKey(rescheduleAction) !== "delay") {
     const destinationMachines = explicitDestinationMachines?.length
       ? uniqueMachineValues(explicitDestinationMachines).filter((machine) => machineKey(machine) !== targetMachine)
-      : compatibleDestinationMachines(affectedRows, machineRows, plannedRows, targetMachine);
+      : compatibleDestinationMachines(affectedRows, machineRows, targetMachine);
     for (const machine of destinationMachines) {
       const queueRows = queueRowsForMachine(plannedRows, machine, affectedKeys, maxRowsPerQueue);
       addGroup({
@@ -102,21 +102,18 @@ export function machineConstraintQueueReview({
 export function compatibleDestinationMachineOptions({
   affectedRows,
   machineRows,
-  plannedRows,
   sourceMachine,
 }: {
   affectedRows: MachineConstraintReviewRow[];
   machineRows: MachineConstraintReviewRow[];
-  plannedRows: MachineConstraintReviewRow[];
   sourceMachine: string;
 }) {
-  return compatibleDestinationMachines(affectedRows, machineRows, plannedRows, machineKey(sourceMachine));
+  return compatibleDestinationMachines(affectedRows, machineRows, machineKey(sourceMachine));
 }
 
 function compatibleDestinationMachines(
   affectedRows: MachineConstraintReviewRow[],
   machineRows: MachineConstraintReviewRow[],
-  plannedRows: MachineConstraintReviewRow[],
   targetMachine: string,
 ) {
   const machines = new Set<string>();
@@ -129,16 +126,7 @@ function compatibleDestinationMachines(
       const key = machineKey(machine);
       if (!key || key === targetMachine) continue;
       const rowType = rowText(row, "machineType", "type", "TYPE", "MACHINE TYPE");
-      if (machineCodeMatches(routeMachine, machine, machineMasterFamily(row)) && machineTypeCompatible(machineType, rowType)) machines.add(machine);
-    }
-    for (const row of plannedRows) {
-      const machine = machineValue(row);
-      const key = machineKey(machine);
-      if (!key || key === targetMachine) continue;
-      if (machineRows.some((master) => machineKey(machineValue(master)) === key)) continue;
-      const rowRoute = rowText(row, "routeMachine");
-      const rowType = rowText(row, "machineType");
-      if ((machineCodeMatches(routeMachine, machine) || machineCodeMatches(routeMachine, rowRoute)) && machineTypeCompatible(machineType, rowType)) machines.add(machine);
+      if (machineFamilyMatches(routeMachine, machineMasterFamily(row)) && machineTypeCompatible(machineType, rowType)) machines.add(machine);
     }
   }
   return [...machines].sort((left, right) => left.localeCompare(right, undefined, { numeric: true }));
