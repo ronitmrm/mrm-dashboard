@@ -58,7 +58,9 @@ export default async function BrandingDocumentPage({
   if (!document?.revisions.length) notFound()
   const availableRevisions = document.revisions.filter(
     (revision) =>
-      type !== "notice" || !document.number || revision.state === "issued"
+      (type !== "notice" && type !== "work-instruction") ||
+      !document.number ||
+      revision.state === "issued"
   )
   const selectedId = (await searchParams).revision
   const selected = selectedId
@@ -68,8 +70,8 @@ export default async function BrandingDocumentPage({
   const draft = availableRevisions.find(
     (revision) => revision.state === "draft"
   )
-  const reference = `${document.number ?? "Number assigned on first issue"}${type === "notice" ? "" : ` · ${revisionLabel(selected.revision)}`}`
-  const fileName = `${document.number ?? "Draft"}${type === "notice" ? "" : `-${revisionLabel(selected.revision)}`}.pdf`
+  const reference = `${document.number ?? "Number assigned on first issue"}${type === "notice" || type === "work-instruction" ? "" : ` · ${revisionLabel(selected.revision)}`}`
+  const fileName = `${document.number ?? "Draft"}${type === "notice" || type === "work-instruction" ? "" : `-${revisionLabel(selected.revision)}`}.pdf`
   const pdfHref =
     selected.state === "issued"
       ? `/branding/${type}/${id}/revisions/${selected.id}/pdf`
@@ -105,7 +107,10 @@ export default async function BrandingDocumentPage({
                 </AttachmentViewerLink>
               </Button>
             ) : null}
-            {canWrite && !draft && type !== "notice" ? (
+            {canWrite &&
+            !draft &&
+            type !== "notice" &&
+            type !== "work-instruction" ? (
               <BrandingIssueControls
                 type={type}
                 documentId={id}
@@ -125,11 +130,13 @@ export default async function BrandingDocumentPage({
             <TabsTrigger value="edit">Data Entry</TabsTrigger>
           ) : null}
           <TabsTrigger value="content">Saved Content</TabsTrigger>
-          {type !== "notice" ||
+          {(type !== "notice" && type !== "work-instruction") ||
           document.revisions.filter((revision) => revision.state === "issued")
             .length > 1 ? (
             <TabsTrigger value="history">
-              {type === "notice" ? "Earlier PDFs" : "Revision History"}
+              {type === "notice" || type === "work-instruction"
+                ? "Earlier PDFs"
+                : "Revision History"}
             </TabsTrigger>
           ) : null}
         </TabsList>
@@ -206,7 +213,7 @@ export default async function BrandingDocumentPage({
             containerClassName="max-h-[60vh] rounded-lg border"
             toolbarStart={
               <span className="text-sm font-medium">
-                {type === "notice"
+                {type === "notice" || type === "work-instruction"
                   ? "Retained PDFs from earlier issues"
                   : "Revision history"}
               </span>
@@ -215,7 +222,9 @@ export default async function BrandingDocumentPage({
             <TableHeader>
               <TableRow>
                 {[
-                  ...(type === "notice" ? [] : ["Revision"]),
+                  ...(type === "notice" || type === "work-instruction"
+                    ? []
+                    : ["Revision"]),
                   "Name",
                   "Status",
                   "Author",
@@ -230,11 +239,13 @@ export default async function BrandingDocumentPage({
             <TableBody>
               {document.revisions
                 .filter(
-                  (revision) => type !== "notice" || revision.state === "issued"
+                  (revision) =>
+                    (type !== "notice" && type !== "work-instruction") ||
+                    revision.state === "issued"
                 )
                 .map((revision) => (
                   <TableRow key={revision.id}>
-                    {type !== "notice" ? (
+                    {type !== "notice" && type !== "work-instruction" ? (
                       <TableCell>{revisionLabel(revision.revision)}</TableCell>
                     ) : null}
                     <TableCell>

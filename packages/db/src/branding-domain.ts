@@ -1,4 +1,9 @@
-export const brandingTypes = ["sop", "notice", "policy"] as const
+export const brandingTypes = [
+  "sop",
+  "notice",
+  "policy",
+  "work-instruction",
+] as const
 export type BrandingType = (typeof brandingTypes)[number]
 export const brandingLanguages = ["en", "hi", "gu"] as const
 export type BrandingLanguage = (typeof brandingLanguages)[number]
@@ -11,13 +16,16 @@ export const brandingTypeLabels = {
   sop: "SOPs",
   notice: "Notices",
   policy: "Policies",
+  "work-instruction": "Work Instructions",
 } as const
 export const brandingPrefixes = {
   sop: "SOP",
   notice: "NTC",
   policy: "POL",
+  "work-instruction": "WI",
 } as const
 export const brandingFields = {
+  "work-instruction": ["Purpose", "Instructions", "Checks"],
   sop: [
     "Purpose",
     "Scope",

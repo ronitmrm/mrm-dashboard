@@ -42,7 +42,8 @@ describe("Branding issue contract", () => {
       brandingNumber("sop", 1),
       brandingNumber("notice", 1),
       brandingNumber("policy", 1),
-    ]).toEqual(["MRM-SOP-0001", "MRM-NTC-0001", "MRM-POL-0001"])
+      brandingNumber("work-instruction", 1),
+    ]).toEqual(["MRM-SOP-0001", "MRM-NTC-0001", "MRM-POL-0001", "MRM-WI-0001"])
     expect(revisionLabel(1)).toBe("R01")
     const notice = await brandingHtml({
       content: parsed,

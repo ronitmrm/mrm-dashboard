@@ -38,7 +38,9 @@ export function BrandingDocumentTable({
             "Name",
             "Department",
             "Languages",
-            ...(type === "notice" ? [] : ["Revision"]),
+            ...(type === "notice" || type === "work-instruction"
+              ? []
+              : ["Revision"]),
             "Status",
             "Effective date",
             "Author",
@@ -70,7 +72,7 @@ export function BrandingDocumentTable({
                   )
                   .join(", ")}
               </TableCell>
-              {type !== "notice" ? (
+              {type !== "notice" && type !== "work-instruction" ? (
                 <TableCell>{revisionLabel(row.revision)}</TableCell>
               ) : null}
               <TableCell>
@@ -78,7 +80,10 @@ export function BrandingDocumentTable({
                   tone={row.state === "issued" ? "positive" : "neutral"}
                   value={row.state === "issued" ? "Issued" : "Draft"}
                 />
-                {type !== "notice" && row.state === "issued" && row.hasDraft ? (
+                {type !== "notice" &&
+                type !== "work-instruction" &&
+                row.state === "issued" &&
+                row.hasDraft ? (
                   <span className="ml-2 text-xs text-muted-foreground">
                     Revision draft
                   </span>
@@ -95,7 +100,9 @@ export function BrandingDocumentTable({
           ))
         ) : (
           <TableRow>
-            <TableCell colSpan={type === "notice" ? 8 : 9}>
+            <TableCell
+              colSpan={type === "notice" || type === "work-instruction" ? 8 : 9}
+            >
               <StandardState
                 variant="empty"
                 title="No documents yet"

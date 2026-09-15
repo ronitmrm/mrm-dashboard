@@ -1,6 +1,14 @@
 # Branding
 
-Branding contains SOPs, Notices, and Policies. Safety signage is outside scope.
+Branding contains SOPs, Notices, Policies, and Work Instructions. Safety signage is outside scope.
+
+- SOPs and policies have a cover page, automatic index with actual page numbers,
+  and ordered topics (heading/body). Each topic starts on a fresh page; long bodies
+  continue across pages. Each selected language gets its own cover/index/content.
+- Work Instructions use MRM-WI-0001 numbering and the same single-issue lifecycle
+  as notices. They contain multiple ordered heading/body sections, no cover or
+  index, and must fit one A4 page including all selected languages. Overlong content
+  is rejected at preview/issue with a request to shorten or split it; never clipped.
 
 - Each type has an independent, organization-wide sequence: MRM-SOP-0001,
   MRM-NTC-0001, MRM-POL-0001. Numbers are assigned on first issue, never reused,

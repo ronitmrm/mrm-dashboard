@@ -1,6 +1,6 @@
 # Branding implementation
 
-- Routes: `apps/web/app/branding/[type]`, types `sop`, `notice`, `policy`.
+- Routes: `apps/web/app/branding/[type]`, types `sop`, `notice`, `policy`, `work-instruction`.
   Shared `OperationalTable`, `PageHeader`, `ActionToolbar`, forms, tabs and
   `AttachmentViewerLink` preserve the dashboard conventions.
 - Domain contract: [Branding](../glossary/branding.md). Repository:
@@ -27,6 +27,11 @@
 - AI writing/translation is intentionally deferred pending the user's provider
   decision. No document text is sent to an AI service. Editors accept final text
   in all three languages; Copy Source does not claim to translate it.
+- Migration 0146 adds Work Instruction constraints and permissions. Template v2
+  renders SOP/policy covers, indexes and individual topic PDF segments, merges
+  with pdf-lib, and stamps global page numbers. Index numbers come from rendered
+  segment page counts. Work Instructions reject output over one page. Issued
+  historical PDFs remain unchanged. Reordering sections changes the next draft.
 - Registers load 100 records per page; column filters apply to that page and
   persist in the browser. Detail history retains every issued revision.
 - Summary cards use organization/type-scoped aggregate counts across all pages,

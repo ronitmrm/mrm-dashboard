@@ -91,6 +91,7 @@ export function sidebarSubmoduleForPermission(
     ["branding.sop.", "SOPs"],
     ["branding.notice.", "Notices"],
     ["branding.policy.", "Policies"],
+    ["branding.work-instruction.", "Work Instructions"],
     ["administration.", "Access Administration"],
     ["artifacts.", "Artifacts"],
     ["pricing.dashboard.", "Pricing"],

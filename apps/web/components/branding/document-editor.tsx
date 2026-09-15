@@ -118,7 +118,13 @@ export function BrandingDocumentEditor({
             description={error}
           />
         ) : null}
-        <FormSection title="Document details">
+        <FormSection
+          title={
+            type === "sop" || type === "policy"
+              ? "Cover details"
+              : "Document details"
+          }
+        >
           <FormGrid>
             <div className="grid gap-2">
               <Label htmlFor="branding-title">Title</Label>
@@ -207,6 +213,13 @@ export function BrandingDocumentEditor({
           description="Review each selected language before saving and issuing. Copy Source copies your text without translating it."
         >
           <p className="mb-4 text-sm text-muted-foreground">
+            {type === "sop" || type === "policy"
+              ? "The PDF adds a cover and an automatic index for each selected language. Add topics below in reading order; each topic begins on a new page."
+              : type === "work-instruction"
+                ? "Add headings and text below. All selected languages must fit on one page; Preview PDF checks the page limit."
+                : "Add headings and text below."}
+          </p>
+          <p className="mb-4 text-sm text-muted-foreground">
             Writing assistance and automatic translation are pending setup. For
             now, enter or paste the final text in each selected language.
           </p>
@@ -250,6 +263,42 @@ export function BrandingDocumentEditor({
                       </div>
                       {translation.sections.map((section, index) => (
                         <div className="grid gap-2" key={index}>
+                          <div className="flex gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              disabled={index === 0}
+                              aria-label={`Move section ${index + 1} up`}
+                              onClick={() => {
+                                const sections = [...translation.sections]
+                                ;[sections[index - 1], sections[index]] = [
+                                  sections[index]!,
+                                  sections[index - 1]!,
+                                ]
+                                updateTranslation({ sections })
+                              }}
+                            >
+                              Move Up
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              disabled={
+                                index === translation.sections.length - 1
+                              }
+                              aria-label={`Move section ${index + 1} down`}
+                              onClick={() => {
+                                const sections = [...translation.sections]
+                                ;[sections[index], sections[index + 1]] = [
+                                  sections[index + 1]!,
+                                  sections[index]!,
+                                ]
+                                updateTranslation({ sections })
+                              }}
+                            >
+                              Move Down
+                            </Button>
+                          </div>
                           <Label htmlFor={`heading-${language}-${index}`}>
                             Section {index + 1} heading
                           </Label>
@@ -341,7 +390,7 @@ export function BrandingDocumentEditor({
             })}
           </div>
         </FormSection>
-        {documentId && type !== "notice" ? (
+        {documentId && type !== "notice" && type !== "work-instruction" ? (
           <FormSection title="Revision notes">
             <div className="grid gap-2">
               <Label htmlFor="change-reason">Reason for change</Label>
