@@ -4,6 +4,7 @@ import type { ReactNode } from "react"
 
 import { SoftwareProcessingProvider } from "@/components/software-processing-provider"
 import { ThemeProvider } from "@/components/theme-provider"
+import { themeInitializationScript } from "../lib/theme-initialization"
 import { cn } from "@workspace/ui/lib/utils"
 
 import "./globals.css"
@@ -48,6 +49,11 @@ export default async function RootLayout({
         hind.variable
       )}
     >
+      <head>
+        <script
+          dangerouslySetInnerHTML={{ __html: themeInitializationScript }}
+        />
+      </head>
       <body className={cn("min-h-svh antialiased")}>
         <ThemeProvider>
           <SoftwareProcessingProvider>{children}</SoftwareProcessingProvider>
