@@ -1,6 +1,10 @@
 "use client"
 
 import * as React from "react"
+import {
+  themeMediaQuery as mediaQuery,
+  themeStorageKey as storageKey,
+} from "../lib/theme-initialization"
 
 type Theme = "light" | "dark" | "system"
 type ResolvedTheme = "light" | "dark"
@@ -12,8 +16,6 @@ type ThemeContextValue = {
   setTheme: (theme: Theme | ((current: Theme) => Theme)) => void
 }
 
-const storageKey = "theme"
-const mediaQuery = "(prefers-color-scheme: dark)"
 const ThemeContext = React.createContext<ThemeContextValue | null>(null)
 
 function isTheme(value: unknown): value is Theme {
