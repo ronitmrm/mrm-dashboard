@@ -100,6 +100,12 @@ Route Master does not accept an independently entered Machine Type;
 Cycle Time Master and Tooling Master select an existing Route Master Line and
 cannot redefine its identity.
 
+Machine allocation, family balancing, machine switches and proposal capacity use
+the dedicated Machine Family field in the unit's Machine Master. An explicit
+family takes precedence over the machine number or name and is matched in full
+(for example, T25 and T26 are different families). Legacy records without a
+family retain number-based matching.
+
 **Master Identity**: The permanent system identity and generated code of one
 master record. Editing its permitted details does not create a second master
 or change its identity.

@@ -1,6 +1,6 @@
 import { qualityParameterCode } from "./quality-parameter-code";
 import { buildDashboardSnapshot, type AttendanceRecord, type DashboardFilters, type ProductionEntry, type TrainingRecord } from "./dashboard-domain";
-import { isActivePlannerDecision, isPlanningWorkday, machineCodeMatches, priorityLabel, priorityScore, sourcePlannerDecisions } from "./planning-rules";
+import { isActivePlannerDecision, isPlanningWorkday, machineCodeMatches, machineMasterFamily, priorityLabel, priorityScore, sourcePlannerDecisions } from "./planning-rules";
 
 type DataEntry = {
   _id?: unknown;
@@ -1091,7 +1091,7 @@ function buildProductionControl({
     const missingCycleRoutes = selectedRoutes.filter((route) => !cycleKeys.has(masterKey(route)));
     const missingToolingRoutes = selectedRoutes.filter((route) => !toolingKeys.has(masterKey(route)));
     const missingMachineRoutes = selectedRoutes.filter((route) => !activePhysicalMachineRows(
-      rowText(route, "MACHINE USED", "machineUsed", "machine", "M/C NO", "MACHINE NO"),
+      machineMasterFamily(route) || rowText(route, "MACHINE USED", "machineUsed", "machine", "M/C NO", "MACHINE NO"),
       rowText(route, "MACHINE TYPE", "machineType"),
       machineRows,
     ).length);
@@ -1112,7 +1112,7 @@ function buildProductionControl({
     const planningItemPending = rowValue(row, "planningItemPending") === true
       || rowText(row, "planningItemPending").toLowerCase() === "true";
     const routeReadyForPlanning = ["Ready", "Auto single option", "Route change plan"].includes(routeStatus);
-    const machineFamily = rowText(firstMissingRoute, "MACHINE USED", "machineUsed", "machine", "M/C NO", "MACHINE NO");
+    const machineFamily = machineMasterFamily(firstMissingRoute) || rowText(firstMissingRoute, "MACHINE USED", "machineUsed", "machine", "M/C NO", "MACHINE NO");
     return {
       jcNo,
       fgPoNo: rowText(row, "FG PO NO.", "fgPoNo"),
@@ -2625,7 +2625,7 @@ function machinePlanDetails(
     let operationReadyCanPullForward = true;
     let routePlanningBlocked = false;
     for (const [routeIndex, route] of routes.entries()) {
-      const routeMachine = rowText(route, "MACHINE USED", "machineUsed", "machine", "M/C NO", "MACHINE NO");
+      const routeMachine = machineMasterFamily(route) || rowText(route, "MACHINE USED", "machineUsed", "machine", "M/C NO", "MACHINE NO");
       if (!routeMachine) continue;
       const setupNo = rowText(route, "SETUP NO.", "SETUP CODE", "setupNo");
       const displaySetupNo = setupStepKey(setupNo, optionNumber) || setupNo;
@@ -2960,7 +2960,7 @@ function machinePlanDetails(
       operationReadyCanPullForward = actualWipBufferAvailable(bufferArgs);
     }
   }
-  const finalizedDetails = finalizeMachineAndSetupSchedule(details, planningCalendar);
+  const finalizedDetails = finalizeMachineAndSetupSchedule(details, planningCalendar, machineRows);
   applyMachineActiveTaskReadiness(finalizedDetails);
   return applyPlannedDateTaskReadiness(finalizedDetails).sort((a, b) =>
     rowText(a, "machine").localeCompare(rowText(b, "machine"), undefined, { numeric: true }) ||
@@ -3060,7 +3060,7 @@ function taskBlockersWithoutPlannedDate(value: string) {
   return uniqueTextValues([value]).filter((blocker) => !blocker.toLowerCase().startsWith("planned date not due until"));
 }
 
-function finalizeMachineAndSetupSchedule(details: Array<Record<string, unknown>>, planningCalendar: PlanningCalendar) {
+function finalizeMachineAndSetupSchedule(details: Array<Record<string, unknown>>, planningCalendar: PlanningCalendar, machineRows: Array<Record<string, unknown>>) {
   let previousSignature = "";
   for (let iteration = 0; iteration < 50; iteration += 1) {
     refreshSetupDependencyReadyDates(details, planningCalendar);
@@ -3069,7 +3069,7 @@ function finalizeMachineAndSetupSchedule(details: Array<Record<string, unknown>>
       previousSignature = "";
       continue;
     }
-    if (balanceMachineFamilyIdleGaps(details, planningCalendar)) {
+    if (balanceMachineFamilyIdleGaps(details, planningCalendar, machineRows)) {
       previousSignature = "";
       continue;
     }
@@ -3085,7 +3085,7 @@ function finalizeMachineAndSetupSchedule(details: Array<Record<string, unknown>>
   return details;
 }
 
-function balanceMachineFamilyIdleGaps(details: Array<Record<string, unknown>>, planningCalendar: PlanningCalendar) {
+function balanceMachineFamilyIdleGaps(details: Array<Record<string, unknown>>, planningCalendar: PlanningCalendar, masterRows: Array<Record<string, unknown>>) {
   const byMachine = new Map<string, Array<Record<string, unknown>>>();
   for (const row of details) {
     const machine = rowText(row, "machine");
@@ -3105,6 +3105,7 @@ function balanceMachineFamilyIdleGaps(details: Array<Record<string, unknown>>, p
       const leadingGapEnd = firstStart ? addDays(firstStart, -1, planningCalendar) : "";
       const leadingCandidate = leadingFamilyIdleGapCandidate(details, {
         targetMachine: machine,
+        machineRows: masterRows,
         targetMachineType: rowText(first, "machineType"),
         gapEnd: leadingGapEnd,
         excludedKeys: new Set([scheduleRowKey(first)]),
@@ -3134,6 +3135,7 @@ function balanceMachineFamilyIdleGaps(details: Array<Record<string, unknown>>, p
 
       const candidate = familyIdleGapCandidate(details, {
         targetMachine: machine,
+        machineRows: masterRows,
         targetMachineType: rowText(current, "machineType"),
         gapStart,
         gapDays,
@@ -3157,7 +3159,7 @@ function balanceMachineFamilyIdleGaps(details: Array<Record<string, unknown>>, p
 
 function familyIdleGapCandidate(
   details: Array<Record<string, unknown>>,
-  gap: { targetMachine: string; targetMachineType: string; gapStart: string; gapDays: number; excludedKeys: Set<string>; planningCalendar: PlanningCalendar },
+  gap: { targetMachine: string; machineRows: Array<Record<string, unknown>>; targetMachineType: string; gapStart: string; gapDays: number; excludedKeys: Set<string>; planningCalendar: PlanningCalendar },
 ) {
   return details
     .filter((row) => isFamilyIdleGapCandidate(row, gap))
@@ -3173,7 +3175,7 @@ function familyIdleGapCandidate(
 
 function leadingFamilyIdleGapCandidate(
   details: Array<Record<string, unknown>>,
-  gap: { targetMachine: string; targetMachineType: string; gapEnd: string; excludedKeys: Set<string>; planningCalendar: PlanningCalendar },
+  gap: { targetMachine: string; machineRows: Array<Record<string, unknown>>; targetMachineType: string; gapEnd: string; excludedKeys: Set<string>; planningCalendar: PlanningCalendar },
 ) {
   if (!gap.gapEnd) return undefined;
   return details
@@ -3194,13 +3196,13 @@ function machineUnavailablePlacementRejectsGapCandidate(details: Array<Record<st
   const candidateOnTarget = { ...candidate, machine: targetMachine };
   return details.some((row) => canonicalKey(rowText(row, "machine")) === targetMachineKey && machineUnavailablePlacesRowBefore(row, candidateOnTarget));
 }
-function isLeadingFamilyIdleGapCandidate(row: Record<string, unknown>, gap: { targetMachine: string; targetMachineType: string; gapEnd: string; excludedKeys: Set<string>; planningCalendar: PlanningCalendar }) {
+function isLeadingFamilyIdleGapCandidate(row: Record<string, unknown>, gap: { targetMachine: string; machineRows: Array<Record<string, unknown>>; targetMachineType: string; gapEnd: string; excludedKeys: Set<string>; planningCalendar: PlanningCalendar }) {
   if (gap.excludedKeys.has(scheduleRowKey(row))) return false;
   if (familyIdleGapRejectedForMachine(row, gap.targetMachine)) return false;
   if (!isMovablePlannedRow(row)) return false;
   const currentMachine = rowText(row, "machine");
   if (!currentMachine || currentMachine === gap.targetMachine) return false;
-  if (!machineCodeMatches(rowText(row, "routeMachine", "machine"), gap.targetMachine)) return false;
+  if (!activePhysicalMachineRows(rowText(row, "routeMachine", "machine"), rowText(row, "machineType"), gap.machineRows).some((machine) => canonicalKey(machine.machine) === canonicalKey(gap.targetMachine))) return false;
   if (!machineTypeCompatible(rowText(row, "machineType"), gap.targetMachineType)) return false;
   const currentStart = parseDate(rowText(row, "setupPlannedDate", "plannedDate"));
   const readyDate = queueReadyDate(row);
@@ -3214,13 +3216,13 @@ function isLeadingFamilyIdleGapCandidate(row: Record<string, unknown>, gap: { ta
   return durationDays > 0 && gapDays > 0 && durationDays <= gapDays;
 }
 
-function isFamilyIdleGapCandidate(row: Record<string, unknown>, gap: { targetMachine: string; targetMachineType: string; gapStart: string; gapDays: number; excludedKeys: Set<string>; planningCalendar: PlanningCalendar }) {
+function isFamilyIdleGapCandidate(row: Record<string, unknown>, gap: { targetMachine: string; machineRows: Array<Record<string, unknown>>; targetMachineType: string; gapStart: string; gapDays: number; excludedKeys: Set<string>; planningCalendar: PlanningCalendar }) {
   if (gap.excludedKeys.has(scheduleRowKey(row))) return false;
   if (familyIdleGapRejectedForMachine(row, gap.targetMachine)) return false;
   if (!isMovablePlannedRow(row)) return false;
   const currentMachine = rowText(row, "machine");
   if (!currentMachine || currentMachine === gap.targetMachine) return false;
-  if (!machineCodeMatches(rowText(row, "routeMachine", "machine"), gap.targetMachine)) return false;
+  if (!activePhysicalMachineRows(rowText(row, "routeMachine", "machine"), rowText(row, "machineType"), gap.machineRows).some((machine) => canonicalKey(machine.machine) === canonicalKey(gap.targetMachine))) return false;
   if (!machineTypeCompatible(rowText(row, "machineType"), gap.targetMachineType)) return false;
   const currentStart = parseDate(rowText(row, "setupPlannedDate", "plannedDate"));
   if (!currentStart || currentStart <= gap.gapStart) return false;
@@ -4980,11 +4982,12 @@ function activePhysicalMachineRows(
     .map((row) => ({
       machine: rowText(row, "machine", "machineNo", "MACHINE NO", "M/C NO", "MACHINE NO."),
       machineType: rowText(row, "machineType", "MACHINE TYPE", "type", "TYPE"),
+      machineFamily: machineMasterFamily(row),
       status: rowText(row, "status", "activeStatus", "isActive", "ACTIVE", "active", "Active"),
     }))
     .filter((row) => row.machine)
     .filter((row) => isMachineActive(row.status))
-    .filter((row) => machineCodeMatches(routeMachine, row.machine))
+    .filter((row) => machineCodeMatches(routeMachine, row.machine, row.machineFamily))
     .filter((row) => !typeKey || !canonicalKey(row.machineType) || canonicalKey(row.machineType) === typeKey)
     .sort((a, b) => a.machine.localeCompare(b.machine, undefined, { numeric: true }));
 }

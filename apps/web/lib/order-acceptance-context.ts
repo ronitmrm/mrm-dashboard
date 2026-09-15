@@ -1,4 +1,4 @@
-import { machineCodeMatches } from "@workspace/db/planning-rules"
+import { machineCodeMatches, machineMasterFamily } from "@workspace/db/planning-rules"
 import {
   validDate,
   type PlanningContext,
@@ -65,7 +65,7 @@ export function proposalContext(snapshot: unknown, planningStart?: string) {
           row["MACHINE NO."]
       )
       const matches = families.filter((family) =>
-        machineCodeMatches(family, id)
+        machineCodeMatches(family, id, machineMasterFamily(row))
       )
       return { id, family: matches.length === 1 ? matches[0]! : "" }
     })
