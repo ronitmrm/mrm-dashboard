@@ -7,8 +7,14 @@ Branding contains SOPs, Notices, Policies, and Work Instructions. Safety signage
   continue across pages. Each selected language gets its own cover/index/content.
 - Work Instructions use MRM-WI-0001 numbering and the same single-issue lifecycle
   as notices. They contain multiple ordered heading/body sections, no cover or
-  index, and must fit one A4 page including all selected languages. Overlong content
-  is rejected at preview/issue with a request to shorten or split it; never clipped.
+  index, and must fit one A4 page including all selected languages. The editor starts
+  with one shared title and one heading/body pair per selected language. Add Heading
+  appends another pair; the last pair cannot be removed. The text wall-poster style
+  follows the Washing & Drying reference: green background, cream rounded panel,
+  green heading labels and the document number above the title. Body font size
+  automatically fits between 10–22pt, with proportional headings; the title fits
+  independently between 12–36pt. If even the minimum size cannot fit, request
+  shorter text or separate instructions; never clip or add a second page.
 
 - Each type has an independent, organization-wide sequence: MRM-SOP-0001,
   MRM-NTC-0001, MRM-POL-0001. Numbers are assigned on first issue, never reused,
