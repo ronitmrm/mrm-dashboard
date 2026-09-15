@@ -5,6 +5,7 @@ import { ArrowLeft, FileText } from "lucide-react"
 import {
   revisionLabel,
   brandingStepNumber,
+  brandingLanguageLabels,
 } from "@workspace/db/branding-domain"
 import { Button } from "@workspace/ui/components/button"
 import { StatusBadge } from "@workspace/ui/components/badge"
@@ -185,7 +186,14 @@ export default async function BrandingDocumentPage({
             ) : null}
           </FormSection>
           {selected.content.translations.map((translation) => (
-            <FormSection key={translation.language} title={translation.title}>
+            <FormSection
+              key={translation.language}
+              title={
+                type === "notice"
+                  ? `Body · ${brandingLanguageLabels[translation.language]}`
+                  : translation.title
+              }
+            >
               <div lang={translation.language} className="grid gap-4">
                 {type === "sop" || type === "policy" ? (
                   <BrandingBookContent translation={translation} />
@@ -229,18 +237,22 @@ export default async function BrandingDocumentPage({
               </div>
             </FormSection>
           ))}
-          <FormSection title="Original inputs">
-            <dl className="grid gap-3">
-              {Object.entries(selected.content.inputs).map(([field, value]) => (
-                <div key={field}>
-                  <dt className="text-sm font-medium">{field}</dt>
-                  <dd className="text-sm break-words whitespace-pre-wrap text-muted-foreground">
-                    {value || "—"}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-          </FormSection>
+          {type !== "notice" ? (
+            <FormSection title="Original inputs">
+              <dl className="grid gap-3">
+                {Object.entries(selected.content.inputs).map(
+                  ([field, value]) => (
+                    <div key={field}>
+                      <dt className="text-sm font-medium">{field}</dt>
+                      <dd className="text-sm break-words whitespace-pre-wrap text-muted-foreground">
+                        {value || "—"}
+                      </dd>
+                    </div>
+                  )
+                )}
+              </dl>
+            </FormSection>
+          ) : null}
         </TabsContent>
         <TabsContent value="history">
           <OperationalTable

@@ -102,6 +102,13 @@ export type BrandingTranslation = {
   }
 }
 
+export function brandingNoticeBody(sections: BrandingSection[]) {
+  return sections
+    .map(({ heading, body }) => [heading, body].filter(Boolean).join("\n"))
+    .filter(Boolean)
+    .join("\n\n")
+}
+
 export function brandingOutline(
   sections: BrandingSection[],
   parent: number[] = [],
@@ -395,7 +402,8 @@ export function parseBrandingContent(
 }
 export function validateBrandingIssue(
   content: BrandingContent,
-  revision: number
+  revision: number,
+  type?: BrandingType
 ) {
   if (!content.effectiveDate)
     throw new Error("Effective date is required before issue.")
@@ -411,7 +419,9 @@ export function validateBrandingIssue(
       brandingOutline(translation.sections).some(
         ({ section: { heading, body, layout, picture, children } }) =>
           (!body.trim() && !children?.length) ||
-          (layout && layout !== "text" ? !picture : !heading)
+          (layout && layout !== "text"
+            ? !picture
+            : type !== "notice" && !heading)
       )
     )
       throw new Error(

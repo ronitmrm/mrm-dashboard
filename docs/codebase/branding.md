@@ -64,7 +64,7 @@ The older template descriptions below are historical where superseded by v4.
   `BRANDING_CHROMIUM_PATH` can select another local browser executable.
 - AI writing/translation is intentionally deferred pending the user's provider
   decision. No document text is sent to an AI service. Editors accept final text
-  in all three languages; Copy Source does not claim to translate it.
+  in all three languages; adding a language does not translate existing text.
 - Migration 0146 adds Work Instruction constraints and permissions. Template v2
   renders SOP/policy covers, indexes and individual topic PDF segments, merges
   with pdf-lib, and stamps global page numbers. Index numbers come from rendered
@@ -87,11 +87,12 @@ Cover pages count toward the index but do not display a page counter. Exact full
 wordmark SVGs were extracted from the supplied HTML guide and bundled alongside
 the fonts. Newly issued revisions record v3; existing frozen PDFs are unchanged.
 
-Notice template v6 follows the later Notice.pdf: a dedicated fixed-size one-page
+Notice template v7 follows the later Notice.pdf: a dedicated fixed-size one-page
 renderer with Noto Sans fonts and a measured content/footer clearance check after
 fonts load. The number prints at top-right (drafts use an unassigned placeholder);
 number/author/title are also stored as PDF metadata. User line breaks are
-preserved; overflow is rejected. SOP/policy retain template v3.
+preserved; all language bodies shrink together until they fit above the footer.
+SOP/policy use the separate book renderer.
 
 Work Instruction template v6 adds private bounded JPEG snapshots to sections;
 the browser converts JPG/PNG/WebP uploads to metadata-free JPEGs (long edge at most
@@ -119,10 +120,12 @@ replace step numbers in this layout and never depend on text or uploaded artwork
 
 The text layout follows the Washing & Drying text poster. The editor
 normalizes each selected language to at least one heading/body pair, with one
-shared title synchronized on save. Source-copy fields are hidden only for WI.
+shared title synchronized on save. Notices use the dedicated single-body editor.
 The renderer fits title and body separately by binary search after fonts load,
 measuring the actual panel space; it emits exactly one A4 page. Keep browser
 evaluation callbacks free of named nested functions because tsx inserts helpers
 that are unavailable inside Chromium. Frozen PDFs are not regenerated.
 
 Visual Guide editor locks the document to bad/good pairs per language. Only picture uploads and captions remain editable; no headings, format/assessment selectors, ordering or section controls. Domain parsing rejects incomplete pairs or mixed formats. Selecting Visual Guide preserves the first two existing entries (headings join captions); more than two must be reduced explicitly first.
+
+Notice v7 uses notice-editor.tsx: one body per language with Add body and a language selector. Old draft headings/body sections merge into the body through brandingNoticeBody. Notice issue validation permits blank section headings; title remains metadata. PDF font fitting shares one page across all languages and verifies page count. Issued PDFs stay frozen.

@@ -86,13 +86,17 @@ published version. Branding remains the authoring and retained-history workspace
   notice with a large green banner and full footer wordmark. Notice languages
   flow together. The later Notice.pdf reference supersedes the notice design:
   Noto Sans Gujarati/Devanagari, Outfit, white page, 100pt NOTICE banner,
-  27.5pt headings, 21.5pt bodies and a footer wordmark. Section headings/bodies
-  are printed. The notice number prints in the top-right corner above the banner;
+  a footer wordmark and one free-text body per language. Notice authors include
+  audience, message, actions and dates directly in that body; there are no separate
+  source, heading or translated-title fields. Add Body adds another language
+  (English, Hindi or Gujarati, once each). Existing draft headings and text are
+  combined into the body when edited. The notice number prints in the top-right corner above the banner;
   drafts show Number assigned on issue. Titles and author remain in records and
   PDF metadata.
   Gujarati precedes Hindi as in the reference; English comes first when selected.
-  No printed page counter. Notices must fit one page at the reference size;
-  excess text is rejected rather than shrunk or clipped. A4 templates retain
+  No printed page counter. All language bodies share one page; body fonts and
+  spacing shrink together as needed without clipping text. Review the PDF for
+  readability before issue. A4 templates retain
   the agreed cover/index/topic structure for SOPs and policies.
 - Per-type View and Save/Issue capabilities govern pages, actions and PDFs.
   There is no anonymous PDF delivery or automatic distribution.

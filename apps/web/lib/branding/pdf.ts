@@ -7,6 +7,7 @@ import { PDFDocument } from "pdf-lib"
 import { brandingBookHtml, generateBrandingBookPdf } from "./book-pdf"
 import {
   brandingStepNumber,
+  brandingNoticeBody,
   revisionLabel,
   type BrandingContent,
   type BrandingType,
@@ -166,11 +167,11 @@ export async function brandingHtml(input: BrandingPdfInput) {
       .notice-banner{position:absolute;top:32pt;left:36pt;right:36pt;height:140pt;border-radius:17pt;background:#006A49;color:white;display:flex;align-items:center;justify-content:center;font:600 100pt/1 'Outfit';letter-spacing:1.2pt}
       .notice-date{position:absolute;top:243pt;right:60pt;font:500 20pt/28pt 'Outfit';color:#006A49}
       .notice-number{position:absolute;top:10pt;right:36pt;font:500 11pt/14pt 'Outfit';color:#006A49}
-      .notice-content{position:absolute;top:241pt;left:55.5pt;right:55.5pt}
+      .notice-content{position:absolute;top:290pt;left:55.5pt;right:55.5pt;font-size:21.5pt;line-height:1.4}
       [lang=gu]{font-family:'Outfit','Noto Sans Gujarati',sans-serif}[lang=hi]{font-family:'Outfit','Noto Sans Devanagari',sans-serif}
-      section+section,article+article{margin-top:64pt}h1{font-size:27.5pt;font-weight:700;line-height:40pt;text-align:center;margin:0 0 28pt;overflow-wrap:anywhere}article:first-child section:first-child h1{max-width:210pt;margin-left:auto;margin-right:auto}
+      article+article{margin-top:1.5em}
       p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}.notice-logo{position:absolute;top:779pt;left:178pt;width:239pt;color:#006A49}
-      </style></head><body><div class="notice-number">${e(input.draft ? "Number assigned on issue" : input.number)}</div><div class="notice-banner">NOTICE</div><div class="notice-date">${e(date || "Date pending")}</div><main class="notice-content">${translations.map((translation) => `<article lang="${translation.language}">${translation.sections.map((section) => `<section><h1>${e(section.heading)}</h1><p>${e(section.body)}</p></section>`).join("")}</article>`).join("")}</main><div class="notice-logo">${await wordmark()}</div></body></html>`,
+      </style></head><body><div class="notice-number">${e(input.draft ? "Number assigned on issue" : input.number)}</div><div class="notice-banner">NOTICE</div><div class="notice-date">${e(date || "Date pending")}</div><main class="notice-content">${translations.map((translation) => `<article lang="${translation.language}"><p>${e(brandingNoticeBody(translation.sections))}</p></article>`).join("")}</main><div class="notice-logo">${await wordmark()}</div></body></html>`,
     }
   }
   return brandingBookHtml(input, styles, logo, await wordmark(true))
@@ -284,18 +285,21 @@ export async function generateBrandingPdf(input: BrandingPdfInput) {
     if (input.type === "notice") {
       await page.evaluate(() => document.fonts.ready)
       const fits = await page.evaluate(() => {
-        const body = document
-          .querySelector(".notice-content")!
-          .getBoundingClientRect()
-        const logo = document
-          .querySelector(".notice-logo")!
-          .getBoundingClientRect()
-        return body.bottom + 24 * (96 / 72) <= logo.top
+        const body = document.querySelector<HTMLElement>(".notice-content")!
+        const logo = document.querySelector<HTMLElement>(".notice-logo")!
+        const limit = logo.getBoundingClientRect().top - 24 * (96 / 72)
+        let low = 0.1
+        let high = 21.5
+        for (let attempt = 0; attempt < 20; attempt++) {
+          const size = (low + high) / 2
+          body.style.fontSize = `${size}pt`
+          if (body.getBoundingClientRect().bottom <= limit) low = size
+          else high = size
+        }
+        body.style.fontSize = `${low}pt`
+        return body.getBoundingClientRect().bottom <= limit
       })
-      if (!fits)
-        throw new Error(
-          "Notice exceeds the reference's one-page layout. Shorten the text or split it into separate notices."
-        )
+      if (!fits) throw new Error("Notice could not be fitted to one page.")
       const bytes = await page.pdf({
         width: `${595.5 / 72}in`,
         height: `${842.25 / 72}in`,
@@ -304,6 +308,8 @@ export async function generateBrandingPdf(input: BrandingPdfInput) {
         margin: { top: 0, bottom: 0, left: 0, right: 0 },
       })
       const noticePdf = await PDFDocument.load(bytes)
+      if (noticePdf.getPageCount() !== 1)
+        throw new Error("Notice could not be fitted to one page.")
       noticePdf.setTitle(input.content.title)
       noticePdf.setSubject(`${input.number}${input.draft ? " · DRAFT" : ""}`)
       noticePdf.setAuthor(input.authorName)
