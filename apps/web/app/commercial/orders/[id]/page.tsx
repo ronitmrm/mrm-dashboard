@@ -146,7 +146,7 @@ export default async function PurchaseOrderPage({
 
       {!closed ? (
         <div className="grid gap-6 xl:grid-cols-3">
- <SectionCard>
+ <SectionCard width="wide">
             <CardHeader>
               <CardTitle>Add Po Line</CardTitle>
               <CardDescription>
@@ -247,7 +247,7 @@ export default async function PurchaseOrderPage({
             </CardContent>
  </SectionCard>
 
- <SectionCard>
+ <SectionCard width="standard">
             <CardHeader>
               <CardTitle>Excel Line Import</CardTitle>
               <CardDescription>
@@ -576,7 +576,7 @@ export default async function PurchaseOrderPage({
           </CardContent>
  </SectionCard>
 
- <SectionCard>
+ <SectionCard width="standard">
           <CardHeader>
             <CardTitle>Cancellation</CardTitle>
             <CardDescription>

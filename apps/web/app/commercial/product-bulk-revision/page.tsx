@@ -89,7 +89,7 @@ export default async function ProductBulkRevisionPage() {
       </section>
 
       <BulkRevisionEntry>
-        <SectionCard>
+        <SectionCard width="wide">
           <CardHeader>
             <CardTitle>Start A Product Revision</CardTitle>
             <CardDescription>

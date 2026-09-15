@@ -8877,7 +8877,8 @@ function DataEntryPanel({
           />
         )
       ) : null}
-      <SectionCard>
+      {!selectionLocked || isImporting ? (
+      <SectionCard width="wide">
         <CardHeader>
           <CardTitle>{title}</CardTitle>
         </CardHeader>
@@ -8960,6 +8961,7 @@ function DataEntryPanel({
           </CardContent>
         </fieldset>
       </SectionCard>
+      ) : null}
       {selectedSpec?.entryType === "store_masters" && storeMasterData ? (
         <StoreMasterWorkspace
           canManage={canManageStoreMasters}
@@ -10858,7 +10860,7 @@ function MaintenancePanel({
           )}
         </CardContent>
       </SectionCard>
-      <SectionCard>
+      <SectionCard width="wide">
         <CardHeader>
           <CardTitle>Breakdown Maintenance Entry</CardTitle>
         </CardHeader>
@@ -11092,7 +11094,7 @@ function PlanningHolidayPanel({
           ["Next saved date", nextPlanningHolidayLabel(holidayRows)],
         ]}
       />
-      <SectionCard>
+      <SectionCard width="standard">
         <CardHeader>
           <CardTitle>Plan A Holiday</CardTitle>
           <CardDescription>
@@ -11108,7 +11110,7 @@ function PlanningHolidayPanel({
         <fieldset aria-busy={isSaving} className="contents" disabled={isSaving}>
           <CardContent>
             <form className="grid gap-3" onSubmit={saveHoliday}>
-              <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-4">
+              <div className="grid gap-3 sm:grid-cols-2">
                 <Field label="Holiday Date">
                   <Input name="date" type="date" required />
                 </Field>
@@ -11315,7 +11317,7 @@ function DataEntryForm({
     )
   }
   return (
-    <SectionCard>
+    <SectionCard width={resolvedFields.length === 1 ? "compact" : resolvedFields.length <= 4 ? "standard" : "wide"}>
       <CardHeader>
         <CardTitle>{spec.title}</CardTitle>
       </CardHeader>
@@ -11403,7 +11405,7 @@ function PlanningMasterRelationForm({
   }
 
   return (
-    <SectionCard>
+    <SectionCard width="wide">
       <CardHeader>
         <CardTitle>{title}</CardTitle>
         <CardDescription>
@@ -11450,16 +11452,18 @@ function PlanningMasterRelationForm({
               </div>
             ) : null}
             {kind === "cycle" ? (
-              <Field label="Cycle Time Sec">
-                <Input
-                  name="cycleTime"
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  required
-                  defaultValue={str(defaults.cycleTime)}
-                />
-              </Field>
+              <div className="max-w-xs">
+                <Field label="Cycle Time Sec">
+                  <Input
+                    name="cycleTime"
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    required
+                    defaultValue={str(defaults.cycleTime)}
+                  />
+                </Field>
+              </div>
             ) : (
               <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
                 {(
@@ -12132,7 +12136,7 @@ function MaintenanceMasterForm({
   const selectedRemark = displayValue(selectedMaster?.remark ?? defaults.remark)
 
   return (
-    <SectionCard>
+    <SectionCard width="wide">
       <CardHeader>
         <CardTitle>{spec.title}</CardTitle>
       </CardHeader>
@@ -13505,14 +13509,14 @@ function LegacyActionForm({
   return (
     <form
       aria-busy={isSubmitting}
-      className="grid gap-3 rounded-xl border bg-background p-3"
+      className="grid w-full max-w-5xl gap-3 rounded-xl border bg-background p-3"
       onSubmit={(event) => void submit(event)}
     >
       <fieldset className="contents" disabled={isSubmitting}>
         <div>
           <div className="text-sm font-medium">{title}</div>
         </div>
-        <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
+        <div className={fields.length === 1 ? "grid gap-3" : fields.length <= 4 ? "grid gap-3 sm:grid-cols-2" : "grid gap-3 sm:grid-cols-2 @5xl/main:grid-cols-3"}>
           {fields.map((field) => (
             <Field key={field.name} label={field.label}>
               {field.options ? (

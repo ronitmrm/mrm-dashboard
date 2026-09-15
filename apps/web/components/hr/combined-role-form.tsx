@@ -46,7 +46,7 @@ export function CombinedRoleForm({
     selectedPostIds.size >= 2 && selectedPostIds.has(primaryPostId)
 
   return (
- <SectionCard>
+ <SectionCard width="wide">
       <CardHeader>
         <CardTitle>Combine Approved Posts</CardTitle>
         <CardDescription>

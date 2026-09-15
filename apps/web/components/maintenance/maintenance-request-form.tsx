@@ -32,7 +32,7 @@ export function MaintenanceRequestForm({
   requesterName: string
 }) {
   return (
-    <SectionCard>
+    <SectionCard width="standard">
       <CardHeader className="border-b border-border/70 pb-4">
         <CardTitle>New Maintenance Request</CardTitle>
       </CardHeader>

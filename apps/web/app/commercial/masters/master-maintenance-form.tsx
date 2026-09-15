@@ -93,7 +93,7 @@ export function MasterMaintenanceForm({
       <input name="master_view" type="hidden" value="dataEntry" />
       <input name="kind" type="hidden" value={kind} />
       <input name="workspace_kind" type="hidden" value={workspaceKind} />
-      <FieldGroup className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <FieldGroup className={isSimple && selectionLocked ? "grid gap-4" : "grid gap-4 sm:grid-cols-2"}>
         {!selectionLocked ? <Field>
           <FieldLabel htmlFor="master-kind">Master</FieldLabel>
           <NativeSelect

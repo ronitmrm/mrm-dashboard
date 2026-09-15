@@ -30,6 +30,21 @@ Use `OperationalTable` for comparable records, scanning, filtering, sorting, sel
 
 Use `PageHeader` once per dashboard screen. Put primary and secondary page actions in its `actions` slot or an adjacent `ActionToolbar`. Use `FormSection` to group related fields and `FormGrid` for responsive field layout.
 
+### Form widths
+
+Keep form panels left-aligned and size them for their controls. Use `SectionCard`
+`width="compact"` (28rem) for simple masters, `width="standard"` (42rem) for
+passwords and small two-column forms, and `width="wide"` (64rem) for larger
+multi-column entry forms. Each shrinks to the available width on mobile.
+`FormSection` defaults to `wide` and accepts the same width options.
+
+Use one column in compact panels and at most two in standard panels. Short
+standalone controls can use a smaller `max-w-*` wrapper; keep labels and help
+with their control. Keep action buttons content-sized and inside the form's
+width. Do not stretch a panel merely to fill the page. Tables, editable line
+items, permission matrices and mixed record workspaces retain the default
+`width="full"`; bound their separate entry forms when appropriate.
+
 Use `MetricSummary` from `apps/web/components/ui/golden-patterns.tsx` for a
 left-aligned, wrapping row of register counts. Cards are 16rem wide, shrinking
 to the available width on narrow screens; small groups leave unused space to

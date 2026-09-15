@@ -139,7 +139,7 @@ export default async function AssembliesPage({
         </CardContent>
  </SectionCard>
 
- <SectionCard>
+ <SectionCard width="standard">
         <CardHeader>
           <CardTitle>Add Component</CardTitle>
           <CardDescription>

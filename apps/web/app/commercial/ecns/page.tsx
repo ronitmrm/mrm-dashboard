@@ -108,7 +108,7 @@ export default async function EngineeringChangeNotesPage() {
         />
       </section>
 
- <SectionCard>
+ <SectionCard width="wide">
         <CardHeader>
           <CardTitle>Open An Engineering Change Note</CardTitle>
           <CardDescription>

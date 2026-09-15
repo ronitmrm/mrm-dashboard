@@ -148,7 +148,7 @@ export default async function MastersPage({
       {showDataEntry ? (
         <>
           {canUpdate && snapshot ? (
- <SectionCard>
+ <SectionCard width={["materialGrade", "rodType", "rodSize", "machineType", "process"].includes(selection.entryKind) ? "compact" : "standard"}>
               <CardHeader>
                 <CardTitle>Add A Master</CardTitle>
                 <CardDescription>

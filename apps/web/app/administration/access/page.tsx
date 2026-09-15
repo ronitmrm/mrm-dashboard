@@ -197,7 +197,7 @@ export default async function AccessAdministrationPage({
         ) : null}
 
         {activeSection === "create" && canCreateRole ? (
-          <SectionCard size="sm">
+          <SectionCard width="standard" size="sm">
             <CardHeader className="border-b">
               <CardTitle>Create Application Role</CardTitle>
               <CardDescription>
@@ -208,7 +208,7 @@ export default async function AccessAdministrationPage({
             <CardContent>
               <form action={createRoleAction}>
                 <FieldGroup className="gap-4">
-                  <div className="grid gap-4 md:grid-cols-3">
+                  <div className="grid gap-4 sm:grid-cols-2">
                     <Field>
                       <FieldLabel htmlFor="role-name">Role Name</FieldLabel>
                       <Input id="role-name" name="name" required />

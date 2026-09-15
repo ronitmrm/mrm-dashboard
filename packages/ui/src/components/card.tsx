@@ -189,6 +189,14 @@ const metricToneSurfaceClassNames: Record<MetricCardTone, string> = {
 }
 type SectionCardProps = React.ComponentProps<typeof Card> & {
   tone?: SemanticTone
+  width?: "full" | "compact" | "standard" | "wide"
+}
+
+const sectionWidthClassNames = {
+  full: "",
+  compact: "w-full min-w-0 max-w-md justify-self-start",
+  standard: "w-full min-w-0 max-w-2xl justify-self-start",
+  wide: "w-full min-w-0 max-w-5xl justify-self-start",
 }
 
 const sectionToneClassNames: Record<SemanticTone, string> = {
@@ -205,13 +213,19 @@ const sectionToneClassNames: Record<SemanticTone, string> = {
 function SectionCard({
   className,
   tone = "neutral",
+  width = "full",
   ...props
 }: SectionCardProps) {
   return (
     <Card
-      className={cn(sectionToneClassNames[tone], className)}
+      className={cn(
+        sectionToneClassNames[tone],
+        sectionWidthClassNames[width],
+        className
+      )}
       data-slot="section-card"
       data-tone={tone}
+      data-width={width}
       {...props}
     />
   )

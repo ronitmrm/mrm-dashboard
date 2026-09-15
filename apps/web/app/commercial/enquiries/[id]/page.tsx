@@ -222,7 +222,7 @@ export default async function EnquiryDetailPage({
         </TableBody></OperationalTable>
       </CardContent></SectionCard>:null}
 
- <SectionCard>
+ <SectionCard width="wide">
         <CardHeader>
           <CardTitle>Enquiry Register Details</CardTitle>
           <CardDescription>
@@ -380,7 +380,7 @@ export default async function EnquiryDetailPage({
         </CardContent>
  </SectionCard>
 
- {canAddLines ? <SectionCard>
+ {canAddLines ? <SectionCard width="wide">
         <CardHeader>
           <CardTitle>Add Line Item</CardTitle>
           <CardDescription>

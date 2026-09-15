@@ -46,7 +46,7 @@ export function PasswordResetForm({
   return (
     <form action={action} className="grid gap-5">
       {isAdministrator ? (
-        <div className="grid gap-2">
+        <div className="grid min-w-0 max-w-lg gap-2">
           <Label htmlFor="targetUserId">Account</Label>
           <NativeSelect
             className="w-full"
@@ -67,7 +67,7 @@ export function PasswordResetForm({
       ) : (
         <>
           <input name="targetUserId" type="hidden" value={currentUserId} />
-          <div className="grid gap-2">
+          <div className="grid max-w-xs gap-2">
             <Label htmlFor="currentPassword">Current Password</Label>
             <Input
               autoComplete="current-password"

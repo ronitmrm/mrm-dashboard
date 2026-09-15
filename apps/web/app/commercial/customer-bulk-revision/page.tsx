@@ -95,7 +95,7 @@ export default async function CustomerBulkRevisionPage({
       </section>
 
       <BulkRevisionEntry>
-        <SectionCard>
+        <SectionCard width="wide">
           <CardHeader>
             <CardTitle>Start A Customer Revision</CardTitle>
             <CardDescription>
