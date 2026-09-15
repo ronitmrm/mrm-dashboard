@@ -71,7 +71,10 @@ The older template descriptions below are historical where superseded by v4.
   no JavaScript or network requests. SOP/policy languages each start a new book;
   notice/WI languages flow together. Automatic wrapping, page numbers and references.
 - Linux hosting uses `@sparticuz/chromium`; Next file tracing includes its binary
-  and font assets. Windows development detects installed Chrome/Edge. An explicit
+  and font assets. Resolve the binary directory's real path in Next configuration:
+  pnpm's app-level symlink path can package binaries separately from the runtime
+  package in `.pnpm`, causing preview and issue to fail on Vercel.
+  Windows development detects installed Chrome/Edge. An explicit
   `BRANDING_CHROMIUM_PATH` can select another local browser executable.
 - AI writing/translation is intentionally deferred pending the user's provider
   decision. No document text is sent to an AI service. Editors accept final text
