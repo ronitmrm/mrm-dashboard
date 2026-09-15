@@ -270,7 +270,7 @@ export function createBrandingRepository(options: RepositoryPoolOptions) {
         if (revision.version !== input.version)
           throw new Error("This draft changed. Reload and review before issue.")
         const content = parseBrandingContent(revision.content, input.type)
-        validateBrandingIssue(content, revision.revision)
+        validateBrandingIssue(content, revision.revision, input.type)
         let number = document.number
         if (!number) {
           const counter = (
@@ -306,7 +306,7 @@ export function createBrandingRepository(options: RepositoryPoolOptions) {
             input.userName,
             revision.id,
             input.type === "notice"
-              ? "mrm-notice-v6"
+              ? "mrm-notice-v7"
               : input.type === "work-instruction"
                 ? "mrm-wi-v7"
                 : "mrm-book-v4",

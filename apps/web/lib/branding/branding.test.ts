@@ -36,6 +36,35 @@ const content = {
   ],
 }
 describe("Branding issue contract", () => {
+  it("issues multilingual notices with one body per language and no headings", async () => {
+    const parsed = parseBrandingContent(
+      {
+        ...content,
+        translations: content.translations.map((entry) => ({
+          ...entry,
+          sections: [
+            { heading: "", body: "Meeting at 10:00.\nPlease attend." },
+          ],
+        })),
+      },
+      "notice"
+    )
+    expect(() => validateBrandingIssue(parsed, 0, "notice")).not.toThrow()
+    const notice = await brandingHtml({
+      content: parsed,
+      type: "notice",
+      number: "Draft",
+      revision: 0,
+      issuedAt: "2026-09-15",
+      authorName: "Author",
+      draft: true,
+    })
+    expect(notice.html.match(/<article lang=/g)).toHaveLength(3)
+    expect(notice.html).toContain("Meeting at 10:00.\nPlease attend.")
+    expect(notice.html).not.toContain("<h1>")
+    parsed.translations[1]!.sections[0]!.body = ""
+    expect(() => validateBrandingIssue(parsed, 0, "notice")).toThrow("Hindi")
+  })
   it("round-trips nested SOP/Policy headings and independently numbered and bulleted bodies", () => {
     const paragraph = (text: string) => ({
       type: "paragraph",
