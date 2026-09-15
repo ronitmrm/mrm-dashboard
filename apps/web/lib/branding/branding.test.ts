@@ -54,8 +54,14 @@ describe("Branding issue contract", () => {
       authorName: "Author",
     })
     const footer = notice.footer.replace(/<style>[\s\S]*?<\/style>/g, "")
-    expect(footer).toContain("MRM-NTC-0001")
+    expect(footer).not.toContain("MRM-NTC-0001")
     expect(footer).not.toContain("R00")
+    expect(notice.html).toContain("14 / 09 / 2026")
+    expect(notice.html).toContain("સમય")
+    expect(notice.html).toContain("समय")
+    expect(notice.html.indexOf('lang="gu"')).toBeLessThan(
+      notice.html.indexOf('lang="hi"')
+    )
     expect(escapeBrandingHtml('<script>"text"</script>')).toBe(
       "&lt;script&gt;&quot;text&quot;&lt;/script&gt;"
     )

@@ -217,7 +217,7 @@ export function BrandingDocumentEditor({
               ? "The PDF adds a cover and an automatic index for each selected language. Add topics below in reading order; each topic begins on a new page."
               : type === "work-instruction"
                 ? "Add headings and text below. All selected languages must fit on one page; Preview PDF checks the page limit."
-                : "Add headings and text below."}
+                : "The notice prints your section headings and bodies in the reference layout. Use one heading/body per language for a simple notice. Titles and numbering stay in the register. Preserve any required line breaks; all content must fit one page."}
           </p>
           <p className="mb-4 text-sm text-muted-foreground">
             Writing assistance and automatic translation are pending setup. For

@@ -40,7 +40,13 @@ Branding contains SOPs, Notices, Policies, and Work Instructions. Safety signage
   Notice Options-1 PDF examples guide template v3: green cover with the original
   tagline lockup, green metadata headers and outlined topic panels, and a white
   notice with a large green banner and full footer wordmark. Notice languages
-  flow together, continuing to another page when needed. A4 templates retain
+  flow together. The later Notice.pdf reference supersedes the notice design:
+  Noto Sans Gujarati/Devanagari, Outfit, white page, 100pt NOTICE banner,
+  27.5pt headings, 21.5pt bodies and a footer wordmark. Section headings/bodies
+  are printed; titles, author and number remain in records and PDF metadata.
+  Gujarati precedes Hindi as in the reference; English comes first when selected.
+  No printed page counter. Notices must fit one page at the reference size;
+  excess text is rejected rather than shrunk or clipped. A4 templates retain
   the agreed cover/index/topic structure for SOPs and policies.
 - Per-type View and Save/Issue capabilities govern pages, actions and PDFs.
   There is no anonymous PDF delivery or automatic distribution.
