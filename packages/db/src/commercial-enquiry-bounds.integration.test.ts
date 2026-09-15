@@ -136,12 +136,17 @@ beforeAll(async () => {
     prefix: "STATUS",
   })
 
+  const statusSourceId = randomUUID()
   await pool.query(
     `
       UPDATE sales.enquiries
       SET technical_handover_status = 'Draft'
-      WHERE organization_id = $1 AND enquiry_number = 'STATUS-0001';
-
+      WHERE organization_id = $1 AND enquiry_number = 'STATUS-0001'
+    `,
+    [statuses.organizationId]
+  )
+  await pool.query(
+    `
       INSERT INTO sales.clarification_tasks (
         organization_id, enquiry_id, enquiry_item_id, question, status,
         source_stage, target_stage, source_system, source_table, source_id
@@ -152,8 +157,12 @@ beforeAll(async () => {
       FROM sales.enquiries enquiry
       JOIN sales.enquiry_items item ON item.enquiry_id = enquiry.id
       WHERE enquiry.organization_id = $1
-        AND enquiry.enquiry_number = 'STATUS-0002';
-
+        AND enquiry.enquiry_number = 'STATUS-0002'
+    `,
+    [statuses.organizationId, statusSourceId]
+  )
+  await pool.query(
+    `
       INSERT INTO catalog.items (
         organization_id, uid, lifecycle_status, description,
         source_system, source_table, source_id
@@ -162,8 +171,12 @@ beforeAll(async () => {
         CASE WHEN value = 3 THEN 'P' ELSE 'Q' END,
         'Excel status product ' || value::text,
         'test', 'commercial_enquiry_bounds', $2 || ':product:' || value::text
-      FROM generate_series(3, 6) value;
-
+      FROM generate_series(3, 6) value
+    `,
+    [statuses.organizationId, statusSourceId]
+  )
+  await pool.query(
+    `
       INSERT INTO sales.quote_items (
         organization_id, quote_number, enquiry_id, enquiry_item_id,
         customer_id, item_id, lineage_item_id, customer_part_code,
@@ -190,22 +203,34 @@ beforeAll(async () => {
         ON enquiry_item.enquiry_id = enquiry.id
       JOIN catalog.items product
         ON product.organization_id = $1
-        AND product.uid = 'STATUS-P-' || value::text;
-
+        AND product.uid = 'STATUS-P-' || value::text
+    `,
+    [statuses.organizationId, statusSourceId]
+  )
+  await pool.query(
+    `
       UPDATE sales.enquiry_items
       SET technical_review_status = 'Not Feasible'
       WHERE enquiry_id = (
         SELECT id FROM sales.enquiries
         WHERE organization_id = $1 AND enquiry_number = 'STATUS-0007'
-      );
-
+      )
+    `,
+    [statuses.organizationId]
+  )
+  await pool.query(
+    `
       UPDATE sales.enquiry_items item
       SET technical_review_status = 'Feasible'
       FROM sales.enquiries enquiry
       WHERE enquiry.id = item.enquiry_id
         AND enquiry.organization_id = $1
-        AND enquiry.enquiry_number IN ('STATUS-0008', 'STATUS-0009');
-
+        AND enquiry.enquiry_number IN ('STATUS-0008', 'STATUS-0009')
+    `,
+    [statuses.organizationId]
+  )
+  await pool.query(
+    `
       INSERT INTO sales.design_tasks (
         organization_id, enquiry_item_id, status, design_status,
         next_stage_status, source_system, source_table, source_id
@@ -219,9 +244,9 @@ beforeAll(async () => {
         ON enquiry.organization_id = $1
         AND enquiry.enquiry_number = 'STATUS-' || lpad(value::text, 4, '0')
       JOIN sales.enquiry_items enquiry_item
-        ON enquiry_item.enquiry_id = enquiry.id;
+        ON enquiry_item.enquiry_id = enquiry.id
     `,
-    [statuses.organizationId, randomUUID()]
+    [statuses.organizationId, statusSourceId]
   )
 
   await pool.query(

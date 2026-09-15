@@ -63,6 +63,14 @@ beforeAll(async () => {
     [organizationCode]
   )
   organizationId = organization.rows[0]!.id
+  await pool.query(
+    `INSERT INTO sales.commercial_terms
+       (organization_id, term_type, name, value, source_system, source_table, source_id)
+     VALUES ($1::uuid, 'packaging_terms', 'Export box', 'Export box', 'test', 'commercial_terms', $1::uuid::text || '-packaging'),
+            ($1::uuid, 'packaging_terms', 'Export', 'Export', 'test', 'commercial_terms', $1::uuid::text || '-export'),
+            ($1::uuid, 'incoterms', 'FOB', 'FOB', 'test', 'commercial_terms', $1::uuid::text || '-incoterms')`,
+    [organizationId]
+  )
   const customer = await pool.query<{ id: string }>(
     `
       INSERT INTO sales.customers (
@@ -588,14 +596,14 @@ describe("PostgreSQL enquiry-to-design workflow", () => {
     })
 
     const technicalQueue =
-      await repository.listTechnicalReviewQueueBounded("MRMPL")
+      await repository.listTechnicalReviewQueueBounded(organizationCode)
     expect(
       technicalQueue.rows.some(
         (queueItem) => queueItem.enquiryItemId === line.id
       )
     ).toBe(false)
 
-    const designQueue = await repository.listDesignQueueBounded("MRMPL")
+    const designQueue = await repository.listDesignQueueBounded(organizationCode)
     expect(
       designQueue.rows.some((queueItem) => queueItem.enquiryItemId === line.id)
     ).toBe(true)
