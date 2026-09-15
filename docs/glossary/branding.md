@@ -49,7 +49,9 @@ Branding contains SOPs, Notices, Policies, and Work Instructions. Safety signage
   flow together. The later Notice.pdf reference supersedes the notice design:
   Noto Sans Gujarati/Devanagari, Outfit, white page, 100pt NOTICE banner,
   27.5pt headings, 21.5pt bodies and a footer wordmark. Section headings/bodies
-  are printed; titles, author and number remain in records and PDF metadata.
+  are printed. The notice number prints in the top-left corner above the banner;
+  drafts show Number assigned on issue. Titles and author remain in records and
+  PDF metadata.
   Gujarati precedes Hindi as in the reference; English comes first when selected.
   No printed page counter. Notices must fit one page at the reference size;
   excess text is rejected rather than shrunk or clipped. A4 templates retain
