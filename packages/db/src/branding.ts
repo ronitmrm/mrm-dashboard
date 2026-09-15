@@ -277,7 +277,7 @@ export function createBrandingRepository(options: RepositoryPoolOptions) {
         if (!bytes.byteLength || bytes.byteLength > 5242880)
           throw new Error("PDF exceeds the 5 MB document limit.")
         await client.query(
-          "UPDATE branding.revisions SET state = 'issued', template_version = 'mrm-brand-v2', pdf = $1, issued_at = $2, updated_at = $2, author_user_id = $3, author_name = $4, version = version + 1 WHERE id = $5",
+          "UPDATE branding.revisions SET state = 'issued', template_version = 'mrm-brand-v3', pdf = $1, issued_at = $2, updated_at = $2, author_user_id = $3, author_name = $4, version = version + 1 WHERE id = $5",
           [
             Buffer.from(bytes),
             issuedAt,

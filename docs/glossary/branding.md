@@ -36,6 +36,11 @@ Branding contains SOPs, Notices, Policies, and Work Instructions. Safety signage
   consequences. Title, department and effective date accompany each document.
 - Brand guide v1.0 governs PDFs: Outfit, Hind, Hind Vadodara; MRM Green #006A49,
   cream #F7F7F2, black #050505, restrained Tennis #8BC341; original internal logo
-  without tagline. A4 document templates apply the foundation, not poster rules.
+  without tagline on internal pages. The supplied Policy Cover, Machine SOP and
+  Notice Options-1 PDF examples guide template v3: green cover with the original
+  tagline lockup, green metadata headers and outlined topic panels, and a white
+  notice with a large green banner and full footer wordmark. Notice languages
+  flow together, continuing to another page when needed. A4 templates retain
+  the agreed cover/index/topic structure for SOPs and policies.
 - Per-type View and Save/Issue capabilities govern pages, actions and PDFs.
   There is no anonymous PDF delivery or automatic distribution.
