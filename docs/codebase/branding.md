@@ -86,3 +86,5 @@ The renderer fits title and body separately by binary search after fonts load,
 measuring the actual panel space; it emits exactly one A4 page. Keep browser
 evaluation callbacks free of named nested functions because tsx inserts helpers
 that are unavailable inside Chromium. Frozen PDFs are not regenerated.
+
+Visual Guide editor locks the document to bad/good pairs per language. Only picture uploads and captions remain editable; no headings, format/assessment selectors, ordering or section controls. Domain parsing rejects incomplete pairs or mixed formats. Selecting Visual Guide preserves the first two existing entries (headings join captions); more than two must be reduced explicitly first.
