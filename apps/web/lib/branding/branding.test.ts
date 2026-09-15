@@ -77,6 +77,46 @@ describe("Branding issue contract", () => {
     )
     expect(() => validateBrandingIssue(parsed, 0)).toThrow("Gujarati")
   })
+  it("keeps visual guide symbols fixed while retaining editable captions", async () => {
+    const parsed = parseBrandingContent(
+      {
+        ...content,
+        languages: ["en"],
+        translations: [
+          {
+            language: "en",
+            title: "Visual guide",
+            sections: ["bad", "good"].map((assessment) => ({
+              heading: "",
+              body: `${assessment} assembly`,
+              layout: "visual-guide",
+              assessment,
+              picture: "data:image/jpeg;base64,/9j/2Q==",
+            })),
+          },
+        ],
+      },
+      "work-instruction"
+    )
+    expect(() => validateBrandingIssue(parsed, 0)).not.toThrow()
+    const result = await brandingHtml({
+      content: parsed,
+      type: "work-instruction",
+      number: "Draft",
+      revision: 0,
+      issuedAt: "2026-09-15",
+      authorName: "Author",
+      draft: true,
+    })
+    expect(result.html).toContain(
+      'aria-label="Bad" fill="none" stroke="#F51524"'
+    )
+    expect(result.html).toContain(
+      'aria-label="Good" fill="none" stroke="#006A49"'
+    )
+    expect(result.html).toContain("bad assembly")
+    expect(result.html).not.toContain('<span class="wi-step">')
+  })
   it("retains four editable pictures and captions in a fixed two-by-two instruction grid", async () => {
     const picture = "data:image/jpeg;base64,/9j/2Q=="
     const parsed = parseBrandingContent(

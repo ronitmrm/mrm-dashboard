@@ -188,7 +188,13 @@ export default async function BrandingDocumentPage({
               <div lang={translation.language} className="grid gap-4">
                 {translation.sections.map((section, index) => (
                   <section key={index}>
-                    {section.layout && section.layout !== "text" ? (
+                    {section.layout === "visual-guide" ? (
+                      <p className="mb-2 text-sm font-medium">
+                        {section.assessment === "bad"
+                          ? "Bad · fixed red cross"
+                          : "Good · fixed green tick"}
+                      </p>
+                    ) : section.layout && section.layout !== "text" ? (
                       <p className="mb-2 text-sm font-medium">
                         Step{" "}
                         {brandingStepNumber(translation.language, index + 1)}

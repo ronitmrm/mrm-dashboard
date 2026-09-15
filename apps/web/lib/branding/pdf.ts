@@ -21,6 +21,18 @@ export type BrandingPdfInput = {
   type: BrandingType
   draft?: boolean
 }
+function isVisualGuide(content: BrandingContent) {
+  const sections = content.translations.flatMap(
+    (translation) => translation.sections
+  )
+  return (
+    sections.length > 0 &&
+    sections.every((section) => section.layout === "visual-guide")
+  )
+}
+function visualSymbol(bad: boolean) {
+  return `<svg class="wi-symbol" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-label="${bad ? "Bad" : "Good"}" fill="none" stroke="${bad ? "#F51524" : "#006A49"}" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="7" width="86" height="86" rx="23"/><path d="${bad ? "M30 29L70 71M70 29L30 71" : "M25 52L43 72L76 32"}"/></svg>`
+}
 export function escapeBrandingHtml(value: string) {
   return value.replace(
     /[&<>"']/g,
@@ -79,14 +91,19 @@ export async function brandingHtml(input: BrandingPdfInput) {
     const sideRows =
       sections.length > 0 &&
       sections.every((section) => section.layout === "picture-left")
+    const visual = isVisualGuide(input.content)
     const columns =
-      sideRows || sections.length === 1 ? 1 : sections.length <= 8 ? 2 : 3
+      visual || sideRows || sections.length === 1
+        ? 1
+        : sections.length <= 8
+          ? 2
+          : 3
     const rows = Math.ceil(sections.length / columns)
     const content = pictures
       ? sections
           .map(
             (section) =>
-              `<section class="wi-tile ${section.layout ?? "text"}" lang="${section.language}">${section.layout && section.layout !== "text" ? (section.picture ? `<img src="${e(section.picture)}" alt="">` : '<div class="wi-missing">Add picture</div>') : ""}<div class="wi-caption"><div class="wi-caption-inner">${section.layout && section.layout !== "text" ? `<span class="wi-step">${e(section.step)}</span>` : ""}<div class="wi-caption-text">${section.heading ? `<h2>${e(section.heading)}</h2>` : ""}<p>${e(section.body)}</p></div></div></div></section>`
+              `<section class="wi-tile ${section.layout ?? "text"}${section.assessment === "bad" ? " bad" : ""}" lang="${section.language}">${section.layout && section.layout !== "text" ? (section.picture ? `<img src="${e(section.picture)}" alt="">` : '<div class="wi-missing">Add picture</div>') : ""}${section.layout === "visual-guide" ? visualSymbol(section.assessment === "bad") : ""}<div class="wi-caption"><div class="wi-caption-inner">${section.layout && section.layout !== "text" && section.layout !== "visual-guide" ? `<span class="wi-step">${e(section.step)}</span>` : ""}<div class="wi-caption-text">${section.heading ? `<h2>${e(section.heading)}</h2>` : ""}<p>${e(section.body)}</p></div></div></div></section>`
           )
           .join("")
       : input.content.translations
@@ -125,7 +142,14 @@ export async function brandingHtml(input: BrandingPdfInput) {
       .picture-left .wi-caption-inner{align-items:flex-start}.wi-tile.text .wi-caption-inner{display:block}
       .picture-left h2,.wi-tile.text h2{max-width:100%;margin-bottom:.4em}
       .wi-tile.text .wi-caption{height:100%}
-      </style></head><body><div class="wi-sheet${pictures ? " wi-pictures" : ""}"><div class="wi-logo">${pictures ? logo : logo.replaceAll("#006A49", "#F7F7F2")}</div><div class="wi-number">${e(reference)}${input.draft ? " · DRAFT" : ""}</div><div class="wi-title"><span>${e(input.content.title)}</span></div><div class="wi-panel"><main class="wi-content">${content}</main></div></div></body></html>`,
+      .wi-visual .wi-panel{top:29mm;left:10mm;right:10mm;bottom:8mm}
+      .wi-visual .wi-content{gap:0;border:1mm solid #006A49;border-radius:7mm;overflow:hidden}
+      .wi-visual .wi-tile{border:0;border-radius:0}.wi-visual .wi-tile+.wi-tile{border-top:1mm solid #006A49}
+      .visual-guide img,.visual-guide .wi-missing{width:54%;height:100%;object-fit:contain;padding:4mm}
+      .wi-symbol{position:absolute;left:56%;top:10%;width:20%;height:80%}
+      .visual-guide .wi-caption{left:78%;width:22%;height:100%;background:transparent;color:#006A49;padding:3mm 5mm 3mm 1mm;border-radius:0}
+      .visual-guide.bad .wi-caption{color:#F51524}.visual-guide .wi-caption p{font-weight:700}
+      </style></head><body><div class="wi-sheet${pictures ? " wi-pictures" : ""}${visual ? " wi-visual" : ""}"><div class="wi-logo">${pictures ? logo : logo.replaceAll("#006A49", "#F7F7F2")}</div><div class="wi-number">${e(reference)}${input.draft ? " · DRAFT" : ""}</div><div class="wi-title"><span>${e(input.content.title)}</span></div><div class="wi-panel"><main class="wi-content">${content}</main></div></div></body></html>`,
     }
   }
   if (input.type === "notice") {
@@ -196,7 +220,11 @@ export async function generateBrandingPdf(input: BrandingPdfInput) {
     if (input.type === "notice")
       await page.setViewport({ width: 794, height: 1123 })
     if (input.type === "work-instruction")
-      await page.setViewport({ width: 794, height: 1122 })
+      await page.setViewport(
+        isVisualGuide(input.content)
+          ? { width: 1123, height: 794 }
+          : { width: 794, height: 1122 }
+      )
     await page.setJavaScriptEnabled(false)
     await page.setRequestInterception(true)
     page.on("request", (request) => {
@@ -248,7 +276,7 @@ export async function generateBrandingPdf(input: BrandingPdfInput) {
             parseFloat(style.paddingTop) -
             parseFloat(style.paddingBottom)
           let low = 0.01,
-            high = 22
+            high = caption.closest(".visual-guide") ? 32 : 22
           for (let step = 0; step < 18; step++) {
             const size = (low + high) / 2
             caption.style.fontSize = `${size}pt`
@@ -264,6 +292,7 @@ export async function generateBrandingPdf(input: BrandingPdfInput) {
       })
       const bytes = await page.pdf({
         format: "A4",
+        landscape: isVisualGuide(input.content),
         printBackground: true,
         waitForFonts: true,
         margin: { top: 0, bottom: 0, left: 0, right: 0 },
