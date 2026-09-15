@@ -26,6 +26,9 @@ Branding contains SOPs, Notices, Policies, and Work Instructions. Safety signage
   excess edges. Picture sections get automatic step numbers in language-appropriate
   digits, following section order within each language. Their heading is optional
   and separate from the step number; their body and picture are required on issue.
+  When all sections use picture-left/body-right, follow the Weigh Scale Calibration
+  reference: full-width stacked rows, approximately 40% picture and 60% green text
+  box. The number of sections fixes equal row heights; captions fit independently.
 
 - Each type has an independent, organization-wide sequence: MRM-SOP-0001,
   MRM-NTC-0001, MRM-POL-0001. Numbers are assigned on first issue, never reused,

@@ -117,6 +117,27 @@ describe("Branding issue contract", () => {
     expect(result.html).toContain("Step 4")
     expect(result.html).toContain('<span class="wi-step">4)</span>')
     expect(result.html).toContain("object-fit:cover")
+    const side = await brandingHtml({
+      content: {
+        ...parsed,
+        translations: parsed.translations.map((translation) => ({
+          ...translation,
+          sections: translation.sections.map((section) => ({
+            ...section,
+            layout: "picture-left",
+          })),
+        })),
+      },
+      type: "work-instruction",
+      number: "Draft",
+      revision: 0,
+      issuedAt: "2026-09-15",
+      authorName: "Author",
+      draft: true,
+    })
+    expect(side.html).toContain(
+      "grid-template-columns:repeat(1,minmax(0,1fr));grid-template-rows:repeat(4,minmax(0,1fr))"
+    )
     expect(() =>
       parseBrandingContent(
         {
