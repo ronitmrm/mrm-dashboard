@@ -41,6 +41,15 @@ readable and selectable when editing historical records.
 commercial terms and line items before downstream work. Its line register opens
 one selected line for editing and does not expose Technical Review or Design
 inputs.
+Logging or importing an enquiry saves a Draft. Sales checks its saved terms and
+lines, then explicitly selects **Send To Technical Review** to release it.
+Drafts stay out of the Technical Review queue. Commercial Requotes retain their
+existing route to Customer Costing.
+Sales may delete the complete enquiry while every line remains unstarted under
+the same Design/costing boundary used for intake corrections. This removes its
+lines and unused task preparation, retains the audit trail and stored files, and
+returns Sales to the enquiry register. Once any line starts work, whole-enquiry
+deletion is blocked.
 Sales may edit or delete selected intake lines, including all lines, after
 handover and Technical Review until Start Design is used on each line. Opening
 a page or saving Technical Review does not start work. A Sales correction resets

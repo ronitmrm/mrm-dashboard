@@ -102,6 +102,14 @@ function salesIntakeLockedSql(line: "item" | "line" | "enquiry_item") {
   )`
 }
 
+function enquiryDeletionBlockedSql(enquiryId: "$1" | "root.enquiry_id" | "enquiry.id") {
+  return `(EXISTS (SELECT 1 FROM sales.enquiry_items line
+      WHERE line.enquiry_id = ${enquiryId} AND ${salesIntakeLockedSql("line")})
+    OR EXISTS (SELECT 1 FROM sales.quote_items WHERE enquiry_id = ${enquiryId})
+    OR EXISTS (SELECT 1 FROM sales.enquiry_revision_requests WHERE enquiry_id = ${enquiryId})
+    OR EXISTS (SELECT 1 FROM sales.quotation_versions WHERE enquiry_id = ${enquiryId}))`
+}
+
 async function assertSalesLineUnstarted(client: PoolClient, enquiryItemId: string) {
   const result = await client.query<{ locked: boolean }>(`
     SELECT ${salesIntakeLockedSql("line")} AS locked
@@ -737,6 +745,7 @@ type EnquiryRootDatabaseRow = {
 }
 
 type EnquiryStatsDatabaseRow = {
+  deletion_blocked: boolean
   design_task_count: string
   enquiry_id: string
   item_count: string
@@ -780,6 +789,7 @@ async function enquiryRowsWithRelations(
   const related = await queryable.query<EnquiryStatsDatabaseRow>(
     `
       SELECT root.enquiry_id,
+        ${enquiryDeletionBlockedSql("root.enquiry_id")} AS deletion_blocked,
         count(DISTINCT item.id)::text AS item_count,
         count(DISTINCT item.id) FILTER (
           WHERE quote.id IS NOT NULL
@@ -862,12 +872,7 @@ async function enquiryRowsWithRelations(
 
     return {
       buyerName: root.buyer_name,
-      canDelete:
-        quoteItemCount === 0 &&
-        poLineCount === 0 &&
-        root.technical_handover_status !== "Handed Over" &&
-        technicalStartedCount === 0 &&
-        designTaskCount === 0,
+      canDelete: !stats?.deletion_blocked,
       canEdit:
         quoteItemCount === 0 &&
         poLineCount === 0 &&
@@ -2770,63 +2775,36 @@ export function createCommercialWorkflowRepository(
 
     async deleteEnquiry(enquiryId: string, actorUserId?: string | null) {
       return transaction(pool, async (client) => {
-        const current = await client.query<{
-          design_task_count: string
-          organization_id: string
-          po_line_count: string
-          quote_item_count: string
-          technical_handover_status: string
-          technical_started_count: string
-        }>(
-          `
-            SELECT enquiry.organization_id,
-              enquiry.technical_handover_status,
-              (
-                SELECT count(*)::text FROM sales.quote_items quote
-                WHERE quote.enquiry_id = enquiry.id
-              ) AS quote_item_count,
-              (
-                SELECT count(*)::text
-                FROM sales.purchase_order_lines po_line
-                JOIN sales.quote_items quote
-                  ON quote.id = po_line.quote_item_id
-                WHERE quote.enquiry_id = enquiry.id
-              ) AS po_line_count,
-              (
-                SELECT count(*)::text
-                FROM sales.enquiry_items enquiry_item
-                WHERE enquiry_item.enquiry_id = enquiry.id
-                  AND enquiry_item.reviewed_at IS NOT NULL
-              ) AS technical_started_count,
-              (
-                SELECT count(*)::text
-                FROM sales.design_tasks design
-                JOIN sales.enquiry_items enquiry_item
-                  ON enquiry_item.id = design.enquiry_item_id
-                WHERE enquiry_item.enquiry_id = enquiry.id
-              ) AS design_task_count
-            FROM sales.enquiries enquiry
-            WHERE enquiry.id = $1
-              AND ($2::uuid IS NULL OR enquiry.created_by_user_id = $2 OR (SELECT identity.has_administrative_access($2)))
-            FOR UPDATE
-          `,
-          [enquiryId, actorUserId ?? null]
-        )
+        const current = await client.query<{ organization_id: string }>(`
+          SELECT organization_id FROM sales.enquiries
+          WHERE id = $1 AND ($2::uuid IS NULL OR created_by_user_id = $2
+            OR (SELECT identity.has_administrative_access($2))) FOR UPDATE
+        `, [enquiryId, actorUserId ?? null])
         const row = current.rows[0]
         if (!row) {
           throw new Error("ENQ was not found.")
         }
-        if (
-          Number(row.quote_item_count) > 0 ||
-          Number(row.po_line_count) > 0 ||
-          row.technical_handover_status === "Handed Over" ||
-          Number(row.technical_started_count) > 0 ||
-          Number(row.design_task_count) > 0
-        ) {
+        await client.query(`SELECT id FROM sales.enquiry_items
+          WHERE enquiry_id = $1 ORDER BY id FOR UPDATE`, [enquiryId])
+        const blocked = await client.query<{ blocked: boolean }>(`
+          SELECT ${enquiryDeletionBlockedSql("$1")} AS blocked
+        `, [enquiryId])
+        if (blocked.rows[0]!.blocked) {
           throw new Error(
             "This enquiry cannot be deleted after downstream work has started."
           )
         }
+        await client.query(`DELETE FROM core.file_links
+          WHERE target_schema = 'sales' AND (
+            (target_table = 'enquiries' AND target_id = $1)
+            OR (target_table = 'enquiry_items' AND target_id IN (
+              SELECT id FROM sales.enquiry_items WHERE enquiry_id = $1))
+            OR (target_table = 'design_tasks' AND target_id IN (
+              SELECT design.id FROM sales.design_tasks design
+              JOIN sales.enquiry_items line ON line.id = design.enquiry_item_id
+              WHERE line.enquiry_id = $1)))`, [enquiryId])
+        await client.query(`DELETE FROM sales.design_tasks WHERE enquiry_item_id IN (
+          SELECT id FROM sales.enquiry_items WHERE enquiry_id = $1)`, [enquiryId])
         await client.query("DELETE FROM sales.enquiries WHERE id = $1", [
           enquiryId,
         ])
@@ -3039,17 +3017,22 @@ export function createCommercialWorkflowRepository(
         const line = await client.query<{
           enquiry_id: string
           organization_id: string
+          technical_handover_status: string
         }>(
           `
-            SELECT enquiry_id, organization_id
-            FROM sales.enquiry_items
-            WHERE id = $1
-            FOR UPDATE
+            SELECT item.enquiry_id, item.organization_id, enquiry.technical_handover_status
+            FROM sales.enquiry_items item
+            JOIN sales.enquiries enquiry ON enquiry.id = item.enquiry_id
+            WHERE item.id = $1
+            FOR UPDATE OF item
           `,
           [input.enquiryItemId]
         )
         if (!line.rows[0]) {
           throw new Error("Line item was not found.")
+        }
+        if (line.rows[0].technical_handover_status !== "Handed Over") {
+          throw new Error("Sales must send this enquiry to Technical Review first.")
         }
         const updated = await client.query<{
           id: string
@@ -6360,6 +6343,7 @@ export function createCommercialWorkflowRepository(
           "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
         )
         const enquiry = await client.query<{
+          deletion_blocked: boolean
           buyer_name: string | null
           company_name: string
           conversion_rate: string
@@ -6385,6 +6369,7 @@ export function createCommercialWorkflowRepository(
         }>(
           `
             SELECT enquiry.id, enquiry.organization_id,
+              ${enquiryDeletionBlockedSql("enquiry.id")} AS deletion_blocked,
               enquiry.enquiry_number, enquiry.status,
               enquiry.technical_handover_status, enquiry.customer_id,
               enquiry.received_on::text, enquiry.source, enquiry.priority,
@@ -6507,6 +6492,7 @@ export function createCommercialWorkflowRepository(
             targetStage: row.target_stage,
           })),
           enquiry: {
+            canDelete: !enquiry.rows[0].deletion_blocked,
             intakeEditable: items.rows.every(line => !line.intake_locked),
             addLinesAllowed: !items.rows.some(line => line.quote_status),
             revisionAllowed: items.rows.length > 0 && items.rows.every(line =>
@@ -6586,6 +6572,7 @@ export function createCommercialWorkflowRepository(
       scope?: SalesWorkScope
     ) {
       const result = await pool.query<{
+        deletion_blocked: boolean
         buyer_name: string | null
         company_name: string
         customer_uid: string
@@ -6616,6 +6603,7 @@ export function createCommercialWorkflowRepository(
       }>(
         `
           SELECT enquiry.id, enquiry.organization_id,
+            ${enquiryDeletionBlockedSql("enquiry.id")} AS deletion_blocked,
             enquiry.enquiry_number, enquiry.status,
             enquiry.technical_handover_status,
             enquiry.technical_handover_at, enquiry.received_on::text,
@@ -6712,12 +6700,7 @@ export function createCommercialWorkflowRepository(
       )
       return result.rows.map((row) => ({
         buyerName: row.buyer_name,
-        canDelete:
-          Number(row.quote_item_count) === 0 &&
-          Number(row.po_line_count) === 0 &&
-          row.technical_handover_status !== "Handed Over" &&
-          Number(row.technical_started_count) === 0 &&
-          Number(row.design_task_count) === 0,
+        canDelete: !row.deletion_blocked,
         canEdit:
           Number(row.quote_item_count) === 0 &&
           Number(row.po_line_count) === 0 &&

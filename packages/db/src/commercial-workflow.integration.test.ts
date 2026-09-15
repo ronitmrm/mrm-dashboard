@@ -533,6 +533,10 @@ describe("PostgreSQL enquiry-to-design workflow", () => {
       targetPrice: 4.5,
     })
 
+    await expect(repository.updateTechnicalReview({
+      enquiryItemId: line.id, checklist: {}, status: "Feasible",
+    })).rejects.toThrow("Sales must send this enquiry to Technical Review first.")
+    expect((await repository.listTechnicalReviewQueue(organizationCode)).some(row => row.enquiryItemId === line.id)).toBe(false)
     await expect(
       repository.handOverToTechnicalReview(enquiryId)
     ).resolves.toMatchObject({
@@ -1127,9 +1131,9 @@ describe("PostgreSQL enquiry-to-design workflow", () => {
       { id: firstDrawing.id },
     ])
 
-    await expect(repository.deleteEnquiry(enquiry.id)).rejects.toThrow(
-      "cannot be deleted"
-    )
+    expect((await repository.getEnquiry(enquiry.id)).enquiry.canDelete).toBe(true)
+    await expect(repository.deleteEnquiry(enquiry.id)).resolves.toEqual({ id: enquiry.id })
+    expect((await pool.query("SELECT id FROM sales.enquiry_items WHERE enquiry_id = $1", [enquiry.id])).rows).toHaveLength(0)
 
     const disposable = await repository.createEnquiry({
       customerId,
@@ -1168,6 +1172,8 @@ describe("PostgreSQL enquiry-to-design workflow", () => {
     expect((await repository.getEnquiry(enquiry.id)).items[0]!.technicalReviewStatus).toBe("Pending Review")
     await repository.updateTechnicalReview({ enquiryItemId: replacement.id, checklist: {}, status: "Feasible" })
     await repository.startDesignWork({ enquiryItemId: replacement.id })
+    expect((await repository.getEnquiry(enquiry.id)).enquiry.canDelete).toBe(false)
+    await expect(repository.deleteEnquiry(enquiry.id)).rejects.toThrow("cannot be deleted")
     const unstarted = await repository.addEnquiryItem({ enquiryId: enquiry.id, organizationId,
       customerPartCode: "UNSTARTED", description: "Other line" })
     const snapshot = await repository.getEnquiry(enquiry.id)

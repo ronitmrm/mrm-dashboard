@@ -213,7 +213,7 @@ export function EnquiryLogForm({
           <FieldLabel htmlFor="enquiry-remarks">Remarks</FieldLabel>
           <Textarea id="enquiry-remarks" name="remarks" />
           <FieldDescription>
-            Technical Line Details Are Added After The Enquiry Is Logged.
+            Saved as Draft. Add and check the lines, then select Send To Technical Review.
           </FieldDescription>
         </Field>
         <Button disabled={!hasCustomers} type="submit">

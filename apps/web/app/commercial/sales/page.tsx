@@ -1,5 +1,6 @@
 import { PendingRetainedUploadForm } from "@/components/pending-retained-upload-form"
 import Link from "next/link"
+import { MasterEntryForm } from "@/components/master-entry-form"
 import { quotationRevisionLabel } from "@/lib/pricing/quotation-revision"
 import { X } from "lucide-react"
 
@@ -253,7 +254,7 @@ export default async function SalesPage({
                         <TableCell>
                           <div className="flex flex-wrap gap-2">
                             {task.action === "handover" ? (
-                              <form action={handOverEnquiryAction}>
+                              <MasterEntryForm action={handOverEnquiryAction}>
                                 <input
                                   name="enquiry_id"
                                   type="hidden"
@@ -264,9 +265,9 @@ export default async function SalesPage({
                                   size="sm"
                                   type="submit"
                                 >
-                                  Hand Over
+                                  Send To Technical Review
                                 </Button>
-                              </form>
+                              </MasterEntryForm>
                             ) : task.action === "quote" ? (
                               <div className="flex flex-wrap items-end gap-2">
                                 <Button asChild size="sm" variant="outline"><AttachmentViewerLink

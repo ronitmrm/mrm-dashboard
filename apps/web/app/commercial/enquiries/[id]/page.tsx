@@ -146,7 +146,11 @@ export default async function EnquiryDetailPage({
     }
   })()
   const { selectedItem, snapshot } = loaded
-  const canRequestRevision = (await listGrantedCapabilities(session.user.id,['pricing.enquiries.update'])).length > 0
+  const grants = await listGrantedCapabilities(session.user.id, [
+    'pricing.enquiries.update', 'pricing.enquiries.delete',
+    'pricing.enquiries.handover', 'pricing.enquiries.items.update',
+  ])
+  const canRequestRevision = grants.includes('pricing.enquiries.update')
   const currentQuotation = loaded.quotations.at(-1)
   const selectedQuotation = selectorParams.revision === undefined ? currentQuotation : loaded.quotations.find(version=>String(version.revision)===selectorParams.revision)
   if (selectorParams.revision !== undefined && !selectedQuotation) notFound()
@@ -154,8 +158,9 @@ export default async function EnquiryDetailPage({
     versions={loaded.quotations} selected={selectedQuotation} drawings={loaded.quoteDrawings} action={canRequestRevision && selectedQuotation.id===currentQuotation?.id
       ? <RequestRevision enquiryId={id} lines={snapshot.items} disabled={loaded.revisions.some(revision=>revision.status==='Open')}/> : null}/>
   const canEditIntake = canRequestRevision && snapshot.enquiry.intakeEditable
-  const canDeleteLines = snapshot.items.some(item => item.intakeEditable) && (await listGrantedCapabilities(session.user.id, ['pricing.enquiries.delete'])).length > 0
-  const canEditSelectedLine = Boolean(selectedItem?.intakeEditable) && (await listGrantedCapabilities(session.user.id, ['pricing.enquiries.items.update'])).length > 0
+  const canDeleteLines = snapshot.items.some(item => item.intakeEditable) && grants.includes('pricing.enquiries.delete')
+  const canDeleteEnquiry = snapshot.enquiry.canDelete && grants.includes('pricing.enquiries.delete')
+  const canEditSelectedLine = Boolean(selectedItem?.intakeEditable) && grants.includes('pricing.enquiries.items.update')
   const canAddLines = canRequestRevision && snapshot.enquiry.addLinesAllowed
   const canEditTerms = canRequestRevision && (canEditIntake || loaded.revisions.some(revision=>revision.status==='Open'))
   const drawingHistory = new Map(loaded.drawingHistoryEntries)
@@ -203,11 +208,12 @@ export default async function EnquiryDetailPage({
           </div>
         </div>
         <DownloadAllDrawings enquiryId={id} query="draft=true" available={loaded.quoteDrawings.length > 0} />
-        {snapshot.enquiry.technicalHandoverStatus !== "Handed Over" ? (
-          <form action={handOverEnquiryAction}>
+        {snapshot.enquiry.technicalHandoverStatus !== "Handed Over" && grants.includes('pricing.enquiries.handover') ? (
+          <MasterEntryForm action={handOverEnquiryAction}>
             <input type="hidden" name="enquiry_id" value={id} />
-            <Button type="submit">Hand Over To Technical Review</Button>
-          </form>
+            <Button disabled={!snapshot.items.length} type="submit">Send To Technical Review</Button>
+            <p className="mt-2 max-w-sm text-sm text-muted-foreground">Draft stays with Sales. Save and check the terms and lines, then send for review.</p>
+          </MasterEntryForm>
         ) : null}
       </section>
       {loaded.revisions.length ? <SectionCard><CardHeader><CardTitle>Revision Requests</CardTitle></CardHeader><CardContent>
@@ -354,15 +360,6 @@ export default async function EnquiryDetailPage({
               </Field>
               <div className="flex flex-wrap gap-3">
                 <Button type="submit">Update Enquiry</Button>
-                {snapshot.enquiry.technicalHandoverStatus !== "Handed Over" ? (
-                  <Button
-                    formAction={deleteEnquiryAction}
-                    type="submit"
-                    variant="destructive"
-                  >
-                    Delete Enquiry
-                  </Button>
-                ) : null}
               </div>
             </FieldGroup>
           </form> : <dl className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -375,6 +372,11 @@ export default async function EnquiryDetailPage({
               ['Taxes and Duties',snapshot.enquiry.taxesAndDuties],['Currency',snapshot.enquiry.currency],['Remarks',snapshot.enquiry.remarks],
             ].map(([label,value])=><div key={label}><dt className="text-xs text-muted-foreground">{label}</dt><dd className="mt-1 whitespace-pre-wrap text-sm">{value || '—'}</dd></div>)}
           </dl>}
+          {canDeleteEnquiry ? <MasterEntryForm action={deleteEnquiryAction}>
+            <input type="hidden" name="enquiry_id" value={id} />
+            <Button type="submit" variant="destructive">Delete Enquiry</Button>
+            <p className="mt-2 text-sm text-muted-foreground">Deletes the complete enquiry and its lines. Available only before Design or costing starts.</p>
+          </MasterEntryForm> : null}
         </CardContent>
  </SectionCard>
 
