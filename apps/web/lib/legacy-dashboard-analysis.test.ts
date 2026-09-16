@@ -531,7 +531,7 @@ describe("buildLegacyDashboardSnapshot", () => {
         productionEntries: [],
         machineConstraints: [
           {
-            machineNo: "ADB503",
+            machineNumber: "ADB503",
             unavailableFrom: "2026-07-01",
             unavailableTo: "2026-08-01",
             reason: "Breakdown",

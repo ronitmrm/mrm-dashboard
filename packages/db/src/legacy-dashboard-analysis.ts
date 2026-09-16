@@ -220,7 +220,7 @@ function priorityDecisionKey(row: ActionRow) {
 
 function machineConstraintDecisionKey(row: ActionRow) {
   return [
-    canonicalKey(rowText(row, "machineNo", "machine", "MACHINE NO.", "MACHINE NO", "M/C NO")),
+    canonicalKey(rowText(row, "machineNumber", "machineNo", "machine", "MACHINE NO.", "MACHINE NO", "M/C NO")),
     rowText(row, "unavailableFrom", "UNAVAILABLE FROM"),
     rowText(row, "unavailableTo", "UNAVAILABLE TO"),
   ].join("|");
@@ -337,7 +337,10 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
     dispatchRows: entryRows(byType, "dispatch"),
     routeSelections: mergeSourceActionRows(sourcePlannerDecisions.routeSelections, input.routeSelections ?? [], routeSelectionDecisionKey),
     plannerPriorities: mergeSourceActionRows(sourcePlannerDecisions.plannerPriorities, input.plannerPriorities ?? [], priorityDecisionKey),
-    machineConstraints: mergeSourceActionRows(sourcePlannerDecisions.machineConstraints, input.machineConstraints ?? [], machineConstraintDecisionKey),
+    machineConstraints: mergeSourceActionRows(sourcePlannerDecisions.machineConstraints, input.machineConstraints ?? [], machineConstraintDecisionKey).map((row) => ({
+      ...row,
+      machineNo: rowText(row, "machineNumber", "machineNo", "machine", "MACHINE NO.", "MACHINE NO", "M/C NO"),
+    })),
     planOverrides: mergeSourceActionRows(sourcePlannerDecisions.planOverrides, input.planOverrides ?? [], planOverrideDecisionKey),
     routeChanges: mergeSourceActionRows(sourcePlannerDecisions.routeChanges, input.routeChanges ?? [], routeChangeDecisionKey),
     dispatchApprovals: input.dispatchApprovals ?? [],

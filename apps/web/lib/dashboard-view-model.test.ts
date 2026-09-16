@@ -5,6 +5,7 @@ import {
   dashboardPayloadFromState,
   dashboardPayloadForProductionFloor,
   dashboardRefreshStatusFromState,
+  dateSortValue,
   jobCardScheduleSummary,
   mergeDashboardStateResponse,
   toDashboardViewModel,
@@ -12,6 +13,12 @@ import {
 } from "./dashboard-view-model";
 
 describe("dashboard state normalization", () => {
+  it("compares date-only planner inputs with dashboard dates on the same local day", () => {
+    const localDay = new Date(2026, 8, 16).getTime();
+    expect(dateSortValue("2026-09-16")).toBe(localDay);
+    expect(dateSortValue("16-Sept-26")).toBe(localDay);
+  });
+
   it("retains the floor payload when only refresh status changed", () => {
     const merged = mergeDashboardStateResponse(
       {

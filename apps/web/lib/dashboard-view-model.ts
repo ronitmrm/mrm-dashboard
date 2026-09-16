@@ -434,6 +434,10 @@ export function dateSortValue(value: unknown) {
 export function parseSortableDate(value: unknown) {
   const raw = str(value);
   if (!raw || raw === "-") return undefined;
+  // Date inputs are local calendar days, just like the dashboard's named dates.
+  // Native parsing treats YYYY-MM-DD as UTC and shifts same-day comparisons.
+  const isoDay = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoDay) return normalizedDate(Number(isoDay[1]), Number(isoDay[2]) - 1, Number(isoDay[3]));
   const directDate = new Date(raw);
   if (!Number.isNaN(directDate.getTime())) return directDate;
   const slashMatch = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
