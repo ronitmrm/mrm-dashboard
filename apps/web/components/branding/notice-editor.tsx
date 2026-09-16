@@ -28,7 +28,7 @@ export function BrandingNoticeEditor({
   return (
     <FormSection
       title="Notice body"
-      description="Write the complete notice here. Add a body for another language; all bodies fit together on one page. Review the PDF for readability."
+      description="Choose any one language or add more. English, Hindi and Gujarati are optional; only the bodies you add appear on the one-page PDF. Review the PDF for readability."
     >
       <div className="grid gap-5">
         {content.translations.map((translation) => (
