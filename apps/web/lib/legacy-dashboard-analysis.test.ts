@@ -748,7 +748,7 @@ describe("buildLegacyDashboardSnapshot", () => {
       vi.useRealTimers()
     }
   })
-  it("honors reviewed destination queue placement for a machine-unavailable shift", () => {
+  it("honors a saved numeric setup placement for a P-prefixed route and its destination queue", () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date("2026-07-01T12:00:00.000Z"))
 
@@ -768,7 +768,7 @@ describe("buildLegacyDashboardSnapshot", () => {
               {
                 targetJcNo: "JC-MOVE-A5",
                 targetPartCode: "M22",
-                targetSetupNo: "1",
+                targetSetupNumber: 1,
                 targetSourceMachine: "A510",
                 targetMachine: "A511",
                 queueBeforeSetups: [
@@ -821,7 +821,7 @@ describe("buildLegacyDashboardSnapshot", () => {
               payload: {
                 partNo,
                 optionNumber: "1",
-                setupNo: "1",
+                setupNo: partNo === "M22" ? "P1" : "1",
                 machineUsed: "A5",
                 machineType: "AUTOMATIC",
               },
@@ -832,7 +832,7 @@ describe("buildLegacyDashboardSnapshot", () => {
               payload: {
                 partNo,
                 optionNumber: "1",
-                setupNo: "1",
+                setupNo: partNo === "M22" ? "P1" : "1",
                 cycleTime: 28800,
                 loadingUnloading: 0,
               },

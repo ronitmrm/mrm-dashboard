@@ -11,6 +11,11 @@ Employees from other units or departments are not substitutes. These selections
 record who performed the work; they do not grant application permissions.
 The separate machine Worker selection still requires a Worker designation.
 
+Planner decisions identify the operation by its setup number. Display labels
+such as `P1` and `Setup 1` refer to setup `1`; they must not prevent a saved
+machine movement, interruption or queue order from applying. This rule is shared
+by every production unit. Shop Floor uses the resulting planner assignment.
+
 A Production Session is one uninterrupted period in which one operator runs one machine for one Job Card, option, and setup. Operator, shift, item, job, option, or setup changes end the current session. Downtime belongs to the session and does not end it.
 
 Shop Floor starts and closes sessions. Quality may also close CNC sessions. Quality, Shop Floor, and Machinist may record downtime; only Quality may record rejection.
