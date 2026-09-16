@@ -121,6 +121,8 @@ function isMachinistEmployee(row: {
   return (
     /machinist/i.test(designation) ||
     /machinist/i.test(String(row.department)) ||
+    (productionFloorFromDepartment(row.department, row.departmentCode) === "cnc" &&
+      /\bprogrammer\b/i.test(String(row.department))) ||
     machinistDepartmentCodes.has(
       String(row.departmentCode).trim().toUpperCase()
     )
