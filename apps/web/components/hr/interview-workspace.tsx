@@ -1,6 +1,7 @@
 "use client"
 
 import type {
+  RecruitmentPendingOfferRow,
   RecruitmentInterviewRecordRow,
   RecruitmentInterviewRow,
 } from "@workspace/db"
@@ -17,6 +18,7 @@ import {
 } from "@workspace/ui/components/card"
 import { Field, FieldLabel } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
+import { StandardState } from "@workspace/ui/components/standard-state"
 import {
   Sheet,
   SheetContent,
@@ -292,9 +294,11 @@ export function InterviewScheduleBoard({
 }
 
 export function InterviewResultsWorkspace({
+  pendingOffers,
   records,
 }: {
   records: RecruitmentInterviewRecordRow[]
+  pendingOffers: RecruitmentPendingOfferRow[]
 }) {
   const [selectedRecord, setSelectedRecord] =
     useState<RecruitmentInterviewRecordRow | null>(null)
@@ -327,6 +331,67 @@ export function InterviewResultsWorkspace({
         ]}
       />
  <SectionCard>
+        <CardHeader>
+          <CardTitle>Awaiting Offer Response ({pendingOffers.length})</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Final HR round approved; candidate acceptance is still pending.
+            Open the job to record their response in Appointment Details or
+            Candidate Withdrew.
+          </p>
+        </CardHeader>
+        <CardContent className="min-w-0">
+          <OperationalTable
+            filterStorageKey="hr-awaiting-offer-response"
+            containerClassName="max-h-[32rem] rounded-md border"
+          >
+            <TableHeader>
+              <TableRow>
+                <TableHead>Candidate</TableHead>
+                <TableHead>Phone</TableHead>
+                <TableHead>Job</TableHead>
+                <TableHead>HR Approved On</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {pendingOffers.length ? pendingOffers.map((row) => (
+                <TableRow key={row.applicationId}>
+                  <TableCell>
+                    <Link
+                      className="font-medium text-primary underline-offset-4 hover:underline focus-visible:underline"
+                      href={`/hr/candidates/${row.candidateId}`}
+                    >
+                      {row.candidateName}
+                    </Link>
+                  </TableCell>
+                  <TableCell>{row.candidatePhone}</TableCell>
+                  <TableCell>{row.jobNumber} · {row.jobTitle}</TableCell>
+                  <TableCell>{formatDate(row.hrApprovedAt)}</TableCell>
+                  <TableCell>
+                    <StatusBadge tone="warning" value="Awaiting Response" />
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button asChild size="sm" variant="outline">
+                      <Link href={`/hr/jobs/${row.jobId}`}>Open Job</Link>
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              )) : (
+                <TableRow>
+                  <TableCell colSpan={6}>
+                    <StandardState
+                      title="No Pending Offer Responses"
+                      description="Candidates appear here after final HR approval, until their response is recorded."
+                    />
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </OperationalTable>
+        </CardContent>
+      </SectionCard>
+      <SectionCard>
         <CardHeader>
           <CardTitle>Interview Workspace</CardTitle>
         </CardHeader>

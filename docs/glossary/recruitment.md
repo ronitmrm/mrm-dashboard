@@ -41,6 +41,16 @@ the job retains eligible selections; candidates with an active application for
 that job are excluded, and the form reports any removed selections. Assignment
 requires both an Open job and at least one selected candidate.
 
+## Awaiting Offer Response
+
+The Interview Workspace lists applications whose final HR Round is Approved,
+whose application remains Approved, and whose willingness to join is not yet
+recorded. Each application appears once, with contact details and a link to its
+Job Workspace to record acceptance or withdrawal. Accepted, declined, withdrawn,
+rejected and Did Not Join applications are excluded. This queue is independent
+of the interview-history display limit. The formal Offer Letter is still
+generated only after acceptance and confirmation of joining terms.
+
 ## Appointment and Offer Correction
 
 HR may edit an accepted pending appointment's joining date, salary before and

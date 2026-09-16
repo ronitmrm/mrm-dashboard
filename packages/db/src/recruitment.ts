@@ -152,6 +152,17 @@ export type RecruitmentJobRow = {
   vacancyCode: string
 }
 
+export type RecruitmentPendingOfferRow = {
+  applicationId: string
+  candidateId: string
+  candidateName: string
+  candidatePhone: string
+  jobId: string
+  jobNumber: string
+  jobTitle: string
+  hrApprovedAt: string
+}
+
 export type RecruitmentInterviewRow = {
   applicationId: string
   candidateId: string
@@ -1874,6 +1885,36 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           status: row.status,
         }
       })
+    },
+
+    async listAwaitingOfferResponses(
+      organizationId: string
+    ): Promise<RecruitmentPendingOfferRow[]> {
+      const result = await pool.query<RecruitmentPendingOfferRow>(
+        `
+          SELECT application.id AS "applicationId",
+            candidate.id AS "candidateId", candidate.name AS "candidateName",
+            candidate.phone AS "candidatePhone", job.id AS "jobId",
+            job.job_number AS "jobNumber", job.title AS "jobTitle",
+            hr.approved_at::text AS "hrApprovedAt"
+          FROM recruitment.applications application
+          JOIN recruitment.candidates candidate ON candidate.id = application.candidate_id
+          JOIN recruitment.job_posts job ON job.id = application.job_post_id
+          JOIN LATERAL (
+            SELECT max(interview.updated_at) AS approved_at
+            FROM recruitment.interviews interview
+            WHERE interview.application_id = application.id
+              AND interview.round_name IN ('HR Round', 'Final HR Round')
+              AND interview.status = 'Approved'
+          ) hr ON hr.approved_at IS NOT NULL
+          WHERE application.organization_id = $1
+            AND application.status = 'Approved'
+            AND application.willing_to_join IS NULL
+          ORDER BY hr.approved_at, candidate.name, application.id
+        `,
+        [organizationId]
+      )
+      return result.rows
     },
 
     async listInterviewRecords(
