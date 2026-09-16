@@ -110,6 +110,8 @@ published version. Branding remains the authoring and retained-history workspace
   precautions and records. Notices cover audience, message, action and dates.
   Policies cover purpose, scope, rules, responsibilities, exceptions and
   consequences. Title, department and effective date accompany each document.
+  The effective date may be today; a future date is not required. Issue requires
+  a valid, non-empty date, with no comparison against the current day.
 - Brand guide v1.0 governs PDFs: Outfit, Hind, Hind Vadodara; MRM Green #006A49,
   cream #F7F7F2, black #050505, restrained Tennis #8BC341; original internal logo
   without tagline on internal pages. The supplied Policy Cover, Machine SOP and
