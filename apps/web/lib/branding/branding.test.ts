@@ -43,7 +43,10 @@ describe("Branding issue contract", () => {
         translations: content.translations.map((entry) => ({
           ...entry,
           sections: [
-            { heading: "", body: "Meeting at 10:00.\nPlease attend." },
+            {
+              heading: "",
+              body: "Meeting at 10:00.\nPlease attend.\n\nBring notes.",
+            },
           ],
         })),
       },
@@ -60,7 +63,10 @@ describe("Branding issue contract", () => {
       draft: true,
     })
     expect(notice.html.match(/<article lang=/g)).toHaveLength(3)
-    expect(notice.html).toContain("Meeting at 10:00.\nPlease attend.")
+    expect(notice.html).toContain(
+      "Meeting at 10:00. Please attend.\n\nBring notes."
+    )
+    expect(parsed.translations[0]!.sections[0]!.body).toContain("10:00.\nPlease")
     expect(notice.html).not.toContain("<h1>")
     parsed.translations[1]!.sections[0]!.body = ""
     expect(() => validateBrandingIssue(parsed, 0, "notice")).toThrow("Hindi")

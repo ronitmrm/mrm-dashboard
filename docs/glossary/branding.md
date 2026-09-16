@@ -119,6 +119,9 @@ published version. Branding remains the authoring and retained-history workspace
   The title still shares the document-wide shrink factor. Selected language
   bodies occupy equal-height regions of the available space between the date
   and footer, centered horizontally and vertically. Notice authors include
+  paragraph breaks as blank lines; single line breaks reflow as spaces so every
+  language wraps across the same full body width without changing font sizes.
+  The saved source text remains unchanged. Notice authors include
   audience, message, actions and dates directly in that body; there are no separate
   source, heading or translated-title fields. Add Body adds another language
   (English, Hindi or Gujarati, once each). Any one language or any combination
