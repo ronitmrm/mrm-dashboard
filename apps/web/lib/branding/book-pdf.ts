@@ -41,7 +41,7 @@ ${brandTypography}
     .cover-draft{${typeStyle("caption")}margin-top:5mm}
     .details h1{${typeStyle("display")}margin:0 0 12mm}.introduction{${typeStyle("lede")}}
     .meta{margin:7mm 0 15mm}.meta p{margin:1mm 0}
-    .meta,.attributions td{font-family:'Outfit','Hind','Hind Vadodara',sans-serif;${typeStyle("caption")}}
+    .meta,.attributions td{font-family:'Outfit','Hind','Hind Vadodara','Gujarati numerals',sans-serif;${typeStyle("caption")}}
     .meta p,.meta strong{font-weight:inherit}
     .attributions,.index{width:100%;border-collapse:collapse}
     .attributions th,.attributions td,.index th,.index td{border:.5pt solid #050505;padding:3mm;text-align:left;vertical-align:top}

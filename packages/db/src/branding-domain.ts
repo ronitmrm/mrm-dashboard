@@ -109,6 +109,31 @@ export function brandingNoticeBody(sections: BrandingSection[]) {
     .join("\n\n")
 }
 
+export function brandingNoticeRichText(
+  sections: BrandingSection[]
+): BrandingRichText {
+  return {
+    type: "doc",
+    content: sections.flatMap(
+      (section) =>
+        section.richBody?.content ??
+        brandingNoticeBody([section])
+          .split(/\r?\n\s*\r?\n/)
+          .map((paragraph) => ({
+            type: "paragraph" as const,
+            content: paragraph
+              ? [
+                  {
+                    type: "text" as const,
+                    text: paragraph.replace(/\s*\r?\n\s*/g, " "),
+                  },
+                ]
+              : [],
+          }))
+    ),
+  }
+}
+
 export function brandingOutline(
   sections: BrandingSection[],
   parent: number[] = [],
@@ -340,7 +365,7 @@ export function parseBrandingContent(
     (translations.some((entry) => entry.details) ||
       sections.some(
         (section) =>
-          section.richBody ||
+          (section.richBody && type !== "notice") ||
           section.children ||
           section.childNumbering ||
           section.includeInIndex !== undefined ||

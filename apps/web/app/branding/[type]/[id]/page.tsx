@@ -6,6 +6,7 @@ import {
   revisionLabel,
   brandingStepNumber,
   brandingLanguageLabels,
+  brandingRichTextHtml,
 } from "@workspace/db/branding-domain"
 import { Button } from "@workspace/ui/components/button"
 import { StatusBadge } from "@workspace/ui/components/badge"
@@ -228,9 +229,18 @@ export default async function BrandingDocumentPage({
                           {section.heading}
                         </h3>
                       ) : null}
-                      <p className="text-sm break-words whitespace-pre-wrap">
-                        {section.body}
-                      </p>
+                      {section.richBody ? (
+                        <div
+                          className="branding-prose text-sm"
+                          dangerouslySetInnerHTML={{
+                            __html: brandingRichTextHtml(section.richBody),
+                          }}
+                        />
+                      ) : (
+                        <p className="text-sm break-words whitespace-pre-wrap">
+                          {section.body}
+                        </p>
+                      )}
                     </section>
                   ))
                 )}

@@ -21,7 +21,7 @@ export const brandTypography = `
   :root{--print-scale:1}
   body{font-family:'Outfit',sans-serif;${typeStyle("body")}}
   [lang=hi]{font-family:'Hind','Outfit',sans-serif}
-  [lang=gu]{font-family:'Hind Vadodara','Outfit',sans-serif}
+  [lang=gu]{font-family:'Hind Vadodara','Gujarati numerals','Outfit',sans-serif}
   [lang=hi],[lang=gu]{line-height:1.6}
   h1,h2,h3,h4{font-family:inherit;text-transform:none;text-wrap:balance}
   h1{${typeStyle("section")}}h2,h3,h4{${typeStyle("subsection")}}

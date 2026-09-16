@@ -1,19 +1,24 @@
 # Branding implementation
 
-## Shared SOP/Policy book (v7, 2026-09-16)
+## Shared SOP/Policy book (v8, 2026-09-16)
 
 - `typography.ts` is the shared Brand Guide B §15.1 source for PDF font roles.
-  SOP/Policy use fixed CSS pixel baselines. Notice v10 and WI v9 use the same roles
+  SOP/Policy use fixed CSS pixel baselines. Notice v11 and WI v10 use the same roles
   multiplied by one root `--print-scale`, measured by `fitSinglePageText` against
   every text box. No independent title/card fitting. See glossary for full table.
   Print page scale is 100%; 12.7mm outer margins are separate from internal spacing.
+- Gujarati digits use a bundled Noto Sans Gujarati face restricted to U+0AE6–0AEF;
+  Hind Vadodara has no numeral glyphs. Embedded fonts keep downloaded PDFs portable.
+- Notice v11 omits empty/unselected languages and top-aligns each body region.
+  Its Tiptap body supports allowlisted tables; `richBody` persists through editing,
+  saved-content display and PDF output. Fitting measures the entire formatted body.
 - Notice/WI fitting now searches above and below the baseline: double the upper
   bound until a text region overflows, then binary-search the largest fitting
   shared multiplier. WI title, body, captions and metadata scale together. Notice
   bodies scale together; banner title, number and date override the multiplier
   to1, keeping128px/13px/13px baselines. Empty notice bodies stay at baseline.
   Headers and metadata are checked for overlap. Generated PDFs must have one page.
-- Notice v9 centers each language in an equal-height grid region and centers the
+- Notice v11 centers each language horizontally in a top-aligned equal-height grid region and centers the
   footer. Its 50mm banner and 128px title restore reference proportions under the
   explicit notice exception in the glossary. Fitting checks each region's text;
   one shared scale still applies. One, two or three selected languages are valid.
@@ -21,10 +26,10 @@
   language; blank lines retain paragraphs. Saved source text is not modified.
 - Details metadata and attribution values use the caption role (Outfit 500,
   13px), including metadata labels. Body paragraphs retain their separate 15px
-  baseline. New issues use book v7; previously issued PDF bytes remain unchanged.
+  baseline. New issues use book v8; previously issued PDF bytes remain unchanged.
 
 - `book-editor.tsx` composes the same heading/details editor for both types.
-  Tiptap StarterKit is loaded only in the book editor; its schema is restricted
+  Tiptap StarterKit is shared with the notice editor; the book schema is restricted
   to paragraphs, text emphasis, and nested bullet/numbered lists. Lists support
   indent/outdent and restart/continue within a sibling group.
   Normalize `editor.getJSON()` through JSON serialization before storing client
@@ -116,7 +121,7 @@ Cover pages count toward the index but do not display a page counter. Exact full
 wordmark SVGs were extracted from the supplied HTML guide and bundled alongside
 the fonts. Newly issued revisions record v3; existing frozen PDFs are unchanged.
 
-Notice template v10 follows the later Notice.pdf layout: a dedicated one-page
+Notice template v11 follows the later Notice.pdf layout: a dedicated one-page
 renderer with the shared brand fonts and per-region fitting after
 fonts load. The number prints at top-right (drafts use an unassigned placeholder);
 number/author/title are also stored as PDF metadata. Blank-line paragraphs are

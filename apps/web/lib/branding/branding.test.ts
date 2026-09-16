@@ -64,12 +64,91 @@ describe("Branding issue contract", () => {
     })
     expect(notice.html.match(/<article lang=/g)).toHaveLength(3)
     expect(notice.html).toContain(
-      "Meeting at 10:00. Please attend.\n\nBring notes."
+      "<p>Meeting at 10:00. Please attend.</p><p>Bring notes.</p>"
     )
-    expect(parsed.translations[0]!.sections[0]!.body).toContain("10:00.\nPlease")
+    expect(parsed.translations[0]!.sections[0]!.body).toContain(
+      "10:00.\nPlease"
+    )
     expect(notice.html).not.toContain("<h1>")
     parsed.translations[1]!.sections[0]!.body = ""
     expect(() => validateBrandingIssue(parsed, 0, "notice")).toThrow("Hindi")
+  })
+  it("preserves notice tables across saves and omits empty languages from previews", async () => {
+    const richBody = {
+      type: "doc",
+      content: [
+        {
+          type: "table",
+          content: [
+            {
+              type: "tableRow",
+              content: [
+                {
+                  type: "tableCell",
+                  content: [
+                    {
+                      type: "paragraph",
+                      content: [
+                        { type: "text", text: "૦૧૨૩૪૫૬૭૮૯ <schedule>" },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    }
+    const parsed = parseBrandingContent(
+      {
+        ...content,
+        languages: ["en", "gu"],
+        translations: [
+          { ...content.translations[0], sections: [{ heading: "", body: "" }] },
+          {
+            ...content.translations[2],
+            sections: [{ heading: "", body: "", richBody }],
+          },
+        ],
+      },
+      "notice"
+    )
+    const reopened = parseBrandingContent(
+      JSON.parse(JSON.stringify(parsed)),
+      "notice"
+    )
+    expect(reopened).toEqual(parsed)
+    const notice = await brandingHtml({
+      content: reopened,
+      type: "notice",
+      number: "Draft",
+      revision: 0,
+      issuedAt: "2026-09-16",
+      authorName: "Author",
+      draft: true,
+    })
+    expect(notice.html.match(/<article lang=/g)).toHaveLength(1)
+    expect(notice.html).toContain('<article lang="gu"')
+    expect(notice.html).toContain(
+      "<table><tr><td><p>૦૧૨૩૪૫૬૭૮૯ &lt;schedule&gt;</p></td></tr></table>"
+    )
+    const cell = richBody.content[0]!.content[0]!.content[0]!
+    Object.assign(cell, { attrs: { colspan: 2 } })
+    expect(() =>
+      parseBrandingContent(
+        {
+          ...parsed,
+          translations: [
+            {
+              ...parsed.translations[1],
+              sections: [{ heading: "", body: "", richBody }],
+            },
+          ],
+        },
+        "notice"
+      )
+    ).toThrow("unmerged")
   })
   it("round-trips nested SOP/Policy headings and independently numbered and bulleted bodies", () => {
     const paragraph = (text: string) => ({

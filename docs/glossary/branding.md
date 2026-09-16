@@ -33,6 +33,9 @@ overlap or clipping. No independent card/font fitting. The one-page limit is str
 Layouts, pictures, margins and page scale stay fixed. The minimum text multiplier
 is 0.001; geometrically impossible layouts report an error instead of clipping.
 Existing issued PDF bytes remain immutable. Internal logos omit the tagline.
+Gujarati numerals ૦–૯ use the bundled Noto Sans Gujarati font (approved
+2026-09-16); all other Gujarati characters retain Hind Vadodara. The fallback
+must be embedded so downloaded PDFs render those digits in other viewers.
 
 SOP Register, Work Instruction Register, and Policies Register are standalone
 main modules outside Branding, available to every signed-in user regardless of
@@ -124,11 +127,16 @@ published version. Branding remains the authoring and retained-history workspace
   restores the reference banner proportions: 50mm tall, with a 128px Outfit 800
   NOTICE title (a notice-specific exception to the general 40px title baseline).
   The title, notice number and date retain their fixed baseline sizes. Selected language
-  bodies occupy equal-height regions of the available space between the date
-  and footer, centered horizontally and vertically. Notice authors include
-  paragraph breaks as blank lines; single line breaks reflow as spaces so every
-  language wraps across the same full body width without changing font sizes.
-  The saved source text remains unchanged. Notice authors include
+  non-empty bodies occupy equal-height regions of the available space between
+  the date and footer, centered horizontally and aligned to the top of each
+  region. Omitted or empty languages reserve no space. Legacy plain text uses
+  blank lines for paragraphs and reflows single line breaks as spaces across
+  the full body width. The editor preserves explicit formatted paragraphs.
+  Notice authors can include
+  formatted paragraphs, lists and simple tables in the body. Tables allow up to
+  20 rows and 8 columns with unmerged cells; users can add/remove rows and columns
+  or paste an HTML table. Table text participates in the same one-page fitting.
+  Notice authors include
   audience, message, actions and dates directly in that body; there are no separate
   source, heading or translated-title fields. Add Body adds another language
   (English, Hindi or Gujarati, once each). Any one language or any combination

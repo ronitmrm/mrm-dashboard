@@ -10,6 +10,8 @@ import { brandTypography, typeStyle } from "./typography"
 import {
   brandingStepNumber,
   brandingNoticeBody,
+  brandingNoticeRichText,
+  brandingRichTextHtml,
   revisionLabel,
   type BrandingContent,
   type BrandingType,
@@ -46,14 +48,6 @@ export function escapeBrandingHtml(value: string) {
   )
 }
 let fontStyles: Promise<string> | undefined
-function noticeBodyHtml(body: string) {
-  return escapeBrandingHtml(
-    body
-      .split(/\r?\n\s*\r?\n/)
-      .map((paragraph) => paragraph.replace(/\s*\r?\n\s*/g, " "))
-      .join("\n\n")
-  )
-}
 function fonts() {
   return (fontStyles ??= Promise.all(
     [
@@ -62,11 +56,12 @@ function fonts() {
       ["Hind", "Hind-Bold.ttf", "700"],
       ["Hind Vadodara", "HindVadodara-Regular.ttf", "400"],
       ["Hind Vadodara", "HindVadodara-Bold.ttf", "700"],
+      ["Gujarati numerals", "NotoSansGujarati.ttf", "100 900"],
     ].map(async ([family, file, weight]) => {
       const bytes = await readFile(
         path.join(process.cwd(), "lib/branding/assets", file!)
       )
-      return `@font-face{font-family:'${family}';font-weight:${weight};src:url(data:font/ttf;base64,${bytes.toString("base64")}) format('truetype');}`
+      return `@font-face{font-family:'${family}';font-weight:${weight};${family === "Gujarati numerals" ? "unicode-range:U+0AE6-0AEF;" : ""}src:url(data:font/ttf;base64,${bytes.toString("base64")}) format('truetype');}`
     })
   ).then((styles) => styles.join("\n")))
 }
@@ -174,9 +169,13 @@ export async function brandingHtml(input: BrandingPdfInput) {
   if (input.type === "notice") {
     const date = input.content.effectiveDate.split("-").reverse().join(" / ")
     const languageOrder = { en: 0, gu: 1, hi: 2 }
-    const translations = [...input.content.translations].sort(
-      (a, b) => languageOrder[a.language] - languageOrder[b.language]
-    )
+    const translations = input.content.translations
+      .filter(
+        (translation) =>
+          input.content.languages.includes(translation.language) &&
+          brandingNoticeBody(translation.sections).trim()
+      )
+      .sort((a, b) => languageOrder[a.language] - languageOrder[b.language])
     return {
       header: "<span></span>",
       footer: "<span></span>",
@@ -189,9 +188,9 @@ export async function brandingHtml(input: BrandingPdfInput) {
       .notice-banner span{white-space:nowrap}
       .notice-date{position:absolute;top:77mm;right:12.7mm;color:#006A49;${typeStyle("caption")}}
       .notice-content{position:absolute;top:90mm;bottom:25mm;left:12.7mm;right:12.7mm;display:grid;grid-auto-rows:minmax(0,1fr);gap:4mm;text-align:center;${typeStyle("body")}}
-      .notice-content article{min-height:0;display:flex;align-items:center;justify-content:center}.notice-content p{width:100%;margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
+      .notice-content article{min-height:0;display:flex;align-items:flex-start;justify-content:center}.notice-body{width:100%;min-width:0;overflow-wrap:anywhere}.notice-body p{margin:0 0 .65em;white-space:pre-wrap}.notice-body>:last-child{margin-bottom:0}.notice-body ul,.notice-body ol{padding-left:1.5em;text-align:left}.notice-body table{width:100%;table-layout:fixed;border-collapse:collapse;margin:.5em 0}.notice-body td,.notice-body th{border:1px solid #006A49;padding:.25em;vertical-align:top;overflow-wrap:anywhere}.notice-body th{font-weight:700}.notice-body td p,.notice-body th p{margin:0}
       .notice-logo{position:absolute;bottom:12.7mm;left:50%;transform:translateX(-50%);width:50mm;color:#006A49}
-      </style></head><body><div class="notice-number">${e(input.draft ? "Number assigned on issue" : input.number)}</div><div class="notice-banner"><span>NOTICE</span></div><div class="notice-date">${e(date || "Date pending")}</div><main class="notice-content">${translations.map((translation) => `<article lang="${translation.language}"><p>${noticeBodyHtml(brandingNoticeBody(translation.sections))}</p></article>`).join("")}</main><div class="notice-logo">${await wordmark()}</div></body></html>`,
+      </style></head><body><div class="notice-number">${e(input.draft ? "Number assigned on issue" : input.number)}</div><div class="notice-banner"><span>NOTICE</span></div><div class="notice-date">${e(date || "Date pending")}</div><main class="notice-content">${translations.map((translation) => `<article lang="${translation.language}"><div class="notice-body">${brandingRichTextHtml(brandingNoticeRichText(translation.sections))}</div></article>`).join("")}</main><div class="notice-logo">${await wordmark()}</div></body></html>`,
     }
   }
   return brandingBookHtml(input, styles, logo, await wordmark())
@@ -229,7 +228,7 @@ export async function fitSinglePageText(
           for (const article of document.querySelectorAll<HTMLElement>(
             ".notice-content article"
           )) {
-            const text = article.querySelector("p")!
+            const text = article.querySelector(".notice-body")!
             if (
               text.getBoundingClientRect().height > article.clientHeight ||
               text.scrollWidth > article.clientWidth
