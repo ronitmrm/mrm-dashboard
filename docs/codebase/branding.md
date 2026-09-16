@@ -11,6 +11,8 @@
   footer. Its 50mm banner and 128px title restore reference proportions under the
   explicit notice exception in the glossary. Fitting checks each region's text;
   one shared scale still applies. One, two or three selected languages are valid.
+  Single pasted line breaks become spaces for full-width wrapping in every
+  language; blank lines retain paragraphs. Saved source text is not modified.
 - Details metadata and attribution values use the caption role (Outfit 500,
   13px), including metadata labels. Body paragraphs retain their separate 15px
   baseline. New issues use book v7; previously issued PDF bytes remain unchanged.

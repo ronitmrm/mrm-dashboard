@@ -46,6 +46,14 @@ export function escapeBrandingHtml(value: string) {
   )
 }
 let fontStyles: Promise<string> | undefined
+function noticeBodyHtml(body: string) {
+  return escapeBrandingHtml(
+    body
+      .split(/\r?\n\s*\r?\n/)
+      .map((paragraph) => paragraph.replace(/\s*\r?\n\s*/g, " "))
+      .join("\n\n")
+  )
+}
 function fonts() {
   return (fontStyles ??= Promise.all(
     [
@@ -181,7 +189,7 @@ export async function brandingHtml(input: BrandingPdfInput) {
       .notice-content{position:absolute;top:90mm;bottom:25mm;left:12.7mm;right:12.7mm;display:grid;grid-auto-rows:minmax(0,1fr);gap:4mm;text-align:center;${typeStyle("body")}}
       .notice-content article{min-height:0;display:flex;align-items:center;justify-content:center}.notice-content p{width:100%;margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
       .notice-logo{position:absolute;bottom:12.7mm;left:50%;transform:translateX(-50%);width:50mm;color:#006A49}
-      </style></head><body><div class="notice-number">${e(input.draft ? "Number assigned on issue" : input.number)}</div><div class="notice-banner">NOTICE</div><div class="notice-date">${e(date || "Date pending")}</div><main class="notice-content">${translations.map((translation) => `<article lang="${translation.language}"><p>${e(brandingNoticeBody(translation.sections))}</p></article>`).join("")}</main><div class="notice-logo">${await wordmark()}</div></body></html>`,
+      </style></head><body><div class="notice-number">${e(input.draft ? "Number assigned on issue" : input.number)}</div><div class="notice-banner">NOTICE</div><div class="notice-date">${e(date || "Date pending")}</div><main class="notice-content">${translations.map((translation) => `<article lang="${translation.language}"><p>${noticeBodyHtml(brandingNoticeBody(translation.sections))}</p></article>`).join("")}</main><div class="notice-logo">${await wordmark()}</div></body></html>`,
     }
   }
   return brandingBookHtml(input, styles, logo, await wordmark())
