@@ -3,7 +3,6 @@
 import { useEffect } from "react"
 import { EditorContent, useEditor } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
-import { TableKit } from "@tiptap/extension-table"
 import {
   brandingRichTextPlain,
   type BrandingRichText,
@@ -29,6 +28,10 @@ const extensions = [
 // Old drafts may contain marks from the former toolbar. Keep their text while
 // adapting them to the locked schema, including on reopening an existing draft.
 function editorContent(value: BrandingRichText): BrandingRichText {
+  if (value.type === "table") {
+    const text = brandingRichTextPlain(value)
+    return { type: "paragraph", content: text ? [{ type: "text", text }] : [] }
+  }
   return {
     ...value,
     ...(value.marks && {
@@ -45,7 +48,6 @@ export default function BrandingRichTextEditor({
   label,
   language,
   disabled = false,
-  tables = false,
   headings = false,
 }: {
   value: BrandingRichText
@@ -54,7 +56,6 @@ export default function BrandingRichTextEditor({
   label: string
   language: string
   disabled?: boolean
-  tables?: boolean
   headings?: boolean
 }) {
   const editor = useEditor({
@@ -62,13 +63,26 @@ export default function BrandingRichTextEditor({
       ...extensions.map((extension) =>
         headings ? extension.configure({ heading: { levels: [2] } }) : extension
       ),
-      ...(tables ? [TableKit.configure({ table: { resizable: false } })] : []),
     ],
     content: editorContent(value),
     immediatelyRender: false,
     shouldRerenderOnTransaction: true,
     editable: !disabled,
     editorProps: {
+      transformPastedHTML: (html) => {
+        const document = new DOMParser().parseFromString(html, "text/html")
+        for (const table of document.querySelectorAll("table")) {
+          const paragraphs = Array.from(table.rows, (row) => {
+            const paragraph = document.createElement("p")
+            paragraph.textContent = Array.from(row.cells, (cell) =>
+              cell.textContent?.trim()
+            ).join(" | ")
+            return paragraph
+          })
+          table.replaceWith(...paragraphs)
+        }
+        return document.body.innerHTML
+      },
       attributes: {
         id,
         role: "textbox",
@@ -131,48 +145,9 @@ export default function BrandingRichTextEditor({
           {
             label: "Heading",
             active: editor.isActive("heading", { level: 2 }),
-            disabled: editor.isActive("table") || Boolean(nearestList),
+            disabled: Boolean(nearestList),
             run: () => editor.chain().focus().toggleHeading({ level: 2 }).run(),
           },
-        ]
-      : []),
-    ...(tables
-      ? [
-          {
-            label: "Insert table",
-            disabled: editor.isActive("table"),
-            run: () =>
-              editor
-                .chain()
-                .focus()
-                .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
-                .run(),
-          },
-          ...[
-            {
-              label: "Add row",
-              run: () => editor.chain().focus().addRowAfter().run(),
-            },
-            {
-              label: "Add column",
-              run: () => editor.chain().focus().addColumnAfter().run(),
-            },
-            {
-              label: "Delete row",
-              run: () => editor.chain().focus().deleteRow().run(),
-            },
-            {
-              label: "Delete column",
-              run: () => editor.chain().focus().deleteColumn().run(),
-            },
-            {
-              label: "Delete table",
-              run: () => editor.chain().focus().deleteTable().run(),
-            },
-          ].map((control) => ({
-            ...control,
-            disabled: !editor.isActive("table"),
-          })),
         ]
       : []),
     {
