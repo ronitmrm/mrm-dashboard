@@ -3,10 +3,16 @@
 ## Shared SOP/Policy book (v7, 2026-09-16)
 
 - `typography.ts` is the shared Brand Guide B §15.1 source for PDF font roles.
-  SOP/Policy use fixed CSS pixel baselines. Notice v9 and WI v8 use the same roles
+  SOP/Policy use fixed CSS pixel baselines. Notice v10 and WI v9 use the same roles
   multiplied by one root `--print-scale`, measured by `fitSinglePageText` against
   every text box. No independent title/card fitting. See glossary for full table.
   Print page scale is 100%; 12.7mm outer margins are separate from internal spacing.
+- Notice/WI fitting now searches above and below the baseline: double the upper
+  bound until a text region overflows, then binary-search the largest fitting
+  shared multiplier. WI title, body, captions and metadata scale together. Notice
+  bodies scale together; banner title, number and date override the multiplier
+  to1, keeping128px/13px/13px baselines. Empty notice bodies stay at baseline.
+  Headers and metadata are checked for overlap. Generated PDFs must have one page.
 - Notice v9 centers each language in an equal-height grid region and centers the
   footer. Its 50mm banner and 128px title restore reference proportions under the
   explicit notice exception in the glossary. Fitting checks each region's text;
@@ -110,11 +116,12 @@ Cover pages count toward the index but do not display a page counter. Exact full
 wordmark SVGs were extracted from the supplied HTML guide and bundled alongside
 the fonts. Newly issued revisions record v3; existing frozen PDFs are unchanged.
 
-Notice template v8 follows the later Notice.pdf layout: a dedicated one-page
-renderer with the shared brand fonts and a content/footer clearance check after
+Notice template v10 follows the later Notice.pdf layout: a dedicated one-page
+renderer with the shared brand fonts and per-region fitting after
 fonts load. The number prints at top-right (drafts use an unassigned placeholder);
-number/author/title are also stored as PDF metadata. User line breaks are
-preserved; all text roles/languages shrink together until they fit above the footer.
+number/author/title are also stored as PDF metadata. Blank-line paragraphs are
+preserved; language bodies enlarge or shrink together to fit their regions while
+the notice title, number and date remain fixed.
 SOP/policy use the separate book renderer.
 
 Work Instruction template v6 adds private bounded JPEG snapshots to sections;

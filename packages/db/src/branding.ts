@@ -306,9 +306,9 @@ export function createBrandingRepository(options: RepositoryPoolOptions) {
             input.userName,
             revision.id,
             input.type === "notice"
-              ? "mrm-notice-v9"
+              ? "mrm-notice-v10"
               : input.type === "work-instruction"
-                ? "mrm-wi-v8"
+                ? "mrm-wi-v9"
                 : "mrm-book-v7",
           ]
         )
