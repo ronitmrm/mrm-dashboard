@@ -22,9 +22,14 @@ used directly (1px = 0.75pt). No author-selected fonts or sizes, italic or under
 | Hindi heading/body | Hind | 700/400 | 23/15px | 1.35/1.60 | 0 |
 
 SOP/Policy text never shrinks; additional body content flows to further pages.
-Notice/WI text starts at these same sizes and shrinks only when necessary: one
-shared multiplier applies to every title, heading, body, caption and metadata
-field across all languages and picture cards. No independent card/font fitting.
+Notice/WI text uses these sizes as proportional baselines. As approved on
+2026-09-16, sparse content enlarges and dense content shrinks to fit one page: one
+shared multiplier applies to content across all languages and picture cards.
+For Notices, only the language bodies scale: the NOTICE banner title stays128px,
+and the number/date stay13px, regardless of body length. For Work Instructions,
+titles, headings, bodies, captions and metadata scale together. Choose the largest multiplier that
+fits every text region, including the title/banner and document metadata, without
+overlap or clipping. No independent card/font fitting. The one-page limit is strict.
 Layouts, pictures, margins and page scale stay fixed. The minimum text multiplier
 is 0.001; geometrically impossible layouts report an error instead of clipping.
 Existing issued PDF bytes remain immutable. Internal logos omit the tagline.
@@ -116,7 +121,7 @@ published version. Branding remains the authoring and retained-history workspace
   centered free-text body per selected language. The 2026-09-16 notice correction
   restores the reference banner proportions: 50mm tall, with a 128px Outfit 800
   NOTICE title (a notice-specific exception to the general 40px title baseline).
-  The title still shares the document-wide shrink factor. Selected language
+  The title, notice number and date retain their fixed baseline sizes. Selected language
   bodies occupy equal-height regions of the available space between the date
   and footer, centered horizontally and vertically. Notice authors include
   paragraph breaks as blank lines; single line breaks reflow as spaces so every
@@ -131,8 +136,8 @@ published version. Branding remains the authoring and retained-history workspace
   drafts show Number assigned on issue. Titles and author remain in records and
   PDF metadata.
   Gujarati precedes Hindi as in the reference; English comes first when selected.
-  No printed page counter. All languages share one page; all text roles use
-  the same shrink factor when required without clipping text. Review the PDF for
+  No printed page counter. All languages share one page; all language bodies use
+  the same enlargement or shrink factor without clipping text. Review the PDF for
   readability before issue. A4 templates retain
   the agreed cover/index/topic structure for SOPs and policies.
 - Per-type View and Save/Issue capabilities govern pages, actions and PDFs.

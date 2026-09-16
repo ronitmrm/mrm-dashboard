@@ -185,11 +185,13 @@ export async function brandingHtml(input: BrandingPdfInput) {
       *{box-sizing:border-box}body{margin:0;background:white;color:#050505}
       .notice-banner{position:absolute;top:22mm;left:12.7mm;right:12.7mm;height:50mm;border-radius:4mm;background:#006A49;color:#F7F7F2;display:flex;align-items:center;justify-content:center;${typeStyle("display")}font-size:calc(128px * var(--print-scale,1))}
       .notice-number{position:absolute;top:12.7mm;right:12.7mm;color:#006A49;${typeStyle("caption")}}
+      .notice-banner,.notice-number,.notice-date{--print-scale:1}
+      .notice-banner span{white-space:nowrap}
       .notice-date{position:absolute;top:77mm;right:12.7mm;color:#006A49;${typeStyle("caption")}}
       .notice-content{position:absolute;top:90mm;bottom:25mm;left:12.7mm;right:12.7mm;display:grid;grid-auto-rows:minmax(0,1fr);gap:4mm;text-align:center;${typeStyle("body")}}
       .notice-content article{min-height:0;display:flex;align-items:center;justify-content:center}.notice-content p{width:100%;margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
       .notice-logo{position:absolute;bottom:12.7mm;left:50%;transform:translateX(-50%);width:50mm;color:#006A49}
-      </style></head><body><div class="notice-number">${e(input.draft ? "Number assigned on issue" : input.number)}</div><div class="notice-banner">NOTICE</div><div class="notice-date">${e(date || "Date pending")}</div><main class="notice-content">${translations.map((translation) => `<article lang="${translation.language}"><p>${noticeBodyHtml(brandingNoticeBody(translation.sections))}</p></article>`).join("")}</main><div class="notice-logo">${await wordmark()}</div></body></html>`,
+      </style></head><body><div class="notice-number">${e(input.draft ? "Number assigned on issue" : input.number)}</div><div class="notice-banner"><span>NOTICE</span></div><div class="notice-date">${e(date || "Date pending")}</div><main class="notice-content">${translations.map((translation) => `<article lang="${translation.language}"><p>${noticeBodyHtml(brandingNoticeBody(translation.sections))}</p></article>`).join("")}</main><div class="notice-logo">${await wordmark()}</div></body></html>`,
     }
   }
   return brandingBookHtml(input, styles, logo, await wordmark())
@@ -204,6 +206,26 @@ export async function fitSinglePageText(
     const check = {
       fits() {
         if (documentType === "notice") {
+          const banner = document.querySelector<HTMLElement>(".notice-banner")!
+          const title = banner.querySelector("span")!
+          const number = document
+            .querySelector(".notice-number")!
+            .getBoundingClientRect()
+          const date = document
+            .querySelector(".notice-date")!
+            .getBoundingClientRect()
+          const content = document
+            .querySelector(".notice-content")!
+            .getBoundingClientRect()
+          if (
+            title.getBoundingClientRect().height > banner.clientHeight ||
+            title.scrollWidth > banner.clientWidth ||
+            number.bottom > banner.getBoundingClientRect().top ||
+            number.left < content.left ||
+            date.bottom > content.top ||
+            date.left < content.left
+          )
+            return false
           for (const article of document.querySelectorAll<HTMLElement>(
             ".notice-content article"
           )) {
@@ -218,7 +240,15 @@ export async function fitSinglePageText(
         }
         const title = document.querySelector<HTMLElement>(".wi-title")!
         const titleText = title.querySelector("span")!
+        const number = document
+          .querySelector(".wi-number")!
+          .getBoundingClientRect()
+        const sheet = document
+          .querySelector(".wi-sheet")!
+          .getBoundingClientRect()
         if (
+          number.bottom > title.getBoundingClientRect().top ||
+          number.left < sheet.left ||
           titleText.getBoundingClientRect().height > title.clientHeight ||
           title.scrollWidth > title.clientWidth
         )
@@ -251,8 +281,6 @@ export async function fitSinglePageText(
         return true
       },
     }
-    root.style.setProperty("--print-scale", "1")
-    if (check.fits()) return 1
     let low = 0.001,
       high = 1
     root.style.setProperty("--print-scale", String(low))
@@ -260,6 +288,17 @@ export async function fitSinglePageText(
       throw new Error(
         "Too many sections to fit on one page. Remove a section or shorten the content."
       )
+    root.style.setProperty("--print-scale", String(high))
+    if (
+      documentType === "notice" &&
+      !document.querySelector(".notice-content")!.textContent?.trim()
+    )
+      return 1
+    while (check.fits()) {
+      low = high
+      high *= 2
+      root.style.setProperty("--print-scale", String(high))
+    }
     for (let step = 0; step < 20; step++) {
       const scale = (low + high) / 2
       root.style.setProperty("--print-scale", String(scale))
