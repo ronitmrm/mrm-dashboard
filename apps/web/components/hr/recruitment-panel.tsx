@@ -10,6 +10,7 @@ import {
   type RecruitmentCombinedRoleRow,
   type RecruitmentEmploymentLetterRow,
   type RecruitmentInterviewRow,
+  type RecruitmentPendingOfferRow,
   type RecruitmentInterviewRecordRow,
   type RecruitmentJobRow,
   type RecruitmentMasterSnapshot,
@@ -103,6 +104,7 @@ type RecruitmentPanelProps = {
   employmentLetters: RecruitmentEmploymentLetterRow[]
   interviews: RecruitmentInterviewRow[]
   interviewRecords: RecruitmentInterviewRecordRow[]
+  pendingOffers: RecruitmentPendingOfferRow[]
   jobs: RecruitmentJobRow[]
   masters: RecruitmentMasterSnapshot
   masterView?: "dataEntry" | "masterTables"
@@ -1120,7 +1122,12 @@ export function RecruitmentPanel(props: RecruitmentPanelProps) {
         />
       )
     case "interviewWorkspacePanel":
-      return <InterviewResultsWorkspace records={props.interviewRecords} />
+      return (
+        <InterviewResultsWorkspace
+          records={props.interviewRecords}
+          pendingOffers={props.pendingOffers}
+        />
+      )
     case "conversationLogsPanel":
       return (
         <ConversationLogsTable

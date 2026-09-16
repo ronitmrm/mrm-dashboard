@@ -5,6 +5,7 @@ import {
   type RecruitmentCandidateRow,
   type RecruitmentCombinedRoleRow,
   type RecruitmentInterviewRow,
+  type RecruitmentPendingOfferRow,
   type RecruitmentInterviewRecordRow,
   type RecruitmentJobRow,
   type RecruitmentMasterSnapshot,
@@ -83,6 +84,7 @@ export default async function HrRecruitmentPage({
   let combinedRoles: RecruitmentCombinedRoleRow[] = []
   let employmentLetters: RecruitmentEmploymentLetterRow[] = []
   let interviews: RecruitmentInterviewRow[] = []
+  let pendingOffers: RecruitmentPendingOfferRow[] = []
   let interviewRecords: RecruitmentInterviewRecordRow[] = []
   let jobs: RecruitmentJobRow[] = []
   let posts: RecruitmentPostRow[] = []
@@ -142,6 +144,7 @@ export default async function HrRecruitmentPage({
       loadedJobs,
       loadedInterviews,
       loadedInterviewRecords,
+      loadedPendingOffers,
       loadedCandidateEvents,
       loadedEmploymentLetters,
     ] = await Promise.all([
@@ -168,6 +171,9 @@ export default async function HrRecruitmentPage({
       panelId === "interviewWorkspacePanel"
         ? repository.listInterviewRecords(organizationId)
         : Promise.resolve(interviewRecords),
+      panelId === "interviewWorkspacePanel"
+        ? repository.listAwaitingOfferResponses(organizationId)
+        : Promise.resolve(pendingOffers),
       panelId === "conversationLogsPanel"
         ? repository.listCandidateEvents(organizationId)
         : Promise.resolve(candidateEvents),
@@ -184,6 +190,7 @@ export default async function HrRecruitmentPage({
     jobs = loadedJobs
     interviews = loadedInterviews
     interviewRecords = loadedInterviewRecords
+    pendingOffers = loadedPendingOffers
     candidateEvents = loadedCandidateEvents
     employmentLetters = loadedEmploymentLetters
   } finally {
@@ -290,6 +297,7 @@ export default async function HrRecruitmentPage({
         employmentLetters={employmentLetters}
         interviews={interviews}
         interviewRecords={interviewRecords}
+        pendingOffers={pendingOffers}
         jobs={jobs}
         masters={masters}
         masterKind={normalizeRecruitmentMasterKind(feedback.kind)}

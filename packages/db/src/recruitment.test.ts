@@ -15,6 +15,21 @@ import {
   recruitmentAdvisoryLockKey,
 } from "./recruitment-codes"
 
+test("pending offer responses are scoped to approved applications without a response", async () => {
+  const rows = [{ applicationId: "application-1", candidateName: "Pending Candidate" }]
+  const query = vi.fn().mockResolvedValue({ rows })
+  const repository = createRecruitmentRepository({ pool: { query } as unknown as Pool })
+  await expect(repository.listAwaitingOfferResponses("org-1")).resolves.toEqual(rows)
+  const [sql, values] = query.mock.calls[0]!
+  expect(values).toEqual(["org-1"])
+  expect(sql).toContain("application.organization_id = $1")
+  expect(sql).toContain("application.status = 'Approved'")
+  expect(sql).toContain("application.willing_to_join IS NULL")
+  expect(sql).toContain("interview.round_name IN ('HR Round', 'Final HR Round')")
+  expect(sql).toContain("interview.status = 'Approved'")
+  expect(sql).not.toContain("LIMIT")
+})
+
 describe("reviseCandidateAppointment", () => {
   function fixture() {
     const query = vi.fn(async (sql: string) => {
