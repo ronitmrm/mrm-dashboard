@@ -57,13 +57,13 @@ it("groups an entry's actions into one unit capability and removes shared entry 
 
 it("separates Universal masters and keeps CNC Tooling grants out of other units", () => {
   const rows = permissionAccessRows(masterPermissionOptions)
-  expect(rows).toHaveLength(71)
+  expect(rows).toHaveLength(74)
   const tooling = rows.find((row) => row.id === "master:cnc:tooling")!
   const grants = permissionKeysForSelections(rows, { [tooling.id]: "full" })
   expect(permissionAccessLevelForKeys(tooling, grants)).toBe("full")
   for (const id of [
     "master:forging:tooling",
-    "master:universal:setup_checklist_master",
+    "master:cnc:setup_checklist_master",
     "master:universal:department",
     "master:universal:designation",
   ]) {

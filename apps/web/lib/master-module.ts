@@ -46,6 +46,12 @@ type MasterDefinition = MasterOption & {
 
 const unitMasterDefinitions = [
   {
+    id: "setup_checklist_master",
+    label: "Setup Checklist",
+    access: "operations",
+    scope: "unit",
+  },
+  {
     id: "setup_name_master",
     label: "Setup Name",
     access: "operations",
@@ -75,12 +81,6 @@ const unitMasterDefinitions = [
 ] as const satisfies readonly MasterDefinition[]
 
 export const sharedOperationalMasterDefinitions = [
-  {
-    id: "setup_checklist_master",
-    label: "Setup Checklist",
-    access: "operations",
-    scope: "universal",
-  },
   {
     id: "maintenance_checklist_master",
     label: "Maintenance Checklist",

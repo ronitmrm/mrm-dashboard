@@ -61,7 +61,8 @@ async function generatedQualityMasterCode(
     | "rejection-remark"
     | "rejection-type"
     | "setup-checklist",
-  dedupeValue?: string
+  dedupeValue?: string,
+  productionFloorId?: string
 ) {
   const cleaned = requestedCode.trim()
   if (cleaned) return cleaned
@@ -83,11 +84,12 @@ async function generatedQualityMasterCode(
         WHERE organization_id = $1
           AND lower(btrim(${definition.identityColumn})) = lower(btrim($2))
           AND code ~* $3
+          ${productionFloorId ? "AND production_floor_id = $4" : ""}
         ORDER BY created_at, code
         LIMIT 1
         FOR UPDATE
       `,
-      [organizationId, identity, `^${definition.prefix}[0-9]+$`]
+      [organizationId, identity, `^${definition.prefix}[0-9]+$`, ...(productionFloorId ? [productionFloorId] : [])]
     )
     if (existing.rows[0]) return existing.rows[0].code
   }
@@ -98,8 +100,9 @@ async function generatedQualityMasterCode(
       ), 0) + 1 AS "nextNumber"
       FROM ${definition.table}
       WHERE organization_id = $1
+        ${productionFloorId ? "AND production_floor_id = $3" : ""}
     `,
-    [organizationId, `^${definition.prefix}[0-9]+$`]
+    [organizationId, `^${definition.prefix}[0-9]+$`, ...(productionFloorId ? [productionFloorId] : [])]
   )
   return `${definition.prefix}${String(result.rows[0]?.nextNumber ?? 1).padStart(3, "0")}`
 }
@@ -869,10 +872,14 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
           JOIN quality.setup_checklist_template_items item
             ON item.template_id = template.id
           WHERE template.organization_id = $1
+            AND template.production_floor_id = (
+              SELECT id FROM manufacturing.production_floors
+              WHERE organization_id = $1 AND code = $2
+            )
           ORDER BY template.revision, template.code, item.sequence, item.item_key
           LIMIT 2000
         `,
-        [input.organizationId]
+        [input.organizationId, productionFloorCode]
       )
       const setupChecklistMasterRows = masters.rows.map(
         ({ sourcePayload, ...row }) => ({
@@ -1543,43 +1550,54 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
       name: string
       organizationId: string
       payload: Record<string, unknown>
+      productionFloorCode?: string
       revision: number
     }) {
       return transaction(pool, async (client) => {
+        const productionFloorCode = normalizeProductionFloorCode(input.productionFloorCode)
+        const floor = await client.query<{ id: string }>(
+          "SELECT id FROM manufacturing.production_floors WHERE organization_id = $1 AND code = $2",
+          [input.organizationId, productionFloorCode]
+        )
+        const productionFloorId = floor.rows[0]?.id
+        if (!productionFloorId) throw new Error("Setup checklist production unit was not found.")
         const code = await generatedQualityMasterCode(
           client,
           input.organizationId,
           input.code,
           "setup-checklist",
-          input.name
+          input.name,
+          productionFloorId
         )
         await assertMasterAvailable(
           client,
           input,
           "quality.setup_checklist_template_items",
-          "template_id IN (SELECT id FROM quality.setup_checklist_templates WHERE organization_id = $1 AND code = $2 AND revision = $3) AND (sequence = ANY($4::integer[]) OR item_key = ANY($5::text[]))",
+          "template_id IN (SELECT id FROM quality.setup_checklist_templates WHERE organization_id = $1 AND code = $2 AND revision = $3 AND production_floor_id = $6) AND (sequence = ANY($4::integer[]) OR item_key = ANY($5::text[]))",
           [
             code,
             input.revision,
             input.items.map((item) => item.sequence),
             input.items.map((item) => item.itemKey),
+            productionFloorId,
           ]
         )
         const payload = {
           ...input.payload,
           checklistCode: code,
           version: code,
+          productionFloorCode,
         }
         const result = await client.query<{ code: string; id: string }>(
           `
             INSERT INTO quality.setup_checklist_templates (
               organization_id, code, name, revision, active,
               created_by_user_id, updated_by_user_id, source_system,
-              source_table, source_id, source_payload
+              source_table, source_id, source_payload, production_floor_id
             )
             VALUES ($1, $2, $3, $4, $5, $6, $6, 'mrm-dashboard',
-              'setup_checklist_master', $7, $8)
-            ON CONFLICT (organization_id, code, revision)
+              'setup_checklist_master', $7, $8, $9)
+            ON CONFLICT (organization_id, production_floor_id, code, revision)
             DO UPDATE SET name = EXCLUDED.name, active = EXCLUDED.active,
               updated_by_user_id = EXCLUDED.updated_by_user_id,
               source_payload = EXCLUDED.source_payload,
@@ -1595,6 +1613,7 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
             input.actorUserId ?? null,
             randomUUID(),
             payload,
+            productionFloorId,
           ]
         )
         await upsertChecklistItems(client, {
@@ -1650,11 +1669,16 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
           `
             SELECT id FROM quality.setup_checklist_templates
             WHERE organization_id = $1 AND lower(code) = lower($2) AND active
+              AND production_floor_id = (
+                SELECT id FROM manufacturing.production_floors
+                WHERE organization_id = $1 AND code = $3
+              )
             ORDER BY revision DESC LIMIT 1
           `,
           [
             input.organizationId,
             requiredText(input.templateCode, "Setup checklist template"),
+            normalizeProductionFloorCode(input.productionFloorCode),
           ]
         )
         if (!template.rows[0]) {

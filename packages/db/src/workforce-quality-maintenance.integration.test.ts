@@ -267,6 +267,27 @@ describe("workforce, quality, and maintenance workflows", () => {
       payload: { version: `SETUP-${suffix}` },
       revision: 1,
     })
+    await pool.query(
+      `INSERT INTO manufacturing.production_floors (organization_id, code, name)
+       VALUES ($1, 'cnc', 'PPAC CNC-01') ON CONFLICT (organization_id, code) DO NOTHING`,
+      [organizationId]
+    )
+    const cncTemplate = await quality.upsertSetupChecklistTemplate({
+      code: template.code,
+      items: [{ inputType: "checkbox", itemKey: "cnc", prompt: "CNC program checked", required: true, sequence: 1 }],
+      name: "CNC setup checklist",
+      organizationId,
+      payload: {},
+      productionFloorCode: "cnc",
+      revision: 1,
+    })
+    expect(cncTemplate.id).not.toBe(template.id)
+    const cncPage = await quality.readSetupChecklistPage({ organizationId, productionFloorCode: "cnc" })
+    expect(cncPage.setupChecklistMasterRows).toEqual([
+      expect.objectContaining({ checkPoint: "CNC program checked", productionFloorCode: "cnc" }),
+    ])
+    const conventionalPage = await quality.readSetupChecklistPage({ organizationId })
+    expect(conventionalPage.setupChecklistMasterRows.some((row) => row.checkPoint === "CNC program checked")).toBe(false)
     const session = await quality.saveSetupChecklistSession({
       completedBy: "SETTER-1",
       jobCardNumber,

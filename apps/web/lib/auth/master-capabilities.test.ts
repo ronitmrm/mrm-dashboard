@@ -18,8 +18,8 @@ describe("independent master permissions", () => {
       supportedMasterActions(master).filter((action) => previousMasterCapabilities(master, action).includes(oldKey)).map((action) => masterPermissionKey(master.unit, master.master, action))
     )
     expect(migratedFrom("quality.setup_checklist.write")).toEqual([])
-    expect(migratedFrom("quality.parameters.manage")).toContain("masters.universal.setup_checklist_master.save")
-    expect(migratedFrom("quality.parameters.manage")).toContain("masters.universal.setup_checklist_master.import")
+    expect(migratedFrom("quality.parameters.manage")).toContain("masters.cnc.setup_checklist_master.save")
+    expect(migratedFrom("quality.parameters.manage")).toContain("masters.cnc.setup_checklist_master.import")
   })
   it("preserves maintenance checklist labels and inactive status for the selected master form", () => {
     const checklist = { checklistCode: "PM-1", checklistTitle: "Cleaning", sequence: 1, stepDescription: "Clean filters", inputType: "checkbox", status: "Inactive", required: "Yes" }
@@ -159,13 +159,13 @@ describe("independent master permissions", () => {
       selectedStoreMasterData(data, "SUPPLIER_PRICE", false).suppliers
     ).toEqual([])
   })
-  it("keeps unit grants separate and shared checklists Universal", () => {
-    expect(scopedMasters).toHaveLength(71)
+  it("keeps setup checklist grants separate for each unit", () => {
+    expect(scopedMasters).toHaveLength(74)
     expect(
       scopedMasters
         .filter(({ master }) => master === "setup_checklist_master")
         .map(({ unit }) => unit)
-    ).toEqual(["universal"])
+    ).toEqual(["conventional", "conventional-02", "cnc", "forging"])
     expect(masterPermissionKey("cnc", "tooling", "read")).not.toBe(
       masterPermissionKey("forging", "tooling", "read")
     )

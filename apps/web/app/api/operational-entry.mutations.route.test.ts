@@ -118,7 +118,7 @@ describe("production entry mutation API authorization", () => {
   afterEach(() => vi.restoreAllMocks())
 
   it("refreshes after the last checklist upload row using the import permission alone", async () => {
-    dependencies.listAllGrantedCapabilities.mockResolvedValue(["masters.universal.setup_checklist_master.import"])
+    dependencies.listAllGrantedCapabilities.mockResolvedValue(["masters.cnc.setup_checklist_master.import"])
     dependencies.isPostgresOperationalEntryType.mockReturnValue(true)
     dependencies.executePostgresOperationalEntry.mockResolvedValue({ code: "SC001" })
     dependencies.requestRefresh.mockResolvedValue({ queued: true })

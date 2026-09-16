@@ -2,6 +2,11 @@
 
 ## Lifecycle
 
+Setup Checklist masters belong to one production unit. Codes and revisions are
+unique within that unit; tasks may only select and complete that unit's templates.
+Editing a unit's checklist does not change another unit's checklist. Existing
+checklist and completion records retain their identities when assigned to a unit.
+
 Department task attribution offers active assistants, HODs and Managers from
 the task's department and production unit. This applies to Shop Floor (including
 RM at Machine and Setup Complete), Inprocess Quality, Machinist and Planner.
