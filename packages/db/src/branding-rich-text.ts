@@ -3,6 +3,7 @@ export type BrandingRichText = {
   type:
     | "doc"
     | "paragraph"
+    | "heading"
     | "text"
     | "hardBreak"
     | "bulletList"
@@ -14,7 +15,7 @@ export type BrandingRichText = {
     | "tableHeader"
   text?: string
   marks?: { type: "bold" | "italic" | "underline" }[]
-  attrs?: { start?: number; colspan?: number; rowspan?: number }
+  attrs?: { start?: number; colspan?: number; rowspan?: number; level?: 2 }
   content?: BrandingRichText[]
 }
 
@@ -34,7 +35,11 @@ export function brandingRichTextPlain(node: BrandingRichText): string {
   return (node.content ?? [])
     .map(brandingRichTextPlain)
     .join(
-      node.type === "paragraph" ? "" : node.type === "tableRow" ? "\t" : "\n"
+      node.type === "paragraph" || node.type === "heading"
+        ? ""
+        : node.type === "tableRow"
+          ? "\t"
+          : "\n"
     )
 }
 
@@ -84,7 +89,7 @@ export function parseBrandingRichText(value: unknown): BrandingRichText {
     if (item.content !== undefined && !Array.isArray(item.content))
       throw new Error("Formatted text content is invalid.")
     const allowedChildren =
-      type === "paragraph"
+      type === "paragraph" || type === "heading"
         ? ["text", "hardBreak"]
         : type === "table"
           ? ["tableRow"]
@@ -96,7 +101,7 @@ export function parseBrandingRichText(value: unknown): BrandingRichText {
                   "paragraph",
                   "orderedList",
                   "bulletList",
-                  ...(type === "doc" ? ["table"] : []),
+                  ...(type === "doc" ? ["table", "heading"] : []),
                 ]
     const content = ((item.content ?? []) as unknown[]).map((child) =>
       parse(child, allowedChildren, depth + 1)
@@ -107,6 +112,11 @@ export function parseBrandingRichText(value: unknown): BrandingRichText {
         !content.length)
     )
       throw new Error("Formatted text structure is incomplete.")
+    if (type === "heading") {
+      const attrs = item.attrs as { level?: unknown } | undefined
+      if (attrs?.level !== 2) throw new Error("Use the notice heading style.")
+      return { type, attrs: { level: 2 }, content }
+    }
     if (type === "orderedList") {
       const attrs = item.attrs as { start?: unknown } | undefined
       const start = attrs?.start ?? 1
@@ -175,6 +185,7 @@ export function brandingRichTextHtml(node: BrandingRichText): string {
   if (node.type === "doc") return body
   const tag = {
     paragraph: "p",
+    heading: "h2",
     bulletList: "ul",
     orderedList: "ol",
     listItem: "li",

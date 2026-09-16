@@ -46,6 +46,7 @@ export default function BrandingRichTextEditor({
   language,
   disabled = false,
   tables = false,
+  headings = false,
 }: {
   value: BrandingRichText
   onChange: (value: BrandingRichText) => void
@@ -54,11 +55,15 @@ export default function BrandingRichTextEditor({
   language: string
   disabled?: boolean
   tables?: boolean
+  headings?: boolean
 }) {
   const editor = useEditor({
-    extensions: tables
-      ? [...extensions, TableKit.configure({ table: { resizable: false } })]
-      : extensions,
+    extensions: [
+      ...extensions.map((extension) =>
+        headings ? extension.configure({ heading: { levels: [2] } }) : extension
+      ),
+      ...(tables ? [TableKit.configure({ table: { resizable: false } })] : []),
+    ],
     content: editorContent(value),
     immediatelyRender: false,
     shouldRerenderOnTransaction: true,
@@ -121,6 +126,16 @@ export default function BrandingRichTextEditor({
     })
   }
   const controls = [
+    ...(headings
+      ? [
+          {
+            label: "Heading",
+            active: editor.isActive("heading", { level: 2 }),
+            disabled: editor.isActive("table") || Boolean(nearestList),
+            run: () => editor.chain().focus().toggleHeading({ level: 2 }).run(),
+          },
+        ]
+      : []),
     ...(tables
       ? [
           {
