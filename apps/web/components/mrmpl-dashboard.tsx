@@ -4771,7 +4771,7 @@ function PlannerActiveMachineIssues({ rows, submitAction, needsReview = false }:
         empty="No active machine constraints"
         rowLimit={rows.length}
         renderRowActions={(_row, index) => (
-          <MachineIssueReviewActions row={rows[index]!} submitAction={submitAction} needsReview={needsReview} />
+          <MachineIssueReviewActions key={str(rows[index]!._id || rows[index]!.id)} row={rows[index]!} submitAction={submitAction} needsReview={needsReview} />
         )}
       />
     </div>
