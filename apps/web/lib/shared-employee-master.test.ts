@@ -6,6 +6,7 @@ import {
   productionQualityOptions,
   productionShopFloorOptions,
   productionMachinistOptions,
+  productionPlannerOptions,
   productionWorkerOptions,
   recruitmentInterviewerOptions,
   sharedEmployeeMasterRows,
@@ -137,6 +138,7 @@ describe("shared Employee Master", () => {
 
     expect(productionMachinistOptions(rows, "conventional")).toEqual([
       { code: "73", name: "Dharaviya Ketanbhai" },
+      { code: "166", name: "Sakhiya Ankit" },
     ])
   })
 
@@ -218,6 +220,7 @@ describe("shared Employee Master", () => {
 
     expect(productionQualityOptions(rows, "conventional")).toEqual([
       { code: "QC-1", name: "Asha" },
+      { code: "QC-MGR", name: "Bhavesh" },
     ])
   })
 
@@ -306,8 +309,8 @@ describe("shared Employee Master", () => {
         status: "Occupied",
       }),
       post({
-        department: "Production Planning & Control Conventional-01",
-        departmentCode: "PPC-CV",
+        department: "Ppac Conventional-01 Planner",
+        departmentCode: "PC0-2",
         designation: "Manager",
         employeeCode: "PLAN-MGR",
         employeeName: "Esha Manager",
@@ -320,6 +323,12 @@ describe("shared Employee Master", () => {
       { code: "PLAN-1", name: "Asha Planner" },
       { code: "PLAN-2", name: "Bharat Planner" },
       { code: "SF-1", name: "Chetan Shop Floor" },
+      { code: "PLAN-MGR", name: "Esha Manager" },
+    ])
+    expect(productionPlannerOptions(rows, "conventional")).toEqual([
+      { code: "PLAN-1", name: "Asha Planner" },
+      { code: "PLAN-2", name: "Bharat Planner" },
+      { code: "PLAN-MGR", name: "Esha Manager" },
     ])
   })
 

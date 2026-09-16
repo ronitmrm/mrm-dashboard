@@ -117,7 +117,7 @@ function isMachinistEmployee(row: {
   designation?: unknown
 }) {
   const designation = String(row.designation)
-  if (/\b(hod|manager)\b/i.test(designation)) return false
+  if (/\bmanagement\b/i.test(designation)) return false
   return (
     /machinist/i.test(designation) ||
     /machinist/i.test(String(row.department)) ||
@@ -157,13 +157,11 @@ function belongsToProductionDepartment(
   row: EmployeeOptionSource,
   productionFloorCode: ProductionFloorCode,
   departmentCodes: ReadonlySet<string>,
-  departmentNamePattern: RegExp,
-  includeSupervisors = false
+  departmentNamePattern: RegExp
 ) {
   const departmentCode = String(row.departmentCode).trim().toUpperCase()
   return (
-    (!isLeadershipEmployee(row) ||
-      (includeSupervisors && /\b(hod|manager)\b/i.test(String(row.designation)))) &&
+    !/\bmanagement\b/i.test(String(row.designation)) &&
     (departmentCodes.has(departmentCode) ||
       departmentNamePattern.test(String(row.department))) &&
     productionFloorFromDepartment(row.department, row.departmentCode) ===
@@ -207,8 +205,7 @@ export function productionShopFloorOptions(
       row,
       productionFloorCode,
       shopFloorDepartmentCodes,
-      /\bshop\s+floor\b/i,
-      true
+      /\bshop\s+floor\b/i
     )
   )
 }
@@ -218,13 +215,14 @@ function isProductionPlanner(
   productionFloorCode: ProductionFloorCode
 ) {
   return (
-    !isLeadershipEmployee(row) &&
+    !/\bmanagement\b/i.test(String(row.designation)) &&
     productionFloorFromDepartment(row.department, row.departmentCode) ===
       productionFloorCode &&
     (plannerDepartmentCodes.has(
       String(row.departmentCode).trim().toUpperCase()
     ) ||
-      /\bplanner\b/i.test(String(row.designation)))
+      /\bplanner\b/i.test(String(row.designation)) ||
+      /\bplanner\b/i.test(String(row.department)))
   )
 }
 
