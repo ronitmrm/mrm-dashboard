@@ -212,6 +212,7 @@ import {
   type EmployeeOption,
 } from "@/lib/shared-employee-master"
 import {
+  nextShopFloorStageId,
   setupChecklistItemAppliesToPhase,
   shopFloorNoPendingActionLabel,
 } from "@/lib/shop-floor-workflow"
@@ -1537,7 +1538,7 @@ function SetupChecklistShell({
     clientHydrationSnapshot,
     serverHydrationSnapshot
   )
-  const { sessionId, phase, selectedMachinist, row } = isClientHydrated
+  const { sessionId, phase: requestedPhase, selectedMachinist, row } = isClientHydrated
     ? setupChecklistQueryFromLocation()
     : {
         sessionId: "",
@@ -1545,6 +1546,8 @@ function SetupChecklistShell({
         selectedMachinist: "",
         row: {} as DashboardPayload,
       }
+  const settingOnly = productionFloorCode === "cnc"
+  const phase = settingOnly ? "end" : requestedPhase
   const checklistPage = usePostgresOperationalPage(
     sessionId
       ? `/api/setup-checklist?sessionId=${encodeURIComponent(sessionId)}&floor=${encodeURIComponent(productionFloorCode)}`
@@ -1578,9 +1581,12 @@ function SetupChecklistShell({
     : undefined
   const currentChecklistSession =
     localChecklistSession ?? snapshotChecklistSession
-  const checklistItems = Array.isArray(currentChecklistSession?.items)
+  const savedChecklistItems = Array.isArray(currentChecklistSession?.items)
     ? (currentChecklistSession.items as DashboardPayload[])
     : setupChecklistItemsFromMaster(activeChecklistMasters)
+  const checklistItems = settingOnly
+    ? savedChecklistItems.map((item) => ({ ...item, section: "Setting" }))
+    : savedChecklistItems
   const phaseChecklistItems = setupChecklistItemsForPhase(checklistItems, phase)
   const canSave =
     Boolean(
@@ -1589,7 +1595,7 @@ function SetupChecklistShell({
       (phase === "start" || phase === "end") &&
       phaseChecklistItems.length
     ) &&
-    (phase === "start" || Boolean(currentChecklistSession))
+    (settingOnly || phase === "start" || Boolean(currentChecklistSession))
   const isComplete =
     canSave && setupChecklistValuesComplete(phaseChecklistItems, values, phase)
 
@@ -1728,7 +1734,7 @@ function SetupChecklistShell({
                     />
                   </div>
                   <div className="grid gap-3 md:grid-cols-3">
-                    <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+                    {!settingOnly && <label className="grid gap-1 text-xs font-medium text-muted-foreground">
                       Pre Setting Done By
                       <Input
                         value={
@@ -1738,7 +1744,7 @@ function SetupChecklistShell({
                         }
                         readOnly
                       />
-                    </label>
+                    </label>}
                     <label className="grid gap-1 text-xs font-medium text-muted-foreground">
                       Setting Done By
                       <Input
@@ -7541,7 +7547,7 @@ function ShopFloorItemSummary({
   const statusLabel =
     tone === "current"
       ? shopFloorCurrentStatusLabel(row, productionCardRows)
-      : str(row.shopFloorStageLabel) || "Planned"
+      : shopFloorWorkflowLabel(row) || "Planned"
   if (compact) {
     return (
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
@@ -7630,9 +7636,7 @@ function ShopFloorRowAction({
   const row = next ?? current
   const stage = str(row?.shopFloorStage) as ShopFloorStageId
   const stageIndex = shopFloorStageIndex(stage)
-  const nextStage = next
-    ? shopFloorStages.find((_, index) => index === stageIndex + 1)
-    : undefined
+  const nextStage = next ? nextShopFloorStage(next) : undefined
   const checklistSessionId = next ? setupChecklistSessionId(next) : ""
   const snapshotChecklistSession = useMemo(
     () =>
@@ -7903,7 +7907,7 @@ function ShopFloorRowAction({
   if (nextStage && next.shopFloorTaskReady === false) {
     return (
       <div className="grid gap-2">
-        <ShopFloorProgress activeIndex={stageIndex} />
+        <ShopFloorProgress activeIndex={stageIndex} productionFloorCode={str(row?.productionFloorCode) || productionFloorFromLocation()} />
         <StatusBadge value="Task not ready" />
         <div className="text-sm text-muted-foreground">
           {displayValue(next.shopFloorTaskBlocker) ||
@@ -7915,7 +7919,7 @@ function ShopFloorRowAction({
 
   return (
     <div className="grid gap-2">
-      <ShopFloorProgress activeIndex={stageIndex} />
+      <ShopFloorProgress activeIndex={stageIndex} productionFloorCode={str(row?.productionFloorCode) || productionFloorFromLocation()} />
       {nextStage ? (
         <>
           <div className="text-sm font-medium">{nextStage.label}</div>
@@ -8068,14 +8072,14 @@ function SetupChecklistForm({
   onAddMaster?: (entryType: string, defaults?: Record<string, unknown>) => void
 }) {
   const defaults = setupChecklistMasterDefaults()
-  if (phase === "start" && !items.length) {
+  if (!items.length) {
     return (
       <div className="grid gap-2 rounded-md border border-[var(--color-warning)]/30 bg-[var(--color-warning-bg)] p-3 text-sm">
         <div className="font-medium text-[var(--color-warning-text)]">
           Setup Checklist Missing
         </div>
         <div className="text-[var(--color-warning-text)]">
-          Create An Active Setup Checklist Before Pre Setting Can Start.
+          {phase === "start" ? "Create An Active Pre Setting Checklist Before Continuing." : "Create An Active Setting Checklist Before Continuing."}
         </div>
         {onAddMaster ? (
           <Button
@@ -8091,7 +8095,7 @@ function SetupChecklistForm({
       </div>
     )
   }
-  if (phase === "end" && !session) {
+  if (phase === "end" && !session && row.productionFloorCode !== "cnc") {
     return (
       <div className="rounded-md border border-[var(--color-warning)]/30 bg-[var(--color-warning-bg)] p-3 text-sm text-[var(--color-warning-text)]">
         Pre Setting Checklist Session Is Missing. Start Pre Setting For This
@@ -8413,11 +8417,11 @@ function FirstPieceReadingControl({
   )
 }
 
-function ShopFloorProgress({ activeIndex }: { activeIndex: number }) {
+function ShopFloorProgress({ activeIndex, productionFloorCode }: { activeIndex: number; productionFloorCode: string }) {
   return (
     <div className="flex flex-wrap gap-1">
-      {shopFloorStages.map((stage, index) => {
-        const done = index <= activeIndex
+      {shopFloorStages.filter((stage) => productionFloorCode !== "cnc" || stage.id !== "presetting").map((stage, index) => {
+        const done = shopFloorStageIndex(stage.id) <= activeIndex
         return (
           <Badge
             key={stage.id}
@@ -13046,7 +13050,8 @@ function SetupChecklistMasterForm({
                     <TableCell>
                       <SearchableSelect
                         className="h-8 min-w-48 rounded-md border bg-background px-2 text-sm"
-                        value={draft.section}
+                        value={productionFloorFromLocation() === "cnc" ? "Setting" : draft.section}
+                        disabled={productionFloorFromLocation() === "cnc"}
                         onChange={(event) =>
                           updateDraft(
                             draft.draftId,
@@ -13055,9 +13060,9 @@ function SetupChecklistMasterForm({
                           )
                         }
                       >
-                        <option value="Pre setting">Pre Setting</option>
+                        {productionFloorFromLocation() !== "cnc" && <option value="Pre setting">Pre Setting</option>}
                         <option value="Setting">Setting</option>
-                        {draft.section === "Pre setting / setting" ? (
+                        {productionFloorFromLocation() !== "cnc" && draft.section === "Pre setting / setting" ? (
                           <option value="Pre setting / setting">
                             Both Phases (Legacy)
                           </option>
@@ -15370,7 +15375,15 @@ function shopFloorRowStatus(
 ) {
   if (current) return shopFloorCurrentStatusLabel(current, productionCardRows)
   if (!next) return "No plan"
-  return str(next.shopFloorStageLabel) || "Setup required"
+  return shopFloorWorkflowLabel(next) || "Setup required"
+}
+
+function shopFloorWorkflowLabel(row: DashboardPayload) {
+  const floor = str(row.productionFloorCode) || productionFloorFromLocation()
+  if (floor === "cnc" && ["presetting", "tools_drawing"].includes(str(row.shopFloorStage))) {
+    return "Setting pending"
+  }
+  return str(row.shopFloorStageLabel)
 }
 
 function shopFloorCurrentStatusLabel(
@@ -15383,7 +15396,7 @@ function shopFloorCurrentStatusLabel(
   )
     return "Running"
   return (
-    str(row.shopFloorStageLabel) || str(row.runningStatus) || "Setup complete"
+    shopFloorWorkflowLabel(row) || str(row.runningStatus) || "Setup complete"
   )
 }
 
@@ -15537,8 +15550,8 @@ function roleTaskMatches(
 }
 
 function nextShopFloorStage(row: DashboardPayload) {
-  const nextIndex = shopFloorStageIndex(str(row.shopFloorStage)) + 1
-  return shopFloorStages[nextIndex]
+  const nextId = nextShopFloorStageId(row.shopFloorStage, str(row.productionFloorCode) || productionFloorFromLocation())
+  return shopFloorStages.find((stage) => stage.id === nextId)
 }
 
 function pendingTaskLabel(row: DashboardPayload) {
@@ -16454,7 +16467,7 @@ function newSetupChecklistDraft(sequence: number): SetupChecklistStepDraft {
     checkPoint: "",
     inputType: "checkbox",
     required: "Yes",
-    section: "Pre setting",
+    section: productionFloorFromLocation() === "cnc" ? "Setting" : "Pre setting",
     remark: "",
   }
 }
@@ -17461,7 +17474,7 @@ function setupChecklistMasterDefaults() {
     checkPoint: "",
     inputType: "checkbox",
     required: "Yes",
-    section: "Pre setting",
+    section: productionFloorFromLocation() === "cnc" ? "Setting" : "Pre setting",
     effectiveFrom: istDateValue(),
     status: "Active",
   }

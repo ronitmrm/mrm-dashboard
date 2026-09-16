@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, test } from "vitest"
 import { createDashboardPlanningRepository } from "./dashboard-planning"
 import { migrateDatabase } from "./migrate"
 import { createProductionShopFloorRepository } from "./production-shop-floor"
+import { createQualityRepository } from "./quality"
 
 const connectionString =
   process.env.TEST_DATABASE_URL ??
@@ -14,6 +15,7 @@ const connectionString =
 const pool = new Pool({ connectionString })
 const planning = createDashboardPlanningRepository({ connectionString })
 const repository = createProductionShopFloorRepository({ connectionString })
+const quality = createQualityRepository({ connectionString })
 const suffix = randomUUID().slice(0, 8)
 const itemUid = `FLOOR-${suffix}`
 const firstJobCard = `FLOOR-JC-${suffix}-1`
@@ -164,6 +166,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await planning.close()
   await repository.close()
+  await quality.close()
   await pool.end()
 })
 
@@ -432,6 +435,22 @@ describe("production and shop-floor workflows", () => {
   })
 
   test("keeps CNC count continuity across shift sessions and stores linked events", async () => {
+    const template = await quality.upsertSetupChecklistTemplate({
+      code: `CNC-${suffix}`, name: "CNC Setting", organizationId, productionFloorCode: "cnc",
+      payload: { section: "Pre setting" }, revision: 1,
+      items: [{ itemKey: "program", prompt: "Program checked", inputType: "checkbox", sequence: 1, required: true }],
+    })
+    const checklist = await quality.saveSetupChecklistSession({
+      organizationId, productionFloorCode: "cnc", jobCardNumber: cncJobCard,
+      operationSetupCode: "1", machineNumber: cncMachine, templateCode: template.code,
+      sessionKey: `CNC-${suffix}`, phase: "end", status: "Completed", completedBy: "Programmer",
+      payload: {}, results: [{ itemKey: "program", value: true }],
+    })
+    expect((await pool.query("SELECT status FROM quality.setup_checklist_sessions WHERE id = $1", [checklist.id])).rows[0]).toEqual({ status: "Completed" })
+    await expect(repository.recordShopFloorStage({
+      organizationId, productionFloorCode: "cnc", jobCardNumber: cncJobCard,
+      machineNumber: cncMachine, operationSetupCode: "1", stage: "presetting", payload: {},
+    })).rejects.toThrow("CNC uses Setting only")
     await repository.recordShopFloorStage({
       jobCardNumber: cncJobCard,
       machineNumber: cncMachine,
