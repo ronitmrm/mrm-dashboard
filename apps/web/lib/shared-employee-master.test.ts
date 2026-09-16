@@ -37,6 +37,15 @@ function post(
 }
 
 describe("shared Employee Master", () => {
+  it("recognizes the unit in current PPAC department names with generated codes", () => {
+    const rows = sharedEmployeeMasterRows([
+      post({ id: "1", status: "Occupied", department: "Ppac Cnc-01 Shop Floor", departmentCode: "PC0SF", designation: "Assistant", employeeCode: "CNC-SF", employeeName: "CNC employee" }),
+      post({ id: "2", status: "Occupied", department: "Ppac Conventional-01 Shop Floor", departmentCode: "PC0SF-2", designation: "Assistant", employeeCode: "CV-SF", employeeName: "Conventional employee" }),
+    ])
+    expect(productionShopFloorOptions(rows, "cnc")).toEqual([{ code: "CNC-SF", name: "CNC employee" }])
+    expect(productionShopFloorOptions(rows, "conventional")).toEqual([{ code: "CV-SF", name: "Conventional employee" }])
+  })
+
   it("provides joined HR employees to every Production floor", () => {
     expect(
       sharedEmployeeMasterRows([

@@ -1,6 +1,7 @@
 import type { RecruitmentPostRow } from "@workspace/db"
 import {
   parseProductionFloorCode,
+  productionFloors,
   type ProductionFloorCode,
 } from "@workspace/db/production-floors"
 
@@ -100,7 +101,14 @@ function productionFloorFromDepartment(
   if (code.startsWith("PPC-CV")) return "conventional"
   if (code.startsWith("PPC-CNC")) return "cnc"
   if (code.startsWith("PPC-FG")) return "forging"
-  return parseProductionFloorCode(department)
+  const departmentName = String(department).trim().toLowerCase()
+  return (
+    parseProductionFloorCode(department) ??
+    productionFloors.find((floor) =>
+      departmentName.startsWith(`${floor.label.toLowerCase()} `)
+    )?.code ??
+    null
+  )
 }
 
 function isMachinistEmployee(row: {
