@@ -112,11 +112,18 @@ published version. Branding remains the authoring and retained-history workspace
   tagline lockup, green metadata headers and outlined topic panels, and a white
   notice with a large green banner and full footer wordmark. Notice languages
   flow together. The later Notice.pdf reference supersedes the notice design:
-  white page and a green Notice banner, using the approved typography above,
-  a footer wordmark and one free-text body per language. Notice authors include
+  white page and a green Notice banner, a centered footer wordmark and one
+  centered free-text body per selected language. The 2026-09-16 notice correction
+  restores the reference banner proportions: 50mm tall, with a 128px Outfit 800
+  NOTICE title (a notice-specific exception to the general 40px title baseline).
+  The title still shares the document-wide shrink factor. Selected language
+  bodies occupy equal-height regions of the available space between the date
+  and footer, centered horizontally and vertically. Notice authors include
   audience, message, actions and dates directly in that body; there are no separate
   source, heading or translated-title fields. Add Body adds another language
-  (English, Hindi or Gujarati, once each). Existing draft headings and text are
+  (English, Hindi or Gujarati, once each). Any one language or any combination
+  is allowed; neither English nor all three languages are compulsory. Existing
+  draft headings and text are
   combined into the body when edited. The notice number prints in the top-right corner above the banner;
   drafts show Number assigned on issue. Titles and author remain in records and
   PDF metadata.
