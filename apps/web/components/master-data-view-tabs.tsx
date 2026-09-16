@@ -65,9 +65,10 @@ export function MasterDataViewTabs(props: MasterDataViewTabsProps) {
     props.dataEntryHref,
     searchParams
   )
-  const masterTablesHref = selection
-    ? withMasterSelectionContext(props.masterTablesHref, searchParams)
-    : "/masters?view=masterTables"
+  const masterTablesHref = withMasterSelectionContext(
+    props.masterTablesHref,
+    searchParams
+  )
   const transferAction = masterDataTransferAction(props.activeView, {
     csvImport: Boolean(props.csvDownloadAction || props.csvImportAction),
     export: Boolean(props.exportAction || props.onExport),

@@ -24,7 +24,7 @@ describe("Master Data workspace", () => {
       "masterSelectionHref(selection, props.activeView)"
     )
     expect(tabsSource).toMatch(
-      /const masterTablesHref = selection\s+\? withMasterSelectionContext\([\s\S]*?\)\s+: "\/masters\?view=masterTables"/
+      /const masterTablesHref = withMasterSelectionContext\(\s*props.masterTablesHref,\s*searchParams\s*\)/
     )
     expect(tabsSource).toContain("MasterDataUnsavedGuard")
     expect(source).toMatch(
