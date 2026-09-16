@@ -3245,9 +3245,9 @@ function PlannerDecisionConsole({
                 </div>
               </div>
             )}
-            <PlannerPendingMachineIssues rows={machineIssues} />
           </div>
         ),
+        issues: <PlannerActiveMachineIssues rows={machineIssues} />,
         history: <ActionLogTable rows={history} />,
       }}
     />
@@ -4747,20 +4747,9 @@ function PlannerActionConflictPanel({
   )
 }
 
-function PlannerPendingMachineIssues({ rows }: { rows: DashboardPayload[] }) {
+function PlannerActiveMachineIssues({ rows }: { rows: DashboardPayload[] }) {
   return (
     <div className="grid gap-2">
-      {rows.length ? (
-        <div className="rounded-lg border bg-muted/15 p-3">
-          <div className="text-sm font-medium">
-            Active machine issues are context only
-          </div>
-          <div className="text-xs text-muted-foreground">
-            These decisions are already saved. They are shown here only to
-            explain machine constraints while resolving a pending conflict.
-          </div>
-        </div>
-      ) : null}
       <DataRowsCard
         title="Active Machine Issues"
         rows={plannerPendingMachineIssueRows(rows)}
