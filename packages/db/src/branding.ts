@@ -309,7 +309,7 @@ export function createBrandingRepository(options: RepositoryPoolOptions) {
               ? "mrm-notice-v8"
               : input.type === "work-instruction"
                 ? "mrm-wi-v8"
-                : "mrm-book-v6",
+                : "mrm-book-v7",
           ]
         )
         return revision.id
