@@ -178,7 +178,24 @@ export function PlannerDecisionWorkspace({
               </div>
             </div>
             <div className="grid gap-3 @3xl/planner:grid-cols-2">
-              {orderAcceptanceHref ? <a href={orderAcceptanceHref} className="grid gap-2 rounded-lg border bg-background p-4 text-left hover:bg-muted/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><span className="font-semibold">Order Acceptance Planning</span><span className="text-sm text-muted-foreground">Review Proposed Orders, collect RM dates and select feasible lines before Purchase confirms the PO.</span><span className="text-xs font-medium text-primary">Open Proposed Orders</span></a> : null}
+              {orderAcceptanceHref ? (
+                <a
+                  href={orderAcceptanceHref}
+                  className="group grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 rounded-lg border bg-background p-4 text-left transition-colors hover:border-primary/50 hover:bg-muted/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:grid-cols-[auto_1fr_auto]"
+                >
+                  <span className="grid size-10 place-items-center rounded-md bg-primary/10 text-primary">
+                    <CheckCircle2 className="size-5" />
+                  </span>
+                  <div className="min-w-0">
+                    <div className="font-semibold">Order Acceptance Planning</div>
+                    <div className="mt-1 text-sm text-muted-foreground">Review Proposed Orders, collect RM dates and select feasible lines.</div>
+                    <div className="mt-2 text-xs text-muted-foreground"><span className="font-medium text-foreground">Best for:</span> Check feasibility before Purchase confirms the PO.</div>
+                  </div>
+                  <span className="col-start-2 flex items-center gap-1 text-xs font-medium text-primary sm:col-start-auto sm:pt-1">
+                    Select <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
+                  </span>
+                </a>
+              ) : null}
               {actionChoices.map((choice) => {
                 const Icon = choice.icon
                 return (
