@@ -39,6 +39,14 @@ function todayDateKey() {
 }
 
 describe("buildLegacyDashboardSnapshot", () => {
+  it("omits inapplicable numbering recommendations from populated and empty snapshots", () => {
+    const input = { workbookName: "PostgreSQL", productionEntries: [] }
+    const dataEntries = [{ entryType: "employee", createdAt: "2026-09-16", payload: { empId: "OP-1" } }]
+    expect(buildLegacyDashboardSnapshot({ ...input, dataEntries }).toolFixtureNumbers?.rows.length).toBeGreaterThan(0)
+    expect(buildLegacyDashboardSnapshot({ ...input, dataEntries, includeToolFixtureNumbers: false }).toolFixtureNumbers).toBeUndefined()
+    expect(buildLegacyDashboardSnapshot({ ...input, includeToolFixtureNumbers: false }).toolFixtureNumbers).toBeUndefined()
+  })
+
   it("keeps saved operational entries available for their table views", () => {
     const workOrder = {
       entryType: "work_order",

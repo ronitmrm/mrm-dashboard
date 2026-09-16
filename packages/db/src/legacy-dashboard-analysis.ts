@@ -14,6 +14,7 @@ type DataEntry = {
 type ActionRow = Record<string, unknown> & { createdAt?: string };
 
 export type LegacyDashboardInput = {
+  includeToolFixtureNumbers?: boolean;
   workbookName: string;
   productionEntries: ProductionEntry[];
   attendanceRecords?: AttendanceRecord[];
@@ -300,6 +301,7 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
     : normalizedProductionEntries(input.productionEntries);
 
   const snapshot = buildProductionAnalysis({
+    includeToolFixtureNumbers: input.includeToolFixtureNumbers ?? true,
     setupNameMasterRows,
     productionRows,
     employees,
@@ -372,10 +374,12 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
     entryRows(byType, "machine_master").length
   ) return snapshot;
 
-  return buildDashboardSnapshot(input);
+  const fallback = buildDashboardSnapshot(input);
+  return { ...fallback, toolFixtureNumbers: input.includeToolFixtureNumbers === false ? undefined : fallback.toolFixtureNumbers };
 }
 
 function buildProductionAnalysis({
+  includeToolFixtureNumbers,
   setupNameMasterRows,
   productionRows,
   employees,
@@ -422,6 +426,7 @@ function buildProductionAnalysis({
   workbookName,
   updatedAt,
 }: {
+  includeToolFixtureNumbers: boolean;
   productionRows: ProductionRow[];
   employees: Map<string, string>;
   setupNameMasterRows: Record<string, unknown>[];
@@ -784,7 +789,7 @@ function buildProductionAnalysis({
     previousProductionDashboardRows,
   });
   const routingStatus = buildRoutingStatus(routeRows, productionRows);
-  const toolFixtureNumbers = buildToolFixtureNumbers(toolingRows);
+  const toolFixtureNumbers = includeToolFixtureNumbers ? buildToolFixtureNumbers(toolingRows) : undefined;
   const dataEntry = buildDataEntryContext({ routeRows, cycleRows, toolingRows, workOrderRows, setupChecklistRows, maintenanceMasterRows, maintenanceChecklistMasterRows, planningHolidayRows, employeeRows, machineRows });
 
   return {

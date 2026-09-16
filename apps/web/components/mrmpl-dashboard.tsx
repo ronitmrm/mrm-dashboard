@@ -2790,6 +2790,7 @@ function DashboardContent({
   if (activeTab === "planningControlTab") {
     return (
       <PlanningControlPanel
+        productionFloorCode={productionFloorCode}
         payload={payload}
         productionControl={productionControl}
         submitAction={submitAction}
@@ -13084,10 +13085,12 @@ function SetupChecklistMasterForm({
   )
 }
 function PlanningControlPanel({
+  productionFloorCode,
   payload,
   productionControl,
   submitAction,
 }: {
+  productionFloorCode: ProductionFloorCode
   payload: DashboardPayload
   productionControl: DashboardPayload
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
@@ -13100,7 +13103,10 @@ function PlanningControlPanel({
         rows={asArray(productionControl.workflowExceptionRows)}
         submitAction={submitAction}
       />
-      <ToolFixturePanel rows={asArray(toolFixtureNumbers.rows)} />
+      {(productionFloorCode === "conventional" ||
+        productionFloorCode === "conventional-02") && (
+        <ToolFixturePanel rows={asArray(toolFixtureNumbers.rows)} />
+      )}
     </section>
   )
 }
