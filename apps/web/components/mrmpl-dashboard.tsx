@@ -1789,7 +1789,7 @@ function SetupChecklistShell({
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <StatusBadge
                   value={
-                    isComplete ? "Checklist complete" : "Progress can be saved"
+                    isComplete ? "Checklist complete" : "Incomplete — completion locked"
                   }
                 />
                 <Button
@@ -1798,7 +1798,7 @@ function SetupChecklistShell({
                   onClick={() => void saveProgress()}
                 >
                   <CheckCircle2 className="size-4" />
-                  {isSaving ? "Saving" : "Save Checklist Progress"}
+                  {isSaving ? "Saving" : isComplete ? "Save Completed Checklist" : "Save Draft"}
                 </Button>
               </div>
             </>
@@ -17399,6 +17399,9 @@ function setupChecklistValuesComplete(
     const value =
       values[setupChecklistItemKey(item, index)] ??
       setupChecklistExistingValue(item, phase)
+    if (str(item.inputType).trim().toLowerCase() === "checkbox") {
+      return ["yes", "true", "1", "ok", "pass", "passed"].includes(str(value).trim().toLowerCase())
+    }
     return Boolean(str(value))
   })
 }

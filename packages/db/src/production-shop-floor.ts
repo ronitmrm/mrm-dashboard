@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto"
+import { assertSettingChecklistComplete } from "./setup-checklist-validation"
 
 import type { PoolClient } from "pg"
 
@@ -2857,6 +2858,19 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         const stage = canonicalStage(input.stage)
         if (normalizeProductionFloorCode(input.productionFloorCode) === "cnc" && stage === "presetting") {
           throw new Error("CNC uses Setting only. Refresh the task and complete Setting.")
+        }
+        if (normalizeProductionFloorCode(input.productionFloorCode) === "cnc" && stage === "setting") {
+          const checklist = await client.query<{ id: string; template_id: string }>(
+            `SELECT session.id, session.template_id
+             FROM quality.setup_checklist_sessions session
+             JOIN quality.setup_checklist_templates template ON template.id = session.template_id
+             WHERE session.work_order_id = $1 AND session.operation_setup_id = $2
+               AND session.machine_id = $3 AND session.reversed_at IS NULL AND template.active
+             ORDER BY session.started_at DESC LIMIT 1 FOR UPDATE OF session`,
+            [workOrder.work_order_id, setupId, machineId]
+          )
+          if (!checklist.rows[0]) throw new Error("Complete the required Setting checklist before Setting Done.")
+          await assertSettingChecklistComplete(client, checklist.rows[0].template_id, checklist.rows[0].id)
         }
         const active = stageIsActive(stage)
         if (!active) {
