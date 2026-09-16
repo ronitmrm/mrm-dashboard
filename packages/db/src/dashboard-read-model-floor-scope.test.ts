@@ -27,11 +27,11 @@ describe("dashboard data-entry floor scope", () => {
     expect(payload).not.toHaveProperty("productionFloorSnapshots.conventional.productionControl.setupNameMasterRows.0")
   })
   it("shares universal checklists and maintenance schedules across all units without leaking unit masters", () => {
-    const universal = ["setup_checklist_master", "maintenance_checklist_master", "maintenance_master"].map(
+    const universal = ["maintenance_checklist_master", "maintenance_master"].map(
       (entryType) => ({ entryType, productionFloorCode: "conventional" })
     )
     for (const floor of productionFloors) {
-      const unitRows = productionFloors.map(({ code }) => ({ entryType: "machine_master", productionFloorCode: code }))
+      const unitRows = productionFloors.map(({ code }) => ({ entryType: "setup_checklist_master", productionFloorCode: code }))
       expect(dashboardDataEntriesForFloor([...universal, ...unitRows], floor.code)).toEqual([
         ...universal, ...unitRows.filter((row) => row.productionFloorCode === floor.code),
       ])

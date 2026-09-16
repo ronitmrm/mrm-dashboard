@@ -29,9 +29,14 @@ const fullAccess: MasterModuleAccess = {
 }
 
 describe("master module selection", () => {
+  it("offers Setup Checklist in each production unit only", () => {
+    for (const unit of ["conventional", "conventional-02", "cnc", "forging"] as const) {
+      expect(availableMainMasters(unit, fullAccess).map(({ id }) => id)).toContain("setup_checklist_master")
+    }
+    expect(availableMainMasters("universal", fullAccess).map(({ id }) => id)).not.toContain("setup_checklist_master")
+  })
   it("keeps shared checklists and maintenance definitions in Universal", () => {
     for (const main of [
-      "setup_checklist_master",
       "maintenance_checklist_master",
       "maintenance_master",
     ]) {

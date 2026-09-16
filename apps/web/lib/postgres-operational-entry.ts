@@ -438,6 +438,7 @@ export function operationalEntryPlan(entryType: string, payload: Payload) {
       input: {
         active: activeStatus(payload.status),
         code: setupTemplateCode(payload),
+        productionFloorCode: text(payload.productionFloorCode),
         items: [
           {
             active: activeStatus(payload.status),

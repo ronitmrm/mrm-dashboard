@@ -348,7 +348,6 @@ function floorRows(rows: JsonRecord[], floorCode: ProductionFloorCode) {
 }
 
 const companyWideMasterEntryTypes = new Set([
-  "setup_checklist_master",
   "maintenance_checklist_master",
   "maintenance_master",
   "rejection_type_master",

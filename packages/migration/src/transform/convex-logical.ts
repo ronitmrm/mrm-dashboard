@@ -438,11 +438,13 @@ const LOGICAL_STATEMENTS = [
     )
     INSERT INTO quality.setup_checklist_templates (
       organization_id, code, name, revision, source_system, source_table,
-      source_id, source_payload
+      source_id, source_payload, production_floor_id
     )
     SELECT $2, 'SETUP-' || version, 'Setup checklist ' || version, 1,
       'convex', 'setup_checklist_template', lower(version),
-      jsonb_build_object('version', version, 'generatedFrom', 'convex')
+      jsonb_build_object('version', version, 'generatedFrom', 'convex'),
+      (SELECT id FROM manufacturing.production_floors
+       WHERE organization_id = $2 AND code = 'conventional')
     FROM versions
     ON CONFLICT (source_system, source_table, source_id) DO NOTHING
   `,
