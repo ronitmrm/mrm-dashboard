@@ -2,12 +2,14 @@
 
 ## Lifecycle
 
-Shop Floor task attribution (including RM at Machine and Setup Complete) offers
-active assistants, HODs and Managers assigned to that unit's Shop Floor
-department. HODs and Managers may perform these tasks when assistants are
-unavailable. Employees from other units or departments are not substitutes.
-This selection records who performed the work; it does not grant application
-permissions or change operator, Quality or dispatch-approval eligibility.
+Department task attribution offers active assistants, HODs and Managers from
+the task's department and production unit. This applies to Shop Floor (including
+RM at Machine and Setup Complete), Inprocess Quality, Machinist and Planner.
+HODs and Managers may perform the department's tasks when assistants are
+unavailable. Dispatch approvers include eligible Planner and Shop Floor employees.
+Employees from other units or departments are not substitutes. These selections
+record who performed the work; they do not grant application permissions.
+The separate machine Worker selection still requires a Worker designation.
 
 A Production Session is one uninterrupted period in which one operator runs one machine for one Job Card, option, and setup. Operator, shift, item, job, option, or setup changes end the current session. Downtime belongs to the session and does not end it.
 
