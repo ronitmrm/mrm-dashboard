@@ -1698,7 +1698,7 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
           [input.organizationId, sessionKey, context.operation_setup_id]
         )
         const completedAt =
-          input.phase === "end"
+          input.phase === "end" && input.status.trim().toLowerCase() === "completed"
             ? input.completedAt || new Date().toISOString()
             : null
         const result = existing.rows[0]
@@ -1706,7 +1706,7 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
               `
                 UPDATE quality.setup_checklist_sessions
                 SET template_id = $1, machine_id = $2, status = $3,
-                  completed_at = COALESCE(migration.try_timestamptz($4), completed_at),
+                  completed_at = migration.try_timestamptz($4),
                   completed_by_user_id = $5, legacy_completer = $6,
                   source_payload = $7
                 WHERE id = $8 RETURNING id
@@ -1813,6 +1813,27 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
               input.phase,
             ]
           )
+        }
+        if (input.phase === "end" && input.status.trim().toLowerCase() === "completed") {
+          const requiredItems = await client.query<{ prompt: string; section: string; answered: boolean }>(
+            `SELECT item.prompt,
+                COALESCE(item.source_payload->>'section', '') AS section,
+                (answer.response_boolean IS NOT NULL OR answer.response_numeric IS NOT NULL
+                  OR NULLIF(btrim(answer.response_text), '') IS NOT NULL) AS answered
+             FROM quality.setup_checklist_template_items item
+             LEFT JOIN quality.setup_checklist_results answer
+               ON answer.template_item_id = item.id AND answer.session_id = $2 AND answer.phase = 'end'
+             WHERE item.template_id = $1 AND item.active AND item.required`,
+            [template.rows[0].id, result.rows[0]!.id]
+          )
+          const missing = requiredItems.rows.filter((item) => {
+            const section = item.section.trim().toLowerCase().replace(/[-_]+/g, " ").replace(/\s+/g, " ")
+            const preSettingOnly = section.includes("pre setting") && !section.replace("pre setting", "").includes("setting")
+            return !preSettingOnly && !item.answered
+          })
+          if (missing.length) {
+            throw new Error(`Complete required checklist points before completion: ${missing.map((item) => item.prompt).join(", ")}`)
+          }
         }
         return result.rows[0]!
       })

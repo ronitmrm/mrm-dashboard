@@ -7,6 +7,12 @@ unique within that unit; tasks may only select and complete that unit's template
 Editing a unit's checklist does not change another unit's checklist. Existing
 checklist and completion records retain their identities when assigned to a unit.
 
+Incomplete checklist answers may be saved as progress, but cannot be marked
+Completed. Completion requires every active required point for the Setting phase
+to have an answer, validated against the unit's master on the server. An explicit
+No or numeric zero is an answer; a blank value is not. Saving incomplete progress
+clears the checklist completion timestamp and leaves Setting Done locked.
+
 CNC-01 has no Pre Setting stage. Its workflow is RM at Machine → Setting →
 Quality Approval → Machine Start. The six CNC checklist points are completed at
 Setting, without requiring an earlier checklist session. Historical Pre Setting
