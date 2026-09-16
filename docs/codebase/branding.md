@@ -1,12 +1,15 @@
 # Branding implementation
 
-## Shared SOP/Policy book (v6, 2026-09-15)
+## Shared SOP/Policy book (v7, 2026-09-16)
 
 - `typography.ts` is the shared Brand Guide B §15.1 source for PDF font roles.
   SOP/Policy use fixed CSS pixel baselines. Notice v8 and WI v8 use the same roles
   multiplied by one root `--print-scale`, measured by `fitSinglePageText` against
   every text box. No independent title/card fitting. See glossary for full table.
   Print page scale is 100%; 12.7mm outer margins are separate from internal spacing.
+- Details metadata and attribution values use the caption role (Outfit 500,
+  13px), including metadata labels. Body paragraphs retain their separate 15px
+  baseline. New issues use book v7; previously issued PDF bytes remain unchanged.
 
 - `book-editor.tsx` composes the same heading/details editor for both types.
   Tiptap StarterKit is loaded only in the book editor; its schema is restricted
