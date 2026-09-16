@@ -73,7 +73,7 @@ describe("Branding issue contract", () => {
     parsed.translations[1]!.sections[0]!.body = ""
     expect(() => validateBrandingIssue(parsed, 0, "notice")).toThrow("Hindi")
   })
-  it("preserves notice tables across saves and omits empty languages from previews", async () => {
+  it("preserves notice headings and tables across saves and omits empty languages", async () => {
     const richBody = {
       type: "doc",
       content: [
@@ -108,7 +108,23 @@ describe("Branding issue contract", () => {
           { ...content.translations[0], sections: [{ heading: "", body: "" }] },
           {
             ...content.translations[2],
-            sections: [{ heading: "", body: "", richBody }],
+            sections: [
+              {
+                heading: "",
+                body: "",
+                richBody: {
+                  ...richBody,
+                  content: [
+                    {
+                      type: "heading",
+                      attrs: { level: 2 },
+                      content: [{ type: "text", text: "નોટિસ" }],
+                    },
+                    ...richBody.content,
+                  ],
+                },
+              },
+            ],
           },
         ],
       },
@@ -130,6 +146,8 @@ describe("Branding issue contract", () => {
     })
     expect(notice.html.match(/<article lang=/g)).toHaveLength(1)
     expect(notice.html).toContain('<article lang="gu"')
+    expect(notice.html).toContain("<h2>નોટિસ</h2>")
+    expect(reopened.translations[1]!.sections[0]!.body).toContain("નોટિસ")
     expect(notice.html).toContain(
       "<table><tr><td><p>૦૧૨૩૪૫૬૭૮૯ &lt;schedule&gt;</p></td></tr></table>"
     )

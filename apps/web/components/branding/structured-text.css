@@ -6,6 +6,20 @@
   margin: 0 0 0.65em;
   white-space: pre-wrap;
 }
+.branding-prose h2 {
+  font-size: 1.8em;
+  font-weight: 800;
+  text-align: center;
+  line-height: 1.35;
+  margin: 0 0 0.65em;
+}
+.branding-prose[lang="hi"] h2,
+.branding-prose[lang="gu"] h2,
+[lang="hi"] .branding-prose h2,
+[lang="gu"] .branding-prose h2 {
+  font-size: 1.533333em;
+  font-weight: 700;
+}
 .branding-prose ul,
 .branding-prose ol {
   padding-left: 1.75em;
