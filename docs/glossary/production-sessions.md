@@ -7,6 +7,8 @@ the task's department and production unit. This applies to Shop Floor (including
 RM at Machine and Setup Complete), Inprocess Quality, Machinist and Planner.
 HODs and Managers may perform the department's tasks when assistants are
 unavailable. Dispatch approvers include eligible Planner and Shop Floor employees.
+In CNC, the Programmer department performs Machinist tasks; its active Assistants,
+HOD and Manager are eligible for the CNC Machinist task selector.
 Employees from other units or departments are not substitutes. These selections
 record who performed the work; they do not grant application permissions.
 The separate machine Worker selection still requires a Worker designation.

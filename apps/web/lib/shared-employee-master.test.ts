@@ -38,6 +38,18 @@ function post(
 }
 
 describe("shared Employee Master", () => {
+  it("includes active CNC Programmer staff and supervisors only in CNC Machinist tasks", () => {
+    const department = "Ppac Cnc-01 Programmer"
+    const rows = sharedEmployeeMasterRows([
+      post({ id: "1", department, departmentCode: "PC0P-2", designation: "Assistant", status: "Occupied", employeeCode: "1", employeeName: "Assistant" }),
+      post({ id: "2", department, designation: "HOD", status: "Occupied", employeeCode: "2", employeeName: "HOD" }),
+      post({ id: "3", department, designation: "Manager", status: "Occupied", employeeCode: "3", employeeName: "Manager" }),
+      post({ id: "4", department, designation: "Assistant", status: "Resigned", employeeCode: "4", employeeName: "Leaving" }),
+    ])
+    expect(productionMachinistOptions(rows, "cnc").map(({ code }) => code)).toEqual(["1", "2", "3"])
+    expect(productionMachinistOptions(rows, "conventional")).toEqual([])
+  })
+
   it("recognizes the unit in current PPAC department names with generated codes", () => {
     const rows = sharedEmployeeMasterRows([
       post({ id: "1", status: "Occupied", department: "Ppac Cnc-01 Shop Floor", departmentCode: "PC0SF", designation: "Assistant", employeeCode: "CNC-SF", employeeName: "CNC employee" }),
