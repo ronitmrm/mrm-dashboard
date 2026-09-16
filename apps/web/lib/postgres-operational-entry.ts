@@ -53,6 +53,7 @@ function requiredStatus(value: unknown) {
 
 function checklistValue(item: Payload, key: string): EntryValue {
   const value = item[key]
+  if (value === null || value === undefined || text(value) === "") return null
   const inputType = text(item.inputType).toLowerCase()
   if (["checkbox", "boolean", "pass_fail", "yes_no"].includes(inputType)) {
     return ["true", "yes", "1", "ok", "pass", "passed"].includes(

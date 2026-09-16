@@ -17448,6 +17448,9 @@ function setupChecklistSessionForStage({
       ? { ...item, startValue: value, startItemRemark: itemRemark }
       : { ...item, endValue: value, endItemRemark: itemRemark }
   })
+  const complete = phase === "end" && setupChecklistValuesComplete(
+    setupChecklistItemsForPhase(sessionItems, phase), {}, phase
+  )
   return {
     ...(existingSession ?? {}),
     sessionId: setupChecklistSessionId(row),
@@ -17455,11 +17458,16 @@ function setupChecklistSessionForStage({
     masterEffectiveFrom: displayValue(
       masterRows[0]?.effectiveFrom || existingSession?.masterEffectiveFrom
     ),
-    status: phase === "start" ? "In progress" : "Completed",
+    status: complete ? "Completed" : "In progress",
     startedAt: phase === "start" ? completedAt : existingSession?.startedAt,
     startedBy: phase === "start" ? doneBy : existingSession?.startedBy,
     startRemark: phase === "start" ? remark : existingSession?.startRemark,
-    endedAt: phase === "end" ? completedAt : existingSession?.endedAt,
+    endedAt: phase === "end"
+      ? complete ? completedAt : null
+      : existingSession?.endedAt,
+    completedAt: phase === "end"
+      ? complete ? completedAt : null
+      : existingSession?.completedAt,
     endedBy: phase === "end" ? doneBy : existingSession?.endedBy,
     endRemark: phase === "end" ? remark : existingSession?.endRemark,
     items: sessionItems,
