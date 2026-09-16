@@ -3532,7 +3532,7 @@ function machineUnavailableQueueBeforeSetupsForSort(row: Record<string, unknown>
 
 function machineUnavailableQueueBeforeMatchesRow(queueBefore: MachineUnavailableQueueBeforeSetup, row: Record<string, unknown>) {
   return queueBefore.jcNo === canonicalKey(rowText(row, "jcNo", "JC NO.", "JC NO"))
-    && queueBefore.setupNo === canonicalKey(rowText(row, "setupNo", "SETUP NO", "SETUP"))
+    && plannerSetupKey(queueBefore.setupNo) === plannerSetupKey(rowText(row, "setupNo", "SETUP NO", "SETUP"))
     && (!queueBefore.machine || queueBefore.machine === canonicalKey(rowText(row, "machine", "machineNo", "MACHINE NO", "M/C NO")));
 }
 function applyPlanOverrideInterruptionQuantities(details: Array<Record<string, unknown>>) {
@@ -3624,9 +3624,9 @@ function priorityInterruptsRow(priorityRow: Record<string, unknown>, row: Record
 
   const stoppedJc = canonicalKey(rowText(priorityRow, "priorityInterruptedJcNo", "interruptedJcNo", "STOPPED JC NO"));
   if (!stoppedJc || stoppedJc !== canonicalKey(rowText(row, "jcNo", "JC NO.", "JC NO"))) return false;
-  const stoppedSetup = canonicalKey(rowText(priorityRow, "priorityInterruptedSetupNo", "interruptedSetupNo", "STOPPED SETUP NO"));
+  const stoppedSetup = plannerSetupKey(rowText(priorityRow, "priorityInterruptedSetupNo", "interruptedSetupNo", "STOPPED SETUP NO"));
   const stoppedMachine = canonicalKey(rowText(priorityRow, "priorityInterruptedMachine", "interruptedMachine", "STOPPED MACHINE"));
-  if (stoppedSetup && stoppedSetup !== canonicalKey(rowText(row, "setupNo", "SETUP NO", "SETUP"))) return false;
+  if (stoppedSetup && stoppedSetup !== plannerSetupKey(rowText(row, "setupNo", "SETUP NO", "SETUP"))) return false;
   if (stoppedMachine && stoppedMachine !== canonicalKey(rowText(row, "machine", "machineNo", "MACHINE NO", "M/C NO"))) return false;
   return true;
 }
@@ -3663,21 +3663,21 @@ function priorityQueueBeforeSetups(priorityRow: Record<string, unknown>) {
 }
 
 function priorityKeepsRowBefore(priorityRow: Record<string, unknown>, blockingRow: Record<string, unknown>) {
-  const prioritySetupNo = canonicalKey(rowText(priorityRow, "setupNo", "SETUP NO", "SETUP"));
+  const prioritySetupNo = plannerSetupKey(rowText(priorityRow, "setupNo", "SETUP NO", "SETUP"));
   return priorityQueueBeforeSetups(priorityRow).some((queueBefore) =>
-    queueBefore.targetSetupNo === prioritySetupNo && priorityQueueBeforeMatchesRow(queueBefore, blockingRow),
+    plannerSetupKey(queueBefore.targetSetupNo) === prioritySetupNo && priorityQueueBeforeMatchesRow(queueBefore, blockingRow),
   );
 }
 
 function priorityQueueBeforeMatchesRow(queueBefore: ReturnType<typeof priorityQueueBeforeSetups>[number], row: Record<string, unknown>) {
   return queueBefore.jcNo === canonicalKey(rowText(row, "jcNo", "JC NO.", "JC NO"))
-    && queueBefore.setupNo === canonicalKey(rowText(row, "setupNo", "SETUP NO", "SETUP"))
+    && plannerSetupKey(queueBefore.setupNo) === plannerSetupKey(rowText(row, "setupNo", "SETUP NO", "SETUP"))
     && (!queueBefore.machine || queueBefore.machine === canonicalKey(rowText(row, "machine", "machineNo", "MACHINE NO", "M/C NO")));
 }
 
 function priorityInterruptionMatchesRow(interruption: ReturnType<typeof priorityInterruptedSetups>[number], row: Record<string, unknown>) {
   return interruption.jcNo === canonicalKey(rowText(row, "jcNo", "JC NO.", "JC NO"))
-    && interruption.setupNo === canonicalKey(rowText(row, "setupNo", "SETUP NO", "SETUP"))
+    && plannerSetupKey(interruption.setupNo) === plannerSetupKey(rowText(row, "setupNo", "SETUP NO", "SETUP"))
     && (!interruption.machine || interruption.machine === canonicalKey(rowText(row, "machine", "machineNo", "MACHINE NO", "M/C NO")));
 }
 
@@ -4012,6 +4012,12 @@ function setupStepKey(setupNo: string, optionNumber: string) {
   return setupKey;
 }
 
+function plannerSetupKey(value: string) {
+  const key = canonicalKey(value);
+  const numbered = /^(?:p\s*|setup\s*)?(\d+)$/.exec(key);
+  return numbered ? String(Number(numbered[1])) : key;
+}
+
 function plannedSetupDate(rmInwardDate: string, setupIndex: number, planningCalendar: PlanningCalendar) {
   const start = parseDate(rmInwardDate);
   return start ? addDays(start, setupIndex, planningCalendar) : "";
@@ -4165,13 +4171,13 @@ function machineUnavailableQueuePlacementForSetup(
 ): MachineUnavailableQueuePlacement | undefined {
   const jcKey = canonicalKey(target.jcNo);
   const partKey = canonicalKey(target.partCode);
-  const setupKey = canonicalKey(target.setupNo);
+  const setupKey = plannerSetupKey(target.setupNo);
   if (!jcKey || !setupKey) return undefined;
   for (const window of windows) {
     for (const placement of window.queuePlacements) {
       if (placement.targetJcNo !== jcKey) continue;
       if (placement.targetPartCode && partKey && placement.targetPartCode !== partKey) continue;
-      if (placement.targetSetupNo !== setupKey) continue;
+      if (plannerSetupKey(placement.targetSetupNo) !== setupKey) continue;
       return placement;
     }
   }
@@ -4187,13 +4193,13 @@ function machineUnavailableInterruptionForSetup(
   target: { jcNo: string; setupNo: string; lockedMachines: Set<string> },
 ): MachineUnavailableSetupInterruption | undefined {
   const jcKey = canonicalKey(target.jcNo);
-  const setupKey = canonicalKey(target.setupNo);
+  const setupKey = plannerSetupKey(target.setupNo);
   const lockedMachineList = [...target.lockedMachines].filter(Boolean);
   const lockedMachineKeys = new Set(lockedMachineList.map(canonicalKey));
   if (!jcKey || !setupKey || !lockedMachineKeys.size) return undefined;
   for (const window of windows) {
     for (const interruption of window.interruptedSetups) {
-      if (interruption.jcNo !== jcKey || interruption.setupNo !== setupKey) continue;
+      if (interruption.jcNo !== jcKey || plannerSetupKey(interruption.setupNo) !== setupKey) continue;
       if (!lockedMachineKeys.has(interruption.machine)) continue;
       const lockedMachine = lockedMachineList.find((machine) => canonicalKey(machine) === interruption.machine) ?? interruption.machine;
       return { ...interruption, machine: lockedMachine, finishedQty: Math.max(0, interruption.finishedQty), window };
@@ -4378,13 +4384,13 @@ function planOverrideDecisionForSetup(planOverrides: ActionRow[], workOrder: Rec
 function matchingPlanOverridesForSetup(planOverrides: ActionRow[], workOrder: Record<string, unknown>, setupNo: string, displaySetupNo?: string) {
   const jcKey = canonicalKey(rowText(workOrder, "jcNo", "JC NO.", "JC NO"));
   const partKey = canonicalKey(rowText(workOrder, "partCode", "PART CODE", "PART NO"));
-  const setupKeys = new Set([canonicalKey(setupNo), canonicalKey(displaySetupNo ?? "")].filter(Boolean));
+  const setupKeys = new Set([plannerSetupKey(setupNo), plannerSetupKey(displaySetupNo ?? "")].filter(Boolean));
   return planOverrides.filter((row) => {
     if (!isActivePlannerDecision(rowText(row, "status", "STATUS"))) return false;
     const targetKey = canonicalKey(rowText(row, "target", "jcNo", "JC NO.", "JC NO", "partCode", "PART CODE", "PART NO"));
     const rowJcKey = canonicalKey(rowText(row, "jcNo", "JC NO.", "JC NO"));
     const rowPartKey = canonicalKey(rowText(row, "partCode", "PART CODE", "PART NO"));
-    const rowSetupKey = canonicalKey(rowText(row, "setupNo", "SETUP NO.", "SETUP NO"));
+    const rowSetupKey = plannerSetupKey(rowText(row, "setupNumber", "setupNo", "SETUP NO.", "SETUP NO"));
     const targetMatches = Boolean(targetKey && (targetKey === jcKey || targetKey === partKey));
     const rowMatches = Boolean((rowJcKey && rowJcKey === jcKey) || (rowPartKey && rowPartKey === partKey));
     const setupMatches = !rowSetupKey || setupKeys.has(rowSetupKey);
@@ -4445,12 +4451,12 @@ function planOverrideInterruptionForSetup(
 ): MachineUnavailableSetupInterruption | undefined {
   if (!isActivePlannerDecision(rowText(override, "status", "STATUS"))) return undefined;
   const jcKey = canonicalKey(target.jcNo);
-  const setupKey = canonicalKey(target.setupNo);
+  const setupKey = plannerSetupKey(target.setupNo);
   const lockedMachineList = [...target.lockedMachines].filter(Boolean);
   const lockedMachineKeys = new Set(lockedMachineList.map(canonicalKey));
   if (!jcKey || !setupKey || !lockedMachineKeys.size) return undefined;
   const interruptions = machineUnavailableInterruptedSetups(override);
-  const match = interruptions.find((interruption) => interruption.jcNo === jcKey && interruption.setupNo === setupKey && lockedMachineKeys.has(interruption.machine));
+  const match = interruptions.find((interruption) => interruption.jcNo === jcKey && plannerSetupKey(interruption.setupNo) === setupKey && lockedMachineKeys.has(interruption.machine));
   if (!match) return undefined;
   const lockedMachine = lockedMachineList.find((machine) => canonicalKey(machine) === match.machine) ?? match.machine;
   const fromDate = parseDate(rowText(override, "createdAt")) || localIsoDate(new Date());
