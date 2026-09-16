@@ -1,4 +1,5 @@
 import { assertMasterAvailable } from "./master-duplicate"
+import { assertSettingChecklistComplete } from "./setup-checklist-validation"
 import { randomUUID } from "node:crypto"
 
 import type { PoolClient } from "pg"
@@ -1815,25 +1816,7 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
           )
         }
         if (input.phase === "end" && input.status.trim().toLowerCase() === "completed") {
-          const requiredItems = await client.query<{ prompt: string; section: string; answered: boolean }>(
-            `SELECT item.prompt,
-                COALESCE(item.source_payload->>'section', '') AS section,
-                (answer.response_boolean IS NOT NULL OR answer.response_numeric IS NOT NULL
-                  OR NULLIF(btrim(answer.response_text), '') IS NOT NULL) AS answered
-             FROM quality.setup_checklist_template_items item
-             LEFT JOIN quality.setup_checklist_results answer
-               ON answer.template_item_id = item.id AND answer.session_id = $2 AND answer.phase = 'end'
-             WHERE item.template_id = $1 AND item.active AND item.required`,
-            [template.rows[0].id, result.rows[0]!.id]
-          )
-          const missing = requiredItems.rows.filter((item) => {
-            const section = item.section.trim().toLowerCase().replace(/[-_]+/g, " ").replace(/\s+/g, " ")
-            const preSettingOnly = section.includes("pre setting") && !section.replace("pre setting", "").includes("setting")
-            return !preSettingOnly && !item.answered
-          })
-          if (missing.length) {
-            throw new Error(`Complete required checklist points before completion: ${missing.map((item) => item.prompt).join(", ")}`)
-          }
+          await assertSettingChecklistComplete(client, template.rows[0].id, result.rows[0]!.id)
         }
         return result.rows[0]!
       })

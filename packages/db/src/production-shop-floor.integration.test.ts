@@ -457,7 +457,16 @@ describe("production and shop-floor workflows", () => {
     expect((await pool.query("SELECT status, completed_at FROM quality.setup_checklist_sessions WHERE id = $1", [checklist.id])).rows[0]).toEqual({ status: "In progress", completed_at: null })
     await expect(quality.saveSetupChecklistSession({ ...incompleteChecklist, status: "Completed" }))
       .rejects.toThrow("Complete required checklist points")
-    await quality.saveSetupChecklistSession({ ...incompleteChecklist, status: "Completed", results: [{ itemKey: "program", value: false }] })
+    await expect(quality.saveSetupChecklistSession({ ...incompleteChecklist, status: "Completed", results: [{ itemKey: "program", value: false }] }))
+      .rejects.toThrow("Complete required checklist points")
+    await quality.saveSetupChecklistSession({ ...incompleteChecklist, status: "In progress", results: [{ itemKey: "program", value: false }] })
+    const settingAction = {
+      organizationId, productionFloorCode: "cnc", jobCardNumber: cncJobCard,
+      machineNumber: cncMachine, operationSetupCode: "1", stage: "setting", payload: {},
+    }
+    await expect(repository.recordShopFloorStage(settingAction)).rejects.toThrow("Complete required checklist points")
+    await quality.saveSetupChecklistSession({ ...incompleteChecklist, status: "Completed", results: [{ itemKey: "program", value: true }] })
+    await repository.recordShopFloorStage(settingAction)
     await expect(repository.recordShopFloorStage({
       organizationId, productionFloorCode: "cnc", jobCardNumber: cncJobCard,
       machineNumber: cncMachine, operationSetupCode: "1", stage: "presetting", payload: {},
