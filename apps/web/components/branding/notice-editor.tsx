@@ -101,7 +101,6 @@ export function BrandingNoticeEditor({
               id={`notice-body-${translation.language}`}
               label={`Body · ${brandingLanguageLabels[translation.language]}`}
               language={translation.language}
-              tables
               headings
               value={brandingNoticeRichText(translation.sections)}
               onChange={(richBody) =>

@@ -13,8 +13,10 @@
   saved content and PDF. Heading and body sizes share the one-page fit multiplier.
   Banner title/number/date remain fixed. Empty/unselected languages are omitted
   and each remaining body region is top-aligned.
-  Its Tiptap body supports allowlisted tables; `richBody` persists through editing,
-  saved-content display and PDF output. Fitting measures the entire formatted body.
+  Its Tiptap body supports headings, paragraphs and lists. Table controls and the
+  table extension were removed at user request; old table text is retained when
+  opening the editor. Saved-content/PDF readers still accept existing table data.
+  Fitting measures the entire formatted body.
 - Notice/WI fitting now searches above and below the baseline: double the upper
   bound until a text region overflows, then binary-search the largest fitting
   shared multiplier. WI title, body, captions and metadata scale together. Notice

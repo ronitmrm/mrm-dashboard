@@ -133,12 +133,12 @@ published version. Branding remains the authoring and retained-history workspace
   blank lines for paragraphs and reflows single line breaks as spaces across
   the full body width. The editor preserves explicit formatted paragraphs.
   Notice authors can include
-  optional headings, formatted paragraphs, lists and simple tables in the body.
+  optional headings, formatted paragraphs and lists in the body.
   Notice headings are centered and bold, using the section heading baseline
   (27px English, 23px Hindi/Gujarati). Headings and body share the same fitting
-  multiplier; the banner, document number and date remain fixed. Tables allow up to
-  20 rows and 8 columns with unmerged cells; users can add/remove rows and columns
-  or paste an HTML table. Table text participates in the same one-page fitting.
+  multiplier; the banner, document number and date remain fixed. Table insertion
+  and editing are unavailable. Previously saved tables become plain text when
+  edited; saved PDF rendering remains compatible with existing documents.
   Notice authors include
   audience, message, actions and dates directly in that body; there are no separate
   source, heading or translated-title fields. Add Body adds another language
