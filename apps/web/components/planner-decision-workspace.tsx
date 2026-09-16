@@ -11,6 +11,7 @@ import {
   ListPlus,
   RefreshCw,
   Route,
+  Wrench,
 } from "lucide-react"
 
 import { Badge } from "@workspace/ui/components/badge"
@@ -28,9 +29,10 @@ export type PlannerDecisionAction =
   | "machine-switch"
   | "route-change"
 
-export type PlannerDecisionView = "new" | "pending" | "history"
+export type PlannerDecisionView = "new" | "pending" | "issues" | "history"
 
 type PlannerDecisionPanels = {
+  issues: ReactNode
   history: ReactNode
   machineUnavailable: ReactNode
   machineSwitch: ReactNode
@@ -121,7 +123,7 @@ export function PlannerDecisionWorkspace({
             Recalculate Plan
           </Button>
         </div>
-        <div className="grid gap-1 rounded-lg border bg-background p-1 sm:grid-cols-3" role="tablist" aria-label="Planner workspace">
+        <div className="grid gap-1 rounded-lg border bg-background p-1 sm:grid-cols-2 xl:grid-cols-4" role="tablist" aria-label="Planner workspace">
           <Button
             type="button"
             role="tab"
@@ -147,9 +149,23 @@ export function PlannerDecisionWorkspace({
             <AlertTriangle className="size-4" />
             <span className="grid flex-1 text-left leading-tight">
               <span>Pending Review</span>
-              <span className="hidden text-xs font-normal text-muted-foreground md:block">Resolve conflicts and constraints</span>
+              <span className="hidden text-xs font-normal text-muted-foreground md:block">Resolve conflicting decisions</span>
             </span>
             {pendingCount ? <Badge variant="secondary">{pendingCount}</Badge> : null}
+          </Button>
+          <Button
+            type="button"
+            role="tab"
+            aria-selected={activeView === "issues"}
+            variant={activeView === "issues" ? "secondary" : "ghost"}
+            className="h-auto justify-start rounded-md px-3 py-2"
+            onClick={() => onViewChange("issues")}
+          >
+            <Wrench className="size-4" />
+            <span className="grid text-left leading-tight">
+              <span>Active Machine Issues</span>
+              <span className="hidden text-xs font-normal text-muted-foreground md:block">View saved machine constraints</span>
+            </span>
           </Button>
           <Button
             type="button"
@@ -248,10 +264,16 @@ export function PlannerDecisionWorkspace({
             <div>
               <div className="text-base font-semibold">Decisions needing attention</div>
               <div className="text-sm text-muted-foreground">
-                Resolve conflicting planner choices and review active machine constraints in one place.
+                Resolve conflicting planner choices that need a decision.
               </div>
             </div>
             {panels.pending}
+          </div>
+        ) : null}
+        {activeView === "issues" ? (
+          <div className="grid min-w-0 gap-4" role="tabpanel" aria-label="Active Machine Issues">
+            <p className="text-sm text-muted-foreground">Saved machine constraints currently affecting planning.</p>
+            {panels.issues}
           </div>
         ) : null}
         {activeView === "history" ? (

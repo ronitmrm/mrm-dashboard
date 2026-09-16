@@ -18,6 +18,7 @@ function renderWorkspace(
       onRecalculate: () => undefined,
       onViewChange: () => undefined,
       panels: {
+        issues: createElement("div", null, "issues-panel"),
         history: createElement("div", null, "history-panel"),
         machineUnavailable: createElement("div", null, "machine-panel"),
         machineSwitch: createElement("div", null, "switch-panel"),
@@ -60,9 +61,15 @@ describe("PlannerDecisionWorkspace", () => {
     expect(html).not.toContain("route-panel")
   })
 
-  test("separates pending decisions from decision history", () => {
+  test("separates pending decisions, active machine issues and decision history", () => {
     const pendingHtml = renderWorkspace({ activeView: "pending" })
     const historyHtml = renderWorkspace({ activeView: "history" })
+    const issuesHtml = renderWorkspace({ activeView: "issues" })
+
+    expect(issuesHtml).toContain("issues-panel")
+    expect(issuesHtml).not.toContain("pending-panel")
+    expect(pendingHtml).not.toContain("issues-panel")
+    expect(historyHtml).not.toContain("issues-panel")
 
     expect(pendingHtml).toContain("pending-panel")
     expect(pendingHtml).not.toContain("history-panel")
