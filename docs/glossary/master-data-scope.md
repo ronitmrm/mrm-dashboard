@@ -90,6 +90,12 @@ Its Data Entry and CSV import require one of the recognized Production Units.
 Quality Inspection Parameter Master is production-unit-scoped even though the
 three quality code masters above are company-wide.
 
+**Next Tool / Fixture Number**: Planning Control numbering recommendations apply
+only to PPAC Conventional-01 and PPAC Conventional-02. CNC-01 and PPAC Forging
+do not use these numbering categories; their dashboard snapshots must not retain
+or generate these recommendations. This does not change Route or Tooling Master
+records used by production planning.
+
 Setup Name Master, Route Master, Cycle Time Master, and Tooling Master are
 production-unit masters. Route Master selects Setup Name and Machine Family.
 Machine Type is fetched from Machine Master for that family in the selected

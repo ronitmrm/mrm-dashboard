@@ -757,6 +757,8 @@ export async function buildCanonicalDashboardReadModel(
       floorCorrections
     )
     const snapshot = buildLegacyDashboardSnapshot({
+      includeToolFixtureNumbers:
+        floorCode === "conventional" || floorCode === "conventional-02",
       attendanceRecords: floorRows(
         corrected(source.attendanceRecords, "attendanceRecords"),
         floorCode
