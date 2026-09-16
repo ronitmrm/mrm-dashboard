@@ -7,6 +7,12 @@ unique within that unit; tasks may only select and complete that unit's template
 Editing a unit's checklist does not change another unit's checklist. Existing
 checklist and completion records retain their identities when assigned to a unit.
 
+CNC-01 has no Pre Setting stage. Its workflow is RM at Machine → Setting →
+Quality Approval → Machine Start. The six CNC checklist points are completed at
+Setting, without requiring an earlier checklist session. Historical Pre Setting
+evidence remains recorded; it does not complete Setting or block the next action.
+Other production units retain their existing Pre Setting workflow.
+
 Department task attribution offers active assistants, HODs and Managers from
 the task's department and production unit. This applies to Shop Floor (including
 RM at Machine and Setup Complete), Inprocess Quality, Machinist and Planner.

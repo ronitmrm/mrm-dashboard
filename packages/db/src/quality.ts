@@ -1587,6 +1587,7 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
           checklistCode: code,
           version: code,
           productionFloorCode,
+          ...(productionFloorCode === "cnc" ? { section: "Setting" } : {}),
         }
         const result = await client.query<{ code: string; id: string }>(
           `
@@ -1643,6 +1644,9 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
       status: string
       templateCode: string
     }) {
+      if (normalizeProductionFloorCode(input.productionFloorCode) === "cnc" && input.phase === "start") {
+        throw new Error("CNC uses a Setting checklist only. Refresh the checklist page.")
+      }
       return transaction(pool, async (client) => {
         const sessionKey = requiredText(
           input.sessionKey,

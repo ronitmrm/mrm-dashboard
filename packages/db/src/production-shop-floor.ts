@@ -2855,6 +2855,9 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         )
         if (!machineId) throw new Error("Shop-floor machine is required.")
         const stage = canonicalStage(input.stage)
+        if (normalizeProductionFloorCode(input.productionFloorCode) === "cnc" && stage === "presetting") {
+          throw new Error("CNC uses Setting only. Refresh the task and complete Setting.")
+        }
         const active = stageIsActive(stage)
         if (!active) {
           const openSession = await client.query<{ id: string }>(

@@ -17,6 +17,14 @@ export function normalizeShopFloorStage(stage: unknown) {
   return stageAliases[text] ?? text;
 }
 
+export function nextShopFloorStageId(stage: unknown, productionFloorCode: string) {
+  const stages = ["raw_material_at_machine", "presetting", "setting", "quality_approval", "operator_started", "item_complete"]
+  const current = stages.indexOf(normalizeShopFloorStage(stage))
+  return stages.slice(current + 1).find((candidate) =>
+    candidate !== "item_complete" && !(productionFloorCode === "cnc" && candidate === "presetting")
+  )
+}
+
 export function shopFloorNoPendingActionLabel(stage: unknown) {
   const normalizedStage = normalizeShopFloorStage(stage);
   if (normalizedStage === "operator_started") return "Machine already started";

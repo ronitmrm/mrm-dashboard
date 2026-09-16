@@ -187,7 +187,8 @@ function setupSessionPlan(payload: Payload) {
           })),
       },
     },
-  ].filter((phase) => phase.input.results.length > 0)
+  ].filter((phase) => phase.input.results.length > 0 &&
+    (common.productionFloorCode !== "cnc" || phase.input.phase === "end"))
 
   return {
     capability: "quality.setup_checklist.write",

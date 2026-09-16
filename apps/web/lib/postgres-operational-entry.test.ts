@@ -173,6 +173,10 @@ describe("PostgreSQL operational entry mapping", () => {
   })
 
   test("uses the generated checklist code for setup checklist masters and sessions", () => {
+    expect(operationalEntryPlan("setup_checklist_session", {
+      productionFloorCode: "cnc", checklistCode: "SC001", endedBy: "Programmer",
+      items: [{ sequence: 1, checkPoint: "Program checked", section: "Pre setting / setting", startValue: "Yes", endValue: "Yes" }],
+    })).toMatchObject({ phases: [{ input: { phase: "end", completedBy: "Programmer" } }] })
     expect(
       operationalEntryPlan("setup_checklist_master", {
         checklistCode: "SC001",
