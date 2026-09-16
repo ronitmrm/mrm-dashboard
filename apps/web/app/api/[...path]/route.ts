@@ -1021,6 +1021,24 @@ async function post(request: NextRequest, context: RouteContext) {
       )
     }
 
+    if (path === "machine-constraint-review") {
+      const action = text(body.action).toLowerCase()
+      if (action !== "available" && action !== "extend") {
+        throw new RouteError(400, "Choose Mark Available or Extend.")
+      }
+      const result = await withPlanningRepository(request, "planning.constraint.write",
+        ({ actorUserId, organizationId, repository }) => repository.reviewMachineConstraint({
+          actorUserId, organizationId, action,
+          constraintId: text(body.constraintId),
+          productionFloorCode: text(body.productionFloorCode),
+          unavailableTo: optionalText(body.unavailableTo),
+        }))
+      return json(await withPlanningRefresh(request, path, body, {
+        ...result,
+        message: action === "available" ? "Machine marked available." : "Machine issue end date extended.",
+      }))
+    }
+
     if (path === "plan-override") {
       const result = await withPlanningRepository(
         request,
@@ -1910,6 +1928,7 @@ const knownDashboardApiPaths = new Set([
   "job-card-delivery-target",
   "job-cards",
   "machine-constraint",
+  "machine-constraint-review",
   "mark-complete",
   "plan-override",
   "planner-priority",

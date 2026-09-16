@@ -11,6 +11,7 @@ import {
 } from "./postgres-runtime"
 import {
   machineTypeForFamily,
+  isActivePlannerDecision,
   validConfirmedPrioritySetupNumbers,
   workOrderIdentityMatches,
 } from "./planning-rules"
@@ -1747,6 +1748,64 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
         }
         await queueDashboardRefresh(client, input.organizationId)
         return { id: created.rows[0]!.id, ok: true }
+      })
+    },
+
+    async reviewMachineConstraint(input: {
+      organizationId: string
+      actorUserId?: string | null
+      productionFloorCode: string
+      constraintId: string
+      action: "available" | "extend"
+      unavailableTo?: string
+    }) {
+      return transaction(pool, async (client) => {
+        const result = await client.query<{
+          id: string
+          source_payload: Record<string, unknown>
+          today: string
+        }>(
+          `SELECT id, source_payload,
+             to_char(now() AT TIME ZONE 'Asia/Kolkata', 'YYYY-MM-DD') AS today
+           FROM manufacturing.machine_constraint_events
+           WHERE organization_id = $1 AND (id::text = $2 OR source_id = $2)
+             AND reversed_at IS NULL FOR UPDATE`,
+          [input.organizationId, input.constraintId]
+        )
+        const row = result.rows[0]
+        if (!row) throw new Error("Machine issue was not found or has been reversed.")
+        if (productionFloorCodeForRecord({ sourcePayload: row.source_payload }) !== input.productionFloorCode) {
+          throw new ProductionUnitAccessError("Machine issue belongs to another Production Unit.")
+        }
+        const previous = row.source_payload
+        if (previous.availableOn || !isActivePlannerDecision(previous.status)) {
+          throw new Error("Machine issue is already closed. Refresh the page.")
+        }
+        const newEnd = input.unavailableTo ?? ""
+        if (input.action === "extend" && (
+          !/^\d{4}-\d{2}-\d{2}$/.test(newEnd) ||
+          !Number.isFinite(Date.parse(newEnd)) ||
+          new Date(newEnd).toISOString().slice(0, 10) !== newEnd ||
+          newEnd < row.today ||
+          newEnd <= String(previous.unavailableTo || previous.unavailableFrom).slice(0, 10)
+        )) throw new Error("Choose a valid end date later than the existing end date and not before today.")
+        await client.query(
+          `UPDATE manufacturing.machine_constraint_events SET
+             ends_at = CASE WHEN $2 = 'extend' THEN $3::date::timestamptz ELSE ends_at END,
+             source_payload = source_payload || $4::jsonb || jsonb_build_object(
+               'availabilityReviews', COALESCE(source_payload->'availabilityReviews', '[]'::jsonb) ||
+                 jsonb_build_array(jsonb_build_object('action', $2::text, 'at', now(),
+                   'actorUserId', $5::text, 'previousTo', source_payload->'unavailableTo',
+                   'newTo', $3::text)))
+           WHERE id = $1`,
+          [row.id, input.action, input.action === "extend" ? newEnd : null,
+            input.action === "available"
+              ? { status: "Available", availableOn: row.today, availableAt: new Date().toISOString(), availableBy: input.actorUserId ?? null }
+              : { unavailableTo: newEnd },
+            input.actorUserId ?? null]
+        )
+        await queueDashboardRefresh(client, input.organizationId)
+        return { id: row.id, ok: true }
       })
     },
 

@@ -196,7 +196,7 @@ import {
   stalePlanningRefreshKey,
 } from "@/lib/planning-refresh-policy"
 import { plannerActionHistoryRows } from "@/lib/planner-action-history"
-import { plannerPendingMachineIssueRows } from "@/lib/planner-pending-review"
+import { machineIssueNeedsReview, openMachineIssues, plannerPendingMachineIssueRows } from "@/lib/planner-pending-review"
 import {
   duplicateQualityParameterCombination,
   hasNonNumericQualityTolerance,
@@ -3191,6 +3191,14 @@ function PlannerDecisionConsole({
   const conflicts = asArray(productionControl.plannerActionConflicts)
   const history = asArray(productionControl.plannerActionLog)
   const machineIssues = asArray(productionControl.machineConstraintRows)
+  const [reviewDate, setReviewDate] = useState(() => istDateValue())
+  useEffect(() => {
+    const timer = setInterval(() => setReviewDate(istDateValue()), 30_000)
+    return () => clearInterval(timer)
+  }, [])
+  const openIssues = openMachineIssues(machineIssues)
+  const overdueIssues = openIssues.filter((row) => machineIssueNeedsReview(row, reviewDate))
+  const activeIssues = openIssues.filter((row) => !machineIssueNeedsReview(row, reviewDate))
 
   return (
     <PlannerDecisionWorkspace
@@ -3198,7 +3206,7 @@ function PlannerDecisionConsole({
       activeAction={activeAction}
       activeView={activeView}
       historyCount={history.length}
-      pendingCount={conflicts.length}
+      pendingCount={conflicts.length + overdueIssues.length}
       onActionChange={setActiveAction}
       onRecalculate={() => void submitAction("reschedule", {})}
       onViewChange={setActiveView}
@@ -3234,7 +3242,7 @@ function PlannerDecisionConsole({
                 productionControl={productionControl}
                 submitAction={submitAction}
               />
-            ) : (
+            ) : !overdueIssues.length ? (
               <div className="rounded-lg border border-dashed bg-muted/10 p-6 text-center">
                 <div className="font-medium">
                   No conflicting decisions require review.
@@ -3244,10 +3252,13 @@ function PlannerDecisionConsole({
                   plan.
                 </div>
               </div>
-            )}
+            ) : null}
+            {overdueIssues.length ? (
+              <PlannerActiveMachineIssues rows={overdueIssues} submitAction={submitAction} needsReview />
+            ) : null}
           </div>
         ),
-        issues: <PlannerActiveMachineIssues rows={machineIssues} />,
+        issues: <PlannerActiveMachineIssues rows={activeIssues} submitAction={submitAction} />,
         history: <ActionLogTable rows={history} />,
       }}
     />
@@ -4747,14 +4758,57 @@ function PlannerActionConflictPanel({
   )
 }
 
-function PlannerActiveMachineIssues({ rows }: { rows: DashboardPayload[] }) {
+function PlannerActiveMachineIssues({ rows, submitAction, needsReview = false }: {
+  rows: DashboardPayload[]
+  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
+  needsReview?: boolean
+}) {
   return (
     <div className="grid gap-2">
       <DataRowsCard
-        title="Active Machine Issues"
-        rows={plannerPendingMachineIssueRows(rows)}
+        title={needsReview ? "Machine availability needs review" : "Active Machine Issues"}
+        rows={plannerPendingMachineIssueRows(rows).map((row) => needsReview ? { ...row, Status: "Pending Review" } : row)}
         empty="No active machine constraints"
+        rowLimit={rows.length}
+        renderRowActions={(_row, index) => (
+          <MachineIssueReviewActions row={rows[index]!} submitAction={submitAction} needsReview={needsReview} />
+        )}
       />
+    </div>
+  )
+}
+
+function MachineIssueReviewActions({ row, submitAction, needsReview }: {
+  row: DashboardPayload
+  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
+  needsReview: boolean
+}) {
+  const [pending, setPending] = useState(false)
+  const [newEnd, setNewEnd] = useState("")
+  const constraintId = str(row._id || row.id)
+  async function review(action: "available" | "extend") {
+    setPending(true)
+    try {
+      await submitAction("machine-constraint-review", { constraintId, action, unavailableTo: newEnd })
+    } finally {
+      setPending(false)
+    }
+  }
+  return (
+    <div className="flex min-w-max items-end gap-2">
+      <Button type="button" size="sm" disabled={pending || !constraintId} onClick={() => void review("available")}>
+        Mark Available
+      </Button>
+      {needsReview ? (
+        <>
+          <Field label="New end date">
+            <Input type="date" value={newEnd} min={istDateValue()} onChange={(event) => setNewEnd(event.target.value)} disabled={pending} />
+          </Field>
+          <Button type="button" size="sm" variant="outline" disabled={pending || !newEnd || !constraintId} onClick={() => void review("extend")}>
+            Extend
+          </Button>
+        </>
+      ) : null}
     </div>
   )
 }
@@ -14248,10 +14302,14 @@ function DataRowsCard({
   title,
   rows,
   empty,
+  renderRowActions,
+  rowLimit = 12,
 }: {
   title: string
   rows: DashboardPayload[]
   empty: string
+  renderRowActions?: (row: DashboardPayload, index: number) => ReactNode
+  rowLimit?: number
 }) {
   const columns = tableColumns(rows)
 
@@ -14271,14 +14329,16 @@ function DataRowsCard({
             <OperationalTable>
               <TableHeader>
                 <TableRow>
+                  {renderRowActions ? <TableHead>Action</TableHead> : null}
                   {columns.map((column) => (
                     <TableHead key={column}>{column}</TableHead>
                   ))}
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {rows.slice(0, 12).map((row, index) => (
+                {rows.slice(0, rowLimit).map((row, index) => (
                   <TableRow key={`${title}-${index}`}>
+                    {renderRowActions ? <TableCell>{renderRowActions(row, index)}</TableCell> : null}
                     {columns.map((column) => (
                       <TableCell
                         key={column}
@@ -14730,7 +14790,7 @@ function machineConstraintPreSaveConflicts(
     proposed.queuePlacements
   )
   if (!machine || !proposed.unavailableFrom || !proposedSignature) return []
-  return rows
+  return openMachineIssues(rows)
     .filter((row) => {
       const targetId = displayValue(row._id || row.targetId)
       if (proposed.resolvedIds.has(targetId)) return false

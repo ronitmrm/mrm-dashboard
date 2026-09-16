@@ -1236,7 +1236,7 @@ function buildProductionControl({
     downtimeMinutes: safeNumber(rowValue(row, "TOTAL DOWNTIME MINUTES", "downtimeMinutes")),
     downtimeReason: rowText(row, "DOWNTIME REASON", "downtimeReason"),
   }));
-  const activeMachineConstraints = machineConstraints.length;
+  const activeMachineConstraints = machineConstraints.filter((row) => isActivePlannerDecision(rowText(row, "status"))).length;
   const activePlanOverrides = planOverrides.length;
   const activeRouteChanges = routeChanges.length;
   const plannerActionLog = [
@@ -4099,12 +4099,18 @@ function planningHolidayViewRows(rows: Record<string, unknown>[]) {
 function activeMachineUnavailableWindows(machineConstraints: ActionRow[]): MachineUnavailableWindow[] {
   const today = localIsoDate(new Date());
   return machineConstraints
-    .filter((row) => isActivePlannerDecision(rowText(row, "status", "STATUS")))
+    .filter((row) => isActivePlannerDecision(rowText(row, "status", "STATUS")) || Boolean(rowText(row, "availableOn")))
     .map((row) => {
       const machine = canonicalKey(rowText(row, "machineNo", "machine", "MACHINE NO.", "MACHINE NO", "M/C NO"));
       const fromDate = parseDate(rowText(row, "unavailableFrom", "UNAVAILABLE FROM")) || today;
       const rawToDate = parseDate(rowText(row, "unavailableTo", "UNAVAILABLE TO")) || fromDate;
-      const toDate = rawToDate < fromDate ? fromDate : rawToDate;
+      let toDate = rawToDate < fromDate ? fromDate : rawToDate;
+      const availableOn = parseDate(rowText(row, "availableOn"));
+      if (availableOn) {
+        const lastUnavailable = new Date(`${availableOn}T00:00:00Z`);
+        lastUnavailable.setUTCDate(lastUnavailable.getUTCDate() - 1);
+        toDate = minDateValue(toDate, lastUnavailable.toISOString().slice(0, 10));
+      }
       return {
         machine,
         fromDate,
@@ -4210,7 +4216,7 @@ function machineUnavailableInterruptionForSetup(
 
 function machineUnavailableWindowsFor(windows: MachineUnavailableWindow[], machine: string) {
   const machineKeyValue = canonicalKey(machine);
-  return windows.filter((window) => window.machine === machineKeyValue);
+  return windows.filter((window) => window.machine === machineKeyValue && window.fromDate <= window.toDate);
 }
 
 function candidateMachineAvailableForAssignment(
@@ -4238,7 +4244,7 @@ function machineUnavailableWindowWantsAlternate(window: MachineUnavailableWindow
 
 function machineHasDelayUnavailableWindow(machine: string, windows: MachineUnavailableWindow[]) {
   const machineKeyValue = canonicalKey(machine);
-  return Boolean(machineKeyValue) && windows.some((window) => window.machine === machineKeyValue && !machineUnavailableWindowWantsAlternate(window));
+  return Boolean(machineKeyValue) && windows.some((window) => window.machine === machineKeyValue && window.fromDate <= window.toDate && !machineUnavailableWindowWantsAlternate(window));
 }
 
 function machineUnavailableProductionDelay(
@@ -4359,7 +4365,7 @@ function firstOverlappingMachineUnavailableWindow(windows: MachineUnavailableWin
   const start = parseDate(startDate) || startDate;
   const end = parseDate(endDate) || endDate;
   if (!start || !end) return undefined;
-  return windows.find((window) => start <= window.toDate && end >= window.fromDate);
+  return windows.find((window) => window.fromDate <= window.toDate && start <= window.toDate && end >= window.fromDate);
 }
 
 function machineUnavailableResumeDate(window: MachineUnavailableWindow, planningCalendar: PlanningCalendar) {

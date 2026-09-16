@@ -753,7 +753,7 @@ describe("buildLegacyDashboardSnapshot", () => {
     vi.setSystemTime(new Date("2026-07-01T12:00:00.000Z"))
 
     try {
-      const snapshot = buildLegacyDashboardSnapshot({
+      const input: Parameters<typeof buildLegacyDashboardSnapshot>[0] = {
         workbookName: "Convex",
         productionEntries: [],
         machineConstraints: [
@@ -857,7 +857,8 @@ describe("buildLegacyDashboardSnapshot", () => {
             },
           },
         ],
-      })
+      }
+      const snapshot = buildLegacyDashboardSnapshot(input)
 
       const blocker = snapshot.productionControl.machinePlanDetailRows.find(
         (row) => row.jcNo === "JC-BLOCK-A5"
@@ -875,6 +876,14 @@ describe("buildLegacyDashboardSnapshot", () => {
       expect(dashboardDateKey(moved?.setupPlannedDate)).toBeGreaterThan(
         dashboardDateKey(blocker?.plannedProductionEndDate)
       )
+      const available = buildLegacyDashboardSnapshot({
+        ...input,
+        machineConstraints: input.machineConstraints!.map((row) => ({
+          ...row, status: "Available", availableOn: "2026-07-01",
+        })),
+      })
+      expect(available.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-MOVE-A5"))
+        .toMatchObject({ machine: "A511", machineUnavailableQueuePlacementTarget: true })
     } finally {
       vi.useRealTimers()
     }
@@ -884,7 +893,7 @@ describe("buildLegacyDashboardSnapshot", () => {
     vi.setSystemTime(new Date("2026-07-01T12:00:00.000Z"))
 
     try {
-      const snapshot = buildLegacyDashboardSnapshot({
+      const input: Parameters<typeof buildLegacyDashboardSnapshot>[0] = {
         workbookName: "Convex",
         productionEntries: [],
         machineConstraints: [
@@ -964,7 +973,8 @@ describe("buildLegacyDashboardSnapshot", () => {
             },
           },
         ],
-      })
+      }
+      const snapshot = buildLegacyDashboardSnapshot(input)
 
       const rows = snapshot.productionControl.machinePlanDetailRows.filter(
         (row) => row.jcNo === "JC-RUNNING-A5-SOLO"
@@ -996,6 +1006,17 @@ describe("buildLegacyDashboardSnapshot", () => {
       expect(
         dashboardDateKey(delayed?.plannedProductionStartDate)
       ).toBeGreaterThanOrEqual(dashboardDateKey("7-July-26"))
+      const available = buildLegacyDashboardSnapshot({
+        ...input,
+        machineConstraints: input.machineConstraints!.map((row) => ({
+          ...row, status: "Available", availableOn: "2026-07-01",
+        })),
+      })
+      const resumed = available.productionControl.machinePlanDetailRows.find(
+        (row) => row.jcNo === "JC-RUNNING-A5-SOLO" && row.orderPcs === 7
+      )
+      expect(resumed).toBeDefined()
+      expect(dashboardDateKey(resumed?.plannedProductionStartDate)).toBeLessThan(dashboardDateKey("7-July-26"))
     } finally {
       vi.useRealTimers()
     }

@@ -26,6 +26,15 @@ An open session changes its displayed operational status to Closing Required as 
 
 ## Downtime lifecycle
 
+Planner machine issues remain open until the planner marks the machine available.
+An open issue whose To date has passed moves from Active Machine Issues to Pending
+Review (India calendar date); a blank To uses the From date. The planner can mark
+it available or extend its end date. Mark Available records the actor and time,
+removes the issue from both queues, and retains it in Decision History. It ends
+the availability restriction from today without reversing saved setup movements
+or queue placements. This planner action does not close a production session's
+downtime or start production.
+
 Downtime starts with a coded reason and start time. A new downtime entry defaults its start time to the current IST time, while remaining editable for corrections. It remains open until an end time and one of two outcomes are entered: Resolved — Resume Production, or Shift Ended — Unresolved. Only one downtime interval may be open in a Production Session, and production cannot resume while it remains open.
 
 An open downtime interval blocks End Session. The user must explicitly close the downtime first; ending a session never silently supplies its end time.

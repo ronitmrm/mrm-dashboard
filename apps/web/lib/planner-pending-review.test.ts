@@ -1,8 +1,15 @@
 import { describe, expect, test } from "vitest"
 
-import { plannerPendingMachineIssueRows } from "./planner-pending-review"
+import { machineIssueNeedsReview, openMachineIssues, plannerPendingMachineIssueRows } from "./planner-pending-review"
 
 describe("plannerPendingMachineIssueRows", () => {
+  test("moves an expired open issue to review and excludes confirmed availability", () => {
+    const issue = { unavailableFrom: "2026-09-16", status: "Active" }
+    expect(machineIssueNeedsReview(issue, "2026-09-16")).toBe(false)
+    expect(machineIssueNeedsReview(issue, "2026-09-17")).toBe(true)
+    expect(machineIssueNeedsReview({ ...issue, unavailableTo: "2026-09-18" }, "2026-09-17")).toBe(false)
+    expect(openMachineIssues([issue, { ...issue, availableOn: "2026-09-16", status: "Available" }])).toEqual([issue])
+  })
   test("keeps only useful business details from a raw machine issue", () => {
     expect(plannerPendingMachineIssueRows([
       {

@@ -24,6 +24,7 @@ const mutationCapabilitiesByPath: Record<string, readonly string[]> = {
   "dispatch-approval": ["operations.dispatch.write"],
   "job-card-delivery-target": ["planning.override.write"],
   "machine-constraint": ["planning.constraint.write"],
+  "machine-constraint-review": ["planning.constraint.write"],
   "mark-complete": ["operations.shop_floor.write"],
   "master-delete": ["operations.corrections.write"],
   "plan-override": ["planning.override.write"],
