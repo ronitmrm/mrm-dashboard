@@ -93,7 +93,9 @@ export function BrandingDocumentEditor({
           return {
             language,
             title: base.title,
-            sections: [{ heading: "", body }],
+            sections: existing?.sections.some((section) => section.richBody)
+              ? existing.sections
+              : [{ heading: "", body }],
           }
         }),
       }

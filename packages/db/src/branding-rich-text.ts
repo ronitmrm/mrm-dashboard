@@ -8,9 +8,13 @@ export type BrandingRichText = {
     | "bulletList"
     | "orderedList"
     | "listItem"
+    | "table"
+    | "tableRow"
+    | "tableCell"
+    | "tableHeader"
   text?: string
   marks?: { type: "bold" | "italic" | "underline" }[]
-  attrs?: { start: number }
+  attrs?: { start?: number; colspan?: number; rowspan?: number }
   content?: BrandingRichText[]
 }
 
@@ -29,7 +33,9 @@ export function brandingRichTextPlain(node: BrandingRichText): string {
   if (node.type === "hardBreak") return "\n"
   return (node.content ?? [])
     .map(brandingRichTextPlain)
-    .join(node.type === "paragraph" ? "" : "\n")
+    .join(
+      node.type === "paragraph" ? "" : node.type === "tableRow" ? "\t" : "\n"
+    )
 }
 
 export function parseBrandingRichText(value: unknown): BrandingRichText {
@@ -80,9 +86,18 @@ export function parseBrandingRichText(value: unknown): BrandingRichText {
     const allowedChildren =
       type === "paragraph"
         ? ["text", "hardBreak"]
-        : type === "orderedList" || type === "bulletList"
-          ? ["listItem"]
-          : ["paragraph", "orderedList", "bulletList"]
+        : type === "table"
+          ? ["tableRow"]
+          : type === "tableRow"
+            ? ["tableCell", "tableHeader"]
+            : type === "orderedList" || type === "bulletList"
+              ? ["listItem"]
+              : [
+                  "paragraph",
+                  "orderedList",
+                  "bulletList",
+                  ...(type === "doc" ? ["table"] : []),
+                ]
     const content = ((item.content ?? []) as unknown[]).map((child) =>
       parse(child, allowedChildren, depth + 1)
     )
@@ -103,6 +118,30 @@ export function parseBrandingRichText(value: unknown): BrandingRichText {
       )
         throw new Error("List starting number is invalid.")
       return { type, attrs: { start }, content }
+    }
+    if (type === "table") {
+      const columns = content[0]?.content?.length ?? 0
+      if (
+        !columns ||
+        columns > 8 ||
+        content.length > 20 ||
+        content.some((row) => row.content?.length !== columns)
+      )
+        throw new Error(
+          "Tables need 1–20 rows with the same 1–8 columns in each row."
+        )
+    }
+    if (type === "tableCell" || type === "tableHeader") {
+      const attrs = item.attrs as
+        | { colspan?: unknown; rowspan?: unknown }
+        | undefined
+      if (
+        (attrs?.colspan ?? 1) !== 1 ||
+        (attrs?.rowspan ?? 1) !== 1 ||
+        !content.length
+      )
+        throw new Error("Use unmerged table cells containing paragraphs.")
+      return { type, attrs: { colspan: 1, rowspan: 1 }, content }
     }
     return { type, content }
   }
@@ -139,6 +178,10 @@ export function brandingRichTextHtml(node: BrandingRichText): string {
     bulletList: "ul",
     orderedList: "ol",
     listItem: "li",
+    table: "table",
+    tableRow: "tr",
+    tableCell: "td",
+    tableHeader: "th",
   }[node.type]
   return `<${tag}${node.type === "orderedList" ? ` start="${node.attrs?.start ?? 1}"` : ""}>${body || (node.type === "paragraph" ? "<br>" : "")}</${tag}>`
 }

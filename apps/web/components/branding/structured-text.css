@@ -29,3 +29,23 @@
 .branding-prose u {
   text-decoration: none;
 }
+.branding-prose table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  margin: 0.75em 0;
+}
+.branding-prose td,
+.branding-prose th {
+  border: 1px solid var(--border);
+  padding: 0.5em;
+  vertical-align: top;
+  position: relative;
+}
+.branding-prose th {
+  background: var(--muted);
+  font-weight: 700;
+}
+.branding-prose .selectedCell {
+  background: var(--accent);
+}

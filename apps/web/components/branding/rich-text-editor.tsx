@@ -3,6 +3,7 @@
 import { useEffect } from "react"
 import { EditorContent, useEditor } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
+import { TableKit } from "@tiptap/extension-table"
 import {
   brandingRichTextPlain,
   type BrandingRichText,
@@ -44,6 +45,7 @@ export default function BrandingRichTextEditor({
   label,
   language,
   disabled = false,
+  tables = false,
 }: {
   value: BrandingRichText
   onChange: (value: BrandingRichText) => void
@@ -51,9 +53,12 @@ export default function BrandingRichTextEditor({
   label: string
   language: string
   disabled?: boolean
+  tables?: boolean
 }) {
   const editor = useEditor({
-    extensions,
+    extensions: tables
+      ? [...extensions, TableKit.configure({ table: { resizable: false } })]
+      : extensions,
     content: editorContent(value),
     immediatelyRender: false,
     shouldRerenderOnTransaction: true,
@@ -116,6 +121,45 @@ export default function BrandingRichTextEditor({
     })
   }
   const controls = [
+    ...(tables
+      ? [
+          {
+            label: "Insert table",
+            disabled: editor.isActive("table"),
+            run: () =>
+              editor
+                .chain()
+                .focus()
+                .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
+                .run(),
+          },
+          ...[
+            {
+              label: "Add row",
+              run: () => editor.chain().focus().addRowAfter().run(),
+            },
+            {
+              label: "Add column",
+              run: () => editor.chain().focus().addColumnAfter().run(),
+            },
+            {
+              label: "Delete row",
+              run: () => editor.chain().focus().deleteRow().run(),
+            },
+            {
+              label: "Delete column",
+              run: () => editor.chain().focus().deleteColumn().run(),
+            },
+            {
+              label: "Delete table",
+              run: () => editor.chain().focus().deleteTable().run(),
+            },
+          ].map((control) => ({
+            ...control,
+            disabled: !editor.isActive("table"),
+          })),
+        ]
+      : []),
     {
       label: "Paragraph",
       run: () => editor.chain().focus().clearNodes().setParagraph().run(),

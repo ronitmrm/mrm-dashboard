@@ -1,19 +1,25 @@
 "use client"
 
+import dynamic from "next/dynamic"
+
 import {
   brandingLanguages,
   brandingLanguageLabels,
+  brandingNoticeRichText,
+  brandingRichTextPlain,
   type BrandingContent,
   type BrandingLanguage,
 } from "@workspace/db/branding-domain"
 import { Button } from "@workspace/ui/components/button"
 import { Label } from "@workspace/ui/components/label"
-import { Textarea } from "@workspace/ui/components/textarea"
 import {
   NativeSelect,
   NativeSelectOption,
 } from "@workspace/ui/components/native-select"
 import { FormSection } from "@/components/ui/golden-patterns"
+const RichTextEditor = dynamic(() => import("./rich-text-editor"), {
+  ssr: false,
+})
 
 export function BrandingNoticeEditor({
   content,
@@ -91,20 +97,26 @@ export function BrandingNoticeEditor({
             <Label htmlFor={`notice-body-${translation.language}`}>
               Body · {brandingLanguageLabels[translation.language]}
             </Label>
-            <Textarea
+            <RichTextEditor
               id={`notice-body-${translation.language}`}
-              lang={translation.language}
-              rows={10}
-              maxLength={12000}
-              value={translation.sections[0]?.body ?? ""}
-              onChange={(event) =>
+              label={`Body · ${brandingLanguageLabels[translation.language]}`}
+              language={translation.language}
+              tables
+              value={brandingNoticeRichText(translation.sections)}
+              onChange={(richBody) =>
                 onChange({
                   ...content,
                   translations: content.translations.map((entry) =>
                     entry === translation
                       ? {
                           ...entry,
-                          sections: [{ heading: "", body: event.target.value }],
+                          sections: [
+                            {
+                              heading: "",
+                              body: brandingRichTextPlain(richBody),
+                              richBody,
+                            },
+                          ],
                         }
                       : entry
                   ),
