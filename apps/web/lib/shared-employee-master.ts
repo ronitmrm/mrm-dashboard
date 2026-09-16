@@ -157,11 +157,13 @@ function belongsToProductionDepartment(
   row: EmployeeOptionSource,
   productionFloorCode: ProductionFloorCode,
   departmentCodes: ReadonlySet<string>,
-  departmentNamePattern: RegExp
+  departmentNamePattern: RegExp,
+  includeSupervisors = false
 ) {
   const departmentCode = String(row.departmentCode).trim().toUpperCase()
   return (
-    !isLeadershipEmployee(row) &&
+    (!isLeadershipEmployee(row) ||
+      (includeSupervisors && /\b(hod|manager)\b/i.test(String(row.designation)))) &&
     (departmentCodes.has(departmentCode) ||
       departmentNamePattern.test(String(row.department))) &&
     productionFloorFromDepartment(row.department, row.departmentCode) ===
@@ -205,7 +207,8 @@ export function productionShopFloorOptions(
       row,
       productionFloorCode,
       shopFloorDepartmentCodes,
-      /\bshop\s+floor\b/i
+      /\bshop\s+floor\b/i,
+      true
     )
   )
 }

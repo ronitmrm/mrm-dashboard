@@ -221,7 +221,7 @@ describe("shared Employee Master", () => {
     ])
   })
 
-  it("offers only active shop-floor employees from the selected production unit", () => {
+  it("offers active shop-floor assistants and supervisors only from the selected production unit", () => {
     const rows = sharedEmployeeMasterRows([
       post({
         department: "Renamed Floor Team",
@@ -242,6 +242,15 @@ describe("shared Employee Master", () => {
         status: "Occupied",
       }),
       post({
+        department: "Renamed Floor Team",
+        departmentCode: "PPC-CVSF",
+        designation: "Manager",
+        employeeCode: "SF-MGR",
+        employeeName: "Ganesh",
+        id: "4",
+        status: "Occupied",
+      }),
+      post({
         department: "CNC Shop Floor",
         departmentCode: "PPC-CNCSF",
         designation: "Assistant",
@@ -254,6 +263,8 @@ describe("shared Employee Master", () => {
 
     expect(productionShopFloorOptions(rows, "conventional")).toEqual([
       { code: "SF-1", name: "Deepak" },
+      { code: "SF-HOD", name: "Esha" },
+      { code: "SF-MGR", name: "Ganesh" },
     ])
   })
 
