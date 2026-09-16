@@ -103,6 +103,29 @@ afterAll(async () => {
 })
 
 describe("dashboard planning writes", () => {
+  test("reviews a machine issue in its unit and preserves the original decision", async () => {
+    const machineNumber = `REVIEW-${suffix}`
+    await repository.upsertMachine({ machineNumber, organizationId, productionFloorCode: "cnc" })
+    const issue = await repository.recordMachineConstraint({
+      machineNumber, organizationId, productionFloorCode: "cnc",
+      reason: "Breakdown", unavailableFrom: "2026-01-01", rescheduleAction: "delay",
+    })
+    const input = { organizationId, constraintId: issue.id, productionFloorCode: "cnc" }
+    await expect(repository.reviewMachineConstraint({ ...input, productionFloorCode: "conventional", action: "available" }))
+      .rejects.toThrow("another Production Unit")
+    await repository.reviewMachineConstraint({ ...input, action: "extend", unavailableTo: "2099-01-01" })
+    await repository.reviewMachineConstraint({ ...input, action: "available" })
+    const saved = await pool.query<{ source_payload: Record<string, unknown>; reversed_at: string | null }>(
+      `SELECT source_payload, reversed_at FROM manufacturing.machine_constraint_events WHERE id=$1`, [issue.id])
+    expect(saved.rows[0]?.reversed_at).toBeNull()
+    expect(saved.rows[0]?.source_payload).toMatchObject({
+      status: "Available", unavailableFrom: "2026-01-01", unavailableTo: "2099-01-01",
+      rescheduleAction: "delay", availableOn: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+      availabilityReviews: [expect.objectContaining({ action: "extend" }), expect.objectContaining({ action: "available" })],
+    })
+    await expect(repository.reviewMachineConstraint({ ...input, action: "available" })).rejects.toThrow("already closed")
+  })
+
   test("references only existing Store Asset Codes in Tooling Master", async () => {
     const routeCode = `TOOLING-${suffix}`
     await repository.upsertRouteOption({

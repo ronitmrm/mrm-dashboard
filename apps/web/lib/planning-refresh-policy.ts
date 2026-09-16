@@ -3,6 +3,7 @@ import { productionMasterTableEntryTypes } from "./production-master-tables";
 const autoRefreshActionPaths = new Set([
   "planner-priority",
   "machine-constraint",
+  "machine-constraint-review",
   "plan-override",
   "route-change",
   "route-selection",

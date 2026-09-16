@@ -120,7 +120,9 @@ function machineUnavailableHistoryRow(
     "Part Code": partCodes.join(", ") || emptyValue,
     Setups: setups.join(", ") || emptyValue,
     "Machine / Route": machinePath || emptyValue,
-    Decision: unavailableWindow
+    Decision: text(row.availableOn)
+      ? `Available from ${text(row.availableOn)} (original downtime ${unavailableWindow})`
+      : unavailableWindow
       ? `Unavailable ${unavailableWindow}`
       : "Unavailable",
   })

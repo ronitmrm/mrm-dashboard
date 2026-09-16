@@ -1,4 +1,17 @@
+import { isActivePlannerDecision } from "@workspace/db/planning-rules"
+import { istDateValue } from "./date-time"
+
 type PlannerPendingRow = Record<string, unknown>
+
+export function machineIssueNeedsReview(row: PlannerPendingRow, today: string) {
+  const end = rowText(row, "unavailableTo") || rowText(row, "unavailableFrom")
+  const date = /^\d{4}-\d{2}-\d{2}/.test(end) ? end.slice(0, 10) : istDateValue(end)
+  return Boolean(date && date < today)
+}
+
+export function openMachineIssues(rows: readonly PlannerPendingRow[]) {
+  return rows.filter((row) => !rowText(row, "availableOn") && isActivePlannerDecision(rowText(row, "status")))
+}
 
 const planActionLabels: Record<string, string> = {
   delay: "Delay plan",

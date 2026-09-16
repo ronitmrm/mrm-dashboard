@@ -149,7 +149,7 @@ export function PlannerDecisionWorkspace({
             <AlertTriangle className="size-4" />
             <span className="grid flex-1 text-left leading-tight">
               <span>Pending Review</span>
-              <span className="hidden text-xs font-normal text-muted-foreground md:block">Resolve conflicting decisions</span>
+              <span className="hidden text-xs font-normal text-muted-foreground md:block">Review decisions and overdue issues</span>
             </span>
             {pendingCount ? <Badge variant="secondary">{pendingCount}</Badge> : null}
           </Button>
@@ -264,7 +264,7 @@ export function PlannerDecisionWorkspace({
             <div>
               <div className="text-base font-semibold">Decisions needing attention</div>
               <div className="text-sm text-muted-foreground">
-                Resolve conflicting planner choices that need a decision.
+                Resolve conflicting planner choices and confirm availability for overdue machine issues.
               </div>
             </div>
             {panels.pending}

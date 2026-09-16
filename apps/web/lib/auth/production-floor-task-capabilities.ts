@@ -149,6 +149,7 @@ const directMutationTasks = {
   "dispatch-approval": "dispatch_approval",
   "job-card-delivery-target": "job_card_delivery_target",
   "machine-constraint": "machine_constraint",
+  "machine-constraint-review": "machine_constraint",
   "mark-complete": "job_card_completion",
   "plan-override": "plan_override",
   "planner-priority": "planner_priority",
