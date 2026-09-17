@@ -199,6 +199,8 @@ const dataEntryTemplateFields: Record<string, string[]> = {
     "remark",
   ],
   rejection_type_master: ["code", "typeOfRejection", "status", "remark"],
+  parameter_master: ["name", "status"],
+  measuring_instrument_master: ["name", "status"],
   rejection_remark_master: ["code", "rejectionRemark", "status", "remark"],
   rejection_reason_master: ["code", "rejectionReason", "status", "remark"],
   quality_parameter_master: [
@@ -1206,7 +1208,9 @@ async function post(request: NextRequest, context: RouteContext) {
         const result = await executePostgresOperationalEntry(
           request,
           entryType,
-          payload
+          payload,
+          "save",
+          typeof body.id === "string" ? body.id : undefined
         )
         return json(await withPlanningRefresh(request, path, body, {
           ...result,

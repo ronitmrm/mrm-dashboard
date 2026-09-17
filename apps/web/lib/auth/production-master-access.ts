@@ -79,6 +79,10 @@ export function productionMasterSnapshot(
       lookup("setupNameMasterRows", ["setupName"])
       lookup("machinePlanningRows", ["machineFamily", "machineType"])
     }
+    if (master === "quality_parameter_master") {
+      lookup("parameterMasterRows", ["name", "status"])
+      lookup("measuringInstrumentMasterRows", ["name", "status"])
+    }
     if (master === "maintenance_master")
       lookup("maintenanceChecklistMasterRows", [
         "checklistCode",

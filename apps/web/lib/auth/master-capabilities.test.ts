@@ -13,6 +13,15 @@ import { mergeDashboardStateResponse } from "../dashboard-view-model"
 import { selectedStoreMasterData } from "./store-master-access"
 
 describe("independent master permissions", () => {
+  it("supplies only shared choice labels to unit inspection editors", () => {
+    const view = productionMasterSnapshot({ productionControl: {
+      parameterMasterRows: [{ name: "Length", status: "Active", internalNote: "private" }],
+      measuringInstrumentMasterRows: [{ name: "Caliper", status: "Active" }],
+    } }, new Set(["masters.cnc.quality_parameter_master.read", "masters.cnc.quality_parameter_master.save"]), "cnc")
+    expect(view.productionControl.parameterMasterRows).toEqual([{ name: "Length", status: "Active" }])
+    expect(view.productionControl.measuringInstrumentMasterRows).toEqual([{ name: "Caliper", status: "Active" }])
+    expect(view.dataEntry.entryTypes).toEqual(["quality_parameter_master"])
+  })
   it("does not turn checklist execution access into master definition access", () => {
     const migratedFrom = (oldKey: string) => scopedMasters.flatMap((master) =>
       supportedMasterActions(master).filter((action) => previousMasterCapabilities(master, action).includes(oldKey)).map((action) => masterPermissionKey(master.unit, master.master, action))
@@ -160,7 +169,7 @@ describe("independent master permissions", () => {
     ).toEqual([])
   })
   it("keeps setup checklist grants separate for each unit", () => {
-    expect(scopedMasters).toHaveLength(74)
+    expect(scopedMasters).toHaveLength(76)
     expect(
       scopedMasters
         .filter(({ master }) => master === "setup_checklist_master")

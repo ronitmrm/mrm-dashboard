@@ -20,6 +20,8 @@ import { productionCapabilityForTab } from "./auth/production-capabilities"
 import { productionMasterCapability } from "./auth/production-master-access"
 
 const operationalEntryTypes = new Set([
+  "parameter_master",
+  "measuring_instrument_master",
   "attendance",
   "attendance_record",
   "employee",
@@ -184,7 +186,8 @@ export async function executePostgresOperationalEntry(
   request: NextRequest,
   entryType: string,
   payload: Record<string, unknown>,
-  masterAction: "save" | "import" = "save"
+  masterAction: "save" | "import" = "save",
+  recordId?: string
 ) {
   const plan = operationalEntryPlan(entryType, payload)
   if (!plan) return null
@@ -258,6 +261,12 @@ export async function executePostgresOperationalEntry(
             ...plan.input,
             actorUserId: actor.actorUserId,
             organizationId,
+          })
+        }
+        if (plan.operation === "reference") {
+          return await repository.upsertQualityReference({
+            ...plan.input, rejectDuplicates: masterAction === "save",
+            actorUserId: actor.actorUserId, organizationId, recordId,
           })
         }
         if (plan.operation === "first-piece") {

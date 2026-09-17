@@ -99,6 +99,8 @@ describe("Production master table rows", () => {
 
   it("shows all quality masters and records their ownership", () => {
     expect(qualityWorkspaceEntryTypes).toEqual([
+      "parameter_master",
+      "measuring_instrument_master",
       "quality_parameter_master",
       "rejection_type_master",
       "rejection_remark_master",
@@ -108,6 +110,8 @@ describe("Production master table rows", () => {
       expect(productionMasterTableEntryTypes).toContain(entryType)
     }
     expect(companyWideQualityMasterEntryTypes).toEqual([
+      "parameter_master",
+      "measuring_instrument_master",
       "rejection_type_master",
       "rejection_remark_master",
       "rejection_reason_master",

@@ -101,6 +101,8 @@ const legacyEntryTypes = [
   "setup_checklist_session",
   "production_card",
   "quality_parameter_master",
+  "parameter_master",
+  "measuring_instrument_master",
   "rejection_type_master",
   "rejection_reason_master",
   "rejection_remark_master",
@@ -143,6 +145,8 @@ const dataEntrySourceBudgets: Record<string, number> = {
   planning_holiday: 1000,
   production_card: 5000,
   quality_parameter_master: 2000,
+  parameter_master: 2000,
+  measuring_instrument_master: 2000,
   rejection_reason_master: 500,
   rejection_remark_master: 500,
   rejection_type_master: 500,
@@ -348,6 +352,8 @@ function floorRows(rows: JsonRecord[], floorCode: ProductionFloorCode) {
 }
 
 const companyWideMasterEntryTypes = new Set([
+  "parameter_master",
+  "measuring_instrument_master",
   "maintenance_checklist_master",
   "maintenance_master",
   "rejection_type_master",
@@ -740,6 +746,9 @@ export async function buildCanonicalDashboardReadModel(
 
   function buildFloorPayload(floorCode: ProductionFloorCode) {
     const floorDataEntries = dashboardDataEntriesForFloor(dataEntries, floorCode)
+    const qualityReferenceRows = (entryType: string) => floorDataEntries
+      .filter((row) => row.entryType === entryType)
+      .map((row) => ({ ...jsonRecord(row.payload), _id: row._id, entryType }))
     const floorCorrections = floorRows(source.corrections, floorCode)
     const floorUpdatedAt = latestCreatedAt(
       floorRows(source.productionEntries, floorCode),
@@ -810,6 +819,11 @@ export async function buildCanonicalDashboardReadModel(
     return {
       ...snapshot,
       cacheStatus: "ready",
+      productionControl: {
+        ...snapshot.productionControl,
+        parameterMasterRows: qualityReferenceRows("parameter_master"),
+        measuringInstrumentMasterRows: qualityReferenceRows("measuring_instrument_master"),
+      },
       productionFloorCode: floorCode,
       sourceCoverage: source.sourceCoverageByFloor[floorCode],
       dataEntry: {

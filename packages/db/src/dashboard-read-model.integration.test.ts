@@ -153,6 +153,25 @@ afterAll(async () => {
 })
 
 describe("canonical PostgreSQL dashboard read model", () => {
+  it("projects Universal parameter choices into every unit's form lookups", async () => {
+    const client = await pool.connect()
+    try {
+      await client.query("BEGIN")
+      await client.query(`INSERT INTO quality.parameter_names
+        (organization_id, name, source_system, source_table, source_id, source_payload)
+        VALUES ($1, 'Length', 'mrm-dashboard', 'parameter_master', $2,
+          '{"name":"Length","status":"Active"}')`, [organizationId, randomUUID()])
+      const built = await buildCanonicalDashboardReadModel(client, { organizationId })
+      for (const unit of ["conventional", "conventional-02", "cnc", "forging"]) {
+        expect(built.payload).toMatchObject({ productionFloorSnapshots: { [unit]: { productionControl: {
+          parameterMasterRows: [expect.objectContaining({ name: "Length", status: "Active", entryType: "parameter_master" })],
+        } } } })
+      }
+    } finally {
+      await client.query("ROLLBACK")
+      client.release()
+    }
+  })
   it("feeds the unchanged planning analysis from normalized canonical rows", async () => {
     const client = await pool.connect()
     try {

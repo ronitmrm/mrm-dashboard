@@ -223,7 +223,7 @@ export function previousMasterCapabilities(
   if (action === "delete") return ["operations.corrections.write"]
   if (
     master.main === "rejection" ||
-    master.master === "quality_parameter_master"
+    ["quality_parameter_master", "parameter_master", "measuring_instrument_master"].includes(master.master)
   )
     return ["quality.parameters.manage"]
   if (master.master === "setup_checklist_master")

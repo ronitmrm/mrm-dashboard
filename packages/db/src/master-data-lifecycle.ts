@@ -39,6 +39,8 @@ const masterTargets = {
     "source_id",
   ],
   quality_parameter_master: ["quality", "parameter_definitions", "source_id"],
+  parameter_master: ["quality", "parameter_names", "source_id"],
+  measuring_instrument_master: ["quality", "measuring_instruments", "source_id"],
   rejection_reason_master: ["quality", "rejection_reasons", "source_id"],
   rejection_remark_master: ["quality", "rejection_remarks", "source_id"],
   rejection_type_master: ["quality", "rejection_types", "source_id"],
@@ -401,6 +403,9 @@ export function createMasterDataLifecycleRepository(
           (total, reference) => total + reference.count,
           0
         )
+        if (usageCount && (input.kind === "parameter_master" || input.kind === "measuring_instrument_master")) {
+          throw new Error("This master is used by inspection parameters and cannot be deleted. Mark it inactive instead.")
+        }
         if (usageCount && !replacement) {
           throw new Error(
             `This master is used by ${usageCount} record${usageCount === 1 ? "" : "s"}. Select a replacement before deleting it.`

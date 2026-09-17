@@ -2,6 +2,14 @@
 
 ## Lifecycle
 
+Quality Inspection Parameter masters remain scoped to their production unit,
+part, route option, and setup. Parameter Master and Measuring Instrument Master
+are Universal: one shared vocabulary across all units. Inspection forms select
+an active parameter name and, when supplied, an active measuring instrument.
+Existing names seed these lists without changing inspection identities or results.
+Names are unique ignoring case and surrounding spaces. Referenced names cannot
+be deleted; inactive choices remain in history but cannot be selected for new saves.
+
 Setup Checklist masters belong to one production unit. Codes and revisions are
 unique within that unit; tasks may only select and complete that unit's templates.
 Editing a unit's checklist does not change another unit's checklist. Existing

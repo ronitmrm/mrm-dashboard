@@ -16,6 +16,8 @@ export type MasterDataFallbackLink = {
 }
 
 export const companyWideMasterEntryTypes = [
+  "parameter_master",
+  "measuring_instrument_master",
   "maintenance_checklist_master",
   "maintenance_master",
   "rejection_type_master",
