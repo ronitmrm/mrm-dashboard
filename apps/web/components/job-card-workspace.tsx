@@ -6,10 +6,11 @@ import { Button } from "@workspace/ui/components/button"
 import { SectionCard, CardContent, CardDescription, CardHeader, CardTitle } from "@workspace/ui/components/card"
 import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@workspace/ui/components/tabs"
 import { OperationalTable, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@workspace/ui/components/table"
 import { ArrowLeft, Factory, History, RefreshCw, Route, Save, Settings2, ShieldAlert, Truck } from "lucide-react"
 import Link from "next/link"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 
 import { dashboardTabHref } from "@/lib/unified-navigation"
 import { formatIstDate, formatIstDateTime } from "@/lib/date-time"
@@ -98,8 +99,31 @@ function PatternBars({ emptyText, rows, valueKey = "minutes" }: { emptyText: str
   })}</div>
 }
 
-function EventTable({ emptyText, rows }: { emptyText: string; rows: Row[] }) {
- return <div className="rounded-md border min-w-0"><OperationalTable containerClassName="max-h-[32rem]" excelFilters><TableHeader className="sticky top-0 z-10 bg-background"><TableRow><TableHead>Time</TableHead><TableHead>Event</TableHead><TableHead>Setup / Machine</TableHead><TableHead>Entered By</TableHead><TableHead>Detail</TableHead><TableHead className="text-right">Value</TableHead></TableRow></TableHeader><TableBody>{rows.length ? rows.map((row, index) => <TableRow key={`${text(row.eventTime)}-${text(row.eventType)}-${index}`}><TableCell className="whitespace-nowrap">{date(row.eventTime, true)}</TableCell><TableCell><Badge variant={text(row.eventType) === "rejection" ? "destructive" : "outline"}>{title(row.eventType)}</Badge></TableCell><TableCell>{display(row.setupNumber)} / {display(row.machineNumber)}</TableCell><TableCell>{display(row.enteredByName)}<span className="block text-xs text-muted-foreground">{title(row.enteredRole)}</span></TableCell><TableCell>{display(row.reasonName || row.detail)}</TableCell><TableCell className="text-right tabular-nums">{row.quantity ? `${quantity(row.quantity)} pcs` : row.durationMinutes ? `${quantity(row.durationMinutes)} min` : "-"}</TableCell></TableRow>) : <TableRow><TableCell colSpan={6} className="py-10 text-center text-muted-foreground">{emptyText}</TableCell></TableRow>}</TableBody></OperationalTable></div>
+function RejectionPatterns({ rows }: { rows: Row[] }) {
+  const dimensions = [
+    { key: "rejectionTypeName", label: "Rejection Type" },
+    { key: "rejectionReasonName", label: "Rejection Reason" },
+    { key: "defectName", label: "Defect" },
+  ] as const
+  return <Tabs defaultValue="rejectionTypeName">
+    <TabsList aria-label="Rejection pattern grouping" className="max-w-full">
+      {dimensions.map(({ key, label }) => <TabsTrigger key={key} value={key} className="px-2 text-xs sm:px-3 sm:text-sm">{label}</TabsTrigger>)}
+    </TabsList>
+    {dimensions.map(({ key }) => {
+      const groups = new Map<string, number>()
+      for (const row of rows) {
+        const name = text(row[key]) || "Uncoded"
+        groups.set(name, (groups.get(name) ?? 0) + number(row.quantity))
+      }
+      const patterns = [...groups].map(([name, quantity]) => ({ name, quantity }))
+        .sort((left, right) => right.quantity - left.quantity)
+      return <TabsContent key={key} value={key}><PatternBars emptyText="No rejection recorded." rows={patterns} valueKey="quantity" /></TabsContent>
+    })}
+  </Tabs>
+}
+
+function EventTable({ emptyText, rows, rejectionColumns = false }: { emptyText: string; rows: Row[]; rejectionColumns?: boolean }) {
+ return <div className="rounded-md border min-w-0"><OperationalTable containerClassName="max-h-[32rem]" excelFilters><TableHeader className="sticky top-0 z-10 bg-background"><TableRow><TableHead>Time</TableHead><TableHead>Event</TableHead><TableHead>Setup / Machine</TableHead><TableHead>Entered By</TableHead>{rejectionColumns ? <><TableHead>Rejection Type</TableHead><TableHead>Rejection Reason</TableHead><TableHead>Defect</TableHead></> : <TableHead>Detail</TableHead>}<TableHead className="text-right">Value</TableHead></TableRow></TableHeader><TableBody>{rows.length ? rows.map((row, index) => <TableRow key={`${text(row.eventTime)}-${text(row.eventType)}-${index}`}><TableCell className="whitespace-nowrap">{date(row.eventTime, true)}</TableCell><TableCell><Badge variant={text(row.eventType) === "rejection" ? "destructive" : "outline"}>{title(row.eventType)}</Badge></TableCell><TableCell>{display(row.setupNumber)} / {display(row.machineNumber)}</TableCell><TableCell>{display(row.enteredByName)}<span className="block text-xs text-muted-foreground">{title(row.enteredRole)}</span></TableCell>{rejectionColumns ? <><TableCell>{display(row.rejectionTypeName)}</TableCell><TableCell>{display(row.rejectionReasonName)}</TableCell><TableCell>{display(row.defectName)}</TableCell></> : <TableCell>{display(row.reasonName || row.detail)}</TableCell>}<TableCell className="text-right tabular-nums">{row.quantity ? `${quantity(row.quantity)} pcs` : row.durationMinutes ? `${quantity(row.durationMinutes)} min` : "-"}</TableCell></TableRow>) : <TableRow><TableCell colSpan={rejectionColumns ? 8 : 6} className="py-10 text-center text-muted-foreground">{emptyText}</TableCell></TableRow>}</TableBody></OperationalTable></div>
 }
 
 function SetupMaster({ setup }: { setup: Row }) {
@@ -167,17 +191,6 @@ export function JobCardWorkspace({ floor, jobCardNumber }: { floor: ProductionFl
   const selectedRoute = routes.find((row) => row.selected === true)
   const downtimeEvents = events.filter((row) => text(row.eventType).startsWith("downtime"))
   const rejectionEvents = events.filter((row) => text(row.eventType) === "rejection")
-  const rejectionPatterns = useMemo(() => {
-    const groups = new Map<string, Row>()
-    for (const event of events) {
-      if (text(event.eventType) !== "rejection") continue
-      const name = value(event, "reasonName", "detail") || "Uncoded"
-      const group = groups.get(name) ?? { name, quantity: 0 }
-      group.quantity = number(group.quantity) + number(event.quantity)
-      groups.set(name, group)
-    }
-    return [...groups.values()].sort((left, right) => number(right.quantity) - number(left.quantity))
-  }, [events])
   const currentStage = number(analytics.actualGoodPieces) >= number(analytics.orderedQuantity) && number(analytics.orderedQuantity) > 0
     ? "Production complete"
     : sessions.some((row) => text(row.status) === "open")
@@ -264,7 +277,7 @@ export function JobCardWorkspace({ floor, jobCardNumber }: { floor: ProductionFl
  <SectionCard><CardHeader><CardTitle>Production Plan</CardTitle></CardHeader><CardContent><div className="rounded-md border min-w-0"><OperationalTable><TableHeader><TableRow><TableHead>Machine</TableHead><TableHead>Setup</TableHead><TableHead>Start</TableHead><TableHead>End</TableHead><TableHead>Status</TableHead></TableRow></TableHeader><TableBody>{planRows.length ? planRows.map((row, index) => <TableRow key={`${value(row, "machineNo", "machineNumber")}-${index}`}><TableCell>{value(row, "machineNo", "machineNumber") || "-"}</TableCell><TableCell>{value(row, "setupNo", "setupNumber") || "-"}</TableCell><TableCell>{date(value(row, "plannedProductionStartDate", "productionStartDate"))}</TableCell><TableCell>{date(value(row, "plannedProductionEndDate", "productionEndDate"))}</TableCell><TableCell>{title(value(row, "runningStatus", "status", "shopFloorStage"))}</TableCell></TableRow>) : <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">No plan rows available.</TableCell></TableRow>}</TableBody></OperationalTable></div></CardContent></SectionCard>
       </section> : null}
 
- {activeTab === "rejection" ? <section className="grid gap-4"><div className="grid gap-3 sm:grid-cols-3"><Metric label="Rejected Pieces" value={quantity(analytics.rejectedPieces)} /><Metric label="Rejection Rate" value={`${quantity(analytics.rejectionPercent, 2)}%`} /><Metric label="Rejection Entries" value={quantity(rejectionEvents.length)} /></div><SectionCard><CardHeader><CardTitle className="flex items-center gap-2"><ShieldAlert className="size-4" /> Rejection Pattern</CardTitle></CardHeader><CardContent><PatternBars emptyText="No rejection recorded." rows={rejectionPatterns} valueKey="quantity" /></CardContent></SectionCard><SectionCard><CardHeader><CardTitle>Rejection Log</CardTitle></CardHeader><CardContent><EventTable emptyText="No rejection entries recorded." rows={rejectionEvents} /></CardContent></SectionCard></section> : null}
+ {activeTab === "rejection" ? <section className="grid gap-4"><div className="grid gap-3 sm:grid-cols-3"><Metric label="Rejected Pieces" value={quantity(analytics.rejectedPieces)} /><Metric label="Rejection Rate" value={`${quantity(analytics.rejectionPercent, 2)}%`} /><Metric label="Rejection Entries" value={quantity(rejectionEvents.length)} /></div><SectionCard><CardHeader><CardTitle className="flex items-center gap-2"><ShieldAlert className="size-4" /> Rejection Pattern</CardTitle></CardHeader><CardContent><RejectionPatterns rows={rejectionEvents} /></CardContent></SectionCard><SectionCard><CardHeader><CardTitle>Rejection Log</CardTitle></CardHeader><CardContent><EventTable emptyText="No rejection entries recorded." rows={rejectionEvents} rejectionColumns /></CardContent></SectionCard></section> : null}
 
  {activeTab === "downtime" ? <section className="grid gap-4"><div className="grid gap-3 sm:grid-cols-3"><Metric label="Downtime" value={`${quantity(analytics.downtimeMinutes)} min`} /><Metric label="Entries" value={quantity(downtimeEvents.length)} /><Metric label="Largest Reason" value={display(list(analytics.downtimeByReason)[0]?.name)} /></div><div className="grid gap-4 xl:grid-cols-2"><SectionCard><CardHeader><CardTitle>By Reason</CardTitle></CardHeader><CardContent><PatternBars emptyText="No downtime recorded." rows={list(analytics.downtimeByReason)} /></CardContent></SectionCard><SectionCard><CardHeader><CardTitle>By Setup</CardTitle></CardHeader><CardContent><PatternBars emptyText="No downtime recorded." rows={list(analytics.downtimeBySetup)} /></CardContent></SectionCard></div><SectionCard><CardHeader><CardTitle>Downtime Log</CardTitle></CardHeader><CardContent><EventTable emptyText="No downtime entries recorded." rows={downtimeEvents} /></CardContent></SectionCard></section> : null}
 

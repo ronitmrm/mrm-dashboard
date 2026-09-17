@@ -5,6 +5,13 @@ company-wide masters. Their Production Unit is **Full Software / Not
 Applicable**. Quality Inspection Parameter Master remains scoped to one
 Production Unit.
 
+The Job Card Rejection view presents three separate dimensions: Rejection Type
+(the saved type), Rejection Reason (the saved remark/cause), and Defect (the saved
+Defect / Downtime Reason). For example: Setup Rejection / Drawing Error / Length
+Short. Its pattern tabs aggregate rejected pieces independently by each dimension;
+the rejection log exposes each as a separate filterable column. Saved values and
+quantities remain unchanged.
+
 A referenced Parameter or Measuring Instrument can be deleted when a replacement from the
 same organisation is selected. Replacement reassigns linked inspection parameter
 definitions and their displayed names atomically, then deletes the old master.
