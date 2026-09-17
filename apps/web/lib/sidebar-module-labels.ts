@@ -1,5 +1,5 @@
 export const sidebarModuleLabels = {
-  branding: "Branding",
+  branding: "Document Templates",
   accessAdministration: "Access Administration",
   costing: "Costing",
   dashboard: "Dashboard",

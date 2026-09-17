@@ -5,8 +5,8 @@ export default function BrandingError({ reset }: { reset: () => void }) {
   return (
     <StandardState
       variant="error"
-      title="Branding could not be loaded"
-      description="Please try again. If this persists, ask your administrator to check the Branding database setup."
+      title="Document Templates could not be loaded"
+      description="Please try again. If this persists, contact your administrator."
       action={
         <Button variant="outline" onClick={reset}>
           Try Again
