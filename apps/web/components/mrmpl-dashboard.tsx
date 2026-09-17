@@ -740,6 +740,24 @@ const dataEntrySpecs: DataEntrySpec[] = [
     ],
   },
   {
+    entryType: "parameter_master",
+    title: "Parameter Master",
+    description: "Inspection parameter names shared across all production units.",
+    fields: [
+      { name: "name", label: "Parameter", required: true },
+      { name: "status", label: "Status", options: ["Active", "Inactive"], defaultValue: "Active" },
+    ],
+  },
+  {
+    entryType: "measuring_instrument_master",
+    title: "Measuring Instrument Master",
+    description: "Measuring instruments shared across all production units.",
+    fields: [
+      { name: "name", label: "Measuring Instrument", required: true },
+      { name: "status", label: "Status", options: ["Active", "Inactive"], defaultValue: "Active" },
+    ],
+  },
+  {
     entryType: "quality_parameter_master",
     title: "Quality Inspection Parameter Master",
     description:
@@ -11930,9 +11948,12 @@ function QualityParameterMasterForm({
                       />
                     </TableCell>
                     <TableCell>
-                      <Input
+                      <SearchableSelect
                         className="h-8 min-w-48"
-                        value={draft.parameterName}
+                        aria-label="Parameter"
+                        value={str(asArray(productionControl.parameterMasterRows).find(
+                          (row) => str(row.name).toLowerCase() === draft.parameterName.trim().toLowerCase()
+                        )?.name) || draft.parameterName}
                         onChange={(event) =>
                           updateDraft(
                             draft.draftId,
@@ -11940,7 +11961,14 @@ function QualityParameterMasterForm({
                             event.target.value
                           )
                         }
-                      />
+                      >
+                        <option value="">Select Parameter</option>
+                        {asArray(productionControl.parameterMasterRows)
+                          .filter((row) => str(row.status).toLowerCase() !== "inactive" || str(row.name).toLowerCase() === draft.parameterName.trim().toLowerCase())
+                          .map((row) => (
+                            <option key={str(row.name)} value={str(row.name)} disabled={str(row.status).toLowerCase() === "inactive"}>{str(row.name)}</option>
+                          ))}
+                      </SearchableSelect>
                     </TableCell>
                     <TableCell>
                       <Input
@@ -11956,9 +11984,12 @@ function QualityParameterMasterForm({
                       />
                     </TableCell>
                     <TableCell>
-                      <Input
+                      <SearchableSelect
                         className="h-8 min-w-36"
-                        value={draft.instrumentUsed}
+                        aria-label="Measuring Instrument"
+                        value={str(asArray(productionControl.measuringInstrumentMasterRows).find(
+                          (row) => str(row.name).toLowerCase() === draft.instrumentUsed.trim().toLowerCase()
+                        )?.name) || draft.instrumentUsed}
                         onChange={(event) =>
                           updateDraft(
                             draft.draftId,
@@ -11966,7 +11997,14 @@ function QualityParameterMasterForm({
                             event.target.value
                           )
                         }
-                      />
+                      >
+                        <option value="">Select Measuring Instrument</option>
+                        {asArray(productionControl.measuringInstrumentMasterRows)
+                          .filter((row) => str(row.status).toLowerCase() !== "inactive" || str(row.name).toLowerCase() === draft.instrumentUsed.trim().toLowerCase())
+                          .map((row) => (
+                            <option key={str(row.name)} value={str(row.name)} disabled={str(row.status).toLowerCase() === "inactive"}>{str(row.name)}</option>
+                          ))}
+                      </SearchableSelect>
                     </TableCell>
                     <TableCell>
                       <Input
@@ -16174,6 +16212,8 @@ function dataEntryKey(entryType: string, payload: Record<string, unknown>) {
   }
   if (entryType === "setup_name_master")
     return str(payload.setupName).toLowerCase()
+  if (entryType === "parameter_master" || entryType === "measuring_instrument_master")
+    return str(payload.name).toLowerCase()
   if (entryType === "machine_master") return str(payload.machineNo)
   if (entryType === "employee") return str(payload.empId)
   return ""

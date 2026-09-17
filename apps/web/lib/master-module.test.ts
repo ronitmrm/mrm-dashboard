@@ -37,6 +37,8 @@ describe("master module selection", () => {
   })
   it("keeps shared checklists and maintenance definitions in Universal", () => {
     for (const main of [
+      "parameter_master",
+      "measuring_instrument_master",
       "maintenance_checklist_master",
       "maintenance_master",
     ]) {

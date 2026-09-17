@@ -169,6 +169,14 @@ describe("workforce, quality, and maintenance workflows", () => {
   })
 
   test("normalizes quality masters, five-sample reports, hourly readings, and two-phase setup checklists", async () => {
+    await quality.upsertQualityReference({
+      kind: "parameter_master", name: "Total length", active: true,
+      organizationId, payload: {},
+    })
+    await quality.upsertQualityReference({
+      kind: "measuring_instrument_master", name: "Vernier caliper", active: true,
+      organizationId, payload: {},
+    })
     const parameter = await quality.upsertParameterDefinition({
       dataType: "numeric",
       inputType: "number",
@@ -181,6 +189,7 @@ describe("workforce, quality, and maintenance workflows", () => {
       parameterCode: "LEN",
       payload: {
         specification: "10.00",
+        instrumentUsed: "Vernier caliper",
         toleranceMinus: 0.2,
         tolerancePlus: 0.2,
       },
@@ -188,6 +197,19 @@ describe("workforce, quality, and maintenance workflows", () => {
       sequence: 1,
       upperLimit: 10.2,
     })
+
+    const references = await pool.query(
+      `SELECT names.name AS parameter, instruments.name AS instrument
+       FROM quality.parameter_definitions definition
+       JOIN quality.parameter_names names ON names.id = definition.parameter_name_id
+       JOIN quality.measuring_instruments instruments ON instruments.id = definition.measuring_instrument_id
+       WHERE definition.id = $1`, [parameter.id]
+    )
+    expect(references.rows).toEqual([{ parameter: "Total length", instrument: "Vernier caliper" }])
+    await expect(quality.upsertParameterDefinition({
+      dataType: "numeric", itemUid, name: "Unlisted parameter", operationSetupCode: "1.1",
+      organizationId, parameterCode: "UNLISTED", payload: {}, routeCode: "1",
+    })).rejects.toThrow("Universal Parameter Master")
 
     const inspection = await quality.recordFirstPieceInspection({
       approvedBy: "QC-1",
@@ -465,6 +487,10 @@ describe("workforce, quality, and maintenance workflows", () => {
           setupNumber: 1,
         },
       ],
+    })
+    await quality.upsertQualityReference({
+      kind: "parameter_master", name: "Surface condition", active: true,
+      organizationId, payload: {},
     })
     await quality.upsertParameterDefinition({
       dataType: "boolean",

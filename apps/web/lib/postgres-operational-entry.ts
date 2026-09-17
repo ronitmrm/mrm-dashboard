@@ -252,6 +252,12 @@ function maintenanceTaskPlan(payload: Payload) {
 }
 
 export function operationalEntryPlan(entryType: string, payload: Payload) {
+  if (entryType === "parameter_master" || entryType === "measuring_instrument_master") {
+    return {
+      capability: "quality.parameters.manage", family: "quality", operation: "reference",
+      input: { kind: entryType, name: text(payload.name), active: activeStatus(payload.status), payload },
+    } as const
+  }
   if (entryType === "rejection_type_master") {
     return {
       capability: "quality.parameters.manage",

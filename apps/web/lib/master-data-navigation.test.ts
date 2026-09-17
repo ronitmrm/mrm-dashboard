@@ -41,6 +41,8 @@ describe("master data navigation", () => {
 
   it("marks software-wide masters as not applicable to one Production Unit", () => {
     expect(companyWideMasterEntryTypes).toEqual([
+      "parameter_master",
+      "measuring_instrument_master",
       "maintenance_checklist_master",
       "maintenance_master",
       "rejection_type_master",

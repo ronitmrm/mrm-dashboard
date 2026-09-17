@@ -4,6 +4,8 @@ export const checklistWorkspaceEntryTypes = [
 ] as const
 
 export const qualityWorkspaceEntryTypes = [
+  "parameter_master",
+  "measuring_instrument_master",
   "quality_parameter_master",
   "rejection_type_master",
   "rejection_remark_master",
@@ -11,6 +13,8 @@ export const qualityWorkspaceEntryTypes = [
 ] as const
 
 export const companyWideQualityMasterEntryTypes = [
+  "parameter_master",
+  "measuring_instrument_master",
   "rejection_type_master",
   "rejection_remark_master",
   "rejection_reason_master",
@@ -61,6 +65,8 @@ export function dataEntryRowsForProductionMaster(
 }
 
 export const productionMasterRowSources: Record<string, readonly string[]> = {
+  parameter_master: ["parameterMasterRows"],
+  measuring_instrument_master: ["measuringInstrumentMasterRows"],
   setup_name_master: ["setupNameMasterRows"],
   route: ["routeMasterRows"],
   cycle: ["cycleMasterRows"],

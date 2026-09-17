@@ -81,6 +81,8 @@ const unitMasterDefinitions = [
 ] as const satisfies readonly MasterDefinition[]
 
 export const sharedOperationalMasterDefinitions = [
+  { id: "parameter_master", label: "Parameter", access: "operations", scope: "universal" },
+  { id: "measuring_instrument_master", label: "Measuring Instrument", access: "operations", scope: "universal" },
   {
     id: "maintenance_checklist_master",
     label: "Maintenance Checklist",

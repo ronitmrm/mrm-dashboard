@@ -1206,6 +1206,46 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
       })
     },
 
+    async upsertQualityReference(input: {
+      recordId?: string
+      kind: "parameter_master" | "measuring_instrument_master"
+      name: string
+      active: boolean
+      organizationId: string
+      actorUserId?: string | null
+      rejectDuplicates?: boolean
+      payload: Record<string, unknown>
+    }) {
+      return transaction(pool, async (client) => {
+        const table = input.kind === "parameter_master" ? "parameter_names" : "measuring_instruments"
+        const name = requiredText(input.name, "Name")
+        if (input.recordId) {
+          const existing = await client.query(
+            `SELECT id FROM quality.${table} WHERE organization_id = $1 AND source_id = $2
+             AND lower(btrim(name)) = lower(btrim($3)) FOR UPDATE`,
+            [input.organizationId, input.recordId, name]
+          )
+          if (!existing.rows.length) throw new Error("Master record was not found or its name was changed.")
+        }
+        await assertMasterAvailable(client, { ...input, rejectDuplicates: input.rejectDuplicates && !input.recordId }, `quality.${table}`,
+          "lower(btrim(name)) = lower(btrim($2))", [name])
+        const result = await client.query<{ id: string }>(
+          `INSERT INTO quality.${table} (
+            organization_id, name, active, created_by_user_id, updated_by_user_id,
+            source_system, source_table, source_id, source_payload
+          ) VALUES ($1, $2, $3, $4, $4, 'mrm-dashboard', $5, $6, $7)
+          ON CONFLICT (organization_id, lower(btrim(name))) DO UPDATE SET
+            active = EXCLUDED.active, updated_by_user_id = EXCLUDED.updated_by_user_id,
+            source_payload = EXCLUDED.source_payload, updated_at = now(),
+            row_version = quality.${table}.row_version + 1
+          RETURNING id`,
+          [input.organizationId, name, input.active, input.actorUserId ?? null,
+            input.kind, randomUUID(), { name, status: input.active ? "Active" : "Inactive" }]
+        )
+        return result.rows[0]!
+      })
+    },
+
     async upsertParameterDefinition(input: {
       rejectDuplicates?: boolean
       actorUserId?: string | null
@@ -1235,6 +1275,21 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
           input.operationSetupCode,
           normalizeProductionFloorCode(input.productionFloorCode)
         )
+        const reference = await client.query<{ id: string; name: string }>(
+          `SELECT id, name FROM quality.parameter_names
+           WHERE organization_id = $1 AND active AND lower(btrim(name)) = lower(btrim($2))`,
+          [input.organizationId, input.name]
+        )
+        if (!reference.rows[0]) throw new Error("Select an active Parameter from the Universal Parameter Master.")
+        const instrumentName = String(input.payload.instrumentUsed ?? "").trim()
+        const instrument = instrumentName ? await client.query<{ id: string; name: string }>(
+          `SELECT id, name FROM quality.measuring_instruments
+           WHERE organization_id = $1 AND active AND lower(btrim(name)) = lower(btrim($2))`,
+          [input.organizationId, instrumentName]
+        ) : null
+        if (instrumentName && !instrument?.rows[0]) {
+          throw new Error("Select an active Measuring Instrument from the Universal Measuring Instrument Master.")
+        }
         if (input.active ?? true) {
           const specification = String(
             input.payload.specification ?? input.nominalValue ?? ""
@@ -1288,14 +1343,16 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
               parameter_code, name, data_type, unit, lower_limit,
               upper_limit, nominal_value, sequence, active,
               created_by_user_id, updated_by_user_id, source_system,
-              source_table, source_id, source_payload
+              source_table, source_id, source_payload, parameter_name_id, measuring_instrument_id
             )
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
               $12, $13, $14, $14, 'mrm-dashboard',
-              'quality_parameter_master', $15, $16)
+              'quality_parameter_master', $15, $16, $17, $18)
             ON CONFLICT (item_id, route_option_id, operation_setup_id,
               lower(parameter_code))
             DO UPDATE SET name = EXCLUDED.name, data_type = EXCLUDED.data_type,
+              parameter_name_id = EXCLUDED.parameter_name_id,
+              measuring_instrument_id = EXCLUDED.measuring_instrument_id,
               unit = EXCLUDED.unit, lower_limit = EXCLUDED.lower_limit,
               upper_limit = EXCLUDED.upper_limit,
               nominal_value = EXCLUDED.nominal_value,
@@ -1311,7 +1368,7 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
             context.route_option_id,
             context.operation_setup_id,
             requiredText(input.parameterCode, "Quality parameter code"),
-            requiredText(input.name, "Quality parameter name"),
+            reference.rows[0].name,
             input.dataType,
             input.unit ?? null,
             input.lowerLimit ?? null,
@@ -1321,7 +1378,10 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
             input.active ?? true,
             input.actorUserId ?? null,
             randomUUID(),
-            { ...input.payload, inputType: input.inputType },
+            { ...input.payload, inputType: input.inputType,
+              parameterName: reference.rows[0].name, instrumentUsed: instrument?.rows[0]?.name ?? "" },
+            reference.rows[0].id,
+            instrument?.rows[0]?.id ?? null,
           ]
         )
         return result.rows[0]!

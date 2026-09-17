@@ -13,6 +13,8 @@ import {
 describe("master data workspaces", () => {
   it("keeps reusable masters separate from operational entries", () => {
     expect(masterDataEntryTypes).toEqual([
+      "parameter_master",
+      "measuring_instrument_master",
       "setup_name_master",
       "route",
       "cycle",
