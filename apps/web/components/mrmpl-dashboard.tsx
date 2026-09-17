@@ -17364,7 +17364,9 @@ function setupChecklistItemKey(item: DashboardPayload, fallbackIndex = 0) {
 }
 
 function setupChecklistItemRequired(item: DashboardPayload) {
-  return str(item.required || "Yes").toLowerCase() !== "no"
+  return !["no", "false", "0", "optional"].includes(
+    str(item.required ?? "Yes").trim().toLowerCase()
+  )
 }
 
 function setupChecklistExistingValue(item: DashboardPayload, phase: string) {
@@ -17399,9 +17401,6 @@ function setupChecklistValuesComplete(
     const value =
       values[setupChecklistItemKey(item, index)] ??
       setupChecklistExistingValue(item, phase)
-    if (str(item.inputType).trim().toLowerCase() === "checkbox") {
-      return ["yes", "true", "1", "ok", "pass", "passed"].includes(str(value).trim().toLowerCase())
-    }
     return Boolean(str(value))
   })
 }

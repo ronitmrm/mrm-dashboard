@@ -9,10 +9,10 @@ checklist and completion records retain their identities when assigned to a unit
 
 Incomplete checklist answers may be saved as progress, but cannot be marked
 Completed. Completion requires every active required point for the Setting phase
-to be satisfied, validated against the unit's master on the server. Required
-checkbox points must be Yes/ticked; No and blank both block completion. This
-includes all six current CNC points. Other input types require an answer (zero
-is valid for numbers). Saving incomplete progress
+to have an explicit answer, validated against the unit's master on the server.
+For points marked Required, either Yes or No satisfies a checkbox/Yes-No answer;
+an untouched/blank selection blocks completion. Optional points may stay blank.
+Numeric zero is a valid answer. Saving incomplete progress
 clears the checklist completion timestamp and leaves Setting Done locked.
 CNC Setting Done rechecks saved answers on the server, so a cached checklist
 or an earlier Completed status cannot bypass this lock.
