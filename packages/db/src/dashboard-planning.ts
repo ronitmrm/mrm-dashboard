@@ -1267,6 +1267,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
 
     async upsertCycleStandard(input: {
       rejectDuplicates?: boolean
+      recordId?: string
       actorUserId?: string | null
       cycleTimeSeconds: number
       itemUid: string
@@ -1291,9 +1292,12 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           normalizeProductionFloorCode(input.productionFloorCode)
         )
         await businessKeyLock(client, "manufacturing.cycle", operationSetupId)
-        const existing = await client.query<{ id: string }>(
+        const existing = await client.query<{
+          id: string; source_id: string; pieces_per_cycle: string; setup_time_minutes: string
+        }>(
           `
-            SELECT id FROM manufacturing.operation_cycle_standards
+            SELECT id, source_id, pieces_per_cycle, setup_time_minutes
+            FROM manufacturing.operation_cycle_standards
             WHERE operation_setup_id = $1 AND effective_to IS NULL
             ORDER BY created_at DESC, id DESC
             LIMIT 1
@@ -1304,18 +1308,26 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
         const sourcePayload = input.sourcePayload ?? input
         const values = [
           input.cycleTimeSeconds,
-          input.piecesPerCycle ?? 1,
-          input.setupTimeMinutes ?? 0,
+          input.piecesPerCycle ?? existing.rows[0]?.pieces_per_cycle ?? 1,
+          input.setupTimeMinutes ?? existing.rows[0]?.setup_time_minutes ?? 0,
           input.actorUserId ?? null,
         ]
-        rejectDuplicateMaster(input.rejectDuplicates, !!existing.rows[0])
+        if (input.recordId && input.recordId !== existing.rows[0]?.id
+          && input.recordId !== existing.rows[0]?.source_id) {
+          throw new Error("The cycle time record to edit was not found for this route setup. Reload the master.")
+        }
+        rejectDuplicateMaster(input.rejectDuplicates && !input.recordId, !!existing.rows[0])
         const result = existing.rows[0]
           ? await client.query<{ id: string }>(
               `
                 UPDATE manufacturing.operation_cycle_standards
                 SET cycle_time_seconds = $1, pieces_per_cycle = $2,
                   setup_time_minutes = $3, updated_by_user_id = $4,
-                  source_payload = $5, updated_at = now(),
+                  source_payload = CASE
+                    WHEN jsonb_typeof(source_payload->'payload') = 'object'
+                    THEN source_payload || jsonb_build_object('payload', (source_payload->'payload') || $5::jsonb)
+                    ELSE COALESCE(source_payload, '{}'::jsonb) || $5::jsonb
+                  END, updated_at = now(),
                   row_version = row_version + 1
                 WHERE id = $6 RETURNING id
               `,
@@ -1341,6 +1353,25 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
                 sourcePayload,
               ]
             )
+        // Closed sessions retain their original standard and production evidence.
+        await client.query(
+          `WITH updated_sessions AS (
+             UPDATE manufacturing.production_sessions
+             SET cycle_time_seconds = $3,
+               updated_at = now(), row_version = row_version + 1,
+               source_payload = COALESCE(source_payload, '{}'::jsonb)
+                 || jsonb_build_object('cycleTime', $3::numeric)
+             WHERE organization_id = $1 AND operation_setup_id = $2
+               AND status = 'open' AND reversed_at IS NULL
+             RETURNING production_entry_id
+           )
+           UPDATE manufacturing.production_entries entry
+           SET source_payload = COALESCE(entry.source_payload, '{}'::jsonb)
+             || jsonb_build_object('cycleTime', $3::numeric)
+           FROM updated_sessions session
+           WHERE entry.id = session.production_entry_id`,
+          [input.organizationId, operationSetupId, input.cycleTimeSeconds]
+        )
         await queueDashboardRefresh(client, input.organizationId)
         return result.rows[0]!
       })

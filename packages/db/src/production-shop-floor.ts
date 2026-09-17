@@ -716,6 +716,11 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           input.operationSetupCode
         )
         if (!setupId) throw new Error("Production setup is required.")
+        // Serialize session creation with cycle revisions, including an absent master.
+        await client.query(
+          "SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))",
+          ["manufacturing.cycle", setupId.toLowerCase()]
+        )
         const machineId = await machineIdFor(
           client,
           input.organizationId,
@@ -826,8 +831,15 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           machineNumber: sessionSnapshot.machine_number,
           productionDate: shiftContext.productionDate,
         })
+        const cycleStandard = await client.query<{ cycle_time_seconds: string }>(
+          `SELECT cycle_time_seconds FROM manufacturing.operation_cycle_standards
+           WHERE operation_setup_id = $1 AND effective_to IS NULL
+           ORDER BY created_at DESC, id DESC LIMIT 1`,
+          [setupId]
+        )
         const requestedCycleTime = Number(
-          input.cycleTimeSeconds ?? input.sourcePayload?.cycleTime ?? 0
+          cycleStandard.rows[0]?.cycle_time_seconds
+            ?? input.cycleTimeSeconds ?? input.sourcePayload?.cycleTime ?? 0
         )
         const cycleTimeSeconds = Number.isFinite(requestedCycleTime)
           ? Math.max(requestedCycleTime, 0)
