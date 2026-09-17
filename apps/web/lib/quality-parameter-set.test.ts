@@ -22,7 +22,7 @@ describe("quality inspection parameter sets", () => {
     ).toBeUndefined()
   })
 
-  it("prefers the active current parameter over a legacy duplicate", () => {
+  it("uses the revised current setup without reviving legacy specifications", () => {
     expect(
       mergeQualityInspectionParameterRows(
         [
@@ -32,7 +32,7 @@ describe("quality inspection parameter sets", () => {
             setupNo: "1",
             code: "P1",
             parameterName: "Total Length",
-            specification: "20.00",
+            specification: "21.00",
             status: "Active",
           },
         ],

@@ -40,6 +40,11 @@ function parameterRowKey(row: QualityInspectionParameterRow) {
     .join("|")
 }
 
+function setupKey(row: QualityInspectionParameterRow) {
+  return [row.partNo || row.partCode || row.uid, row.optionNumber, row.setupNo]
+    .map(normalized).join("|")
+}
+
 function isActive(row: QualityInspectionParameterRow) {
   return normalized(row.status || "Active") !== "inactive"
 }
@@ -63,7 +68,10 @@ export function mergeQualityInspectionParameterRows(
   legacyRows: readonly QualityInspectionParameterRow[]
 ) {
   const rowsByParameter = new Map<string, QualityInspectionParameterRow>()
-  for (const row of [...currentRows, ...legacyRows]) {
+  // A current setup owns its complete parameter set, including removals and ECNs.
+  const currentSetups = new Set(currentRows.map(setupKey))
+  const fallbackRows = legacyRows.filter((row) => !currentSetups.has(setupKey(row)))
+  for (const row of [...currentRows, ...fallbackRows]) {
     if (!isActive(row)) continue
     const key = parameterRowKey(row)
     if (!key.replaceAll("|", "") || rowsByParameter.has(key)) continue

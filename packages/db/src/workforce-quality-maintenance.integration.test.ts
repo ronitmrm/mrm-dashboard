@@ -456,6 +456,62 @@ describe("workforce, quality, and maintenance workflows", () => {
     })
   })
 
+  test("revises every parameter field for new inspections while preserving saved FPIR and hourly evidence", async () => {
+    for (const name of ["ECN length", "ECN thread"]) {
+      await quality.upsertQualityReference({ kind: "parameter_master", name, active: true, organizationId, payload: {} })
+    }
+    for (const name of ["ECN caliper", "ECN gauge"]) {
+      await quality.upsertQualityReference({ kind: "measuring_instrument_master", name, active: true, organizationId, payload: {} })
+    }
+    const definition = {
+      organizationId, itemUid, routeCode: "1", operationSetupCode: "1.1", parameterCode: "ECN",
+      name: "ECN length", dataType: "numeric" as const, inputType: "number", nominalValue: 25,
+      lowerLimit: 24.75, upperLimit: 25.25, sequence: 1,
+      payload: { specification: "25", instrumentUsed: "ECN caliper", tolerancePlus: "0.25", toleranceMinus: "0.25", remark: "Original" },
+    }
+    await quality.upsertParameterDefinition(definition)
+    const firstPiece = {
+      organizationId, jobCardNumber, operationSetupCode: "1.1", status: "Approved",
+      inspectedAt: "2026-09-17T09:00:00Z", inspectionKey: `ECN-FP-${suffix}`,
+      dimensions: [{ parameterCode: "ECN", readings: [25] }], payload: {},
+    }
+    const hourly = {
+      organizationId, jobCardNumber, operationSetupCode: "1.1", status: "OK",
+      checkedAt: "2026-09-17T10:00:00Z", checkKey: `ECN-HR-${suffix}`,
+      readings: [{ parameterCode: "ECN", actualReading: 25 }], payload: {},
+    }
+    const oldFpir = await quality.recordFirstPieceInspection(firstPiece)
+    await quality.recordHourlyCheck(hourly)
+    await expect(quality.upsertParameterDefinition({ ...definition, rejectDuplicates: true })).rejects.toThrow("already exists")
+    await quality.upsertParameterDefinition({
+      ...definition, rejectDuplicates: true, reviseExisting: true,
+      name: "ECN thread", dataType: "text", inputType: "text", nominalValue: null,
+      lowerLimit: null, upperLimit: null, sequence: 2,
+      payload: { specification: "M10", instrumentUsed: "ECN gauge", tolerancePlus: "0", toleranceMinus: "0", remark: "Revised" },
+    })
+    const oldPage = await quality.readHourlyQualityPage({ organizationId, checkKey: hourly.checkKey })
+    expect(oldPage.existingCheck).toMatchObject({ readings: [{
+      parameterName: "ECN length", specification: "25", instrumentUsed: "ECN caliper",
+      tolerancePlus: "0.25", toleranceMinus: "0.25", inputType: "number", actualReading: "25",
+    }] })
+    const newFpir = await quality.recordFirstPieceInspection({ ...firstPiece, inspectionKey: `${firstPiece.inspectionKey}-new`, dimensions: [{ parameterCode: "ECN", readings: ["M10"] }] })
+    await quality.recordHourlyCheck({ ...hourly, checkKey: `${hourly.checkKey}-new`, readings: [{ parameterCode: "ECN", actualReading: "M10" }] })
+    const newPage = await quality.readHourlyQualityPage({ organizationId, checkKey: `${hourly.checkKey}-new` })
+    expect(newPage.existingCheck).toMatchObject({ readings: [{
+      parameterName: "ECN thread", specification: "M10", instrumentUsed: "ECN gauge",
+      tolerancePlus: "0", toleranceMinus: "0", inputType: "text", sequence: 2, actualReading: "M10",
+    }] })
+    await quality.recordFirstPieceInspection(firstPiece)
+    await quality.recordHourlyCheck(hourly)
+    const reports = await pool.query(`SELECT id, source_payload FROM quality.first_piece_inspections WHERE id = ANY($1::uuid[])`, [[oldFpir.id, newFpir.id]])
+    expect(reports.rows.find((row) => row.id === oldFpir.id)?.source_payload.dimensions[0]).toMatchObject({
+      parameterName: "ECN length", specification: "25", inputType: "number", remark: "Original", readings: [25],
+    })
+    expect(reports.rows.find((row) => row.id === newFpir.id)?.source_payload.dimensions[0]).toMatchObject({
+      parameterName: "ECN thread", specification: "M10", inputType: "text", remark: "Revised", readings: ["M10"],
+    })
+  })
+
   test("uses the only active route for quality writes and rejects duplicate parameter specifications", async () => {
     const automaticItemUid = `AUTO-QUALITY-${suffix}`
     const automaticJobCard = `AUTO-QUALITY-JC-${suffix}`
