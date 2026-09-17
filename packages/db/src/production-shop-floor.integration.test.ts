@@ -525,6 +525,14 @@ describe("production and shop-floor workflows", () => {
       typeCode: "RT-01",
       typeName: "In-process",
     })
+    const workspace = await repository.readJobCardWorkspace({
+      organizationId, jobCardNumber: cncJobCard, productionFloorCode: "cnc",
+    })
+    expect(workspace.events.filter((event) => event.eventType === "rejection"))
+      .toEqual([expect.objectContaining({
+        rejectionTypeName: "In-process", rejectionReasonName: "Segregated",
+        defectName: "Visual defect", quantity: "7",
+      })])
     await planning.upsertMachine({ organizationId, productionFloorCode: "cnc", machineNumber: `NEW-FAMILY-${suffix}`,
       sourcePayload: { machineFamily: `NEW-FAMILY-${suffix}`, machineType: "CNC" },
     })

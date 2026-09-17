@@ -1916,11 +1916,31 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
               reason_code AS "reasonCode", reason_name AS "reasonName",
               quantity, entered_by_name AS "enteredByName",
               entered_role AS "enteredRole", setup_number AS "setupNumber",
-              machine_number AS "machineNumber", operator_code AS "operatorCode"
+              machine_number AS "machineNumber", operator_code AS "operatorCode",
+              NULL::text AS "rejectionTypeName", NULL::text AS "rejectionReasonName",
+              NULL::text AS "defectName"
            FROM reporting.production_event_log
            WHERE organization_id = $1 AND production_floor_code = $2
              AND lower(job_card_number) = lower($3)
-           ORDER BY event_time DESC`,
+             AND event_type <> 'rejection'
+           UNION ALL
+           SELECT session.id, session.session_reference, 'rejection',
+             rejection.recorded_at, rejection.recorded_at, NULL::timestamptz,
+             NULL::integer, rejection.reason_code,
+             concat_ws(' · ', rejection.type_name, rejection.reason_name, rejection.remark_name),
+             rejection.quantity, actor.name, rejection.entered_role,
+             session.setup_number_snapshot, session.machine_number_snapshot,
+             session.operator_code_snapshot,
+             rejection.type_name, rejection.remark_name, rejection.reason_name
+           FROM manufacturing.production_session_rejection_events rejection
+           JOIN manufacturing.production_sessions session ON session.id = rejection.production_session_id
+           JOIN catalog.machines machine ON machine.id = session.machine_id
+           JOIN manufacturing.production_floors floor ON floor.id = machine.production_floor_id
+           LEFT JOIN identity.users actor ON actor.id = rejection.entered_by_user_id
+           WHERE session.organization_id = $1 AND floor.code = $2
+             AND lower(session.job_card_number_snapshot) = lower($3)
+             AND session.reversed_at IS NULL AND rejection.reversed_at IS NULL
+           ORDER BY "eventTime" DESC`,
           [input.organizationId, floorCode, jobCardNumber]
         ),
         pool.query<Record<string, unknown>>(
