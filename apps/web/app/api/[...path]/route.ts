@@ -605,7 +605,6 @@ async function savePlanningMasterEntry(
     return repository.upsertRouteOption({
       rejectDuplicates,
       recordId,
-      correctionConfirmed: payload.routeCorrection === "Correction to the same operation",
       actorUserId,
       itemUid,
       organizationId,

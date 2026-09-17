@@ -361,9 +361,12 @@ describe("dashboard planning writes", () => {
       setups: [{ operationCode: "CUT", operationName: "Cut corrected", sequence: 1, setupNumber: 1 }],
       sourcePayload: { numberOfSetups: 1, stageWeight: 95 },
     }
-    await expect(repository.upsertRouteOption(correction)).rejects.toThrow("Confirm this is a correction")
-    await repository.upsertRouteOption({ ...correction, correctionConfirmed: true })
-    await expect(repository.upsertRouteOption({ ...correction, correctionConfirmed: true,
+    await repository.upsertRouteOption(correction)
+    const corrected = await pool.query<{ operation_name: string }>(
+      "SELECT operation_name FROM manufacturing.operation_setups WHERE route_option_id = $1", [route.id]
+    )
+    expect(corrected.rows[0]?.operation_name).toBe("Cut corrected")
+    await expect(repository.upsertRouteOption({ ...correction,
       setups: [{ ...correction.setups[0]!, sequence: 2 }],
     })).rejects.toThrow("requires a new route option")
     await repository.upsertRouteOption({ ...routeInput, routeCode: "2" })

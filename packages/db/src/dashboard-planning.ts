@@ -976,7 +976,6 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
     async upsertRouteOption(input: {
       rejectDuplicates?: boolean
       recordId?: string
-      correctionConfirmed?: boolean
       actorUserId?: string | null
       itemUid: string
       organizationId: string
@@ -1191,23 +1190,20 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           rejectDuplicateMaster(input.rejectDuplicates && !input.recordId, !!prior)
           const familyChanged = prior && input.machineFamily !== undefined
             && String(prior.source_payload?.machineFamily ?? prior.source_payload?.machineUsed ?? "").trim().toLowerCase() !== input.machineFamily.trim().toLowerCase()
-          if (prior && (familyChanged || (prior.operation_name ?? "").trim().toLowerCase() !== (canonicalSetupName ?? "").trim().toLowerCase())) {
-            if (!input.correctionConfirmed) throw new Error("Confirm this is a correction to the same operation. For a changed operation or manufacturing method, create a new route option.")
-            if (familyChanged) {
-              const incompatible = await client.query(
-                `SELECT 1 FROM manufacturing.shop_floor_setup_state state
-                 JOIN catalog.machines machine ON machine.id = state.machine_id
-                 WHERE state.operation_setup_id = $1 AND state.active
-                   AND lower(btrim(COALESCE(machine.source_payload->>'machineFamily', ''))) <> lower($2)
-                 UNION ALL
-                 SELECT 1 FROM manufacturing.production_sessions session
-                 JOIN catalog.machines machine ON machine.id = session.machine_id
-                 WHERE session.operation_setup_id = $1 AND session.status = 'open' AND session.reversed_at IS NULL
-                   AND lower(btrim(COALESCE(machine.source_payload->>'machineFamily', ''))) <> lower($2)
-                 LIMIT 1`, [prior.id, input.machineFamily!.trim()]
-              )
-              if (incompatible.rows.length) throw new Error("Machine Family conflicts with an active machine assignment. Finish or explicitly move that work before correcting the family.")
-            }
+          if (prior && familyChanged) {
+            const incompatible = await client.query(
+              `SELECT 1 FROM manufacturing.shop_floor_setup_state state
+               JOIN catalog.machines machine ON machine.id = state.machine_id
+               WHERE state.operation_setup_id = $1 AND state.active
+                 AND lower(btrim(COALESCE(machine.source_payload->>'machineFamily', ''))) <> lower($2)
+               UNION ALL
+               SELECT 1 FROM manufacturing.production_sessions session
+               JOIN catalog.machines machine ON machine.id = session.machine_id
+               WHERE session.operation_setup_id = $1 AND session.status = 'open' AND session.reversed_at IS NULL
+                 AND lower(btrim(COALESCE(machine.source_payload->>'machineFamily', ''))) <> lower($2)
+               LIMIT 1`, [prior.id, input.machineFamily!.trim()]
+            )
+            if (incompatible.rows.length) throw new Error("Machine Family conflicts with an active machine assignment. Finish or explicitly move that work before correcting the family.")
           }
           if (current.rows[0]) {
             await client.query(
