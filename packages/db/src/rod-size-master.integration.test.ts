@@ -62,13 +62,22 @@ test("saves unique organization-scoped Rod Sizes and lists them in the editable 
   expect(
     (await workflow.getDesignWorkspaceOptions(organizationCode)).rodSizes
   ).toEqual(["13 mm"])
-  await lifecycle.deleteMaster({
+  const uid = randomUUID()
+  await pool.query(
+    `INSERT INTO catalog.items (organization_id, uid, description, rod_size, source_system, source_table, source_id)
+     VALUES ($1, $2, 'Replacement test', '13 mm', 'test', 'replacement', $2)`, [organizationId, uid]
+  )
+  const deletion = {
     organizationId,
-    kind: "commercial_rod_size",
+    kind: "commercial_rod_size" as const,
     recordId: rows[0]!.id,
     reason: "Remove test choice",
-  })
-  expect((await repository.snapshot(organizationId)).rodSizes).toEqual([])
+  }
+  await expect(lifecycle.deleteMaster(deletion)).rejects.toThrow("Select a replacement")
+  const replacement = await repository.upsertNamed({ organizationId, kind: "rodSize", name: "14 mm" })
+  await lifecycle.deleteMaster({ ...deletion, replacementRecordId: replacement.id })
+  expect((await pool.query("SELECT rod_size FROM catalog.items WHERE uid = $1", [uid])).rows[0]?.rod_size).toBe("14 mm")
+  expect((await repository.snapshot(organizationId)).rodSizes).toEqual([{ name: "14 mm" }])
 })
 
 test("seeds all permanent portfolio sizes without customer codes, excludes blanks, and is repeatable", async () => {

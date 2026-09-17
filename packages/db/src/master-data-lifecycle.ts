@@ -4,6 +4,7 @@ import type { PoolClient } from "pg"
 
 import { queueDashboardRefresh } from "./dashboard-refresh-queue"
 import { productionFloorCodeForRecord } from "./production-floors"
+import { applyMasterTextReferences, masterTextReferences } from "./master-text-references"
 import {
   repositoryPool,
   withTransaction,
@@ -209,7 +210,7 @@ async function masterRow(
   recordId: string
 ) {
   const [schemaName, tableName, lookupColumn] = target
-  const result = await client.query<{ id: string; snapshot: unknown }>(
+  const result = await client.query<{ id: string; snapshot: Record<string, unknown> }>(
     `SELECT target.id, to_jsonb(target) AS snapshot
      FROM ${qualifiedTable(schemaName, tableName)} target
      WHERE target.organization_id = $1
@@ -218,6 +219,24 @@ async function masterRow(
     [organizationId, recordId]
   )
   return result.rows[0]
+}
+
+function validateReplacement(kind: MasterDataKind, source: Record<string, unknown>, replacement: Record<string, unknown>) {
+  if (replacement.active === false) throw new Error("Select an active replacement master.")
+  const scopes: Partial<Record<MasterDataKind, readonly string[]>> = {
+    commercial_commercial_term: ["term_type"],
+    commercial_website_field: ["field_key"],
+    commercial_subcategory: ["category_id"],
+    setup_name_master: ["production_floor_id"],
+    machine_master: ["production_floor_id"],
+    quality_parameter_master: ["operation_setup_id", "data_type"],
+    setup_checklist_master: ["template_id", "response_type"],
+    maintenance_checklist_master: ["definition_id", "response_type"],
+    hr_job_template: ["department_id", "designation_id", "combined_role_id"],
+  }
+  if (scopes[kind]?.some((field) => source[field] !== replacement[field])) {
+    throw new Error("The replacement must have the same Production Unit, parent and field type as this master.")
+  }
 }
 
 async function syncReplacementDisplayValues(
@@ -235,6 +254,12 @@ async function syncReplacementDisplayValues(
          AND item.asset_category_id = category.id`,
       [organizationId, replacementId]
     )
+    await client.query(
+      `UPDATE store.code_requests request SET requested_category = category.name
+       FROM store.asset_categories category
+       WHERE request.organization_id = $1 AND category.id = $2 AND request.requested_category_id = category.id`,
+      [organizationId, replacementId]
+    )
   }
   if (kind === "store_subcategory") {
     await client.query(
@@ -246,6 +271,13 @@ async function syncReplacementDisplayValues(
        JOIN store.asset_categories category ON category.id = subcategory.category_id
        WHERE item.organization_id = $1 AND subcategory.id = $2
          AND item.asset_subcategory_id = subcategory.id`,
+      [organizationId, replacementId]
+    )
+    await client.query(
+      `UPDATE store.code_requests request
+       SET requested_subcategory = subcategory.name, requested_category_id = category.id, requested_category = category.name
+       FROM store.asset_subcategories subcategory JOIN store.asset_categories category ON category.id = subcategory.category_id
+       WHERE request.organization_id = $1 AND subcategory.id = $2 AND request.requested_subcategory_id = subcategory.id`,
       [organizationId, replacementId]
     )
   }
@@ -262,6 +294,16 @@ async function syncReplacementDisplayValues(
        JOIN store.asset_categories category ON category.id = subcategory.category_id
        WHERE item.organization_id = $1 AND asset_name.id = $2
          AND item.asset_name_id = asset_name.id`,
+      [organizationId, replacementId]
+    )
+    await client.query(
+      `UPDATE store.code_requests request
+       SET requested_asset_name = asset_name.name, requested_subcategory_id = subcategory.id,
+         requested_subcategory = subcategory.name, requested_category_id = category.id, requested_category = category.name
+       FROM store.asset_names asset_name
+       JOIN store.asset_subcategories subcategory ON subcategory.id = asset_name.subcategory_id
+       JOIN store.asset_categories category ON category.id = subcategory.category_id
+       WHERE request.organization_id = $1 AND asset_name.id = $2 AND request.requested_asset_name_id = asset_name.id`,
       [organizationId, replacementId]
     )
   }
@@ -391,7 +433,22 @@ export function createMasterDataLifecycleRepository(
         if (replacementRecordId && !replacement) {
           throw new Error("Replacement master was not found.")
         }
-        if (replacement) await authorizeMasterRecord(client, input.kind, replacement.snapshot, input.authorize)
+        if (replacement) {
+          await authorizeMasterRecord(client, input.kind, replacement.snapshot, input.authorize)
+          validateReplacement(input.kind, source.snapshot, replacement.snapshot)
+          if (input.kind === "parameter_master") {
+            const conflict = await client.query(
+              `SELECT 1 FROM quality.parameter_definitions old
+               JOIN quality.parameter_definitions kept ON kept.operation_setup_id = old.operation_setup_id
+                 AND kept.active AND old.active
+                 AND lower(btrim(COALESCE(kept.source_payload->'payload'->>'specification', kept.source_payload->>'specification', kept.nominal_value::text, '')))
+                   = lower(btrim(COALESCE(old.source_payload->'payload'->>'specification', old.source_payload->>'specification', old.nominal_value::text, '')))
+               WHERE old.parameter_name_id = $1 AND kept.parameter_name_id = $2 LIMIT 1`,
+              [source.id, replacement.id]
+            )
+            if (conflict.rows.length) throw new Error("This replacement would duplicate an inspection parameter with the same specification. Resolve those definitions first.")
+          }
+        }
 
         const [schemaName, tableName] = target
         const references = await referenceColumns(client, schemaName, tableName)
@@ -409,15 +466,14 @@ export function createMasterDataLifecycleRepository(
           }
         }
 
-        const usageCount = usedReferences.reduce(
+        const textReferences = await masterTextReferences(client, input.kind, source.snapshot)
+        const textUsageCount = await applyMasterTextReferences(client, input.organizationId, textReferences)
+        const usageCount = textUsageCount + usedReferences.reduce(
           (total, reference) => total + reference.count,
           0
         )
         if (usageCount && input.kind === "route") {
           throw new Error("This route setup has linked records. Create a new option instead of deleting or replacing it.")
-        }
-        if (usageCount && input.kind === "parameter_master") {
-          throw new Error("This master is used by inspection parameters and cannot be deleted. Mark it inactive instead.")
         }
         if (usageCount && !replacement) {
           throw new Error(
@@ -426,6 +482,8 @@ export function createMasterDataLifecycleRepository(
         }
 
         if (replacement) {
+          await applyMasterTextReferences(client, input.organizationId, textReferences,
+            String(replacement.snapshot.option_value ?? replacement.snapshot.name ?? ""))
           if (input.kind === "store_supplier") {
             await client.query(
               `UPDATE store.supplier_prices source_price
@@ -470,23 +528,39 @@ export function createMasterDataLifecycleRepository(
             )
           }
           for (const reference of usedReferences) {
-            if (input.kind === "measuring_instrument_master" &&
+            if ((input.kind === "measuring_instrument_master" || input.kind === "parameter_master") &&
                 reference.schemaName === "quality" &&
-                reference.tableName === "parameter_definitions" &&
-                reference.columnName === "measuring_instrument_id") {
+                reference.tableName === "parameter_definitions") {
+              const parameter = input.kind === "parameter_master"
+              const column = parameter ? "parameter_name_id" : "measuring_instrument_id"
+              const key = parameter ? "parameterName" : "instrumentUsed"
               await client.query(
                 `UPDATE quality.parameter_definitions definition
-                 SET measuring_instrument_id = instrument.id,
+                 SET ${column} = choice.id,
+                   ${parameter ? "name = choice.name," : ""}
                    source_payload = CASE
                      WHEN jsonb_typeof(definition.source_payload->'payload') = 'object'
-                     THEN jsonb_set(definition.source_payload, '{payload,instrumentUsed}', to_jsonb(instrument.name))
-                     ELSE jsonb_set(COALESCE(definition.source_payload, '{}'::jsonb), '{instrumentUsed}', to_jsonb(instrument.name))
+                     THEN jsonb_set(definition.source_payload, '{payload,${key}}', to_jsonb(choice.name))
+                     ELSE jsonb_set(COALESCE(definition.source_payload, '{}'::jsonb), '{${key}}', to_jsonb(choice.name))
                    END,
                    updated_at = now(), row_version = definition.row_version + 1
-                 FROM quality.measuring_instruments instrument
-                 WHERE instrument.id = $1 AND definition.measuring_instrument_id = $2
+                 FROM quality.${parameter ? "parameter_names" : "measuring_instruments"} choice
+                 WHERE choice.id = $1 AND definition.${column} = $2
                    AND definition.organization_id = $3`,
                 [replacement.id, source.id, input.organizationId]
+              )
+              continue
+            }
+            if (input.kind === "setup_name_master" && reference.tableName === "operation_setups") {
+              await client.query(
+                `UPDATE manufacturing.operation_setups setup
+                 SET setup_name_id = choice.id, operation_name = choice.name,
+                   source_payload = CASE WHEN jsonb_typeof(setup.source_payload->'payload') = 'object'
+                     THEN jsonb_set(setup.source_payload, '{payload,setupName}', to_jsonb(choice.name))
+                     ELSE jsonb_set(COALESCE(setup.source_payload, '{}'::jsonb), '{setupName}', to_jsonb(choice.name)) END,
+                   updated_at = now(), row_version = setup.row_version + 1
+                 FROM manufacturing.setup_names choice
+                 WHERE choice.id = $1 AND setup.setup_name_id = $2`, [replacement.id, source.id]
               )
               continue
             }
@@ -530,6 +604,7 @@ export function createMasterDataLifecycleRepository(
               kind: input.kind,
               previous: source.snapshot,
               references: usedReferences,
+              textUsageCount,
               replacementId: replacement?.id ?? null,
               usageCount,
             },
@@ -542,6 +617,11 @@ export function createMasterDataLifecycleRepository(
           replacementId: replacement?.id ?? null,
           usageCount,
         }
+      }).catch((error: unknown) => {
+        if (error && typeof error === "object" && "code" in error && error.code === "23505") {
+          throw new Error("This replacement would create conflicting linked records. Resolve the duplicate child records or select another replacement.")
+        }
+        throw error
       })
     },
   }

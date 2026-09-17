@@ -483,11 +483,34 @@ describe("workforce, quality, and maintenance workflows", () => {
       expect((await pool.query(
         `SELECT 1 FROM quality.measuring_instruments WHERE source_id = $1`, [deletion.recordId]
       )).rowCount).toBe(0)
+      const nextParameter = await quality.upsertQualityReference({
+        kind: "parameter_master", name: "Overall length", active: true, organizationId, payload: {},
+      })
+      const names = await pool.query<{ old: string; replacement: string }>(
+        `SELECT old.source_id AS old, replacement.source_id AS replacement
+         FROM quality.parameter_definitions definition
+         JOIN quality.parameter_names old ON old.id = definition.parameter_name_id
+         JOIN quality.parameter_names replacement ON replacement.id = $2
+         WHERE definition.id = $1`, [parameter.id, nextParameter.id]
+      )
+      const replaceParameter = { ...deletion, kind: "parameter_master" as const,
+        recordId: names.rows[0]!.old, replacementRecordId: names.rows[0]!.replacement }
+      const duplicateDefinition = await quality.upsertParameterDefinition({
+        organizationId, itemUid, routeCode: "1", operationSetupCode: "1.1",
+        parameterCode: "LEN-DUP", name: "Overall length", dataType: "numeric",
+        payload: { specification: "10.00" },
+      })
+      await expect(lifecycle.deleteMaster(replaceParameter)).rejects.toThrow("same specification")
+      await pool.query("DELETE FROM quality.parameter_definitions WHERE id = $1", [duplicateDefinition.id])
+      await lifecycle.deleteMaster(replaceParameter)
+      expect((await pool.query(
+        `SELECT name, source_payload->>'parameterName' AS display FROM quality.parameter_definitions WHERE id = $1`, [parameter.id]
+      )).rows).toEqual([{ name: "Overall length", display: "Overall length" }])
       const saved = await pool.query(
-        `SELECT parameter_snapshot->'source_payload'->>'instrumentUsed' AS instrument
+        `SELECT parameter_snapshot->'source_payload'->>'instrumentUsed' AS instrument, parameter_snapshot->>'name' AS name
          FROM quality.first_piece_readings WHERE inspection_id = $1`, [inspection.id]
       )
-      expect(saved.rows).toEqual([{ instrument: "Vernier caliper" }])
+      expect(saved.rows).toEqual([{ instrument: "Vernier caliper", name: "Total length" }])
     } finally {
       await lifecycle.close()
     }
