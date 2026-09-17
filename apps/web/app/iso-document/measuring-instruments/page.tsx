@@ -43,15 +43,15 @@ export default async function MeasuringInstrumentRegisterPage() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <div
-        className="text-left text-sm font-medium"
-        aria-label="Register number"
-      >
-        Register No.: {measuringInstrumentRegister.number}
-      </div>
       <PageHeader
+        className="sm:flex-nowrap sm:items-center"
         title={measuringInstrumentRegister.title}
         description="Open a Store item to view its units, history, locations and certificates. Entries and updates are managed in Store."
+        actions={
+          <span className="text-sm font-medium" aria-label="Document number">
+            Document No.: {measuringInstrumentRegister.number}
+          </span>
+        }
       />
       <MetricSummary
         scope="Measuring instruments · before table filters"

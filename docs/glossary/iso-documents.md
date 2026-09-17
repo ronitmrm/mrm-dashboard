@@ -1,7 +1,8 @@
 # ISO Document
 
-ISO Document groups registers. A register number appears at the top-left of its
-page, never in sidebar labels. The initial Measuring Instrument Register number
+ISO Document groups registers. The document number appears on the right inside
+the page header, labelled "Document No.", never in sidebar labels. The initial
+Measuring Instrument Register number
 is `MRMPL/ISO/REG/001` (defined in `apps/web/lib/iso-documents.ts`).
 
 ## Measuring Instrument Register
