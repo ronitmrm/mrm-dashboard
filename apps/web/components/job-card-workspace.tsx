@@ -6,7 +6,6 @@ import { Button } from "@workspace/ui/components/button"
 import { SectionCard, CardContent, CardDescription, CardHeader, CardTitle } from "@workspace/ui/components/card"
 import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@workspace/ui/components/tabs"
 import { OperationalTable, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@workspace/ui/components/table"
 import { ArrowLeft, Factory, History, RefreshCw, Route, Save, Settings2, ShieldAlert, Truck } from "lucide-react"
 import Link from "next/link"
@@ -93,7 +92,7 @@ function PatternBars({ emptyText, rows, valueKey = "minutes" }: { emptyText: str
     const label = display(row.name || row.reasonName || row.setupNumber)
     const amount = number(row[valueKey])
     return <div className="grid gap-1" key={`${label}-${index}`}>
-      <div className="flex items-center justify-between gap-3 text-sm"><span className="truncate font-medium">{label}</span><span className="shrink-0 tabular-nums">{quantity(amount)} {valueKey === "minutes" ? "min" : "pcs"}</span></div>
+      <div className="flex items-center justify-between gap-3 text-sm"><span className="min-w-0 break-words font-medium">{label}</span><span className="shrink-0 tabular-nums">{quantity(amount)} {valueKey === "minutes" ? "min" : "pcs"}</span></div>
  <div className="h-2 overflow-hidden rounded-full bg-muted"><div className={`h-full rounded-full ${valueKey === "minutes" ? "bg-[var(--color-warning-bg)]" : "bg-[var(--color-danger-bg)]"}`} style={{ width: `${Math.max((amount / maximum) * 100, 2)}%` }} /></div>
     </div>
   })}</div>
@@ -105,11 +104,8 @@ function RejectionPatterns({ rows }: { rows: Row[] }) {
     { key: "rejectionReasonName", label: "Rejection Reason" },
     { key: "defectName", label: "Defect" },
   ] as const
-  return <Tabs defaultValue="rejectionTypeName">
-    <TabsList aria-label="Rejection pattern grouping" className="max-w-full">
-      {dimensions.map(({ key, label }) => <TabsTrigger key={key} value={key} className="px-2 text-xs sm:px-3 sm:text-sm">{label}</TabsTrigger>)}
-    </TabsList>
-    {dimensions.map(({ key }) => {
+  return <dl className="grid gap-6 md:grid-cols-3">
+    {dimensions.map(({ key, label }) => {
       const groups = new Map<string, number>()
       for (const row of rows) {
         const name = text(row[key]) || "Uncoded"
@@ -117,9 +113,12 @@ function RejectionPatterns({ rows }: { rows: Row[] }) {
       }
       const patterns = [...groups].map(([name, quantity]) => ({ name, quantity }))
         .sort((left, right) => right.quantity - left.quantity)
-      return <TabsContent key={key} value={key}><PatternBars emptyText="No rejection recorded." rows={patterns} valueKey="quantity" /></TabsContent>
+      return <div key={key} className="min-w-0 space-y-3">
+        <dt className="text-sm font-semibold">{label}</dt>
+        <dd><PatternBars emptyText="No rejection recorded." rows={patterns} valueKey="quantity" /></dd>
+      </div>
     })}
-  </Tabs>
+  </dl>
 }
 
 function EventTable({ emptyText, rows, rejectionColumns = false }: { emptyText: string; rows: Row[]; rejectionColumns?: boolean }) {
