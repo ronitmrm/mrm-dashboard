@@ -156,6 +156,13 @@ referenced duplicate or incorrect master is removed. Current references move
 to the replacement before the unwanted master is deleted. The replacement
 must be valid for every affected record.
 
+Replacement includes current name-based selections as well as database links.
+It must retain the same Production Unit, field/term type and any parent scope
+required by the consuming record. Inactive replacements are invalid. Saved
+inspection snapshots and issued commercial documents keep their recorded values.
+Used route structure still requires a new route option; replacement cannot bypass
+that rule. Conflicting child identities must be resolved before merging parents.
+
 **Master Deletion**: Permanent removal of a master that has no references. A
 referenced master cannot be deleted directly; it first requires a valid Master
 Replacement. If no valid replacement exists, deletion is prohibited. Every

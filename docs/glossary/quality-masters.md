@@ -5,11 +5,11 @@ company-wide masters. Their Production Unit is **Full Software / Not
 Applicable**. Quality Inspection Parameter Master remains scoped to one
 Production Unit.
 
-A referenced Measuring Instrument can be deleted when a replacement from the
+A referenced Parameter or Measuring Instrument can be deleted when a replacement from the
 same organisation is selected. Replacement reassigns linked inspection parameter
-definitions and their displayed instrument names atomically, then deletes the
-old instrument. Saved inspection snapshots retain their original instrument.
-Without a replacement, a referenced instrument must remain or be made inactive.
+definitions and their displayed names atomically, then deletes the old master.
+Saved inspection snapshots retain their original definitions. Without a
+replacement, a referenced master cannot be deleted.
 
 Dimension tolerances may contain numeric values or text such as L1/L3.
 Text tolerances must remain visible and require Text or Ok / Not Ok input;

@@ -4,6 +4,8 @@ import { Pool } from "pg"
 import { afterAll, beforeAll, describe, expect, test } from "vitest"
 
 import { createCommercialReportingRepository } from "./commercial-reporting"
+import { createCommercialMasterRepository } from "./commercial-masters"
+import { createMasterDataLifecycleRepository } from "./master-data-lifecycle"
 import { migrateDatabase } from "./migrate"
 
 const connectionString =
@@ -218,7 +220,7 @@ describe("commercial drawing, website, and analytics parity", () => {
       ) WHERE id = ANY($1::uuid[])`,
       [[parentId, childId]]
     )
-    const profiles = await pool.query<{ id: string; item_id: string }>(
+    const profiles = await pool.query<{ id: string; item_id: string; row_version: string }>(
       `
         INSERT INTO catalog.website_product_profiles (
           organization_id, item_id, title, published, source_system,
@@ -231,7 +233,7 @@ describe("commercial drawing, website, and analytics parity", () => {
             '{"websiteStatus":"In Progress","isActive":false}'::jsonb),
           ($1, $6, 'Unrelated fitting', false, 'test', 'website_product_entries', $7,
             '{"websiteStatus":"In Progress","isActive":false}'::jsonb)
-        RETURNING id, item_id
+        RETURNING id, item_id, row_version::text
       `,
       [
         organizationId,
@@ -261,7 +263,7 @@ describe("commercial drawing, website, and analytics parity", () => {
 
     const completeFields = {
       additionalNotes: "Catalog approved",
-      applications: "Heating",
+      applications: "Heating; Cooling; Ventilation",
       category: "Ignored CSV category",
       certifications: "ROHS",
       connections: "NPT",
@@ -324,7 +326,17 @@ describe("commercial drawing, website, and analytics parity", () => {
       partCode: "01-101-002",
       websiteStatus: "Completed",
     })
-    expect(unrelatedVersion.rows[0]?.row_version).toBe("0")
+    expect(unrelatedVersion.rows[0]?.row_version).toBe(unrelatedProfile.row_version)
+    const masters = createCommercialMasterRepository({ pool })
+    const oldApplication = await masters.upsertNamed({ organizationId, kind: "application", name: "Heating" })
+    const replacement = await masters.upsertNamed({ organizationId, kind: "application", name: "Cooling" })
+    const lifecycle = createMasterDataLifecycleRepository({ pool })
+    const deletion = { organizationId, kind: "commercial_application" as const, recordId: oldApplication.id, reason: "Merge application" }
+    await expect(lifecycle.deleteMaster(deletion)).rejects.toThrow("Select a replacement")
+    await lifecycle.deleteMaster({ ...deletion, replacementRecordId: replacement.id })
+    expect((await repository.listWebsiteProducts({ organizationId })).rows.find(
+      (row) => row.profileId === parentProfile.id
+    )?.applications).toBe("Cooling; Ventilation")
   })
 
   test("bounds Website Product operations and searches before the cap", async () => {
