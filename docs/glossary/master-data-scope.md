@@ -110,8 +110,8 @@ cannot redefine its identity.
 setup's number/sequence and the option's declared number of setups are fixed.
 An unused draft option may be completed with its remaining setups. Once selected
 or used in production, adding/removing/reordering setups requires a new option.
-Setup Name and Machine Family may be corrected on the same setup only when the
-user confirms this remains the same operation. A different operation or alternate
+Setup Name and Machine Family may be corrected directly through Edit and Save;
+the system detects changes without an extra confirmation. A different operation or alternate
 manufacturing method requires a new option. A family correction cannot invalidate
 an active machine assignment; finish or explicitly move that work first. Queued
 work is replanned against the corrected family.
