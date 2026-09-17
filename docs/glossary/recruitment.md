@@ -1,5 +1,12 @@
 # Recruitment
 
+## Employee Master CSV import
+
+Completed employee rows default to Joined, for employees already working.
+An explicit employment event of Appointed remains supported for employees yet
+to join. Rows with both employee name and employee code blank are skipped.
+The import assigns vacant posts only; it does not change existing assignments.
+
 ## Creating a job from Employee Master
 
 Create Job first asks for a target date and an optional active Job Template.

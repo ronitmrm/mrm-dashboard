@@ -46,7 +46,7 @@ describe("HR master CSV inputs", () => {
     })
   })
 
-  it("defaults a completed employee assignment row to Appointed", () => {
+  it("defaults a completed employee assignment row to Joined", () => {
     expect(
       employeeAssignmentInputFromCsvRow(
         {
@@ -59,7 +59,7 @@ describe("HR master CSV inputs", () => {
       )
     ).toEqual({
       employeeCode: "36",
-      employeeEvent: "Appointed",
+      employeeEvent: "Joined",
       employeeName: "Bhavesh D Khichda",
       lastWorkingDate: null,
       rowNumber: 3,
