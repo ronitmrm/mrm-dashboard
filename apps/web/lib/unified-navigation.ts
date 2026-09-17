@@ -30,6 +30,15 @@ import {
   type LucideIcon,
 } from "lucide-react"
 import type { ProductionFloorCode } from "@workspace/db/production-floors"
+import { measuringInstrumentRegister } from "./iso-documents"
+
+export const isoDocumentNavigation = [
+  {
+    href: measuringInstrumentRegister.href,
+    icon: Gauge,
+    label: measuringInstrumentRegister.title,
+  },
+] as const
 
 export type DashboardTabId =
   | "productionDashboardTab"

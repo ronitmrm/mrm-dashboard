@@ -73,6 +73,7 @@ import {
   personalDashboardNavigation,
   productionFloorNavigation,
   storeNavigation,
+  isoDocumentNavigation,
   universalProductionNavigation,
   type DashboardTabId,
 } from "@/lib/unified-navigation"
@@ -127,6 +128,7 @@ function defaultExpandedSections(
       pathname.startsWith("/maintenance") ||
       activeDashboardTab === "maintenanceTab",
     store: pathname.startsWith("/store"),
+    isoDocument: pathname.startsWith("/iso-document"),
     productionConventional:
       onProduction && activeProductionFloor === "conventional",
     productionConventional02:
@@ -239,6 +241,13 @@ export function UnifiedSidebarNavigation({
     ),
     normalizedMenuSearch,
     "branding sop notice policy documents"
+  )
+  const filteredIsoDocumentNavigation = filterNavigationItems(
+    visibleStoreNavigation.some((item) => item.href === "/store/stock")
+      ? isoDocumentNavigation
+      : [],
+    normalizedMenuSearch,
+    "iso document measuring instrument register"
   )
   const filteredStoreNavigation = filterNavigationItems(
     visibleStoreNavigation,
@@ -631,6 +640,37 @@ export function UnifiedSidebarNavigation({
         </NavigationSection>
       ) : null}
 
+      {filteredIsoDocumentNavigation.length ? (
+        <NavigationSection
+          icon={ListChecks}
+          isActive={pathname.startsWith("/iso-document")}
+          label={sidebarModuleLabels.isoDocument}
+          onOpenChange={(open) => {
+            if (!normalizedMenuSearch) setSectionOpen("isoDocument", open)
+          }}
+          open={normalizedMenuSearch ? true : expandedSections.isoDocument}
+        >
+          {filteredIsoDocumentNavigation.map((item) => (
+            <SidebarMenuSubItem key={item.href}>
+              <SidebarMenuSubButton
+                asChild
+                className={submoduleButtonClassName}
+                isActive={navigationHrefMatches(
+                  pathname,
+                  searchParams,
+                  item.href
+                )}
+              >
+                <a href={item.href}>
+                  <item.icon aria-hidden="true" />
+                  <span>{item.label}</span>
+                </a>
+              </SidebarMenuSubButton>
+            </SidebarMenuSubItem>
+          ))}
+        </NavigationSection>
+      ) : null}
+
       {filteredBrandingNavigation.length ? (
         <NavigationSection
           icon={Palette}
@@ -828,6 +868,7 @@ export function UnifiedSidebarNavigation({
       !filteredHrNavigation.length &&
       !filteredMaintenanceNavigation.length &&
       !filteredStoreNavigation.length &&
+      !filteredIsoDocumentNavigation.length &&
       !filteredBrandingNavigation.length &&
       !filteredCommercialNavigation.length &&
       !filteredMasterDataNavigation.length &&

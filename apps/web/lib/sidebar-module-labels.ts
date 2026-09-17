@@ -10,6 +10,7 @@ export const sidebarModuleLabels = {
   operationalEntry: "Operational Entry",
   productionDashboard: "Production Dashboard",
   store: "Store",
+  isoDocument: "ISO Document",
 } as const
 
 const masterDataPermissionPrefixes = [
