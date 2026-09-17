@@ -84,6 +84,7 @@ beforeAll(async () => {
     machineNumber: cncMachine,
     organizationId,
     productionFloorCode: "cnc",
+    sourcePayload: { machineFamily: `OLD-FAMILY-${suffix}`, machineType: "CNC" },
   })
   for (const [index, jobCardNumber] of [
     firstJobCard,
@@ -130,6 +131,7 @@ beforeAll(async () => {
     organizationId,
     productionFloorCode: "cnc",
     routeCode: "CNC-1",
+    machineFamily: `OLD-FAMILY-${suffix}`,
     setups: [
       { operationCode: "TURN", sequence: 1, setupNumber: 1 },
     ],
@@ -523,11 +525,27 @@ describe("production and shop-floor workflows", () => {
       typeCode: "RT-01",
       typeName: "In-process",
     })
+    await planning.upsertMachine({ organizationId, productionFloorCode: "cnc", machineNumber: `NEW-FAMILY-${suffix}`,
+      sourcePayload: { machineFamily: `NEW-FAMILY-${suffix}`, machineType: "CNC" },
+    })
+    const beforeFamilyChange = await pool.query(
+      "SELECT machine_id, to_jsonb(session) AS snapshot FROM manufacturing.production_sessions session WHERE id = $1", [first.id]
+    )
     await planning.upsertRouteOption({
       itemUid, organizationId, productionFloorCode: "cnc", routeCode: "CNC-1",
+      machineFamily: `NEW-FAMILY-${suffix}`,
       replaceSetups: false, sourcePayload: { stageWeight: 475 },
       setups: [{ operationCode: "TURN", sequence: 1, setupNumber: 1 }],
     })
+    expect((await pool.query(
+      "SELECT machine_id, to_jsonb(session) AS snapshot FROM manufacturing.production_sessions session WHERE id = $1", [first.id]
+    )).rows).toEqual(beforeFamilyChange.rows)
+    expect((await pool.query(
+      `SELECT state.machine_id FROM manufacturing.shop_floor_setup_state state
+       JOIN manufacturing.production_sessions session ON session.work_order_id = state.work_order_id
+         AND session.operation_setup_id = state.operation_setup_id
+       WHERE session.id = $1 AND state.active`, [first.id]
+    )).rows[0]?.machine_id).toBe(beforeFamilyChange.rows[0]?.machine_id)
     const closed = await repository.closeProductionSession({
       endCount: 10_850,
       endedAt: "2026-08-15T14:00:00+05:30",

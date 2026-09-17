@@ -112,9 +112,10 @@ An unused draft option may be completed with its remaining setups. Once selected
 or used in production, adding/removing/reordering setups requires a new option.
 Setup Name and Machine Family may be corrected directly through Edit and Save;
 the system detects changes without an extra confirmation. A different operation or alternate
-manufacturing method requires a new option. A family correction cannot invalidate
-an active machine assignment; finish or explicitly move that work first. Queued
-work is replanned against the corrected family.
+manufacturing method requires a new option. A family correction applies to queued
+and future work. Running work retains its current physical machine and saved
+production; editing the master never moves an active assignment. Work already
+committed to a machine through shop-floor setup also retains that assignment.
 
 Stage Weight may be revised on the existing setup. New production sessions read
 the current weight (Cycle Time Master's operation weight still takes precedence);
