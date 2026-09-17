@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, test } from "vitest"
 
 import { createDashboardPlanningRepository } from "./dashboard-planning"
 import { createMaintenanceRepository } from "./maintenance"
+import { createMasterDataLifecycleRepository } from "./master-data-lifecycle"
 import { migrateDatabase } from "./migrate"
 import { createQualityRepository } from "./quality"
 import { createWorkforceRepository } from "./workforce"
@@ -454,6 +455,42 @@ describe("workforce, quality, and maintenance workflows", () => {
       setup_status: "Completed",
       template_id: template.id,
     })
+
+    const replacement = await quality.upsertQualityReference({
+      kind: "measuring_instrument_master", name: "Digital Vernier Calliper",
+      active: true, organizationId, payload: {},
+    })
+    const original = await pool.query<{ source_id: string }>(
+      `SELECT source_id FROM quality.measuring_instruments
+       WHERE organization_id = $1 AND name = 'Vernier caliper'`, [organizationId]
+    )
+    const lifecycle = createMasterDataLifecycleRepository({ connectionString })
+    try {
+      const deletion = {
+        kind: "measuring_instrument_master" as const, organizationId,
+        recordId: original.rows[0]!.source_id, reason: "Replace abbreviated instrument",
+      }
+      await expect(lifecycle.deleteMaster(deletion)).rejects.toThrow("Select a replacement")
+      const target = await pool.query<{ source_id: string }>(
+        `SELECT source_id FROM quality.measuring_instruments WHERE id = $1`, [replacement.id]
+      )
+      await lifecycle.deleteMaster({ ...deletion, replacementRecordId: target.rows[0]!.source_id })
+      const updated = await pool.query(
+        `SELECT measuring_instrument_id, source_payload->>'instrumentUsed' AS instrument
+         FROM quality.parameter_definitions WHERE id = $1`, [parameter.id]
+      )
+      expect(updated.rows).toEqual([{ measuring_instrument_id: replacement.id, instrument: "Digital Vernier Calliper" }])
+      expect((await pool.query(
+        `SELECT 1 FROM quality.measuring_instruments WHERE source_id = $1`, [deletion.recordId]
+      )).rowCount).toBe(0)
+      const saved = await pool.query(
+        `SELECT parameter_snapshot->'source_payload'->>'instrumentUsed' AS instrument
+         FROM quality.first_piece_readings WHERE inspection_id = $1`, [inspection.id]
+      )
+      expect(saved.rows).toEqual([{ instrument: "Vernier caliper" }])
+    } finally {
+      await lifecycle.close()
+    }
   })
 
   test("revises every parameter field for new inspections while preserving saved FPIR and hourly evidence", async () => {

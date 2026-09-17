@@ -416,7 +416,7 @@ export function createMasterDataLifecycleRepository(
         if (usageCount && input.kind === "route") {
           throw new Error("This route setup has linked records. Create a new option instead of deleting or replacing it.")
         }
-        if (usageCount && (input.kind === "parameter_master" || input.kind === "measuring_instrument_master")) {
+        if (usageCount && input.kind === "parameter_master") {
           throw new Error("This master is used by inspection parameters and cannot be deleted. Mark it inactive instead.")
         }
         if (usageCount && !replacement) {
@@ -470,6 +470,26 @@ export function createMasterDataLifecycleRepository(
             )
           }
           for (const reference of usedReferences) {
+            if (input.kind === "measuring_instrument_master" &&
+                reference.schemaName === "quality" &&
+                reference.tableName === "parameter_definitions" &&
+                reference.columnName === "measuring_instrument_id") {
+              await client.query(
+                `UPDATE quality.parameter_definitions definition
+                 SET measuring_instrument_id = instrument.id,
+                   source_payload = CASE
+                     WHEN jsonb_typeof(definition.source_payload->'payload') = 'object'
+                     THEN jsonb_set(definition.source_payload, '{payload,instrumentUsed}', to_jsonb(instrument.name))
+                     ELSE jsonb_set(COALESCE(definition.source_payload, '{}'::jsonb), '{instrumentUsed}', to_jsonb(instrument.name))
+                   END,
+                   updated_at = now(), row_version = definition.row_version + 1
+                 FROM quality.measuring_instruments instrument
+                 WHERE instrument.id = $1 AND definition.measuring_instrument_id = $2
+                   AND definition.organization_id = $3`,
+                [replacement.id, source.id, input.organizationId]
+              )
+              continue
+            }
             await client.query(
               `UPDATE ${qualifiedTable(reference.schemaName, reference.tableName)}
                SET ${identifier(reference.columnName)} = $1
