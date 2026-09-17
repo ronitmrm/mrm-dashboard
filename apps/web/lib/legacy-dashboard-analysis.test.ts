@@ -51,7 +51,9 @@ describe("buildLegacyDashboardSnapshot", () => {
         payload: { partNo: "M2162B", optionNumber: "1", setupNo: "1", numberOfSetups: 2, setupName: "Turning", machineFamily: "T42", stageWeight: 0 },
       }],
     })
-    const row = snapshot.productionControl!.routeMasterRows[0]!
+    const control = snapshot.productionControl!
+    if (!("routeMasterRows" in control)) throw new Error("Route Master is missing")
+    const row = control.routeMasterRows[0]!
     expect(masterEditDefaults("route", { ...row, stageWeight: 475 }).__entryId)
       .toBe("saved-cnc-route-setup")
   })
