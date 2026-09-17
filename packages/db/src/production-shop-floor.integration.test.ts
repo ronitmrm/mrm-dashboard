@@ -523,6 +523,11 @@ describe("production and shop-floor workflows", () => {
       typeCode: "RT-01",
       typeName: "In-process",
     })
+    await planning.upsertRouteOption({
+      itemUid, organizationId, productionFloorCode: "cnc", routeCode: "CNC-1",
+      replaceSetups: false, sourcePayload: { stageWeight: 475 },
+      setups: [{ operationCode: "TURN", sequence: 1, setupNumber: 1 }],
+    })
     const closed = await repository.closeProductionSession({
       endCount: 10_850,
       endedAt: "2026-08-15T14:00:00+05:30",
@@ -576,6 +581,7 @@ describe("production and shop-floor workflows", () => {
       id: string; cycle: number; entryCycle: number; target: number | null; good: number
     }>(
       `SELECT session.id, session.cycle_time_seconds::float8 AS cycle,
+         session.piece_weight_grams::float8 AS weight,
          (entry.source_payload->>'cycleTime')::float8 AS "entryCycle",
          (entry.source_payload->>'targetQty')::int AS target, entry.quantity_good::float8 AS good
        FROM manufacturing.production_sessions session
@@ -583,9 +589,9 @@ describe("production and shop-floor workflows", () => {
        WHERE session.id = ANY($1::uuid[])`, [[first.id, second.id]]
     )
     expect(revisedSessions.rows.find((row) => row.id === first.id))
-      .toMatchObject({ cycle: 60, entryCycle: 60, target: 470, good: 843 })
+      .toMatchObject({ cycle: 60, entryCycle: 60, target: 470, good: 843, weight: 489 })
     expect(revisedSessions.rows.find((row) => row.id === second.id))
-      .toMatchObject({ cycle: 30, entryCycle: 30, good: 0 })
+      .toMatchObject({ cycle: 30, entryCycle: 30, good: 0, weight: 475 })
 
     const openDowntime = await repository.startProductionSessionDowntime({
       enteredRole: "machinist",

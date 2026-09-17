@@ -975,6 +975,8 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
 
     async upsertRouteOption(input: {
       rejectDuplicates?: boolean
+      recordId?: string
+      correctionConfirmed?: boolean
       actorUserId?: string | null
       itemUid: string
       organizationId: string
@@ -1011,7 +1013,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
         await businessKeyLock(
           client,
           "manufacturing.route",
-          `${productionFloorCode}:${itemId}:${routeCode}`
+          `${productionFloorCode}:${itemId}`
         )
         const existing = await client.query<{ id: string }>(
           `
@@ -1032,6 +1034,61 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
         const sourcePayload = {
           ...(typeof input.sourcePayload === "object" && input.sourcePayload !== null
             && !Array.isArray(input.sourcePayload) ? input.sourcePayload : input),
+        }
+        const previousSetups = existing.rows[0]
+          ? await client.query<{ setup_number: number; sequence: number; source_payload: Record<string, unknown> | null }>(
+              `SELECT setup_number, sequence, COALESCE(source_payload->'payload', source_payload) AS source_payload FROM manufacturing.operation_setups
+               WHERE route_option_id = $1 AND active FOR UPDATE`, [existing.rows[0].id]
+            )
+          : { rows: [] }
+        const used = existing.rows[0] ? await client.query<{ used: boolean }>(
+          `SELECT EXISTS (SELECT 1 FROM manufacturing.route_selections WHERE route_option_id = $1)
+             OR EXISTS (SELECT 1 FROM manufacturing.shop_floor_setup_state WHERE route_option_id = $1)
+             OR EXISTS (SELECT 1 FROM manufacturing.production_entries WHERE route_option_id = $1)
+             OR EXISTS (SELECT 1 FROM manufacturing.production_sessions WHERE route_option_id = $1) AS used`,
+          [existing.rows[0].id]
+        ) : { rows: [] }
+        const declaredCount = Number((sourcePayload as Record<string, unknown>).numberOfSetups) || 0
+        const previousCount = previousSetups.rows.map((row) => Number(row.source_payload?.numberOfSetups) || 0).find((count) => count > 0)
+        const setupCount = declaredCount || previousCount || 0
+        if ((previousCount && declaredCount && previousCount !== declaredCount)
+          || (used.rows[0]?.used && !previousCount && declaredCount && declaredCount !== previousSetups.rows.length)
+          || (setupCount && (!Number.isInteger(setupCount) || setupCount < Math.max(...input.setups.map((setup) => setup.setupNumber))))
+          || input.setups.some((setup) => {
+            const prior = previousSetups.rows.find((row) => row.setup_number === setup.setupNumber)
+            return prior ? prior.sequence !== setup.sequence : used.rows[0]?.used
+          })
+          || (used.rows[0]?.used && input.replaceSetups !== false
+            && previousSetups.rows.some((row) => !input.setups.some((setup) => setup.setupNumber === row.setup_number)))) {
+          throw new Error("Changing setup sequence or number of setups requires a new route option.")
+        }
+        if (previousCount && !declaredCount) Object.assign(sourcePayload, { numberOfSetups: previousCount })
+        if (!existing.rows[0]) {
+          // Materialize the old automatic choice before introducing another option.
+          const sole = await client.query<{ id: string; route_code: string }>(
+            `SELECT id, route_code FROM manufacturing.route_options
+             WHERE item_id = $1 AND production_floor_id = $2 AND active`, [itemId, productionFloorId]
+          )
+          if (sole.rows.length === 1) {
+            const jobs = await client.query<{ id: string; job_card_number: string; source_payload: Record<string, unknown> | null }>(
+              `SELECT id, job_card_number, source_payload FROM manufacturing.work_orders
+               WHERE item_id = $1 AND organization_id = $2 FOR UPDATE`, [itemId, input.organizationId]
+            )
+            for (const job of jobs.rows) {
+              if (productionFloorCodeForRecord({ sourcePayload: job.source_payload }) !== productionFloorCode) continue
+              await client.query(
+                `INSERT INTO manufacturing.route_selections
+                 (organization_id, work_order_id, route_option_id, selected_by_user_id, reason,
+                  source_system, source_table, source_id, source_payload)
+                 VALUES ($1, $2, $3, $4, 'Preserved automatic sole route option',
+                   'mrm-dashboard', 'routeSelections', $5, $6)
+                 ON CONFLICT (work_order_id) WHERE reversed_at IS NULL DO NOTHING`,
+                [input.organizationId, job.id, sole.rows[0]!.id, input.actorUserId ?? null,
+                  randomUUID(), { productionFloorCode, automatic: true,
+                    jobCardNumber: job.job_card_number, routeCode: sole.rows[0]!.route_code }]
+              )
+            }
+          }
         }
         if (input.machineFamily !== undefined) {
           const machineFamily = requiredText(input.machineFamily, "Machine Family")
@@ -1091,7 +1148,8 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
         const routeOptionId = route.rows[0]!.id
         const retainedSetupNumbers: number[] = []
         for (const setup of input.setups) {
-          if (!(setup.setupNumber > 0) || !(setup.sequence > 0)) {
+          if (!(setup.setupNumber > 0) || !(setup.sequence > 0)
+            || !Number.isInteger(setup.setupNumber) || !Number.isInteger(setup.sequence)) {
             throw new Error(
               "Route setup and sequence numbers must be positive."
             )
@@ -1118,15 +1176,39 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           const canonicalSetupName =
             setupName.rows[0]?.name ?? setup.operationName?.trim() ?? null
           retainedSetupNumbers.push(setup.setupNumber)
-          const current = await client.query<{ id: string }>(
+          const current = await client.query<{ id: string; source_id: string; operation_name: string | null; source_payload: Record<string, unknown> | null }>(
             `
-              SELECT id FROM manufacturing.operation_setups
+              SELECT id, source_id, operation_name, COALESCE(source_payload->'payload', source_payload) AS source_payload FROM manufacturing.operation_setups
               WHERE route_option_id = $1 AND setup_number = $2
               FOR UPDATE
             `,
             [routeOptionId, setup.setupNumber]
           )
-          rejectDuplicateMaster(input.rejectDuplicates, !!current.rows[0])
+          const prior = current.rows[0]
+          if (input.recordId && (!prior || ![prior.id, prior.source_id].includes(input.recordId))) {
+            throw new Error("Route setup identity cannot change. Create a new route option.")
+          }
+          rejectDuplicateMaster(input.rejectDuplicates && !input.recordId, !!prior)
+          const familyChanged = prior && input.machineFamily !== undefined
+            && String(prior.source_payload?.machineFamily ?? prior.source_payload?.machineUsed ?? "").trim().toLowerCase() !== input.machineFamily.trim().toLowerCase()
+          if (prior && (familyChanged || (prior.operation_name ?? "").trim().toLowerCase() !== (canonicalSetupName ?? "").trim().toLowerCase())) {
+            if (!input.correctionConfirmed) throw new Error("Confirm this is a correction to the same operation. For a changed operation or manufacturing method, create a new route option.")
+            if (familyChanged) {
+              const incompatible = await client.query(
+                `SELECT 1 FROM manufacturing.shop_floor_setup_state state
+                 JOIN catalog.machines machine ON machine.id = state.machine_id
+                 WHERE state.operation_setup_id = $1 AND state.active
+                   AND lower(btrim(COALESCE(machine.source_payload->>'machineFamily', ''))) <> lower($2)
+                 UNION ALL
+                 SELECT 1 FROM manufacturing.production_sessions session
+                 JOIN catalog.machines machine ON machine.id = session.machine_id
+                 WHERE session.operation_setup_id = $1 AND session.status = 'open' AND session.reversed_at IS NULL
+                   AND lower(btrim(COALESCE(machine.source_payload->>'machineFamily', ''))) <> lower($2)
+                 LIMIT 1`, [prior.id, input.machineFamily!.trim()]
+              )
+              if (incompatible.rows.length) throw new Error("Machine Family conflicts with an active machine assignment. Finish or explicitly move that work before correcting the family.")
+            }
+          }
           if (current.rows[0]) {
             await client.query(
               `
@@ -1135,7 +1217,11 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
                   active = true, updated_by_user_id = $4,
                   legacy_setup_code = COALESCE($5, legacy_setup_code),
                   source_system = 'mrm-dashboard',
-                  source_table = 'dataEntries', source_payload = $6,
+                  source_table = 'dataEntries', source_payload = CASE
+                    WHEN jsonb_typeof(source_payload->'payload') = 'object'
+                    THEN source_payload || jsonb_build_object('payload', (source_payload->'payload') || $6::jsonb)
+                    ELSE COALESCE(source_payload, '{}'::jsonb) || $6::jsonb
+                  END,
                   setup_name_id = $7, updated_at = now(),
                   row_version = row_version + 1
                 WHERE id = $8

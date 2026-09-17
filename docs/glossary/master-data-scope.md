@@ -106,6 +106,27 @@ Route Master does not accept an independently entered Machine Type;
 Cycle Time Master and Tooling Master select an existing Route Master Line and
 cannot redefine its identity.
 
+**Route corrections and new options**: In every Production Unit, an existing
+setup's number/sequence and the option's declared number of setups are fixed.
+An unused draft option may be completed with its remaining setups. Once selected
+or used in production, adding/removing/reordering setups requires a new option.
+Setup Name and Machine Family may be corrected on the same setup only when the
+user confirms this remains the same operation. A different operation or alternate
+manufacturing method requires a new option. A family correction cannot invalidate
+an active machine assignment; finish or explicitly move that work first. Queued
+work is replanned against the corrected family.
+
+Stage Weight may be revised on the existing setup. New production sessions read
+the current weight (Cycle Time Master's operation weight still takes precedence);
+existing sessions retain their starting weight. Close and restart a session when
+the physical weight changes during production. Saved production is never rewritten
+by a route correction.
+
+A sole route option remains automatically selected. When a second option is
+created, existing job cards keep the previously automatic option; new job cards
+with multiple options require planner selection. Changing an existing job's route
+is an explicit planner action.
+
 Machine allocation, family balancing, machine switches and proposal capacity use
 the dedicated Machine Family field in the unit's Machine Master. An explicit
 family is required in every Production Unit and is matched in full (for example,

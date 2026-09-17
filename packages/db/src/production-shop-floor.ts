@@ -735,8 +735,25 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           floorCode,
           input.actorUserId
         )
-        if (!(input.pieceWeightGrams > 0)) {
-          throw new Error("Piece weight from Cycle Time Master is required.")
+        const weightMaster = await client.query<{ setup_payload: Record<string, unknown> | null; cycle_payload: Record<string, unknown> | null }>(
+          `SELECT setup.source_payload AS setup_payload, cycle.source_payload AS cycle_payload
+           FROM manufacturing.operation_setups setup
+           LEFT JOIN LATERAL (
+             SELECT source_payload FROM manufacturing.operation_cycle_standards
+             WHERE operation_setup_id = setup.id AND effective_to IS NULL
+             ORDER BY created_at DESC, id DESC LIMIT 1
+           ) cycle ON true WHERE setup.id = $1 FOR SHARE OF setup`, [setupId]
+        )
+        const weightRow = weightMaster.rows[0]
+        const cycleWeightPayload = { ...weightRow?.cycle_payload, ...objectRecord(weightRow?.cycle_payload?.payload) }
+        const routeWeightPayload = { ...weightRow?.setup_payload, ...objectRecord(weightRow?.setup_payload?.payload) }
+        const operationWeight = Number(cycleWeightPayload.operationWeight)
+        const stageWeight = Number(routeWeightPayload.stageWeight)
+        const pieceWeightGrams = operationWeight > 0 ? operationWeight
+          : routeWeightPayload.stageWeight != null && routeWeightPayload.stageWeight !== ""
+            ? stageWeight : input.pieceWeightGrams
+        if (!(pieceWeightGrams > 0) || !Number.isFinite(pieceWeightGrams)) {
+          throw new Error("Piece weight from Cycle Time or Route Master is required.")
         }
         const shiftContext = productionShiftAt(floorCode, startedAt)
         if (!shiftContext) {
@@ -935,7 +952,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             startedAt.toISOString(),
             startCount,
             carriedFromSessionId,
-            input.pieceWeightGrams,
+            pieceWeightGrams,
             input.actorUserId ?? null,
             sourcePayload,
             sessionReference,

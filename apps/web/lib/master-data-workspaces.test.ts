@@ -95,6 +95,7 @@ describe("master data workspaces", () => {
       "partNo",
       "optionNumber",
       "setupNo",
+      "numberOfSetups",
     ])
   })
 })

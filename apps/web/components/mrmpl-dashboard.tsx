@@ -11388,13 +11388,24 @@ function DataEntryForm({
     <SectionCard width={resolvedFields.length === 1 ? "compact" : resolvedFields.length <= 4 ? "standard" : "wide"}>
       <CardHeader>
         <CardTitle>{spec.title}</CardTitle>
+        {spec.entryType === "route" ? <CardDescription>
+          Use a new option for changed setup sequence, setup count or manufacturing process.
+          Correct names, machine family and stage weight here. Existing sessions keep their starting weight.
+          A single available option is selected automatically.
+        </CardDescription> : null}
       </CardHeader>
       <CardContent>
         <LegacyActionForm
           key={`${spec.entryType}-${defaultsKey}`}
           title={`Save ${spec.title}`}
-          fields={resolvedFields}
-          defaults={resolvedDefaults}
+          fields={spec.entryType === "route" && defaults.__editingMaster
+            ? [...resolvedFields, {
+              name: "routeCorrection",
+              label: "Changing Setup Name or Machine Family?",
+              options: ["", "Correction to the same operation"],
+            }]
+            : resolvedFields}
+          defaults={spec.entryType === "route" ? { ...resolvedDefaults, routeCorrection: "" } : resolvedDefaults}
           deriveValues={spec.entryType === "route" ? (values) => ({
             machineType: machineTypeForFamily(
               asArray(productionControl.machinePlanningRows), values.machineFamily
@@ -13639,6 +13650,8 @@ function LegacyActionForm({
                           )?.label ?? option)
                         : option
                           ? option.replaceAll("_", " ")
+                          : field.name === "routeCorrection"
+                            ? "No name or family change"
                           : ["setupName", "machineFamily"].includes(field.name)
                             ? `Select ${field.label}`
                             : ["fixture", "tooling", "foamTool"].includes(
