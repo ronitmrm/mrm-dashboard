@@ -533,7 +533,8 @@ async function savePlanningMasterEntry(
   { actorUserId, organizationId, repository }: PlanningContext,
   entryType: string,
   payload: Record<string, unknown>,
-  rejectDuplicates = false
+  rejectDuplicates = false,
+  recordId?: string
 ) {
   if (entryType === "setup_name_master") {
     return repository.upsertSetupName({
@@ -628,6 +629,7 @@ async function savePlanningMasterEntry(
     const cycleTime = numeric(payload.cycleTime)
     return repository.upsertCycleStandard({
       rejectDuplicates,
+      recordId,
       actorUserId,
       cycleTimeSeconds: cycleTime,
       itemUid,
@@ -635,7 +637,6 @@ async function savePlanningMasterEntry(
       productionFloorCode: text(payload.productionFloorCode),
       routeCode,
       setupNumber: setupNumber!,
-      setupTimeMinutes: 0,
       sourcePayload: payload,
     })
   }
@@ -1589,7 +1590,8 @@ async function post(request: NextRequest, context: RouteContext) {
             ? operationalEntryWriteScope(entryType, "save", body.productionFloorCode, payload).capability
             : productionMasterCapability(entryType, "save", payload.productionFloorCode) ?? "operations.shop_floor.write",
           (planningContext) =>
-            savePlanningMasterEntry(planningContext, entryType, payload, true)
+            savePlanningMasterEntry(planningContext, entryType, payload, true,
+              typeof body.id === "string" ? body.id : undefined)
         )
         return json(
           await withPlanningRefresh(request, path, body, {

@@ -481,7 +481,14 @@ describe("production and shop-floor workflows", () => {
       stage: "operator_started",
     })
 
+    const cycleInput = {
+      itemUid, organizationId, productionFloorCode: "cnc", routeCode: "CNC-1",
+      setupNumber: 1, cycleTimeSeconds: 60, setupTimeMinutes: 12,
+      sourcePayload: { partNo: itemUid, optionNumber: "CNC-1", setupNo: "1", cycleTime: 60, pieceWeight: 489 },
+    }
+    const cycle = await planning.upsertCycleStandard(cycleInput)
     const first = await repository.startProductionSession({
+      cycleTimeSeconds: 999, // A stale start form must not override the current master.
       jobCardNumber: cncJobCard,
       machineNumber: cncMachine,
       measurementMethod: "counter",
@@ -549,6 +556,36 @@ describe("production and shop-floor workflows", () => {
       shift: "B",
       startCount: 10_850,
     })
+
+    const cycleSource = await pool.query<{ source_id: string }>(
+      "SELECT source_id FROM manufacturing.operation_cycle_standards WHERE id = $1", [cycle.id]
+    )
+    await expect(planning.upsertCycleStandard({ ...cycleInput, rejectDuplicates: true }))
+      .rejects.toThrow("already exists")
+    await planning.upsertCycleStandard({
+      ...cycleInput, cycleTimeSeconds: 30, recordId: cycleSource.rows[0]!.source_id,
+      rejectDuplicates: true, setupTimeMinutes: undefined,
+      sourcePayload: { partNo: itemUid, optionNumber: "CNC-1", setupNo: "1", cycleTime: 30 },
+    })
+    const retainedSettings = await pool.query(
+      `SELECT setup_time_minutes::float8 AS minutes, (source_payload->>'pieceWeight')::int AS weight
+       FROM manufacturing.operation_cycle_standards WHERE id = $1`, [cycle.id]
+    )
+    expect(retainedSettings.rows[0]).toEqual({ minutes: 12, weight: 489 })
+    const revisedSessions = await pool.query<{
+      id: string; cycle: number; entryCycle: number; target: number | null; good: number
+    }>(
+      `SELECT session.id, session.cycle_time_seconds::float8 AS cycle,
+         (entry.source_payload->>'cycleTime')::float8 AS "entryCycle",
+         (entry.source_payload->>'targetQty')::int AS target, entry.quantity_good::float8 AS good
+       FROM manufacturing.production_sessions session
+       JOIN manufacturing.production_entries entry ON entry.id = session.production_entry_id
+       WHERE session.id = ANY($1::uuid[])`, [[first.id, second.id]]
+    )
+    expect(revisedSessions.rows.find((row) => row.id === first.id))
+      .toMatchObject({ cycle: 60, entryCycle: 60, target: 470, good: 843 })
+    expect(revisedSessions.rows.find((row) => row.id === second.id))
+      .toMatchObject({ cycle: 30, entryCycle: 30, good: 0 })
 
     const openDowntime = await repository.startProductionSessionDowntime({
       enteredRole: "machinist",
@@ -640,6 +677,13 @@ describe("production and shop-floor workflows", () => {
       organizationId,
       sessionId: second.id,
     })
+    const closedTarget = await pool.query<{ target: number }>(
+      `SELECT (entry.source_payload->>'targetQty')::int AS target
+       FROM manufacturing.production_sessions session
+       JOIN manufacturing.production_entries entry ON entry.id = session.production_entry_id
+       WHERE session.id = $1`, [second.id]
+    )
+    expect(closedTarget.rows[0]?.target).toBe(50)
   })
 
   test("starts a session with an active operator from the central HR Employee Master", async () => {

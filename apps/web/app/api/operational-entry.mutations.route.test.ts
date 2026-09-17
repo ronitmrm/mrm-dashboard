@@ -8,6 +8,7 @@ const dependencies = vi.hoisted(() => ({
   organizationIdForCode: vi.fn(),
   upsertRawMaterialReceipt: vi.fn(),
   upsertRawMaterialReceipts: vi.fn(),
+  upsertCycleStandard: vi.fn(),
   executePostgresOperationalEntry: vi.fn(),
   isPostgresOperationalEntryType: vi.fn(),
   requestRefresh: vi.fn(),
@@ -28,6 +29,11 @@ vi.mock("@workspace/db", async (importOriginal) => ({
     organizationIdForCode: dependencies.organizationIdForCode,
     upsertRawMaterialReceipt: dependencies.upsertRawMaterialReceipt,
     upsertRawMaterialReceipts: dependencies.upsertRawMaterialReceipts,
+  }),
+  createDashboardPlanningRepository: () => ({
+    close: dependencies.close,
+    organizationIdForCode: dependencies.organizationIdForCode,
+    upsertCycleStandard: dependencies.upsertCycleStandard,
   }),
 }))
 
@@ -116,6 +122,20 @@ describe("production entry mutation API authorization", () => {
   })
 
   afterEach(() => vi.restoreAllMocks())
+
+  it("passes the edited cycle record identity and queues recalculation", async () => {
+    dependencies.listAllGrantedCapabilities.mockResolvedValue(["masters.cnc.cycle.save"])
+    dependencies.upsertCycleStandard.mockResolvedValue({ id: "cycle-1" })
+    const response = await post("data-entry", {
+      entryType: "cycle", id: "cycle-source-1", productionFloorCode: "cnc",
+      payload: { partNo: "M2162B", optionNumber: "1", setupNo: "1", cycleTime: "30" },
+    })
+    expect(response.status).toBe(200)
+    expect(dependencies.upsertCycleStandard).toHaveBeenCalledWith(expect.objectContaining({
+      recordId: "cycle-source-1", cycleTimeSeconds: 30, productionFloorCode: "cnc", rejectDuplicates: true,
+    }))
+    expect(dependencies.requestRefresh).toHaveBeenCalledWith("organization-1")
+  })
 
   it("refreshes after the last checklist upload row using the import permission alone", async () => {
     dependencies.listAllGrantedCapabilities.mockResolvedValue(["masters.cnc.setup_checklist_master.import"])

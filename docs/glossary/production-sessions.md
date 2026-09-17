@@ -106,6 +106,13 @@ Example: `C501-20260815-03` is the third session for machine C501 on Production 
 
 ## Measurement and output
 
+Cycle Time Master revisions apply to the selected unit, item, route and setup.
+Open production sessions adopt the revised cycle time, and planning refreshes
+remaining-duration and completion estimates from the current master. The open
+session's target is calculated using the revised cycle time for its runtime.
+Closed sessions and recorded output/targets remain unchanged. New sessions read
+the current master on the server, even if the start form was opened earlier.
+
 Conventional-01, Conventional-02, and Forging use Weight. CNC selects Machine Counter or Weight per session. Counter continuity applies only when the immediately preceding closed session has the same machine, Job Card, Part Code, option, setup, and Machine Counter method.
 
 Rejected pieces are included in total produced pieces. Good pieces equal total produced minus rejected pieces.
