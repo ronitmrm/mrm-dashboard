@@ -16,6 +16,7 @@ type SearchableSelectProps = Omit<
 > & {
   emptyMessage?: string
   searchPlaceholder?: string
+  wrapLabels?: boolean
   size?: "sm" | "default"
 }
 
@@ -88,6 +89,7 @@ function SearchableSelect({
   searchPlaceholder = "Type to filter...",
   size = "default",
   value,
+  wrapLabels = false,
   ...props
 }: SearchableSelectProps) {
   const options = React.useMemo(() => collectOptions(children), [children])
@@ -165,7 +167,8 @@ function SearchableSelect({
           aria-required={required}
           className={cn(
             "flex h-10 w-full min-w-0 items-center justify-between gap-2 rounded-md border border-input bg-background py-1 pr-3 pl-3 text-sm shadow-none transition-[color,box-shadow,background-color,border-color] outline-none hover:border-primary/45 focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 data-[size=sm]:h-8 data-[size=sm]:rounded-sm dark:bg-input/20 dark:hover:border-primary/60",
-            className
+            className,
+            wrapLabels && "h-auto min-h-10 text-left"
           )}
           data-size={size}
           data-slot="searchable-select"
@@ -175,7 +178,7 @@ function SearchableSelect({
         >
           <span
             className={cn(
-              "truncate",
+              wrapLabels ? "min-w-0 whitespace-normal break-words" : "truncate",
               !selectedOption && "text-muted-foreground"
             )}
           >
@@ -189,7 +192,7 @@ function SearchableSelect({
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className="w-[var(--radix-popover-trigger-width)] min-w-56 gap-1 rounded-lg p-1"
+        className="w-[var(--radix-popover-trigger-width)] min-w-56 max-w-[var(--radix-popover-content-available-width)] gap-1 rounded-lg p-1"
       >
         <div className="relative">
           <SearchIcon
@@ -227,7 +230,7 @@ function SearchableSelect({
                     role="option"
                     type="button"
                   >
-                    <span className="min-w-0 truncate">{option.label}</span>
+                    <span className={cn("min-w-0", wrapLabels ? "whitespace-normal break-words" : "truncate")}>{option.label}</span>
                     {option.value === selectedValue ? (
                       <CheckIcon
                         aria-hidden="true"

@@ -7,7 +7,7 @@ import {
 } from "@workspace/ui/components/searchable-select"
 
 type NativeSelectProps = Omit<React.ComponentProps<"select">, "size"> &
-  Pick<SearchableSelectProps, "searchPlaceholder"> & {
+  Pick<SearchableSelectProps, "searchPlaceholder" | "wrapLabels"> & {
     size?: "sm" | "default"
   }
 
