@@ -75,6 +75,41 @@ export function normalizeProductionFloorCode(
   return parseProductionFloorCode(value) ?? defaultProductionFloorCode
 }
 
+export function productionFloorFromDepartment(
+  department: unknown,
+  departmentCode: unknown
+): ProductionFloorCode | null {
+  const code = String(departmentCode).trim().toUpperCase()
+  if (code.startsWith("PPC-CV02")) return "conventional-02"
+  if (code.startsWith("PPC-CV")) return "conventional"
+  if (code.startsWith("PPC-CNC")) return "cnc"
+  if (code.startsWith("PPC-FG")) return "forging"
+  const departmentName = String(department).trim().toLowerCase()
+  return (
+    parseProductionFloorCode(department) ??
+    productionFloors.find((floor) =>
+      departmentName.startsWith(`${floor.label.toLowerCase()} `)
+    )?.code ??
+    null
+  )
+}
+
+const shopFloorDepartmentCodes = new Set([
+  "PPC-CVSF", "PPC-CV02SF", "PPC-CNCSF", "PPC-FGSF",
+])
+
+export function isShopFloorDepartment(
+  department: unknown,
+  departmentCode: unknown,
+  productionFloorCode: ProductionFloorCode
+) {
+  return (
+    productionFloorFromDepartment(department, departmentCode) === productionFloorCode &&
+    (shopFloorDepartmentCodes.has(String(departmentCode).trim().toUpperCase()) ||
+      /\bshop\s+floor\b/i.test(String(department)))
+  )
+}
+
 export function productionFloorCodeForRecord(
   value: unknown
 ): ProductionFloorCode {

@@ -10,6 +10,7 @@ import {
   type RepositoryPoolOptions,
 } from "./postgres-runtime"
 import {
+  isShopFloorDepartment,
   normalizeProductionFloorCode,
   productionFloorCodeForRecord,
   ProductionUnitAccessError,
@@ -68,13 +69,6 @@ type ProductionSessionEndReason =
   | "manual_stop"
 
 type ProductionEntryRole = "quality" | "shop_floor" | "machinist"
-
-const shopFloorDepartmentCode: Record<ProductionFloorCode, string> = {
-  cnc: "PPC-CNCSF",
-  conventional: "PPC-CVSF",
-  "conventional-02": "PPC-CV02SF",
-  forging: "PPC-FGSF",
-}
 
 const stageAliases: Record<string, string> = {
   item_complete: "item_complete",
@@ -507,6 +501,15 @@ async function requiredActiveEmployeeIdFor(
   actorUserId?: string | null
 ) {
   const normalizedEmployeeCode = requiredText(employeeCode, "Operator code")
+  const departments = await client.query<{ id: string; code: string; name: string }>(
+    "SELECT id, code, name FROM recruitment.departments WHERE organization_id = $1 AND active",
+    [organizationId]
+  )
+  const departmentIds = departments.rows
+    .filter((department) => isShopFloorDepartment(
+      department.name, department.code, productionFloorCode
+    ))
+    .map((department) => department.id)
   const projected = await client.query<{ id: string }>(
     `
       WITH active_post AS MATERIALIZED (
@@ -524,7 +527,7 @@ async function requiredActiveEmployeeIdFor(
         WHERE post.organization_id = $1
           AND lower(btrim(post.employee_code)) = lower($2)
           AND post.status = 'Occupied'
-          AND upper(btrim(department.code)) = $3
+          AND department.id = ANY($3::uuid[])
           AND designation.name !~* '(^|[^a-z])(hod|manager|management)([^a-z]|$)'
           AND nullif(btrim(post.employee_name), '') IS NOT NULL
         ORDER BY post.updated_at DESC, post.id
@@ -586,7 +589,7 @@ async function requiredActiveEmployeeIdFor(
     [
       organizationId,
       normalizedEmployeeCode,
-      shopFloorDepartmentCode[productionFloorCode],
+      departmentIds,
       actorUserId ?? null,
     ]
   )

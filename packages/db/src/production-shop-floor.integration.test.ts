@@ -715,7 +715,7 @@ describe("production and shop-floor workflows", () => {
       `
         INSERT INTO recruitment.departments (
           organization_id, code, name, source_system, source_table, source_id
-        ) VALUES ($1, 'PPC-CVSF', 'Conventional Shop Floor',
+        ) VALUES ($1, 'PC0SF-2', 'Ppac Conventional-01 Shop Floor',
           'test', 'departments', $2)
         ON CONFLICT (organization_id, lower(code))
         DO UPDATE SET active = true

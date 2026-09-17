@@ -1,7 +1,7 @@
 import type { RecruitmentPostRow } from "@workspace/db"
 import {
-  parseProductionFloorCode,
-  productionFloors,
+  isShopFloorDepartment,
+  productionFloorFromDepartment,
   type ProductionFloorCode,
 } from "@workspace/db/production-floors"
 
@@ -63,13 +63,6 @@ const qualityDepartmentCodes = new Set([
   "PPC-FGIQ",
 ])
 
-const shopFloorDepartmentCodes = new Set([
-  "PPC-CVSF",
-  "PPC-CV02SF",
-  "PPC-CNCSF",
-  "PPC-FGSF",
-])
-
 const plannerDepartmentCodes = new Set([
   "PPC-CV",
   "PPC-CV02",
@@ -90,25 +83,6 @@ type EmployeeOptionSource = {
 export type EmployeeOption = {
   code: string
   name: string
-}
-
-function productionFloorFromDepartment(
-  department: unknown,
-  departmentCode: unknown
-): ProductionFloorCode | null {
-  const code = String(departmentCode).trim().toUpperCase()
-  if (code.startsWith("PPC-CV02")) return "conventional-02"
-  if (code.startsWith("PPC-CV")) return "conventional"
-  if (code.startsWith("PPC-CNC")) return "cnc"
-  if (code.startsWith("PPC-FG")) return "forging"
-  const departmentName = String(department).trim().toLowerCase()
-  return (
-    parseProductionFloorCode(department) ??
-    productionFloors.find((floor) =>
-      departmentName.startsWith(`${floor.label.toLowerCase()} `)
-    )?.code ??
-    null
-  )
 }
 
 function isMachinistEmployee(row: {
@@ -203,12 +177,8 @@ export function productionShopFloorOptions(
   productionFloorCode: ProductionFloorCode
 ) {
   return employeeOptions(rows, (row) =>
-    belongsToProductionDepartment(
-      row,
-      productionFloorCode,
-      shopFloorDepartmentCodes,
-      /\bshop\s+floor\b/i
-    )
+    !/\bmanagement\b/i.test(String(row.designation)) &&
+    isShopFloorDepartment(row.department, row.departmentCode, productionFloorCode)
   )
 }
 
@@ -245,12 +215,8 @@ export function productionDispatchApproverOptions(
     rows,
     (row) =>
       isProductionPlanner(row, productionFloorCode) ||
-      belongsToProductionDepartment(
-        row,
-        productionFloorCode,
-        shopFloorDepartmentCodes,
-        /\bshop\s+floor\b/i
-      )
+      (!/\bmanagement\b/i.test(String(row.designation)) &&
+        isShopFloorDepartment(row.department, row.departmentCode, productionFloorCode))
   )
 }
 
@@ -274,11 +240,7 @@ export function productionWorkerOptions(
     rows,
     (row) =>
       /\bworker\b/i.test(String(row.designation)) &&
-      belongsToProductionDepartment(
-        row,
-        productionFloorCode,
-        shopFloorDepartmentCodes,
-        /\bshop\s+floor\b/i
-      )
+      !/\bmanagement\b/i.test(String(row.designation)) &&
+      isShopFloorDepartment(row.department, row.departmentCode, productionFloorCode)
   )
 }
