@@ -438,7 +438,10 @@ describe("production and shop-floor workflows", () => {
     const template = await quality.upsertSetupChecklistTemplate({
       code: `CNC-${suffix}`, name: "CNC Setting", organizationId, productionFloorCode: "cnc",
       payload: { section: "Pre setting" }, revision: 1,
-      items: [{ itemKey: "program", prompt: "Program checked", inputType: "checkbox", sequence: 1, required: true }],
+      items: [
+        { itemKey: "program", prompt: "Program checked", inputType: "checkbox", sequence: 1, required: true },
+        { itemKey: "optional", prompt: "Optional check", inputType: "checkbox", sequence: 2, required: false },
+      ],
     })
     const checklist = await quality.saveSetupChecklistSession({
       organizationId, productionFloorCode: "cnc", jobCardNumber: cncJobCard,
@@ -457,15 +460,12 @@ describe("production and shop-floor workflows", () => {
     expect((await pool.query("SELECT status, completed_at FROM quality.setup_checklist_sessions WHERE id = $1", [checklist.id])).rows[0]).toEqual({ status: "In progress", completed_at: null })
     await expect(quality.saveSetupChecklistSession({ ...incompleteChecklist, status: "Completed" }))
       .rejects.toThrow("Complete required checklist points")
-    await expect(quality.saveSetupChecklistSession({ ...incompleteChecklist, status: "Completed", results: [{ itemKey: "program", value: false }] }))
-      .rejects.toThrow("Complete required checklist points")
-    await quality.saveSetupChecklistSession({ ...incompleteChecklist, status: "In progress", results: [{ itemKey: "program", value: false }] })
     const settingAction = {
       organizationId, productionFloorCode: "cnc", jobCardNumber: cncJobCard,
       machineNumber: cncMachine, operationSetupCode: "1", stage: "setting", payload: {},
     }
     await expect(repository.recordShopFloorStage(settingAction)).rejects.toThrow("Complete required checklist points")
-    await quality.saveSetupChecklistSession({ ...incompleteChecklist, status: "Completed", results: [{ itemKey: "program", value: true }] })
+    await quality.saveSetupChecklistSession({ ...incompleteChecklist, status: "Completed", results: [{ itemKey: "program", value: false }] })
     await repository.recordShopFloorStage(settingAction)
     await expect(repository.recordShopFloorStage({
       organizationId, productionFloorCode: "cnc", jobCardNumber: cncJobCard,
