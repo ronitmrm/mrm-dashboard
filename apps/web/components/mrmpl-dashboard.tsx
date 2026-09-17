@@ -1186,7 +1186,7 @@ function HourlyQualityCheckShell({
     [hourlyQualityPageRecord.qualityParameterMasterRows]
   )
 
-  const parameters = useMemo(
+  const currentParameters = useMemo(
     () =>
       selectedRow
         ? sortQualityParameterRows(
@@ -1212,6 +1212,10 @@ function HourlyQualityCheckShell({
         | undefined)
     : undefined
 
+  const parameters = existingCheck
+    ? asArray(existingCheck.readings)
+    : existingCheck === null ? currentParameters : []
+
   useEffect(() => {
     const timeout = window.setTimeout(() => {
       if (!existingCheck) {
@@ -1225,7 +1229,7 @@ function HourlyQualityCheckShell({
         const code = qualityParameterCode(reading)
         if (!code) continue
         nextReadings[code] = normalizeQualityReadingInput(
-          reading.actualReading || reading.value
+          reading.actualReading ?? reading.value
         )
         nextRemarks[code] = str(reading.remark)
       }
@@ -11798,6 +11802,8 @@ function QualityParameterMasterForm({
             entryType: spec.entryType,
             key: dataEntryKey(spec.entryType, payload),
             returnTab: "qualityParameterMasterTab",
+            reviseParameter: drafts.some((draft) => draft.persisted && qualityParameterAutoCode(draft) === payload.code)
+              || removedRows.some((row) => row.code === payload.code),
             payload,
           },
           { throwOnError: true }

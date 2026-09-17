@@ -187,7 +187,8 @@ export async function executePostgresOperationalEntry(
   entryType: string,
   payload: Record<string, unknown>,
   masterAction: "save" | "import" = "save",
-  recordId?: string
+  recordId?: string,
+  reviseParameter = false
 ) {
   const plan = operationalEntryPlan(entryType, payload)
   if (!plan) return null
@@ -258,6 +259,7 @@ export async function executePostgresOperationalEntry(
         if (plan.operation === "parameter") {
           return await repository.upsertParameterDefinition({
             rejectDuplicates: masterAction === "save",
+            reviseExisting: reviseParameter,
             ...plan.input,
             actorUserId: actor.actorUserId,
             organizationId,

@@ -27,6 +27,45 @@ type ParameterRow = {
   id: string
   lower_limit: string | null
   upper_limit: string | null
+  parameter_code: string
+  name: string
+  nominal_value: string | null
+  sequence: number
+  source_payload: Record<string, unknown> | null
+}
+
+function parameterDetails(parameter: ParameterRow) {
+  const payload = payloadRecord(parameter.source_payload)
+  return {
+    ...payload,
+    code: parameter.parameter_code,
+    parameterCode: parameter.parameter_code,
+    parameterName: parameter.name,
+    specification: payload.specification ?? parameter.nominal_value ?? "",
+    inputType: payload.inputType ?? (
+      parameter.data_type === "boolean" ? "pass_fail"
+        : parameter.data_type === "numeric" ? "number" : "text"
+    ),
+    sequence: parameter.sequence,
+  }
+}
+
+async function savedParameters(
+  client: PoolClient,
+  table: "first_piece_readings" | "hourly_check_readings",
+  column: "inspection_id" | "hourly_check_id",
+  id: string
+) {
+  const result = await client.query<{ parameter: ParameterRow }>(
+    `SELECT COALESCE(reading.parameter_snapshot, to_jsonb(parameter)) AS parameter
+     FROM quality.${table} reading
+     JOIN quality.parameter_definitions parameter ON parameter.id = reading.parameter_definition_id
+     WHERE reading.${column} = $1`,
+    [id]
+  )
+  return new Map(result.rows.map(({ parameter }) => [
+    parameter.parameter_code.toLowerCase(), parameter,
+  ]))
 }
 
 type ChecklistItemInput = {
@@ -306,7 +345,7 @@ async function parameterFor(
 ) {
   const result = await client.query<ParameterRow>(
     `
-      SELECT id, data_type, lower_limit::text, upper_limit::text
+      SELECT *
       FROM quality.parameter_definitions
       WHERE organization_id = $1 AND operation_setup_id = $2
         AND (
@@ -338,12 +377,14 @@ async function replaceFirstPieceReadings(
     organizationId: string
   }
 ) {
+  const saved = await savedParameters(client, "first_piece_readings", "inspection_id", input.inspectionId)
+  const dimensions = []
   await client.query(
     "DELETE FROM quality.first_piece_readings WHERE inspection_id = $1",
     [input.inspectionId]
   )
   for (const [dimensionIndex, dimension] of input.dimensions.entries()) {
-    const parameter = await parameterFor(
+    const parameter = saved.get(dimension.parameterCode.toLowerCase()) ?? await parameterFor(
       client,
       input.organizationId,
       input.operationSetupId,
@@ -361,9 +402,9 @@ async function replaceFirstPieceReadings(
       `
         INSERT INTO quality.first_piece_readings (
           organization_id, inspection_id, parameter_definition_id,
-          numeric_value, text_value, boolean_value, result, sequence
+          numeric_value, text_value, boolean_value, result, sequence, parameter_snapshot
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         RETURNING id
       `,
       [
@@ -375,8 +416,10 @@ async function replaceFirstPieceReadings(
         first.booleanValue,
         results.every((result) => result === "OK") ? "OK" : "Not OK",
         dimensionIndex + 1,
+        parameter,
       ]
     )
+    dimensions.push({ ...dimension, ...parameterDetails(parameter) })
     for (const [sampleIndex, value] of dimension.readings.entries()) {
       const columns = valueColumns(value, parameter.data_type)
       await client.query(
@@ -400,6 +443,7 @@ async function replaceFirstPieceReadings(
       )
     }
   }
+  return dimensions
 }
 
 async function replaceHourlyReadings(
@@ -416,12 +460,14 @@ async function replaceHourlyReadings(
     }>
   }
 ) {
+  const saved = await savedParameters(client, "hourly_check_readings", "hourly_check_id", input.hourlyCheckId)
+  const readings = []
   await client.query(
     "DELETE FROM quality.hourly_check_readings WHERE hourly_check_id = $1",
     [input.hourlyCheckId]
   )
   for (const [index, reading] of input.readings.entries()) {
-    const parameter = await parameterFor(
+    const parameter = saved.get(reading.parameterCode.toLowerCase()) ?? await parameterFor(
       client,
       input.organizationId,
       input.operationSetupId,
@@ -433,9 +479,9 @@ async function replaceHourlyReadings(
       `
         INSERT INTO quality.hourly_check_readings (
           organization_id, hourly_check_id, parameter_definition_id,
-          numeric_value, text_value, boolean_value, result, sequence
+          numeric_value, text_value, boolean_value, result, sequence, parameter_snapshot
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       `,
       [
         input.organizationId,
@@ -446,9 +492,12 @@ async function replaceHourlyReadings(
         columns.booleanValue,
         reading.result || readingResult(parameter, reading.actualReading),
         index + 1,
+        parameter,
       ]
     )
+    readings.push({ ...reading, ...parameterDetails(parameter) })
   }
+  return readings
 }
 
 async function upsertChecklistItems(
@@ -782,13 +831,15 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
             code: string
             numericValue: string | null
             parameterName: string
+            parameterSnapshot: ParameterRow
             result: string
             sequence: number
             textValue: string | null
           }>(
             `
-              SELECT parameter.parameter_code AS "code",
-                parameter.name AS "parameterName", reading.result,
+              SELECT COALESCE(reading.parameter_snapshot->>'parameter_code', parameter.parameter_code) AS "code",
+                COALESCE(reading.parameter_snapshot->>'name', parameter.name) AS "parameterName", reading.result,
+                COALESCE(reading.parameter_snapshot, to_jsonb(parameter)) AS "parameterSnapshot",
                 reading.sequence, reading.numeric_value::text AS "numericValue",
                 reading.text_value AS "textValue",
                 reading.boolean_value AS "booleanValue"
@@ -816,6 +867,7 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
                   reading.code.toLowerCase()
               )
               return {
+                ...parameterDetails(reading.parameterSnapshot),
                 ...(sourceReading ?? {}),
                 actualReading: readingValue(reading),
                 code: reading.code,
@@ -1248,6 +1300,7 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
 
     async upsertParameterDefinition(input: {
       rejectDuplicates?: boolean
+      reviseExisting?: boolean
       actorUserId?: string | null
       dataType: "boolean" | "numeric" | "text"
       inputType?: string | null
@@ -1275,6 +1328,15 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
           input.operationSetupCode,
           normalizeProductionFloorCode(input.productionFloorCode)
         )
+        if (input.reviseExisting) {
+          const existing = await client.query(
+            `SELECT id FROM quality.parameter_definitions
+             WHERE organization_id = $1 AND operation_setup_id = $2
+               AND lower(parameter_code) = lower($3) FOR UPDATE`,
+            [input.organizationId, context.operation_setup_id, input.parameterCode]
+          )
+          if (!existing.rows.length) throw new Error("The quality parameter to revise was not found. Reload the form.")
+        }
         const reference = await client.query<{ id: string; name: string }>(
           `SELECT id, name FROM quality.parameter_names
            WHERE organization_id = $1 AND active AND lower(btrim(name)) = lower(btrim($2))`,
@@ -1326,7 +1388,7 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
         }
         await assertMasterAvailable(
           client,
-          input,
+          { ...input, rejectDuplicates: input.rejectDuplicates && !input.reviseExisting },
           "quality.parameter_definitions",
           "operation_setup_id = $2 AND (lower(parameter_code) = lower($3) OR (lower(btrim(name)) = lower(btrim($4)) AND lower(btrim(COALESCE(source_payload ->> 'specification', nominal_value::text, ''))) = lower(btrim($5))))",
           [
@@ -1488,12 +1550,18 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
                 input.payload,
               ]
             )
-        await replaceFirstPieceReadings(client, {
+        const dimensions = await replaceFirstPieceReadings(client, {
           dimensions: input.dimensions,
           inspectionId: result.rows[0]!.id,
           operationSetupId: context.operation_setup_id,
           organizationId: input.organizationId,
         })
+        await client.query(
+          `UPDATE quality.first_piece_inspections SET source_payload = $2 WHERE id = $1`,
+          [result.rows[0]!.id, { ...input.payload, dimensions: dimensions.map((dimension, index) => ({
+            ...payloadRows(input.payload.dimensions)[index], ...dimension,
+          })) }]
+        )
         return result.rows[0]!
       })
     },
@@ -1592,12 +1660,19 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
                 input.payload,
               ]
             )
-        await replaceHourlyReadings(client, {
+        const readings = await replaceHourlyReadings(client, {
           hourlyCheckId: result.rows[0]!.id,
           operationSetupId: context.operation_setup_id,
           organizationId: input.organizationId,
           readings: input.readings,
         })
+        await client.query(
+          `UPDATE quality.hourly_checks SET source_payload = $2 WHERE id = $1`,
+          [result.rows[0]!.id, { ...input.payload, readings: readings.map((reading, index) => ({
+            ...payloadRows(input.payload.readings)[index], ...reading,
+            remark: payloadRows(input.payload.readings)[index]?.remark ?? "",
+          })) }]
+        )
         return result.rows[0]!
       })
     },

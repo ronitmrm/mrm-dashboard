@@ -1210,7 +1210,8 @@ async function post(request: NextRequest, context: RouteContext) {
           entryType,
           payload,
           "save",
-          typeof body.id === "string" ? body.id : undefined
+          typeof body.id === "string" ? body.id : undefined,
+          entryType === "quality_parameter_master" && body.reviseParameter === true
         )
         return json(await withPlanningRefresh(request, path, body, {
           ...result,
