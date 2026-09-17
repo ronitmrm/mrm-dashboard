@@ -1,6 +1,6 @@
-# Branding
+# Document Templates
 
-Branding contains SOPs, Notices, Policies, and Work Instructions. Safety signage is outside scope.
+Document Templates contains SOPs, Notices, Policies, and Work Instructions. Safety signage is outside scope.
 
 ## Approved print typography (2026-09-15)
 
@@ -38,11 +38,11 @@ Gujarati numerals ૦–૯ use the bundled Noto Sans Gujarati font (approved
 must be embedded so downloaded PDFs render those digits in other viewers.
 
 SOP Register, Work Instruction Register, and Policies Register are standalone
-main modules outside Branding, available to every signed-in user regardless of
-role or Branding permissions. They list one latest published (issued) revision
+main modules outside Document Templates, available to every signed-in user regardless of
+role or Document Templates permissions. They list one latest published (issued) revision
 per document, with its published metadata and PDF. Unissued documents, draft
 changes, and history are not shown. A revision draft does not replace the current
-published version. Branding remains the authoring and retained-history workspace.
+published version. Document Templates remains the authoring and retained-history workspace.
 
 - SOPs and policies share one format: cover, document details, automatic index,
   then continuously flowing numbered headings and nested subheadings. Each language

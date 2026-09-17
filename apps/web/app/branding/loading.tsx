@@ -3,7 +3,7 @@ export default function BrandingLoading() {
   return (
     <StandardState
       variant="loading"
-      title="Loading Branding"
+      title="Loading Document Templates"
       description="Loading documents and revisions."
     />
   )
