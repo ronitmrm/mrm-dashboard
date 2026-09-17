@@ -22,3 +22,23 @@ open the workspace for individual units' current locations.
 Access uses `store.stock.read`; opening a workspace additionally requires
 `store.asset_history.read`. Existing Store action permissions remain enforced.
 The Universal Measuring Instrument Master for inspection dropdowns is unchanged.
+
+## Machine Maintenance Register
+
+One row is one completed machine maintenance task, including Planned and
+Breakdown work. Only tasks with Completed status and a completion timestamp
+appear. Repeated maintenance on the same machine remains separate history.
+Machine, production unit, work performed, completion date and technician come
+from the existing maintenance records; inactive schedules do not hide history.
+Facility requests without a machine link are not machine maintenance records.
+Access uses `maintenance.workspace.read`.
+
+## Machine Maintenance Plan
+
+The selected calendar month shows saved machine maintenance due dates across
+all production units. Completed planned tasks remain in their original due
+month, alongside active schedules still due that month. Breakdown work is not
+planned work. Counts distinguish maintenance jobs from distinct machines.
+Dates are saved commitments, not recurrence forecasts; completing a task and
+advancing its next due date preserves the completed task in the original month.
+Access uses `maintenance.workspace.read`.

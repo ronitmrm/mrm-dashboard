@@ -839,6 +839,10 @@ describe("workforce, quality, and maintenance workflows", () => {
       organizationId,
       payload: { status: "Inactive" },
     })
+    expect((await maintenance.listCompletedMachineMaintenance(organizationId))
+      .filter((row) => row.machineNumber === machineNumber)).toHaveLength(0)
+    expect((await maintenance.listMachineMaintenancePlan(organizationId, "2026-07"))
+      .filter((row) => row.machineNumber === machineNumber)).toHaveLength(1)
     const task = await maintenance.completeTask({
       completedAt: "2026-07-21T12:00:00.000Z",
       completedBy: "TECH-1",
@@ -891,6 +895,19 @@ describe("workforce, quality, and maintenance workflows", () => {
       payload: { breakdownReason: "Bearing", workDone: "Replaced" },
       taskKey: `BREAKDOWN-${suffix}`,
     })
+
+    const completed = (await maintenance.listCompletedMachineMaintenance(organizationId))
+      .filter((row) => row.machineNumber === machineNumber)
+    expect(completed.map((row) => row.taskType).sort()).toEqual(["Breakdown", "Planned"])
+    expect(completed.find((row) => row.id === task.id)?.workDone).toBe("Serviced")
+    const julyPlan = (await maintenance.listMachineMaintenancePlan(organizationId, "2026-07"))
+      .filter((row) => row.machineNumber === machineNumber)
+    expect(julyPlan).toHaveLength(1)
+    expect(julyPlan[0]).toMatchObject({ dueOn: "2026-07-21", status: "Completed" })
+    const augustPlan = (await maintenance.listMachineMaintenancePlan(organizationId, "2026-08"))
+      .filter((row) => row.machineNumber === machineNumber)
+    expect(augustPlan).toHaveLength(1)
+    expect(augustPlan[0]).toMatchObject({ dueOn: "2026-08-20", status: "Planned" })
 
     const result = await pool.query<{
       breakdown_tasks: string

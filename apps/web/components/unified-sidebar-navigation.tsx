@@ -242,8 +242,10 @@ export function UnifiedSidebarNavigation({
   )
   const filteredIsoDocumentNavigation = filterNavigationItems(
     isoDocumentNavigation.filter((item) =>
-      !item.href.startsWith("/iso-document") ||
-      visibleStoreNavigation.some((storeItem) => storeItem.href === "/store/stock")
+      item.href.startsWith("/iso-document/machine-maintenance")
+        ? navigationAccess.maintenanceHrefs?.includes("/?tab=maintenanceTab")
+        : !item.href.startsWith("/iso-document") ||
+          visibleStoreNavigation.some((storeItem) => storeItem.href === "/store/stock")
     ),
     normalizedMenuSearch,
     "iso document published documents registers"

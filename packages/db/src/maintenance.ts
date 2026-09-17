@@ -387,6 +387,92 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
   return {
     close,
 
+    async listCompletedMachineMaintenance(organizationId: string) {
+      const result = await pool.query<{
+        id: string
+        machineNumber: string
+        productionUnit: string
+        maintenance: string
+        taskType: string
+        dueOn: string
+        completedAt: string
+        completedBy: string | null
+        workDone: string | null
+      }>(`
+        SELECT task.id, machine.machine_number AS "machineNumber",
+          floor.name AS "productionUnit", definition.name AS maintenance,
+          task.task_type AS "taskType", task.due_on::text AS "dueOn",
+          task.completed_at::text AS "completedAt",
+          COALESCE(NULLIF(task.legacy_completer, ''), technician.name) AS "completedBy",
+          task.source_payload->>'workDone' AS "workDone"
+        FROM maintenance.tasks task
+        JOIN maintenance.machine_schedules schedule ON schedule.id = task.machine_schedule_id
+          AND schedule.organization_id = task.organization_id
+        JOIN maintenance.definitions definition ON definition.id = schedule.definition_id
+          AND definition.organization_id = task.organization_id
+        JOIN catalog.machines machine ON machine.id = schedule.machine_id
+          AND machine.organization_id = task.organization_id
+        JOIN manufacturing.production_floors floor ON floor.id = machine.production_floor_id
+        LEFT JOIN identity.users technician ON technician.id = task.completed_by_user_id
+        WHERE task.organization_id = $1 AND task.status = 'Completed'
+          AND task.completed_at IS NOT NULL
+        ORDER BY task.completed_at DESC, machine.machine_number, task.id
+      `, [organizationId])
+      return result.rows
+    },
+
+    async listMachineMaintenancePlan(organizationId: string, month: string) {
+      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new Error("Select a valid month.")
+      const result = await pool.query<{
+        id: string
+        machineId: string
+        machineNumber: string
+        productionUnit: string
+        maintenance: string
+        dueOn: string
+        status: string
+        completedAt: string | null
+      }>(`
+        WITH planned AS (
+          SELECT task.id::text, task.machine_schedule_id AS schedule_id,
+            task.due_on, task.status, task.completed_at
+          FROM maintenance.tasks task
+          WHERE task.organization_id = $1 AND lower(task.task_type) = 'planned'
+            AND task.due_on >= $2::date AND task.due_on < $2::date + interval '1 month'
+            AND task.status <> 'Cancelled'
+          UNION ALL
+          SELECT 'schedule-' || schedule.id::text, schedule.id, schedule.next_due_on,
+            'Planned', NULL::timestamptz
+          FROM maintenance.machine_schedules schedule
+          JOIN maintenance.definitions definition ON definition.id = schedule.definition_id
+            AND definition.organization_id = schedule.organization_id
+          WHERE schedule.organization_id = $1 AND schedule.active AND definition.active
+            AND lower(definition.code) <> 'breakdown'
+            AND schedule.next_due_on >= $2::date
+            AND schedule.next_due_on < $2::date + interval '1 month'
+            AND NOT EXISTS (
+              SELECT 1 FROM maintenance.tasks task
+              WHERE task.organization_id = $1 AND task.machine_schedule_id = schedule.id
+                AND task.due_on = schedule.next_due_on AND lower(task.task_type) = 'planned'
+                AND task.status <> 'Cancelled'
+            )
+        )
+        SELECT planned.id, machine.id AS "machineId", machine.machine_number AS "machineNumber",
+          floor.name AS "productionUnit", definition.name AS maintenance,
+          planned.due_on::text AS "dueOn", planned.status,
+          planned.completed_at::text AS "completedAt"
+        FROM planned
+        JOIN maintenance.machine_schedules schedule ON schedule.id = planned.schedule_id
+          AND schedule.organization_id = $1
+        JOIN maintenance.definitions definition ON definition.id = schedule.definition_id
+          AND definition.organization_id = $1
+        JOIN catalog.machines machine ON machine.id = schedule.machine_id AND machine.organization_id = $1
+        JOIN manufacturing.production_floors floor ON floor.id = machine.production_floor_id
+        ORDER BY planned.due_on, machine.machine_number, planned.id
+      `, [organizationId, `${month}-01`])
+      return result.rows
+    },
+
     async organizationIdForCode(code: string) {
       const result = await pool.query<{ id: string }>(
         "SELECT id FROM core.organizations WHERE lower(code) = lower($1)",

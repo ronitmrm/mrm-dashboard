@@ -35,6 +35,15 @@ Maintenance navigation contains Manager Approval, All Requests, Electrical, Plum
 
 ## Invariants
 
+ISO Document exposes read-only Machine Maintenance Register and Machine
+Maintenance Plan routes under `/iso-document/machine-maintenance-*`. Both require
+`maintenance.workspace.read` and use organization-scoped queries in
+`packages/db/src/maintenance.ts`. The register reads completed physical tasks;
+the monthly plan combines saved task due dates with active schedule due dates,
+deduplicating the same schedule/date. It excludes breakdowns and retains completed
+planned tasks after next-due advancement. These views do not create tasks or copy
+records. Facility requests remain in their existing request work lists.
+
 - One request row equals one task.
 - Final Category and Priority are required before Approved or later statuses.
 - Only Pending Approval requests accept a manager decision.
