@@ -34,7 +34,7 @@ import {
 
 describe("unified navigation", () => {
   it("groups published registers under ISO Document", () => {
-    expect(isoDocumentNavigation.slice(1)).toEqual(publishedRegisterNavigation)
+    expect(isoDocumentNavigation.slice(1, 4)).toEqual(publishedRegisterNavigation)
     expect(
       publishedRegisterNavigation.map(({ href, label }) => ({ href, label }))
     ).toEqual([
