@@ -2,7 +2,6 @@
 
 import {
   Children,
-  Fragment,
   useEffect,
   useRef,
   useState,
@@ -60,7 +59,6 @@ import {
 import {
   administrationNavigation,
   brandingNavigation,
-  publishedRegisterNavigation,
   commercialCostingNavigation,
   commercialMasterDataWorkspaceNavigation,
   commercialOperationalEntryNavigation,
@@ -128,7 +126,7 @@ function defaultExpandedSections(
       pathname.startsWith("/maintenance") ||
       activeDashboardTab === "maintenanceTab",
     store: pathname.startsWith("/store"),
-    isoDocument: pathname.startsWith("/iso-document"),
+    isoDocument: isoDocumentNavigation.some((item) => pathname.startsWith(item.href)),
     productionConventional:
       onProduction && activeProductionFloor === "conventional",
     productionConventional02:
@@ -243,11 +241,12 @@ export function UnifiedSidebarNavigation({
     "branding sop notice policy documents"
   )
   const filteredIsoDocumentNavigation = filterNavigationItems(
-    visibleStoreNavigation.some((item) => item.href === "/store/stock")
-      ? isoDocumentNavigation
-      : [],
+    isoDocumentNavigation.filter((item) =>
+      !item.href.startsWith("/iso-document") ||
+      visibleStoreNavigation.some((storeItem) => storeItem.href === "/store/stock")
+    ),
     normalizedMenuSearch,
-    "iso document measuring instrument register"
+    "iso document published documents registers"
   )
   const filteredStoreNavigation = filterNavigationItems(
     visibleStoreNavigation,
@@ -372,25 +371,6 @@ export function UnifiedSidebarNavigation({
     window.localStorage.setItem(storageKey, JSON.stringify(next))
     window.dispatchEvent(new Event(stateChangedEvent))
   }
-
-  const publishedRegisterItems = filterNavigationItems(
-    publishedRegisterNavigation,
-    normalizedMenuSearch,
-    "published documents registers"
-  ).map((item) => (
-    <SidebarMenuItem key={item.href}>
-      <SidebarMenuButton
-        asChild
-        className={topLevelButtonClassName}
-        isActive={navigationHrefMatches(pathname, searchParams, item.href)}
-      >
-        <a href={item.href}>
-          <item.icon aria-hidden="true" />
-          <span>{item.label}</span>
-        </a>
-      </SidebarMenuButton>
-    </SidebarMenuItem>
-  ))
 
   return (
     <>
@@ -643,7 +623,7 @@ export function UnifiedSidebarNavigation({
       {filteredIsoDocumentNavigation.length ? (
         <NavigationSection
           icon={ListChecks}
-          isActive={pathname.startsWith("/iso-document")}
+          isActive={isoDocumentNavigation.some((item) => pathname.startsWith(item.href))}
           label={sidebarModuleLabels.isoDocument}
           onOpenChange={(open) => {
             if (!normalizedMenuSearch) setSectionOpen("isoDocument", open)
@@ -783,22 +763,12 @@ export function UnifiedSidebarNavigation({
         )
       })}
 
-      {publishedRegisterItems.length > 0 &&
-      !filteredUniversalProductionNavigation.some(
-        (item) => item.id === "productionDashboardTab"
-      ) ? (
-        <SidebarGroup className="px-3 py-0.5">
-          <SidebarMenu className="gap-3">{publishedRegisterItems}</SidebarMenu>
-        </SidebarGroup>
-      ) : null}
-
       {filteredUniversalProductionNavigation.length ? (
         <SidebarGroup className="px-3 py-0.5">
           <SidebarGroupContent>
             <SidebarMenu className="gap-3">
               {filteredUniversalProductionNavigation.map((item) => (
-                <Fragment key={item.id}>
-                  <SidebarMenuItem>
+                  <SidebarMenuItem key={item.id}>
                     <SidebarMenuButton
                       asChild
                       className={topLevelButtonClassName}
@@ -827,10 +797,6 @@ export function UnifiedSidebarNavigation({
                       )}
                     </SidebarMenuButton>
                   </SidebarMenuItem>
-                  {item.id === "productionDashboardTab"
-                    ? publishedRegisterItems
-                    : null}
-                </Fragment>
               ))}
             </SidebarMenu>
           </SidebarGroupContent>

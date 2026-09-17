@@ -32,14 +32,6 @@ import {
 import type { ProductionFloorCode } from "@workspace/db/production-floors"
 import { measuringInstrumentRegister } from "./iso-documents"
 
-export const isoDocumentNavigation = [
-  {
-    href: measuringInstrumentRegister.href,
-    icon: Gauge,
-    label: measuringInstrumentRegister.title,
-  },
-] as const
-
 export type DashboardTabId =
   | "productionDashboardTab"
   | "productionSessionsTab"
@@ -109,6 +101,15 @@ export const publishedRegisterNavigation = [
     icon: ScrollText,
     label: "Policies Register",
   },
+] as const
+
+export const isoDocumentNavigation = [
+  {
+    href: measuringInstrumentRegister.href,
+    icon: Gauge,
+    label: measuringInstrumentRegister.title,
+  },
+  ...publishedRegisterNavigation,
 ] as const
 
 export function dashboardTabHref(
