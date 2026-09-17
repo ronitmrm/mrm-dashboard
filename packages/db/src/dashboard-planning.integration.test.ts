@@ -358,14 +358,19 @@ describe("dashboard planning writes", () => {
       "SELECT source_id FROM manufacturing.operation_setups WHERE route_option_id = $1", [route.id]
     )
     const correction = { ...routeInput, recordId: setup.rows[0]!.source_id, rejectDuplicates: true,
+      machineFamily: `FAMILY-${suffix}`,
       setups: [{ operationCode: "CUT", operationName: "Cut corrected", sequence: 1, setupNumber: 1 }],
       sourcePayload: { numberOfSetups: 1, stageWeight: 95 },
     }
+    await repository.upsertMachine({ organizationId, machineNumber: `FAMILY-MC-${suffix}`,
+      sourcePayload: { machineFamily: correction.machineFamily, machineType: "CNC" },
+    })
     await repository.upsertRouteOption(correction)
-    const corrected = await pool.query<{ operation_name: string }>(
-      "SELECT operation_name FROM manufacturing.operation_setups WHERE route_option_id = $1", [route.id]
+    const corrected = await pool.query<{ operation_name: string; family: string }>(
+      "SELECT operation_name, source_payload->>'machineFamily' AS family FROM manufacturing.operation_setups WHERE route_option_id = $1", [route.id]
     )
     expect(corrected.rows[0]?.operation_name).toBe("Cut corrected")
+    expect(corrected.rows[0]?.family).toBe(correction.machineFamily)
     await expect(repository.upsertRouteOption({ ...correction,
       setups: [{ ...correction.setups[0]!, sequence: 2 }],
     })).rejects.toThrow("requires a new route option")

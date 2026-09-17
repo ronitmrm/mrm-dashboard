@@ -34,3 +34,23 @@ it("uses only the dedicated family across planning, switches and proposal capaci
     { id: "ACE-02", family: "T25" },
   ])
 })
+
+it("applies a revised family to waiting work while retaining the running job's machine", () => {
+  const snapshot = buildLegacyDashboardSnapshot({
+    workbookName: "PostgreSQL", productionEntries: [],
+    dataEntries: [
+      ...["RUNNING", "WAITING"].map((jcNo) => ({ entryType: "work_order", payload: {
+        jcNo, partCode: "P1", optionNumber: "1", orderPcs: 100, rmInwardDate: "2026-09-15",
+      } })),
+      { entryType: "route", payload: { partNo: "P1", optionNumber: "1", setupNo: "1", machineFamily: "T26", machineType: "CNC" } },
+      { entryType: "cycle", payload: { partNo: "P1", optionNumber: "1", setupNo: "1", cycleTime: 60 } },
+      { entryType: "tooling", payload: { partNo: "P1", optionNumber: "1", setupNo: "1", tooling: "G1" } },
+      { entryType: "machine_master", payload: { machineNo: "OLD", machineFamily: "T25", machineType: "CNC", status: "Active" } },
+      { entryType: "machine_master", payload: { machineNo: "NEW", machineFamily: "T26", machineType: "CNC", status: "Active" } },
+      { entryType: "shop_floor_status", payload: { jcNo: "RUNNING", partCode: "P1", optionNumber: "1", setupNo: "1", machine: "OLD", stage: "operator_started", completedAt: "2026-09-15T08:00:00.000Z" } },
+    ].map((entry) => ({ ...entry, createdAt: "2026-09-15T00:00:00.000Z" })),
+  })
+  const rows = snapshot.productionControl.machinePlanDetailRows
+  expect(rows.find((row) => row.jcNo === "RUNNING")).toMatchObject({ machine: "OLD", runningStatus: "Running" })
+  expect(rows.find((row) => row.jcNo === "WAITING")).toMatchObject({ machine: "NEW" })
+})
