@@ -27,6 +27,7 @@ import {
   productionFloorNavigation,
   publishedRegisterNavigation,
   storeNavigation,
+  isoDocumentNavigation,
   storePurchaseOrderHref,
   universalProductionNavigation,
 } from "./unified-navigation"
@@ -82,7 +83,7 @@ describe("unified navigation", () => {
     )
     const nativeLinks = source.match(/<a href=\{item\.href\}>/g) ?? []
 
-    expect(nativeLinks).toHaveLength(7)
+    expect(nativeLinks).toHaveLength(8)
     expect(source).toContain(
       "<a href={productionNavigationHref(item.id, floor.code)}>"
     )
@@ -111,6 +112,7 @@ describe("unified navigation", () => {
       ...hrNavigation.map(({ href }) => href),
       ...administrationNavigation.map(({ href }) => href),
       ...storeNavigation.map(({ href }) => href),
+      ...isoDocumentNavigation.map(({ href }) => href),
     ]
 
     expect(new Set(hrefs)).toHaveLength(hrefs.length)

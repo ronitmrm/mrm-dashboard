@@ -38,6 +38,7 @@ import {
   navigationHrefMatches,
   personalDashboardNavigation,
   storeNavigation,
+  isoDocumentNavigation,
   type DashboardTabId,
 } from "@/lib/unified-navigation"
 
@@ -104,6 +105,7 @@ export function CommercialShell({
       ...brandingNavigation,
       ...publishedRegisterNavigation,
       ...storeNavigation,
+      ...isoDocumentNavigation,
     ].find((item) =>
       navigationHrefMatches(pathname, searchParams, item.href)
     ) ??

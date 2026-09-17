@@ -6,6 +6,7 @@ export const sidebarSectionIds = [
   "operationalEntry",
   "maintenance",
   "store",
+  "isoDocument",
   "productionConventional",
   "productionConventional02",
   "productionCnc",

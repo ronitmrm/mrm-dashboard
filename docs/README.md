@@ -4,6 +4,7 @@ Use this index before changing domain behavior or implementation conventions.
 
 - [Codebase](./codebase/): implementation and architecture guidance.
 - [Glossary](./glossary/): canonical business terms, lifecycle rules, formulas, and metrics.
+- [ISO Document](./glossary/iso-documents.md): Store-linked Measuring Instrument Register and page numbering.
 - [Document Templates](./glossary/branding.md): SOP, Notice and Policy numbering, issue and revision rules.
 - [Website Catalogue](./glossary/website-catalogue.md): included fields and Product Portfolio ownership.
 - [Personal dashboard analytics](./glossary/dashboard-analytics.md): permission-aware metrics, charts, and calculated KPIs.
