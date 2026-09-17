@@ -54,7 +54,7 @@ export function employeeAssignmentInputFromCsvRow(
   const employeeCode = csvValue(row, "employee_code")
   if (!employeeName && !employeeCode) return null
   const employeeEvent =
-    csvValue(row, "employment_event", "employee_event") || "Appointed"
+    csvValue(row, "employment_event", "employee_event") || "Joined"
   if (targetType !== "combined" && targetType !== "individual") {
     throw new Error(
       `CSV row ${rowNumber}: Target Type must be combined or individual.`
