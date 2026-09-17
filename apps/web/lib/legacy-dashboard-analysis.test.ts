@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { buildLegacyDashboardSnapshot } from "@workspace/db/dashboard-analysis"
+import { masterEditDefaults } from "./master-data-workspaces"
 
 afterEach(() => {
   vi.useRealTimers()
@@ -39,6 +40,22 @@ function todayDateKey() {
 }
 
 describe("buildLegacyDashboardSnapshot", () => {
+  it("keeps the saved route identity when editing its stage weight", () => {
+    const snapshot = buildLegacyDashboardSnapshot({
+      workbookName: "PostgreSQL",
+      productionEntries: [],
+      dataEntries: [{
+        _id: "saved-cnc-route-setup",
+        entryType: "route",
+        createdAt: "2026-09-17T00:00:00.000Z",
+        payload: { partNo: "M2162B", optionNumber: "1", setupNo: "1", numberOfSetups: 2, setupName: "Turning", machineFamily: "T42", stageWeight: 0 },
+      }],
+    })
+    const row = snapshot.productionControl!.routeMasterRows[0]!
+    expect(masterEditDefaults("route", { ...row, stageWeight: 475 }).__entryId)
+      .toBe("saved-cnc-route-setup")
+  })
+
   it("omits inapplicable numbering recommendations from populated and empty snapshots", () => {
     const input = { workbookName: "PostgreSQL", productionEntries: [] }
     const dataEntries = [{ entryType: "employee", createdAt: "2026-09-16", payload: { empId: "OP-1" } }]

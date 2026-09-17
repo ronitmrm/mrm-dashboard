@@ -5105,6 +5105,7 @@ function routeMasterTableRow(row: Record<string, unknown>) {
     "machine",
   );
   return {
+    _id: row._id,
     partNo: rowText(row, "PART NO", "PART CODE", "partNo", "partCode"),
     optionNumber,
     setupNo,
