@@ -342,6 +342,41 @@ describe("dashboard planning writes", () => {
     expect(floor.rows[0]?.code).toBe("cnc")
   })
 
+  test("corrects route details, protects structure and preserves the previous automatic option", async () => {
+    const item = `ROUTE-EDIT-${suffix}`
+    const routeInput = {
+      itemUid: item, organizationId, routeCode: "1", replaceSetups: false,
+      setups: [{ operationCode: "CUT", operationName: "Cut", sequence: 1, setupNumber: 1 }],
+      sourcePayload: { numberOfSetups: 1, stageWeight: 100 },
+    }
+    const route = await repository.upsertRouteOption(routeInput)
+    const job = await repository.upsertWorkOrder({
+      itemUid: item, organizationId, jobCardNumber: `ROUTE-JC-${suffix}`,
+      orderedQuantity: 10, workOrderNumber: `ROUTE-WO-${suffix}`,
+    })
+    const setup = await pool.query<{ source_id: string }>(
+      "SELECT source_id FROM manufacturing.operation_setups WHERE route_option_id = $1", [route.id]
+    )
+    const correction = { ...routeInput, recordId: setup.rows[0]!.source_id, rejectDuplicates: true,
+      setups: [{ operationCode: "CUT", operationName: "Cut corrected", sequence: 1, setupNumber: 1 }],
+      sourcePayload: { numberOfSetups: 1, stageWeight: 95 },
+    }
+    await expect(repository.upsertRouteOption(correction)).rejects.toThrow("Confirm this is a correction")
+    await repository.upsertRouteOption({ ...correction, correctionConfirmed: true })
+    await expect(repository.upsertRouteOption({ ...correction, correctionConfirmed: true,
+      setups: [{ ...correction.setups[0]!, sequence: 2 }],
+    })).rejects.toThrow("requires a new route option")
+    await repository.upsertRouteOption({ ...routeInput, routeCode: "2" })
+    const selection = await pool.query<{ route_option_id: string }>(
+      "SELECT route_option_id FROM manufacturing.route_selections WHERE work_order_id = $1 AND reversed_at IS NULL", [job.id]
+    )
+    expect(selection.rows).toEqual([{ route_option_id: route.id }])
+    await expect(repository.upsertRouteOption({ ...routeInput,
+      setups: [{ operationCode: "FORM", sequence: 2, setupNumber: 2 }],
+      sourcePayload: { numberOfSetups: 2, stageWeight: 90 },
+    })).rejects.toThrow("requires a new route option")
+  })
+
   test("upserts normalized masters, work orders, and route setups by business key", async () => {
     const machine = await repository.upsertMachine({
       machineNumber: firstMachine,

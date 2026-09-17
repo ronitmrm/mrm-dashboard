@@ -85,7 +85,7 @@ const identityFieldsByEntryType: Record<string, readonly string[]> = {
   rejection_reason_master: ["code"],
   rejection_remark_master: ["code"],
   rejection_type_master: ["code"],
-  route: ["partNo", "optionNumber", "setupNo"],
+  route: ["partNo", "optionNumber", "setupNo", "numberOfSetups"],
   setup_checklist_master: ["checklistCode", "sequence"],
   setup_name_master: ["setupName"],
   parameter_master: ["name"],

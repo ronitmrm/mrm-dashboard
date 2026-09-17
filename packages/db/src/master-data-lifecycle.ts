@@ -367,6 +367,16 @@ export function createMasterDataLifecycleRepository(
         await authorizeMasterRecord(client, input.kind, source.snapshot, input.authorize)
 
         const replacementRecordId = input.replacementRecordId?.trim() || null
+        if (input.kind === "route") {
+          const routeUsage = await client.query<{ used: boolean }>(
+            `SELECT EXISTS (SELECT 1 FROM manufacturing.route_selections WHERE route_option_id = $1)
+               OR EXISTS (SELECT 1 FROM manufacturing.shop_floor_setup_state WHERE route_option_id = $1)
+               OR EXISTS (SELECT 1 FROM manufacturing.production_entries WHERE route_option_id = $1)
+               OR EXISTS (SELECT 1 FROM manufacturing.production_sessions WHERE route_option_id = $1) AS used`,
+            [(source.snapshot as Record<string, unknown>).route_option_id]
+          )
+          if (routeUsage.rows[0]?.used) throw new Error("Removing or replacing a setup from a used route requires a new route option. Historical references cannot be reassigned.")
+        }
         if (replacementRecordId === recordId) {
           throw new Error("Select a different replacement master.")
         }
@@ -403,6 +413,9 @@ export function createMasterDataLifecycleRepository(
           (total, reference) => total + reference.count,
           0
         )
+        if (usageCount && input.kind === "route") {
+          throw new Error("This route setup has linked records. Create a new option instead of deleting or replacing it.")
+        }
         if (usageCount && (input.kind === "parameter_master" || input.kind === "measuring_instrument_master")) {
           throw new Error("This master is used by inspection parameters and cannot be deleted. Mark it inactive instead.")
         }
