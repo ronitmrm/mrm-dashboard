@@ -122,7 +122,6 @@ export type ManagedStagingEnvelope = {
       recoveredWithinMs: number
     }
     notificationToWorkerClaimMs: LatencyEvidence
-    sseHintToCanonicalReadMs: LatencyEvidence
   }
   health: {
     connectionHeadroomPercent: number
@@ -156,7 +155,6 @@ type ManagedStagingConfig = {
       committedWriteToReadModelP99: number
       notificationToWorkerClaimP95: number
       notificationToWorkerClaimP99: number
-      sseHintToCanonicalReadP95: number
     }
     latencyMillisecondsP95: {
       authorizationDatabase: number
@@ -641,7 +639,6 @@ function parseEnvelope(
     "committedWriteToReadModelMs",
     "listenerRecovery",
     "notificationToWorkerClaimMs",
-    "sseHintToCanonicalReadMs",
   ])
   const listenerRecovery = object(
     freshness.listenerRecovery,
@@ -704,11 +701,6 @@ function parseEnvelope(
       notificationToWorkerClaimMs: parseLatency(
         freshness.notificationToWorkerClaimMs,
         "freshness.notificationToWorkerClaimMs",
-        measuredSamples
-      ),
-      sseHintToCanonicalReadMs: parseLatency(
-        freshness.sseHintToCanonicalReadMs,
-        "freshness.sseHintToCanonicalReadMs",
         measuredSamples
       ),
     },
@@ -934,11 +926,6 @@ function enforceThresholds(
     record.freshness.committedWriteToReadModelMs.p95,
     freshness.committedWriteToReadModelP95,
     "committedWriteToReadModelMs p95"
-  )
-  requireMaximum(
-    record.freshness.sseHintToCanonicalReadMs.p95,
-    freshness.sseHintToCanonicalReadP95,
-    "sseHintToCanonicalReadMs p95"
   )
   if (!record.freshness.listenerRecovery.durableWorkRecovered) {
     throw new Error("listener recovery did not recover durable work")

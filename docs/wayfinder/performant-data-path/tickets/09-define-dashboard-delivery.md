@@ -12,18 +12,18 @@ blocked_by:
 
 ## Question
 
-What externally visible state machine governs initial loads, unchanged versions, changed versions, Server-Sent Event reconnects, stale indicators, safety refreshes, and errors?
+What externally visible state machine governs initial loads, unchanged versions, changed versions, stale indicators, bounded safety refreshes, and errors?
 
 Prototype only the contract and state transitions, not production code.
 
 ## Resolution
 
-Adopt the [dashboard delivery contract](../dashboard-delivery-contract.md). Connection, payload freshness, canonical request, durable refresh, coverage, and visibility are independent state dimensions. SSE events only request canonical state; unchanged responses retain same-floor payload; floor changes clear it; reconnect always refetches before stale state can settle.
+Adopt the [dashboard delivery contract](../dashboard-delivery-contract.md). Payload freshness, canonical request, durable refresh, coverage, and visibility are independent state dimensions. Unchanged responses retain same-floor payload, floor changes clear it, visible dashboards revalidate every 60 seconds, and hidden dashboards schedule no periodic requests.
 
-Existing content remains visible during reconnect, refresh, and retryable errors. Initial failure without content is blocking. Safety refresh runs every 60 seconds only while visible, one-second polling exists only during a known active refresh, and partial coverage is a distinct visible state.
+Existing content remains visible during checking, refresh, and retryable errors. Initial failure without content is blocking. Initial, stale, or overdue state reads immediately when visible, one-second polling exists only during a known active refresh, and partial coverage is a distinct visible state.
 
 ## Prototype evidence
 
 - Throwaway branch `prototype/dashboard-delivery-state`, commit `f47be17`, contains the terminal state-machine prototype; no prototype code remains on this branch.
-- Exercising initial load, hints, unchanged state, disconnect, safety recovery, request failure, reconnect, partial coverage, and floor switch found and corrected the missing reconnect refetch transition.
+- The prototype exercised initial load, hints, unchanged state, disconnect, safety recovery, request failure, reconnect, partial coverage, and floor switch. Its SSE-specific connection transitions are historical and were removed from the production contract on 2026-09-18.
 - The contract records automated reducer/route/browser scenarios. Final visual/accessibility acceptance remains HITL and is deferred until the implementation reaches that gate.

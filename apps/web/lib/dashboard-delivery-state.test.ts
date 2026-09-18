@@ -27,7 +27,6 @@ describe("dashboard delivery state", () => {
     })
 
     expect(current).toMatchObject({
-      connection: "connecting",
       coverage: "partial",
       data: { rows: ["CNC-1"] },
       floor: "cnc",
@@ -44,7 +43,7 @@ describe("dashboard delivery state", () => {
     ).toMatchObject({ refetchPending: true, request: "canonical-state" })
   })
 
-  it("retains the exact payload for hints and unchanged responses without overlapping requests", () => {
+  it("retains the exact payload for canonical checks and unchanged responses without overlapping requests", () => {
     const dashboard = { rows: ["CNC-1"] }
     const data = { dashboard, status: { status: "idle" } }
     const nextData = { dashboard, status: { status: "queued" } }
@@ -66,10 +65,11 @@ describe("dashboard delivery state", () => {
         atMs: 1_000,
       }
     )
-    const hinted = dashboardDeliveryReducer(loaded, {
-      type: "hint.received",
+    const due = dashboardDeliveryReducer(loaded, {
+      type: "safety.due",
+      atMs: 61_000,
     })
-    const refetching = dashboardDeliveryReducer(hinted, {
+    const refetching = dashboardDeliveryReducer(due, {
       type: "request.started",
       requestId: 2,
       floor: "cnc",
@@ -89,13 +89,13 @@ describe("dashboard delivery state", () => {
       atMs: 2_000,
     })
 
-    expect(hinted).toMatchObject({
+    expect(due).toMatchObject({
       data,
       payload: "current",
       refetchPending: true,
       request: "canonical-state",
     })
-    expect(dashboardRequestDescriptor(hinted, 2)).toEqual({
+    expect(dashboardRequestDescriptor(due, 2)).toEqual({
       floor: "cnc",
       knownVersion: 7,
       requestId: 2,
@@ -135,7 +135,7 @@ describe("dashboard delivery state", () => {
     expect(dashboardDeliveryPollDelay(aborted, 0)).toBe(0)
   })
 
-  it("keeps same-floor content stale through disconnect, reconnect, and refetch failure", () => {
+  it("keeps same-floor content visible through a canonical check and refetch failure", () => {
     const data = { rows: ["CNC-1"] }
     const loaded = dashboardDeliveryReducer(
       dashboardDeliveryReducer(
@@ -157,13 +157,11 @@ describe("dashboard delivery state", () => {
         atMs: 1_000,
       }
     )
-    const disconnected = dashboardDeliveryReducer(loaded, {
-      type: "connection.lost",
+    const due = dashboardDeliveryReducer(loaded, {
+      type: "safety.due",
+      atMs: 61_000,
     })
-    const reconnected = dashboardDeliveryReducer(disconnected, {
-      type: "connection.opened",
-    })
-    const refetching = dashboardDeliveryReducer(reconnected, {
+    const refetching = dashboardDeliveryReducer(due, {
       type: "request.started",
       requestId: 2,
       floor: "cnc",
@@ -176,13 +174,7 @@ describe("dashboard delivery state", () => {
       atMs: 3_000,
     })
 
-    expect(disconnected).toMatchObject({
-      connection: "retrying",
-      data,
-      payload: "stale",
-    })
-    expect(reconnected).toMatchObject({
-      connection: "live",
+    expect(due).toMatchObject({
       data,
       refetchPending: true,
       request: "canonical-state",
@@ -269,7 +261,10 @@ describe("dashboard delivery state", () => {
       }
     )
     const refetching = dashboardDeliveryReducer(
-      dashboardDeliveryReducer(loaded, { type: "hint.received" }),
+      dashboardDeliveryReducer(loaded, {
+        type: "safety.due",
+        atMs: 61_000,
+      }),
       { type: "request.started", requestId: 2, floor: "cnc" }
     )
     const switched = dashboardDeliveryReducer(refetching, {
@@ -324,7 +319,10 @@ describe("dashboard delivery state", () => {
       }
     )
     const refetching = dashboardDeliveryReducer(
-      dashboardDeliveryReducer(loaded, { type: "hint.received" }),
+      dashboardDeliveryReducer(loaded, {
+        type: "safety.due",
+        atMs: 61_000,
+      }),
       { type: "request.started", requestId: 2, floor: "cnc" }
     )
     const regressive = dashboardDeliveryReducer(refetching, {
@@ -387,6 +385,13 @@ describe("dashboard delivery state", () => {
     })
 
     expect(dashboardDeliveryPollDelay(loaded, 1_000)).toBe(60_000)
+    expect(dashboardDeliveryPollDelay(loaded, 61_000)).toBe(0)
+    expect(
+      dashboardDeliveryReducer(loaded, {
+        type: "safety.due",
+        atMs: 61_000,
+      })
+    ).toMatchObject({ refetchPending: true, request: "canonical-state" })
     expect(dashboardDeliveryPollDelay(hidden, 30_000)).toBeNull()
     expect(hiddenDue).toBe(hidden)
     expect(visible).toMatchObject({
@@ -396,6 +401,28 @@ describe("dashboard delivery state", () => {
       visibility: "visible",
     })
     expect(dashboardDeliveryPollDelay(visible, 62_000)).toBe(0)
+  })
+
+  it("starts hidden without requesting and reads immediately when first visible", () => {
+    const hidden = createDashboardDeliveryState<{ rows: string[] }>(
+      "cnc",
+      "hidden"
+    )
+    const visible = dashboardDeliveryReducer(hidden, {
+      type: "visibility.changed",
+      visibility: "visible",
+      atMs: 1_000,
+    })
+
+    expect(dashboardDeliveryPollDelay(hidden, 0)).toBeNull()
+    expect(dashboardRequestDescriptor(hidden, 1)).toBeNull()
+    expect(visible).toMatchObject({
+      data: null,
+      refetchPending: true,
+      request: "initial",
+      visibility: "visible",
+    })
+    expect(dashboardDeliveryPollDelay(visible, 1_000)).toBe(0)
   })
 
   it("exposes retry for a blocking initial error without inventing a known version", () => {
@@ -451,7 +478,10 @@ describe("dashboard delivery state", () => {
       }
     )
     const refetching = dashboardDeliveryReducer(
-      dashboardDeliveryReducer(loaded, { type: "hint.received" }),
+      dashboardDeliveryReducer(loaded, {
+        type: "safety.due",
+        atMs: 61_000,
+      }),
       { type: "request.started", requestId: 2, floor: "cnc" }
     )
     const invalid = dashboardDeliveryReducer(refetching, {

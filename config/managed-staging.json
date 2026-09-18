@@ -53,8 +53,7 @@
       "committedWriteToReadModelP95": 10000,
       "committedWriteToReadModelP99": 30000,
       "notificationToWorkerClaimP95": 2000,
-      "notificationToWorkerClaimP99": 5000,
-      "sseHintToCanonicalReadP95": 2000
+      "notificationToWorkerClaimP99": 5000
     },
     "latencyMillisecondsP95": {
       "authorizationDatabase": 50,

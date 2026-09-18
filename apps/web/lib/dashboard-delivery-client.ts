@@ -130,21 +130,6 @@ export function dashboardCoverageNotice(
     : null
 }
 
-export function dashboardConnectionLabel<Data>(
-  state: DashboardDeliveryState<Data>
-) {
-  if (state.data === null) {
-    return state.request === "error" ? "Unavailable" : "Loading"
-  }
-  if (state.connection === "retrying") return "Reconnecting"
-  if (state.payload === "stale") return "Stale"
-  if (state.inFlight !== null || state.request === "canonical-state") {
-    return "Checking updates"
-  }
-  if (state.connection === "connecting") return "Connecting"
-  return "Connected"
-}
-
 function sentence(message: string) {
   const trimmed = message.trim()
   return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`
@@ -159,9 +144,6 @@ export function dashboardDeliveryNotice<Data>(
   }
   if (state.lastError) {
     return `${sentence(state.lastError)} Showing the last successful dashboard.`
-  }
-  if (state.connection === "retrying") {
-    return "Reconnecting to live updates. Showing the last successful dashboard."
   }
   if (state.refresh === "pending") {
     return "Planning recalculation queued. Showing the current dashboard while it completes."

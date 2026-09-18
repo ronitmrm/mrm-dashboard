@@ -44,9 +44,10 @@ values; a later change requires the same measured amendment.
 - committed write to worker claim: p95 ≤2 seconds and p99 ≤5 seconds while the listener is healthy;
 - committed write to published canonical read model: p95 ≤10 seconds and p99 ≤30 seconds;
 - lost notifications or listener connection: durable work is discovered by the next 30-second safety sweep;
-- SSE invalidation hint to completed canonical refetch: p95 ≤2 seconds;
-- browser safety refresh: every 60 seconds while visible, paused while hidden;
+- browser canonical revalidation: one steady-state read per 60-second visible interval, paused while hidden;
+- initially hidden tabs perform no read until visible; stale or overdue tabs begin a canonical read immediately on visibility return;
 - active refresh-status polling may run every second only while a durable refresh is known to be active;
+- dashboard delivery opens no long-lived event-stream request;
 - authorization revocation applies on the next request, regardless of Redis state or application instance.
 
 ## Coverage and completeness gates

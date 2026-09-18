@@ -81,12 +81,12 @@ Boundary B review runs the projection, repository, route, runtime listener/sweep
 ### Boundary C — Dashboard browser delivery
 
 11. `feat: model dashboard delivery states`
-    - Implement the independent connection, payload, canonical-request, durable-refresh, coverage, and visibility state machine proven by the Ticket 9 prototype.
-    - Evidence: reducer tests cover initial/unchanged/changed responses, hints, disconnect, reconnect refetch, stale errors, durable refresh, visibility, late prior-floor responses, and no overlapping fetches.
+    - Implement the independent payload, canonical-request, durable-refresh, coverage, and visibility state machine evolved from the Ticket 9 prototype.
+    - Evidence: reducer tests cover initial/unchanged/changed responses, stale errors, durable refresh, visible safety deadlines, hidden suspension, overdue visibility recovery, late prior-floor responses, and no overlapping fetches.
 
 12. `feat: render resilient dashboard delivery`
-    - Connect SSE hints to canonical refetch, keep same-floor content through reconnect/retry, clear on floor change, show stale/refresh/failure/coverage text, and enforce visible-tab 60-second safety refresh.
-    - Evidence: route/browser automation passes performance and state scenarios; web test/typecheck/build pass.
+    - Use bounded canonical revalidation, keep same-floor content through checks/retry, clear on floor change, show stale/refresh/failure/coverage text, and retire the dashboard event stream and its Redis subscriber.
+    - Evidence: route/browser automation proves finite requests, no event stream, visible 60-second checks, hidden suspension, and retained content; web test/typecheck/build pass.
     - Review stop: ask the user to test the supplied preview with exact account, URL, seed state, actions, expected visual text, keyboard steps, and screen-reader announcements. Do not advance on automated evidence alone.
 
 ### Boundary D — authorization
@@ -189,14 +189,14 @@ Local services are stopped with retained volumes after the final local gate. Pro
 The following existing commits need follow-up evidence or correction before their boundary can be accepted:
 
 - `7c5d410`: source bounding exists, but per-category/per-floor coverage and six-field carry-forward remain incomplete;
-- `bf48707`: steady one-second polling and reconnect behavior conflict with the delivery/wake-up contracts;
+- `bf48707`: steady one-second polling conflicts with the bounded delivery/wake-up contracts;
 - `fda6ac1`: batched Sales candidates silently cap and lose match/recency presentation order;
 - `4886332`: only two Sales lists expose a generic notice and complete export routes are absent;
 - `ce3a75a`: affected-price reads share a graph, but ECN decision writes still recurse per node;
 - `f310aef`: audit insertion is batched, but committed events lack durable command order;
 - `137067f`: employee writes are set-based, but the 100-input server cap and ordered-event assertions are absent.
 
-Authorization commit `dfa3f2` and the schema/dashboard-state/SSE commits remain candidates pending their contract gates. Prototype commit `f47be17` stays on its throwaway branch and is not merged into production history.
+Authorization commit `dfa3f2` and the schema/dashboard-state commits remain candidates pending their contract gates. Prototype commit `f47be17` stays on its throwaway branch and is not merged into production history.
 
 ## Out of scope
 

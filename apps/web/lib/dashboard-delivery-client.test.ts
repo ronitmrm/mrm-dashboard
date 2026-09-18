@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest"
 
 import {
   dashboardCanonicalRequestUrl,
-  dashboardConnectionLabel,
   dashboardCoverageNotice,
   dashboardDeliveryNotice,
   dashboardDeliveryResponseAction,
@@ -147,7 +146,7 @@ describe("dashboard delivery client", () => {
     })
   })
 
-  it("presents retained reconnecting data without claiming it is current", () => {
+  it("presents a canonical update check while retaining current data", () => {
     const initial = createDashboardDeliveryState<{ dashboard: object }>("cnc")
     const started = dashboardDeliveryReducer(initial, {
       type: "request.started",
@@ -164,14 +163,19 @@ describe("dashboard delivery client", () => {
       requestId: 1,
       version: 1,
     })
-    const retrying = dashboardDeliveryReducer(loaded, {
-      type: "connection.lost",
+    const due = dashboardDeliveryReducer(loaded, {
+      type: "safety.due",
+      atMs: 61_000,
+    })
+    const checking = dashboardDeliveryReducer(due, {
+      type: "request.started",
+      floor: "cnc",
+      requestId: 2,
     })
 
-    expect(dashboardConnectionLabel(initial)).toBe("Loading")
-    expect(dashboardConnectionLabel(retrying)).toBe("Reconnecting")
-    expect(dashboardDeliveryNotice(retrying)).toBe(
-      "Reconnecting to live updates. Showing the last successful dashboard."
+    expect(checking.data).toBe(loaded.data)
+    expect(dashboardDeliveryNotice(checking)).toBe(
+      "Checking for dashboard updates."
     )
   })
 
@@ -197,7 +201,6 @@ describe("dashboard delivery client", () => {
       message: "Worker exhausted retries",
     })
 
-    expect(dashboardConnectionLabel(failed)).toBe("Stale")
     expect(dashboardDeliveryNotice(failed)).toBe(
       "Worker exhausted retries. Showing the last successful dashboard."
     )

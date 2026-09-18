@@ -102,7 +102,6 @@ function validEnvelope() {
         recoveredWithinMs: 29_000,
       },
       notificationToWorkerClaimMs: latency(1_500),
-      sseHintToCanonicalReadMs: latency(1_500),
     },
     health: {
       connectionHeadroomPercent: 30,

@@ -1124,7 +1124,7 @@ function FirstPieceInspectionShell({
       {isLoading ? <Skeleton className="h-64 w-full" /> : null}
       {dashboardDeliveryState.request === "error" ? (
         <AlertMessage tone="destructive">
-          Live Inspection Tasks Could Not Be Loaded. Refresh And Try Again.
+          Inspection Tasks Could Not Be Loaded. Refresh And Try Again.
         </AlertMessage>
       ) : null}
       {!isLoading ? (
@@ -2292,7 +2292,7 @@ function DashboardShell({
               <span>
                 {isAllProductionUnitsTab
                   ? "All Production Units"
-                  : `${selectedProductionFloor.label} · ${planningRecalculatedAt ? `Planning recalculated ${formatDate(planningRecalculatedAt)}` : view.updatedAt ? `Workbook updated ${formatDate(view.updatedAt)}` : "Live Postgresql Records"}`}
+                  : `${selectedProductionFloor.label} · ${planningRecalculatedAt ? `Planning recalculated ${formatDate(planningRecalculatedAt)}` : view.updatedAt ? `Workbook updated ${formatDate(view.updatedAt)}` : "PostgreSQL records"}`}
               </span>
               {planningRecalculatedAt && view.updatedAt ? (
                 <span> - Workbook Updated {formatDate(view.updatedAt)}</span>

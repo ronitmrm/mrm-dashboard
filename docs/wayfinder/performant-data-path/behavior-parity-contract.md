@@ -32,9 +32,9 @@ The fingerprint preserves order where users or downstream files observe it: Prod
 Only these migration effects are allowed without a business-spec amendment:
 
 1. Unchanged dashboard reads may return version/status metadata without the dashboard payload.
-2. Live invalidation may make committed dashboard changes visible sooner; the existing safety refresh remains.
+2. Visible dashboards revalidate canonical state every 60 seconds; hidden tabs schedule no periodic reads and check initial, stale, or overdue state immediately when visible again.
 3. Operational commercial and dashboard collections may be bounded only at a named repository boundary, with visible returned/available/limit coverage. Search applies before the bound. Exports and explicit history remain exhaustive.
-4. Connection, stale, retry, and partial-coverage indicators may be added where the new delivery contract requires them.
+4. Checking, stale, retry, and partial-coverage indicators may be added where the new delivery contract requires them.
 5. Volatile performance metadata, delivery timing inside the accepted freshness envelope, and provider plan-cost values may differ.
 
 Everything else is a parity failure, including silent truncation, changed lifecycle transitions, changed order, missing audit evidence, cross-floor leakage, stale authorization, or weakened atomicity.
