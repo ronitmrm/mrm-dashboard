@@ -27,7 +27,7 @@ Every protected Server Component, Server Action, and Route Handler checks the se
 2. every canonical write, reversal, correction, approval, import, bulk assignment, and refresh request;
 3. protected file upload/download, PDF/workbook export, and explicit-history route;
 4. dashboard, HR/recruitment, quality, planning, maintenance, pricing, and commercial reads;
-5. any API route consumed by the client, including live-state and event-stream authorization.
+5. any API route consumed by the client, including canonical live-state reads.
 
 Layout, proxy, navigation visibility, disabled buttons, and client-side checks are usability hints only. Repository domain invariants and database constraints remain mandatory after authorization.
 
@@ -49,7 +49,7 @@ Cookie session caching may not be enabled by this migration. Better Auth warns t
 - a second request after session revocation, ban, role removal, denied override, or capability removal is rejected;
 - a second application instance observes the same result without restart or invalidation delivery;
 - Redis empty/unavailable yields identical authorization decisions;
-- sensitive read, write, upload/download, export/history, administration, dashboard API, and event-stream boundaries each have server-facing capability coverage;
+- sensitive read, write, upload/download, export/history, administration, and dashboard API boundaries each have server-facing capability coverage;
 - cookie-cache configuration remains disabled and no process-global auth/grant cache exists.
 
 The decision is consistent with [Better Auth session management](https://www.better-auth.com/docs/concepts/session-management) and ADR-0006.

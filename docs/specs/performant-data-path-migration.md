@@ -20,8 +20,8 @@ The migration will be accepted through externally observable behavioral parity, 
 
 1. As a Production Floor user, I want my existing floor-scoped dashboard behavior preserved, so that another Production Floor's data is never exposed.
 2. As a Production Floor user, I want unchanged dashboards to transfer only version metadata, so that routine refreshes remain fast.
-3. As a Production Floor user, I want changed dashboards delivered promptly, so that I do not wait for a polling interval.
-4. As a Production Floor user, I want periodic fallback refreshes, so that missed live notifications self-heal.
+3. As a Production Floor user, I want changed dashboards discovered within a bounded visible interval, so that freshness has a predictable limit.
+4. As a Production Floor user, I want overdue dashboards refreshed immediately when I return to a hidden tab.
 5. As a Production Floor user, I want Production pauses to remain reversible, so that existing operational control is preserved.
 6. As a Production Floor user, I want machine-plan detail retained per floor, so that planning remains accurate.
 7. As a Production Floor user, I want first-piece tasks and reports to remain distinct, so that the existing workflow remains intact.
@@ -76,8 +76,8 @@ The migration will be accepted through externally observable behavioral parity, 
 - Prior dashboard-state reads select only the required floor-specific machine-plan projection, never the complete prior JSON model.
 - Dashboard state accepts a known version and omits payload data when that version remains current.
 - Existing server-side Production Floor extraction remains mandatory.
-- Server-Sent Events carry invalidation and version hints only. Clients retrieve canonical state through the dashboard-state contract.
-- A 60-second safety refresh remains in place to recover from disconnected or missed event streams.
+- Clients retrieve canonical state through the dashboard-state contract every 60 seconds while visible.
+- Hidden tabs schedule no periodic dashboard reads; initial, stale, or overdue state reads immediately when visible again.
 - Refresh jobs remain durable PostgreSQL records.
 - Transactional PostgreSQL notifications are wake-up hints emitted with canonical writes; they never replace the durable queue.
 - Workers use a session-capable listener connection and retain a 30-second safety sweep.
@@ -113,7 +113,7 @@ The migration will be accepted through externally observable behavioral parity, 
 - Wall-clock and execution-plan assertions run in a controlled benchmark job rather than timing-sensitive unit tests. Plans must avoid temporary writes on the audited paths.
 - The migration-history seam applies the full schema to an empty PostgreSQL database and upgrades a representative database through staging migration `0038` before applying `0039` through `0043`.
 - Migration-history verification requires prior migration names and checksums to remain unchanged, business fingerprints to survive, projections to backfill, and required indexes, triggers, and roles to exist.
-- Dashboard tests cover floor isolation, unchanged and changed versions, coverage warnings, live invalidation, reconnects, and safety refresh.
+- Dashboard tests cover floor isolation, unchanged and changed versions, coverage warnings, visible safety refresh, hidden suspension, and overdue visibility recovery.
 - Refresh tests cover notification-after-commit, rollback, duplicate hints, listener loss, worker restart, and durable-queue recovery.
 - Authorization tests cover same-request deduplication, immediate revocation, cross-instance behavior, Redis loss, and sensitive operations.
 - Recruitment tests cover bulk assignment rollback, audit completeness, repeat applications, Approved Post statuses, and round locks.

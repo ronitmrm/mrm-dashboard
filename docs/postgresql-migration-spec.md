@@ -55,7 +55,7 @@ below.
 | SQLite extraction       | Online backup for rehearsals; final backup after writes stop and startup migrations/repairs have completed                                                                               |
 | Legacy identity         | Exclude users, password credentials, permissions, verification state, and sessions from both source databases                                                                            |
 | New users               | Provision a new Better Auth administrator and recreate staff access from approved role/capability assignments                                                                            |
-| Dashboard subscriptions | Replace Convex live subscriptions with a durable PostgreSQL read-model job and client invalidation/polling                                                                               |
+| Dashboard subscriptions | Replace Convex live subscriptions with a durable PostgreSQL read-model job and bounded canonical client revalidation                                                                     |
 | Redis                   | Optional disposable acceleration for rate limits, caches, permission caching, and invalidation; never a source of business correctness                                                   |
 | Rollback                | Legacy sources stay read-only and intact through the acceptance window; writes are enabled in PostgreSQL only after read-only smoke acceptance                                           |
 
@@ -578,7 +578,7 @@ Refresh flow:
 4. The worker reads canonical rows at a consistent transaction snapshot.
 5. Existing analysis code produces the dashboard payload.
 6. The worker writes a new version and source watermark atomically.
-7. The client invalidates/polls the version endpoint and fetches changed data.
+7. The visible client polls the canonical version endpoint on a bounded schedule and fetches changed data.
 
 Outbox delivery and refresh work use idempotency keys. Redis loss may delay a
 cache invalidation but may not lose a canonical write or durable refresh job.
@@ -1076,7 +1076,7 @@ Steps:
 2. Add durable refresh jobs and versioned read models.
 3. Reuse the current planning analysis against normalized query results.
 4. Replace `useQuery`/`useMutation` with the target client/data layer.
-5. Replace live subscriptions with explicit invalidation and bounded polling.
+5. Replace live subscriptions with bounded canonical polling.
 6. Remove chunk serialization.
 
 Exit gate:

@@ -3,7 +3,6 @@ import type { ProductionFloorCode } from "@workspace/db"
 const DASHBOARD_SAFETY_REFRESH_MS = 60_000
 const DASHBOARD_ACTIVE_REFRESH_POLL_MS = 1_000
 
-type DashboardConnectionState = "connecting" | "live" | "retrying"
 type DashboardPayloadState = "none" | "current" | "stale"
 type DashboardCanonicalRequestState =
   | "initial"
@@ -28,7 +27,6 @@ export type DashboardRequestDescriptor = DashboardRequest & {
 }
 
 export type DashboardDeliveryState<Data> = {
-  connection: DashboardConnectionState
   coverage: DashboardCoverageState
   data: Data | null
   floor: ProductionFloorCode
@@ -46,10 +44,7 @@ export type DashboardDeliveryState<Data> = {
 }
 
 export type DashboardDeliveryAction<Data> =
-  | { type: "connection.lost" }
-  | { type: "connection.opened" }
   | { type: "floor.changed"; floor: ProductionFloorCode }
-  | { type: "hint.received" }
   | { type: "refresh.failed"; message: string }
   | { type: "refresh.poll-due" }
   | { type: "refresh.requested" }
@@ -92,7 +87,6 @@ export function createDashboardDeliveryState<Data>(
   visibility: DashboardVisibilityState = "visible"
 ): DashboardDeliveryState<Data> {
   return {
-    connection: "connecting",
     coverage: "complete",
     data: null,
     floor,
@@ -126,30 +120,8 @@ export function dashboardDeliveryReducer<Data>(
   action: DashboardDeliveryAction<Data>
 ): DashboardDeliveryState<Data> {
   switch (action.type) {
-    case "connection.lost":
-      return {
-        ...state,
-        connection: "retrying",
-        payload: state.data === null ? "none" : "stale",
-      }
-    case "connection.opened":
-      return {
-        ...state,
-        connection: "live",
-        refetchPending: true,
-        request: state.data === null ? state.request : "canonical-state",
-      }
     case "floor.changed":
-      return {
-        ...createDashboardDeliveryState<Data>(action.floor, state.visibility),
-        connection: state.connection,
-      }
-    case "hint.received":
-      return {
-        ...state,
-        refetchPending: true,
-        request: state.data === null ? state.request : "canonical-state",
-      }
+      return createDashboardDeliveryState<Data>(action.floor, state.visibility)
     case "refresh.requested":
       return {
         ...state,
@@ -204,13 +176,16 @@ export function dashboardDeliveryReducer<Data>(
         return { ...state, visibility: "hidden" }
       }
       const shouldRefetch =
+        state.request === "initial" ||
         state.payload === "stale" ||
         (state.safetyDeadlineMs !== null &&
           action.atMs >= state.safetyDeadlineMs)
+      const nextRequest: DashboardCanonicalRequestState =
+        state.data === null ? "initial" : "canonical-state"
       return {
         ...state,
         ...(shouldRefetch
-          ? { refetchPending: true, request: "canonical-state" as const }
+          ? { refetchPending: true, request: nextRequest }
           : {}),
         visibility: "visible",
       }
