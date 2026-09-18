@@ -16,6 +16,7 @@ export const brandingTypes = [
   "notice",
   "policy",
   "work-instruction",
+  "controlled-document",
 ] as const
 export type BrandingType = (typeof brandingTypes)[number]
 export const brandingLanguages = ["en", "hi", "gu"] as const
@@ -39,14 +40,17 @@ export const brandingTypeLabels = {
   notice: "Notices",
   policy: "Policies",
   "work-instruction": "Work Instructions",
+  "controlled-document": "Controlled Documents",
 } as const
 export const brandingPrefixes = {
   sop: "SOP",
   notice: "NTC",
   policy: "POL",
   "work-instruction": "WI",
+  "controlled-document": "CD",
 } as const
 export const brandingFields = {
+  "controlled-document": ["Document number"],
   "work-instruction": ["Purpose", "Instructions", "Checks"],
   sop: [
     "Purpose",
@@ -333,6 +337,31 @@ export function parseBrandingContent(
   const department = text(item.department, "Department", 160)
   if (!title || !department)
     throw new Error("Title and department are required.")
+  if (type === "controlled-document") {
+    const effectiveDate = text(item.effectiveDate, "Effective date", 10)
+    if (
+      effectiveDate &&
+      (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveDate) ||
+        !Number.isFinite(Date.parse(effectiveDate)) ||
+        new Date(effectiveDate).toISOString().slice(0, 10) !== effectiveDate)
+    )
+      throw new Error("Effective date is invalid.")
+    const number = text(
+      object(item.inputs)["Document number"],
+      "Document number",
+      100
+    )
+    if (!number) throw new Error("Document number is required.")
+    return {
+      title,
+      department,
+      effectiveDate,
+      inputs: { "Document number": number },
+      languages: [],
+      translations: [],
+      changeReason: text(item.changeReason ?? "", "Change reason", 2000),
+    }
+  }
   if (!Array.isArray(item.languages))
     throw new Error("Select at least one language.")
   const languages = brandingLanguages.filter((language) =>

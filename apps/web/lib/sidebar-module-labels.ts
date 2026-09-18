@@ -1,5 +1,6 @@
 export const sidebarModuleLabels = {
   branding: "Document Templates",
+  qualityControl: "Quality Control",
   accessAdministration: "Access Administration",
   costing: "Costing",
   dashboard: "Dashboard",
@@ -46,6 +47,8 @@ export function sidebarModuleForPermission(
   permissionKey: string,
   storedModule: string
 ) {
+  if (permissionKey.startsWith("quality.control.")) return sidebarModuleLabels.qualityControl
+  if (permissionKey.startsWith("quality.rejection_register.")) return sidebarModuleLabels.isoDocument
   if (startsWithAny(permissionKey, masterDataPermissionPrefixes)) {
     return sidebarModuleLabels.masterData
   }
@@ -89,7 +92,10 @@ export function sidebarSubmoduleForPermission(
   }
 
   const mappings = [
+    ["quality.control.", "Rejection Entry"],
+    ["quality.rejection_register.", "Rejection Register"],
     ["branding.sop.", "SOPs"],
+    ["branding.controlled-document.", "Controlled Documents"],
     ["branding.notice.", "Notices"],
     ["branding.policy.", "Policies"],
     ["branding.work-instruction.", "Work Instructions"],

@@ -5481,7 +5481,7 @@ function runtimeHoursFromRow(row: Record<string, unknown>, downtimeMinutes: numb
   return Math.max(elapsed - downtimeMinutes, 0) / 60;
 }
 
-function rejectionEntriesFromRow(row: Record<string, unknown>) {
+export function rejectionEntriesFromRow(row: Record<string, unknown>) {
   const entries: Array<Record<string, unknown>> = [];
   for (let index = 1; index <= rejectionEntryCount; index += 1) {
     const qty = safeNumber(rowValue(row, `REJECTION ${index} QUANTITY (PCS)`, `REJECTION ${index} REJECTION QUANTITY`, `REJECTION ${index} QTY (PCS)`, `RejQty${index}`));

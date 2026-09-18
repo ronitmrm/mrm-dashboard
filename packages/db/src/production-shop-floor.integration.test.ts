@@ -7,6 +7,7 @@ import { createDashboardPlanningRepository } from "./dashboard-planning"
 import { migrateDatabase } from "./migrate"
 import { createProductionShopFloorRepository } from "./production-shop-floor"
 import { createQualityRepository } from "./quality"
+import { createRejectionRepository } from "./rejections"
 
 const connectionString =
   process.env.TEST_DATABASE_URL ??
@@ -120,6 +121,7 @@ beforeAll(async () => {
     orderedQuantity: 2_000,
     organizationId,
     sourcePayload: {
+      productionFloorCode: "cnc",
       jcNo: cncJobCard,
       partCode: itemUid,
       rmPoNo: rmPoNumber,
@@ -566,6 +568,26 @@ describe("production and shop-floor workflows", () => {
       rejectedPieces: 7,
       totalPieces: 850,
     })
+
+    const rejections = createRejectionRepository({ pool })
+    const registerFilter = { from: "2020-01-01", to: "2099-12-31", unit: "cnc" }
+    const productionRejects = (await rejections.list(organizationId, registerFilter)).filter((row) => row.jobCard === cncJobCard)
+    expect(productionRejects).toMatchObject([{ pieces: 7, kg: 3.423, type: "In-process", defect: "Visual defect", reason: "Segregated" }])
+    const actor = (await pool.query<{ id: string }>("INSERT INTO identity.users(name,email) VALUES ('QC tester',$1) RETURNING id", [`qc-${randomUUID()}@example.test`])).rows[0]!.id
+    const type = await quality.upsertRejectionType({ organizationId, code: "", name: `QC type ${suffix}`, payload: {} })
+    const defect = await quality.upsertRejectionReason({ organizationId, code: "", name: `QC defect ${suffix}`, payload: {} })
+    const reason = await quality.upsertRejectionRemark({ organizationId, code: "", remark: `QC reason ${suffix}`, payload: {} })
+    const options = await rejections.entryOptions(organizationId, { unit: "cnc", part: itemUid, job: cncJobCard })
+    expect(options.jobs).toHaveLength(1)
+    const rejectionInput = { organizationId, userId: actor, requestId: randomUUID(), jobId: options.jobs[0]!.id,
+      date: "2026-09-18", stage: "Checking", typeId: type.id, defectId: defect.id, reasonId: reason.id, pieces: 3, kg: 1.5 }
+    await rejections.save(rejectionInput)
+    await rejections.save(rejectionInput)
+    await expect(rejections.save({ ...rejectionInput, stage: "Other" })).rejects.toThrow("Select Checking")
+    const allRejects = (await rejections.list(organizationId, registerFilter)).filter((row) => row.jobCard === cncJobCard)
+    expect(allRejects).toHaveLength(2)
+    expect(allRejects.reduce((total, row) => total + row.pieces, 0)).toBe(10)
+    expect(allRejects.find((row) => row.stage === "Checking")).toMatchObject({ pieces: 3, kg: 1.5, unit: "PPAC CNC-01" })
 
     const second = await repository.startProductionSession({
       jobCardNumber: cncJobCard,

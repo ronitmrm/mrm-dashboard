@@ -59,6 +59,7 @@ import {
 import {
   administrationNavigation,
   brandingNavigation,
+  qualityControlNavigation,
   commercialCostingNavigation,
   commercialMasterDataWorkspaceNavigation,
   commercialOperationalEntryNavigation,
@@ -107,6 +108,7 @@ function defaultExpandedSections(
     )
   return {
     branding: pathname.startsWith("/branding"),
+    qualityControl: pathname.startsWith("/quality-control"),
     costing:
       pathname.startsWith("/commercial") &&
       !onCommercialMasterData &&
@@ -242,7 +244,7 @@ export function UnifiedSidebarNavigation({
   )
   const filteredIsoDocumentNavigation = filterNavigationItems(
     isoDocumentNavigation.filter((item) =>
-      item.href.startsWith("/iso-document/machine-maintenance")
+      item.href === "/iso-document/rejections" ? navigationAccess.qualityControlHrefs?.includes(item.href) : item.href.startsWith("/iso-document/machine-maintenance")
         ? navigationAccess.maintenanceHrefs?.includes("/?tab=maintenanceTab")
         : !item.href.startsWith("/iso-document") ||
           visibleStoreNavigation.some((storeItem) => storeItem.href === "/store/stock")
@@ -254,6 +256,10 @@ export function UnifiedSidebarNavigation({
     visibleStoreNavigation,
     normalizedMenuSearch,
     "store inventory assets requests receipts"
+  )
+  const filteredQualityControlNavigation = filterNavigationItems(
+    qualityControlNavigation.filter((item) => navigationAccess.qualityControlHrefs?.includes(item.href)),
+    normalizedMenuSearch, "quality control rejection checking assembly"
   )
   const filteredMaintenanceNavigation = filterNavigationItems(
     visibleMaintenanceNavigation,
@@ -653,6 +659,17 @@ export function UnifiedSidebarNavigation({
         </NavigationSection>
       ) : null}
 
+      {filteredQualityControlNavigation.length ? (
+        <NavigationSection icon={ListChecks} isActive={pathname.startsWith("/quality-control")}
+          label={sidebarModuleLabels.qualityControl} open={normalizedMenuSearch ? true : expandedSections.qualityControl}
+          onOpenChange={(open) => { if (!normalizedMenuSearch) setSectionOpen("qualityControl", open) }}>
+          {filteredQualityControlNavigation.map((item) => <SidebarMenuSubItem key={item.href}>
+            <SidebarMenuSubButton asChild className={submoduleButtonClassName} isActive={pathname === item.href}>
+              <a href={item.href}><item.icon aria-hidden="true" /><span>{item.label}</span></a>
+            </SidebarMenuSubButton>
+          </SidebarMenuSubItem>)}
+        </NavigationSection>
+      ) : null}
       {filteredBrandingNavigation.length ? (
         <NavigationSection
           icon={Palette}
@@ -837,6 +854,7 @@ export function UnifiedSidebarNavigation({
       !filteredMaintenanceNavigation.length &&
       !filteredStoreNavigation.length &&
       !filteredIsoDocumentNavigation.length &&
+      !filteredQualityControlNavigation.length &&
       !filteredBrandingNavigation.length &&
       !filteredCommercialNavigation.length &&
       !filteredMasterDataNavigation.length &&

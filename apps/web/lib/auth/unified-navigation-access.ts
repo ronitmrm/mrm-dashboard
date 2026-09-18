@@ -1,5 +1,6 @@
 import { cache } from "react"
 import { brandingPageAccess } from "./branding-capabilities"
+import { qualityControlPageAccess } from "./quality-control-capabilities"
 import {
   hrMasterForPanel,
   masterCapability,
@@ -26,6 +27,7 @@ const administrationCapability = "administration.access.read"
 const artifactCapability = "artifacts.read"
 
 export type UnifiedNavigationAccess = {
+  qualityControlHrefs?: string[]
   brandingHrefs?: string[]
   masterReadKeys?: string[]
   operationalEntryReadKeys?: string[]
@@ -45,6 +47,7 @@ async function readUnifiedNavigationAccess(
   userId: string
 ): Promise<UnifiedNavigationAccess> {
   const capabilities = [
+    ...qualityControlPageAccess.map(({ readPermissionKey }) => readPermissionKey),
     ...brandingPageAccess.map(({ readPermissionKey }) => readPermissionKey),
     ...masterPermissionOptions
       .filter(({ key }) => key.endsWith(".read"))
@@ -103,6 +106,7 @@ async function readUnifiedNavigationAccess(
   )
 
   return {
+    qualityControlHrefs: qualityControlPageAccess.filter(({ readPermissionKey }) => grantedCapabilities.has(readPermissionKey)).map(({ href }) => href),
     brandingHrefs: brandingPageAccess
       .filter(({ readPermissionKey }) =>
         grantedCapabilities.has(readPermissionKey)

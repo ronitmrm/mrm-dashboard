@@ -23,6 +23,7 @@ import {
   StandardState,
 } from "@/components/ui/golden-patterns"
 import { UiReferenceThemeToggle } from "@/components/ui/ui-reference-theme-toggle"
+import { UiReferenceFilteredTotals } from "@/components/ui/ui-reference-filtered-totals"
 import { requireAuthenticatedSession } from "@/lib/auth/require-capability"
 import { StatusBadge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
@@ -150,6 +151,7 @@ export default async function UiReferencePage() {
         ]}
       />
 
+      <UiReferenceFilteredTotals />
       <SectionCard size="sm">
         <CardHeader>
           <CardTitle>Action toolbar</CardTitle>

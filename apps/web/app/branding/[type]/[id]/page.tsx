@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/golden-patterns"
 import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
 import { BrandingDocumentEditor } from "@/components/branding/document-editor"
+import { ControlledDocumentEditor } from "@/components/branding/controlled-document-editor"
 import { BrandingIssueControls } from "@/components/branding/issue-controls"
 import { brandingType, withBranding } from "@/lib/branding/server"
 import { brandingCapability } from "@/lib/auth/branding-capabilities"
@@ -76,7 +77,7 @@ export default async function BrandingDocumentPage({
   const draft = availableRevisions.find(
     (revision) => revision.state === "draft"
   )
-  const reference = `${document.number ?? "Number assigned on first issue"}${type === "notice" || type === "work-instruction" ? "" : ` · ${revisionLabel(selected.revision)}`}`
+  const reference = `${document.number ?? (type === "controlled-document" ? selected.content.inputs["Document number"] : "Number assigned on first issue")}${type === "notice" || type === "work-instruction" ? "" : ` · ${revisionLabel(selected.revision)}`}`
   const fileName = `${document.number ?? "Draft"}${type === "notice" || type === "work-instruction" ? "" : `-${revisionLabel(selected.revision)}`}.pdf`
   const pdfHref =
     selected.state === "issued"
@@ -102,7 +103,9 @@ export default async function BrandingDocumentPage({
                 Back to Records
               </Link>
             </Button>
-            {selected.content.translations.length ? (
+            {selected.content.translations.length ||
+            (type === "controlled-document" &&
+              (selected.hasUpload || selected.state === "issued")) ? (
               <Button variant="outline" asChild>
                 <AttachmentViewerLink
                   href={pdfHref}
@@ -149,23 +152,34 @@ export default async function BrandingDocumentPage({
         {selected.state === "draft" && canWrite ? (
           <TabsContent value="edit">
             <p className="mb-4 text-sm text-muted-foreground">
-              Save changes before previewing or issuing. Issue PDF freezes the
+              Save changes before previewing or releasing. Release freezes the
               saved document.
             </p>
-            <BrandingDocumentEditor
-              key={`${selected.id}:${selected.version}`}
-              type={type}
-              documentId={id}
-              version={selected.version}
-              initial={selected.content}
-            />
+            {type === "controlled-document" ? (
+              <ControlledDocumentEditor
+                documentId={id}
+                version={selected.version}
+                initial={selected.content}
+                numberLocked={Boolean(document.number)}
+              />
+            ) : (
+              <BrandingDocumentEditor
+                key={`${selected.id}:${selected.version}`}
+                type={type}
+                documentId={id}
+                version={selected.version}
+                initial={selected.content}
+              />
+            )}
           </TabsContent>
         ) : null}
         <TabsContent value="content" className="grid gap-4">
           {canWrite && draft?.id === selected.id ? (
             <ActionToolbar>
               <span className="text-sm text-muted-foreground">
-                Issue this saved document after reviewing its text and PDF.
+                {type === "controlled-document"
+                  ? "Review the uploaded PDF and revision details before release."
+                  : "Issue this saved document after reviewing its text and PDF."}
               </span>
               <BrandingIssueControls
                 type={type}
@@ -315,7 +329,18 @@ export default async function BrandingDocumentPage({
                     </TableCell>
                     <TableCell>
                       <StatusBadge
-                        value={revision.state === "issued" ? "Issued" : "Draft"}
+                        value={
+                          revision.state === "issued"
+                            ? type === "controlled-document"
+                              ? revision.id !==
+                                availableRevisions.find(
+                                  (entry) => entry.state === "issued"
+                                )?.id
+                                ? "Superseded"
+                                : "Released"
+                              : "Issued"
+                            : "Draft"
+                        }
                         tone={
                           revision.state === "issued" ? "positive" : "neutral"
                         }
