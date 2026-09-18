@@ -113,7 +113,7 @@ const legacyEntryTypes = [
   "maintenance_task",
 ] as const
 
-const snapshotEntryTypes = new Set([...legacyEntryTypes, "shop_floor_status"])
+const snapshotEntryTypes = new Set([...legacyEntryTypes, "shop_floor_status", "production_opening_balance"])
 
 const machinePlanContinuityFields = [
   "jcNo",
@@ -132,6 +132,7 @@ const productionDashboardContinuityFields = [
 ] as const
 
 const dataEntrySourceBudgets: Record<string, number> = {
+  production_opening_balance: 5000,
   setup_name_master: 1000,
   cycle: 500,
   employee: 1000,

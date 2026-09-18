@@ -303,6 +303,7 @@ function lastDate(values: Array<string | null | undefined>) {
 }
 
 export function buildJobCardAnalytics(input: {
+  openingBalances?: JobCardSessionRow[]
   downtimeEvents: JobCardDowntimeRow[]
   finalSetupNumber: string | null
   firstSetupNumber: string | null
@@ -313,16 +314,17 @@ export function buildJobCardAnalytics(input: {
   const orderedQuantity = finite(input.orderedQuantity)
   const finalSetupNumber = input.finalSetupNumber?.trim() || null
   const firstSetupNumber = input.firstSetupNumber?.trim() || null
-  const operationProducedPieces = input.sessions.reduce(
+  const outputRows = [...input.sessions, ...(input.openingBalances ?? [])]
+  const operationProducedPieces = outputRows.reduce(
     (total, row) => total + finite(row.totalPieces),
     0
   )
-  const operationGoodPieces = input.sessions.reduce(
+  const operationGoodPieces = outputRows.reduce(
     (total, row) => total + finite(row.goodPieces),
     0
   )
   const finishedSessions = finalSetupNumber
-    ? input.sessions.filter((row) => row.setupNumber?.trim() === finalSetupNumber)
+    ? outputRows.filter((row) => row.setupNumber?.trim() === finalSetupNumber)
     : []
   const actualProducedPieces = finishedSessions.reduce(
     (total, row) => total + finite(row.totalPieces),
@@ -333,11 +335,11 @@ export function buildJobCardAnalytics(input: {
     0
   )
   const materialOutputPieces = firstSetupNumber
-    ? input.sessions
+    ? outputRows
       .filter((row) => row.setupNumber?.trim() === firstSetupNumber)
       .reduce((total, row) => total + finite(row.totalPieces), 0)
     : 0
-  const rejectedPieces = input.sessions.reduce(
+  const rejectedPieces = outputRows.reduce(
     (total, row) => total + finite(row.rejectedPieces),
     0
   )
@@ -384,7 +386,7 @@ export function buildJobCardAnalytics(input: {
   const setupNumbers = new Set(
     [
       ...input.planRows.map((row) => row.setupNumber?.trim()),
-      ...input.sessions.map((row) => row.setupNumber?.trim()),
+      ...outputRows.map((row) => row.setupNumber?.trim()),
     ].filter((value): value is string => Boolean(value))
   )
 
@@ -419,7 +421,7 @@ export function buildJobCardAnalytics(input: {
     setupPerformance: [...setupNumbers]
       .sort((left, right) => left.localeCompare(right, undefined, { numeric: true }))
       .map((setupNumber) => {
-        const actualGood = input.sessions
+        const actualGood = outputRows
           .filter((row) => row.setupNumber?.trim() === setupNumber)
           .reduce((total, row) => total + finite(row.goodPieces), 0)
         return {

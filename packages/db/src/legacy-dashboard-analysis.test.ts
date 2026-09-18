@@ -3,6 +3,44 @@ import { describe, expect, test } from "vitest"
 import { buildLegacyDashboardSnapshot } from "./legacy-dashboard-analysis"
 
 describe("legacy dashboard route selections", () => {
+  test("keeps opening pieces per setup without inflating daily output or observed rates", () => {
+    const createdAt = "2026-09-18T22:00:00+05:30"
+    const entry = (entryType: string, payload: Record<string, unknown>) => ({ entryType, payload, createdAt })
+    const input: Parameters<typeof buildLegacyDashboardSnapshot>[0] = {
+      workbookName: "Opening", productionEntries: [{ jobCard: "JC-OPEN", partCode: "PART", setupNo: "2", machine: "CNC-1", machineType: "CNC",
+        operatorId: "OP", prodDate: "2026-09-19", outputQty: 110, actualQty: 100, rejectQty: 10, targetQty: 200 }],
+      dataEntries: [
+        entry("work_order", { jcNo: "JC-OPEN", partCode: "PART", optionNumber: "1", orderPcs: 10000, rmInwardDate: "2026-09-18", rmInwardKg: 100 }),
+        entry("rm_inward", { jcNo: "JC-OPEN", rmInwardDate: "2026-09-18", rmInwardKg: 100, status: "Received" }),
+        entry("machine_master", { machineNo: "CNC-1", machineType: "CNC", machineFamily: "T42", status: "Active" }),
+        ...["1", "2", "3"].flatMap((setupNo) => [
+          entry("route", { partNo: "PART", optionNumber: "1", setupNo, machineType: "CNC", machineFamily: "T42" }),
+          entry("cycle", { partNo: "PART", optionNumber: "1", setupNo, cycleTime: 60 }),
+          entry("tooling", { partNo: "PART", optionNumber: "1", setupNo }),
+        ]),
+        entry("production_opening_balance", { jobCardNumber: "JC-OPEN", partCode: "PART", optionNumber: "1", setupNo: "1", goodPieces: 10000, rejectedPieces: 0, status: "completed", cutoffAt: createdAt }),
+        entry("production_opening_balance", { jobCardNumber: "JC-OPEN", partCode: "PART", optionNumber: "1", setupNo: "2", machineNumber: "CNC-1", goodPieces: 5000, rejectedPieces: 20, status: "running", cutoffAt: createdAt }),
+        entry("shop_floor_status", { jcNo: "JC-OPEN", partCode: "PART", optionNumber: "1", setupNo: "2", machine: "CNC-1", stage: "operator_started", openingBalance: true }),
+      ],
+    }
+    const beforeProduction = buildLegacyDashboardSnapshot({ ...input, productionEntries: [] }).productionControl!
+    if (!("machinePlanDetailRows" in beforeProduction)) throw new Error("Missing planning")
+    expect(beforeProduction.machinePlanDetailRows.find((row) => row.setupNo === "2")).toMatchObject({
+      rawActualQty: 5000, pendingGoodQty: 5000, rawRows: 0, actualStartDate: "", setupCompletionDate: "",
+      plannedProductionStartDate: "19-Sept-26",
+    })
+    const snapshot = buildLegacyDashboardSnapshot(input)
+    const control = snapshot.productionControl!
+    if (!("machinePlanDetailRows" in control)) throw new Error("Missing planning")
+    const running = control.machinePlanDetailRows.find((row) => row.setupNo === "2")!
+    expect(running).toMatchObject({ rawActualQty: 5100, rawRejectQty: 30, pendingGoodQty: 4900, openingGoodQty: 5000, rawRows: 1, machine: "CNC-1" })
+    expect(control.machinePlanDetailRows.some((row) => row.setupNo === "1")).toBe(false)
+    expect(control.machinePlanDetailRows.find((row) => row.setupNo === "3")).toMatchObject({ pendingGoodQty: 10000 })
+    expect(control.productionOutputRows).toHaveLength(1)
+    expect(snapshot.operatorPerformance).toEqual(expect.arrayContaining([expect.objectContaining({ output: 110 })]))
+    // 4,900 / 100 new good pieces per working day must take months, not one day.
+    expect(String(running.plannedProductionEndDate)).toContain("Nov")
+  })
   test("retains all uploaded dimensions when parameter codes are generated", () => {
     const dimensions = [
       { parameterName: "Total Length", specification: 15 },
