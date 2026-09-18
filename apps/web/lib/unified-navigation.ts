@@ -72,6 +72,7 @@ export const personalDashboardNavigation = {
 } as const
 
 export const brandingNavigation = [
+  { href: "/branding/controlled-document", icon: FileSpreadsheet, label: "Controlled Documents" },
   { href: "/branding/sop", icon: ListChecks, label: "SOPs" },
   { href: "/branding/notice", icon: FilePenLine, label: "Notices" },
   { href: "/branding/policy", icon: ScrollText, label: "Policies" },
@@ -83,6 +84,7 @@ export const brandingNavigation = [
 ] as const
 
 export const publishedRegisterNavigation = [
+  { href: "/registers/controlled-document", type: "controlled-document", icon: FileSpreadsheet, label: "Controlled Document Register" },
   {
     href: "/registers/sop",
     type: "sop",
@@ -104,6 +106,7 @@ export const publishedRegisterNavigation = [
 ] as const
 
 export const isoDocumentNavigation = [
+  { href: "/iso-document/rejections", icon: ShieldCheck, label: "Rejection Register" },
   {
     href: measuringInstrumentRegister.href,
     icon: Gauge,
@@ -112,6 +115,10 @@ export const isoDocumentNavigation = [
   ...publishedRegisterNavigation,
   { href: machineMaintenanceRegister.href, icon: Wrench, label: machineMaintenanceRegister.title },
   { href: machineMaintenancePlan.href, icon: CalendarDays, label: machineMaintenancePlan.title },
+] as const
+
+export const qualityControlNavigation = [
+  { href: "/quality-control", icon: ShieldCheck, label: "Rejection Entry" },
 ] as const
 
 export function dashboardTabHref(

@@ -54,7 +54,13 @@ export function BrandingIssueControls({
         ) : (
           <FilePlus2 aria-hidden="true" />
         )}
-        {pending ? "Working…" : draft ? "Issue PDF" : "Create Revision"}
+        {pending
+          ? "Working…"
+          : draft
+            ? type === "controlled-document"
+              ? "Release PDF"
+              : "Issue PDF"
+            : "Create Revision"}
       </Button>
       {error ? (
         <StandardState

@@ -7,6 +7,7 @@ export const sidebarSectionIds = [
   "maintenance",
   "store",
   "isoDocument",
+  "qualityControl",
   "productionConventional",
   "productionConventional02",
   "productionCnc",

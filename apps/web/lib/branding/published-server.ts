@@ -9,11 +9,11 @@ export async function withPublishedRegister<T>(
   operation: (context: {
     repository: ReturnType<typeof createBrandingRepository>
     organizationId: string
-    type: "sop" | "policy" | "work-instruction"
+    type: "sop" | "policy" | "work-instruction" | "controlled-document"
   }) => Promise<T>
 ) {
   await requireAuthenticatedSession(`/registers/${type}`)
-  if (type !== "sop" && type !== "policy" && type !== "work-instruction")
+  if (type !== "sop" && type !== "policy" && type !== "work-instruction" && type !== "controlled-document")
     notFound()
   const repository = createBrandingRepository({ pool: getWebPostgresPool() })
   try {

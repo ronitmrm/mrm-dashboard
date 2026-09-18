@@ -38,6 +38,7 @@ describe("protected server boundaries", () => {
       "authorizePostgresDashboardEvents(",
       "withDashboardReadRepository(",
       "withBranding(",
+      "withRejections(",
     ]
     const authenticatedAccountOnlyBoundaries = new Map([
       ["registers/[type]/[id]/pdf/route.ts", "withPublishedRegister("],
@@ -68,6 +69,10 @@ describe("protected server boundaries", () => {
     )
     expect(brandingGuard).toContain('brandingCapability(type, "read")')
     expect(brandingGuard).toContain('brandingCapability(type, "write")')
+    const rejectionGuard = await readFile(new URL("../rejections-server.ts", import.meta.url), "utf8")
+    expect(rejectionGuard).toContain('"quality.control.read"')
+    expect(rejectionGuard).toContain('requireCapability("quality.control.write", path)')
+    expect(rejectionGuard).toContain('"quality.rejection_register.read"')
   })
 
   it("pins narrow capabilities at representative sensitive boundaries", async () => {

@@ -252,3 +252,4 @@ export {
   type BrandingRegisterRow,
 } from "./branding"
 export { createOrderAcceptanceRepository } from "./order-acceptance"
+export { createRejectionRepository } from "./rejections"

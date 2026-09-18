@@ -10,6 +10,7 @@ import {
 } from "@workspace/ui/components/tabs"
 import { BrandingDocumentTable } from "@/components/branding/document-table"
 import { BrandingDocumentEditor } from "@/components/branding/document-editor"
+import { ControlledDocumentEditor } from "@/components/branding/controlled-document-editor"
 import {
   PageHeader,
   ActionToolbar,
@@ -51,9 +52,11 @@ export default async function BrandingRegisterPage({
         title={brandingTypeLabels[type]}
         icon={Palette}
         description={
-          type === "notice" || type === "work-instruction"
-            ? `Create and issue branded ${brandingTypeLabels[type].toLowerCase()}.`
-            : "Create branded documents and retain every issued revision."
+          type === "controlled-document"
+            ? "Upload prepared PDFs, release documents and retain every revision."
+            : type === "notice" || type === "work-instruction"
+              ? `Create and issue branded ${brandingTypeLabels[type].toLowerCase()}.`
+              : "Create branded documents and retain every issued revision."
         }
       />
       <MetricSummary
@@ -97,7 +100,11 @@ export default async function BrandingRegisterPage({
         </TabsList>
         {canWrite ? (
           <TabsContent value="entry">
-            <BrandingDocumentEditor type={type} />
+            {type === "controlled-document" ? (
+              <ControlledDocumentEditor />
+            ) : (
+              <BrandingDocumentEditor type={type} />
+            )}
           </TabsContent>
         ) : null}
         <TabsContent value="records" className="grid min-w-0 gap-4">

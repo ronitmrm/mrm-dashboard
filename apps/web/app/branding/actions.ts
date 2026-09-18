@@ -10,6 +10,52 @@ function message(error: unknown) {
     ? error.message
     : "The document could not be saved. Please try again."
 }
+export async function saveControlledDocument(form: FormData) {
+  try {
+    const id = await withBranding(
+      "controlled-document",
+      "write",
+      async ({ repository, ...context }) => {
+        const file = form.get("pdf")
+        let uploadedPdf: Uint8Array | undefined
+        if (file instanceof File && file.size) {
+          if (file.size > 5242880)
+            throw new Error("Upload a PDF no larger than 5 MB.")
+          uploadedPdf = new Uint8Array(await file.arrayBuffer())
+          const { PDFDocument } = await import("pdf-lib")
+          try {
+            const pdf = await PDFDocument.load(uploadedPdf)
+            if (!pdf.getPageCount()) throw new Error("Empty PDF")
+          } catch {
+            throw new Error("Upload a valid, unencrypted PDF.")
+          }
+        }
+        return repository.save({
+          ...context,
+          type: "controlled-document",
+          documentId: String(form.get("documentId") || "") || undefined,
+          version: Number(form.get("version")),
+          uploadedPdf,
+          content: parseBrandingContent(
+            {
+              title: form.get("title"),
+              department: form.get("department"),
+              effectiveDate: form.get("effectiveDate"),
+              changeReason: form.get("changeReason"),
+              inputs: { "Document number": form.get("number") },
+            },
+            "controlled-document"
+          ),
+        })
+      }
+    )
+    revalidatePath("/branding/controlled-document")
+    revalidatePath(`/branding/controlled-document/${id}`)
+    return { id }
+  } catch (error) {
+    return { error: message(error) }
+  }
+}
 export async function saveBrandingDraft(input: {
   type: string
   documentId?: string
@@ -71,6 +117,7 @@ export async function issueBrandingDocument(input: {
     )
     revalidatePath(`/branding/${type}`)
     revalidatePath(`/branding/${type}/${input.documentId}`)
+    revalidatePath(`/registers/${type}`)
     return { success: true }
   } catch (error) {
     return { error: message(error) }

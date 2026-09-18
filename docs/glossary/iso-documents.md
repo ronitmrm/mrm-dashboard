@@ -1,6 +1,9 @@
 # ISO Document
 
-ISO Document groups registers. The document number appears on the right inside
+ISO Document groups registers, including the Controlled Document Register
+(latest released uploaded PDFs; lifecycle in `branding.md`) and Rejection
+Register (individual rejection events; lifecycle in `rejections.md`).
+The document number appears on the right inside
 the page header, labelled "Document No.", never in sidebar labels. The initial
 Measuring Instrument Register number
 is `MRMPL/ISO/REG/001` (defined in `apps/web/lib/iso-documents.ts`).

@@ -26,6 +26,7 @@
     "vitest": "4.1.10"
   },
   "exports": {
+    "./rejection-domain": "./src/rejection-domain.ts",
     "./branding-domain": "./src/branding-domain.ts",
     "./quality-parameter-code": "./src/quality-parameter-code.ts",
     ".": "./src/index.ts",

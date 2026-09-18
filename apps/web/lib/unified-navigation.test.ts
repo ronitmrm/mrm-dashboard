@@ -34,10 +34,11 @@ import {
 
 describe("unified navigation", () => {
   it("groups published registers under ISO Document", () => {
-    expect(isoDocumentNavigation.slice(1, 4)).toEqual(publishedRegisterNavigation)
+    expect(isoDocumentNavigation.filter((item) => item.href.startsWith("/registers/"))).toEqual(publishedRegisterNavigation)
     expect(
       publishedRegisterNavigation.map(({ href, label }) => ({ href, label }))
     ).toEqual([
+      { href: "/registers/controlled-document", label: "Controlled Document Register" },
       { href: "/registers/sop", label: "SOP Register" },
       {
         href: "/registers/work-instruction",
@@ -84,7 +85,7 @@ describe("unified navigation", () => {
     )
     const nativeLinks = source.match(/<a href=\{item\.href\}>/g) ?? []
 
-    expect(nativeLinks).toHaveLength(7)
+    expect(nativeLinks).toHaveLength(8)
     expect(source).toContain(
       "<a href={productionNavigationHref(item.id, floor.code)}>"
     )

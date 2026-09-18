@@ -37,7 +37,7 @@ export function BrandingDocumentTable({
             "Number",
             "Name",
             "Department",
-            "Languages",
+            ...(type === "controlled-document" ? [] : ["Languages"]),
             ...(type === "notice" || type === "work-instruction"
               ? []
               : ["Revision"]),
@@ -64,14 +64,16 @@ export function BrandingDocumentTable({
                 </Link>
               </TableCell>
               <TableCell>{row.department}</TableCell>
-              <TableCell>
-                {row.languages
-                  .map(
-                    (language) =>
-                      brandingLanguageLabels[language as BrandingLanguage]
-                  )
-                  .join(", ")}
-              </TableCell>
+              {type !== "controlled-document" ? (
+                <TableCell>
+                  {row.languages
+                    .map(
+                      (language) =>
+                        brandingLanguageLabels[language as BrandingLanguage]
+                    )
+                    .join(", ")}
+                </TableCell>
+              ) : null}
               {type !== "notice" && type !== "work-instruction" ? (
                 <TableCell>{revisionLabel(row.revision)}</TableCell>
               ) : null}
@@ -101,7 +103,13 @@ export function BrandingDocumentTable({
         ) : (
           <TableRow>
             <TableCell
-              colSpan={type === "notice" || type === "work-instruction" ? 8 : 9}
+              colSpan={
+                type === "notice" ||
+                type === "work-instruction" ||
+                type === "controlled-document"
+                  ? 8
+                  : 9
+              }
             >
               <StandardState
                 variant="empty"

@@ -1,5 +1,19 @@
 # Branding implementation
 
+## Controlled PDF uploads (2026-09-18)
+
+- `controlled-document` reuses `branding.documents/revisions`, document locks,
+  optimistic draft versions, immutable issues and latest-published queries.
+- Migration0155 adds bounded draft `uploaded_pdf` bytes. Release moves them into
+  the existing immutable `pdf` field, clears the draft upload and never invokes
+  the PDF generator. A new revision deliberately starts without an upload.
+- `saveControlledDocument` validates an unencrypted, nonempty PDF with pdf-lib;
+  maximum5MB. Stored bytes are retained exactly. Uploaded document numbers are
+  supplied by the author, locked after release, checked case-insensitively under
+  an advisory lock. Original template document numbering remains unchanged.
+- Authoring uses `branding.controlled-document.read/write`. Published register
+  and current PDF use the same authenticated-reader contract as other registers.
+
 ## Shared SOP/Policy book (v8, 2026-09-16)
 
 - `typography.ts` is the shared Brand Guide B §15.1 source for PDF font roles.

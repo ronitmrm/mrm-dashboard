@@ -50,6 +50,7 @@ type OperationalTableProps = React.ComponentProps<"table"> & {
   filterMode?: "dom" | "external"
   filterStorageKey?: string
   onFilteredRowCountChange?: (visible: number, total: number) => void
+  onFilteredRowIdsChange?: (ids: string[]) => void
   state?: "ready" | "empty" | "loading" | "error"
   stateAction?: React.ReactNode
   stateDescription?: React.ReactNode
@@ -192,6 +193,7 @@ function OperationalTable({
   filterMode = "dom",
   filterStorageKey,
   onFilteredRowCountChange,
+  onFilteredRowIdsChange,
   state = "ready",
   stateAction,
   stateDescription,
@@ -375,6 +377,7 @@ function OperationalTable({
       }
     }
     onFilteredRowCountChange?.(matchingRows.size, snapshot.rows.length)
+    onFilteredRowIdsChange?.([...matchingRows].flatMap((row) => row.dataset.rowId ? [row.dataset.rowId] : []))
   }, [
     excelFilters,
     filterMode,
@@ -383,6 +386,7 @@ function OperationalTable({
     filters,
     filteredSelectionCheckboxName,
     onFilteredRowCountChange,
+    onFilteredRowIdsChange,
     sort,
     syncFilteredSelectionState,
   ])

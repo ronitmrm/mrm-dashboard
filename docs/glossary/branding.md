@@ -1,6 +1,26 @@
 # Document Templates
 
-Document Templates contains SOPs, Notices, Policies, and Work Instructions. Safety signage is outside scope.
+Document Templates contains SOPs, Notices, Policies, Work Instructions and Controlled Documents. Safety signage is outside scope.
+
+## Uploaded controlled documents
+
+Controlled Documents accepts externally prepared PDFs (up to 5 MB); it does not
+generate or edit their contents. Title, document number, department and effective
+date accompany each upload. The supplied document number is unique within the
+organization and remains unchanged after first release. Authors must ensure the
+PDF's printed number, revision and date agree with the saved metadata.
+
+An initial draft releases as R00. Create Revision retains the document identity,
+increments R01/R02/etc., and requires a replacement PDF and a change reason.
+Only one editable draft exists at a time. Release freezes metadata and exact PDF
+bytes; released revisions cannot be overwritten or deleted. A draft never
+replaces the current release. Release takes effect immediately; the effective
+date is recorded metadata, not scheduled publication. No approval step is added.
+
+ISO Document → Controlled Document Register lists the latest released revision
+of every controlled document. Authoring and all revision history remain under
+Document Templates → Controlled Documents. The register uses the existing
+signed-in published-document access; authoring has separate read/write grants.
 
 ## Approved print typography (2026-09-15)
 

@@ -22,6 +22,7 @@ export type BrandingRevision = {
   updatedAt: string
   issuedAt: string | null
   templateVersion: string
+  hasUpload: boolean
 }
 export type BrandingDocument = {
   id: string
@@ -40,7 +41,7 @@ export type BrandingRegisterRow = BrandingDocument & {
   updatedAt: string
 }
 const revisionSelect = `id, document_id AS "documentId", revision, content, state, version,
-  author_name AS "authorName", updated_at::text AS "updatedAt", issued_at::text AS "issuedAt", template_version AS "templateVersion"`
+  author_name AS "authorName", updated_at::text AS "updatedAt", issued_at::text AS "issuedAt", template_version AS "templateVersion", uploaded_pdf IS NOT NULL AS "hasUpload"`
 export function createBrandingRepository(options: RepositoryPoolOptions) {
   const { pool, close } = repositoryPool(options)
   return {
@@ -73,7 +74,7 @@ export function createBrandingRepository(options: RepositoryPoolOptions) {
         )
       ).rows[0]!
       const result = await pool.query<BrandingRegisterRow>(
-        `SELECT d.id, d.type, d.number,
+        `SELECT d.id, d.type, COALESCE(d.number, CASE WHEN d.type = 'controlled-document' THEN r.content->'inputs'->>'Document number' END) AS number,
         r.content->>'title' AS title, r.content->>'department' AS department,
         r.content->'languages' AS languages, r.content->>'effectiveDate' AS "effectiveDate",
         r.revision, r.state, r.author_name AS "authorName", r.updated_at::text AS "updatedAt",
@@ -134,10 +135,19 @@ export function createBrandingRepository(options: RepositoryPoolOptions) {
       documentId?: string
       version?: number
       content: BrandingContent
+      uploadedPdf?: Uint8Array
       userId: string
       userName: string
     }) {
       const content = parseBrandingContent(input.content, input.type)
+      if (
+        input.uploadedPdf &&
+        (input.type !== "controlled-document" ||
+          !input.uploadedPdf.byteLength ||
+          input.uploadedPdf.byteLength > 5242880 ||
+          Buffer.from(input.uploadedPdf).subarray(0, 5).toString() !== "%PDF-")
+      )
+        throw new Error("Upload a PDF no larger than 5 MB.")
       return withTransaction(pool, async (client) => {
         const documentId =
           input.documentId ??
@@ -148,12 +158,18 @@ export function createBrandingRepository(options: RepositoryPoolOptions) {
             )
           ).rows[0]!.id
         const document = (
-          await client.query(
-            "SELECT id FROM branding.documents WHERE id = $1 AND organization_id = $2 AND type = $3 FOR UPDATE",
+          await client.query<{ id: string; number: string | null }>(
+            "SELECT id, number FROM branding.documents WHERE id = $1 AND organization_id = $2 AND type = $3 FOR UPDATE",
             [documentId, input.organizationId, input.type]
           )
         ).rows[0]
         if (!document) throw new Error("Document not found.")
+        if (
+          input.type === "controlled-document" &&
+          document.number &&
+          content.inputs["Document number"] !== document.number
+        )
+          throw new Error("A released document's number cannot change.")
         if (
           (input.type === "notice" || input.type === "work-instruction") &&
           input.documentId
@@ -182,6 +198,12 @@ export function createBrandingRepository(options: RepositoryPoolOptions) {
           await client.query(
             "INSERT INTO branding.revisions(document_id, revision, content, author_user_id, author_name) VALUES ($1, 0, $2, $3, $4)",
             [documentId, content, input.userId, input.userName]
+          )
+        }
+        if (input.uploadedPdf) {
+          await client.query(
+            "UPDATE branding.revisions SET uploaded_pdf = $2 WHERE document_id = $1 AND state = 'draft'",
+            [documentId, Buffer.from(input.uploadedPdf)]
           )
         }
         return documentId
@@ -272,6 +294,23 @@ export function createBrandingRepository(options: RepositoryPoolOptions) {
         const content = parseBrandingContent(revision.content, input.type)
         validateBrandingIssue(content, revision.revision, input.type)
         let number = document.number
+        if (!number && input.type === "controlled-document") {
+          number = content.inputs["Document number"]!
+          await client.query(
+            "SELECT pg_advisory_xact_lock(hashtext($1), hashtext(lower($2)))",
+            [input.organizationId, number]
+          )
+          const existing = await client.query(
+            "SELECT 1 FROM branding.documents WHERE organization_id = $1 AND lower(number) = lower($2) AND id <> $3",
+            [input.organizationId, number, input.documentId]
+          )
+          if (existing.rowCount)
+            throw new Error("Document number already exists.")
+          await client.query(
+            "UPDATE branding.documents SET number = $1 WHERE id = $2",
+            [number, input.documentId]
+          )
+        }
         if (!number) {
           const counter = (
             await client.query<{ value: string }>(
@@ -287,33 +326,58 @@ export function createBrandingRepository(options: RepositoryPoolOptions) {
           )
         }
         const issuedAt = new Date().toISOString()
-        const bytes = await render({
-          content,
-          number,
-          revision: revision.revision,
-          issuedAt,
-          authorName: input.userName,
-          type: input.type,
-        })
+        const bytes =
+          input.type === "controlled-document"
+            ? (
+                await client.query<{ uploaded_pdf: Buffer | null }>(
+                  "SELECT uploaded_pdf FROM branding.revisions WHERE id = $1",
+                  [revision.id]
+                )
+              ).rows[0]?.uploaded_pdf
+            : await render({
+                content,
+                number,
+                revision: revision.revision,
+                issuedAt,
+                authorName: input.userName,
+                type: input.type,
+              })
+        if (!bytes)
+          throw new Error("Upload the PDF for this revision before release.")
         if (!bytes.byteLength || bytes.byteLength > 5242880)
           throw new Error("PDF exceeds the 5 MB document limit.")
         await client.query(
-          "UPDATE branding.revisions SET state = 'issued', template_version = $6, pdf = $1, issued_at = $2, updated_at = $2, author_user_id = $3, author_name = $4, version = version + 1 WHERE id = $5",
+          "UPDATE branding.revisions SET state = 'issued', template_version = $6, pdf = $1, uploaded_pdf = NULL, issued_at = $2, updated_at = $2, author_user_id = $3, author_name = $4, version = version + 1 WHERE id = $5",
           [
             Buffer.from(bytes),
             issuedAt,
             input.userId,
             input.userName,
             revision.id,
-            input.type === "notice"
-              ? "mrm-notice-v12"
-              : input.type === "work-instruction"
-                ? "mrm-wi-v10"
-                : "mrm-book-v8",
+            input.type === "controlled-document"
+              ? "uploaded-pdf-v1"
+              : input.type === "notice"
+                ? "mrm-notice-v12"
+                : input.type === "work-instruction"
+                  ? "mrm-wi-v10"
+                  : "mrm-book-v8",
           ]
         )
         return revision.id
       })
+    },
+    async uploadedDraftPdf(organizationId: string, documentId: string) {
+      return (
+        (
+          await pool.query<{ pdf: Buffer }>(
+            `SELECT r.uploaded_pdf AS pdf FROM branding.revisions r
+         JOIN branding.documents d ON d.id = r.document_id
+         WHERE d.organization_id = $1 AND d.id = $2 AND d.type = 'controlled-document'
+           AND r.state = 'draft' AND r.uploaded_pdf IS NOT NULL`,
+            [organizationId, documentId]
+          )
+        ).rows[0] ?? null
+      )
     },
     async publishedPdf(
       organizationId: string,

@@ -10,6 +10,27 @@ export async function GET(
   const type = brandingType(rawType)
   if (!/^[0-9a-f-]{36}$/i.test(id))
     return new Response("Not found", { status: 404 })
+  if (type === "controlled-document") {
+    const uploaded = await withBranding(
+      type,
+      "read",
+      ({ repository, organizationId }) =>
+        repository.uploadedDraftPdf(organizationId, id)
+    )
+    if (!uploaded)
+      return new Response("Upload a draft PDF first", { status: 404 })
+    return new Response(new Uint8Array(uploaded.pdf), {
+      headers: {
+        "Content-Type": "application/pdf",
+        "Cache-Control": "private, no-store",
+        "Content-Disposition": attachmentContentDisposition(
+          request.url,
+          "Draft.pdf"
+        ),
+        "X-Content-Type-Options": "nosniff",
+      },
+    })
+  }
   const document = await withBranding(
     type,
     "read",

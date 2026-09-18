@@ -65,7 +65,7 @@ export default async function PublishedRegisterPage({
               "Number",
               "Name",
               "Department",
-              "Languages",
+              ...(type === "controlled-document" ? [] : ["Languages"]),
               ...(hasRevision ? ["Current revision"] : []),
               "Status",
               "Effective date",
@@ -84,14 +84,16 @@ export default async function PublishedRegisterPage({
                 <TableCell>{row.number}</TableCell>
                 <TableCell className="font-medium">{row.title}</TableCell>
                 <TableCell>{row.department}</TableCell>
-                <TableCell>
-                  {row.languages
-                    .map(
-                      (language) =>
-                        brandingLanguageLabels[language as BrandingLanguage]
-                    )
-                    .join(", ")}
-                </TableCell>
+                {type !== "controlled-document" ? (
+                  <TableCell>
+                    {row.languages
+                      .map(
+                        (language) =>
+                          brandingLanguageLabels[language as BrandingLanguage]
+                      )
+                      .join(", ")}
+                  </TableCell>
+                ) : null}
                 {hasRevision ? (
                   <TableCell>{revisionLabel(row.revision)}</TableCell>
                 ) : null}
@@ -115,7 +117,9 @@ export default async function PublishedRegisterPage({
             ))
           ) : (
             <TableRow>
-              <TableCell colSpan={hasRevision ? 10 : 9}>
+              <TableCell
+                colSpan={hasRevision && type !== "controlled-document" ? 10 : 9}
+              >
                 <StandardState
                   variant="empty"
                   title="No published documents"
