@@ -314,7 +314,12 @@ async function plannerInterruptionState(
             AND downtime.ended_at IS NULL
             AND downtime.reversed_at IS NULL
         ) END AS has_open_downtime,
-        COALESCE(closed_sessions.finished_quantity, 0)::text AS finished_quantity,
+        (COALESCE(closed_sessions.finished_quantity, 0) + COALESCE((
+          SELECT balance.quantity_good FROM manufacturing.production_opening_balances balance
+          WHERE balance.work_order_id = reference.work_order_id
+            AND balance.operation_setup_id = reference.operation_setup_id
+            AND balance.machine_id = reference.machine_id
+        ), 0))::text AS finished_quantity,
         COALESCE(closed_sessions.session_references, ARRAY[]::text[])
           AS session_references,
         closed_sessions.settled_at::text AS settled_at

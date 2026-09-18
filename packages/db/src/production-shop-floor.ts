@@ -2336,7 +2336,20 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         plannedProductionStartDate: payloadText(row, "plannedProductionStartDate", "productionStartDate"),
         setupNumber: payloadText(row, "setupNo", "setupNumber"),
       }))
+      const openingResult = await pool.query<{
+        setupNumber: string; goodPieces: string; rejectedPieces: string; status: string; cutoffAt: Date
+      }>(`SELECT setup.setup_number::text AS "setupNumber", balance.quantity_good AS "goodPieces",
+          balance.quantity_rejected AS "rejectedPieces", balance.status, batch.cutoff_at AS "cutoffAt"
+        FROM manufacturing.production_opening_balances balance
+        JOIN manufacturing.production_opening_batches batch ON batch.id = balance.batch_id
+        JOIN manufacturing.operation_setups setup ON setup.id = balance.operation_setup_id
+        WHERE balance.organization_id = $1 AND balance.work_order_id = $2 AND balance.route_option_id = $3`,
+      [input.organizationId, jobCard.id, selectedRoute?.id ?? null])
       const analyticsSummary = buildJobCardAnalytics({
+        openingBalances: openingResult.rows.map((row) => ({
+          setupNumber: row.setupNumber, goodPieces: Number(row.goodPieces), rejectedPieces: Number(row.rejectedPieces),
+          totalPieces: Number(row.goodPieces) + Number(row.rejectedPieces),
+        })),
         downtimeEvents: eventsResult.rows
           .filter((row) => ["downtime", "downtime_started"].includes(String(row.eventType)))
           .map((row) => ({
@@ -2439,6 +2452,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
               : "planner_required",
         },
         legacyProductionEntries: legacyEntriesResult.rows,
+        openingBalances: openingResult.rows,
         planRows,
         plannerMovements,
         productionFloorCode: floorCode,

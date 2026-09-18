@@ -9,6 +9,7 @@ Use this index before changing domain behavior or implementation conventions.
 - [Website Catalogue](./glossary/website-catalogue.md): included fields and Product Portfolio ownership.
 - [Personal dashboard analytics](./glossary/dashboard-analytics.md): permission-aware metrics, charts, and calculated KPIs.
 - [Golden UI patterns](./codebase/ui-golden-patterns.md): mandatory dashboard composition and visual semantics.
+- [CNC startup migration](./codebase/cnc-startup-migration.md): opening workbook validation, preview and one-time import.
 - [Order Acceptance Planning](./glossary/order-acceptance-planning.md): proposed orders, RM assumptions, capacity review and proposal approval.
 - [Access Administration](./codebase/access-administration.md): granular permission catalogue, coverage, enforcement, and exceptions.
 - [ADRs](./adr/): durable architectural decisions.

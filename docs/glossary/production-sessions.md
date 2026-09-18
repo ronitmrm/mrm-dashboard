@@ -106,6 +106,30 @@ Example: `C501-20260815-03` is the third session for machine C501 on Production 
 
 ## Measurement and output
 
+### CNC startup opening balances
+
+CNC startup uses one agreed cutoff timestamp in IST. Each already-started Job
+Card, part, route and setup has one opening balance: good pieces, rejected
+pieces, and Running or Completed state. Running setups also name their machine.
+Completed is lifecycle evidence, not an inferred quantity; a completed setup may
+still show a shortfall against the order. Unstarted setups have no opening row.
+
+Pending good pieces per setup = max(order pieces − opening good pieces −
+post-cutoff good pieces, 0). Rejections never reduce this requirement. Opening
+pieces count toward cumulative Job Card progress and available WIP, but never
+toward daily output, session counts, productivity or observed production rates.
+The cutoff is not an invented historical start or completion date.
+
+The startup import is atomic and immutable. An identical replay is a no-op;
+a changed batch is rejected for reconciliation. Existing output or workflow for
+the imported setups must be reconciled before import. Subsequent production must
+start at or after cutoff; undated daily entries on the cutoff date are rejected
+because their overlap cannot be determined. A running baseline establishes current
+machine ownership without creating historical sessions, operators, checklists or
+quality approvals. Normal post-cutoff sessions still require an eligible operator
+and valid measurement settings. RM receipt readiness rules remain unchanged;
+cumulative receipts and unused kilograms are reconciled separately.
+
 Cycle Time Master revisions apply to the selected unit, item, route and setup.
 Open production sessions adopt the revised cycle time, and planning refreshes
 remaining-duration and completion estimates from the current master. The open
