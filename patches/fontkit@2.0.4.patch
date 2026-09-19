@@ -1,0 +1,65 @@
+diff --git a/dist/browser-module.mjs b/dist/browser-module.mjs
+index 4d0a389de8a3db767f1fef99ed186790431aa844..60d0e20a50802395e1ed846decb22eb41e3687b3 100644
+--- a/dist/browser-module.mjs
++++ b/dist/browser-module.mjs
+@@ -12115,7 +12115,7 @@ class $807e58506be70005$export$2e2bcd8739ae039 {
+         };
+         let size = $807e58506be70005$var$Glyf.size(glyf);
+         let tail = 4 - size % 4;
+-        let stream = new $6uUbQ$EncodeStream(size + tail);
++        let stream = new $6uUbQ$EncodeStream(new Uint8Array(size + tail));
+         $807e58506be70005$var$Glyf.encode(stream, glyf);
+         // Align to 4-byte length
+         if (tail !== 0) stream.fill(0, tail);
+diff --git a/dist/browser.cjs b/dist/browser.cjs
+index a5fa901b5608575f84390e3ef0474a7789e8269a..05f936b941654f1d414a0dc39347db4f7e89b2cc 100644
+--- a/dist/browser.cjs
++++ b/dist/browser.cjs
+@@ -12132,7 +12132,7 @@ class $2784eedf0b35a048$export$2e2bcd8739ae039 {
+         };
+         let size = $2784eedf0b35a048$var$Glyf.size(glyf);
+         let tail = 4 - size % 4;
+-        let stream = new $gfJaN$restructure.EncodeStream(size + tail);
++        let stream = new $gfJaN$restructure.EncodeStream(new Uint8Array(size + tail));
+         $2784eedf0b35a048$var$Glyf.encode(stream, glyf);
+         // Align to 4-byte length
+         if (tail !== 0) stream.fill(0, tail);
+diff --git a/dist/main.cjs b/dist/main.cjs
+index 851b2d2bbcae17e91f9f2468f61112ee2dc8fbd8..6e7df526bf75fea93d1381acb65136f487dbb8d7 100644
+--- a/dist/main.cjs
++++ b/dist/main.cjs
+@@ -12153,7 +12153,7 @@ class $2784eedf0b35a048$export$2e2bcd8739ae039 {
+         };
+         let size = $2784eedf0b35a048$var$Glyf.size(glyf);
+         let tail = 4 - size % 4;
+-        let stream = new $elh9A$restructure.EncodeStream(size + tail);
++        let stream = new $elh9A$restructure.EncodeStream(new Uint8Array(size + tail));
+         $2784eedf0b35a048$var$Glyf.encode(stream, glyf);
+         // Align to 4-byte length
+         if (tail !== 0) stream.fill(0, tail);
+diff --git a/dist/module.mjs b/dist/module.mjs
+index fde88fc3f23e6fff533da842186fee8402cbcde1..1ee95835af46796a720380cd9fd67610e133ae61 100644
+--- a/dist/module.mjs
++++ b/dist/module.mjs
+@@ -12136,7 +12136,7 @@ class $807e58506be70005$export$2e2bcd8739ae039 {
+         };
+         let size = $807e58506be70005$var$Glyf.size(glyf);
+         let tail = 4 - size % 4;
+-        let stream = new $52ZIf$EncodeStream(size + tail);
++        let stream = new $52ZIf$EncodeStream(new Uint8Array(size + tail));
+         $807e58506be70005$var$Glyf.encode(stream, glyf);
+         // Align to 4-byte length
+         if (tail !== 0) stream.fill(0, tail);
+diff --git a/src/glyph/TTFGlyphEncoder.js b/src/glyph/TTFGlyphEncoder.js
+index 6ab8b73c6532146442ea1564aa56dca417b369b9..8edc5b0e08717410d6547db4f4ef10406aa800b9 100644
+--- a/src/glyph/TTFGlyphEncoder.js
++++ b/src/glyph/TTFGlyphEncoder.js
+@@ -124,7 +124,7 @@ export default class TTFGlyphEncoder {
+     let size = Glyf.size(glyf);
+     let tail = 4 - (size % 4);
+     
+-    let stream = new r.EncodeStream(size + tail);
++    let stream = new r.EncodeStream(new Uint8Array(size + tail));
+     Glyf.encode(stream, glyf);
+     
+     // Align to 4-byte length
