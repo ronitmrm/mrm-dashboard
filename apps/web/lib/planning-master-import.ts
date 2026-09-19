@@ -44,18 +44,11 @@ export function workOrderNumberForPayload(row: ImportRow) {
 function workOrderImportIssues(rows: ImportRow[]) {
   const issues: string[] = []
   const firstRowByJobCard = new Map<string, number>()
-  const firstRowByLine = new Map<
-    string,
-    { csvRow: number; fgPoNumber: string; partCode: string }
-  >()
   let duplicateJobCard: string | null = null
-  let duplicateLine: string | null = null
 
   for (const [index, row] of rows.entries()) {
     const csvRow = index + 2
     const jobCard = text(row.jcNo)
-    const fgPoNumber = text(row.fgPoNo)
-    const partCode = text(row.partCode)
 
     if (jobCard && !duplicateJobCard) {
       const key = jobCard.toLowerCase()
@@ -66,20 +59,9 @@ function workOrderImportIssues(rows: ImportRow[]) {
         firstRowByJobCard.set(key, csvRow)
       }
     }
-
-    if (fgPoNumber && partCode && !duplicateLine) {
-      const key = `${fgPoNumber}\u0000${partCode}`.toLowerCase()
-      const firstLine = firstRowByLine.get(key)
-      if (firstLine) {
-        duplicateLine = `CSV rows ${firstLine.csvRow} and ${csvRow} repeat FG PO ${firstLine.fgPoNumber} with Part Code ${firstLine.partCode}. That combination may appear only once in a Work Order.`
-      } else {
-        firstRowByLine.set(key, { csvRow, fgPoNumber, partCode })
-      }
-    }
   }
 
   if (duplicateJobCard) issues.push(duplicateJobCard)
-  if (duplicateLine) issues.push(duplicateLine)
   return issues
 }
 

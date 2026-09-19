@@ -53,6 +53,9 @@ approval/checklist/operator/session evidence is not fabricated. Completed setup
 states do not create historical completion events with invented dates.
 
 Implementation: `packages/db/src/production-opening-balances.ts`,
+`packages/db/migrations/0158_work_order_job_card_lines.sql` permits separate
+Job Cards for the same FG PO/part; retain each line's quantity independently.
+Opening schema:
 `packages/db/migrations/0154_cnc_opening_balances.sql`,
 `packages/db/migrations/0157_cnc_opening_machine_balances.sql`,
 `apps/web/lib/cnc-opening-workbook.ts`. Verification uses isolated local PostgreSQL
