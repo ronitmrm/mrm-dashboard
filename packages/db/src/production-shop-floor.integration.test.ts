@@ -1,3 +1,4 @@
+import { createStoreRepository } from "./store"
 import { randomUUID } from "node:crypto"
 
 import { Pool } from "pg"
@@ -1015,4 +1016,39 @@ describe("production and shop-floor workflows", () => {
       organizationId,
     })
   })
+  test("refuses shared tooling already held by another setup until it completes", async () => {
+    const machines = [`TOOL-MC-A-${suffix}`, `TOOL-MC-B-${suffix}`]
+    for (const machineNumber of machines) await planning.upsertMachine({ organizationId, machineNumber })
+    const jobs = [`TOOL-A-${suffix}`, `TOOL-B-${suffix}`]
+    for (const jobCardNumber of jobs) {
+      await planning.upsertWorkOrder({ organizationId, itemUid, jobCardNumber, workOrderNumber: jobCardNumber, orderedQuantity: 100 })
+      await planning.selectRoute({ organizationId, jobCardNumber, routeCode: "1" })
+    }
+    const store = createStoreRepository({ connectionString })
+    const category = await store.createAssetCategory({ organizationId, name: `Tool ${suffix}` })
+    const subcategory = await store.createAssetSubcategory({ organizationId, categoryId: category.id, name: "Fixture" })
+    const name = await store.createAssetName({ organizationId, subcategoryId: subcategory.id, name: "F1" })
+    const item = await store.createItemType({ organizationId, assetType: "NON_CONSUMABLE", identificationName: "F1", unit: "Nos",
+      assetCategoryId: category.id, assetSubcategoryId: subcategory.id, assetNameId: name.id })
+    await store.close()
+    const code = item.typeCode
+    await pool.query(`INSERT INTO store.assets (organization_id,item_type_id,asset_code,identification_name,status,current_holder_type,current_holder_reference,current_holder_name)
+      SELECT $1,$2,$3||n::text,'Tool unit',CASE WHEN n=1 THEN 'ASSIGNED' ELSE 'AVAILABLE' END,
+        CASE WHEN n=1 THEN 'DEPARTMENT' ELSE 'STORE' END,'PPAC Conventional-01','PPAC Conventional-01'
+      FROM generate_series(1,5) n`, [organizationId,item.id,code])
+    await pool.query(`INSERT INTO manufacturing.operation_tooling (organization_id,operation_setup_id,tool_code,source_system,source_table,source_id)
+      SELECT $1,setup.id,$2,'test','tooling',setup.id::text FROM manufacturing.operation_setups setup
+      JOIN manufacturing.route_options route ON route.id=setup.route_option_id
+      JOIN catalog.items item ON item.id=route.item_id
+      WHERE item.uid=$3 AND route.route_code='1' AND setup.setup_number=1`, [organizationId,code,itemUid])
+    const start = (jobCardNumber: string, machineNumber: string) => repository.recordShopFloorStage({
+      jobCardNumber, machineNumber, operationSetupCode: "1", organizationId, stage: "presetting", payload: {},
+    })
+    await start(jobs[0]!, machines[0]!)
+    await expect(start(jobs[1]!, machines[1]!)).rejects.toThrow("1 allocated to this department, 1 occupied")
+    await repository.recordSetupCompletion({ jobCardNumber: jobs[0]!, machineNumber: machines[0]!,
+      operationSetupCode: "1", organizationId, completedBy: "Test" })
+    await expect(start(jobs[1]!, machines[1]!)).resolves.toBeDefined()
+  })
+
 })

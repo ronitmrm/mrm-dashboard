@@ -1,3 +1,4 @@
+import { assertToolingAvailable } from "./tooling-availability"
 import { randomUUID } from "node:crypto"
 import { assertSettingChecklistComplete } from "./setup-checklist-validation"
 
@@ -731,6 +732,8 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           floorCode
         )
         if (!machineId) throw new Error("Production machine is required.")
+        await assertToolingAvailable(client, { organizationId: input.organizationId,
+          setupId, workOrderId: workOrder.work_order_id, machineId, floorCode })
         const operatorId = await requiredActiveEmployeeIdFor(
           client,
           input.organizationId,
@@ -2923,6 +2926,11 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           )
           if (!checklist.rows[0]) throw new Error("Complete the required Setting checklist before Setting Done.")
           await assertSettingChecklistComplete(client, checklist.rows[0].template_id, checklist.rows[0].id)
+        }
+        if (["presetting", "setting", "quality_approval", "operator_started"].includes(stage)) {
+          await assertToolingAvailable(client, { organizationId: input.organizationId,
+            setupId, workOrderId: workOrder.work_order_id, machineId,
+            floorCode: normalizeProductionFloorCode(input.productionFloorCode) })
         }
         const active = stageIsActive(stage)
         if (!active) {
