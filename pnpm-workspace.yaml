@@ -16,3 +16,6 @@ overrides:
   "nanoid@<3.3.18": "3.3.18"
   "postcss@<=8.5.22": "8.5.23"
   "sharp@<0.35.0": "0.35.3"
+
+patchedDependencies:
+  fontkit@2.0.4: patches/fontkit@2.0.4.patch
