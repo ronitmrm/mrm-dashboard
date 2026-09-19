@@ -34,11 +34,14 @@ export type BrandingTextRun = {
   font: FontAlias
   text: string
   width: number
+  italic?: boolean
+  underline?: boolean
 }
 
 export type BrandingTextLine = {
   runs: BrandingTextRun[]
   width: number
+  leftInsetPt: number
   ascentPt: number
   descentPt: number
 }
@@ -51,6 +54,7 @@ export type BrandingTextLayout = {
   inkBottomPt: number
   height: number
   sizePt: number
+  trackingPt: number
 }
 
 export type BrandingTextStyle = {
@@ -58,7 +62,18 @@ export type BrandingTextStyle = {
   weight: BrandFontWeight
   sizePt: number
   lineHeight: number
+  trackingEm?: number
 }
+
+export type BrandingTextSpan = {
+  text: string
+  bold?: boolean
+  italic?: boolean
+  underline?: boolean
+}
+
+const obliqueDegrees = 14
+const obliqueSlope = Math.tan((obliqueDegrees * Math.PI) / 180)
 
 const outfitWeights = [400, 500, 600, 700, 800] as const
 const gujaratiDigits = /^[\u0ae6-\u0aef]+$/u
@@ -216,6 +231,23 @@ function fontAlias(
   return `HindVadodara-${localWeight}`
 }
 
+function clusterFont(
+  cluster: string,
+  language: BrandingLanguage,
+  weight: BrandFontWeight
+) {
+  const script = /[\p{Script=Gujarati}]/u.test(cluster)
+    ? "gu"
+    : /[\p{Script=Devanagari}]/u.test(cluster)
+      ? "hi"
+      : language
+  return fontAlias(
+    script,
+    weight,
+    script === "gu" && gujaratiDigits.test(cluster)
+  )
+}
+
 function graphemes(text: string, language: BrandingLanguage) {
   return [
     ...new Intl.Segmenter(languageTags[language], {
@@ -231,11 +263,7 @@ function unmeasuredRuns(
 ) {
   const runs: { font: FontAlias; text: string }[] = []
   for (const cluster of graphemes(text, language)) {
-    const font = fontAlias(
-      language,
-      weight,
-      language === "gu" && gujaratiDigits.test(cluster)
-    )
+    const font = clusterFont(cluster, language, weight)
     const previous = runs.at(-1)
     if (previous?.font === font) previous.text += cluster
     else runs.push({ font, text: cluster })
@@ -243,136 +271,143 @@ function unmeasuredRuns(
   return runs
 }
 
-function measureRuns(
-  doc: PDFKit.PDFDocument,
-  text: string,
-  style: BrandingTextStyle
-): BrandingTextRun[] {
-  return measureUnshapedRuns(
-    doc,
-    unmeasuredRuns(text, style.language, style.weight),
-    style
-  )
-}
-
-function measureUnshapedRuns(
-  doc: PDFKit.PDFDocument,
-  runs: { font: FontAlias; text: string }[],
+/** Resolve emphasis only at grapheme boundaries, including marks crossing a cluster. */
+function styledRuns(
+  text: string | BrandingTextSpan[],
   style: BrandingTextStyle
 ) {
-  const merged: { font: FontAlias; text: string }[] = []
-  for (const run of runs) {
-    const previous = merged.at(-1)
-    if (previous?.font === run.font) previous.text += run.text
-    else merged.push({ ...run })
-  }
-  return merged.map((run) => {
-    doc.font(run.font).fontSize(style.sizePt)
-    return { ...run, width: doc.widthOfString(run.text) }
-  })
-}
-
-function emptyLine(): BrandingTextLine {
-  return { runs: [], width: 0, ascentPt: 0, descentPt: 0 }
-}
-
-function appendRuns(
-  doc: PDFKit.PDFDocument,
-  line: BrandingTextLine,
-  runs: BrandingTextRun[],
-  style: BrandingTextStyle
-) {
-  line.runs = measureUnshapedRuns(doc, [...line.runs, ...runs], style)
-  line.width = line.runs.reduce((sum, run) => sum + run.width, 0)
-}
-
-function combinedWidth(
-  doc: PDFKit.PDFDocument,
-  line: BrandingTextLine,
-  runs: BrandingTextRun[],
-  style: BrandingTextStyle
-) {
-  return measureUnshapedRuns(doc, [...line.runs, ...runs], style).reduce(
-    (sum, run) => sum + run.width,
-    0
-  )
-}
-
-function splitOversizeToken(
-  doc: PDFKit.PDFDocument,
-  token: string,
-  style: BrandingTextStyle,
-  maxWidth: number
-) {
-  const pieces: BrandingTextRun[][] = []
-  let current = ""
-  for (const cluster of graphemes(token, style.language)) {
-    const candidate = `${current}${cluster}`
-    const candidateRuns = measureRuns(doc, candidate, style)
-    const candidateWidth = candidateRuns.reduce(
-      (sum, run) => sum + run.width,
-      0
+  const spans = typeof text === "string" ? [{ text }] : text
+  const source = spans.map((span) => span.text).join("")
+  let offset = 0
+  const ends = spans.map((span) => (offset += span.text.length))
+  let position = 0
+  let spanIndex = 0
+  const runs: Omit<BrandingTextRun, "width">[] = []
+  for (const cluster of graphemes(source, style.language)) {
+    while (spanIndex < ends.length - 1 && position >= ends[spanIndex]!)
+      spanIndex++
+    const weight = spans[spanIndex]?.bold ? 700 : style.weight
+    const font = clusterFont(cluster, style.language, weight)
+    const italic = !!spans[spanIndex]?.italic
+    const underline = !!spans[spanIndex]?.underline
+    const previous = runs.at(-1)
+    if (
+      previous?.font === font &&
+      previous.italic === italic &&
+      previous.underline === underline
     )
-    if (current && candidateWidth > maxWidth) {
-      pieces.push(measureRuns(doc, current, style))
-      current = cluster
-    } else {
-      current = candidate
-    }
+      previous.text += cluster
+    else runs.push({ font, text: cluster, italic, underline })
+    position += cluster.length
   }
-  if (current) pieces.push(measureRuns(doc, current, style))
-  return pieces
+  return runs
 }
 
 export function layoutBrandingText(
   doc: PDFKit.PDFDocument,
   fonts: PdfKitBrandFonts,
-  text: string,
+  text: string | BrandingTextSpan[],
   style: BrandingTextStyle,
   maxWidth: number
 ): BrandingTextLayout {
-  if (maxWidth <= 0) throw new Error("Text width must be positive.")
-  const lines: BrandingTextLine[] = []
-  const pushLine = (line: BrandingTextLine) => lines.push(line)
-  const paragraphs = text.split("\n")
-  for (const paragraph of paragraphs) {
-    let line = emptyLine()
-    const tokens = [
-      ...new Intl.Segmenter(languageTags[style.language], {
-        granularity: "word",
-      }).segment(paragraph),
-    ].map(({ segment }) => segment)
-    for (const token of tokens) {
-      const whitespace = /^\s+$/u.test(token)
-      if (whitespace && !line.runs.length) continue
-      const tokenRuns = measureRuns(doc, token, style)
-      const tokenWidth = tokenRuns.reduce((sum, run) => sum + run.width, 0)
-      if (
-        line.runs.length &&
-        combinedWidth(doc, line, tokenRuns, style) > maxWidth
-      ) {
-        pushLine(line)
-        line = emptyLine()
-        if (whitespace) continue
+  if (!(maxWidth > 0) || !Number.isFinite(maxWidth))
+    throw new Error("Text width must be positive.")
+  const trackingPt = (style.trackingEm ?? 0) * style.sizePt
+  const features: PDFKit.Mixins.TextOptions["features"] = trackingPt
+    ? []
+    : undefined
+  const sourceRuns = styledRuns(text, style)
+  const source = sourceRuns.map((run) => run.text).join("")
+  // Shape the exact final runs for each candidate line. Never add independently
+  // measured graphemes and then reshape that sum when drawing.
+  const measure = (start: number, end: number): BrandingTextLine => {
+    let offset = 0
+    const runs: BrandingTextRun[] = []
+    for (const run of sourceRuns) {
+      const from = Math.max(0, start - offset)
+      const to = Math.min(run.text.length, end - offset)
+      if (to > from) {
+        const value = run.text.slice(from, to)
+        doc.font(run.font).fontSize(style.sizePt)
+        const count = trackingPt
+          ? fonts.byAlias.get(run.font)!.font.layout(value, features).glyphs
+              .length
+          : 0
+        const width =
+          doc.widthOfString(value, { features }) +
+          trackingPt * Math.max(0, count - 1)
+        runs.push({ ...run, text: value, width })
       }
-      if (tokenWidth <= maxWidth) {
-        appendRuns(doc, line, tokenRuns, style)
+      offset += run.text.length
+      if (offset >= end) break
+    }
+    let advance = 0
+    let left = 0
+    let right = 0
+    for (const [index, run] of runs.entries()) {
+      const font = fonts.byAlias.get(run.font)!.font
+      const shear = run.italic
+        ? (obliqueSlope * style.sizePt) / font.unitsPerEm
+        : 0
+      left = Math.min(left, advance - Math.abs(font.descent) * shear)
+      right = Math.max(right, advance + run.width + font.ascent * shear)
+      advance += run.width + (index < runs.length - 1 ? trackingPt : 0)
+    }
+    return {
+      runs,
+      width: right - left,
+      leftInsetPt: -left,
+      ascentPt: 0,
+      descentPt: 0,
+    }
+  }
+  const lines: BrandingTextLine[] = []
+  let paragraphOffset = 0
+  for (const paragraph of source.split("\n")) {
+    let lineStart = paragraphOffset
+    let lineEnd = lineStart
+    const trimEnd = (end: number) => {
+      while (end > lineStart && /\s/u.test(source[end - 1]!)) end--
+      return end
+    }
+    const push = () => {
+      lines.push(measure(lineStart, trimEnd(lineEnd)))
+      lineStart = lineEnd
+    }
+    for (const { segment, index } of new Intl.Segmenter(style.language, {
+      granularity: "word",
+    }).segment(paragraph)) {
+      const tokenStart = paragraphOffset + index
+      const tokenEnd = tokenStart + segment.length
+      if (/^\s+$/u.test(segment)) {
+        if (lineEnd > lineStart) lineEnd = tokenEnd
+        else lineStart = lineEnd = tokenEnd
         continue
       }
-      for (const piece of splitOversizeToken(doc, token, style, maxWidth)) {
-        if (
-          line.runs.length &&
-          combinedWidth(doc, line, piece, style) > maxWidth
-        ) {
-          pushLine(line)
-          line = emptyLine()
-        }
-        appendRuns(doc, line, piece, style)
+      if (
+        lineEnd > lineStart &&
+        measure(lineStart, tokenEnd).width > maxWidth
+      ) {
+        push()
+        lineStart = lineEnd = tokenStart
+      }
+      if (measure(tokenStart, tokenEnd).width <= maxWidth) {
+        lineEnd = tokenEnd
+        continue
+      }
+      let clusterOffset = tokenStart
+      for (const cluster of graphemes(segment, style.language)) {
+        const end = clusterOffset + cluster.length
+        if (lineEnd > lineStart && measure(lineStart, end).width > maxWidth)
+          push()
+        lineEnd = end
+        clusterOffset = end
       }
     }
-    if (line.runs.length || !paragraph.length) pushLine(line)
+    if (lineEnd > lineStart || !paragraph.length) push()
+    paragraphOffset += paragraph.length + 1
   }
-  if (!lines.length) lines.push(emptyLine())
+  if (!lines.length) lines.push(measure(0, 0))
 
   const lineHeightPt = style.sizePt * style.lineHeight
   const metricsFor = (alias: FontAlias) => {
@@ -386,6 +421,22 @@ export function layoutBrandingText(
   }
   const primaryMetrics = metricsFor(fontAlias(style.language, style.weight))
   for (const line of lines) {
+    for (const run of line.runs) {
+      const shaped = fonts.byAlias
+        .get(run.font)!
+        .font.layout(run.text, features)
+      const missing = shaped.glyphs.filter((glyph) => glyph.id === 0)
+      if (missing.length) {
+        const characters = [
+          ...new Set(missing.flatMap((glyph) => glyph.codePoints)),
+        ]
+          .map((point) => `U+${point.toString(16).toUpperCase()}`)
+          .join(", ")
+        throw new Error(
+          `Unsupported character for font ${run.font}: ${characters || "unmapped glyph"}.`
+        )
+      }
+    }
     const runMetrics = line.runs.map(({ font }) => metricsFor(font))
     line.ascentPt = Math.max(
       primaryMetrics.ascentPt,
@@ -393,7 +444,8 @@ export function layoutBrandingText(
     )
     line.descentPt = Math.max(
       primaryMetrics.descentPt,
-      ...runMetrics.map(({ descentPt }) => descentPt)
+      ...runMetrics.map(({ descentPt }) => descentPt),
+      line.runs.some((run) => run.underline) ? style.sizePt * 0.125 : 0
     )
   }
   const primaryInkHeight = primaryMetrics.ascentPt + primaryMetrics.descentPt
@@ -422,6 +474,7 @@ export function layoutBrandingText(
     inkBottomPt: inkBottom - boundsTop,
     height: boundsBottom - boundsTop,
     sizePt: style.sizePt,
+    trackingPt,
   }
 }
 
@@ -430,10 +483,19 @@ export function drawBrandingText(
   layout: BrandingTextLayout,
   x: number,
   y: number,
-  color = "#050505"
+  color = "#050505",
+  align: "left" | "center" | "right" = "left",
+  width = 0
 ) {
   for (const [lineIndex, line] of layout.lines.entries()) {
-    let cursor = x
+    let cursor =
+      x +
+      line.leftInsetPt +
+      (align === "center"
+        ? (width - line.width) / 2
+        : align === "right"
+          ? width - line.width
+          : 0)
     const baselineY = brandingLineBaselineY(layout, y, lineIndex)
     for (const run of line.runs) {
       doc
@@ -444,9 +506,23 @@ export function drawBrandingText(
         .text(run.text, cursor, baselineY, {
           baseline: "alphabetic",
           lineBreak: false,
+          characterSpacing: layout.trackingPt,
+          features: layout.trackingPt ? [] : undefined,
+          oblique: run.italic ? obliqueDegrees : false,
         })
         .endMarkedContent()
-      cursor += run.width
+      if (run.underline) {
+        const underlineY = baselineY + layout.sizePt * 0.1
+        doc
+          .save()
+          .strokeColor(color)
+          .lineWidth(layout.sizePt * 0.05)
+          .moveTo(cursor, underlineY)
+          .lineTo(cursor + run.width, underlineY)
+          .stroke()
+          .restore()
+      }
+      cursor += run.width + layout.trackingPt
     }
   }
   return y + layout.height
