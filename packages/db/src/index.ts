@@ -84,7 +84,6 @@ export {
 } from "./commercial-workflow"
 export { createCustomerRepository } from "./customers"
 export { createDashboardPlanningRepository } from "./dashboard-planning"
-export { createProductionOpeningRepository, parseProductionOpeningBatch } from "./production-opening-balances"
 export {
   normalizeSourceCoverage,
   type CoverageFacts,
