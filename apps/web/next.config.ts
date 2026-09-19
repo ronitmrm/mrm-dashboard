@@ -1,4 +1,3 @@
-import { realpathSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import type { NextConfig } from "next"
@@ -12,18 +11,7 @@ import { commercialAttachmentRequestLimitBytes } from "./lib/commercial-attachme
 
 const appDir = path.dirname(fileURLToPath(import.meta.url))
 const workspaceRoot = path.join(appDir, "../..")
-// Trace binaries beside the real package, where Chromium resolves them at runtime.
-// pnpm's app-level symlink is not preserved by every deployment packager.
-const chromiumBin = path
-  .relative(
-    appDir,
-    realpathSync(path.join(appDir, "node_modules/@sparticuz/chromium/bin"))
-  )
-  .split(path.sep)
-  .join("/")
-
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["@sparticuz/chromium", "puppeteer-core"],
   experimental: {
     proxyClientMaxBodySize: Math.max(
       maxDashboardProxyRequestBytes,
@@ -53,7 +41,6 @@ const nextConfig: NextConfig = {
   outputFileTracingRoot: workspaceRoot,
   outputFileTracingIncludes: {
     "/hr/**": ["./lib/hr/assets/**/*", "./lib/pricing/assets/Outfit-*.ttf"],
-    "/branding/**": ["./lib/branding/assets/**/*", `${chromiumBin}/**/*`],
     "/commercial/**": ["./lib/pricing/assets/**/*"],
   },
   turbopack: {

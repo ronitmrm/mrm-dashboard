@@ -31,6 +31,66 @@ afterAll(async () => {
   await pool.end()
 })
 
+test("a generated PDF failure rolls back the draft and first-issue number", async () => {
+  const context = {
+    organizationId,
+    userId,
+    userName: "Author",
+    type: "notice" as const,
+  }
+  const content = parseBrandingContent(
+    {
+      title: "Safety notice",
+      department: "Quality",
+      effectiveDate: "2026-09-19",
+      inputs: {},
+      languages: ["en"],
+      translations: [
+        {
+          language: "en",
+          title: "Safety notice",
+          sections: [{ heading: "", body: "Check the machine guards." }],
+        },
+      ],
+    },
+    context.type
+  )
+  const documentId = await repository.save({ ...context, content })
+  const before = (await repository.get(
+    organizationId,
+    context.type,
+    documentId
+  ))!
+  const draft = before.revisions[0]!
+  const render = vi.fn().mockRejectedValue(new Error("PDF generation failed"))
+  await expect(
+    repository.issue(
+      {
+        ...context,
+        documentId,
+        revisionId: draft.id,
+        version: draft.version,
+      },
+      render
+    )
+  ).rejects.toThrow("PDF generation failed")
+  expect(render).toHaveBeenCalledOnce()
+  expect(
+    await repository.get(organizationId, context.type, documentId)
+  ).toEqual(before)
+  expect(
+    await repository.pdf(organizationId, context.type, documentId, draft.id)
+  ).toBeNull()
+  expect(
+    (
+      await pool.query(
+        "SELECT value FROM branding.counters WHERE organization_id = $1 AND type = $2",
+        [organizationId, context.type]
+      )
+    ).rows
+  ).toEqual([])
+})
+
 test("uploads, releases and revises without replacing the current PDF until release", async () => {
   const context = {
     organizationId,
