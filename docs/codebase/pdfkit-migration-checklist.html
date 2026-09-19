@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" /><title>Issue 152 — PDFKit migration</title>
+  <style>
+    body {
+      font: 15px system-ui;
+      margin: 32px;
+      color: #18332b;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+    }
+    th,
+    td {
+      border: 1px solid #ccd8d2;
+      padding: 12px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background: #edf3ef;
+    }
+  </style>
+  <h1>Issue 152 — PDFKit migration</h1>
+  <p>
+    Branch: perf/compute-optimization. Rebased onto staging 8d155468. No
+    deployment or retention changes.
+  </p>
+  <table>
+    <thead>
+      <tr>
+        <th>Deliverable</th>
+        <th>Owner</th>
+        <th>Status</th>
+        <th>Evidence</th>
+        <th>Remaining blocker</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr id="baseline">
+        <td>
+          Paired reference PDFs; same-environment sizes, timing and memory
+        </td>
+        <td>Implementation / senior</td>
+        <td>Old-renderer baseline captured</td>
+        <td>
+          Six fixed fixtures under
+          <code>/tmp/mrm-pdfkit-152/old-renderer</code>; fresh/repeated timing
+          and peak process-tree RSS plus local NFT traces in
+          <code>old-renderer-baseline.json</code>. Historical Vercel groups:
+          308,506,009 unique bytes, reported separately.
+        </td>
+        <td>Pair against replacement output after font-proof approval</td>
+      </tr>
+      <tr id="fonts">
+        <td>Actual font proof: weights, Indic shaping, wrapping, extraction</td>
+        <td>Implementation / senior</td>
+        <td>Accepted by senior</td>
+        <td>
+          <code>/tmp/mrm-pdfkit-152/font-proof.pdf</code> and PNG: distinct
+          Outfit 400/500/600/700/800 and Noto digit 400/700 resources in one
+          PDF; real Indic faces, 11.25 pt body, cluster-safe wrapping, measured
+          ink bounds, common baseline, selectable text, zero .notdef glyphs.
+          PDF.js returns some Indic marks in visual/decomposed order despite
+          ActualText; source-order equality is not claimed.
+        </td>
+        <td>None; visual and source review completed 2026-09-19</td>
+      </tr>
+      <tr id="posters">
+        <td>Notice and all Work Instruction layouts</td>
+        <td>Implementation</td>
+        <td>Pending</td>
+        <td>Existing validated content and render contract retained</td>
+        <td>Font proof</td>
+      </tr>
+      <tr id="books">
+        <td>SOP/Policy pagination, languages, index and lists</td>
+        <td>Implementation</td>
+        <td>Pending</td>
+        <td>Fixed typography; actual printed references required</td>
+        <td>Font proof</td>
+      </tr>
+      <tr id="lifecycle">
+        <td>Issue rollback, versions, private access, immutable downloads</td>
+        <td>Senior</td>
+        <td>Pending</td>
+        <td>Existing repository boundary</td>
+        <td>Focused integration verification</td>
+      </tr>
+      <tr id="visual">
+        <td>Print-scale review of representative template families</td>
+        <td>Design / senior</td>
+        <td>Unverified</td>
+        <td>No design scores before inspection</td>
+        <td>Replacement output</td>
+      </tr>
+      <tr id="packaging">
+        <td>
+          Remove runtime browser; measure final function groups and performance
+        </td>
+        <td>Implementation / senior</td>
+        <td>Pending</td>
+        <td>Local and deployed evidence reported separately</td>
+        <td>Replacement acceptance</td>
+      </tr>
+      <tr id="delivery">
+        <td>Required checks, isolated workflow smoke, documentation</td>
+        <td>Senior</td>
+        <td>Pending</td>
+        <td>Lint, typecheck, web tests, production build</td>
+        <td>Implementation</td>
+      </tr>
+    </tbody>
+  </table>
+</html>
