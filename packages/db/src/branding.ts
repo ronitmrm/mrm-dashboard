@@ -357,10 +357,10 @@ export function createBrandingRepository(options: RepositoryPoolOptions) {
             input.type === "controlled-document"
               ? "uploaded-pdf-v1"
               : input.type === "notice"
-                ? "mrm-notice-v12"
+                ? "mrm-notice-v13"
                 : input.type === "work-instruction"
-                  ? "mrm-wi-v10"
-                  : "mrm-book-v8",
+                  ? "mrm-wi-v11"
+                  : "mrm-book-v9",
           ]
         )
         return revision.id

@@ -114,7 +114,6 @@ function advanceWidth(font: Font, text: string) {
 
 export function loadPdfKitBrandFonts() {
   return (loadedFonts ??= (async () => {
-    const assetRoot = path.join(process.cwd(), "lib/branding/assets")
     const sources = {
       outfit: "Outfit.ttf",
       hind400: "Hind-Regular.ttf",
@@ -123,19 +122,32 @@ export function loadPdfKitBrandFonts() {
       gujarati700: "HindVadodara-Bold.ttf",
       digits: "NotoSansGujarati.ttf",
     } as const
-    const entries = await Promise.all(
-      Object.entries(sources).map(
-        async ([key, file]) =>
-          [
-            key,
-            fontFromBytes(await readFile(path.join(assetRoot, file)), file),
-          ] as const
-      )
-    )
-    const sourceFonts = Object.fromEntries(entries) as Record<
-      keyof typeof sources,
-      Font
-    >
+    // Explicit reads let Next trace only the six runtime fonts, including when
+    // the renderer is grouped with server actions outside Branding routes.
+    const bytes = await Promise.all([
+      readFile(path.join(process.cwd(), "lib/branding/assets/Outfit.ttf")),
+      readFile(
+        path.join(process.cwd(), "lib/branding/assets/Hind-Regular.ttf")
+      ),
+      readFile(path.join(process.cwd(), "lib/branding/assets/Hind-Bold.ttf")),
+      readFile(
+        path.join(process.cwd(), "lib/branding/assets/HindVadodara-Regular.ttf")
+      ),
+      readFile(
+        path.join(process.cwd(), "lib/branding/assets/HindVadodara-Bold.ttf")
+      ),
+      readFile(
+        path.join(process.cwd(), "lib/branding/assets/NotoSansGujarati.ttf")
+      ),
+    ])
+    const sourceFonts = {
+      outfit: fontFromBytes(bytes[0], sources.outfit),
+      hind400: fontFromBytes(bytes[1], sources.hind400),
+      hind700: fontFromBytes(bytes[2], sources.hind700),
+      gujarati400: fontFromBytes(bytes[3], sources.gujarati400),
+      gujarati700: fontFromBytes(bytes[4], sources.gujarati700),
+      digits: fontFromBytes(bytes[5], sources.digits),
+    }
     const loaded: LoadedBrandFont[] = outfitWeights.map((weight) => ({
       alias: `Outfit-${weight}`,
       font: uniqueVariation(sourceFonts.outfit, "Outfit", weight),
