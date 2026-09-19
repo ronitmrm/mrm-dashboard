@@ -27,14 +27,18 @@ function date(value: string) {
 export async function buildOfferLetterPdf(letter: Offer) {
   const pdf = await PDFDocument.create()
   pdf.registerFontkit(fontkit)
-  const asset = (name: string) =>
-    readFile(path.join(process.cwd(), "lib", name))
+  // Keep tracing on these exact assets: a dynamic lib path also bundles the
+  // unrelated Branding fonts into the shared server-action function.
   const [regularBytes, boldBytes, headerBytes, footerBytes] = await Promise.all(
     [
-      asset("pricing/assets/Outfit-Regular.ttf"),
-      asset("pricing/assets/Outfit-Medium.ttf"),
-      asset("hr/assets/offer-header.png"),
-      asset("hr/assets/offer-footer.png"),
+      readFile(
+        path.join(process.cwd(), "lib/pricing/assets/Outfit-Regular.ttf")
+      ),
+      readFile(
+        path.join(process.cwd(), "lib/pricing/assets/Outfit-Medium.ttf")
+      ),
+      readFile(path.join(process.cwd(), "lib/hr/assets/offer-header.png")),
+      readFile(path.join(process.cwd(), "lib/hr/assets/offer-footer.png")),
     ]
   )
   const regular = await pdf.embedFont(regularBytes, { subset: true })

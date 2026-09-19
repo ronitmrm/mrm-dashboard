@@ -24,8 +24,9 @@
   </style>
   <h1>Issue 152 — PDFKit migration</h1>
   <p>
-    Branch: perf/compute-optimization. Rebased onto staging 8d155468. No
-    deployment or retention changes.
+    Branch: perf/compute-optimization. Rebased onto staging daa2fdc7.
+    <a href="pdfkit-migration-verification.md">Measured verification report</a>.
+    No deployment or retention changes.
   </p>
   <table>
     <thead>
@@ -43,15 +44,14 @@
           Paired reference PDFs; same-environment sizes, timing and memory
         </td>
         <td>Implementation / senior</td>
-        <td>Old-renderer baseline captured</td>
+        <td>Accepted by senior</td>
         <td>
           Six fixed fixtures under
           <code>/tmp/mrm-pdfkit-152/old-renderer</code>; fresh/repeated timing
-          and peak process-tree RSS plus local NFT traces in
-          <code>old-renderer-baseline.json</code>. Historical Vercel groups:
-          308,506,009 unique bytes, reported separately.
+          and peak process-tree RSS in before/after baseline JSON. Twelve-render
+          wall time 4,492.05 → 1,000.32 ms; peak tree RSS 486.4 → 190.2 MiB.
         </td>
-        <td>Pair against replacement output after font-proof approval</td>
+        <td>None; local measurements, not production percentiles</td>
       </tr>
       <tr id="fonts">
         <td>Actual font proof: weights, Indic shaping, wrapping, extraction</td>
@@ -70,19 +70,19 @@
       <tr id="posters">
         <td>Notice and all Work Instruction layouts</td>
         <td>Implementation</td>
-        <td>Implemented; output checks pass</td>
+        <td>Accepted by senior</td>
         <td>
           PDFKit single-page A4 regions, common fitting, vector artwork,
           mixed-script fonts and fixed crop/contain cards. Five poster PDFs in
           <code>/tmp/mrm-pdfkit-152/new-renderer</code>. Historical tables,
           legacy paragraphs and image layouts verified through PDF output.
         </td>
-        <td>Senior accepted six PDFs; workflow smoke remains</td>
+        <td>None; generated Notice workflow also verified</td>
       </tr>
       <tr id="books">
         <td>SOP/Policy pagination, languages, index and lists</td>
         <td>Implementation</td>
-        <td>Implemented; output checks pass</td>
+        <td>Accepted by senior</td>
         <td>
           Nine-page paired book; stage 12 prints on page 7. One bounded test
           variation verifies a multi-page index, two language books, mixed Indic
@@ -90,14 +90,18 @@
           list-specific and collapsed margins retained. Stage 6 stays with its
           first paragraph on printed page 5; index references rechecked.
         </td>
-        <td>Senior accepted paired book; lifecycle verification remains</td>
+        <td>None; lifecycle verification passed</td>
       </tr>
       <tr id="lifecycle">
         <td>Issue rollback, versions, private access, immutable downloads</td>
         <td>Senior</td>
-        <td>Pending</td>
-        <td>Existing repository boundary</td>
-        <td>Focused integration verification</td>
+        <td>Accepted by senior</td>
+        <td>
+          Two repository integration tests pass: upload bypass/immutability and
+          generated failure rollback. New Notice marker v13; historical v12
+          download retains exact SHA-256. Published authentication tests pass.
+        </td>
+        <td>None</td>
       </tr>
       <tr id="visual">
         <td>Print-scale review of representative template families</td>
@@ -107,8 +111,9 @@
           <code>/tmp/mrm-pdfkit-152/final-review</code>: Notice, WI text, grid,
           picture-left, Visual Guide and SOP book. Visible commas restored by
           the final-repeat-count Fontkit patch; black book tables, green Index,
-          centered grid steps, Indic shaping and crop/contain inspected. Policy
-          was not separately visually sampled.
+          centered grid steps, Indic shaping and crop/contain inspected. A
+          paired Policy render also checked cover, details, index and
+          opening/final body pages using the same book fixture.
         </td>
         <td>Senior accepted six PDFs; no score for uninspected variants</td>
       </tr>
@@ -117,16 +122,25 @@
           Remove runtime browser; measure final function groups and performance
         </td>
         <td>Implementation / senior</td>
-        <td>Pending</td>
-        <td>Local and deployed evidence reported separately</td>
-        <td>Replacement acceptance</td>
+        <td>Accepted by senior</td>
+        <td>
+          Local Vercel packaging: 342 aliases, nine unique physical groups;
+          385,206,247 → 94,429,671 bytes (75.49% reduction). Zero Chromium or
+          Puppeteer runtime bytes. Required fonts only in three render/action
+          groups; stored-download group has none. No regional multiplier.
+        </td>
+        <td>None; deployed storage is a separate measurement</td>
       </tr>
       <tr id="delivery">
         <td>Required checks, isolated workflow smoke, documentation</td>
         <td>Senior</td>
-        <td>Pending</td>
-        <td>Lint, typecheck, web tests, production build</td>
-        <td>Implementation</td>
+        <td>Checks passed; pending-state review recorded in report</td>
+        <td>
+          Lint, typecheck and final production build pass; 815 web tests and two
+          repository integration tests pass. Isolated generated and uploaded
+          document workflows, viewer and exact stored downloads verified.
+        </td>
+        <td>None for renderer; see report for verification limitations</td>
       </tr>
     </tbody>
   </table>
