@@ -20,6 +20,7 @@ beforeAll(async () => {
   await pool.query(`INSERT INTO catalog.items (organization_id, uid, description, source_system, source_table, source_id)
     VALUES ($1, 'PART', 'Opening part', 'test', 'items', $2)`, [organizationId, randomUUID()])
   await planning.upsertMachine({ organizationId, machineNumber: `CNC-${organizationId}`, productionFloorCode: "cnc" })
+  await planning.upsertMachine({ organizationId, machineNumber: `CNC-B-${organizationId}`, productionFloorCode: "cnc" })
   await planning.upsertWorkOrder({ organizationId, jobCardNumber: "JC", workOrderNumber: "WO", itemUid: "PART", orderedQuantity: 10000,
     sourcePayload: { jcNo: "JC", partCode: "PART", orderPcs: 10000, productionFloorCode: "cnc" } })
   await planning.upsertRouteOption({ organizationId, itemUid: "PART", routeCode: "1", productionFloorCode: "cnc",
@@ -34,18 +35,29 @@ test("previews, atomically imports and replays an opening, then counts only new 
   const batch = { cutoffAt: "2026-09-18T22:00:00+05:30", rows: [
     { jobCardNumber: "JC", partCode: "PART", optionNumber: "1", setupNumber: 1, machineNumber: null, goodPieces: 10000, rejectedPieces: 8, status: "completed" },
     { jobCardNumber: "JC", partCode: "PART", optionNumber: "1", setupNumber: 2, machineNumber: `CNC-${organizationId}`, goodPieces: 5000, rejectedPieces: 20, status: "running" },
+    { jobCardNumber: "JC", partCode: "PART", optionNumber: "1", setupNumber: 2, machineNumber: `CNC-B-${organizationId}`, goodPieces: 2000, rejectedPieces: 5, status: "running" },
   ] }
   expect(await opening.importBatch({ organizationId, batch })).toMatchObject({ status: "preview", rows: [
-    { pendingGoodPieces: 0 }, { pendingGoodPieces: 5000 },
+    { pendingGoodPieces: 0 }, { pendingGoodPieces: 3000 }, { pendingGoodPieces: 3000 },
   ] })
   expect((await pool.query("SELECT 1 FROM manufacturing.production_opening_batches WHERE organization_id = $1", [organizationId])).rowCount).toBe(0)
   expect(await opening.importBatch({ organizationId, batch, commit: true })).toMatchObject({ status: "imported" })
   expect(await opening.importBatch({ organizationId, batch, commit: true })).toMatchObject({ status: "already_imported" })
+  await shop.recordShopFloorStage({ organizationId, productionFloorCode: "cnc", jobCardNumber: "JC",
+    operationSetupCode: "2", machineNumber: `CNC-B-${organizationId}`, stage: "operator_started", payload: {} })
   await expect(opening.importBatch({ organizationId, batch: { ...batch, cutoffAt: "2026-09-18T21:00:00+05:30" }, commit: true })).rejects.toThrow("different contents")
+  const states = await pool.query(`SELECT machine.machine_number, state.active
+    FROM manufacturing.shop_floor_setup_state state
+    JOIN catalog.machines machine ON machine.id = state.machine_id
+    WHERE state.organization_id = $1 ORDER BY machine.machine_number`, [organizationId])
+  expect(states.rows).toEqual([
+    { machine_number: `CNC-${organizationId}`, active: true },
+    { machine_number: `CNC-B-${organizationId}`, active: true },
+  ])
   const client = await pool.connect()
   try {
     const source = await readCanonicalDashboardSource(client, organizationId)
-    expect(source.allDataEntries.filter((row) => row.entryType === "production_opening_balance")).toHaveLength(2)
+    expect(source.allDataEntries.filter((row) => row.entryType === "production_opening_balance")).toHaveLength(3)
     expect(source.productionEntries).toHaveLength(0)
   } finally { client.release() }
   const input = { organizationId, productionFloorCode: "cnc", jobCardNumber: "JC", operationSetupCode: "2",
@@ -58,8 +70,8 @@ test("previews, atomically imports and replays an opening, then counts only new 
   const session = await shop.startProductionSession({ ...sessionInput, startedAt: "2026-09-19T06:00:00+05:30" })
   await shop.closeProductionSession({ organizationId, sessionId: session.id, endedAt: "2026-09-19T14:00:00+05:30", endCount: 100, endReason: "shift_end" })
   const workspace = await shop.readJobCardWorkspace({ organizationId, productionFloorCode: "cnc", jobCardNumber: "JC" })
-  expect(workspace.openingBalances).toHaveLength(2)
-  expect(workspace.analytics).toMatchObject({ actualGoodPieces: 5200, sessionCount: 1, legacyEntryCount: 1, setupPerformance: [
-    { actualGoodPieces: 10000 }, { actualGoodPieces: 5200 },
+  expect(workspace.openingBalances).toHaveLength(3)
+  expect(workspace.analytics).toMatchObject({ actualGoodPieces: 7200, sessionCount: 1, legacyEntryCount: 1, setupPerformance: [
+    { actualGoodPieces: 10000 }, { actualGoodPieces: 7200 },
   ] })
 })

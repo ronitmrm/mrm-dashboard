@@ -1087,8 +1087,8 @@ function buildProductionControl({
       setupRec.actualQty += safeNumber(rowValue(row, "ACTUAL QTY IN PCS", "ACTUAL QTY")) || Math.max(safeNumber(rowValue(row, "PRODUCTION QTY (PCS)", "PROD QTY IN PCS")) - (isOpening ? safeNumber(row.rejectedPieces) : rejectionTotalFromRow(row)), 0);
       setupRec.rows += isOpening ? 0 : 1;
       if (isOpening) {
-        setupRec.openingGood = safeNumber(row.goodPieces);
-        setupRec.openingRejected = safeNumber(row.rejectedPieces);
+        setupRec.openingGood = (setupRec.openingGood ?? 0) + safeNumber(row.goodPieces);
+        setupRec.openingRejected = (setupRec.openingRejected ?? 0) + safeNumber(row.rejectedPieces);
         setupRec.openingDate = rowText(row, "cutoffAt").slice(0, 10);
       }
     }
@@ -1101,8 +1101,8 @@ function buildProductionControl({
       setupRec.actualQty += safeNumber(rowValue(row, "ACTUAL QTY IN PCS", "ACTUAL QTY")) || Math.max(safeNumber(rowValue(row, "PRODUCTION QTY (PCS)", "PROD QTY IN PCS")) - (isOpening ? safeNumber(row.rejectedPieces) : rejectionTotalFromRow(row)), 0);
       setupRec.rows += isOpening ? 0 : 1;
       if (isOpening) {
-        setupRec.openingGood = safeNumber(row.goodPieces);
-        setupRec.openingRejected = safeNumber(row.rejectedPieces);
+        setupRec.openingGood = (setupRec.openingGood ?? 0) + safeNumber(row.goodPieces);
+        setupRec.openingRejected = (setupRec.openingRejected ?? 0) + safeNumber(row.rejectedPieces);
         setupRec.openingDate = rowText(row, "cutoffAt").slice(0, 10);
       }
       if (machine) setupRec.machines.add(machine);

@@ -2967,9 +2967,10 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             FROM manufacturing.shop_floor_setup_state
             WHERE work_order_id = $1 AND route_option_id = $2
               AND operation_setup_id = $3
+            ORDER BY (machine_id IS NOT DISTINCT FROM $4::uuid) DESC, updated_at DESC, id
             FOR UPDATE
           `,
-          [workOrder.work_order_id, workOrder.route_option_id, setupId]
+          [workOrder.work_order_id, workOrder.route_option_id, setupId, machineId]
         )
         if (
           active &&
@@ -3168,12 +3169,13 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             FROM manufacturing.shop_floor_setup_state
             WHERE work_order_id = $1 AND route_option_id = $2
               AND ($3::uuid IS NULL OR operation_setup_id = $3)
+              AND ($4::uuid IS NULL OR machine_id = $4)
               AND active
             ORDER BY updated_at DESC
             LIMIT 1
             FOR UPDATE
           `,
-          [workOrder.work_order_id, workOrder.route_option_id, setupId]
+          [workOrder.work_order_id, workOrder.route_option_id, setupId, machineId]
         )
         if (!setupId) setupId = state.rows[0]?.operation_setup_id ?? null
         if (!machineId) machineId = state.rows[0]?.machine_id ?? null

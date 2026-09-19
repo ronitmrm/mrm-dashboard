@@ -109,8 +109,10 @@ Example: `C501-20260815-03` is the third session for machine C501 on Production 
 ### CNC startup opening balances
 
 CNC startup uses one agreed cutoff timestamp in IST. Each already-started Job
-Card, part, route and setup has one opening balance: good pieces, rejected
-pieces, and Running or Completed state. Running setups also name their machine.
+Card, part, route and setup has opening good/rejected pieces and Running or
+Completed state. A running setup may have one balance per machine; sum those
+balances for setup progress while retaining each machine's quantities and state.
+A completed setup has one balance and cannot also have running balances.
 Completed is lifecycle evidence, not an inferred quantity; a completed setup may
 still show a shortfall against the order. Unstarted setups have no opening row.
 
