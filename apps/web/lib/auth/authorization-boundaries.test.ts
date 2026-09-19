@@ -35,7 +35,6 @@ describe("protected server boundaries", () => {
       "requireHrPage(",
       "requireProductionPage(",
       "authorizedDashboardSession(",
-      "authorizePostgresDashboardEvents(",
       "withDashboardReadRepository(",
       "withBranding(",
       "withRejections(",

@@ -15,6 +15,7 @@ import {
   dashboardRequestDescriptor,
   type DashboardDeliveryAction,
   type DashboardDeliveryState,
+  type DashboardVisibilityState,
 } from "@/lib/dashboard-delivery-state"
 import {
   DashboardStateNormalizationError,
@@ -25,6 +26,13 @@ import {
 type UseDashboardDeliveryOptions = {
   floor: ProductionFloorCode
   onData?: (data: DashboardRecord) => void
+}
+
+function currentVisibility(): DashboardVisibilityState {
+  return typeof document !== "undefined" &&
+    document.visibilityState === "hidden"
+    ? "hidden"
+    : "visible"
 }
 
 export function useDashboardDelivery({
@@ -39,7 +47,7 @@ export function useDashboardDelivery({
       current: DashboardDeliveryState<DashboardRecord>,
       action: DashboardDeliveryAction<DashboardRecord>
     ) => dashboardDeliveryReducer(current, action),
-    createDashboardDeliveryState<DashboardRecord>(floor)
+    createDashboardDeliveryState<DashboardRecord>(floor, currentVisibility())
   )
   const stateRef = useRef(state)
   const onDataRef = useRef(onData)
@@ -169,33 +177,21 @@ export function useDashboardDelivery({
       })
     }
     document.addEventListener("visibilitychange", handleVisibilityChange)
+    handleVisibilityChange()
     return () =>
       document.removeEventListener("visibilitychange", handleVisibilityChange)
   }, [dispatch])
-
-  useEffect(() => {
-    if (scopedStateUrl) return
-    const events = new EventSource("/api/dashboard-events")
-    const handleOpen = () => dispatch({ type: "connection.opened" })
-    const handleError = () => dispatch({ type: "connection.lost" })
-    const handleHint = () => dispatch({ type: "hint.received" })
-    events.addEventListener("open", handleOpen)
-    events.addEventListener("error", handleError)
-    events.addEventListener("dashboard-version", handleHint)
-    return () => {
-      events.removeEventListener("open", handleOpen)
-      events.removeEventListener("error", handleError)
-      events.removeEventListener("dashboard-version", handleHint)
-      events.close()
-    }
-  }, [dispatch, scopedStateUrl])
 
   useEffect(() => {
     const nowMs = Date.now()
     const delay = dashboardDeliveryPollDelay(state, nowMs)
     if (delay === null) return
     if (delay === 0) {
-      void requestCanonicalState()
+      if (state.request === "initial" || state.request === "canonical-state") {
+        void requestCanonicalState()
+      } else {
+        dispatch({ type: "safety.due", atMs: nowMs })
+      }
       return
     }
     const timeout = window.setTimeout(() => {
