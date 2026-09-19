@@ -232,11 +232,21 @@ function machineConstraintDecisionKey(row: ActionRow) {
 
 function planOverrideDecisionKey(row: ActionRow) {
   return [
-    canonicalKey(rowText(row, "target", "jcNo", "JC NO.", "JC NO", "PART CODE", "PART NO")),
-    canonicalKey(rowText(row, "setupNo", "SETUP NO.", "SETUP NO")),
-    canonicalKey(rowText(row, "fromMachine", "FROM MACHINE")),
-    canonicalKey(rowText(row, "toMachine", "TO MACHINE")),
+    canonicalKey(rowText(row, "target", "jobCardNumber", "jcNo", "JC NO.", "JC NO", "PART CODE", "PART NO")),
+    canonicalKey(rowText(row, "setupNumber", "setupNo", "SETUP NO.", "SETUP NO")),
+    canonicalKey(rowText(row, "fromMachineNumber", "fromMachine", "FROM MACHINE")),
+    canonicalKey(rowText(row, "toMachineNumber", "toMachine", "TO MACHINE")),
   ].join("|");
+}
+
+function normalizePlanOverrideDecision(row: ActionRow): ActionRow {
+  return {
+    ...row,
+    target: rowText(row, "target", "jobCardNumber", "jcNo", "JC NO.", "JC NO", "PART CODE", "PART NO"),
+    setupNo: rowText(row, "setupNumber", "setupNo", "SETUP NO.", "SETUP NO"),
+    fromMachine: rowText(row, "fromMachineNumber", "fromMachine", "FROM MACHINE"),
+    toMachine: rowText(row, "toMachineNumber", "toMachine", "TO MACHINE"),
+  };
 }
 
 function routeChangeDecisionKey(row: ActionRow) {
@@ -347,7 +357,8 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
       ...row,
       machineNo: rowText(row, "machineNumber", "machineNo", "machine", "MACHINE NO.", "MACHINE NO", "M/C NO"),
     })),
-    planOverrides: mergeSourceActionRows(sourcePlannerDecisions.planOverrides, input.planOverrides ?? [], planOverrideDecisionKey),
+    planOverrides: mergeSourceActionRows(sourcePlannerDecisions.planOverrides, input.planOverrides ?? [], planOverrideDecisionKey)
+      .map(normalizePlanOverrideDecision),
     routeChanges: mergeSourceActionRows(sourcePlannerDecisions.routeChanges, input.routeChanges ?? [], routeChangeDecisionKey),
     dispatchApprovals: input.dispatchApprovals ?? [],
     setupCompletions: mergeSourceActionRows(sourcePlannerDecisions.setupCompletions, input.setupCompletions ?? [], setupCompletionDecisionKey),
@@ -3613,6 +3624,9 @@ function applyPlanOverrideInterruptionQuantities(details: Array<Record<string, u
       const actualQty = meta.productionActual?.actualQty ?? 0;
       row.planOverrideStoppedByJcNo = rowText(overrideRow, "target", "jcNo");
       row.planOverrideRemainingQty = round(Math.max((meta.totalOrderPcs ?? meta.orderPcs ?? safeNumber(rowValue(row, "orderPcs"))) - actualQty, 0));
+      row.runningStatus = "Planner stopped";
+      row.shopFloorStage = "planned";
+      row.shopFloorStageLabel = "Planner stopped";
     }
   }
 }

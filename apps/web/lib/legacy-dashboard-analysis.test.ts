@@ -1286,7 +1286,7 @@ describe("buildLegacyDashboardSnapshot", () => {
       expect(stopped).toMatchObject({
         orderPcs: 2,
         rawActualQty: 2,
-        runningStatus: "Breakdown stopped",
+        runningStatus: "Planner stopped",
       })
       expect(shifted).toMatchObject({
         orderPcs: 8,
@@ -1520,31 +1520,31 @@ describe("buildLegacyDashboardSnapshot", () => {
         productionEntries: [],
         planOverrides: [
           {
-            target: "JC-M24",
-            setupNo: "1",
-            fromMachine: "ADB503",
-            toMachine: "ADB504",
+            jobCardNumber: "JC-M24",
+            setupNumber: 1,
+            fromMachineNumber: "ADB503",
+            toMachineNumber: "ADB504",
             interruptedSetups: [
               {
-                jcNo: "JC-M24",
-                setupNo: "1",
-                machine: "ADB503",
-                finishedQty: 2,
+                jobCardNumber: "JC-M24",
+                setupNumber: 1,
+                machineNumber: "ADB503",
+                finishedQuantity: 2,
               },
               {
-                jcNo: "JC-M93",
-                setupNo: "1",
-                machine: "ADB504",
-                finishedQty: 1,
+                jobCardNumber: "JC-M93",
+                setupNumber: 1,
+                machineNumber: "ADB504",
+                finishedQuantity: 1,
               },
             ],
             queuePlacements: [
               {
-                targetJcNo: "JC-M24",
+                targetJobCardNumber: "JC-M24",
                 targetPartCode: "M24",
-                targetSetupNo: "1",
-                targetSourceMachine: "ADB503",
-                targetMachine: "ADB504",
+                targetSetupNumber: 1,
+                targetSourceMachineNumber: "ADB503",
+                targetMachineNumber: "ADB504",
                 queueBeforeSetups: [],
               },
             ],
@@ -1654,14 +1654,17 @@ describe("buildLegacyDashboardSnapshot", () => {
       expect(stoppedSource).toMatchObject({
         orderPcs: 2,
         rawActualQty: 2,
-        runningStatus: "Breakdown stopped",
+        runningStatus: "Planner stopped",
       })
       expect(shifted).toMatchObject({
         orderPcs: 8,
         runningStatus: "Plan shifted",
         machineUnavailableQueuePlacementTarget: true,
       })
-      expect(stoppedTarget).toMatchObject({ rawActualQty: 1 })
+      expect(stoppedTarget).toMatchObject({
+        rawActualQty: 1,
+        runningStatus: "Planner stopped",
+      })
       expect(
         dashboardDateKey(shifted?.plannedProductionStartDate)
       ).toBeLessThanOrEqual(

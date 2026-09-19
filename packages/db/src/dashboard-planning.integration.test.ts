@@ -904,7 +904,44 @@ describe("dashboard planning writes", () => {
     }))
   })
 
-  test("rejects a plan override while the target physical machine is locked by another active setup", async () => {
+  test("requires target interruption and releases the stopped shop-floor setup", async () => {
+    const moveItemUid = `MOVE-${suffix}`
+    const movingJobCard = `MOVE-${suffix}-1`
+    const blockingJobCard = `MOVE-${suffix}-2`
+    const sourceMachine = `MOVE-${suffix}-SRC`
+    const targetMachine = `MOVE-${suffix}-TGT`
+    await repository.upsertRouteOption({
+      itemUid: moveItemUid,
+      organizationId,
+      routeCode: "1",
+      setups: [{ operationCode: "MOVE", sequence: 1, setupNumber: 1 }],
+    })
+    await repository.upsertWorkOrder({
+      itemUid: moveItemUid,
+      jobCardNumber: movingJobCard,
+      orderedQuantity: 20,
+      organizationId,
+      workOrderNumber: `MOVE-WO-${suffix}-1`,
+    })
+    await repository.upsertWorkOrder({
+      itemUid: moveItemUid,
+      jobCardNumber: blockingJobCard,
+      orderedQuantity: 20,
+      organizationId,
+      workOrderNumber: `MOVE-WO-${suffix}-2`,
+    })
+    await repository.selectRoute({
+      jobCardNumber: movingJobCard,
+      organizationId,
+      routeCode: "1",
+    })
+    await repository.selectRoute({
+      jobCardNumber: blockingJobCard,
+      organizationId,
+      routeCode: "1",
+    })
+    await repository.upsertMachine({ machineNumber: sourceMachine, organizationId })
+    await repository.upsertMachine({ machineNumber: targetMachine, organizationId })
     const ids = await pool.query<{
       machine_id: string
       route_option_id: string
@@ -925,7 +962,7 @@ describe("dashboard planning writes", () => {
           AND machine.machine_number = $2
           AND work_order.job_card_number = $3
       `,
-      [organizationId, secondMachine, secondJobCard]
+      [organizationId, targetMachine, blockingJobCard]
     )
     const row = ids.rows[0]!
     await pool.query(
@@ -950,13 +987,62 @@ describe("dashboard planning writes", () => {
 
     await expect(
       repository.recordPlanOverride({
-        fromMachineNumber: firstMachine,
-        jobCardNumber: firstJobCard,
+        fromMachineNumber: sourceMachine,
+        jobCardNumber: movingJobCard,
         organizationId,
         reason: "Unsafe move",
         setupNumber: 1,
-        toMachineNumber: secondMachine,
+        toMachineNumber: targetMachine,
       })
     ).rejects.toThrow("active setup")
+
+    await repository.recordPlanOverride({
+      fromMachineNumber: sourceMachine,
+      interruptedSetups: [{
+        jobCardNumber: blockingJobCard,
+        machineNumber: targetMachine,
+        setupNumber: 1,
+      }],
+      jobCardNumber: movingJobCard,
+      organizationId,
+      reason: "Approved target interruption",
+      setupNumber: 1,
+      toMachineNumber: targetMachine,
+    })
+
+    const released = await pool.query<{
+      active: boolean
+      stage: string
+      stop_events: string
+    }>(
+      `
+        SELECT state.active, state.stage,
+          (SELECT count(*)
+           FROM manufacturing.shop_floor_stage_events event
+           WHERE event.setup_state_id = state.id
+             AND event.to_stage = 'planned'
+             AND event.source_table = 'planOverrides') AS stop_events
+        FROM manufacturing.shop_floor_setup_state state
+        WHERE state.id = (
+          SELECT state.id
+          FROM manufacturing.shop_floor_setup_state state
+          WHERE state.organization_id = $1
+            AND state.work_order_id = $2
+            AND state.operation_setup_id = $3
+            AND state.machine_id = $4
+        )
+      `,
+      [
+        organizationId,
+        row.work_order_id,
+        row.setup_id,
+        row.machine_id,
+      ]
+    )
+    expect(released.rows[0]).toEqual({
+      active: false,
+      stage: "planned",
+      stop_events: "1",
+    })
   })
 })

@@ -399,6 +399,107 @@ async function settledPlannerInterruptions(
   return settled
 }
 
+async function releasePlanOverrideInterruptedSetups(
+  client: PoolClient,
+  input: {
+    actorUserId?: string | null
+    decisionId: string
+    interruptions: SettledInterruptedSetup[]
+    organizationId: string
+    reason: string
+  }
+) {
+  for (const interruption of input.interruptions) {
+    const current = await client.query<{
+      id: string
+      job_card_number: string
+      machine_number: string
+      option_number: string
+      part_code: string
+      setup_number: number
+      source_payload: Record<string, unknown> | null
+      stage: string
+    }>(
+      `
+        SELECT state.id, state.stage, state.source_payload,
+          work_order.job_card_number, item.uid AS part_code,
+          route.route_code AS option_number, setup.setup_number,
+          machine.machine_number
+        FROM manufacturing.shop_floor_setup_state state
+        JOIN manufacturing.work_orders work_order
+          ON work_order.id = state.work_order_id
+        JOIN catalog.items item ON item.id = work_order.item_id
+        JOIN manufacturing.route_options route ON route.id = state.route_option_id
+        JOIN manufacturing.operation_setups setup
+          ON setup.id = state.operation_setup_id
+        JOIN catalog.machines machine ON machine.id = state.machine_id
+        WHERE state.organization_id = $1
+          AND lower(work_order.job_card_number) = lower($2)
+          AND setup.setup_number = $3
+          AND lower(machine.machine_number) = lower($4)
+          AND state.active
+        FOR UPDATE OF state
+      `,
+      [
+        input.organizationId,
+        interruption.jobCardNumber.trim(),
+        interruption.setupNumber,
+        interruption.machineNumber.trim(),
+      ]
+    )
+    const state = current.rows[0]
+    if (!state) continue
+    const sourcePayload = {
+      ...(state.source_payload ?? {}),
+      jcNo: state.job_card_number,
+      jobCardNumber: state.job_card_number,
+      machine: state.machine_number,
+      machineNumber: state.machine_number,
+      optionNumber: state.option_number,
+      partCode: state.part_code,
+      plannerDecisionId: input.decisionId,
+      reason: input.reason,
+      setupNo: String(state.setup_number),
+      setupNumber: state.setup_number,
+      stage: "planned",
+      status: "stopped",
+    }
+    await client.query(
+      `
+        UPDATE manufacturing.shop_floor_setup_state
+        SET stage = 'planned', active = false, completed_at = NULL,
+          updated_by_user_id = $1, source_payload = $2,
+          updated_at = now(), row_version = row_version + 1
+        WHERE id = $3
+      `,
+      [input.actorUserId ?? null, sourcePayload, state.id]
+    )
+    await client.query(
+      `
+        INSERT INTO manufacturing.shop_floor_stage_events (
+          organization_id, setup_state_id, from_stage, to_stage,
+          machine_id, actor_user_id, reason, source_system, source_table,
+          source_id, source_payload
+        )
+        SELECT $1, $2, $3, 'planned', machine_id, $4, $5,
+          'mrm-dashboard', $6, $7, $8
+        FROM manufacturing.shop_floor_setup_state
+        WHERE id = $2
+      `,
+      [
+        input.organizationId,
+        state.id,
+        state.stage,
+        input.actorUserId ?? null,
+        input.reason,
+        "planOverrides",
+        randomUUID(),
+        sourcePayload,
+      ]
+    )
+  }
+}
+
 async function requireMachineSessionSettlement(
   client: PoolClient,
   organizationId: string,
@@ -2040,6 +2141,13 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
             sourcePayload,
           ]
         )
+        await releasePlanOverrideInterruptedSetups(client, {
+          actorUserId: input.actorUserId,
+          decisionId: created.rows[0]!.id,
+          interruptions: interruptedSetups,
+          organizationId: input.organizationId,
+          reason: requiredText(input.reason, "Override reason"),
+        })
         let detailSequence = 0
         for (const interrupted of interruptedSetups) {
           await insertOverrideDetail(client, {
