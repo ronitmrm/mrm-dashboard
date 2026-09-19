@@ -15,7 +15,7 @@ describe("legacy dashboard route selections", () => {
         entry("machine_master", { machineNo: "CNC-1", machineType: "CNC", machineFamily: "T42", status: "Active" }),
         ...["1", "2", "3"].flatMap((setupNo) => [
           entry("route", { partNo: "PART", optionNumber: "1", setupNo, machineType: "CNC", machineFamily: "T42" }),
-          entry("cycle", { partNo: "PART", optionNumber: "1", setupNo, cycleTime: 60 }),
+          ...(setupNo === "2" ? [] : [entry("cycle", { partNo: "PART", optionNumber: "1", setupNo, cycleTime: 60 })]),
           entry("tooling", { partNo: "PART", optionNumber: "1", setupNo }),
         ]),
         entry("production_opening_balance", { jobCardNumber: "JC-OPEN", partCode: "PART", optionNumber: "1", setupNo: "1", goodPieces: 10000, rejectedPieces: 0, status: "completed", cutoffAt: createdAt }),
@@ -27,7 +27,7 @@ describe("legacy dashboard route selections", () => {
     if (!("machinePlanDetailRows" in beforeProduction)) throw new Error("Missing planning")
     expect(beforeProduction.machinePlanDetailRows.find((row) => row.setupNo === "2")).toMatchObject({
       rawActualQty: 5000, pendingGoodQty: 5000, rawRows: 0, actualStartDate: "", setupCompletionDate: "",
-      plannedProductionStartDate: "19-Sept-26",
+      plannedProductionStartDate: "19-Sept-26", runningStatus: "Running", shopFloorStage: "operator_started",
     })
     const snapshot = buildLegacyDashboardSnapshot(input)
     const control = snapshot.productionControl!

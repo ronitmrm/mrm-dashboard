@@ -40,6 +40,12 @@ clears the checklist completion timestamp and leaves Setting Done locked.
 CNC Setting Done rechecks saved answers on the server, so a cached checklist
 or an earlier Completed status cannot bypass this lock.
 
+An actual shop-floor setup remains visible and locked to its physical machine
+after RM reaches the machine, even when its cycle or tooling master is still
+incomplete. Missing masters continue to block unstarted setup planning. For CNC
+startup openings, an `operator_started` setup is Running from the saved opening
+state; its cycle time may be entered when that setup's real session starts.
+
 CNC-01 has no Pre Setting stage. Its workflow is RM at Machine → Setting →
 Quality Approval → Machine Start. The six CNC checklist points are completed at
 Setting, without requiring an earlier checklist session. Historical Pre Setting
