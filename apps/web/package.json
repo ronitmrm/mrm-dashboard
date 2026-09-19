@@ -4,7 +4,6 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "cnc:prepare": "tsx scripts/prepare-cnc-opening.ts",
     "artifact:auth:refresh": "node --conditions=react-server --import tsx scripts/refresh-artifact-oidc.ts",
     "artifact:storage:migrate": "node --conditions=react-server --import tsx scripts/migrate-artifact-storage.ts",
     "artifact:uploads:cleanup": "node --conditions=react-server --import tsx scripts/cleanup-pending-artifact-uploads.ts",

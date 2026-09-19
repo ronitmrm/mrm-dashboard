@@ -303,7 +303,6 @@ function lastDate(values: Array<string | null | undefined>) {
 }
 
 export function buildJobCardAnalytics(input: {
-  openingBalances?: JobCardSessionRow[]
   downtimeEvents: JobCardDowntimeRow[]
   finalSetupNumber: string | null
   firstSetupNumber: string | null
@@ -314,7 +313,7 @@ export function buildJobCardAnalytics(input: {
   const orderedQuantity = finite(input.orderedQuantity)
   const finalSetupNumber = input.finalSetupNumber?.trim() || null
   const firstSetupNumber = input.firstSetupNumber?.trim() || null
-  const outputRows = [...input.sessions, ...(input.openingBalances ?? [])]
+  const outputRows = input.sessions
   const operationProducedPieces = outputRows.reduce(
     (total, row) => total + finite(row.totalPieces),
     0

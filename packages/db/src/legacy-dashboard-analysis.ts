@@ -63,13 +63,9 @@ type WipProductionStream = {
   endDate: string;
   quantity: number;
   dailyQty: number;
-  opening?: boolean;
 };
 
 type PlanningProductionActual = {
-  openingGood?: number;
-  openingRejected?: number;
-  openingDate?: string;
   machine?: string;
   startDate: string;
   latestDate: string;
@@ -307,7 +303,6 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
   );
   const firstPieceInspectionMasterRows = entryRows(byType, "first_piece_inspection_master");
   const firstPieceInspectionReportRows = latestEntryRowsByKey(entryRows(byType, "first_piece_inspection_report"), firstPieceReportEntryKey);
-  const openingRows = entryRows(byType, "production_opening_balance");
   const rawSoftwareRows = entryRows(byType, "software_raw");
   const meetingRows = entryRows(byType, "meeting_action");
   const routeLookup = loadRouteLookup(routeRows);
@@ -318,7 +313,6 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
   const snapshot = buildProductionAnalysis({
     includeToolFixtureNumbers: input.includeToolFixtureNumbers ?? true,
     setupNameMasterRows,
-    openingRows,
     productionRows,
     employees,
     departments,
@@ -401,7 +395,6 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
 function buildProductionAnalysis({
   includeToolFixtureNumbers,
   setupNameMasterRows,
-  openingRows,
   productionRows,
   employees,
   departments,
@@ -449,7 +442,6 @@ function buildProductionAnalysis({
 }: {
   includeToolFixtureNumbers: boolean;
   productionRows: ProductionRow[];
-  openingRows: Record<string, unknown>[];
   employees: Map<string, string>;
   setupNameMasterRows: Record<string, unknown>[];
   departments: Map<string, string>;
@@ -773,7 +765,6 @@ function buildProductionAnalysis({
   }
   const productionControl = buildProductionControl({
     setupNameMasterRows,
-    openingRows,
     productionRows,
     routeRows,
     cycleRows,
@@ -962,7 +953,6 @@ function buildProductionAnalysis({
 
 function buildProductionControl({
   setupNameMasterRows,
-  openingRows,
   productionRows,
   routeRows,
   cycleRows,
@@ -1001,7 +991,6 @@ function buildProductionControl({
   previousProductionDashboardRows,
 }: {
   productionRows: ProductionRow[];
-  openingRows: Record<string, unknown>[];
   setupNameMasterRows: Record<string, unknown>[];
   routeRows: Record<string, unknown>[];
   cycleRows: Record<string, unknown>[];
@@ -1052,36 +1041,17 @@ function buildProductionControl({
   const rawByJc = new Map<string, { outputQty: number; actualQty: number; rejectQty: number; rows: number; machines: Set<string>; operators: Set<string> }>();
   const rawBySetup = new Map<string, PlanningProductionActual>();
   const rawBySetupAnyMachine = new Map<string, PlanningProductionActual & { machines: Set<string> }>();
-  const currentOpeningRows = openingRows.filter((opening) => {
-    const jc = canonicalKey(rowText(opening, "jobCardNumber"));
-    const work = workOrderRows.find((row) => canonicalKey(rowText(row, "JC NO.", "jcNo")) === jc);
-    const part = rowText(opening, "partCode");
-    const changed = routeChangeForWorkOrder(routeChangeByTarget, rowText(opening, "jobCardNumber"), part);
-    const option = rowText(changed ?? {}, "newOption", "NEW ROUTE OPTION")
-      || rowText(work ?? {}, "OPTION NUMBER", "optionNumber")
-      || rowText(selectedRouteByJc.get(jc) ?? {}, "optionNumber", "routeCode")
-      || (routeOptionsByPart.get(canonicalKey(part))?.length === 1 ? rowText(routeOptionsByPart.get(canonicalKey(part))![0]!, "optionNumber") : "");
-    return canonicalKey(option) === canonicalKey(rowText(opening, "optionNumber"));
-  });
-  const openingProductionRows: ProductionRow[] = currentOpeningRows.map((row) => ({
-    ...row, openingBalance: true,
-    "JobCardNo": row.jobCardNumber, "PART CODE": row.partCode, "SETUP CODE": row.setupNo,
-    "MACHINE NO": row.machineNumber,
-    "PRODUCTION QTY (PCS)": safeNumber(row.goodPieces) + safeNumber(row.rejectedPieces),
-    "ACTUAL QTY IN PCS": safeNumber(row.goodPieces),
-  }));
   let latestRawDate = "";
-  for (const row of [...productionRows, ...openingProductionRows]) {
-    const isOpening = row.openingBalance === true;
+  for (const row of productionRows) {
     const jcNo = rowText(row, "JobCardNo", "JOB CARD NO.", "JC NO.");
     const prodDate = parseDate(rowValue(row, "PROD DATE", "PRODUCTION DATE"));
     if (prodDate && (!latestRawDate || prodDate > latestRawDate)) latestRawDate = prodDate;
     if (!jcNo) continue;
     const rec = getOrCreate(rawByJc, canonicalKey(jcNo), () => ({ outputQty: 0, actualQty: 0, rejectQty: 0, rows: 0, machines: new Set<string>(), operators: new Set<string>() }));
     rec.outputQty += safeNumber(rowValue(row, "PRODUCTION QTY (PCS)", "PROD QTY IN PCS"));
-    rec.actualQty += safeNumber(rowValue(row, "ACTUAL QTY IN PCS", "ACTUAL QTY")) || Math.max(safeNumber(rowValue(row, "PRODUCTION QTY (PCS)", "PROD QTY IN PCS")) - (isOpening ? safeNumber(row.rejectedPieces) : rejectionTotalFromRow(row)), 0);
-    rec.rejectQty += (isOpening ? safeNumber(row.rejectedPieces) : rejectionTotalFromRow(row));
-    rec.rows += isOpening ? 0 : 1;
+    rec.actualQty += safeNumber(rowValue(row, "ACTUAL QTY IN PCS", "ACTUAL QTY")) || Math.max(safeNumber(rowValue(row, "PRODUCTION QTY (PCS)", "PROD QTY IN PCS")) - rejectionTotalFromRow(row), 0);
+    rec.rejectQty += rejectionTotalFromRow(row);
+    rec.rows += 1;
     rec.machines.add(rowText(row, "MACHINE NO", "M/C NO"));
     rec.operators.add(rowText(row, "OPERATOR ID", "OPERATOR NAME"));
     const partCode = rowText(row, "PART CODE", "PART NO", "partCode");
@@ -1095,13 +1065,8 @@ function buildProductionControl({
       if (prodDate && (!setupRec.latestDate || prodDate > setupRec.latestDate)) setupRec.latestDate = prodDate;
       if (prodDate) setupRec.dates.add(prodDate);
       setupRec.outputQty += safeNumber(rowValue(row, "PRODUCTION QTY (PCS)", "PROD QTY IN PCS"));
-      setupRec.actualQty += safeNumber(rowValue(row, "ACTUAL QTY IN PCS", "ACTUAL QTY")) || Math.max(safeNumber(rowValue(row, "PRODUCTION QTY (PCS)", "PROD QTY IN PCS")) - (isOpening ? safeNumber(row.rejectedPieces) : rejectionTotalFromRow(row)), 0);
-      setupRec.rows += isOpening ? 0 : 1;
-      if (isOpening) {
-        setupRec.openingGood = (setupRec.openingGood ?? 0) + safeNumber(row.goodPieces);
-        setupRec.openingRejected = (setupRec.openingRejected ?? 0) + safeNumber(row.rejectedPieces);
-        setupRec.openingDate = rowText(row, "cutoffAt").slice(0, 10);
-      }
+      setupRec.actualQty += safeNumber(rowValue(row, "ACTUAL QTY IN PCS", "ACTUAL QTY")) || Math.max(safeNumber(rowValue(row, "PRODUCTION QTY (PCS)", "PROD QTY IN PCS")) - rejectionTotalFromRow(row), 0);
+      setupRec.rows += 1;
     }
     if (setupAnyMachineKey) {
       const setupRec = getOrCreate(rawBySetupAnyMachine, setupAnyMachineKey, (): PlanningProductionActual & { machines: Set<string> } => ({ startDate: "", latestDate: "", outputQty: 0, actualQty: 0, rows: 0, dates: new Set<string>(), machines: new Set<string>() }));
@@ -1109,13 +1074,8 @@ function buildProductionControl({
       if (prodDate && (!setupRec.latestDate || prodDate > setupRec.latestDate)) setupRec.latestDate = prodDate;
       if (prodDate) setupRec.dates.add(prodDate);
       setupRec.outputQty += safeNumber(rowValue(row, "PRODUCTION QTY (PCS)", "PROD QTY IN PCS"));
-      setupRec.actualQty += safeNumber(rowValue(row, "ACTUAL QTY IN PCS", "ACTUAL QTY")) || Math.max(safeNumber(rowValue(row, "PRODUCTION QTY (PCS)", "PROD QTY IN PCS")) - (isOpening ? safeNumber(row.rejectedPieces) : rejectionTotalFromRow(row)), 0);
-      setupRec.rows += isOpening ? 0 : 1;
-      if (isOpening) {
-        setupRec.openingGood = (setupRec.openingGood ?? 0) + safeNumber(row.goodPieces);
-        setupRec.openingRejected = (setupRec.openingRejected ?? 0) + safeNumber(row.rejectedPieces);
-        setupRec.openingDate = rowText(row, "cutoffAt").slice(0, 10);
-      }
+      setupRec.actualQty += safeNumber(rowValue(row, "ACTUAL QTY IN PCS", "ACTUAL QTY")) || Math.max(safeNumber(rowValue(row, "PRODUCTION QTY (PCS)", "PROD QTY IN PCS")) - rejectionTotalFromRow(row), 0);
+      setupRec.rows += 1;
       if (machine) setupRec.machines.add(machine);
     }
   }
@@ -1252,7 +1212,7 @@ function buildProductionControl({
     .filter((row) => row.planningItemMissing || row.routeSelectionMissing || row.routeMasterMissing || row.cycleTimeMissing || row.toolingPlanMissing || row.machineMasterMissing);
   const masterGaps = allWorkOrderGaps.filter((row) => row.rmStatus === "Received");
   const combinedBatches = combinedRows(prioritizedWorkOrderRows, rawByJc, routeGroups, cycleKeys, toolingKeys);
-  const machinePlanDetailRows = machinePlanDetails(prioritizedWorkOrderRows, rawBySetup, rawBySetupAnyMachine, routeGroups, cycleRows, toolingRows, machineRows, machineConstraints, planOverrides, shopFloorStatusRows, previousMachineAssignmentsBySetup(previousMachinePlanDetailRows), planningCalendar, currentOpeningRows);
+  const machinePlanDetailRows = machinePlanDetails(prioritizedWorkOrderRows, rawBySetup, rawBySetupAnyMachine, routeGroups, cycleRows, toolingRows, machineRows, machineConstraints, planOverrides, shopFloorStatusRows, previousMachineAssignmentsBySetup(previousMachinePlanDetailRows), planningCalendar);
   const productionDashboardRows = buildProductionDashboardRows({
     dispatchApprovals,
     dispatchRows,
@@ -1354,7 +1314,6 @@ function buildProductionControl({
     workOrders: prioritizedWorkOrderRows,
     rmInwardRows,
     productionOutputRows,
-    openingBalanceRows: currentOpeningRows,
     productionDashboardRows,
     jobCardStatusTiles: workOrderOutputRows,
     routeSelectionRequired: workOrderOutputRows.filter((row) => row.optionSource === "Planner required" && row.rmStatus === "Received"),
@@ -2656,7 +2615,6 @@ function machinePlanDetails(
   shopFloorStatusRows: Record<string, unknown>[],
   previousMachineAssignments: Map<string, Set<string>>,
   planningCalendar: PlanningCalendar,
-  openingRows: Record<string, unknown>[] = [],
 ) {
   const details: Array<Record<string, unknown>> = [];
   const cycleByKey = latestMasterRows(cycleRows);
@@ -2689,14 +2647,6 @@ function machinePlanDetails(
       if (!routeMachine) continue;
       const setupNo = rowText(route, "SETUP NO.", "SETUP CODE", "setupNo");
       const displaySetupNo = setupStepKey(setupNo, optionNumber) || setupNo;
-      const opening = openingRows.find((opening) => canonicalKey(rowText(opening, "jobCardNumber")) === canonicalKey(rowText(row, "jcNo"))
-        && canonicalKey(rowText(opening, "partCode")) === canonicalKey(partCode)
-        && canonicalKey(rowText(opening, "optionNumber")) === canonicalKey(optionNumber)
-        && setupStepKey(rowText(opening, "setupNo"), optionNumber) === displaySetupNo);
-      if (opening?.status === "completed") {
-        operationReadyDate = maxDateValue(operationReadyDate, rowText(opening, "cutoffAt").slice(0, 10));
-        continue;
-      }
       const setupOrderPcs = remainingQtyBySetup.get(canonicalKey(displaySetupNo)) ?? safeNumber(rowValue(row, "orderPcs"));
       const machineType = rowText(route, "MACHINE TYPE", "machineType");
       const overrideDecision = planOverrideDecisionForSetup(planOverrides, row, setupNo, displaySetupNo);
@@ -2880,7 +2830,7 @@ function machinePlanDetails(
         const settingDone = setupLifecycleStageRank(effectiveStage) >= setupLifecycleStageRank("setting");
         const machineStarted = setupLifecycleStageRank(effectiveStage) >= setupLifecycleStageRank("operator_started");
         const itemComplete = effectiveStage === "item_complete";
-        const shopFloorCompletedAt = shopFloorStatus && !shopFloorStatus.openingBalance ? rowText(shopFloorStatus, "completedAt", "createdAt") : "";
+        const shopFloorCompletedAt = shopFloorStatus ? rowText(shopFloorStatus, "completedAt", "createdAt") : "";
         const shopFloorDoneBy = shopFloorStatus ? rowText(shopFloorStatus, "doneBy") : "";
         const staticBaseReadyDate = routeIndex === 0 ? addDays(parseDate(rmInwardDate) || rmInwardDate, 0, planningCalendar) : plannedSetupDate(rmInwardDate, routeIndex, planningCalendar);
         const baseSetupDate = splitRole === "remaining_moved_to_alternate_machine"
@@ -2888,12 +2838,12 @@ function machinePlanDetails(
           : splitRole === "remaining_delayed_on_same_machine"
             ? maxDateValue(operationReadyDate || staticBaseReadyDate, setupInterruption ? machineUnavailableResumeDate(setupInterruption.window, planningCalendar) : "")
             : operationReadyDate || staticBaseReadyDate;
-        const plannedStartDate = maxDateValue(baseSetupDate, machineNextSetupDate.get(machineKeyValue) ?? "", productionActual?.openingDate ?? "");
+        const plannedStartDate = maxDateValue(baseSetupDate, machineNextSetupDate.get(machineKeyValue) ?? "");
         const plannedCompletionDate = plannedStartDate;
         const setupCompletionDate = settingDone ? parseDate(shopFloorCompletedAt) || shopFloorCompletedAt : "";
         const actualStartDate = productionActual?.startDate ?? "";
         const actualCompletionDate = itemComplete ? parseDate(shopFloorCompletedAt) || shopFloorCompletedAt : "";
-        const plannedProductionStartDate = actualStartDate || maxDateValue(plannedCompletionDate, setupCompletionDate, productionActual?.openingDate ?? "");
+        const plannedProductionStartDate = actualStartDate || maxDateValue(plannedCompletionDate, setupCompletionDate);
         const plannedProductionEndDate = plannedProductionEnd(plannedProductionStartDate, machineOrderPcs, cycle, productionActual, planningCalendar);
         if (plannedProductionEndDate) routeProductionEndDates.push(parseDate(plannedProductionEndDate) || plannedProductionEndDate);
         if (plannedProductionStartDate && plannedProductionEndDate) {
@@ -2905,7 +2855,7 @@ function machinePlanDetails(
             dailyQty: cycleDailyQty(cycle),
           });
         }
-        if (productionActual && (productionActual.rows || productionActual.openingDate)) routeProductionActuals.push(productionActual);
+        if (productionActual && productionActual.rows) routeProductionActuals.push(productionActual);
         if (machineKeyValue) {
           machineLoad.set(machineKeyValue, (machineLoad.get(machineKeyValue) ?? 0) + 1);
           machinePlannedDays.set(machineKeyValue, (machinePlannedDays.get(machineKeyValue) ?? 0) + plannedProductionDays(plannedProductionStartDate, plannedProductionEndDate, planningCalendar));
@@ -2961,7 +2911,6 @@ function machinePlanDetails(
         priorityRemark: rowText(row, "priorityRemark"),
         rawOutputQty: round(productionActual?.outputQty ?? 0),
         rawActualQty: round(productionActual?.actualQty ?? 0),
-        openingGoodQty: productionActual?.openingGood ?? 0,
         pendingGoodQty: Math.max(machineOrderPcs - (productionActual?.actualQty ?? 0), 0),
         rawRejectQty: Math.max((productionActual?.outputQty ?? 0) - (productionActual?.actualQty ?? 0), 0),
         rawRows: productionActual?.rows ?? 0,
@@ -3011,8 +2960,8 @@ function machinePlanDetails(
         Object.defineProperty(detail, "__planningMeta", {
           enumerable: false,
           value: {
-            readyDate: maxDateValue(baseSetupDate, productionActual?.openingDate ?? ""),
-            baseReadyDate: maxDateValue(staticBaseReadyDate, productionActual?.openingDate ?? ""),
+            readyDate: baseSetupDate,
+            baseReadyDate: staticBaseReadyDate,
             canPullForward: operationReadyCanPullForward,
             orderPcs: machineOrderPcs,
             totalOrderPcs: setupOrderPcs,
@@ -4416,7 +4365,6 @@ function mergedProductionActual(
 ) {
   if (!manualActual) return actual;
   if (!actual) return manualActual;
-  if (actual.openingDate && actual.actualQty >= manualActual.actualQty) return actual;
   const dates = new Set([...actual.dates, ...manualActual.dates]);
   return {
     ...actual,
@@ -4719,14 +4667,14 @@ function plannedProductionEnd(
   startDate: string,
   orderPcs: number,
   cycle: Record<string, unknown> | undefined,
-  actual?: Pick<PlanningProductionActual, "latestDate" | "outputQty" | "actualQty" | "dates" | "openingGood" | "openingRejected" | "openingDate">,
+  actual?: Pick<PlanningProductionActual, "latestDate" | "outputQty" | "actualQty" | "dates">,
   planningCalendar: PlanningCalendar = defaultPlanningCalendar,
 ) {
   const normalizedStartDate = addDays(parseDate(startDate) || startDate, 0, planningCalendar);
   if (!normalizedStartDate) return "";
   if (actual?.latestDate && actual.dates.size) {
     if (actual.actualQty >= orderPcs) return maxDateValue(normalizedStartDate, actual.latestDate);
-    const dailyOutput = Math.max(actual.actualQty - (actual.openingGood ?? 0), 0) / actual.dates.size;
+    const dailyOutput = Math.max(actual.actualQty, 0) / actual.dates.size;
     if (dailyOutput > 0) {
       const remainingQty = Math.max(orderPcs - actual.actualQty, 0);
       const remainingDays = Math.max(1, Math.ceil(remainingQty / dailyOutput));
@@ -4768,7 +4716,7 @@ function plannedWipBufferReadyDate({
     .filter((stream) => stream.startDate && stream.endDate && stream.endDate >= stream.startDate && stream.quantity > 0 && stream.dailyQty > 0);
   const actualStreams = uniqueProductionActuals(actuals)
     .map((actual) => {
-      const quantity = Math.max(actual.actualQty - (actual.openingGood ?? 0), 0);
+      const quantity = Math.max(actual.actualQty, 0);
       const dateCount = actual.dates.size || 1;
       return {
         machine: actual.machine ?? "",
@@ -4779,17 +4727,12 @@ function plannedWipBufferReadyDate({
       };
     })
     .filter((stream) => stream.startDate && stream.endDate && stream.endDate >= stream.startDate && stream.quantity > 0 && stream.dailyQty > 0);
-  const openingStreams: WipProductionStream[] = actuals.filter((actual) => actual.openingGood && actual.openingDate).map((actual) => ({
-    machine: actual.machine ?? "", startDate: actual.openingDate!, endDate: actual.openingDate!,
-    quantity: actual.openingGood!, dailyQty: 0, opening: true,
-  }));
   const actualByMachine = new Map(actualStreams.map((stream) => [canonicalKey(stream.machine), stream]));
   const futurePlannedStreams = streams.flatMap((stream) => {
     const actual = actualByMachine.get(canonicalKey(stream.machine));
-    const opening = openingStreams.find((opening) => canonicalKey(opening.machine) === canonicalKey(stream.machine));
-    if (!actual && !opening) return [stream];
-    const remainingQuantity = Math.max(stream.quantity - (actual?.quantity ?? 0) - (opening?.quantity ?? 0), 0);
-    const remainingStartDate = actual ? addDays(actual.endDate, 1, planningCalendar) : maxDateValue(stream.startDate, opening?.startDate ?? "");
+    if (!actual) return [stream];
+    const remainingQuantity = Math.max(stream.quantity - actual.quantity, 0);
+    const remainingStartDate = addDays(actual.endDate, 1, planningCalendar);
     if (!remainingQuantity || !remainingStartDate || remainingStartDate > stream.endDate) return [];
     return [{
       ...stream,
@@ -4798,13 +4741,13 @@ function plannedWipBufferReadyDate({
       dailyQty: actual?.dailyQty || stream.dailyQty,
     }];
   });
-  const supplyStreams = [...openingStreams, ...actualStreams, ...futurePlannedStreams];
+  const supplyStreams = [...actualStreams, ...futurePlannedStreams];
   if (!supplyStreams.length || !orderPcs || !nextCycle) return "";
   const previousDailyQty = supplyStreams.length ? sum(supplyStreams.map((stream) => stream.dailyQty)) : cycleDailyQty(previousCycle);
   const nextDailyQty = cycleDailyQty(nextCycle) * Math.max(1, nextMachineCount);
   if (!previousDailyQty || !nextDailyQty) return "";
 
-  const actualQty = Math.min(orderPcs, sum([...openingStreams, ...actualStreams].map((stream) => stream.quantity)));
+  const actualQty = Math.min(orderPcs, sum(actualStreams.map((stream) => stream.quantity)));
   const stoppedMachineUnlockQty = Math.min(orderPcs, nextDailyQty * minimumParallelMachineWorkDays);
   const stoppedMachineWipCanStartDownstream = !actualStreams.length || actualQty >= stoppedMachineUnlockQty;
   const bufferDays = previousDailyQty < nextDailyQty ? 3 : 2;
@@ -4884,7 +4827,6 @@ function streamProducedQtyThroughDate(stream: WipProductionStream, dateValue: st
   const start = parseDate(stream.startDate) || stream.startDate;
   const end = minDateValue(parseDate(stream.endDate) || stream.endDate, parseDate(dateValue) || dateValue);
   if (!start || !end || end < start) return 0;
-  if (stream.opening) return stream.quantity;
   return Math.min(stream.quantity, plannedProductionDays(start, end, planningCalendar) * stream.dailyQty);
 }
 
@@ -4899,7 +4841,7 @@ function actualWipBufferAvailable({
   previousCycle: Record<string, unknown> | undefined;
   nextCycle: Record<string, unknown> | undefined;
   nextMachineCount?: number;
-  actuals?: Array<Pick<PlanningProductionActual, "latestDate" | "outputQty" | "actualQty" | "dates" | "openingGood" | "openingRejected" | "openingDate">>;
+  actuals?: Array<Pick<PlanningProductionActual, "latestDate" | "outputQty" | "actualQty" | "dates">>;
 }) {
   if (!orderPcs || !nextCycle || !actuals.length) return false;
   const previousDailyQty = cycleDailyQty(previousCycle);
@@ -4907,7 +4849,7 @@ function actualWipBufferAvailable({
   if (!previousDailyQty || !nextDailyQty) return false;
   const actualDailyQty = sum(actuals.map((actual) => {
     const dateCount = actual.dates.size || 1;
-    return Math.max(actual.actualQty - (actual.openingGood ?? 0), 0) / dateCount;
+    return Math.max(actual.actualQty, 0) / dateCount;
   }));
   const effectivePreviousDailyQty = actualDailyQty || previousDailyQty;
   const bufferDays = effectivePreviousDailyQty < nextDailyQty ? 3 : 2;

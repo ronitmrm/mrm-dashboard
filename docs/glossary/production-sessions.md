@@ -120,36 +120,15 @@ Example: `C501-20260815-03` is the third session for machine C501 on Production 
 
 ## Measurement and output
 
-### CNC startup opening balances
+### CNC fresh-start transition
 
-CNC startup uses one agreed cutoff timestamp in IST. Each already-started Job
-Card, part, route and setup has opening good/rejected pieces and Running or
-Completed state. A running setup may have one balance per machine; sum those
-balances for setup progress while retaining each machine's quantities and state.
-A completed setup has one balance and cannot also have running balances.
-Completed is lifecycle evidence, not an inferred quantity; a completed setup may
-still show a shortfall against the order. Unstarted setups have no opening row.
-
-Pending good pieces per setup = max(order pieces − opening good pieces −
-post-cutoff good pieces, 0). Rejections never reduce this requirement. Opening
-pieces count toward cumulative Job Card progress and available WIP, but never
-toward daily output, session counts, productivity or observed production rates.
-The cutoff is not an invented historical start or completion date.
-
-For this CNC startup, each job card listed in the RM sheet is confirmed to have
-material for its full ordered quantity. Received kilograms record historical
-receipts and do not cap planning pieces. Unused kilograms are optional; a blank
-means unknown remaining stock, not zero and not the received quantity.
-
-The startup import is atomic and immutable. An identical replay is a no-op;
-a changed batch is rejected for reconciliation. Existing output or workflow for
-the imported setups must be reconciled before import. Subsequent production must
-start at or after cutoff; undated daily entries on the cutoff date are rejected
-because their overlap cannot be determined. A running baseline establishes current
-machine ownership without creating historical sessions, operators, checklists or
-quality approvals. Normal post-cutoff sessions still require an eligible operator
-and valid measurement settings. RM receipt readiness rules remain unchanged;
-cumulative receipts and unused kilograms are reconciled separately.
+Only Job Cards with no production setup started enter the new CNC workflow.
+Items already started finish entirely in the old system. Each machine finishes
+its old-system queue before starting any new-system setup. Planning assumes idle
+machines; planned dates remain estimates, and sessions record actual start/end
+times when the machine switches. No historical opening quantities, setup states,
+or invented production dates are imported. Every new Job Card follows the normal
+material, route, setup, quality and production workflow from its first step.
 
 Cycle Time Master revisions apply to the selected unit, item, route and setup.
 Open production sessions adopt the revised cycle time, and planning refreshes
