@@ -465,7 +465,7 @@ const FOUNDATION_STATEMENTS = [
           AND lower(work_order.job_card_number) =
             lower(reference.job_card_number)
       )
-    ON CONFLICT (organization_id, lower(work_order_number)) DO NOTHING
+    ON CONFLICT (organization_id, lower(job_card_number)) DO NOTHING
   `,
 ] as const
 

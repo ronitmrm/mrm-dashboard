@@ -310,6 +310,20 @@ describe("dashboard planning writes", () => {
     ).rejects.toThrow(/Job Card already belongs to another FG PO Number and Part Code/i)
   })
 
+  test("keeps separate Job Cards for the same FG PO and part on reimport", async () => {
+    const shared = { organizationId, itemUid, workOrderNumber: `118::${itemUid}` }
+    const first = await repository.upsertWorkOrder({ ...shared, jobCardNumber: `P1429-${suffix}`, orderedQuantity: 1000 })
+    const second = await repository.upsertWorkOrder({ ...shared, jobCardNumber: `P1482-${suffix}`, orderedQuantity: 3700 })
+    expect(first.id).not.toBe(second.id)
+    const repeated = await repository.upsertWorkOrder({ ...shared, jobCardNumber: `P1429-${suffix}`, orderedQuantity: 1000 })
+    expect(repeated.id).toBe(first.id)
+    const lines = await pool.query<{ quantity: number }>(
+      "SELECT ordered_quantity::float8 AS quantity FROM manufacturing.work_orders WHERE id = ANY($1::uuid[]) ORDER BY ordered_quantity",
+      [[first.id, second.id]]
+    )
+    expect(lines.rows).toEqual([{ quantity: 1000 }, { quantity: 3700 }])
+  })
+
   test("reallocates one central machine record between production floors", async () => {
     const machineNumber = `MOVE-${suffix}`
     const original = await repository.upsertMachine({

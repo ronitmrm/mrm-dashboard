@@ -1,5 +1,13 @@
 # Production Sessions
 
+## Work order job cards
+
+Each Job Card identifies one production order line. Multiple Job Cards may share
+the same FG PO and Part Code, with separate ordered quantities, routes, material
+readiness and production history. Reimporting a Job Card updates that line; it
+must not reassign the Job Card to a different FG PO or part. Duplicate Job Cards
+within one import are rejected.
+
 ## Lifecycle
 
 Quality Inspection Parameter masters remain scoped to their production unit,

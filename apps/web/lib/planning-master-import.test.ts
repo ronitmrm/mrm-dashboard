@@ -90,7 +90,7 @@ describe("planning master CSV imports", () => {
     })
   })
 
-  it("uses FG PO and Part Code together as the unique Work Order line", () => {
+  it("uses FG PO and Part Code as the shared Work Order reference", () => {
     expect(workOrderNumberForPayload({ fgPoNo: "FG-001", jcNo: "JC-001", partCode: "M2B" })).toBe(
       "FG-001::M2B"
     )
@@ -99,7 +99,7 @@ describe("planning master CSV imports", () => {
     )
   })
 
-  it("rejects repeated Job Cards and repeated FG PO plus Part Code lines", () => {
+  it("allows separate Job Cards for the same FG PO/part but rejects repeated Job Cards", () => {
     const invalidRows = [
       { fgPoNo: "FG-001", jcNo: "JC-001", partCode: "M2B" },
       { fgPoNo: "FG-002", jcNo: "JC-001", partCode: "M3" },
@@ -107,7 +107,8 @@ describe("planning master CSV imports", () => {
     ]
 
     expect(planningImportValidationError("work_order", invalidRows, [])).toBe(
-      "Work order CSV needs correction before import. CSV rows 2 and 3 repeat Job Card JC-001. Each Job Card must identify exactly one line. CSV rows 2 and 4 repeat FG PO FG-001 with Part Code M2B. That combination may appear only once in a Work Order."
+      "Work order CSV needs correction before import. CSV rows 2 and 3 repeat Job Card JC-001. Each Job Card must identify exactly one line."
     )
+    expect(planningImportValidationError("work_order", [invalidRows[0]!, invalidRows[2]!], [])).toBeNull()
   })
 })
