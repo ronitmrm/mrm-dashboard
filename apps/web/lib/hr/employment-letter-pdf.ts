@@ -1,3 +1,4 @@
+import { buildOfferLetterPdf } from "./offer-letter-pdf"
 import type { PreparedEmploymentLetter } from "@workspace/db"
 import {
   PDFDocument,
@@ -227,133 +228,21 @@ function pronouns(value: "he-him" | "she-her" | "they-them") {
 export async function buildEmploymentLetterPdf(
   letter: PreparedEmploymentLetter
 ) {
+  if (letter.type === "offer") return buildOfferLetterPdf(letter)
+
   const pdf = await PDFDocument.create()
   const regular = await pdf.embedFont(StandardFonts.Helvetica)
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold)
   const title =
-    letter.type === "offer"
-      ? "Offer Letter"
-      : letter.type === "appointment"
-        ? "Appointment Letter"
-        : "Certificate of Experience"
+    letter.type === "appointment"
+      ? "Appointment Letter"
+      : "Certificate of Experience"
   pdf.setTitle(`${letter.identity.employeeName} ${title}`)
   pdf.setSubject(`${letter.type} employment letter`)
   pdf.setCreator("MRM Dashboard")
   pdf.setProducer("MRM Dashboard")
 
-  if (letter.type === "offer") {
-    const first = page(pdf, regular, bold)
-    drawTitle(first, "OFFER LETTER")
-    line(first, `Ref: ${letter.reference}`, { bold: true, gap: 2 })
-    line(first, dateLabel(letter.issuedOn), { gap: 14 })
-    line(
-      first,
-      `To,\n${letter.identity.employeeName}\n${letter.details.postalAddress}`,
-      { gap: 14 }
-    )
-    line(
-      first,
-      `Subject: Offer of Employment - ${letter.identity.designation}`,
-      { bold: true, gap: 14 }
-    )
-    line(first, `Dear ${letter.identity.employeeName},`, { gap: 10 })
-    line(
-      first,
-      `With reference to your application and the subsequent interviews, we are pleased to offer you the position of ${letter.identity.designation} in ${letter.identity.department} at Mayank Raw Mint Pvt. Ltd. Your joining date will be ${dateLabel(letter.identity.joiningDate)}.`,
-      { gap: 10 }
-    )
-    line(
-      first,
-      "Please bring xerox copies of the following documents on the day of joining:",
-      { gap: 4 }
-    )
-    ;[
-      "Aadhaar Card",
-      "PAN Card",
-      "Two Passport Size Photographs",
-      "Cancelled Cheque or Bank Passbook",
-      "Educational Qualification Certificates",
-      "Previous Employment Experience Letter (if applicable)",
-    ].forEach((item, index) =>
-      line(first, `${index + 1}. ${item}`, { gap: 0, indent: 10, size: 9.2 })
-    )
-    line(first, "Please turn over for detailed terms and conditions.", {
-      gap: 8,
-    })
-    line(
-      first,
-      "We look forward to welcoming you and wish you a successful association with us.",
-      { gap: 8 }
-    )
-    sign(
-      first,
-      letter.details.signatoryName,
-      letter.details.signatoryDesignation
-    )
-
-    const second = page(pdf, regular, bold)
-    drawTitle(second, "Continuation of Offer Letter")
-    line(second, `Ref: ${letter.reference}`, { bold: true, gap: 12 })
-    clause(
-      second,
-      1,
-      "Compensation",
-      `During probation, your consolidated salary will be ${money(letter.salary)} per ${letter.details.payPeriod}. After probation, your salary range will be ${money(letter.details.salaryAfterProbationMinimum)} to ${money(letter.details.salaryAfterProbationMaximum)} per ${letter.details.payPeriod}, subject to applicable statutory deductions.`
-    )
-    clause(
-      second,
-      2,
-      "Probation",
-      `You will be on probation for a period of ${letter.details.probationLength} ${letter.details.probationUnit} from the date of joining. Upon satisfactory completion, your employment will be confirmed in writing.`
-    )
-    clause(
-      second,
-      3,
-      "Termination During Probation",
-      "During probation, either party may terminate employment without notice. Salary is payable up to the last working day, subject to proper intimation and clearance."
-    )
-    clause(
-      second,
-      4,
-      "Statutory Deductions",
-      "All applicable statutory deductions will be made in accordance with prevailing laws and regulations."
-    )
-    clause(
-      second,
-      5,
-      "Working Days and Hours",
-      `Working days are Saturday through Thursday. Duty hours are ${letter.details.dutyStartTime} to ${letter.details.dutyEndTime}, subject to applicable labour laws and additional business requirements.`
-    )
-    clause(
-      second,
-      6,
-      "Attendance Policy",
-      "Company attendance and punctuality policies communicated at joining will apply."
-    )
-    clause(
-      second,
-      7,
-      "Leave and Transfer Policy",
-      "No paid leave applies during probation unless stated otherwise. Post-confirmation leave and transfers follow company policy."
-    )
-    clause(
-      second,
-      8,
-      "Confidentiality",
-      "You must maintain strict confidentiality of company information during and after employment."
-    )
-    clause(
-      second,
-      9,
-      "Acceptance of Offer",
-      "Please confirm acceptance by signing and returning a copy of this letter."
-    )
-    line(
-      second,
-      `Acknowledged and Accepted by:\n${letter.identity.employeeName}\nDate: ____________________`,
-      { gap: 0 }
-    )
-  } else if (letter.type === "appointment") {
+  if (letter.type === "appointment") {
     const first = page(pdf, regular, bold)
     drawTitle(first, "APPOINTMENT LETTER")
     line(first, `Ref: ${letter.reference}`, { bold: true, gap: 2 })
