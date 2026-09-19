@@ -24,7 +24,7 @@ export function parseProductionOpeningBatch(value: unknown) {
   }
   if (!Array.isArray(batch.rows) || !batch.rows.length) throw new Error("Opening rows are required.")
   if (batch.rows.length > 5000) throw new Error("Opening batch exceeds the dashboard's 5,000-setup capacity.")
-  const keys = new Set<string>()
+  const states = new Map<string, ProductionOpeningRow["status"]>()
   const machines = new Set<string>()
   const rows = batch.rows.map((value: unknown): ProductionOpeningRow => {
     if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid opening row.")
@@ -45,8 +45,11 @@ export function parseProductionOpeningBatch(value: unknown) {
       status: row.status, machineNumber: row.status === "running" ? text("machineNumber") : null,
     }
     const key = JSON.stringify([result.jobCardNumber.toLowerCase(), result.partCode.toLowerCase(), result.optionNumber.toLowerCase(), result.setupNumber])
-    if (keys.has(key)) throw new Error(`Duplicate opening setup: ${result.jobCardNumber}/${result.setupNumber}.`)
-    keys.add(key)
+    const previousState = states.get(key)
+    if (previousState && (previousState === "completed" || result.status === "completed")) {
+      throw new Error(`Duplicate opening setup: ${result.jobCardNumber}/${result.setupNumber}; completed and running balances cannot overlap.`)
+    }
+    states.set(key, result.status)
     if (result.machineNumber) {
       const machine = result.machineNumber.toLowerCase()
       if (machines.has(machine)) throw new Error(`Multiple running setups on ${result.machineNumber}.`)
@@ -112,7 +115,14 @@ export function createProductionOpeningRepository(options: RepositoryPoolOptions
           if (conflict.rows[0]?.present) throw new Error(`Existing production or workflow must be reconciled: ${row.jobCardNumber}/${row.setupNumber}.`)
           resolved.push({ row, target, machineId })
         }
-        const preview = resolved.map(({ row, target }) => ({ ...row, pendingGoodPieces: Math.max(Number(target.ordered_quantity) - row.goodPieces, 0) }))
+        const goodBySetup = new Map<string, number>()
+        const setupKey = (target: { work_order_id: string; setup_id: string }) => `${target.work_order_id}/${target.setup_id}`
+        for (const { row, target } of resolved) {
+          const key = setupKey(target)
+          goodBySetup.set(key, (goodBySetup.get(key) ?? 0) + row.goodPieces)
+        }
+        const preview = resolved.map(({ row, target }) => ({ ...row,
+          pendingGoodPieces: Math.max(Number(target.ordered_quantity) - (goodBySetup.get(setupKey(target)) ?? 0), 0) }))
         if (!input.commit) return { status: "preview", cutoffAt: batch.cutoffAt, rows: preview }
         const savedBatch = await client.query<{ id: string }>(`INSERT INTO manufacturing.production_opening_batches
           (organization_id, cutoff_at, source_digest) VALUES ($1, $2, $3) RETURNING id`, [input.organizationId, batch.cutoffAt, digest])

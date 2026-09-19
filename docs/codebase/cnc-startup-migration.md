@@ -10,8 +10,10 @@ against the shared staging/production database during tests.
 1. Fill the six-sheet CNC startup workbook; keep the row 3 headings. Identifiers
    must remain text. Use Excel dates or `YYYY-MM-DD`, and one IST cutoff time.
    Each running setup needs a matching production row, including explicit zeros.
-   A setup cannot be both Running and Completed or run on two machines in this
-   baseline; reconcile those cases before proceeding.
+   A setup may run on multiple machines: supply separate quantities and matching
+   rows for each machine. A setup cannot be both Running and Completed.
+   Migration 0157 permits these per-machine balances; preview pending pieces
+   use their combined good output, not each machine's output independently.
 2. `pnpm --filter web cnc:prepare <absolute-filled.xlsx> <absolute-review.json>`
    reads the workbook without database access. It validates sheets, required
    values, work-order identities, duplicate setups, running-machine matches and
@@ -47,5 +49,6 @@ states do not create historical completion events with invented dates.
 
 Implementation: `packages/db/src/production-opening-balances.ts`,
 `packages/db/migrations/0154_cnc_opening_balances.sql`,
+`packages/db/migrations/0157_cnc_opening_machine_balances.sql`,
 `apps/web/lib/cnc-opening-workbook.ts`. Verification uses isolated local PostgreSQL
 and existing Vitest tooling. Keep workbook/review files outside tracked source.
