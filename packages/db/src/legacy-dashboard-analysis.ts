@@ -2649,6 +2649,7 @@ function machinePlanDetails(
 ) {
   const details: Array<Record<string, unknown>> = [];
   const cycleByKey = latestMasterRows(cycleRows);
+  const toolingKeys = new Set(latestMasterRows(toolingRows).keys());
   const shopFloorStatusBySetup = latestShopFloorStatusBySetup(shopFloorStatusRows);
   const machineUnavailableWindows = activeMachineUnavailableWindows(machineConstraints);
   const machineLoad = new Map<string, number>();
@@ -2660,8 +2661,6 @@ function machinePlanDetails(
     const optionNumber = rowText(row, "optionNumber");
     if (!partCode || !optionNumber || optionNumber === "Not selected") continue;
     if (rowText(row, "rmStatus") !== "Received") continue;
-    if (!workOrderPlanningMastersReady(row, { hasCycleMaster: cycleRows.length > 0, hasToolingMaster: toolingRows.length > 0 })) continue;
-
     const routeKeyValue = [canonicalKey(partCode), optionNumber].join("|");
     const remainingSetups = routeChangeRemainingPlan(row).filter((setup) => setup.plan && safeNumber(setup.quantity) > 0);
     const remainingQtyBySetup = new Map(remainingSetups.map((setup) => [canonicalKey(setup.setupNo), setup.quantity]));
@@ -2709,6 +2708,15 @@ function machinePlanDetails(
         optionNumber,
         setupNo: displaySetupNo,
       });
+      const setupHasExecution = productionActualMachines.size > 0 || lockedShopFloorMachines.size > 0;
+      const setupMastersReady =
+        (!cycleRows.length || Boolean(cycle)) &&
+        (!toolingRows.length || toolingKeys.has(masterKey(route)));
+      if (!setupMastersReady && !setupHasExecution) {
+        routePlanningBlocked = true;
+        operationReadyCanPullForward = false;
+        continue;
+      }
       const previousMachines = previousMachineAssignments.get(machinePlanSetupKey({
         jcNo: rowText(row, "jcNo"),
         partCode,
@@ -3027,13 +3035,6 @@ function machinePlanDetails(
     rowText(a, "partCode").localeCompare(rowText(b, "partCode"), undefined, { numeric: true }) ||
     numericSort(rowText(a, "setupNo"), rowText(b, "setupNo")),
   );
-}
-
-function workOrderPlanningMastersReady(row: Record<string, unknown>, masters: { hasCycleMaster: boolean; hasToolingMaster: boolean }) {
-  const routeStatus = rowText(row, "routeStatus");
-  return (routeStatus === "Ready" || routeStatus === "Auto single option" || routeStatus === "Route change plan") &&
-    (!masters.hasCycleMaster || rowText(row, "cycleStatus") === "Ready") &&
-    (!masters.hasToolingMaster || rowText(row, "toolingStatus") === "Ready");
 }
 
 function shopFloorTaskReadiness(previousOperationReady: boolean, plannedStartDate: string) {

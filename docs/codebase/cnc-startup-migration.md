@@ -65,3 +65,7 @@ Dashboard source budgets allow 5,000 route, cycle and tooling rows per productio
 unit. Verify source coverage after loading: a truncated group must not be treated
 as evidence that an imported master is missing. CNC startup exceeds the former
 500-row limits (773 route/tooling rows and676 cycle rows).
+
+Running opening setups must remain in `machinePlanDetailRows` and lock their
+actual physical machines when cycle time is deferred. Master gaps block only
+unstarted setup planning; they must not hide actual execution state.
