@@ -134,7 +134,7 @@ const productionDashboardContinuityFields = [
 const dataEntrySourceBudgets: Record<string, number> = {
   production_opening_balance: 5000,
   setup_name_master: 1000,
-  cycle: 500,
+  cycle: 5000,
   employee: 1000,
   first_piece_inspection_report: 2500,
   hourly_quality_check: 5000,
@@ -152,11 +152,11 @@ const dataEntrySourceBudgets: Record<string, number> = {
   rejection_remark_master: 500,
   rejection_type_master: 500,
   rm_inward: 2000,
-  route: 500,
+  route: 5000,
   setup_checklist_master: 2000,
   setup_checklist_session: 5000,
   shop_floor_status: 5000,
-  tooling: 500,
+  tooling: 5000,
   work_order: 5000,
 }
 

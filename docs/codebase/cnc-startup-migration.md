@@ -60,3 +60,8 @@ Opening schema:
 `packages/db/migrations/0157_cnc_opening_machine_balances.sql`,
 `apps/web/lib/cnc-opening-workbook.ts`. Verification uses isolated local PostgreSQL
 and existing Vitest tooling. Keep workbook/review files outside tracked source.
+
+Dashboard source budgets allow 5,000 route, cycle and tooling rows per production
+unit. Verify source coverage after loading: a truncated group must not be treated
+as evidence that an imported master is missing. CNC startup exceeds the former
+500-row limits (773 route/tooling rows and676 cycle rows).
