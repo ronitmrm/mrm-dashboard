@@ -215,6 +215,7 @@ import {
   nextShopFloorStageId,
   setupChecklistItemAppliesToPhase,
   shopFloorNoPendingActionLabel,
+  shopFloorRowIsExplicitlyStopped,
 } from "@/lib/shop-floor-workflow"
 import {
   priorityChangePlan,
@@ -15634,6 +15635,7 @@ function shopFloorItemIsCurrent(row: DashboardPayload) {
 
 function shopFloorItemIsProductionCurrent(row: DashboardPayload) {
   if (
+    shopFloorRowIsExplicitlyStopped(row) ||
     planningRowIsBreakdownStopped(row) ||
     planningRowIsShiftedAfterBreakdown(row)
   )

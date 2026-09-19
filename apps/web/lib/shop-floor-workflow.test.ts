@@ -4,6 +4,7 @@ import {
   nextShopFloorStageId,
   setupChecklistItemAppliesToPhase,
   shopFloorNoPendingActionLabel,
+  shopFloorRowIsExplicitlyStopped,
 } from "./shop-floor-workflow";
 
 describe("shop-floor workflow action labels", () => {
@@ -16,6 +17,14 @@ describe("shop-floor workflow action labels", () => {
     expect(shopFloorNoPendingActionLabel("operator_started")).toBe("Machine already started");
     expect(shopFloorNoPendingActionLabel("worker_start")).toBe("Machine already started");
   });
+
+  it("keeps a planner-stopped opening row off the current machine slot", () => {
+    expect(shopFloorRowIsExplicitlyStopped({
+      rawOutputQty: 6082,
+      runningStatus: "Planner stopped",
+      shopFloorStage: "planned",
+    })).toBe(true)
+  })
 
   it("shows each setup checklist point only in its assigned phase", () => {
     expect(setupChecklistItemAppliesToPhase("Pre setting", "start")).toBe(true);

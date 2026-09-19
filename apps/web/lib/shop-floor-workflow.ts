@@ -32,6 +32,13 @@ export function shopFloorNoPendingActionLabel(stage: unknown) {
   return "No pending workflow task";
 }
 
+export function shopFloorRowIsExplicitlyStopped(row: Record<string, unknown>) {
+  return (
+    normalizeShopFloorStage(row.shopFloorStage) === "planned" &&
+    String(row.runningStatus ?? "").trim().toLowerCase() === "planner stopped"
+  )
+}
+
 export function setupChecklistItemAppliesToPhase(
   section: unknown,
   phase: "end" | "start"
