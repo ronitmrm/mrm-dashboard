@@ -1,262 +1,528 @@
-import { PDFArray, PDFDict, PDFDocument, PDFName, PDFRef } from "pdf-lib"
-import type { Page } from "puppeteer-core"
 import {
   brandingOutline,
-  brandingRichTextHtml,
   plainBrandingRichText,
   revisionLabel,
+  type BrandingLanguage,
 } from "@workspace/db/branding-domain"
 import type { BrandingPdfInput } from "./pdf"
-import { brandTypography, typeStyle } from "./typography"
+import {
+  A4,
+  BLACK,
+  CREAM,
+  GREEN,
+  MARGIN,
+  blockFits,
+  drawBlock,
+  drawLogo,
+  drawText,
+  drawWordmark,
+  loadWordmark,
+  mm,
+  richBlocks,
+  textLayout,
+  type PdfContext,
+  type TextBlock,
+  type TextPart,
+} from "./pdfkit-layout"
 
-const escape = (value: string) =>
-  value.replace(
-    /[&<>"']/g,
-    (char) =>
-      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
-        char
-      ]!
-  )
+const WIDTH = A4[0] - MARGIN * 2
+const BOTTOM = A4[1] - mm(25)
+type PlacedBlock = { block: TextBlock; y: number }
+type FlowPage = PlacedBlock[]
 
-export function brandingBookHtml(
-  input: BrandingPdfInput,
-  fonts: string,
-  logo: string,
-  wordmark: string
-) {
-  const styles = `${fonts}
-${brandTypography}
-    *{box-sizing:border-box}body{margin:0;color:#050505;background:white;overflow-wrap:anywhere}
-    h1,h2,h3,h4{break-after:avoid;margin:8mm 0 4mm;color:#006A49}
-    h2,h3,h4{color:#050505;margin-top:5mm}article>h1:first-child{margin-top:0}
-    p{margin:0 0 4mm;white-space:pre-wrap;orphans:3;widows:3}
-    ul,ol{padding-left:8mm;margin:2mm 0 5mm}ul{list-style-type:disc}ol{list-style-type:decimal}
-    li>p{margin-bottom:0}ol>li{margin-bottom:3mm}li>ul,li>ol{margin-top:3mm;margin-bottom:0;padding-left:6mm}
-    li>p:has(+ul),li>p:has(+ol){break-after:avoid}.new-page{break-before:page}
-    .cover{position:fixed;inset:12.7mm;background:#006A49;padding:5mm}
-    .cover-panel{height:100%;border-radius:9mm;background:#F7F7F2;color:#006A49;padding:10mm;display:flex;flex-direction:column;align-items:center}
-    .cover-logo{width:84mm;max-width:100%;margin:0 0 40mm;flex-shrink:0}
-    .cover h1{text-align:center;margin:0;width:100%;flex-shrink:0;${typeStyle("display")}}
-    .cover-footer{margin-top:auto;display:flex;justify-content:space-between;width:100%;gap:6mm;${typeStyle("caption")}}
-    .cover-draft{${typeStyle("caption")}margin-top:5mm}
-    .details h1{${typeStyle("display")}margin:0 0 12mm}.introduction{${typeStyle("lede")}}
-    .meta{margin:7mm 0 15mm}.meta p{margin:1mm 0}
-    .meta,.attributions td{font-family:'Outfit','Hind','Hind Vadodara','Gujarati numerals',sans-serif;${typeStyle("caption")}}
-    .meta p,.meta strong{font-weight:inherit}
-    .attributions,.index{width:100%;border-collapse:collapse}
-    .attributions th,.attributions td,.index th,.index td{border:.5pt solid #050505;padding:3mm;text-align:left;vertical-align:top}
-    .attributions{text-align:center;table-layout:fixed}.attributions th,.attributions td{text-align:center}
-    .attributions th{color:#006A49;${typeStyle("subsection")}}
-    .index-title{text-align:center;margin:12mm 0 4mm!important}
-    .index th{${typeStyle("subsection")}}.index td{height:10mm;vertical-align:middle}
-    .index thead{display:table-header-group}.index tr,.attributions tr{break-inside:avoid}
-    .index th:first-child,.index td:first-child{width:17mm;text-align:center}
-    .index th:last-child,.index td:last-child{width:23mm;text-align:center}
-    [lang=hi] .cover h1,[lang=gu] .cover h1,[lang=hi] .details h1,[lang=gu] .details h1{${typeStyle("localHeading")}}
-    [lang=hi] .introduction,[lang=gu] .introduction{${typeStyle("localBody")}}
-  `
-  const header = (title: string, language = "en") =>
-    `<style>${fonts}</style><div style="margin:0 12.7mm;display:flex;align-items:center;gap:6px;color:#006A49;${typeStyle(language === "en" ? "subsection" : "localHeading")}"><div style="flex-shrink:0">${logo}</div><div style="overflow-wrap:anywhere">${escape(title)}${input.draft ? " · DRAFT" : ""}</div></div>`
-  const footer = `<style>${fonts}</style><div style="margin:0 12.7mm;border-top:1pt solid #050505;padding-top:3mm;color:#050505;${typeStyle("caption")}font-family:Outfit;padding-right:12mm">Doc. No.: ${escape(input.number)} | Rev. No.: ${revisionLabel(input.revision)} | Effective Date: ${escape(input.content.effectiveDate || "Pending")}</div>`
-  const html = `<!doctype html><html><head><meta charset="utf-8"><style>${styles}</style></head><body></body></html>`
+/** Paginate measured lines; markers belong to their first line, never a page. */
+function flow(top: number) {
+  const pages: FlowPage[] = [[]]
+  let y = top
+  const newPage = () => {
+    if (pages.at(-1)!.length) {
+      pages.push([])
+      y = top
+    }
+  }
+  const add = (blocks: TextBlock[]) => {
+    let relaxKeepThrough = -1
+    for (let index = 0; index < blocks.length; index++) {
+      const block = blocks[index]!
+      const inkHeight = Math.max(
+        0,
+        ...block.parts.map((part) => part.y + part.layout.height),
+        ...(block.borders ?? []).map((border) => border.y + border.height)
+      )
+      if (!blockFits(block) || inkHeight > BOTTOM - top)
+        throw new Error("A book element cannot fit the fixed page region.")
+      let keepHeight = inkHeight
+      let precedingHeight = 0
+      let chainEnd = index
+      for (
+        let cursor = index;
+        index > relaxKeepThrough &&
+        blocks[cursor]?.keepNext &&
+        blocks[cursor + 1];
+        cursor++
+      ) {
+        precedingHeight += blocks[cursor]!.height
+        const next = blocks[cursor + 1]!
+        keepHeight =
+          precedingHeight +
+          Math.max(
+            0,
+            ...next.parts.map((part) => part.y + part.layout.height),
+            ...(next.borders ?? []).map((border) => border.y + border.height)
+          )
+        chainEnd = cursor + 1
+      }
+      if (keepHeight > BOTTOM - top && chainEnd > index) {
+        // An oversized chain must flow. Keep its opening pair together, then
+        // relax the remaining links so they cannot strand the first block.
+        relaxKeepThrough = chainEnd
+        const next = blocks[index + 1]!
+        keepHeight =
+          block.height +
+          Math.max(
+            0,
+            ...next.parts.map((part) => part.y + part.layout.height),
+            ...(next.borders ?? []).map((border) => border.y + border.height)
+          )
+      }
+      if (y + Math.min(keepHeight, BOTTOM - top) > BOTTOM) newPage()
+      if (y + inkHeight > BOTTOM) newPage()
+      pages.at(-1)!.push({ block, y })
+      y += block.height
+    }
+  }
   return {
-    html,
-    header: header(input.content.title),
-    footer,
-    bookHeader: header,
-    wordmark,
+    pages,
+    add,
+    newPage,
+    get page() {
+      return pages.length - 1
+    },
+    get y() {
+      return y
+    },
   }
 }
 
-/** Chromium outlines resolve headings to actual printed pages, including list wrapping. */
-function headingPages(pdf: PDFDocument) {
-  const pages = new Map(
-    pdf.getPages().map((page, index) => [page.ref.toString(), index])
-  )
-  const result: number[] = []
-  const visit = (item: PDFDict | undefined) => {
-    while (item) {
-      const destination = item.lookupMaybe(PDFName.of("Dest"), PDFArray)
-      const ref = destination?.get(0)
-      const page = ref instanceof PDFRef ? pages.get(ref.toString()) : undefined
-      if (page === undefined)
-        throw new Error("Could not resolve a heading's PDF page.")
-      result.push(page)
-      visit(item.lookupMaybe(PDFName.of("First"), PDFDict))
-      item = item.lookupMaybe(PDFName.of("Next"), PDFDict)
+function paragraph(
+  ctx: PdfContext,
+  text: string,
+  language: BrandingLanguage,
+  role: "display" | "section" | "subsection" | "caption",
+  gap = 0,
+  color = BLACK
+): TextBlock {
+  const layout = textLayout(ctx, text, language, role, WIDTH)
+  return {
+    height: layout.height + gap,
+    parts: [{ layout, x: 0, y: 0, width: WIDTH, color }],
+  }
+}
+
+function tableRow(
+  ctx: PdfContext,
+  values: string[],
+  widths: number[],
+  language: BrandingLanguage,
+  role: "body" | "caption" | "subsection",
+  centered = false,
+  indent = 0
+): TextBlock {
+  let x = 0
+  const padding = mm(3)
+  const parts: TextPart[] = values.map((value, index) => {
+    const left = padding + (index === 1 ? indent : 0)
+    const width = widths[index]! - left - padding
+    const part = {
+      layout: textLayout(ctx, value, language, role, width),
+      x: x + left,
+      y: padding,
+      width,
+      align:
+        centered || index === 0 || index === values.length - 1
+          ? ("center" as const)
+          : ("left" as const),
     }
-  }
-  visit(
-    pdf.catalog
-      .lookupMaybe(PDFName.of("Outlines"), PDFDict)
-      ?.lookupMaybe(PDFName.of("First"), PDFDict)
+    x += widths[index]!
+    return part
+  })
+  const height = Math.max(
+    mm(10),
+    ...parts.map((part) => part.layout.height + padding * 2)
   )
-  return result
+  if (role === "body" && !centered)
+    for (const part of parts) part.y = (height - part.layout.height) / 2
+  x = 0
+  const borders = widths.map((width) => {
+    const box = { x, y: 0, width, height }
+    x += width
+    return box
+  })
+  return { height, parts, borders, borderColor: BLACK }
 }
 
-export async function generateBrandingBookPdf(
-  page: Page,
-  input: BrandingPdfInput,
-  template: ReturnType<typeof brandingBookHtml>
+export async function drawBrandingBook(
+  ctx: PdfContext,
+  input: BrandingPdfInput
 ) {
-  const output = await PDFDocument.create()
-  const numbers = new Map<number, number>()
-  const append = async (document: PDFDocument, firstNumber?: number) => {
-    for (const [index, embedded] of (
-      await output.embedPages(document.getPages())
-    ).entries()) {
-      if (firstNumber !== undefined)
-        numbers.set(output.getPageCount(), firstNumber + index)
-      output.addPage([embedded.width, embedded.height]).drawPage(embedded)
-    }
-  }
+  const artwork = await loadWordmark()
+  const reference = revisionLabel(input.revision)
   for (const translation of input.content.translations) {
-    const render = async (
-      body: string,
-      cover = false,
-      outline = false,
-      detailsPage = false
-    ) => {
-      await page.setContent(
-        template.html.replace(
-          "<body></body>",
-          () =>
-            `<body><article lang="${translation.language}">${body}</article></body>`
-        ),
-        { waitUntil: "load" }
-      )
-      return PDFDocument.load(
-        await page.pdf({
-          format: "A4",
-          printBackground: true,
-          waitForFonts: true,
-          tagged: outline,
-          outline,
-          displayHeaderFooter: false,
-          omitBackground: true,
-          margin: cover
-            ? { top: 0, bottom: 0, left: 0, right: 0 }
-            : {
-                top: detailsPage ? "12.7mm" : "30mm",
-                bottom: "25mm",
-                left: "12.7mm",
-                right: "12.7mm",
-              },
-          timeout: 30000,
-        })
-      )
-    }
-    const cover = await render(
-      `<div class="cover"><div class="cover-panel"><div class="cover-logo">${template.wordmark}</div><h1>${escape(translation.title)}</h1>${input.draft ? '<p class="cover-draft">DRAFT</p>' : ""}<div class="cover-footer"><span>${escape(input.number)}</span><span>Rev No. ${revisionLabel(input.revision)}</span><span>${escape(input.content.effectiveDate || "Date pending")}</span></div></div></div>`,
-      true
-    )
-    if (cover.getPageCount() !== 1)
-      throw new Error(
-        "Cover title is too long for one page. Shorten the title."
-      )
+    const language = translation.language
     const details = translation.details
+    const detailsFlow = flow(MARGIN)
+    detailsFlow.add([
+      paragraph(ctx, translation.title, language, "display", mm(12), GREEN),
+    ])
+    if (details)
+      detailsFlow.add(
+        richBlocks(ctx, details.introduction, language, WIDTH, { role: "lede" })
+      )
+    const metadata = [
+      `Document No.: ${input.number}`,
+      `Revision: ${reference}`,
+      `Effective Date: ${input.content.effectiveDate || "Pending"}`,
+      `Prepared by: ${details?.preparedBy || input.content.department}`,
+    ].map((text) => paragraph(ctx, text, "en", "caption", mm(1)))
+    metadata[0]!.parts.forEach((part) => (part.y += mm(7)))
+    metadata[0]!.height += mm(7)
+    metadata.at(-1)!.height += mm(15)
+    detailsFlow.add(metadata)
     const attributions =
       details?.attributions.filter(
         (entry) => entry.name || entry.designation
       ) ?? []
-    const detailsPdf = await render(
-      `<div class="details"><h1>${escape(translation.title)}</h1><div class="introduction">${details ? brandingRichTextHtml(details.introduction) : ""}</div><div class="meta"><p><strong>Document No.:</strong> ${escape(input.number)}</p><p><strong>Revision:</strong> ${revisionLabel(input.revision)}</p><p><strong>Effective Date:</strong> ${escape(input.content.effectiveDate || "Pending")}</p><p><strong>Prepared by:</strong> ${escape(details?.preparedBy || input.content.department)}</p></div>${attributions.length ? `<table class="attributions"><thead><tr>${attributions.map((entry) => `<th>${escape(entry.role)}</th>`).join("")}</tr></thead><tbody><tr>${attributions.map((entry) => `<td>${escape(entry.name)}</td>`).join("")}</tr><tr>${attributions.map(() => "<th>Designation</th>").join("")}</tr><tr>${attributions.map((entry) => `<td>${escape(entry.designation)}</td>`).join("")}</tr></tbody></table>` : ""}</div>`,
-      false,
-      false,
-      true
-    )
-    // Render the frame once as normal page content. Chromium's repeated PDF calls
-    // can omit web-font header/footer templates on the first page of a segment.
-    const frame = await render(
-      `<style>body{background:transparent!important}</style><div style="position:absolute;top:12.7mm;left:0;right:0">${template.bookHeader(translation.title, translation.language)}</div><div style="position:absolute;bottom:12.7mm;left:0;right:0">${template.footer}</div>`,
-      true
-    )
-    const embeddedFrame = await output.embedPage(frame.getPage(0))
-    // Crop the same complete frame for details pages. An otherwise empty HTML
-    // page with only a bottom-positioned footer can print without that footer.
-    const embeddedFooter = await output.embedPage(frame.getPage(0), {
-      left: 0,
-      bottom: 0,
-      right: frame.getPage(0).getWidth(),
-      top: 100,
-    })
-    const firstPage = output.getPageCount()
+    if (attributions.length) {
+      const widths = attributions.map(() => WIDTH / attributions.length)
+      const rows = [
+        tableRow(
+          ctx,
+          attributions.map((entry) => entry.role),
+          widths,
+          "en",
+          "subsection",
+          true
+        ),
+        tableRow(
+          ctx,
+          attributions.map((entry) => entry.name),
+          widths,
+          "en",
+          "caption",
+          true
+        ),
+        tableRow(
+          ctx,
+          attributions.map(() => "Designation"),
+          widths,
+          "en",
+          "subsection",
+          true
+        ),
+        tableRow(
+          ctx,
+          attributions.map((entry) => entry.designation),
+          widths,
+          "en",
+          "caption",
+          true
+        ),
+      ]
+      rows[0]!.parts.forEach((part) => (part.color = GREEN))
+      rows[2]!.parts.forEach((part) => (part.color = GREEN))
+      detailsFlow.add([
+        {
+          height: rows.reduce((sum, row) => sum + row.height, 0),
+          borderColor: BLACK,
+          parts: rows.flatMap((row, index) =>
+            row.parts.map((part) => ({
+              ...part,
+              y:
+                part.y +
+                rows.slice(0, index).reduce((sum, row) => sum + row.height, 0),
+            }))
+          ),
+          borders: rows.flatMap((row, index) =>
+            row.borders!.map((border) => ({
+              ...border,
+              y:
+                border.y +
+                rows.slice(0, index).reduce((sum, row) => sum + row.height, 0),
+            }))
+          ),
+        },
+      ])
+    }
+
     const outline = brandingOutline(translation.sections)
-    const body = outline
-      .map(
-        ({ section, depth, label }) =>
-          `<h${depth + 1}${section.pageBreakBefore ? ' class="new-page"' : ""}>${escape(label)}</h${depth + 1}>${section.body.trim() ? brandingRichTextHtml(section.richBody ?? plainBrandingRichText(section.body)) : ""}`
+    const body = flow(mm(30))
+    const destinations: number[] = []
+    for (const { section, depth, label } of outline) {
+      if (section.pageBreakBefore) body.newPage()
+      const heading = paragraph(
+        ctx,
+        label,
+        language,
+        depth ? "subsection" : "section",
+        mm(4),
+        depth ? BLACK : GREEN
       )
-      .join("")
-    const contentPdf = await render(
-      body || "<p>No content entered.</p>",
-      false,
-      true
-    )
-    const positions = headingPages(contentPdf)
-    if (positions.length !== outline.length)
-      throw new Error(
-        "Could not calculate all index page numbers. Check the document headings."
+      const previous = body.pages.at(-1)!.at(-1)?.block
+      const previousMargin = previous
+        ? previous.height -
+          Math.max(
+            0,
+            ...previous.parts.map((part) => part.y + part.layout.height)
+          )
+        : 0
+      const topGap = previous
+        ? Math.max(0, mm(depth ? 5 : 8) - previousMargin)
+        : 0
+      heading.parts.forEach((part) => (part.y += topGap))
+      heading.height += topGap
+      heading.keepNext = true
+      const blocks = section.body.trim()
+        ? richBlocks(
+            ctx,
+            section.richBody ?? plainBrandingRichText(section.body),
+            language,
+            WIDTH
+          )
+        : []
+      // Keep the heading and the first body line together, without preventing
+      // the rest of a long paragraph/list from flowing normally.
+      const before = body.pages.map((page) => page.length)
+      body.add([heading, ...blocks])
+      const headingPage = body.pages.findIndex(
+        (page, index) =>
+          page.length > (before[index] ?? 0) &&
+          page.some((entry) => entry.block === heading)
       )
+      if (headingPage < 0)
+        throw new Error("Could not locate a rendered heading.")
+      destinations.push(headingPage)
+    }
+    if (!outline.length)
+      body.add(
+        richBlocks(
+          ctx,
+          plainBrandingRichText("No content entered."),
+          language,
+          WIDTH
+        )
+      )
+
     const indexTitle = { en: "Index", hi: "अनुक्रमणिका", gu: "અનુક્રમણિકા" }[
-      translation.language
+      language
     ]
-    const indexBody = (indexPages: number) =>
-      `<h1 class="index-title">${indexTitle}</h1><table class="index"><thead><tr><th>No.</th><th>Table Of Contents</th><th>Page</th></tr></thead><tbody>${outline.map((entry, index) => (entry.depth && entry.section.includeInIndex === false ? "" : `<tr><td>${escape(entry.number)}</td><td style="padding-left:${3 + entry.depth * 3}mm">${escape(entry.section.heading)}</td><td>${detailsPdf.getPageCount() + indexPages + positions[index]! + 1}</td></tr>`)).join("")}</tbody></table>`
-    let indexPdf = await render(indexBody(1))
-    let stable = false
-    for (let attempt = 0; attempt < 4; attempt++) {
-      const count = indexPdf.getPageCount()
-      indexPdf = await render(indexBody(count))
-      if (indexPdf.getPageCount() === count) {
-        stable = true
+    const indexWidths = [mm(17), WIDTH - mm(40), mm(23)]
+    const indexHeader = tableRow(
+      ctx,
+      ["No.", "Table Of Contents", "Page"],
+      indexWidths,
+      "en",
+      "subsection"
+    )
+    const makeIndex = (count: number) => {
+      const pages: FlowPage[] = [[]]
+      const title = paragraph(
+        ctx,
+        indexTitle,
+        language,
+        "section",
+        mm(4),
+        GREEN
+      )
+      title.parts[0]!.align = "center"
+      title.parts[0]!.y = mm(12)
+      title.height += mm(12)
+      pages[0]!.push(
+        { block: title, y: mm(30) },
+        { block: indexHeader, y: mm(30) + title.height }
+      )
+      let y = mm(30) + title.height + indexHeader.height
+      outline.forEach((entry, index) => {
+        if (entry.depth && entry.section.includeInIndex === false) return
+        const printed =
+          detailsFlow.pages.length + count + destinations[index]! + 1
+        const row = tableRow(
+          ctx,
+          [entry.number, entry.section.heading, String(printed)],
+          indexWidths,
+          language,
+          "body",
+          false,
+          mm(entry.depth * 3)
+        )
+        if (
+          !blockFits(row) ||
+          row.height + indexHeader.height > BOTTOM - mm(30)
+        )
+          throw new Error("An index entry cannot fit a page.")
+        if (y + row.height > BOTTOM) {
+          pages.push([{ block: indexHeader, y: mm(30) }])
+          y = mm(30) + indexHeader.height
+        }
+        pages.at(-1)!.push({ block: row, y })
+        y += row.height
+      })
+      return pages
+    }
+    let indexPages = makeIndex(1)
+    let settled = false
+    for (let pass = 0; pass < 4; pass++) {
+      const next = makeIndex(indexPages.length)
+      if (next.length === indexPages.length) {
+        indexPages = next
+        settled = true
         break
       }
+      indexPages = next
     }
-    if (!stable)
+    if (!settled)
       throw new Error(
         "Index pagination did not settle. Shorten the heading titles."
       )
-    await append(cover)
-    await append(detailsPdf, 1)
-    await append(indexPdf, detailsPdf.getPageCount() + 1)
-    await append(
-      contentPdf,
-      detailsPdf.getPageCount() + indexPdf.getPageCount() + 1
-    )
-    for (let index = firstPage + 1; index < output.getPageCount(); index++) {
-      output
-        .getPage(index)
-        .drawPage(
-          index > firstPage + detailsPdf.getPageCount()
-            ? embeddedFrame
-            : embeddedFooter
-        )
+
+    ctx.doc.addPage({ size: [...A4], margin: 0 })
+    ctx.doc.rect(MARGIN, MARGIN, WIDTH, A4[1] - MARGIN * 2).fill(GREEN)
+    const panel = {
+      x: MARGIN + mm(5),
+      y: MARGIN + mm(5),
+      width: WIDTH - mm(10),
+      height: A4[1] - MARGIN * 2 - mm(10),
     }
-  }
-  for (const [index, number] of numbers) {
-    await page.setContent(
-      template.html.replace(
-        "<body></body>",
-        () =>
-          `<body style="background:transparent"><div style="position:absolute;bottom:12.7mm;right:12.7mm;${typeStyle("caption")}font-family:Outfit">${number}</div></body>`
+    ctx.doc
+      .roundedRect(panel.x, panel.y, panel.width, panel.height, mm(9))
+      .fill(CREAM)
+    const logoWidth = Math.min(mm(84), panel.width - mm(20))
+    const logoHeight = (logoWidth * artwork.height) / artwork.width
+    drawWordmark(
+      ctx,
+      artwork,
+      (A4[0] - logoWidth) / 2,
+      panel.y + mm(10),
+      logoWidth
+    )
+    const titleY = panel.y + mm(10) + logoHeight + mm(40)
+    const title = textLayout(
+      ctx,
+      translation.title,
+      language,
+      "display",
+      panel.width - mm(20)
+    )
+    const footerY = panel.y + panel.height - mm(10) - 15.6
+    drawText(
+      ctx,
+      title,
+      {
+        x: panel.x + mm(10),
+        y: titleY,
+        width: panel.width - mm(20),
+        height: footerY - mm(15) - titleY,
+      },
+      GREEN,
+      "center"
+    )
+    if (input.draft)
+      drawText(
+        ctx,
+        textLayout(ctx, "DRAFT", "en", "caption", panel.width - mm(20)),
+        {
+          x: panel.x + mm(10),
+          y: titleY + title.height + mm(5),
+          width: panel.width - mm(20),
+          height: footerY - titleY - title.height - mm(5),
+        },
+        GREEN,
+        "center"
       )
+    const coverValues = [
+      input.number,
+      `Rev No. ${reference}`,
+      input.content.effectiveDate || "Date pending",
+    ]
+    const footerWidth = panel.width - mm(20)
+    const values = coverValues.map((value) =>
+      textLayout(ctx, value, "en", "caption", footerWidth)
     )
-    const numberPdf = await PDFDocument.load(
-      await page.pdf({
-        format: "A4",
-        printBackground: true,
-        omitBackground: true,
-        waitForFonts: true,
-        margin: { top: 0, bottom: 0, left: 0, right: 0 },
+    const widths = values.map((value) =>
+      Math.max(...value.lines.map((line) => line.width))
+    )
+    const gap =
+      (footerWidth - widths.reduce((sum, width) => sum + width, 0)) / 2
+    if (gap < mm(6))
+      throw new Error("Cover metadata cannot fit the fixed region.")
+    let footerX = panel.x + mm(10)
+    values.forEach((value, index) => {
+      drawText(
+        ctx,
+        value,
+        { x: footerX, y: footerY, width: widths[index]!, height: 15.6 },
+        GREEN
+      )
+      footerX += widths[index]! + gap
+    })
+
+    const internalPages = [...detailsFlow.pages, ...indexPages, ...body.pages]
+    internalPages.forEach((page, index) => {
+      ctx.doc.addPage({ size: [...A4], margin: 0 })
+      if (index >= detailsFlow.pages.length) {
+        drawLogo(ctx, MARGIN, MARGIN, 24)
+        const header = textLayout(
+          ctx,
+          `${translation.title}${input.draft ? " · DRAFT" : ""}`,
+          language,
+          "subsection",
+          WIDTH - 28.5
+        )
+        drawText(
+          ctx,
+          header,
+          {
+            x: MARGIN + 28.5,
+            y: MARGIN,
+            width: WIDTH - 28.5,
+            height: mm(30) - MARGIN - mm(2),
+          },
+          GREEN
+        )
+      }
+      const footer = textLayout(
+        ctx,
+        `Doc. No.: ${input.number} | Rev. No.: ${reference} | Effective Date: ${input.content.effectiveDate || "Pending"}`,
+        "en",
+        "caption",
+        WIDTH - mm(12)
+      )
+      const footerTop = A4[1] - MARGIN - footer.height
+      if (footerTop - mm(3) < BOTTOM)
+        throw new Error("Footer cannot fit its reserved page region.")
+      ctx.doc
+        .moveTo(MARGIN, footerTop - mm(3))
+        .lineTo(A4[0] - MARGIN, footerTop - mm(3))
+        .lineWidth(1)
+        .stroke(BLACK)
+      drawText(ctx, footer, {
+        x: MARGIN,
+        y: footerTop,
+        width: WIDTH - mm(12),
+        height: footer.height,
       })
-    )
-    output.getPage(index).drawPage(await output.embedPage(numberPdf.getPage(0)))
+      drawText(
+        ctx,
+        textLayout(ctx, String(index + 1), "en", "caption", mm(12)),
+        {
+          x: A4[0] - MARGIN - mm(12),
+          y: A4[1] - MARGIN - 15.6,
+          width: mm(12),
+          height: 15.6,
+        },
+        BLACK,
+        "right"
+      )
+      for (const { block, y } of page) drawBlock(ctx, block, MARGIN, y)
+    })
   }
-  output.setTitle(input.content.title)
-  output.setAuthor(input.authorName)
-  output.setSubject(
-    `${input.number} · ${revisionLabel(input.revision)}${input.draft ? " · DRAFT" : ""}`
-  )
-  return output.save()
 }

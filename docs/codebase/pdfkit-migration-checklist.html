@@ -70,16 +70,27 @@
       <tr id="posters">
         <td>Notice and all Work Instruction layouts</td>
         <td>Implementation</td>
-        <td>Pending</td>
-        <td>Existing validated content and render contract retained</td>
-        <td>Font proof</td>
+        <td>Implemented; output checks pass</td>
+        <td>
+          PDFKit single-page A4 regions, common fitting, vector artwork,
+          mixed-script fonts and fixed crop/contain cards. Five poster PDFs in
+          <code>/tmp/mrm-pdfkit-152/new-renderer</code>. Historical tables,
+          legacy paragraphs and image layouts verified through PDF output.
+        </td>
+        <td>Senior accepted six PDFs; workflow smoke remains</td>
       </tr>
       <tr id="books">
         <td>SOP/Policy pagination, languages, index and lists</td>
         <td>Implementation</td>
-        <td>Pending</td>
-        <td>Fixed typography; actual printed references required</td>
-        <td>Font proof</td>
+        <td>Implemented; output checks pass</td>
+        <td>
+          Nine-page paired book; stage 12 prints on page 7. One bounded test
+          variation verifies a multi-page index, two language books, mixed Indic
+          metadata, reset numbering and actual heading references. Fixed sizes;
+          list-specific and collapsed margins retained. Stage 6 stays with its
+          first paragraph on printed page 5; index references rechecked.
+        </td>
+        <td>Senior accepted paired book; lifecycle verification remains</td>
       </tr>
       <tr id="lifecycle">
         <td>Issue rollback, versions, private access, immutable downloads</td>
@@ -91,9 +102,15 @@
       <tr id="visual">
         <td>Print-scale review of representative template families</td>
         <td>Design / senior</td>
-        <td>Unverified</td>
-        <td>No design scores before inspection</td>
-        <td>Replacement output</td>
+        <td>Six fixture families inspected; review corrections applied</td>
+        <td>
+          <code>/tmp/mrm-pdfkit-152/final-review</code>: Notice, WI text, grid,
+          picture-left, Visual Guide and SOP book. Visible commas restored by
+          the final-repeat-count Fontkit patch; black book tables, green Index,
+          centered grid steps, Indic shaping and crop/contain inspected. Policy
+          was not separately visually sampled.
+        </td>
+        <td>Senior accepted six PDFs; no score for uninspected variants</td>
       </tr>
       <tr id="packaging">
         <td>

@@ -11,7 +11,6 @@ import { parseBrandingContent } from "@workspace/db/branding-domain"
 const execFileAsync = promisify(execFile)
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const outputRoot = "/tmp/mrm-pdfkit-152"
-const rendererRoot = path.join(outputRoot, "old-renderer")
 const scriptPath = fileURLToPath(import.meta.url)
 
 type RenderMetric = {
@@ -160,7 +159,12 @@ async function traceMetric(tracePath: string) {
   }
 }
 
-async function main() {
+async function main(label: string | undefined, includeTraces: boolean) {
+  if (label !== "old-renderer" && label !== "new-renderer")
+    throw new Error(
+      "Choose an explicit old-renderer or new-renderer artifact label."
+    )
+  const rendererRoot = path.join(outputRoot, label)
   await mkdir(rendererRoot, { recursive: true })
   const fresh = []
   for (const fixture of brandingVerificationFixtures) {
@@ -178,23 +182,28 @@ async function main() {
     ".next/server/app/branding/[type]/[id]/preview/route.js.nft.json",
     ".next/server/app/branding/[type]/[id]/revisions/[revisionId]/pdf/route.js.nft.json",
   ].map((entry) => path.join(appRoot, entry))
-  const traces = await Promise.all(tracePaths.map(traceMetric))
+  const traces = includeTraces
+    ? await Promise.all(tracePaths.map(traceMetric))
+    : []
   const result = {
     capturedAt: new Date().toISOString(),
     runtime: { node: process.version, platform: process.platform },
     build: {
-      kind: "local Next.js production NFT traces; not Vercel function groups",
+      kind: includeTraces
+        ? "local Next.js production NFT traces; not Vercel function groups"
+        : "Not captured; renderer-only run",
       traces,
     },
     freshProcess: fresh,
     repeatedProcess: repeated,
   }
   await writeFile(
-    path.join(outputRoot, "old-renderer-baseline.json"),
+    path.join(outputRoot, `${label}-baseline.json`),
     `${JSON.stringify(result, null, 2)}\n`
   )
   console.log(JSON.stringify(result, null, 2))
 }
 
 const args = process.argv.slice(2)
-if (!(await childMode(args))) await main()
+if (!(await childMode(args)))
+  await main(args[0], args.includes("--include-build-traces"))
