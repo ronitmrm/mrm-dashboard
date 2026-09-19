@@ -110,7 +110,11 @@ export function prepareCncOpeningWorkbook(bytes: Buffer) {
     checkJob(row)
     required(row, "RM PO No.")
     row["RM Received Date"] = calendarDate(row["RM Received Date"])
-    if (quantity(row, "Unused Available (kg)") > quantity(row, "Total Received (kg)")) throw new Error("Unused RM cannot exceed cumulative received kilograms.")
+    const receivedKg = quantity(row, "Total Received (kg)")
+    if (String(row["Unused Available (kg)"] ?? "").trim()
+      && quantity(row, "Unused Available (kg)") > receivedKg) {
+      throw new Error("Unused RM cannot exceed cumulative received kilograms.")
+    }
   }
   const batch = parseProductionOpeningBatch({ cutoffAt: `${calendarDate(cutoff[0]!["Cutoff Date"])}T${time.length === 5 ? `${time}:00` : time}+05:30`, rows })
   return { ...batch, workOrders, rawMaterial }

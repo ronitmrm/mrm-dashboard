@@ -122,6 +122,11 @@ pieces count toward cumulative Job Card progress and available WIP, but never
 toward daily output, session counts, productivity or observed production rates.
 The cutoff is not an invented historical start or completion date.
 
+For this CNC startup, each job card listed in the RM sheet is confirmed to have
+material for its full ordered quantity. Received kilograms record historical
+receipts and do not cap planning pieces. Unused kilograms are optional; a blank
+means unknown remaining stock, not zero and not the received quantity.
+
 The startup import is atomic and immutable. An identical replay is a no-op;
 a changed batch is rejected for reconciliation. Existing output or workflow for
 the imported setups must be reconciled before import. Subsequent production must

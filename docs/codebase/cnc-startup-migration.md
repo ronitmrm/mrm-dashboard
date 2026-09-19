@@ -17,12 +17,17 @@ against the shared staging/production database during tests.
 2. `pnpm --filter web cnc:prepare <absolute-filled.xlsx> <absolute-review.json>`
    reads the workbook without database access. It validates sheets, required
    values, work-order identities, duplicate setups, running-machine matches and
-   kilograms. Formulas are rejected. The output file must not already exist.
+   received kilograms. Unused Available (kg) may be blank; if supplied it must
+   be nonnegative and no greater than received kilograms. Formulas are rejected.
+   The output file must not already exist.
 3. Review `workOrders` and `rawMaterial` in that JSON separately. Create/reconcile
    work orders, masters and explicit CNC route selections using existing flows.
    **This command imports opening setup quantities/state only.** It does not
    import work orders or RM, infer receipt dates or change RM planning rules.
-   Reconcile cumulative receipt kilograms versus unused stock before RM writes.
+   Each listed RM job card is confirmed ready for its full ordered quantity.
+   Unused stock is not needed for this readiness; never copy cumulative receipts
+   into remaining stock or interpret a blank balance as zero. Actual stock
+   balances require separate reconciliation before stock writes.
 4. Set `OPENING_ORGANIZATION_ID` and the existing migration database environment
    securely. Never print connection strings. Run
    `pnpm --filter @workspace/migration cnc:opening <absolute-review.json>`.
