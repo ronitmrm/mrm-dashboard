@@ -52,10 +52,8 @@ const nextConfig: NextConfig = {
   },
   outputFileTracingRoot: workspaceRoot,
   outputFileTracingIncludes: {
-    "/branding/**": [
-      "./lib/branding/assets/**/*",
-      `${chromiumBin}/**/*`,
-    ],
+    "/hr/**": ["./lib/hr/assets/**/*", "./lib/pricing/assets/Outfit-*.ttf"],
+    "/branding/**": ["./lib/branding/assets/**/*", `${chromiumBin}/**/*`],
     "/commercial/**": ["./lib/pricing/assets/**/*"],
   },
   turbopack: {

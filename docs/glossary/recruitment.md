@@ -128,6 +128,11 @@ The Offer Letter is issued after the candidate accepts the final joining terms.
 It includes the agreed post-probation salary range and the duty start/end times
 entered during appointment confirmation. Duty times have no default. The salary
 range uses the selected salary period. These terms are retained at issuance.
+New offers follow the two-page Offer.pdf reference supplied on 2026-09-19:
+branded introductory page, plain continuation page with nine full clauses,
+and the shared company footer. Salary range and duty times remain appointment
+values; sample candidate details and the scanned signature are not reused.
+Previously issued PDFs remain immutable.
 The Appointment Letter is issued only after the employee has joined and HR
 confirms probation completion; the Experience Letter is issued only after the
 employee is marked Resigned and reaches the recorded Last Working Date. Each

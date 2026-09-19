@@ -93,13 +93,59 @@ describe("employment letter PDF", () => {
       expect(pdf.getPageCount()).toBe(pageCount)
       expect(pdf.getTitle()).toContain(letter.identity.employeeName)
       expect(pdf.getSubject()).toContain(`${type}`)
-      if (type === "offer" || type === "appointment") {
-        const content = pdf.context.enumerateIndirectObjects()
-          .filter((entry): entry is [typeof entry[0], PDFRawStream] => entry[1] instanceof PDFRawStream)
-          .map(([, stream]) => Buffer.from(decodePDFRawStream(stream).decode()).toString())
+      if (type === "offer") {
+        const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs")
+        const document = await getDocument({
+          data: bytes,
+          useSystemFonts: true,
+        }).promise
+        try {
+          const pages = await Promise.all(
+            [1, 2].map(async (number) => {
+              const page = await document.getPage(number)
+              const content = await page.getTextContent()
+              return content.items
+                .flatMap((item) => ("str" in item ? [item.str] : []))
+                .join(" ")
+            })
+          )
+          expect(pages[0]).toContain("OFFER LETTER")
+          for (const text of [
+            "Continuation of Offer Letter",
+            "Rs. 15,000.00",
+            "Rs. 18,000.00",
+            "Rs. 22,000.00",
+            "09:15 to 18:45",
+            "withhold dues",
+            "Acknowledged and Accepted by:",
+            letter.identity.employeeName,
+            "Date: ____________________",
+          ]) {
+            expect(pages[1]?.replace(/\s+/g, " ")).toContain(text)
+          }
+        } finally {
+          await document.destroy()
+        }
+      }
+      if (type === "appointment") {
+        const content = pdf.context
+          .enumerateIndirectObjects()
+          .filter(
+            (entry): entry is [(typeof entry)[0], PDFRawStream] =>
+              entry[1] instanceof PDFRawStream
+          )
+          .map(([, stream]) =>
+            Buffer.from(decodePDFRawStream(stream).decode()).toString()
+          )
           .join("\n")
-        for (const text of ["Acknowledged and Accepted by:", letter.identity.employeeName, "Date: ____________________"]) {
-          expect(content).toContain(`<${Buffer.from(text).toString("hex").toUpperCase()}> Tj`)
+        for (const text of [
+          "Acknowledged and Accepted by:",
+          letter.identity.employeeName,
+          "Date: ____________________",
+        ]) {
+          expect(content).toContain(
+            `<${Buffer.from(text).toString("hex").toUpperCase()}> Tj`
+          )
         }
       }
     }
