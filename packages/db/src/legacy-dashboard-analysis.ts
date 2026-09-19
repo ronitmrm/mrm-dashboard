@@ -2647,7 +2647,8 @@ function machinePlanDetails(
       if (!routeMachine) continue;
       const setupNo = rowText(route, "SETUP NO.", "SETUP CODE", "setupNo");
       const displaySetupNo = setupStepKey(setupNo, optionNumber) || setupNo;
-      const setupOrderPcs = remainingQtyBySetup.get(canonicalKey(displaySetupNo)) ?? safeNumber(rowValue(row, "orderPcs"));
+      const customerOrderPcs = safeNumber(rowValue(row, "orderPcs"));
+      const requestedGoodQty = remainingQtyBySetup.get(canonicalKey(displaySetupNo)) ?? customerOrderPcs;
       const machineType = rowText(route, "MACHINE TYPE", "machineType");
       const overrideDecision = planOverrideDecisionForSetup(planOverrides, row, setupNo, displaySetupNo);
       const override = overrideDecision.override;
@@ -2662,6 +2663,19 @@ function machinePlanDetails(
         partCode,
         setupNo,
       }));
+      const previousRoute = allRoutes[allRoutes.indexOf(route) - 1];
+      const previousSetupNo = previousRoute ? rowText(previousRoute, "SETUP NO.", "SETUP CODE", "setupNo") : "";
+      const upstreamActual = previousRoute
+        ? rawBySetupAnyMachine.get(productionSetupBaseKey({ jcNo: rowText(row, "jcNo"), partCode, setupNo: setupStepKey(previousSetupNo, optionNumber) || previousSetupNo }))
+          ?? rawBySetupAnyMachine.get(productionSetupBaseKey({ jcNo: rowText(row, "jcNo"), partCode, setupNo: previousSetupNo }))
+        : undefined;
+      const setupGoodQty = productionActualAnyMachine?.actualQty ?? 0;
+      const setupProcessedQty = productionActualAnyMachine?.outputQty ?? 0;
+      const physicalWipQty = Math.max((upstreamActual?.actualQty ?? 0) - setupProcessedQty, 0);
+      // Forecast demand and actual stock are different obligations. Output already
+      // processed (including rejects) must never be scheduled as input again.
+      const setupOrderPcs = Math.max(requestedGoodQty, setupGoodQty + physicalWipQty);
+      const setupRemainingQty = Math.max(setupOrderPcs - setupGoodQty, 0);
       const productionActualMachines = productionActualAnyMachine?.machines ?? new Set<string>();
       const lockedShopFloorMachines = shopFloorLockedMachinesForSetup(shopFloorStatusRows, {
         jcNo: rowText(row, "jcNo"),
@@ -2891,6 +2905,10 @@ function machinePlanDetails(
         optionNumber,
         orderPcs: machineOrderPcs,
         totalOrderPcs: setupOrderPcs,
+        customerOrderPcs,
+        customerOrderRemainingQty: Math.max(customerOrderPcs - safeNumber(row.finalSetupGoodPieces), 0),
+        physicalWipQty,
+        setupRemainingQty,
         cycleTime: safeNumber(rowValue(cycle ?? {}, "cycleTime", "CYCLE TIME")),
         loadingUnloading: safeNumber(rowValue(cycle ?? {}, "loadingUnloading", "LOADING AND UNLOADING")),
         operationWeight: safeNumber(rowValue(cycle ?? {}, "operationWeight", "OPERATION WT.", "OPERATION WEIGHT")),
@@ -3572,7 +3590,7 @@ function applyPlanOverrideInterruptionQuantities(details: Array<Record<string, u
       }
       const actualQty = meta.productionActual?.actualQty ?? 0;
       row.planOverrideStoppedByJcNo = rowText(overrideRow, "target", "jcNo");
-      row.planOverrideRemainingQty = round(Math.max((meta.totalOrderPcs ?? meta.orderPcs ?? safeNumber(rowValue(row, "orderPcs"))) - actualQty, 0));
+      row.planOverrideRemainingQty = round(Math.min(safeNumber(row.setupRemainingQty), Math.max((meta.totalOrderPcs ?? meta.orderPcs ?? safeNumber(rowValue(row, "orderPcs"))) - actualQty, 0)));
       row.runningStatus = "Planner stopped";
       row.shopFloorStage = "planned";
       row.shopFloorStageLabel = "Planner stopped";
@@ -3617,7 +3635,7 @@ function applyPriorityInterruptionQuantities(details: Array<Record<string, unkno
       const meta = planningMeta(row);
       const actualQty = meta.productionActual?.actualQty ?? 0;
       row.priorityStoppedByJcNo = rowText(approval, "jcNo");
-      row.priorityRemainingQty = round(Math.max((meta.totalOrderPcs ?? meta.orderPcs ?? safeNumber(rowValue(row, "orderPcs"))) - actualQty, 0));
+      row.priorityRemainingQty = round(Math.min(safeNumber(row.setupRemainingQty), Math.max((meta.totalOrderPcs ?? meta.orderPcs ?? safeNumber(rowValue(row, "orderPcs"))) - actualQty, 0)));
     }
   }
 }
@@ -4322,7 +4340,7 @@ function machineUnavailableSplitPlan({
   const producedMachineKey = canonicalKey(interruption.machine);
   const remainingMachines = assignedMachines.filter((machine) => canonicalKey(machine) !== producedMachineKey);
   if (!producedMachineKey) return undefined;
-  const producedQty = Math.min(setupOrderPcs, Math.max(0, interruption.finishedQty));
+  const producedQty = Math.max(0, interruption.finishedQty);
   const remainingQty = Math.max(setupOrderPcs - producedQty, 0);
   const orderPcsByMachine = new Map<string, number>();
   const remainingMachineQty = assignedMachineOrderPcs(remainingQty, Math.max(1, remainingMachines.length));
@@ -4333,12 +4351,13 @@ function machineUnavailableSplitPlan({
     assignments.push({ machine: interruption.machine, role: "produced_on_unavailable_machine", orderPcs: producedQty });
   }
   if (remainingMachines.length) {
-    for (const machine of remainingMachines) {
+    for (const [index, machine] of remainingMachines.entries()) {
       const machineKeyValue = canonicalKey(machine);
       if (!machineKeyValue) continue;
       remainingMachineKeys.add(machineKeyValue);
-      orderPcsByMachine.set(machineKeyValue, remainingMachineQty);
-      assignments.push({ machine, role: "remaining_moved_to_alternate_machine", orderPcs: remainingMachineQty });
+      const machineQty = Math.min(remainingMachineQty, Math.max(remainingQty - index * remainingMachineQty, 0));
+      orderPcsByMachine.set(machineKeyValue, machineQty);
+      assignments.push({ machine, role: "remaining_moved_to_alternate_machine", orderPcs: machineQty });
     }
   } else if (remainingQty > 0) {
     remainingMachineKeys.add(producedMachineKey);

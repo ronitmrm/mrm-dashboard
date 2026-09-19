@@ -14091,7 +14091,10 @@ function MachinePlannedPartsPanel({
                     label="Setup"
                     value={`${displayValue(row.setupNo)} ${displayValue(row.setupName) !== "-" ? displayValue(row.setupName) : ""}`}
                   />
-                  <TileField label="Order Pcs" value={row.orderPcs} numeric />
+                  <TileField label="Customer Order Pcs" value={row.customerOrderPcs} numeric />
+                  <TileField label="Planned Good Pcs" value={row.orderPcs} numeric />
+                  <TileField label="Remaining Planned Pcs" value={row.pendingGoodQty} numeric />
+                  <TileField label="Available Setup WIP" value={row.physicalWipQty} numeric />
                   <TileField
                     label="Actual / Output"
                     value={`${displayValue(row.rawActualQty, true)} / ${displayValue(row.rawOutputQty, true)}`}

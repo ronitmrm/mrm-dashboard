@@ -833,20 +833,10 @@ describe("dashboard planning writes", () => {
       unavailableFrom: "2026-08-16T16:00:00+05:30",
     })).rejects.toThrow(`Start downtime on Production Session ${sessionReference}`)
 
-    await pool.query(
-      `
-        UPDATE manufacturing.production_entries
-        SET quantity_good = 40, completed_at = '2026-08-16T16:00:00+05:30'
-        WHERE id = $1;
-        UPDATE manufacturing.production_sessions
-        SET status = 'closed', ended_at = '2026-08-16T16:00:00+05:30',
-          end_reason = 'manual_stop', gross_weight_kg = 0.616,
-          net_weight_kg = 0.616, total_pieces = 40, quantity_good = 40,
-          updated_at = now()
-        WHERE id = $2
-      `,
-      [productionEntryId, sessionId]
-    )
+    await jobCards.closeProductionSession({
+      organizationId, sessionId, endedAt: "2026-08-16T16:00:00+05:30",
+      endReason: "manual_stop", grossWeightKg: 0.616, crateCount: 0, crateWeightKg: 0,
+    })
     await repository.recordMachineConstraint({
       interruptedSetups: interruption,
       machineNumber: firstMachine,
@@ -1044,5 +1034,13 @@ describe("dashboard planning writes", () => {
       stage: "planned",
       stop_events: "1",
     })
+    await pool.query("UPDATE manufacturing.shop_floor_setup_state SET active=true, stage='operator_started' WHERE work_order_id=$1 AND machine_id=$2", [row.work_order_id, row.machine_id])
+    await repository.recordPlannerPriority({
+      jobCardNumber: movingJobCard, organizationId, priority: "Urgent",
+      confirmedSetupNumbers: ["1"], approvalMode: "allow_stop_running",
+      interruptedSetups: [{ jobCardNumber: blockingJobCard, machineNumber: targetMachine, setupNumber: 1 }],
+    })
+    const priorityState = await pool.query("SELECT active, stage, completed_at FROM manufacturing.shop_floor_setup_state WHERE work_order_id=$1 AND machine_id=$2", [row.work_order_id, row.machine_id])
+    expect(priorityState.rows[0]).toEqual({ active: false, stage: "planned", completed_at: null })
   })
 })

@@ -143,7 +143,22 @@ Rejected pieces are included in total produced pieces. Good pieces equal total p
 
 Planner Actions never accept a second produced-quantity figure. When a planner decision stops or moves a running setup, its Production Session must first be closed through the normal Weight or Machine Counter workflow at the actual interruption time. The planner decision then reads the resulting canonical good output and uses it as interruption evidence; the same output therefore appears immediately in the Production Entry and Job Card.
 
-Saving an approved machine move also releases each stopped setup's active machine ownership in the same transaction. Its workflow returns to Planned without marking the setup complete, the planner history retains the stop evidence, and the destination machine can immediately accept the approved setup.
+Saving an approved machine move, priority stop, or machine-constraint move also releases each stopped setup's active machine ownership in the same transaction. Its workflow returns to Planned without marking the setup complete, the planner history retains the stop evidence, and the destination machine can immediately accept the approved setup.
+
+Customer-order balance and physical WIP are separate. Customer balance is ordered
+pieces minus final-setup good output, floored at zero. For a downstream setup,
+physical WIP is the preceding route setup's pooled good output minus this setup's
+total processed pieces (good plus rejected), floored at zero. A planner stop never
+marks that stock complete. Replanning retains the normal customer-demand forecast
+and also processes physical WIP exceeding it; it must not cap that stock at the
+customer order. Already recorded good output is retained, never recreated.
+
+Recalculation replaces allocations for the same Job Card/route/setup. New upstream
+good output increases its existing remaining plan; it does not append a duplicate
+batch. Sum remaining allocations across machines once. Production rejects consume
+input stock and do not become downstream good stock. Existing WIP timing/buffer
+rules still control when stock can move. Explicit route-change quantities retain
+their selected setup scope.
 
 The interruption evidence also stores the immutable Production Session references and latest settlement time. This lets the Job Card trace every planner movement back to the exact weighed or counter-based production records.
 

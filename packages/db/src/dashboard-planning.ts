@@ -394,11 +394,12 @@ async function settledPlannerInterruptions(
   return settled
 }
 
-async function releasePlanOverrideInterruptedSetups(
+async function releasePlannerInterruptedSetups(
   client: PoolClient,
   input: {
     actorUserId?: string | null
     decisionId: string
+    decisionSource: "planOverrides" | "plannerPriorities" | "machineConstraints"
     interruptions: SettledInterruptedSetup[]
     organizationId: string
     reason: string
@@ -487,7 +488,7 @@ async function releasePlanOverrideInterruptedSetups(
         state.stage,
         input.actorUserId ?? null,
         input.reason,
-        "planOverrides",
+        input.decisionSource,
         randomUUID(),
         sourcePayload,
       ]
@@ -1780,6 +1781,14 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
             priorityPosition(input.priority),
           ]
         )
+        await releasePlannerInterruptedSetups(client, {
+          actorUserId: input.actorUserId,
+          decisionId: created.rows[0]!.id,
+          decisionSource: "plannerPriorities",
+          interruptions: interruptedSetups,
+          organizationId: input.organizationId,
+          reason: input.remark?.trim() || input.priority,
+        })
         let detailSequence = 1
         for (const interrupted of interruptedSetups) {
           const reference = await optionalPlanningReference(
@@ -1911,6 +1920,16 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
             sourcePayload,
           ]
         )
+        if (!keepsWorkOnMachine) {
+          await releasePlannerInterruptedSetups(client, {
+            actorUserId: input.actorUserId,
+            decisionId: created.rows[0]!.id,
+            decisionSource: "machineConstraints",
+            interruptions: interruptedSetups,
+            organizationId: input.organizationId,
+            reason: input.reason,
+          })
+        }
         for (const interrupted of interruptedSetups) {
           await insertConstraintDetail(client, {
             evidence: interrupted,
@@ -2136,9 +2155,10 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
             sourcePayload,
           ]
         )
-        await releasePlanOverrideInterruptedSetups(client, {
+        await releasePlannerInterruptedSetups(client, {
           actorUserId: input.actorUserId,
           decisionId: created.rows[0]!.id,
+          decisionSource: "planOverrides",
           interruptions: interruptedSetups,
           organizationId: input.organizationId,
           reason: requiredText(input.reason, "Override reason"),
