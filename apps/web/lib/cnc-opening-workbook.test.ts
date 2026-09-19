@@ -17,6 +17,13 @@ test("reconciles the six-sheet template and refuses overlapping running/complete
     { jobCardNumber: "001", setupNumber: 2, machineNumber: "CNC-2", goodPieces: 2000, rejectedPieces: 5, status: "running" },
     { jobCardNumber: "001", setupNumber: 2, machineNumber: "CNC-1", goodPieces: 5000, rejectedPieces: 20, status: "running" },
   ], rawMaterial: [{ "Unused Available (kg)": 100 }] })
+  delete book.Sheets["5 Raw Material"]!.F4
+  const prepared = prepareCncOpeningWorkbook(bytes())
+  expect(prepared.rawMaterial[0]).toMatchObject({ "Total Received (kg)": 500 })
+  expect(prepared.rawMaterial[0]).not.toHaveProperty("Unused Available (kg)")
+  delete book.Sheets["5 Raw Material"]!.E4
+  expect(() => prepareCncOpeningWorkbook(bytes())).toThrow("Total Received (kg) is required")
+  book.Sheets["5 Raw Material"]!.E4 = { t: "n", v: 500 }
   book.Sheets["4 Completed Setups"]!.D4 = { t: "n", v: 2 }
   expect(() => prepareCncOpeningWorkbook(bytes())).toThrow("Duplicate opening setup")
 })
