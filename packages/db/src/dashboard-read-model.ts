@@ -1,3 +1,4 @@
+import { readToolingAllocations, readToolingOccupancy } from "./tooling-availability"
 import type { PoolClient } from "pg"
 
 import { buildLegacyDashboardSnapshot } from "./legacy-dashboard-analysis"
@@ -744,6 +745,9 @@ export async function buildCanonicalDashboardReadModel(
     return previousProductionDashboardRowsByFloor.get(floorCode) ?? []
   }
 
+  const toolingAllocations = await readToolingAllocations(client, context.organizationId)
+  const toolingOccupancy = await readToolingOccupancy(client, context.organizationId)
+
   function buildFloorPayload(floorCode: ProductionFloorCode) {
     const floorDataEntries = dashboardDataEntriesForFloor(dataEntries, floorCode)
     const qualityReferenceRows = (entryType: string) => floorDataEntries
@@ -771,7 +775,12 @@ export async function buildCanonicalDashboardReadModel(
         corrected(source.attendanceRecords, "attendanceRecords"),
         floorCode
       ) as never,
-      dataEntries: floorDataEntries,
+      dataEntries: [...floorDataEntries, ...[...toolingAllocations.values()].map(asset => ({
+        entryType: "tooling_availability", createdAt: "",
+        payload: { assetCode: asset.assetCode, totalQuantity: asset.totalQuantity,
+          storeQuantity: asset.storeQuantity, allocatedQuantity: asset.floors.get(floorCode) ?? 0,
+          occupiedQuantity: toolingOccupancy.find(row => row.assetCode === asset.assetCode && row.floorCode === floorCode)?.occupiedQuantity ?? 0 },
+      }))],
       dispatchApprovals: floorRows(
         corrected(source.dispatchApprovals, "dispatchApprovals"),
         floorCode

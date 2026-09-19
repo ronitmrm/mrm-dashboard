@@ -2019,6 +2019,7 @@ describe("buildLegacyDashboardSnapshot", () => {
         },
       ],
       dataEntries: [
+        ...["T1", "T2"].map(assetCode => ({ entryType: "tooling_availability", createdAt: "2026-06-24T00:00:00.000Z", payload: { assetCode, allocatedQuantity: 1, totalQuantity: 1, storeQuantity: 0 } })),
         {
           entryType: "work_order",
           createdAt: "2026-06-24T00:00:00.000Z",

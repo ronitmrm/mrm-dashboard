@@ -1,3 +1,4 @@
+import { requiredToolingCodes } from "./tooling-availability";
 import { qualityParameterCode } from "./quality-parameter-code";
 import { buildDashboardSnapshot, type AttendanceRecord, type DashboardFilters, type ProductionEntry, type TrainingRecord } from "./dashboard-domain";
 import { isActivePlannerDecision, isPlanningWorkday, machineFamilyMatches, machineMasterFamily, priorityLabel, priorityScore, sourcePlannerDecisions } from "./planning-rules";
@@ -278,6 +279,7 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
   const setupNameMasterRows = entryRows(byType, "setup_name_master");
   const cycleRows = entryRows(byType, "cycle");
   const toolingRows = entryRows(byType, "tooling");
+  const toolingAvailability = entryRows(byType, "tooling_availability");
   const workOrderRows = entryRows(byType, "work_order");
   const rmInwardRows = entryRows(byType, "rm_inward");
   const planningHolidayRows = latestEntryRowsByKey(entryRows(byType, "planning_holiday"), planningHolidayEntryKey);
@@ -340,6 +342,7 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
     routeRows,
     cycleRows,
     toolingRows,
+    toolingAvailability,
     workOrderRows,
     rmInwardRows,
     planningHolidayRows,
@@ -422,6 +425,7 @@ function buildProductionAnalysis({
   routeRows,
   cycleRows,
   toolingRows,
+  toolingAvailability,
   workOrderRows,
   rmInwardRows,
   planningHolidayRows,
@@ -469,6 +473,7 @@ function buildProductionAnalysis({
   routeRows: Record<string, unknown>[];
   cycleRows: Record<string, unknown>[];
   toolingRows: Record<string, unknown>[];
+  toolingAvailability: Record<string, unknown>[];
   workOrderRows: Record<string, unknown>[];
   rmInwardRows: Record<string, unknown>[];
   planningHolidayRows: Record<string, unknown>[];
@@ -769,6 +774,7 @@ function buildProductionAnalysis({
     routeRows,
     cycleRows,
     toolingRows,
+    toolingAvailability,
     workOrderRows,
     rmInwardRows,
     planningHolidayRows,
@@ -957,6 +963,7 @@ function buildProductionControl({
   routeRows,
   cycleRows,
   toolingRows,
+  toolingAvailability,
   workOrderRows,
   rmInwardRows,
   planningHolidayRows,
@@ -995,6 +1002,7 @@ function buildProductionControl({
   routeRows: Record<string, unknown>[];
   cycleRows: Record<string, unknown>[];
   toolingRows: Record<string, unknown>[];
+  toolingAvailability: Record<string, unknown>[];
   workOrderRows: Record<string, unknown>[];
   rmInwardRows: Record<string, unknown>[];
   planningHolidayRows: Record<string, unknown>[];
@@ -1212,7 +1220,7 @@ function buildProductionControl({
     .filter((row) => row.planningItemMissing || row.routeSelectionMissing || row.routeMasterMissing || row.cycleTimeMissing || row.toolingPlanMissing || row.machineMasterMissing);
   const masterGaps = allWorkOrderGaps.filter((row) => row.rmStatus === "Received");
   const combinedBatches = combinedRows(prioritizedWorkOrderRows, rawByJc, routeGroups, cycleKeys, toolingKeys);
-  const machinePlanDetailRows = machinePlanDetails(prioritizedWorkOrderRows, rawBySetup, rawBySetupAnyMachine, routeGroups, cycleRows, toolingRows, machineRows, machineConstraints, planOverrides, shopFloorStatusRows, previousMachineAssignmentsBySetup(previousMachinePlanDetailRows), planningCalendar);
+  const machinePlanDetailRows = machinePlanDetails(prioritizedWorkOrderRows, rawBySetup, rawBySetupAnyMachine, routeGroups, cycleRows, toolingRows, toolingAvailability, machineRows, machineConstraints, planOverrides, shopFloorStatusRows, previousMachineAssignmentsBySetup(previousMachinePlanDetailRows), planningCalendar);
   const productionDashboardRows = buildProductionDashboardRows({
     dispatchApprovals,
     dispatchRows,
@@ -2609,6 +2617,7 @@ function machinePlanDetails(
   routeGroups: Map<string, Record<string, unknown>[]>,
   cycleRows: Array<Record<string, unknown>>,
   toolingRows: Array<Record<string, unknown>>,
+  toolingAvailability: Array<Record<string, unknown>>,
   machineRows: Array<Record<string, unknown>>,
   machineConstraints: ActionRow[],
   planOverrides: ActionRow[],
@@ -2619,6 +2628,8 @@ function machinePlanDetails(
   const details: Array<Record<string, unknown>> = [];
   const cycleByKey = latestMasterRows(cycleRows);
   const toolingKeys = new Set(latestMasterRows(toolingRows).keys());
+  const toolingByKey = latestMasterRows(toolingRows);
+  const allocatedTooling = new Map(toolingAvailability.map(row => [canonicalKey(row.assetCode), safeNumber(row.allocatedQuantity)]));
   const shopFloorStatusBySetup = latestShopFloorStatusBySetup(shopFloorStatusRows);
   const machineUnavailableWindows = activeMachineUnavailableWindows(machineConstraints);
   const machineLoad = new Map<string, number>();
@@ -2649,6 +2660,7 @@ function machinePlanDetails(
       const displaySetupNo = setupStepKey(setupNo, optionNumber) || setupNo;
       const customerOrderPcs = safeNumber(rowValue(row, "orderPcs"));
       const requestedGoodQty = remainingQtyBySetup.get(canonicalKey(displaySetupNo)) ?? customerOrderPcs;
+      const requiredTools = requiredToolingCodes(toolingByKey.get(masterKey(route)) ?? {});
       const machineType = rowText(route, "MACHINE TYPE", "machineType");
       const overrideDecision = planOverrideDecisionForSetup(planOverrides, row, setupNo, displaySetupNo);
       const override = overrideDecision.override;
@@ -2790,6 +2802,19 @@ function machinePlanDetails(
         }).filter((machine) => canonicalKey(machine) !== canonicalKey(setupInterruption.machine));
         if (remainingMachines.length) assignedMachines = [setupInterruption.machine, ...remainingMachines];
       }
+      let toolingSequenceMachine = "";
+      if (requiredTools.length && !override && !setupInterruption && !productionActualMachines.size && !lockedShopFloorMachines.size) {
+        const previousDetails = details.filter(detail => rowText(detail, "jcNo") === rowText(row, "jcNo") && rowText(detail, "setupNo") === (setupStepKey(previousSetupNo, optionNumber) || previousSetupNo));
+        const sharedSingleTool = requiredTools.some(code => allocatedTooling.get(canonicalKey(code)) === 1 && previousDetails.some(detail => (detail.requiredToolingCodes as string[]).includes(code)));
+        const previousMachine = previousDetails.find(detail => activePhysicalMachineRows(routeMachine, machineType, machineRows).some(candidate => canonicalKey(candidate.machine) === canonicalKey(detail.machine)))?.machine;
+        if (sharedSingleTool && typeof previousMachine === "string") {
+          assignedMachines = [previousMachine];
+          toolingSequenceMachine = previousMachine;
+        } else {
+          const capacity = Math.max(1, Math.min(...requiredTools.map(code => allocatedTooling.get(canonicalKey(code)) ?? 0)));
+          assignedMachines = assignedMachines.slice(0, capacity);
+        }
+      }
       if (!assignedMachines.length) {
         routePlanningBlocked = true;
         operationReadyCanPullForward = false;
@@ -2906,6 +2931,10 @@ function machinePlanDetails(
         orderPcs: machineOrderPcs,
         totalOrderPcs: setupOrderPcs,
         customerOrderPcs,
+        requiredToolingCodes: requiredTools,
+        toolingAllocatedQuantities: Object.fromEntries(requiredTools.map(code => [code, allocatedTooling.get(canonicalKey(code)) ?? 0])),
+        toolingSequenceMachine,
+        toolingOccupiedQuantities: Object.fromEntries(requiredTools.map(code => [code, safeNumber(toolingAvailability.find(stock => canonicalKey(stock.assetCode) === canonicalKey(code))?.occupiedQuantity)])),
         customerOrderRemainingQty: Math.max(customerOrderPcs - safeNumber(row.finalSetupGoodPieces), 0),
         physicalWipQty,
         setupRemainingQty,
@@ -3007,12 +3036,65 @@ function machinePlanDetails(
     }
   }
   const finalizedDetails = finalizeMachineAndSetupSchedule(details, planningCalendar, machineRows);
+  applyToolingTaskReadiness(finalizedDetails, toolingAvailability);
   applyMachineActiveTaskReadiness(finalizedDetails);
   return applyPlannedDateTaskReadiness(finalizedDetails).sort((a, b) =>
     rowText(a, "machine").localeCompare(rowText(b, "machine"), undefined, { numeric: true }) ||
     rowText(a, "partCode").localeCompare(rowText(b, "partCode"), undefined, { numeric: true }) ||
     numericSort(rowText(a, "setupNo"), rowText(b, "setupNo")),
   );
+}
+
+function requiredToolingCodesFromPlan(row: Record<string, unknown>): string[] {
+  return Array.isArray(row.requiredToolingCodes) ? row.requiredToolingCodes as string[] : [];
+}
+
+function toolingCapacity(row: Record<string, unknown>, code: string) {
+  return Math.max(0, Math.floor(safeNumber(asRecord(row.toolingAllocatedQuantities)[code])));
+}
+
+function toolingHeld(row: Record<string, unknown>) {
+  return !shopFloorRowIsComplete(row) && !row.priorityStoppedByJcNo && !row.planOverrideStoppedByJcNo &&
+    ["presetting", "setting", "quality_approval", "operator_started"].includes(rowText(row, "shopFloorStage"));
+}
+
+function toolingReadyDate(row: Record<string, unknown>, slots: Map<string, string[]>) {
+  if (shopFloorRowIsComplete(row) || (!toolingHeld(row) && safeNumber(row.pendingGoodQty) <= 0)) return "";
+  return maxDateValue(...requiredToolingCodesFromPlan(row).map(code => slots.get(code)?.[0] ?? ""));
+}
+
+function applyToolingTaskReadiness(rows: Array<Record<string, unknown>>, availability: Record<string, unknown>[]) {
+  const busy = new Map<string, number>();
+  for (const row of rows) if (toolingHeld(row)) {
+    for (const code of requiredToolingCodesFromPlan(row)) busy.set(code, (busy.get(code) ?? 0) + 1);
+  }
+  for (const stock of availability) {
+    const code = rowText(stock,"assetCode").toUpperCase();
+    busy.set(code, Math.max(busy.get(code) ?? 0, safeNumber(stock.occupiedQuantity)));
+  }
+  const blockedSetups = new Set<string>();
+  for (const row of [...rows].sort((a,b) => numericSort(rowText(a,"setupNo"), rowText(b,"setupNo")))) {
+    const codes = requiredToolingCodesFromPlan(row);
+    const shortages = codes.filter(code => toolingCapacity(row, code) === 0);
+    const unavailable = codes.filter(code => (busy.get(code) ?? 0) - (toolingHeld(row) ? 1 : 0) >= toolingCapacity(row, code));
+    const job = [row.jcNo, row.partCode, row.optionNumber].join("|");
+    const blocked = !toolingHeld(row) && !shopFloorRowIsComplete(row) && safeNumber(row.pendingGoodQty) > 0 && (row.toolingPlanBlocked || shortages.length > 0 || blockedSetups.has(job));
+    row.toolingAvailability = codes.map(code => {
+      const stock = availability.find(item => canonicalKey(item.assetCode) === canonicalKey(code));
+      const allocated = toolingCapacity(row, code), occupied = busy.get(code) ?? 0;
+      return `${code}: ${safeNumber(stock?.totalQuantity)} usable total / ${safeNumber(stock?.storeQuantity)} in Store / ${allocated} allocated / ${occupied} occupied / ${Math.max(0, allocated-occupied)} free`;
+    }).join("; ");
+    row.toolingPlanStatus = blocked ? (shortages.length ? `Awaiting Store allocation: ${shortages.join(", ")}` : unavailable.length ? `Waiting for active tooling release: ${unavailable.join(", ")}` : "Previous setup awaiting tooling allocation")
+      : unavailable.length && !shopFloorRowIsComplete(row) ? `Waiting for tooling release: ${unavailable.join(", ")}`
+      : row.toolingSequenceMachine ? `Sequential on ${row.toolingSequenceMachine}` : "Ready";
+    if (blocked) {
+      blockedSetups.add(job);
+      for (const field of ["plannedDate", "setupPlannedDate", "plannedStartDate", "plannedCompletionDate", "plannedProductionStartDate", "plannedProductionEndDate"]) row[field] = "";
+    }
+    if (!shopFloorRowIsComplete(row) && (blocked || unavailable.length)) {
+      row.shopFloorTaskBlocker = uniqueTextValues([rowText(row, "shopFloorTaskBlocker"), rowText(row, "toolingPlanStatus")]).join("; ");
+    }
+  }
 }
 
 function shopFloorTaskReadiness(previousOperationReady: boolean, plannedStartDate: string) {
@@ -3238,6 +3320,7 @@ function machineUnavailablePlacementRejectsGapCandidate(details: Array<Record<st
 function isLeadingFamilyIdleGapCandidate(row: Record<string, unknown>, gap: { targetMachine: string; machineRows: Array<Record<string, unknown>>; targetMachineType: string; gapEnd: string; excludedKeys: Set<string>; planningCalendar: PlanningCalendar }) {
   if (gap.excludedKeys.has(scheduleRowKey(row))) return false;
   if (familyIdleGapRejectedForMachine(row, gap.targetMachine)) return false;
+  if (row.toolingSequenceMachine || requiredToolingCodesFromPlan(row).length) return false;
   if (!isMovablePlannedRow(row)) return false;
   const currentMachine = rowText(row, "machine");
   if (!currentMachine || currentMachine === gap.targetMachine) return false;
@@ -3258,6 +3341,7 @@ function isLeadingFamilyIdleGapCandidate(row: Record<string, unknown>, gap: { ta
 function isFamilyIdleGapCandidate(row: Record<string, unknown>, gap: { targetMachine: string; machineRows: Array<Record<string, unknown>>; targetMachineType: string; gapStart: string; gapDays: number; excludedKeys: Set<string>; planningCalendar: PlanningCalendar }) {
   if (gap.excludedKeys.has(scheduleRowKey(row))) return false;
   if (familyIdleGapRejectedForMachine(row, gap.targetMachine)) return false;
+  if (row.toolingSequenceMachine || requiredToolingCodesFromPlan(row).length) return false;
   if (!isMovablePlannedRow(row)) return false;
   const currentMachine = rowText(row, "machine");
   if (!currentMachine || currentMachine === gap.targetMachine) return false;
@@ -3431,6 +3515,7 @@ function rescheduleMachineQueues(details: Array<Record<string, unknown>>, planni
   applyPlanOverrideInterruptionQuantities(details);
   const byMachine = new Map<string, Array<Record<string, unknown>>>();
   for (const row of details) {
+    row.toolingNextAvailableDate = "";
     const machine = rowText(row, "machine");
     if (!machine) continue;
     const rows = byMachine.get(machine) ?? [];
@@ -3438,19 +3523,51 @@ function rescheduleMachineQueues(details: Array<Record<string, unknown>>, planni
     byMachine.set(machine, rows);
   }
 
-  for (const rows of byMachine.values()) {
-    const queue = applyMachineUnavailableQueuePlacementOrder([...rows].sort(machineQueueSort));
-    let machineNextDate = "";
-    while (queue.length) {
-      const row = takeNextMachineQueueRow(queue, machineNextDate);
+  const queues = [...byMachine.values()].map(rows => ({
+    queue: applyMachineUnavailableQueuePlacementOrder([...rows].sort(machineQueueSort)), nextDate: "",
+  }));
+  const knownHolders = new Map<string, number>();
+  for (const row of details) if (toolingHeld(row)) {
+    for (const code of requiredToolingCodesFromPlan(row)) knownHolders.set(code, (knownHolders.get(code) ?? 0) + 1);
+  }
+  const unplannedHolders = new Map<string, number>();
+  for (const row of details) for (const code of requiredToolingCodesFromPlan(row)) {
+    const known = knownHolders.get(code) ?? 0;
+    unplannedHolders.set(code, Math.max(0, safeNumber(asRecord(row.toolingOccupiedQuantities)[code]) - known));
+  }
+  const blockedJobs = new Set<string>();
+  for (const row of [...details].sort((a,b) => numericSort(rowText(a,"setupNo"), rowText(b,"setupNo")))) {
+    const key = [row.jcNo,row.partCode,row.optionNumber].join("|");
+    row.toolingPlanBlocked = !toolingHeld(row) && !shopFloorRowIsComplete(row) && safeNumber(row.pendingGoodQty) > 0 &&
+      (blockedJobs.has(key) || requiredToolingCodesFromPlan(row).some(code => toolingCapacity(row,code) <= (unplannedHolders.get(code) ?? 0)));
+    if (row.toolingPlanBlocked) blockedJobs.add(key);
+  }
+  const slots = new Map<string, string[]>();
+  for (const row of details) for (const code of requiredToolingCodesFromPlan(row)) {
+    if (!slots.has(code)) slots.set(code, Array.from({ length: Math.max(0, toolingCapacity(row, code) - (unplannedHolders.get(code) ?? 0)) }, () => ""));
+  }
+  while (queues.some(item => item.queue.length)) {
+    for (const item of queues) for (const row of item.queue) row.toolingNextAvailableDate = toolingHeld(row) ? "" : toolingReadyDate(row, slots);
+    const candidates = queues.filter(item => item.queue.length).map(item => ({ item,
+      row: takeNextMachineQueueRow([...item.queue], item.nextDate),
+    }));
+    candidates.sort((a,b) => Number(toolingHeld(b.row)) - Number(toolingHeld(a.row)) ||
+      maxDateValue(queueReadyDate(a.row), a.item.nextDate, toolingReadyDate(a.row, slots)).localeCompare(maxDateValue(queueReadyDate(b.row), b.item.nextDate, toolingReadyDate(b.row, slots))) || machineQueueSort(a.row,b.row));
+    const { item, row } = candidates[0]!;
+    item.queue.splice(item.queue.indexOf(row), 1);
+    if (row.toolingPlanBlocked) continue;
+    let machineNextDate = item.nextDate;
+    {
       const meta = planningMeta(row);
       const lockedStartDate = lockedProductionStartDate(row);
       const productionActualStartDate = actualProductionStartDate(meta);
       const readyDate = meta.readyDate || parseDate(rowText(row, "setupPlannedDate")) || "";
-      let plannedStartDate = maxDateValue(readyDate, lockedStartDate, machineNextDate);
+      const toolingDate = toolingHeld(row) ? "" : toolingReadyDate(row, slots);
+      let plannedStartDate = maxDateValue(readyDate, lockedStartDate, machineNextDate, toolingDate);
       const setupCompletionDate = parseDate(rowText(row, "setupCompletionDate", "completionDate", "setupCompletedOn"));
       const unenteredProductionStartDate = unenteredProductionForecastStartDate(row, planningCalendar);
-      let plannedProductionStartDate = productionActualStartDate || maxDateValue(plannedStartDate, setupCompletionDate, unenteredProductionStartDate);
+      let plannedProductionStartDate = (productionActualStartDate && (!requiredToolingCodesFromPlan(row).length || toolingHeld(row) || shopFloorRowIsComplete(row)))
+        ? productionActualStartDate : maxDateValue(plannedStartDate, setupCompletionDate, unenteredProductionStartDate);
       let plannedProductionEndDate = maxDateValue(
         plannedProductionEnd(plannedProductionStartDate, meta.orderPcs ?? 0, meta.cycle, meta.productionActual, planningCalendar),
         meta.minimumProductionEndDate ?? "",
@@ -3483,12 +3600,22 @@ function rescheduleMachineQueues(details: Array<Record<string, unknown>>, planni
       row.plannedProductionEndDate = dateLabel(plannedProductionEndDate);
       row.planVsActual = setupPlanVsActual(plannedStartDate, parseDate(rowText(row, "setupCompletionDate")) || rowText(row, "setupCompletionDate"));
       machineNextDate = maxDateValue(machineNextDate, nextMachineAvailableDate(plannedProductionEndDate || plannedStartDate, planningCalendar));
+      item.nextDate = machineNextDate;
+      if (!shopFloorRowIsComplete(row) && (toolingHeld(row) || safeNumber(row.pendingGoodQty) > 0)) {
+        for (const code of requiredToolingCodesFromPlan(row)) {
+          const resourceSlots = slots.get(code)!;
+          if (resourceSlots.length) { resourceSlots[0] = machineNextDate; resourceSlots.sort(); }
+        }
+      }
     }
   }
   return details;
 }
 
 function machineQueueSort(a: Record<string, unknown>, b: Record<string, unknown>) {
+  if ((a.toolingSequenceMachine || b.toolingSequenceMachine) && rowText(a, "jcNo") === rowText(b, "jcNo") && !shopFloorRowIsComplete(a) && !shopFloorRowIsComplete(b)) {
+    return numericSort(rowText(a, "setupNo"), rowText(b, "setupNo"));
+  }
   const aActualStart = lockedProductionStartDate(a);
   const bActualStart = lockedProductionStartDate(b);
   const priorityDiff = safeNumber(rowValue(b, "plannerPriorityScore")) - safeNumber(rowValue(a, "plannerPriorityScore"));
@@ -3853,7 +3980,7 @@ function isQueueReady(row: Record<string, unknown>, currentSlotDate: string) {
 
 function queueReadyDate(row: Record<string, unknown>) {
   const meta = planningMeta(row);
-  return meta.readyDate || parseDate(rowText(row, "setupPlannedDate")) || "";
+  return maxDateValue(meta.readyDate || parseDate(rowText(row, "setupPlannedDate")) || "", rowText(row, "toolingNextAvailableDate"));
 }
 
 function earliestQueueReadyDate(queue: Array<Record<string, unknown>>) {

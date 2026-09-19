@@ -1,3 +1,5 @@
+import { lockToolingAllocation, assertToolingTransferAvailable } from "./tooling-availability"
+import { queueDashboardRefresh } from "./dashboard-refresh-queue"
 import { rejectDuplicateMaster, assertMasterAvailable } from "./master-duplicate"
 import { createHash } from "node:crypto"
 
@@ -420,6 +422,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       })
     }
     return withTransaction(pool, async (client) => {
+      await lockToolingAllocation(client, input.organizationId)
       const order = await client.query<{
         created_by_user_id: string | null
         issuance_state: string
@@ -537,6 +540,11 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           [input.purchaseOrderId]
         )
       }
+      if (order.rows[0].order_type === "REPAIR") {
+        const unit = await client.query<{ asset_code: string }>("SELECT asset_code FROM store.assets WHERE id=$1", [order.rows[0].repair_asset_id])
+        if (unit.rows[0]) await assertToolingTransferAvailable(client, input.organizationId, unit.rows[0].asset_code)
+      }
+      await queueDashboardRefresh(client, input.organizationId)
       return prepared
     })
   }
@@ -2320,6 +2328,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       unit: string
     }) {
       return withTransaction(pool, async (client) => {
+        await lockToolingAllocation(client, input.organizationId)
         const classification = await assetClassificationPath(client, input)
         const assetType = storeAssetType(input.assetType)
         const result = await client.query<{ id: string }>(
@@ -2352,6 +2361,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           ]
         )
         if (!result.rows[0]) throw new Error("Store Item Type was not found.")
+        await queueDashboardRefresh(client, input.organizationId)
         return result.rows[0]
       })
     },
@@ -2845,6 +2855,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           `,
           [input.actorUserId ?? null, input.purchaseOrderLineId]
         )
+        await queueDashboardRefresh(client, input.organizationId)
         return { assetCodes, receiptId: receipt.rows[0]!.id, receiptNumber }
       })
     },
@@ -2953,6 +2964,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       requisitionId: string
     }) {
       return withTransaction(pool, async (client) => {
+        await lockToolingAllocation(client, input.organizationId)
         const quantity = positiveQuantity(input.quantity)
         const request = await client.query<{
           department: string
@@ -3113,6 +3125,8 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             input.requisitionId,
           ]
         )
+        await queueDashboardRefresh(client, input.organizationId)
+
         return { issuedQuantity: String(issuedQuantity), status }
       })
     },
@@ -3610,6 +3624,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       vendorId?: string | null
     }) {
       return withTransaction(pool, async (client) => {
+        await lockToolingAllocation(client, input.organizationId)
         const asset = await client.query<{
           current_holder_name: string | null
           current_holder_reference: string | null
@@ -3736,6 +3751,9 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             input.actorUserId ?? null,
           ]
         )
+
+        await assertToolingTransferAvailable(client, input.organizationId, input.assetCode)
+        await queueDashboardRefresh(client, input.organizationId)
       })
     },
 
@@ -3787,6 +3805,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       status: "BROKEN" | "SCRAPPED" | "UNDER_MAINTENANCE"
     }) {
       return withTransaction(pool, async (client) => {
+        await lockToolingAllocation(client, input.organizationId)
         const asset = await client.query<{
           current_holder_name: string | null
           current_holder_reference: string | null
@@ -3848,6 +3867,8 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             input.actorUserId ?? null,
           ]
         )
+
+        await queueDashboardRefresh(client, input.organizationId)
       })
     },
 

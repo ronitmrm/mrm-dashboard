@@ -14095,6 +14095,8 @@ function MachinePlannedPartsPanel({
                   <TileField label="Planned Good Pcs" value={row.orderPcs} numeric />
                   <TileField label="Remaining Planned Pcs" value={row.pendingGoodQty} numeric />
                   <TileField label="Available Setup WIP" value={row.physicalWipQty} numeric />
+                  <TileField label="Tooling availability" value={row.toolingAvailability || "Not required"} />
+                  <TileField label="Tooling plan" value={row.toolingPlanStatus || "Ready"} />
                   <TileField
                     label="Actual / Output"
                     value={`${displayValue(row.rawActualQty, true)} / ${displayValue(row.rawOutputQty, true)}`}

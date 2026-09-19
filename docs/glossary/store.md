@@ -197,3 +197,27 @@ A Route Master Line may explicitly require no special tooling. Fixture,
 Tooling and Foam Tool can all be Not Required; saving still records the
 completed tooling master for planning readiness. This record has no Asset Code
 and does not create a Store asset or a physical tool requirement.
+
+
+**Production tooling capacity**: Fixture, Tooling and Foam Tool are reusable
+resources identified by their existing Store Asset Code. Each required code uses
+one usable physical unit per setup/machine; listing the same code twice does not
+create a second requirement. Not Required creates no reservation. Planning uses
+only usable units allocated to the production department (including its machines),
+never unallocated Store stock, another department's stock, broken, scrapped or
+under-maintenance units. Store remains the only allocation/quantity source.
+
+A setup holds its resources from presetting/setting through production until an
+explicit planner stop or setup completion. Session closure for a shift change,
+temporary pause or downtime does not release them. Stopping releases production
+occupancy, not the department's Store allocation. Restarting checks capacity again.
+Forecast reservations last through the planned production end; a late running
+setup still blocks an actual start until released. Allocation and lifecycle changes
+refresh planning. Insufficient allocated stock blocks the plan and its downstream
+setups until Store supplies it; no release date is invented.
+
+When successive setups share a resource with one allocated usable unit, prefer
+the same compatible machine in sequence. Existing running ownership and explicit
+planner machine choices take precedence, but cannot override resource capacity.
+Machine, WIP and resource constraints all determine the forecast dates. Displays
+separate total usable, Store-held, department allocated, occupied and free quantities.
