@@ -37,8 +37,9 @@ name (or Supplier Code) and Store Asset Code. Category can be omitted for Asset
 Name only when the Subcategory uniquely identifies one record. Unknown or
 ambiguous references stop the import with a row error. Legacy ID columns remain
 accepted. Unit and Location Type accept the form's displayed labels; units are
-stored using the same values as the form. Master exports include readable
-references as well.
+stored using the same values as the form. Supplier Price `valid_from` accepts
+`YYYY-MM-DD`, `DD-MM-YYYY`, or `DD/MM/YYYY` and is stored as an ISO date. Master
+exports include readable references as well.
 
 **Asset Type**: The stock-control choice for a Store Item Type. It is either
 Consumable or Non Consumable; users select it from a dropdown and never enter
