@@ -74,3 +74,52 @@ test("checks every compatible machine gap after raw material becomes ready", () 
     vi.useRealTimers()
   }
 }, 15_000)
+
+test("moves an unstarted queued setup ahead when its WIP is ready first", () => {
+  vi.useFakeTimers()
+  vi.setSystemTime(new Date("2026-09-20T06:00:00Z"))
+
+  const createdAt = "2026-09-20T05:00:00Z"
+  const entry = (entryType: string, payload: Record<string, unknown>) => ({ entryType, payload, createdAt })
+  const job = (jcNo: string, partCode: string, upstreamCycleTime: number) => [
+    entry("work_order", { jcNo, partCode, optionNumber: "1", orderPcs: 100, rmInwardDate: "2026-09-20", rmInwardKg: 1 }),
+    entry("route", { partNo: partCode, optionNumber: "1", setupNo: "1", machineType: "CNC", machineFamily: "UPSTREAM" }),
+    entry("cycle", { partNo: partCode, optionNumber: "1", setupNo: "1", cycleTime: upstreamCycleTime }),
+    entry("route", { partNo: partCode, optionNumber: "1", setupNo: "2", machineType: "CNC", machineFamily: "DOWNSTREAM" }),
+    entry("cycle", { partNo: partCode, optionNumber: "1", setupNo: "2", cycleTime: 288 }),
+  ]
+
+  try {
+    const control = buildLegacyDashboardSnapshot({
+      workbookName: "PostgreSQL",
+      productionEntries: [],
+      dataEntries: [
+        ...job("FIRST-QUEUED", "SLOW-WIP", 1_440),
+        ...job("SECOND-QUEUED", "READY-WIP", 288),
+        entry("machine_master", { machineNo: "CNC-UP-SLOW", machineType: "CNC", machineFamily: "UPSTREAM", status: "Active" }),
+        entry("machine_master", { machineNo: "CNC-UP-FAST", machineType: "CNC", machineFamily: "UPSTREAM", status: "Active" }),
+        entry("machine_master", { machineNo: "CNC-DOWN", machineType: "CNC", machineFamily: "DOWNSTREAM", status: "Active" }),
+      ],
+      previousMachinePlanDetailRows: [
+        { jcNo: "FIRST-QUEUED", partCode: "SLOW-WIP", optionNumber: "1", setupNo: "1", routeMachine: "UPSTREAM", machine: "CNC-UP-SLOW" },
+        { jcNo: "FIRST-QUEUED", partCode: "SLOW-WIP", optionNumber: "1", setupNo: "2", routeMachine: "DOWNSTREAM", machine: "CNC-DOWN" },
+        { jcNo: "SECOND-QUEUED", partCode: "READY-WIP", optionNumber: "1", setupNo: "1", routeMachine: "UPSTREAM", machine: "CNC-UP-FAST" },
+        { jcNo: "SECOND-QUEUED", partCode: "READY-WIP", optionNumber: "1", setupNo: "2", routeMachine: "DOWNSTREAM", machine: "CNC-DOWN" },
+      ],
+    }).productionControl!
+    if (!("machinePlanDetailRows" in control)) throw new Error("Missing plan")
+
+    const setupTwo = control.machinePlanDetailRows.filter((row) => row.machine === "CNC-DOWN" && row.setupNo === "2")
+    const firstQueued = setupTwo.find((row) => row.jcNo === "FIRST-QUEUED")!
+    const secondQueued = setupTwo.find((row) => row.jcNo === "SECOND-QUEUED")!
+    const dateOrdinal = (value: unknown) => {
+      const [day, month, year] = String(value).split("-")
+      const monthIndex = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sept", "Oct", "Nov", "Dec"].indexOf(month ?? "")
+      return Number(year) * 400 + monthIndex * 32 + Number(day)
+    }
+    expect(dateOrdinal(secondQueued.setupPlannedDate)).toBeLessThan(dateOrdinal(firstQueued.setupPlannedDate))
+    expect(setupTwo.every((row) => row.runningStatus === "Planned")).toBe(true)
+  } finally {
+    vi.useRealTimers()
+  }
+}, 15_000)

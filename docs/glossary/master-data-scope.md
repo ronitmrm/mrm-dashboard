@@ -141,6 +141,13 @@ unstarted setup streams may fill a gap only when they fit before the machine's
 next reserved work. WIP availability, tooling capacity, physical machine locks,
 planner decisions and minimum parallel-run rules remain binding.
 
+Within one physical machine's queue, unstarted setups follow effective material
+availability: Raw Material for the first setup and pooled WIP availability for
+later setups. If a later-listed setup becomes ready before the setup ahead of it,
+planning moves the ready setup forward instead of leaving the machine idle. A
+setup at Raw Material at Machine or any later shop-floor stage retains its queue
+position unless an explicit planner action moves or stops it.
+
 **Master Identity**: The permanent system identity and generated code of one
 master record. Editing its permitted details does not create a second master
 or change its identity.
