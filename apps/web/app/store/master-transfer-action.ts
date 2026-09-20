@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache"
 import { unstable_rethrow } from "next/navigation"
+import { createStoreRepository } from "@workspace/db"
+import { readAuthEnvironment } from "@/lib/auth/auth"
 
 import {
   csvValue,
@@ -40,8 +42,12 @@ export async function importStoreMasterCsvAction(formData: FormData) {
   let imported = 0
   try {
     const rows = await readMasterCsv(formData.get("master_csv_file"))
+    const classifications = master === "ITEM_TYPE" ? await readClassifications() : null
     for (const row of rows) {
-      const result = await importRow(master, row)
+      const result = await importRow(
+        master,
+        classifications ? resolveClassification(row, classifications) : row
+      )
       if (result?.error) throw new Error(result.error)
       imported += 1
     }
@@ -54,6 +60,60 @@ export async function importStoreMasterCsvAction(formData: FormData) {
     revalidatePath("/store/masters")
     revalidatePath("/")
   }
+}
+
+async function readClassifications() {
+  const repository = createStoreRepository({
+    connectionString: readAuthEnvironment().connectionString,
+  })
+  try {
+    const organizationId = await repository.organizationIdForCode("MRMPL")
+    return await repository.listAssetClassificationMasters(organizationId)
+  } finally {
+    await repository.close()
+  }
+}
+
+function classificationId(
+  value: string,
+  options: { id: string; name: string }[],
+  label: string
+) {
+  const normalized = value.trim().toLowerCase()
+  if (!normalized) throw new Error(`${label} is required.`)
+  const matches = options.filter(
+    (option) => option.id.toLowerCase() === normalized || option.name.trim().toLowerCase() === normalized
+  )
+  if (matches.length !== 1) {
+    throw new Error(
+      matches.length
+        ? `${label} "${value}" is ambiguous. Use its master ID.`
+        : `${label} "${value}" was not found in the selected classification. Check the Store Classification Master.`
+    )
+  }
+  return matches[0]!.id
+}
+
+function resolveClassification(
+  row: MasterCsvRow,
+  masters: Awaited<ReturnType<typeof readClassifications>>
+) {
+  const categoryId = classificationId(
+    csvValue(row, "asset_category", "asset_category_name", "category", "asset_category_id"),
+    masters.categories,
+    "Asset Category"
+  )
+  const subcategoryId = classificationId(
+    csvValue(row, "asset_subcategory", "asset_subcategory_name", "subcategory", "asset_subcategory_id"),
+    masters.subcategories.filter((option) => option.categoryId === categoryId),
+    "Asset Subcategory"
+  )
+  const assetNameId = classificationId(
+    csvValue(row, "asset_name", "asset_name_id"),
+    masters.assetNames.filter((option) => option.subcategoryId === subcategoryId),
+    "Asset Name"
+  )
+  return { ...row, asset_category_id: categoryId, asset_subcategory_id: subcategoryId, asset_name_id: assetNameId }
 }
 
 async function importRow(master: StoreMasterKey, row: MasterCsvRow) {
