@@ -5126,6 +5126,8 @@ function PlannerPriorityForm({
   }
 
   function confirmPriorityStep(stepKey: string) {
+    const window = priorityStepWindows.get(stepKey)
+    if (!window?.startDate || !window.endDate) return
     setConfirmedPrioritySteps((current) => ({ ...current, [stepKey]: true }))
   }
 
@@ -5739,11 +5741,13 @@ function PriorityPlanStepReview({
 
       <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
         <span className="text-sm text-muted-foreground">
-          {runningBlockerCount
+          {!plannedWindow.startDate || !plannedWindow.endDate
+            ? "No feasible dates. Check tooling allocation and refresh the plan."
+            : runningBlockerCount
             ? "Running work left unselected will continue running."
             : "No running setup blocks this target."}
         </span>
-        <Button type="button" onClick={onConfirm}>
+        <Button type="button" onClick={onConfirm} disabled={!plannedWindow.startDate || !plannedWindow.endDate}>
           Confirm Setup {step.setupNo}
           <ChevronRight className="size-4" />
         </Button>

@@ -145,6 +145,9 @@ Planner Actions never accept a second produced-quantity figure. When a planner d
 
 Saving an approved machine move, priority stop, or machine-constraint move also releases each stopped setup's active machine ownership in the same transaction. Its workflow returns to Planned without marking the setup complete, the planner history retains the stop evidence, and the destination machine can immediately accept the approved setup.
 
+A subsequent shop-floor transition supersedes that stop's workflow and preemption
+effects. Historical stop evidence must not reset a resumed or completed setup.
+
 Customer-order balance and physical WIP are separate. Customer balance is ordered
 pieces minus final-setup good output, floored at zero. For a downstream setup,
 physical WIP is the preceding route setup's pooled good output minus this setup's

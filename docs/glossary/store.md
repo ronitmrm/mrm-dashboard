@@ -221,3 +221,7 @@ the same compatible machine in sequence. Existing running ownership and explicit
 planner machine choices take precedence, but cannot override resource capacity.
 Machine, WIP and resource constraints all determine the forecast dates. Displays
 separate total usable, Store-held, department allocated, occupied and free quantities.
+
+Priority previews also respect department tooling capacity across machines and
+the working calendar. Unselected reservations remain protected throughout the
+previewed run; missing allocation or an unknown release date cannot promise dates.

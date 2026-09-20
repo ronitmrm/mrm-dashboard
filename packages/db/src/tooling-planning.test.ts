@@ -45,5 +45,19 @@ test("department tooling capacity sequences shared resources and refreshes after
     expect(plans().every(row => !String(row.toolingPlanStatus).includes("Waiting for tooling release"))).toBe(true)
     allocation.allocatedQuantity = 0
     expect(plans().every(row => row.plannedProductionStartDate === "" && row.shopFloorTaskReady === false)).toBe(true)
+    // An old stop must not reset the later workflow or release its tooling twice.
+    allocation.allocatedQuantity = 1
+    state.stage = "operator_started"
+    input.planOverrides = [{ jobCardNumber: "B", setupNumber: 1, fromMachineNumber: "CNC-02", toMachineNumber: "CNC-01",
+      status: "Active", createdAt: "2026-09-20T05:00:00Z", interruptedSetups: [
+        { jobCardNumber: "A", setupNumber: 1, machineNumber: "CNC-01", finishedQuantity: 0 },
+      ] }]
+    expect(plans().find(row => row.jcNo === "A" && row.setupNo === "1")).toMatchObject({
+      shopFloorStage: "operator_started", runningStatus: "Running",
+    })
+    state.stage = "item_complete"
+    expect(plans().find(row => row.jcNo === "A" && row.setupNo === "1")).toMatchObject({
+      shopFloorStage: "item_complete", runningStatus: "Complete",
+    })
   } finally { vi.useRealTimers() }
 })
