@@ -157,6 +157,12 @@ planning moves the ready setup forward instead of leaving the machine idle. A
 setup at Raw Material at Machine or any later shop-floor stage retains its queue
 position unless an explicit planner action moves or stops it.
 
+Raw Material receipt or pooled WIP availability is the earliest setup forecast
+date, not a permanently retained overdue date. On recalculation, an unstarted
+setup whose forecast is already past moves to the current planning date (or the
+next working date), and its planned production start and finish move with it.
+Recorded setup or production actuals remain locked.
+
 **Master Identity**: The permanent system identity and generated code of one
 master record. Editing its permitted details does not create a second master
 or change its identity.
