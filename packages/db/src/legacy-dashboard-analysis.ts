@@ -3649,7 +3649,8 @@ function rescheduleMachineQueues(details: Array<Record<string, unknown>>, planni
       const productionActualStartDate = actualProductionStartDate(meta);
       const readyDate = meta.readyDate || parseDate(rowText(row, "setupPlannedDate")) || "";
       const toolingDate = toolingHeld(row) ? "" : toolingReadyDate(row, slots);
-      let plannedStartDate = maxDateValue(readyDate, lockedStartDate, machineNextDate, toolingDate);
+      const currentUnstartedForecastDate = staleUnstartedForecastStartDate(row, planningCalendar);
+      let plannedStartDate = maxDateValue(readyDate, lockedStartDate, machineNextDate, toolingDate, currentUnstartedForecastDate);
       const setupCompletionDate = parseDate(rowText(row, "setupCompletionDate", "completionDate", "setupCompletedOn"));
       const unenteredProductionStartDate = unenteredProductionForecastStartDate(row, planningCalendar);
       let plannedProductionStartDate = (productionActualStartDate && (!requiredToolingCodesFromPlan(row).length || toolingHeld(row) || shopFloorRowIsComplete(row)))
@@ -3974,8 +3975,8 @@ function staleUnstartedForecastStartDate(row: Record<string, unknown>, planningC
   if (setupLifecycleStageRank(rowText(row, "shopFloorStage")) >= setupLifecycleStageRank("setting")) return "";
 
   const today = addDays(localIsoDate(new Date()), 0, planningCalendar);
-  const plannedStartDate = parseDate(rowText(row, "setupPlannedDate", "plannedStartDate", "plannedDate"));
-  return plannedStartDate && today && plannedStartDate < today ? today : "";
+  const materialReadyDate = meta.readyDate || parseDate(rowText(row, "setupPlannedDate", "plannedStartDate", "plannedDate"));
+  return materialReadyDate && today && materialReadyDate < today ? today : "";
 }
 
 function unenteredProductionForecastStartDate(row: Record<string, unknown>, planningCalendar: PlanningCalendar) {

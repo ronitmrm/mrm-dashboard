@@ -70,6 +70,11 @@ test("checks every compatible machine gap after raw material becomes ready", () 
     const machineFor = (jobCard: string) => control.machinePlanDetailRows.find((row) => row.jcNo === jobCard)?.machine
     expect(machineFor("READY-001-001")).toBe("CNC-001-A")
     expect(machineFor("READY-005-013")).toBe("CNC-005-A")
+    expect(control.machinePlanDetailRows.find((row) => row.jcNo === "BLOCK-001")).toMatchObject({
+      setupPlannedDate: "20-Sept-26",
+      plannedProductionStartDate: "20-Sept-26",
+      plannedProductionEndDate: "20-Sept-26",
+    })
   } finally {
     vi.useRealTimers()
   }
