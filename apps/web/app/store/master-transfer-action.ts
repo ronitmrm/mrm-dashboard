@@ -105,7 +105,6 @@ export async function importStoreMasterCsvAction(formData: FormData) {
             asset_name_id: [],
             asset_subcategory_id: [],
             asset_type: [],
-            drawing_number: [],
             identification_name: ["name", "identification"],
             minimum_stock: [],
             unit: [],
