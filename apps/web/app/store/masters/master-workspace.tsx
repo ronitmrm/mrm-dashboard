@@ -904,28 +904,17 @@ function StoreItemTypeForm({
   defaults: Record<string, string>
 }) {
   const editing = Boolean(defaults.master_id)
-  const initialAssetType = defaults.asset_type ?? "NON_CONSUMABLE"
-  const initialCategoryId =
-    defaults.asset_category_id ?? data.masters.categories[0]?.id ?? ""
-  const initialSubcategoryId =
-    defaults.asset_subcategory_id ??
-    data.masters.subcategories.find(
-      (row) => row.categoryId === initialCategoryId
-    )?.id ??
-    ""
-  const initialAssetNameId =
-    defaults.asset_name_id ??
-    data.masters.assetNames.find(
-      (row) => row.subcategoryId === initialSubcategoryId
-    )?.id ??
-    ""
+  const initialAssetType = defaults.asset_type ?? ""
+  const initialCategoryId = defaults.asset_category_id ?? ""
+  const initialSubcategoryId = defaults.asset_subcategory_id ?? ""
+  const initialAssetNameId = defaults.asset_name_id ?? ""
   const [assetType, setAssetType] = useState(initialAssetType)
   const [categoryId, setCategoryId] = useState(initialCategoryId)
   const [subcategoryId, setSubcategoryId] = useState(initialSubcategoryId)
   const [assetNameId, setAssetNameId] = useState(initialAssetNameId)
   const [saved, setSaved] = useState(false)
-  const selectedUnit = defaults.unit ?? "No."
-  const unitOptions = STORE_UNIT_OPTIONS.some(
+  const selectedUnit = defaults.unit ?? ""
+  const unitOptions = !selectedUnit || STORE_UNIT_OPTIONS.some(
     (option) => option.value === selectedUnit
   )
     ? [...STORE_UNIT_OPTIONS]
@@ -962,33 +951,26 @@ function StoreItemTypeForm({
   )
 
   function selectCategory(nextCategoryId: string) {
-    const nextSubcategoryId =
-      data.masters.subcategories.find(
-        (row) => row.categoryId === nextCategoryId
-      )?.id ?? ""
-    const nextAssetNameId =
-      data.masters.assetNames.find(
-        (row) => row.subcategoryId === nextSubcategoryId
-      )?.id ?? ""
     setCategoryId(nextCategoryId)
-    setSubcategoryId(nextSubcategoryId)
-    setAssetNameId(nextAssetNameId)
+    setSubcategoryId("")
+    setAssetNameId("")
   }
 
   function selectSubcategory(nextSubcategoryId: string) {
     setSubcategoryId(nextSubcategoryId)
-    setAssetNameId(
-      data.masters.assetNames.find(
-        (row) => row.subcategoryId === nextSubcategoryId
-      )?.id ?? ""
-    )
+    setAssetNameId("")
   }
 
   return (
     <MasterEntryForm
       action={createStoreItemTypeAction}
       onSuccess={() => {
-        if (!editing) setAssetNameId("")
+        if (!editing) {
+          setAssetType("")
+          setCategoryId("")
+          setSubcategoryId("")
+          setAssetNameId("")
+        }
         setSaved(true)
       }}
       onChange={() => setSaved(false)}
@@ -1033,6 +1015,7 @@ function StoreItemTypeForm({
         <SelectField
           disabled={editing}
           label="Asset Type"
+          placeholder="Select Asset Type"
           name={editing ? "asset_type_display" : "asset_type"}
           onChange={(event) => setAssetType(event.target.value)}
           options={[
@@ -1044,6 +1027,7 @@ function StoreItemTypeForm({
         <SelectField
           label="Category"
           name="asset_category_id"
+          placeholder="Select Category"
           onChange={(event) => selectCategory(event.target.value)}
           options={data.masters.categories.map((row) => ({
             label: row.name,
@@ -1054,6 +1038,7 @@ function StoreItemTypeForm({
         <SelectField
           label="Subcategory"
           name="asset_subcategory_id"
+          placeholder="Select Subcategory"
           onChange={(event) => selectSubcategory(event.target.value)}
           options={subcategories.map((row) => ({
             label: row.name,
@@ -1091,10 +1076,11 @@ function StoreItemTypeForm({
           defaultValue={selectedUnit}
           label="Unit"
           name="unit"
+          placeholder="Select Unit"
           options={unitOptions}
         />
         <TextField
-          defaultValue={defaults.minimum_stock ?? "0"}
+          defaultValue={defaults.minimum_stock ?? ""}
           label="Minimum Stock Alert"
           name="minimum_stock"
           type="number"
