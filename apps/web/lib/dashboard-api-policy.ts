@@ -1,4 +1,4 @@
-export const maxBrowserImportRows = 100;
+export const maxBrowserImportRows = 1000;
 export const maxMachineMasterBrowserImportRows = 250;
 
 export function browserImportPolicy(entryType: string, rowCount: number) {
