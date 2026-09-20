@@ -5,21 +5,21 @@ Date: 2026-07-18
 Status: Approved classification; retention durations require business approval
 
 Artifact handling below records the approved target for
-[issue #88](./specs/private-google-cloud-artifacts.md). The current deployed
+[Artifact storage architecture](./codebase/artifact-storage.md). The current deployed
 UploadThing public-read exposure persists until verified cutover. The local
 GCS-only runtime must not be deployed before every live legacy locator is
 migrated and reconciled; the private boundary is not deployed acceptance.
 
 ## Classes
 
-| Class                    | Examples                                                                                            | Handling                                                                                                                                                      |
-| ------------------------ | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Restricted identity      | Legacy user rows, password hashes, sessions, verification records                                   | Keep only inside sealed source artifacts for the shortest approved period. Exclude from working extracts, staging, logs, and canonical import.                |
-| Confidential business    | Customers, enquiries, quotes, prices, purchase orders, production, quality, maintenance, attendance | Encrypt artifacts and backups at rest and in transit. Limit access to named migration operators and approvers.                                                |
+| Class                    | Examples                                                                                            | Handling                                                                                                                                                |
+| ------------------------ | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Restricted identity      | Legacy user rows, password hashes, sessions, verification records                                   | Keep only inside sealed source artifacts for the shortest approved period. Exclude from working extracts, staging, logs, and canonical import.          |
+| Confidential business    | Customers, enquiries, quotes, prices, purchase orders, production, quality, maintenance, attendance | Encrypt artifacts and backups at rest and in transit. Limit access to named migration operators and approvers.                                          |
 | Confidential files       | Drawings, attachments, resumes, purchase-order and design files                                     | Retain privately with encryption at rest and in transit. Authorize every byte request through the application; expose no public or signed download URL. |
-| Operational audit        | Corrections, reversals, actor text, migration conflicts, reconciliation evidence                    | Append-only. Preserve provenance and approved exception decisions.                                                                                            |
-| Disposable derived state | Convex snapshot chunks, PostgreSQL read models, Redis caches                                        | Rebuild from canonical PostgreSQL data. Do not treat as migration authority.                                                                                  |
-| Sanitized fixtures       | Synthetic or irreversibly redacted migration test data                                              | May be committed when it contains no production identity or confidential business values.                                                                     |
+| Operational audit        | Corrections, reversals, actor text, migration conflicts, reconciliation evidence                    | Append-only. Preserve provenance and approved exception decisions.                                                                                      |
+| Disposable derived state | Convex snapshot chunks, PostgreSQL read models, Redis caches                                        | Rebuild from canonical PostgreSQL data. Do not treat as migration authority.                                                                            |
+| Sanitized fixtures       | Synthetic or irreversibly redacted migration test data                                              | May be committed when it contains no production identity or confidential business values.                                                               |
 
 ## Rules
 

@@ -97,14 +97,14 @@ For example, Conventional downtime from 16:00 until the 20:00 shift end records 
 
 ## Shift and production date
 
-| Production Floor | Shift | Start | End |
-| --- | --- | --- | --- |
-| Conventional-01 | General | 08:30 | 20:00 |
-| Conventional-02 | General | 08:30 | 20:00 |
-| Forging | General | 08:30 | 20:00 |
-| CNC | A | 06:00 | 14:00 |
-| CNC | B | 14:00 | 22:00 |
-| CNC | C | 22:00 | 06:00 |
+| Production Floor | Shift   | Start | End   |
+| ---------------- | ------- | ----- | ----- |
+| Conventional-01  | General | 08:30 | 20:00 |
+| Conventional-02  | General | 08:30 | 20:00 |
+| Forging          | General | 08:30 | 20:00 |
+| CNC              | A       | 06:00 | 14:00 |
+| CNC              | B       | 14:00 | 22:00 |
+| CNC              | C       | 22:00 | 06:00 |
 
 Production Date is the date on which the shift starts. CNC Shift C therefore keeps its starting date after midnight until 06:00.
 

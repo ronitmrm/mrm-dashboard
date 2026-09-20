@@ -94,11 +94,11 @@ and Import authorize their exact unit/entry/action, including submitted row scop
 Migration `0122_scoped_operational_entry_access.sql` registers the 48 keys and
 copies existing role grants and user overrides through this source mapping:
 
-| New action | Existing source |
-| --- | --- |
-| Read / Export, every production entry | `operations.operational_entry.read` |
-| Save / Import, Work Order | `operations.shop_floor.write` |
-| Save / Import, RM Inward and Software Production Output | `operations.production.write` |
+| New action                                              | Existing source                     |
+| ------------------------------------------------------- | ----------------------------------- |
+| Read / Export, every production entry                   | `operations.operational_entry.read` |
+| Save / Import, Work Order                               | `operations.shop_floor.write`       |
+| Save / Import, RM Inward and Software Production Output | `operations.production.write`       |
 
 The old sources were company-wide for these entries, so each source maps to the
 same action in all four units. Legacy permissions, role assignments and records
@@ -282,21 +282,21 @@ current catalogues and persisted registry. Migration 0118 adds the 69 independen
 master rows below; replaced grouped master rows are excluded. Use the selector's
 configured row count rather than a raw count of registered permission keys.
 
-| Main Module           | Sub Module                                                                                                                  | Type                | Page / Task                                                                 | Applicable actions                                                                     | Route                                                  | Backend/API handler                                             | Existing permission                                                | Stable permission source                            | Status  |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------- | --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------ | --------------------------------------------------------------- | ------------------------------------------------------------------ | --------------------------------------------------- | ------- |
-| Access Administration | Access Administration, Artifacts                                                                                            | 2 Pages / 10 Tasks  | Access Administration, Artifacts, profile/staff commands, artifact deletion | View plus each visible command                                                         | `/administration/access`, `/administration/artifacts`  | `app/administration/access/actions.ts`, artifact server helpers | administration and artifact keys                                   | administration page/task catalogue                  | Covered |
-| Costing               | Pricing, Product Parameter Costing, Sales, Technical Review, Design Tasks, Engineering Changes, Drawing History, Excel View | 16 Pages / 26 Tasks | Commercial pages and exact workflow buttons                                 | View, create, edit, delete, import, upload, approve and workflow actions where present | `/commercial/**`                                       | `app/commercial/**/actions.ts`, scoped route handlers           | `pricing.*`                                                        | commercial page/task catalogues                     | Covered |
-| HR & Recruitment      | Existing HR navigation labels                                                                                               | 5 Pages / 10 Tasks  | Recruitment pages, interviews, jobs and exact workflow buttons              | View, create, edit, delete, assign, schedule, record, close and withdraw where present | `/hr`, `/hr/**`                                        | `app/hr/actions.ts`, approved-post export route                 | `hr.*`                                                             | HR page/task catalogues                             | Covered |
-| Machines              | Machines                                                                                                                    | 1 Page              | Machines                                                                    | View                                                                                   | production dashboard route/tab                         | dashboard API boundary                                          | operations machine capability                                      | production page catalogue                           | Covered |
-| Maintenance           | Requests and trade worklists                                                                                                | 1 Page / 7 Tasks    | Requests, approval and trade tasks                                          | View, approve and complete where present                                               | `/maintenance/**`                                      | maintenance server actions                                      | `maintenance.*`                                                    | maintenance navigation plus registered task keys    | Covered |
-| Master Data           | Master Selection, Master Tables                                                                                             | 70 master rows     | Individual Universal and production-unit masters                           | View, save, create, edit, delete, rename and import where supported                    | `/masters`, `/commercial/**`, `/hr`, dashboard tabs    | domain server actions, `/api/masters/state`, lifecycle guards    | `masters.<scope>.<master>.<action>`                              | master catalogue and migration 0118                 | Covered |
+| Main Module           | Sub Module                                                                                                                  | Type                | Page / Task                                                                            | Applicable actions                                                                      | Route                                                  | Backend/API handler                                               | Existing permission                                                 | Stable permission source                                              | Status  |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------ | ----------------------------------------------------------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------- | ------- |
+| Access Administration | Access Administration, Artifacts                                                                                            | 2 Pages / 10 Tasks  | Access Administration, Artifacts, profile/staff commands, artifact deletion            | View plus each visible command                                                          | `/administration/access`, `/administration/artifacts`  | `app/administration/access/actions.ts`, artifact server helpers   | administration and artifact keys                                    | administration page/task catalogue                                    | Covered |
+| Costing               | Pricing, Product Parameter Costing, Sales, Technical Review, Design Tasks, Engineering Changes, Drawing History, Excel View | 16 Pages / 26 Tasks | Commercial pages and exact workflow buttons                                            | View, create, edit, delete, import, upload, approve and workflow actions where present  | `/commercial/**`                                       | `app/commercial/**/actions.ts`, scoped route handlers             | `pricing.*`                                                         | commercial page/task catalogues                                       | Covered |
+| HR & Recruitment      | Existing HR navigation labels                                                                                               | 5 Pages / 10 Tasks  | Recruitment pages, interviews, jobs and exact workflow buttons                         | View, create, edit, delete, assign, schedule, record, close and withdraw where present  | `/hr`, `/hr/**`                                        | `app/hr/actions.ts`, approved-post export route                   | `hr.*`                                                              | HR page/task catalogues                                               | Covered |
+| Machines              | Machines                                                                                                                    | 1 Page              | Machines                                                                               | View                                                                                    | production dashboard route/tab                         | dashboard API boundary                                            | operations machine capability                                       | production page catalogue                                             | Covered |
+| Maintenance           | Requests and trade worklists                                                                                                | 1 Page / 7 Tasks    | Requests, approval and trade tasks                                                     | View, approve and complete where present                                                | `/maintenance/**`                                      | maintenance server actions                                        | `maintenance.*`                                                     | maintenance navigation plus registered task keys                      | Covered |
+| Master Data           | Master Selection, Master Tables                                                                                             | 70 master rows      | Individual Universal and production-unit masters                                       | View, save, create, edit, delete, rename and import where supported                     | `/masters`, `/commercial/**`, `/hr`, dashboard tabs    | domain server actions, `/api/masters/state`, lifecycle guards     | `masters.<scope>.<master>.<action>`                                 | master catalogue and migration 0118                                   | Covered |
 | Operational Entry     | Unit / Production Entries; Entry Selection, Entry Tables                                                                    | 14 Pages / 21 Tasks | 12 production unit/entry rows; Universal Enquiries and Purchase Orders; existing tasks | View, Save, Import, Export for production entries; existing commercial workflow actions | `/operational-entry`, `/commercial/**`, dashboard tabs | `/api/operational-entry/state`, commercial actions, dashboard API | `entries.<unit>.<entry>.<action>` and existing commercial/task keys | operational entry catalogue, migration 0122, existing task catalogues | Covered |
-| PPAC Conventional-01  | Existing PPAC tabs                                                                                                          | 11 Pages / 17 Tasks | Floor pages and production commands                                         | View plus each exact production command                                                | dashboard floor tabs                                   | `app/api/[...path]/route.ts` and dashboard events               | floor-scoped operations keys plus migrated server gates            | floor page/task catalogues                          | Covered |
-| PPAC Conventional-02  | Existing PPAC tabs                                                                                                          | 11 Pages / 17 Tasks | Floor pages and production commands                                         | View plus each exact production command                                                | dashboard floor tabs                                   | `app/api/[...path]/route.ts` and dashboard events               | floor-scoped operations keys plus migrated server gates            | floor page/task catalogues                          | Covered |
-| PPAC CNC-01           | Existing PPAC tabs                                                                                                          | 11 Pages / 17 Tasks | Floor pages and production commands                                         | View plus each exact production command                                                | dashboard floor tabs                                   | `app/api/[...path]/route.ts` and dashboard events               | floor-scoped operations keys plus migrated server gates            | floor page/task catalogues                          | Covered |
-| PPAC Forging          | Existing PPAC tabs                                                                                                          | 11 Pages / 17 Tasks | Floor pages and production commands                                         | View plus each exact production command                                                | dashboard floor tabs                                   | `app/api/[...path]/route.ts` and dashboard events               | floor-scoped operations keys plus migrated server gates            | floor page/task catalogues                          | Covered |
-| Production Dashboard  | Production Dashboard                                                                                                        | 1 Page / 2 Tasks    | Dashboard and registered dashboard tasks                                    | View plus exact task actions                                                           | `/` dashboard tabs                                     | dashboard API and event authorization                           | granular operations keys                                           | production page catalogue and registered tasks      | Covered |
-| Store                 | Store Overview, Requests & Issues, New Item Requests, Purchase Register, Stock                                              | 6 Pages / 10 Tasks  | Store pages and exact request, receipt, purchase and asset commands         | View, submit, issue, resolve, receive and lifecycle actions where present              | `/store/**`                                            | Store actions/routes using `requireStoreAction`                 | granular `store.*`                                                 | Store page/action catalogues                        | Covered |
+| PPAC Conventional-01  | Existing PPAC tabs                                                                                                          | 11 Pages / 17 Tasks | Floor pages and production commands                                                    | View plus each exact production command                                                 | dashboard floor tabs                                   | `app/api/[...path]/route.ts` and dashboard events                 | floor-scoped operations keys plus migrated server gates             | floor page/task catalogues                                            | Covered |
+| PPAC Conventional-02  | Existing PPAC tabs                                                                                                          | 11 Pages / 17 Tasks | Floor pages and production commands                                                    | View plus each exact production command                                                 | dashboard floor tabs                                   | `app/api/[...path]/route.ts` and dashboard events                 | floor-scoped operations keys plus migrated server gates             | floor page/task catalogues                                            | Covered |
+| PPAC CNC-01           | Existing PPAC tabs                                                                                                          | 11 Pages / 17 Tasks | Floor pages and production commands                                                    | View plus each exact production command                                                 | dashboard floor tabs                                   | `app/api/[...path]/route.ts` and dashboard events                 | floor-scoped operations keys plus migrated server gates             | floor page/task catalogues                                            | Covered |
+| PPAC Forging          | Existing PPAC tabs                                                                                                          | 11 Pages / 17 Tasks | Floor pages and production commands                                                    | View plus each exact production command                                                 | dashboard floor tabs                                   | `app/api/[...path]/route.ts` and dashboard events                 | floor-scoped operations keys plus migrated server gates             | floor page/task catalogues                                            | Covered |
+| Production Dashboard  | Production Dashboard                                                                                                        | 1 Page / 2 Tasks    | Dashboard and registered dashboard tasks                                               | View plus exact task actions                                                            | `/` dashboard tabs                                     | dashboard API and event authorization                             | granular operations keys                                            | production page catalogue and registered tasks                        | Covered |
+| Store                 | Store Overview, Requests & Issues, New Item Requests, Purchase Register, Stock                                              | 6 Pages / 10 Tasks  | Store pages and exact request, receipt, purchase and asset commands                    | View, submit, issue, resolve, receive and lifecycle actions where present               | `/store/**`                                            | Store actions/routes using `requireStoreAction`                   | granular `store.*`                                                  | Store page/action catalogues                                          | Covered |
 
 Broad compatibility keys are intentionally omitted from the UI after their
 grants and overrides are copied to granular keys by migrations 0077, 0085,
@@ -356,67 +356,17 @@ All feature authorization is capability-based and configured through Access
 Administration. Department and designation names may classify operational data,
 but never grant page or task rights.
 
-## Acceptance case
-
-The managed `design-team` role contains only Commercial Design, Drawing History,
-Technical Review, Enquiries, Customers, Products and Assembly/BOM grants needed
-by that workflow. It contains no HR permission. Consequently Universal-HR is
-absent from its navigation and HR direct pages/actions remain forbidden. This
-was browser-verified on 2026-09-02 with a disposable Design Team account; the
-account was removed after verification.
-
-Migration 0113 also preserves the canonical designation acronym `HOD` in both
-newly normalized text and existing designation rows.
-
-## Verification safety
+## Test safety
 
 Access and authentication integration tests delete identity fixtures. Never run
 them against the shared staging/live database or load the managed application
 environment into a test process. Use an isolated test database; its connection
 must not reuse the live endpoint. A `_test` role name alone does not isolate data.
 
-All four SQL-consuming Vitest configurations (Web, DB, Migration, Runtime) call
+All SQL-consuming Vitest configurations call
 `scripts/test-database-safety.ts` before test modules load. The guard requires
 `mrmpl_test` (or an `mrmpl_test_` suffix), rejects connection-routing query
 overrides, and requires `TEST_DATABASE_ALLOWED_HOST` for remote endpoints.
 Remote endpoints must differ from application endpoints in both the process
 environment and workspace/Web environment files; pooled/direct Neon aliases
 count as the same endpoint. Errors never include connection strings.
-
-The startup regression launches the real runner with a sentinel fixture and
-proves unsafe configurations stop before that fixture loads. Local CI keeps its
-existing `localhost:5434/mrmpl_test` target; this workstation must use an isolated
-managed branch, never provision local containers. That branch's test role needs
-`CREATEDB` for disposable auth databases and enough connections for concurrent
-repository reads (the shared test role's two-connection limit is insufficient).
-Do not change the shared branch's role privileges or limits for testing.
-
-On 2026-09-03, ten leaked `Design HOD` integration fixtures were backed up and
-removed with their employee links, posts, departments, and designations. The
-cleanup compared exact snapshots and incoming references, was rehearsed on an
-isolated clone, and preserved non-actor revision evidence. Two immutable-revision
-triggers were disabled only inside the owner-controlled transaction and restored
-before commit to allow backed-up actor references to become null. No business
-organizations, commercial records, or files were deleted. Operational backup
-and recovery IDs remain in the ignored `.handoff/` directory, not source control.
-
-Browser follow-up verified separate Create Role, Application Roles, and Staff
-Accounts tabs, compact summary cards, and wrapped employee/post cells. Adding
-Design Team to Khattar Ankit's Design & Engineering post succeeded on an isolated
-copy while preserving Administrative. The reported multiple-role error did not
-reproduce; no speculative authorization changes or live role grants were made.
-
-If Drizzle table types unexpectedly lose `$inferSelect`, inspect the installed
-package before changing application schemas. Installed declarations had altered
-Drizzle `Table` imports to `OperationalTable`; restoring the locked dependencies
-resolved the typecheck and build failures on 2026-09-03:
-
-```powershell
-pnpm install --force --frozen-lockfile --optimistic-repeat-install=false
-pnpm typecheck
-pnpm build
-```
-
-Scope source rewrites to tracked application files; never include `node_modules`,
-generated declarations, or caches. Do not weaken application types to compensate
-for altered dependency files.

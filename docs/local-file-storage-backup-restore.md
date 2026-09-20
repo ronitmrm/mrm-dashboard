@@ -41,11 +41,3 @@ each file and verifies the restored checksum. Only point
 After a production restore, reconcile PostgreSQL file rows against the restored
 paths and stored checksums, then test an authorized legacy download from every
 file family. Do not reopen local writes; no such runtime interface remains.
-
-## LM-09 acceptance proof — 2026-07-22
-
-The automated contract restored nested binary and text fixtures byte-for-byte
-and rejected a symlink, a nested backup destination, a same-size checksum
-tamper, and a nonempty restore destination. The root commands then backed up
-and restored two nested files totaling 8,512 bytes; both manifests reported the
-same paths, sizes, SHA-256 values, file count, and total byte count.
