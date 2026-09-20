@@ -82,7 +82,7 @@ test("checks every compatible machine gap after raw material becomes ready", () 
   }
 }, 15_000)
 
-test("keeps downstream machines available until actual WIP is ready", () => {
+test("keeps every downstream stage off machines until its preceding actual WIP is ready", () => {
   vi.useFakeTimers()
   vi.setSystemTime(new Date("2026-09-20T06:00:00Z"))
 
@@ -94,6 +94,10 @@ test("keeps downstream machines available until actual WIP is ready", () => {
     entry("cycle", { partNo: partCode, optionNumber: "1", setupNo: "1", cycleTime: upstreamCycleTime }),
     entry("route", { partNo: partCode, optionNumber: "1", setupNo: "2", machineType: "CNC", machineFamily: "DOWNSTREAM" }),
     entry("cycle", { partNo: partCode, optionNumber: "1", setupNo: "2", cycleTime: 288 }),
+    entry("route", { partNo: partCode, optionNumber: "1", setupNo: "3", machineType: "CNC", machineFamily: "DOWNSTREAM" }),
+    entry("cycle", { partNo: partCode, optionNumber: "1", setupNo: "3", cycleTime: 288 }),
+    entry("route", { partNo: partCode, optionNumber: "1", setupNo: "4", machineType: "CNC", machineFamily: "DOWNSTREAM" }),
+    entry("cycle", { partNo: partCode, optionNumber: "1", setupNo: "4", cycleTime: 288 }),
   ]
 
   try {
@@ -113,8 +117,12 @@ test("keeps downstream machines available until actual WIP is ready", () => {
       previousMachinePlanDetailRows: [
         { jcNo: "FIRST-QUEUED", partCode: "SLOW-WIP", optionNumber: "1", setupNo: "1", routeMachine: "UPSTREAM", machine: "CNC-UP-SLOW" },
         { jcNo: "FIRST-QUEUED", partCode: "SLOW-WIP", optionNumber: "1", setupNo: "2", routeMachine: "DOWNSTREAM", machine: "CNC-DOWN" },
+        { jcNo: "FIRST-QUEUED", partCode: "SLOW-WIP", optionNumber: "1", setupNo: "3", routeMachine: "DOWNSTREAM", machine: "CNC-DOWN" },
+        { jcNo: "FIRST-QUEUED", partCode: "SLOW-WIP", optionNumber: "1", setupNo: "4", routeMachine: "DOWNSTREAM", machine: "CNC-DOWN" },
         { jcNo: "SECOND-QUEUED", partCode: "READY-WIP", optionNumber: "1", setupNo: "1", routeMachine: "UPSTREAM", machine: "CNC-UP-FAST" },
         { jcNo: "SECOND-QUEUED", partCode: "READY-WIP", optionNumber: "1", setupNo: "2", routeMachine: "DOWNSTREAM", machine: "CNC-DOWN" },
+        { jcNo: "SECOND-QUEUED", partCode: "READY-WIP", optionNumber: "1", setupNo: "3", routeMachine: "DOWNSTREAM", machine: "CNC-DOWN" },
+        { jcNo: "SECOND-QUEUED", partCode: "READY-WIP", optionNumber: "1", setupNo: "4", routeMachine: "DOWNSTREAM", machine: "CNC-DOWN" },
         { jcNo: "OTHER-READY", partCode: "OTHER-PART", optionNumber: "1", setupNo: "1", routeMachine: "DOWNSTREAM", machine: "CNC-DOWN" },
       ],
     }
@@ -139,7 +147,10 @@ test("keeps downstream machines available until actual WIP is ready", () => {
     })
     const refreshed = buildLegacyDashboardSnapshot(input).productionControl!
     if (!("machinePlanDetailRows" in refreshed)) throw new Error("Missing refreshed plan")
-    expect(refreshed.machinePlanDetailRows.some((row) => row.jcNo === "SECOND-QUEUED" && row.setupNo === "2")).toBe(true)
+    expect(refreshed.machinePlanDetailRows
+      .filter((row) => row.jcNo === "SECOND-QUEUED")
+      .map((row) => row.setupNo)
+      .sort()).toEqual(["1", "2"])
   } finally {
     vi.useRealTimers()
   }
