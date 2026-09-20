@@ -3,6 +3,7 @@
 import * as React from "react"
 
 import { StandardDialogContent } from "@/components/ui/golden-patterns"
+import { serializedAllocationSelections } from "@/lib/store/bulk-allocation-selection"
 import { Button } from "@workspace/ui/components/button"
 import {
   Dialog,
@@ -95,8 +96,11 @@ export function BulkAllocationButton({ formId }: { formId: string }) {
     )
     setSelection(nextSelection)
     setAssetSelections((current) =>
-      Object.fromEntries(
-        Object.entries(current).filter(([key]) => activeSlots.has(key))
+      serializedAllocationSelections(
+        nextSelection,
+        Object.fromEntries(
+          Object.entries(current).filter(([key]) => activeSlots.has(key))
+        )
       )
     )
   }, [formId])
@@ -161,8 +165,9 @@ export function BulkAllocationButton({ formId }: { formId: string }) {
           <>
             Allocate {selection.length} selected{" "}
             {selection.length === 1 ? "line" : "lines"} in full to one
-            Department. Select each exact Non Consumable Unit ID before saving.
-            If any stock changed, no line is allocated.
+            Department. Quantity-one serialized lines start with the first
+            available Unit ID; change it if needed. If any stock changed, no
+            line is allocated.
           </>
         }
         title="Allocate selected request lines"
