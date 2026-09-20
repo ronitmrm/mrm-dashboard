@@ -11,6 +11,7 @@ import { ArrowLeft, Factory, History, RefreshCw, Route, Save, Settings2, ShieldA
 import Link from "next/link"
 import { useCallback, useEffect, useState } from "react"
 
+import { jobCardCurrentStage } from "@/lib/job-card-current-stage"
 import { dashboardTabHref } from "@/lib/unified-navigation"
 import { formatIstDate, formatIstDateTime } from "@/lib/date-time"
 
@@ -190,23 +191,7 @@ export function JobCardWorkspace({ floor, jobCardNumber }: { floor: ProductionFl
   const selectedRoute = routes.find((row) => row.selected === true)
   const downtimeEvents = events.filter((row) => text(row.eventType).startsWith("downtime"))
   const rejectionEvents = events.filter((row) => text(row.eventType) === "rejection")
-  const currentStage = number(analytics.actualGoodPieces) >= number(analytics.orderedQuantity) && number(analytics.orderedQuantity) > 0
-    ? "Production complete"
-    : sessions.some((row) => text(row.status) === "open")
-      ? "Production running"
-      : number(analytics.actualGoodPieces) > 0
-        ? "Production"
-        : setupTimings.some((row) => row.qualityApprovedAt)
-          ? "Ready for production"
-          : setupTimings.some((row) => row.settingCompletedAt)
-            ? "Awaiting quality approval"
-            : setupTimings.some((row) => row.settingStartedAt)
-              ? "Setup in progress"
-              : !selectedRoute
-                ? "Part readiness"
-                : receipts.length === 0
-                  ? "Awaiting raw material"
-                  : "Ready for setup"
+  const currentStage = jobCardCurrentStage({ analytics, sessions, setupTimings, selectedRoute, receipts, planRows })
 
   async function saveDeliveryTarget() {
     setSaving(true)

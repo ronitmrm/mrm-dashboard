@@ -24,6 +24,10 @@ The workspace separates Overview, Masters, Setup, Production, Rejection,
 Downtime, Delivery, and Complete Log so each view shows only its own metrics and
 records.
 
+Current Stage recognizes running work from an open Production Session or the current
+machine plan, including imported opening production. Missing receipt history must
+not label running work as awaiting raw material.
+
 ## Analytics
 
 - Plan: ordered quantity and current planned production dates.
