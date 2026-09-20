@@ -355,7 +355,7 @@ function dataEntryDestination(entryType: string): DashboardTabId {
 }
 
 const storeMasterCsvColumns = {
-  ASSET_NAME: ["asset_name", "asset_subcategory_id"],
+  ASSET_NAME: ["asset_name", "asset_category", "asset_subcategory"],
   CATEGORY: ["asset_category_name"],
   ITEM_TYPE: [
     "applicable_item_code",
@@ -368,7 +368,7 @@ const storeMasterCsvColumns = {
     "unit",
   ],
   LOCATION: ["location_code", "location_name", "location_type"],
-  SUBCATEGORY: ["asset_category_id", "asset_subcategory_name"],
+  SUBCATEGORY: ["asset_category", "asset_subcategory_name"],
   SUPPLIER: [
     "supplier_name",
     "supplier_address",
@@ -377,8 +377,8 @@ const storeMasterCsvColumns = {
     "contact_details",
   ],
   SUPPLIER_PRICE: [
-    "supplier_id",
-    "item_type_id",
+    "supplier",
+    "asset_code",
     "unit_price",
     "valid_from",
     "quote_reference",
