@@ -25,6 +25,12 @@ Identification in separate columns. When a Store Item Type applies to a
 manufactured product, its Product Portfolio UID is selected from active internal
 Portfolio products instead of entered as free text.
 
+Item Type CSV imports use Category, Subcategory, and Asset Name text from the
+existing classification masters, matched ignoring letter case and outer spaces.
+Subcategory is resolved within its Category and Asset Name within its Subcategory.
+Unknown or ambiguous names are rejected with a row error; imports do not create
+classification masters. Existing CSVs with internal IDs remain accepted.
+
 **Asset Type**: The stock-control choice for a Store Item Type. It is either
 Consumable or Non Consumable; users select it from a dropdown and never enter
 another value.
