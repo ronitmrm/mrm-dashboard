@@ -2230,7 +2230,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       assetSubcategoryId: string
       assetType: StoreAssetType
       applicableItemCode?: string | null
-      identificationName: string
+      identificationName?: string
       minimumStock?: number
       organizationId: string
       unit: string
@@ -2301,7 +2301,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             input.assetCategoryId,
             input.assetSubcategoryId,
             input.assetNameId,
-            requiredText(input.identificationName, "Identification name"),
+            input.identificationName?.trim() ?? "",
             input.applicableItemCode?.trim() || null,
             typeCode,
             trackingMode,
@@ -2322,7 +2322,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       assetType: StoreAssetType
       applicableItemCode?: string | null
       id: string
-      identificationName: string
+      identificationName?: string
       minimumStock?: number
       organizationId: string
       unit: string
@@ -2350,7 +2350,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             input.assetCategoryId,
             input.assetSubcategoryId,
             input.assetNameId,
-            requiredText(input.identificationName, "Identification name"),
+            input.identificationName?.trim() ?? "",
             input.applicableItemCode?.trim() || null,
             trackingModeForAssetType(assetType),
             requiredText(input.unit, "Unit"),
