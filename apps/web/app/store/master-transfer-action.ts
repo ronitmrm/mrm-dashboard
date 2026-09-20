@@ -37,6 +37,27 @@ function form(row: MasterCsvRow, fields: Record<string, string[]>) {
   return formData
 }
 
+function normalizedCsvDate(value: string, label: string) {
+  const trimmed = value.trim()
+  if (!trimmed) return ""
+
+  const dayFirst = /^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/.exec(trimmed)
+  const normalized = dayFirst
+    ? `${dayFirst[3]!}-${dayFirst[2]!.padStart(2, "0")}-${dayFirst[1]!.padStart(2, "0")}`
+    : trimmed
+  const parsed = new Date(`${normalized}T00:00:00Z`)
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(normalized) ||
+    Number.isNaN(parsed.valueOf()) ||
+    parsed.toISOString().slice(0, 10) !== normalized
+  ) {
+    throw new Error(
+      `${label} must be a valid date in YYYY-MM-DD, DD-MM-YYYY, or DD/MM/YYYY format.`
+    )
+  }
+  return normalized
+}
+
 export async function importStoreMasterCsvAction(formData: FormData) {
   const master = normalizeStoreMasterKey(formData.get("store_master"))
   await requireCapability(masterCapability(master, "import"), "/masters")
@@ -195,13 +216,22 @@ async function importRow(master: StoreMasterKey, row: MasterCsvRow) {
       )
     case "SUPPLIER_PRICE":
       return createStoreSupplierPriceAction(
-        form(row, {
-          item_type_id: [],
-          quote_reference: [],
-          supplier_id: [],
-          unit_price: [],
-          valid_from: [],
-        })
+        form(
+          {
+            ...row,
+            valid_from: normalizedCsvDate(
+              csvValue(row, "valid_from"),
+              "Valid From"
+            ),
+          },
+          {
+            item_type_id: [],
+            quote_reference: [],
+            supplier_id: [],
+            unit_price: [],
+            valid_from: [],
+          }
+        )
       )
     case "VENDOR":
       return createStoreVendorAction(

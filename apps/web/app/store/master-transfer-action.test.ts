@@ -78,6 +78,22 @@ test("resolves readable references across Store master CSVs and form labels", as
   expect(save.mock.lastCall?.[0].get("unit")).toBe("No.")
 })
 
+test("normalizes day-first Supplier Price dates before saving", async () => {
+  save.mockImplementationOnce(async (data) => {
+    if (data.get("valid_from") !== "2026-09-19") {
+      return { error: 'date/time field value out of range: "19-09-2026"' }
+    }
+  })
+
+  const result = await importCsv(
+    "SUPPLIER_PRICE",
+    "supplier,asset_code,unit_price,valid_from\nTool Supplier,NC001,100,19-09-2026"
+  )
+
+  expect(result).toBeUndefined()
+  expect(save.mock.lastCall?.[0].get("valid_from")).toBe("2026-09-19")
+})
+
 test("rejects an ambiguous Subcategory without choosing a parent arbitrarily", async () => {
   const result = await importCsv("ASSET_NAME", "asset_name,asset_subcategory_id\nNew Fixture,Tools")
   expect(result?.error).toContain('Row 2: Asset Subcategory "Tools" is ambiguous.')
