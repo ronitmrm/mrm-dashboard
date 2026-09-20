@@ -127,4 +127,83 @@ describe("legacy dashboard route selections", () => {
       }],
     })
   })
+
+  test("creates one readiness row per setup missing cycle time", () => {
+    const createdAt = "2026-09-20T10:00:00.000Z"
+    const entry = (entryType: string, payload: Record<string, unknown>) => ({
+      entryType,
+      payload,
+      createdAt,
+    })
+    const snapshot = buildLegacyDashboardSnapshot({
+      workbookName: "PostgreSQL",
+      productionEntries: [],
+      dataEntries: [
+        entry("work_order", {
+          jcNo: "JC-READINESS",
+          partCode: "PART-READINESS",
+          optionNumber: "2",
+          orderPcs: 2_400,
+        }),
+        entry("rm_inward", {
+          jcNo: "JC-READINESS",
+          partCode: "PART-READINESS",
+          rmPoNo: "RM-READINESS",
+          rmInwardDate: "2026-09-20",
+          rmInwardKg: 100,
+        }),
+        ...["1", "2"].flatMap((setupNo) => [
+          entry("route", {
+            partNo: "PART-READINESS",
+            optionNumber: "2",
+            setupNo,
+            setupName: `Setup ${setupNo}`,
+            machineType: "CNC",
+            machineFamily: "READINESS-FAMILY",
+          }),
+          entry("tooling", {
+            partNo: "PART-READINESS",
+            optionNumber: "2",
+            setupNo,
+            fixture: "Not Required",
+            tooling: "Not Required",
+            foamTool: "Not Required",
+          }),
+        ]),
+        entry("machine_master", {
+          machineNo: "CNC-READINESS-01",
+          machineType: "CNC",
+          machineFamily: "READINESS-FAMILY",
+          status: "Active",
+        }),
+      ],
+    })
+
+    expect(snapshot.productionControl).toMatchObject({
+      allWorkOrderGaps: [
+        expect.objectContaining({
+          jcNo: "JC-READINESS",
+          orderPcs: 2_400,
+          optionNumber: "2",
+          missingSetupNo: "1",
+          cycleTimeMissing: true,
+          toolingPlanMissing: false,
+          machineMasterMissing: false,
+        }),
+        expect.objectContaining({
+          jcNo: "JC-READINESS",
+          orderPcs: 2_400,
+          optionNumber: "2",
+          missingSetupNo: "2",
+          cycleTimeMissing: true,
+          toolingPlanMissing: false,
+          machineMasterMissing: false,
+        }),
+      ],
+      masterGaps: [
+        expect.objectContaining({ missingSetupNo: "1" }),
+        expect.objectContaining({ missingSetupNo: "2" }),
+      ],
+    })
+  })
 })
