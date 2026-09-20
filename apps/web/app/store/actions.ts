@@ -555,7 +555,7 @@ export async function createStoreItemTypeAction(formData: FormData) {
           assetSubcategoryId: requiredText(formData, "asset_subcategory_id"),
           assetType: assetType(formData),
           applicableItemCode: optionalText(formData, "applicable_item_code"),
-          identificationName: requiredText(formData, "identification_name"),
+          identificationName: optionalText(formData, "identification_name") ?? "",
           minimumStock: Number(optionalText(formData, "minimum_stock") ?? 0),
           organizationId,
           unit: requiredText(formData, "unit"),

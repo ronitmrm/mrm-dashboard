@@ -995,14 +995,13 @@ function StoreItemTypeForm({
         ) : null}
         <Field>
           <FieldLabel htmlFor="master-identification_name">
-            Identification
+            Identification (optional)
           </FieldLabel>
           <Input
             defaultValue={defaults.identification_name}
             id="master-identification_name"
             name="identification_name"
             placeholder="e.g. Bosch GWS 600, 100 mm"
-            required
           />
           <FieldDescription>
             Enter the make, model, size, grade, or specification that identifies

@@ -205,6 +205,28 @@ async function createPurchaseOrder(
 }
 
 describe("Store requests", () => {
+  test("creates, edits and receives an item without Identification", async () => {
+    const input = {
+      ...(await createClassification("Optional Identification")),
+      assetType: "NON_CONSUMABLE" as const,
+      organizationId,
+      unit: "No.",
+    }
+    const item = await store.createItemType(input)
+    await store.updateItemType({ ...input, id: item.id, identificationName: " " })
+    const order = await createPurchaseOrder(item.id, 1, "100.00")
+    const location = await store.ensurePrimaryStoreLocation({ organizationId })
+    const receipt = await store.receiveStock({
+      locationId: location.id, organizationId, purchaseOrderLineId: order.id,
+      quantity: 1, receivedBy: "store.integration@example.com",
+    })
+    const result = await pool.query<{ identification_name: string }>(
+      "SELECT identification_name FROM store.assets WHERE asset_code = $1 AND organization_id = $2",
+      [receipt.assetCodes[0], organizationId]
+    )
+    expect(result.rows[0]?.identification_name).toBe("")
+  })
+
   test("keeps current and superseded Item drawings while reusing Organization bytes", async () => {
     const firstItem = await store.createItemType({
       ...(await createClassification("Artifact Drawing One")),
