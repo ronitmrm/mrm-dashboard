@@ -8,6 +8,7 @@ import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { Pencil, Trash2 } from "lucide-react"
 import { Button } from "@workspace/ui/components/button"
+import { StatusBadge } from "@workspace/ui/components/badge"
 import { StandardState } from "@workspace/ui/components/standard-state"
 import { MetricSummary } from "@/components/ui/golden-patterns"
 import {
@@ -922,6 +923,7 @@ function StoreItemTypeForm({
   const [categoryId, setCategoryId] = useState(initialCategoryId)
   const [subcategoryId, setSubcategoryId] = useState(initialSubcategoryId)
   const [assetNameId, setAssetNameId] = useState(initialAssetNameId)
+  const [saved, setSaved] = useState(false)
   const selectedUnit = defaults.unit ?? "No."
   const unitOptions = STORE_UNIT_OPTIONS.some(
     (option) => option.value === selectedUnit
@@ -985,6 +987,11 @@ function StoreItemTypeForm({
   return (
     <MasterEntryForm
       action={createStoreItemTypeAction}
+      onSuccess={() => {
+        if (!editing) setAssetNameId("")
+        setSaved(true)
+      }}
+      onChange={() => setSaved(false)}
       uploads={[
         {
           field: "asset_drawing",
@@ -1057,6 +1064,7 @@ function StoreItemTypeForm({
         <SelectField
           label="Asset Name"
           name="asset_name_id"
+          placeholder="Select Asset Name"
           onChange={(event) => setAssetNameId(event.target.value)}
           options={assetNames.map((row) => ({
             label: row.name,
@@ -1103,6 +1111,11 @@ function StoreItemTypeForm({
           />
         </Field>
       </FieldGroup>
+      {saved ? (
+        <p className="mt-5" role="status">
+          <StatusBadge value="Asset saved" tone="positive" />
+        </p>
+      ) : null}
       {!editing && existingItem ? (
         <StandardState
           className="mt-5"
