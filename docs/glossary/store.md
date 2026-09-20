@@ -149,7 +149,11 @@ and remaining quantities, and Current Available Stock, and allows each line to
 be allocated independently. Issuing uses the request's Department and the
 signed-in Store user's identity. A Non Consumable Unit ID is selected from the
 available physical units for that request's Asset Code and Store; it is never
-entered as free text.
+entered as free text. Bulk allocation accepts selected open lines only when
+each line's full remaining quantity is currently available, issues every
+selected line in one atomic operation, and automatically assigns available
+Non Consumable Unit IDs in Unit ID order. Any stock shortfall leaves every
+selected line unchanged.
 
 **Stock Register**: The single filterable Store inventory table containing both
 Consumable and Non Consumable items. A Consumable has one quantity-managed row.
