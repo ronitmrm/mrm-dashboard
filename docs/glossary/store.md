@@ -154,12 +154,13 @@ signed-in Store user's identity. A Non Consumable Unit ID is selected from the
 available physical units for that request's Asset Code and Store; it is never
 entered as free text. One bulk allocation can contain only selected open lines
 for the same Department, and each line's full remaining quantity must be
-currently available. The operator explicitly selects one available Non
-Consumable Unit ID for every whole unit being issued; for a remaining quantity
-of one, exactly one Unit ID is selected from the available list. The complete
-batch is issued in one atomic operation. A mixed Department, missing or
-duplicate Unit ID, unavailable Unit ID, or stock shortfall leaves every
-selected line unchanged.
+currently available. The operator selects one available Non Consumable Unit ID
+for every whole unit being issued. For a serialized line with a remaining
+quantity of one, the first available Unit ID is preselected and remains editable;
+the operator can choose another available Unit ID before saving. The complete
+batch is issued in one atomic operation. A mixed Department, missing or duplicate
+Unit ID, unavailable Unit ID, or stock shortfall leaves every selected line
+unchanged.
 
 **Stock Register**: The single filterable Store inventory table containing both
 Consumable and Non Consumable items. A Consumable has one quantity-managed row.
