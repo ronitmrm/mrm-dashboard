@@ -7,8 +7,8 @@ import {
 } from "./dashboard-api-policy";
 
 describe("dashboard API policy", () => {
-  it("allows 100 general rows and 250 Machine Master rows", () => {
-    expect(maxBrowserImportRows).toBe(100);
+  it("allows 1000 general rows and 250 Machine Master rows", () => {
+    expect(maxBrowserImportRows).toBe(1000);
     expect(maxMachineMasterBrowserImportRows).toBe(250);
   });
 

@@ -21,6 +21,7 @@
   - `any` is the enemy. inferred types are our friend. our system should adapt to changes instead of requiring changes everywhere.
   - if your TS code looks like a python dev wrote it, it is bad TS code.
   - write typescript in ways that Matt Pocock and Theo would be proud of.
+- for pdf generation never bundle chromium. we use pdf-kit for it.
 
 ## Project Shape
 
