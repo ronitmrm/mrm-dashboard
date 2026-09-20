@@ -123,12 +123,15 @@ Maintenance History flows; it does not create stock receipt quantity.
 Order and its received quantity. Goods are received against the same order row;
 Purchase Order entry and receipt are not separate workspaces.
 
-**Store Receipt**: A goods receipt recorded against one Store Purchase Order
-line. It cannot exceed the line's remaining quantity and inherits its Supplier,
-Store Item Type, and agreed unit price. Bulk receipt accepts selected open goods
-lines and receives each selected line's full remaining quantity into the primary
-Store in one atomic operation; it does not add optional bill, warranty, or serial
-number details.
+**Store Receipt**: One Goods Receipt Note recorded against exactly one Store
+Purchase Order. It may contain one or more selected open goods lines from that
+order; each line inherits its Store Item Type and agreed unit price and cannot
+exceed its remaining quantity. Bulk receipt receives every selected line's full
+remaining quantity into the primary Store in one atomic operation. Supplier Bill
+Number, Supplier Bill Date, and an optional warranty / guarantee document belong
+to the receipt header, while a common Warranty / Guarantee Until date is copied
+to every selected receipt line and its Physical Assets. A receipt selection can
+never mix lines from different Purchase Orders.
 
 **Store Request**: One numbered demand submitted by a Department and an
 individual to one Store location. It contains one or more Coded Item Request
@@ -149,10 +152,13 @@ and remaining quantities, and Current Available Stock, and allows each line to
 be allocated independently. Issuing uses the request's Department and the
 signed-in Store user's identity. A Non Consumable Unit ID is selected from the
 available physical units for that request's Asset Code and Store; it is never
-entered as free text. Bulk allocation accepts selected open lines only when
-each line's full remaining quantity is currently available, issues every
-selected line in one atomic operation, and automatically assigns available
-Non Consumable Unit IDs in Unit ID order. Any stock shortfall leaves every
+entered as free text. One bulk allocation can contain only selected open lines
+for the same Department, and each line's full remaining quantity must be
+currently available. The operator explicitly selects one available Non
+Consumable Unit ID for every whole unit being issued; for a remaining quantity
+of one, exactly one Unit ID is selected from the available list. The complete
+batch is issued in one atomic operation. A mixed Department, missing or
+duplicate Unit ID, unavailable Unit ID, or stock shortfall leaves every
 selected line unchanged.
 
 **Stock Register**: The single filterable Store inventory table containing both

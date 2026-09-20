@@ -33,6 +33,7 @@ import {
 } from "@/lib/store-request-policy"
 import { createGoogleCloudArtifactProvider } from "@/lib/google-cloud-artifact-provider"
 import { buildStorePurchaseOrderPdf } from "@/lib/store/purchase-order-pdf"
+import type { PendingUploadIntent } from "@/lib/artifact-upload-contract"
 import {
   consumePendingArtifactUpload,
   pendingUploadAuthorizationForUser,
@@ -123,6 +124,73 @@ function revalidateStore() {
   revalidatePath("/store/requests/new")
   revalidatePath("/store/new-item-requests")
   revalidatePath("/store/assets")
+}
+
+async function retainStoreReceiptGuaranteeCard(input: {
+  actorUserId: string
+  expectedIntent: PendingUploadIntent
+  organizationId: string
+  pendingAuthorization: Awaited<
+    ReturnType<typeof pendingUploadAuthorizationForUser>
+  >
+  receiptId: string
+  uploadId: string
+}) {
+  const artifacts = createArtifactService({
+    connectionString: readAuthEnvironment().connectionString,
+    provider: createGoogleCloudArtifactProvider(),
+  })
+  try {
+    await consumePendingArtifactUpload({
+      authorization: input.pendingAuthorization,
+      expectedIntent: input.expectedIntent,
+      finalize: async (source) => {
+        const sha256 = createHash("sha256").update(source.bytes).digest("hex")
+        const artifact = await artifacts.store({
+          actorUserId: input.actorUserId,
+          authorizeTarget: (client) =>
+            authorizeStoreReceiptArtifactTarget(client, {
+              organizationId: input.organizationId,
+              receiptId: input.receiptId,
+            }),
+          bytes: source.bytes,
+          fileName: source.fileName,
+          idempotencyKey: [
+            "store-guarantee-card",
+            input.receiptId,
+            source.fileName,
+            sha256,
+          ].join(":"),
+          mediaType: source.mediaType,
+          organizationId: input.organizationId,
+          origin: "uploaded",
+          pendingUploadId: source.pendingUploadId,
+          purpose: "guarantee_card",
+          target: {
+            id: input.receiptId,
+            schema: "store",
+            table: "receipts",
+          },
+        })
+        return {
+          binding: {
+            artifactId: artifact.id,
+            purpose: "guarantee_card",
+            target: {
+              id: input.receiptId,
+              schema: "store",
+              table: "receipts",
+            },
+          },
+          value: undefined,
+        }
+      },
+      recover: () => undefined,
+      uploadId: input.uploadId,
+    })
+  } finally {
+    await artifacts.close()
+  }
 }
 
 function storeIssuedPurchaseOrderPdf(
@@ -846,14 +914,21 @@ export async function issueRemainingStoreRequisitionBatchAction(
   if (!requisitionIds.length) {
     throw new Error("Select at least one Store request line to allocate.")
   }
+  const lines = requisitionIds.map((requisitionId) => ({
+    assetCodes: formData
+      .getAll(`asset_code_${requisitionId}`)
+      .map((value) => value.toString().trim())
+      .filter(Boolean),
+    requisitionId,
+  }))
   await withStore(
     "store.requests.issue",
     async (repository, actorUserId, organizationId, actorEmail) =>
       repository.issueRemainingRequisitionBatch({
         actorUserId,
         issuedBy: actorEmail,
+        lines,
         organizationId,
-        requisitionIds,
       })
   )
   revalidateStore()
@@ -901,71 +976,14 @@ export async function receiveStoreStockAction(formData: FormData) {
         warrantyUntil: optionalText(formData, "warranty_until"),
       })
       if (guaranteeUploadId && pendingAuthorization) {
-        const artifacts = createArtifactService({
-          connectionString: readAuthEnvironment().connectionString,
-          provider: createGoogleCloudArtifactProvider(),
+        await retainStoreReceiptGuaranteeCard({
+          actorUserId,
+          expectedIntent: guaranteeIntent,
+          organizationId,
+          pendingAuthorization,
+          receiptId: received.receiptId,
+          uploadId: guaranteeUploadId,
         })
-        try {
-          const retain = async (source: {
-            bytes: Buffer
-            fileName: string
-            mediaType: string
-            pendingUploadId?: string
-          }) => {
-            const sha256 = createHash("sha256")
-              .update(source.bytes)
-              .digest("hex")
-            return artifacts.store({
-              actorUserId,
-              authorizeTarget: (client) =>
-                authorizeStoreReceiptArtifactTarget(client, {
-                  organizationId,
-                  receiptId: received.receiptId,
-                }),
-              bytes: source.bytes,
-              fileName: source.fileName,
-              idempotencyKey: [
-                "store-guarantee-card",
-                received.receiptId,
-                source.fileName,
-                sha256,
-              ].join(":"),
-              mediaType: source.mediaType,
-              organizationId,
-              origin: "uploaded",
-              pendingUploadId: source.pendingUploadId,
-              purpose: "guarantee_card",
-              target: {
-                id: received.receiptId,
-                schema: "store",
-                table: "receipts",
-              },
-            })
-          }
-          await consumePendingArtifactUpload({
-            authorization: pendingAuthorization,
-            expectedIntent: guaranteeIntent,
-            finalize: async (source) => {
-              const artifact = await retain(source)
-              return {
-                binding: {
-                  artifactId: artifact.id,
-                  purpose: "guarantee_card",
-                  target: {
-                    id: received.receiptId,
-                    schema: "store",
-                    table: "receipts",
-                  },
-                },
-                value: undefined,
-              }
-            },
-            recover: () => undefined,
-            uploadId: guaranteeUploadId,
-          })
-        } finally {
-          await artifacts.close()
-        }
       }
       return received
     }
@@ -976,6 +994,8 @@ export async function receiveStoreStockAction(formData: FormData) {
 export async function receiveRemainingStoreStockBatchAction(
   formData: FormData
 ) {
+  const guaranteeUploadId = pendingUploadId(formData, "guarantee_card")
+  const purchaseOrderId = requiredText(formData, "purchase_order_id")
   const purchaseOrderLineIds = formData
     .getAll("purchase_order_line_id")
     .map((value) => value.toString().trim())
@@ -983,9 +1003,23 @@ export async function receiveRemainingStoreStockBatchAction(
   if (!purchaseOrderLineIds.length) {
     throw new Error("Select at least one Purchase Order line to receive.")
   }
+  const guaranteeIntent = {
+    kind: "store-guarantee-card" as const,
+    purchaseOrderId,
+  }
   await withStore(
     "store.receipts.receive",
     async (repository, actorUserId, organizationId) => {
+      const pendingAuthorization = guaranteeUploadId
+        ? await pendingUploadAuthorizationForUser(actorUserId)
+        : null
+      if (guaranteeUploadId && pendingAuthorization) {
+        await preparePendingArtifactUploadForFinalAction({
+          authorization: pendingAuthorization,
+          expectedIntent: guaranteeIntent,
+          uploadId: guaranteeUploadId,
+        })
+      }
       const [requestContext, location] = await Promise.all([
         repository.requisitionRequestContext({
           organizationId,
@@ -996,13 +1030,28 @@ export async function receiveRemainingStoreStockBatchAction(
           organizationId,
         }),
       ])
-      return repository.receiveRemainingStockBatch({
+      const received = await repository.receiveRemainingStockBatch({
         actorUserId,
+        billDate: optionalText(formData, "bill_date"),
+        billNumber: optionalText(formData, "bill_number"),
         locationId: location.id,
         organizationId,
+        purchaseOrderId,
         purchaseOrderLineIds,
         receivedBy: requestContext.requesterEmail,
+        warrantyUntil: optionalText(formData, "warranty_until"),
       })
+      if (guaranteeUploadId && pendingAuthorization) {
+        await retainStoreReceiptGuaranteeCard({
+          actorUserId,
+          expectedIntent: guaranteeIntent,
+          organizationId,
+          pendingAuthorization,
+          receiptId: received.receiptId,
+          uploadId: guaranteeUploadId,
+        })
+      }
+      return received
     }
   )
   revalidateStore()

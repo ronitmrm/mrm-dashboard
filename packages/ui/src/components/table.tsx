@@ -33,6 +33,7 @@ import {
   tableSecondaryTextSelector,
 } from "@workspace/ui/lib/table-filter-display"
 import {
+  exclusiveFilteredTableSelectionRows,
   filteredTableSelectionState,
   selectAllFilteredTableRows,
   type FilteredTableSelectionRow,
@@ -44,6 +45,7 @@ type OperationalTableProps = React.ComponentProps<"table"> & {
   excelFilters?: boolean
   filteredSelection?: {
     checkboxName: string
+    exclusiveGroup?: boolean
     label?: string
     onSelect?: (value: string) => void
   }
@@ -210,6 +212,9 @@ function OperationalTable({
   const filteredSelectionRowsRef = React.useRef<
     FilteredTableSelectionRow<HTMLInputElement>[]
   >([])
+  const inherentlyDisabledCheckboxesRef = React.useRef(
+    new WeakMap<HTMLInputElement, boolean>()
+  )
   const [columns, setColumns] = React.useState<TableFilterColumn[]>([])
   const [filterHosts, setFilterHosts] = React.useState<
     Record<number, HTMLElement>
@@ -221,18 +226,33 @@ function OperationalTable({
     selectedCount: 0,
   })
   const filteredSelectionCheckboxName = filteredSelection?.checkboxName
+  const exclusiveSelectionGroup = filteredSelection?.exclusiveGroup === true
 
   const syncFilteredSelectionState = React.useCallback(() => {
-    const nextState = filteredTableSelectionState(
-      filteredSelectionRowsRef.current
-    )
+    const selectedGroup = exclusiveSelectionGroup
+      ? filteredSelectionRowsRef.current.find((row) => row.checkbox?.checked)
+          ?.group
+      : undefined
+    if (exclusiveSelectionGroup) {
+      for (const row of filteredSelectionRowsRef.current) {
+        const checkbox = row.checkbox
+        if (!checkbox) continue
+        checkbox.disabled =
+          (inherentlyDisabledCheckboxesRef.current.get(checkbox) ?? false) ||
+          (selectedGroup !== undefined && row.group !== selectedGroup)
+      }
+    }
+    const selectionRows = exclusiveSelectionGroup
+      ? exclusiveFilteredTableSelectionRows(filteredSelectionRowsRef.current)
+      : filteredSelectionRowsRef.current
+    const nextState = filteredTableSelectionState(selectionRows)
     setSelectionState((current) =>
       current.selectableCount === nextState.selectableCount &&
       current.selectedCount === nextState.selectedCount
         ? current
         : nextState
     )
-  }, [])
+  }, [exclusiveSelectionGroup])
 
   const refreshTable = React.useCallback(() => {
     const table = tableRef.current
@@ -346,12 +366,25 @@ function OperationalTable({
       }
     }
     filteredSelectionRowsRef.current = filteredSelectionCheckboxName
-      ? snapshot.rows.map((row) => ({
-          checkbox: Array.from(
+      ? snapshot.rows.map((row) => {
+          const checkbox = Array.from(
             row.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')
-          ).find((input) => input.name === filteredSelectionCheckboxName),
-          hidden: row.hidden,
-        }))
+          ).find((input) => input.name === filteredSelectionCheckboxName)
+          if (
+            checkbox &&
+            !inherentlyDisabledCheckboxesRef.current.has(checkbox)
+          ) {
+            inherentlyDisabledCheckboxesRef.current.set(
+              checkbox,
+              checkbox.disabled
+            )
+          }
+          return {
+            checkbox,
+            group: checkbox?.dataset.selectionGroup,
+            hidden: row.hidden,
+          }
+        })
       : []
     syncFilteredSelectionState()
 
@@ -377,7 +410,11 @@ function OperationalTable({
       }
     }
     onFilteredRowCountChange?.(matchingRows.size, snapshot.rows.length)
-    onFilteredRowIdsChange?.([...matchingRows].flatMap((row) => row.dataset.rowId ? [row.dataset.rowId] : []))
+    onFilteredRowIdsChange?.(
+      [...matchingRows].flatMap((row) =>
+        row.dataset.rowId ? [row.dataset.rowId] : []
+      )
+    )
   }, [
     excelFilters,
     filterMode,
@@ -491,7 +528,7 @@ function OperationalTable({
 
   return (
     <div
-      className="min-w-0 w-full"
+      className="w-full min-w-0"
       data-filter-storage-key={filterStorageKey ?? "automatic"}
       data-slot="operational-table"
     >
@@ -527,7 +564,10 @@ function OperationalTable({
       {columns.length || toolbarStart ? (
         <div
           data-slot="table-toolbar"
-          className={cn("flex flex-wrap items-center gap-2", toolbarStart ? "pb-4" : "pb-2")}
+          className={cn(
+            "flex flex-wrap items-center gap-2",
+            toolbarStart ? "pb-4" : "pb-2"
+          )}
         >
           {toolbarStart}
           {filteredSelection ? (
@@ -539,8 +579,13 @@ function OperationalTable({
                 selectionState.selectedCount === selectionState.selectableCount
               }
               onClick={() => {
+                const selectionRows = exclusiveSelectionGroup
+                  ? exclusiveFilteredTableSelectionRows(
+                      filteredSelectionRowsRef.current
+                    )
+                  : filteredSelectionRowsRef.current
                 const changed = selectAllFilteredTableRows(
-                  filteredSelectionRowsRef.current,
+                  selectionRows,
                   filteredSelection.onSelect
                     ? (checkbox) => filteredSelection.onSelect?.(checkbox.value)
                     : undefined

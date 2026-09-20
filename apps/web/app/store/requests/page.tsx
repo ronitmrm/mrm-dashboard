@@ -102,7 +102,13 @@ export default async function StoreRequestsPage() {
           ) : null}
           <OperationalTable
             filteredSelection={
-              canManage ? { checkboxName: "requisition_id" } : undefined
+              canManage
+                ? {
+                    checkboxName: "requisition_id",
+                    exclusiveGroup: true,
+                    label: "Select All Department Lines",
+                  }
+                : undefined
             }
             toolbarStart={
               canManage ? (
@@ -148,6 +154,17 @@ export default async function StoreRequestsPage() {
                           <input
                             aria-label={`Select ${request.typeCode} from ${request.requestNumber}`}
                             className="size-4 accent-primary"
+                            data-allocation-item-label={`${request.typeCode} — ${request.identificationName}`}
+                            data-allocation-item-type-id={request.itemTypeId}
+                            data-allocation-remaining-quantity={
+                              request.remainingQuantity
+                            }
+                            data-allocation-tracking-mode={request.trackingMode}
+                            data-allocation-unit-ids={JSON.stringify(
+                              request.availableUnitIds
+                            )}
+                            data-selection-group={request.department}
+                            data-selection-group-label={request.department}
                             form={bulkAllocationFormId}
                             name="requisition_id"
                             type="checkbox"
