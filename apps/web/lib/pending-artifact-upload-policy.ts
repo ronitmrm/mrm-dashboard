@@ -286,24 +286,39 @@ export async function authorizePendingUploadIntent(
     case "store-guarantee-card": {
       requireCapability(authorization, "store.receipts.receive")
       const organizationId = await organizationForCode(client, "MRMPL")
-      await organizationForTarget(
-        client,
-        `SELECT line.organization_id
-         FROM store.purchase_order_lines line
-         JOIN store.purchase_orders purchase_order
-           ON purchase_order.id = line.purchase_order_id
-         WHERE line.id = $1 AND line.organization_id = $2
-           AND ($3::boolean OR (
-             purchase_order.issuance_state = 'issued'
-             AND purchase_order.status <> 'Cancelled'
-             AND line.received_quantity < line.ordered_quantity
-           ))`,
-        [
-          intent.purchaseOrderLineId,
-          organizationId,
-          options.finalizing === true,
-        ]
-      )
+      if ("purchaseOrderId" in intent) {
+        await organizationForTarget(
+          client,
+          `SELECT purchase_order.organization_id
+           FROM store.purchase_orders purchase_order
+           WHERE purchase_order.id = $1
+             AND purchase_order.organization_id = $2
+             AND ($3::boolean OR (
+               purchase_order.issuance_state = 'issued'
+               AND purchase_order.status <> 'Cancelled'
+             ))`,
+          [intent.purchaseOrderId, organizationId, options.finalizing === true]
+        )
+      } else {
+        await organizationForTarget(
+          client,
+          `SELECT line.organization_id
+           FROM store.purchase_order_lines line
+           JOIN store.purchase_orders purchase_order
+             ON purchase_order.id = line.purchase_order_id
+           WHERE line.id = $1 AND line.organization_id = $2
+             AND ($3::boolean OR (
+               purchase_order.issuance_state = 'issued'
+               AND purchase_order.status <> 'Cancelled'
+               AND line.received_quantity < line.ordered_quantity
+             ))`,
+          [
+            intent.purchaseOrderLineId,
+            organizationId,
+            options.finalizing === true,
+          ]
+        )
+      }
       return organizationId
     }
   }

@@ -408,15 +408,20 @@ export async function authorizeStoreReceiptArtifactTarget(
   if (!target.rows[0]) throw new Error("Store receipt was not found.")
 }
 
+type StoreReceiptLineInput = {
+  manufacturerSerialNumbers?: string[]
+  purchaseOrderLineId: string
+  quantity: number | "remaining"
+}
+
 type StoreReceiptInput = {
   actorUserId?: string | null
   billDate?: string | null
   billNumber?: string | null
+  expectedPurchaseOrderId?: string
+  lines: StoreReceiptLineInput[]
   locationId: string
-  manufacturerSerialNumbers?: string[]
   organizationId: string
-  purchaseOrderLineId: string
-  quantity: number | "remaining"
   receivedBy?: string | null
   warrantyUntil?: string | null
 }
@@ -425,12 +430,27 @@ async function receiveStockWithClient(
   client: PoolClient,
   input: StoreReceiptInput
 ) {
+  const linesById = new Map(
+    input.lines.map((line) => [line.purchaseOrderLineId, line] as const)
+  )
+  if (!linesById.size) {
+    throw new Error("Select at least one Purchase Order line to receive.")
+  }
+  if (linesById.size !== input.lines.length) {
+    throw new Error(
+      "A Purchase Order line can be selected only once per receipt."
+    )
+  }
   const order = await client.query<{
+    id: string
     identification_name: string
+    issuance_state: string
     item_type_id: string
     next_asset_number: number
+    order_type: "GOODS" | "REPAIR"
     order_number: string
     ordered_quantity: string
+    purchase_order_id: string
     received_quantity: string
     status: string
     supplier_id: string
@@ -439,47 +459,76 @@ async function receiveStockWithClient(
     unit_price: string
   }>(
     `
-      SELECT line.item_type_id, purchase_order.supplier_id,
+      SELECT line.id, line.purchase_order_id, line.item_type_id,
+        purchase_order.supplier_id,
         purchase_order.order_number, line.ordered_quantity::text,
         line.received_quantity::text, line.unit_price::text,
-        purchase_order.status, item.type_code, item.identification_name,
-        item.tracking_mode, item.next_asset_number
+        purchase_order.status, purchase_order.order_type,
+        purchase_order.issuance_state, item.type_code,
+        item.identification_name, item.tracking_mode, item.next_asset_number
       FROM store.purchase_order_lines line
       JOIN store.purchase_orders purchase_order
         ON purchase_order.id = line.purchase_order_id
       JOIN store.item_types item ON item.id = line.item_type_id
-      WHERE line.id = $1 AND line.organization_id = $2
-        AND purchase_order.issuance_state = 'issued'
+      WHERE line.id = ANY($1::uuid[]) AND line.organization_id = $2
+      ORDER BY line.id
       FOR UPDATE OF line, purchase_order, item
     `,
-    [input.purchaseOrderLineId, input.organizationId]
+    [[...linesById.keys()].sort(), input.organizationId]
   )
-  if (!order.rows[0]) throw new Error("Purchase Order was not found.")
-  if (order.rows[0].status === "Cancelled") {
+  if (order.rows.length !== linesById.size) {
+    throw new Error("Purchase Order was not found.")
+  }
+  const purchaseOrderIds = new Set(
+    order.rows.map((row) => row.purchase_order_id)
+  )
+  if (purchaseOrderIds.size !== 1) {
+    throw new Error(
+      "A bulk receipt can include lines from only one Purchase Order."
+    )
+  }
+  const purchaseOrderId = order.rows[0]!.purchase_order_id
+  if (
+    input.expectedPurchaseOrderId &&
+    input.expectedPurchaseOrderId !== purchaseOrderId
+  ) {
+    throw new Error(
+      "Selected lines do not belong to the chosen Purchase Order."
+    )
+  }
+  if (order.rows[0]!.issuance_state !== "issued") {
+    throw new Error("Purchase Order has not been issued.")
+  }
+  if (order.rows[0]!.order_type !== "GOODS") {
+    throw new Error("Repair Purchase Orders do not create stock receipts.")
+  }
+  if (order.rows[0]!.status === "Cancelled") {
     throw new Error("A cancelled Purchase Order cannot be received.")
   }
-  const remainingQuantity =
-    Number(order.rows[0].ordered_quantity) -
-    Number(order.rows[0].received_quantity)
-  if (remainingQuantity <= 0) {
-    throw new Error(
-      `Purchase Order ${order.rows[0].order_number} has no remaining quantity for this line.`
+  const preparedLines = order.rows.map((row) => {
+    const lineInput = linesById.get(row.id)!
+    const remainingQuantity =
+      Number(row.ordered_quantity) - Number(row.received_quantity)
+    if (remainingQuantity <= 0) {
+      throw new Error(
+        `Purchase Order ${row.order_number} has no remaining quantity for this line.`
+      )
+    }
+    const quantity = positiveQuantity(
+      lineInput.quantity === "remaining"
+        ? remainingQuantity
+        : lineInput.quantity
     )
-  }
-  const quantity = positiveQuantity(
-    input.quantity === "remaining" ? remainingQuantity : input.quantity
-  )
-  if (quantity > remainingQuantity) {
-    throw new Error(
-      `Receipt quantity exceeds the remaining Purchase Order quantity of ${remainingQuantity}.`
-    )
-  }
-  if (
-    order.rows[0].tracking_mode === "SERIALIZED" &&
-    !Number.isInteger(quantity)
-  ) {
-    throw new Error("Non Consumable quantity must be a whole number.")
-  }
+    if (quantity > remainingQuantity) {
+      throw new Error(
+        `Receipt quantity exceeds the remaining Purchase Order quantity of ${remainingQuantity}.`
+      )
+    }
+    if (row.tracking_mode === "SERIALIZED" && !Number.isInteger(quantity)) {
+      throw new Error("Non Consumable quantity must be a whole number.")
+    }
+    return { ...row, lineInput, quantity }
+  })
   const receiptNumber = await nextDocumentNumber(client, {
     counterKey: "RECEIPT",
     organizationId: input.organizationId,
@@ -488,38 +537,24 @@ async function receiveStockWithClient(
   const receipt = await client.query<{ id: string }>(
     `
       INSERT INTO store.receipts (
-        organization_id, receipt_number, purchase_order_line_id, location_id,
-        supplier_id, bill_number, bill_date, received_by, created_by_user_id
-      ) VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, '')::date, $8, $9)
+        organization_id, receipt_number, purchase_order_line_id,
+        purchase_order_id, location_id, supplier_id, bill_number, bill_date,
+        received_by, created_by_user_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7,
+        NULLIF($8, '')::date, $9, $10)
       RETURNING id
     `,
     [
       input.organizationId,
       receiptNumber,
-      input.purchaseOrderLineId,
+      preparedLines[0]!.id,
+      purchaseOrderId,
       input.locationId,
-      order.rows[0].supplier_id,
+      preparedLines[0]!.supplier_id,
       input.billNumber?.trim() || null,
       input.billDate ?? null,
       input.receivedBy?.trim() || null,
       input.actorUserId ?? null,
-    ]
-  )
-  const line = await client.query<{ id: string }>(
-    `
-      INSERT INTO store.receipt_lines (
-        organization_id, receipt_id, item_type_id, quantity,
-        unit_price, warranty_until
-      ) VALUES ($1, $2, $3, $4, $5, NULLIF($6, '')::date)
-      RETURNING id
-    `,
-    [
-      input.organizationId,
-      receipt.rows[0]!.id,
-      order.rows[0].item_type_id,
-      quantity,
-      order.rows[0].unit_price,
-      input.warrantyUntil ?? null,
     ]
   )
   if (input.billNumber?.trim()) {
@@ -539,12 +574,39 @@ async function receiveStockWithClient(
     )
   }
   const assetCodes: string[] = []
-  if (order.rows[0].tracking_mode === "SERIALIZED") {
-    for (let index = 0; index < quantity; index += 1) {
-      const number = order.rows[0].next_asset_number + index
-      const assetCode = storeUnitId(order.rows[0].type_code, number)
-      const asset = await client.query<{ id: string }>(
-        `
+  const receivedLines = []
+  const nextAssetNumberByItem = new Map<string, number>()
+  for (const orderLine of preparedLines) {
+    const receiptLine = await client.query<{ id: string }>(
+      `
+        INSERT INTO store.receipt_lines (
+          organization_id, receipt_id, purchase_order_line_id, item_type_id,
+          quantity, unit_price, warranty_until
+        ) VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, '')::date)
+        RETURNING id
+      `,
+      [
+        input.organizationId,
+        receipt.rows[0]!.id,
+        orderLine.id,
+        orderLine.item_type_id,
+        orderLine.quantity,
+        orderLine.unit_price,
+        input.warrantyUntil ?? null,
+      ]
+    )
+    const lineAssetCodes: string[] = []
+    if (orderLine.tracking_mode === "SERIALIZED") {
+      const firstAssetNumber =
+        nextAssetNumberByItem.get(orderLine.item_type_id) ??
+        orderLine.next_asset_number
+      for (let index = 0; index < orderLine.quantity; index += 1) {
+        const assetCode = storeUnitId(
+          orderLine.type_code,
+          firstAssetNumber + index
+        )
+        const asset = await client.query<{ id: string }>(
+          `
           INSERT INTO store.assets (
             organization_id, item_type_id, receipt_line_id, asset_code,
             identification_name, manufacturer_serial_number,
@@ -554,22 +616,24 @@ async function receiveStockWithClient(
             NULLIF($8, '')::date, COALESCE(NULLIF($9, '')::date, current_date), $10, $10)
           RETURNING id
         `,
-        [
-          input.organizationId,
-          order.rows[0].item_type_id,
-          line.rows[0]!.id,
-          assetCode,
-          order.rows[0].identification_name,
-          input.manufacturerSerialNumbers?.[index]?.trim() || null,
-          input.locationId,
-          input.warrantyUntil ?? null,
-          input.billDate ?? null,
-          input.actorUserId ?? null,
-        ]
-      )
-      assetCodes.push(assetCode)
-      await client.query(
-        `
+          [
+            input.organizationId,
+            orderLine.item_type_id,
+            receiptLine.rows[0]!.id,
+            assetCode,
+            orderLine.identification_name,
+            orderLine.lineInput.manufacturerSerialNumbers?.[index]?.trim() ||
+              null,
+            input.locationId,
+            input.warrantyUntil ?? null,
+            input.billDate ?? null,
+            input.actorUserId ?? null,
+          ]
+        )
+        assetCodes.push(assetCode)
+        lineAssetCodes.push(assetCode)
+        await client.query(
+          `
           INSERT INTO store.stock_movements (
             organization_id, item_type_id, asset_id, location_id,
             receipt_line_id, movement_type, quantity,
@@ -578,26 +642,30 @@ async function receiveStockWithClient(
           ) VALUES ($1, $2, $3, $4, $5, 'RECEIPT', 1,
             'STORE', $4::uuid::text, $6, $7)
         `,
-        [
-          input.organizationId,
-          order.rows[0].item_type_id,
-          asset.rows[0]!.id,
-          input.locationId,
-          line.rows[0]!.id,
-          input.receivedBy?.trim() || null,
-          input.actorUserId ?? null,
-        ]
+          [
+            input.organizationId,
+            orderLine.item_type_id,
+            asset.rows[0]!.id,
+            input.locationId,
+            receiptLine.rows[0]!.id,
+            input.receivedBy?.trim() || null,
+            input.actorUserId ?? null,
+          ]
+        )
+      }
+      nextAssetNumberByItem.set(
+        orderLine.item_type_id,
+        firstAssetNumber + orderLine.quantity
       )
-    }
-    await client.query(
-      `UPDATE store.item_types
-       SET next_asset_number = next_asset_number + $1, updated_at = now()
-       WHERE id = $2`,
-      [quantity, order.rows[0].item_type_id]
-    )
-  } else {
-    await client.query(
-      `
+      await client.query(
+        `UPDATE store.item_types
+         SET next_asset_number = next_asset_number + $1, updated_at = now()
+         WHERE id = $2`,
+        [orderLine.quantity, orderLine.item_type_id]
+      )
+    } else {
+      await client.query(
+        `
         INSERT INTO store.stock_movements (
           organization_id, item_type_id, location_id, receipt_line_id,
           movement_type, quantity, to_holder_type,
@@ -605,26 +673,31 @@ async function receiveStockWithClient(
         ) VALUES ($1, $2, $3, $4, 'RECEIPT', $5,
           'STORE', $3::uuid::text, $6, $7)
       `,
-      [
-        input.organizationId,
-        order.rows[0].item_type_id,
-        input.locationId,
-        line.rows[0]!.id,
-        quantity,
-        input.receivedBy?.trim() || null,
-        input.actorUserId ?? null,
-      ]
-    )
-  }
-  await client.query(
-    `
+        [
+          input.organizationId,
+          orderLine.item_type_id,
+          input.locationId,
+          receiptLine.rows[0]!.id,
+          orderLine.quantity,
+          input.receivedBy?.trim() || null,
+          input.actorUserId ?? null,
+        ]
+      )
+    }
+    await client.query(
+      `
       UPDATE store.purchase_order_lines
       SET received_quantity = received_quantity + $1,
         updated_at = now(), updated_by_user_id = $2
       WHERE id = $3
     `,
-    [quantity, input.actorUserId ?? null, input.purchaseOrderLineId]
-  )
+      [orderLine.quantity, input.actorUserId ?? null, orderLine.id]
+    )
+    receivedLines.push({
+      assetCodes: lineAssetCodes,
+      purchaseOrderLineId: orderLine.id,
+    })
+  }
   await client.query(
     `
       UPDATE store.purchase_orders purchase_order
@@ -642,21 +715,23 @@ async function receiveStockWithClient(
           ELSE 'Open'
         END,
         updated_at = now(), updated_by_user_id = $1
-      WHERE purchase_order.id = (
-        SELECT line.purchase_order_id
-        FROM store.purchase_order_lines line
-        WHERE line.id = $2
-      )
+      WHERE purchase_order.id = $2
     `,
-    [input.actorUserId ?? null, input.purchaseOrderLineId]
+    [input.actorUserId ?? null, purchaseOrderId]
   )
-  return { assetCodes, receiptId: receipt.rows[0]!.id, receiptNumber }
+  return {
+    assetCodes,
+    lines: receivedLines,
+    purchaseOrderId,
+    receiptId: receipt.rows[0]!.id,
+    receiptNumber,
+  }
 }
 
 type StoreRequisitionIssueInput = {
   actorUserId?: string | null
   assetCode?: string | null
-  automaticallySelectUnits?: boolean
+  assetCodes?: string[]
   holderName?: string | null
   holderReference?: string | null
   holderType?: StoreHolderType
@@ -712,8 +787,21 @@ async function issueRequisitionWithClient(
     if (!Number.isInteger(quantity)) {
       throw new Error("Non Consumable quantity must be a whole number.")
     }
-    if (!input.automaticallySelectUnits && quantity !== 1) {
-      throw new Error("Issue Non Consumables one Unit ID at a time.")
+    const requestedAssetCodes = (
+      input.assetCodes ?? (input.assetCode ? [input.assetCode] : [])
+    )
+      .map((assetCode) => assetCode.trim())
+      .filter(Boolean)
+    const distinctAssetCodes = new Set(
+      requestedAssetCodes.map((assetCode) => assetCode.toLowerCase())
+    )
+    if (
+      requestedAssetCodes.length !== quantity ||
+      distinctAssetCodes.size !== requestedAssetCodes.length
+    ) {
+      throw new Error(
+        `Select exactly ${quantity} distinct Unit ID${quantity === 1 ? "" : "s"}.`
+      )
     }
     const machineId =
       holderType === "MACHINE"
@@ -723,44 +811,28 @@ async function issueRequisitionWithClient(
             holderReference
           )
         : null
-    const selectedAssets = input.automaticallySelectUnits
-      ? await client.query<{ id: string }>(
-          `
-            SELECT id
-            FROM store.assets
-            WHERE organization_id = $1
-              AND item_type_id = $2
-              AND current_location_id = $3
-              AND status = 'AVAILABLE'
-            ORDER BY asset_code
-            LIMIT $4
-            FOR UPDATE
-          `,
-          [input.organizationId, row.item_type_id, row.location_id, quantity]
-        )
-      : await client.query<{ id: string }>(
-          `
-            SELECT id
-            FROM store.assets
-            WHERE organization_id = $1
-              AND lower(asset_code) = lower($2)
-              AND item_type_id = $3
-              AND current_location_id = $4
-              AND status = 'AVAILABLE'
-            FOR UPDATE
-          `,
-          [
-            input.organizationId,
-            requiredText(input.assetCode, "Unit ID"),
-            row.item_type_id,
-            row.location_id,
-          ]
-        )
+    const selectedAssets = await client.query<{ id: string }>(
+      `
+        SELECT id
+        FROM store.assets
+        WHERE organization_id = $1
+          AND lower(asset_code) = ANY($2::text[])
+          AND item_type_id = $3
+          AND current_location_id = $4
+          AND status = 'AVAILABLE'
+        ORDER BY asset_code
+        FOR UPDATE
+      `,
+      [
+        input.organizationId,
+        [...distinctAssetCodes],
+        row.item_type_id,
+        row.location_id,
+      ]
+    )
     if (selectedAssets.rows.length !== quantity) {
       throw new Error(
-        input.automaticallySelectUnits
-          ? "Insufficient available Unit IDs in the selected Store."
-          : "Unit ID is not available in the selected Store."
+        "A selected Unit ID is not available in the selected Store."
       )
     }
     const assetIds = selectedAssets.rows.map((asset) => asset.id)
@@ -811,6 +883,12 @@ async function issueRequisitionWithClient(
       ]
     )
   } else {
+    if (
+      input.assetCode?.trim() ||
+      input.assetCodes?.some((code) => code.trim())
+    ) {
+      throw new Error("Unit IDs can be selected only for Non Consumables.")
+    }
     const balance = await client.query<{ available: string }>(
       `
         SELECT COALESCE(sum(quantity), 0)::text AS available
@@ -3141,7 +3219,22 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       warrantyUntil?: string | null
     }) {
       return withTransaction(pool, async (client) => {
-        const received = await receiveStockWithClient(client, input)
+        const received = await receiveStockWithClient(client, {
+          actorUserId: input.actorUserId,
+          billDate: input.billDate,
+          billNumber: input.billNumber,
+          lines: [
+            {
+              manufacturerSerialNumbers: input.manufacturerSerialNumbers,
+              purchaseOrderLineId: input.purchaseOrderLineId,
+              quantity: input.quantity,
+            },
+          ],
+          locationId: input.locationId,
+          organizationId: input.organizationId,
+          receivedBy: input.receivedBy,
+          warrantyUntil: input.warrantyUntil,
+        })
         await queueDashboardRefresh(client, input.organizationId)
         return received
       })
@@ -3149,10 +3242,14 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
 
     async receiveRemainingStockBatch(input: {
       actorUserId?: string | null
+      billDate?: string | null
+      billNumber?: string | null
       locationId: string
       organizationId: string
+      purchaseOrderId: string
       purchaseOrderLineIds: string[]
       receivedBy?: string | null
+      warrantyUntil?: string | null
     }) {
       const purchaseOrderLineIds = [
         ...new Set(
@@ -3168,21 +3265,22 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         throw new Error("Bulk receipt is limited to 500 Purchase Order lines.")
       }
       return withTransaction(pool, async (client) => {
-        const receipts = []
-        for (const purchaseOrderLineId of purchaseOrderLineIds) {
-          receipts.push(
-            await receiveStockWithClient(client, {
-              actorUserId: input.actorUserId,
-              locationId: input.locationId,
-              organizationId: input.organizationId,
-              purchaseOrderLineId,
-              quantity: "remaining",
-              receivedBy: input.receivedBy,
-            })
-          )
-        }
+        const receipt = await receiveStockWithClient(client, {
+          actorUserId: input.actorUserId,
+          billDate: input.billDate,
+          billNumber: input.billNumber,
+          expectedPurchaseOrderId: input.purchaseOrderId,
+          lines: purchaseOrderLineIds.map((purchaseOrderLineId) => ({
+            purchaseOrderLineId,
+            quantity: "remaining",
+          })),
+          locationId: input.locationId,
+          organizationId: input.organizationId,
+          receivedBy: input.receivedBy,
+          warrantyUntil: input.warrantyUntil,
+        })
         await queueDashboardRefresh(client, input.organizationId)
-        return { receipts }
+        return receipt
       })
     },
 
@@ -3300,32 +3398,70 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
     async issueRemainingRequisitionBatch(input: {
       actorUserId?: string | null
       issuedBy?: string | null
+      lines: Array<{
+        assetCodes?: string[]
+        requisitionId: string
+      }>
       organizationId: string
-      requisitionIds: string[]
     }) {
-      const requisitionIds = [
-        ...new Set(
-          input.requisitionIds
-            .map((requisitionId) => requisitionId.trim())
-            .filter(Boolean)
-        ),
-      ].sort()
-      if (!requisitionIds.length) {
+      const linesById = new Map(
+        input.lines
+          .map((line) => ({
+            assetCodes: line.assetCodes,
+            requisitionId: line.requisitionId.trim(),
+          }))
+          .filter((line) => line.requisitionId)
+          .map((line) => [line.requisitionId, line] as const)
+      )
+      if (!linesById.size) {
         throw new Error("Select at least one Store request line to allocate.")
       }
-      if (requisitionIds.length > 500) {
+      if (linesById.size !== input.lines.length) {
+        throw new Error(
+          "A Store request line can be selected only once per allocation."
+        )
+      }
+      if (linesById.size > 500) {
         throw new Error(
           "Bulk allocation is limited to 500 Store request lines."
         )
       }
       return withTransaction(pool, async (client) => {
         await lockToolingAllocation(client, input.organizationId)
+        const selectedRequests = await client.query<{
+          department: string
+          id: string
+        }>(
+          `
+            SELECT request.id, header.department
+            FROM store.requisitions request
+            JOIN store.requisition_headers header
+              ON header.id = request.request_header_id
+            WHERE request.organization_id = $1
+              AND request.id = ANY($2::uuid[])
+            ORDER BY request.id
+            FOR UPDATE OF request
+          `,
+          [input.organizationId, [...linesById.keys()].sort()]
+        )
+        if (selectedRequests.rows.length !== linesById.size) {
+          throw new Error("A selected Store request line was not found.")
+        }
+        const departments = new Set(
+          selectedRequests.rows.map((request) => request.department)
+        )
+        if (departments.size !== 1) {
+          throw new Error(
+            "Bulk allocation can contain request lines for only one Department."
+          )
+        }
         const allocations = []
-        for (const requisitionId of requisitionIds) {
+        for (const requisitionId of [...linesById.keys()].sort()) {
+          const line = linesById.get(requisitionId)!
           allocations.push(
             await issueRequisitionWithClient(client, {
               actorUserId: input.actorUserId,
-              automaticallySelectUnits: true,
+              assetCodes: line.assetCodes,
               holderType: "DEPARTMENT",
               issuedBy: input.issuedBy,
               organizationId: input.organizationId,
@@ -3335,7 +3471,10 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           )
         }
         await queueDashboardRefresh(client, input.organizationId)
-        return { allocations }
+        return {
+          allocations,
+          department: selectedRequests.rows[0]!.department,
+        }
       })
     },
 
@@ -3613,7 +3752,10 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             ON receipt_line.id = asset.receipt_line_id
           LEFT JOIN store.receipts receipt ON receipt.id = receipt_line.receipt_id
           LEFT JOIN store.purchase_order_lines purchase_order_line
-            ON purchase_order_line.id = receipt.purchase_order_line_id
+            ON purchase_order_line.id = COALESCE(
+              receipt_line.purchase_order_line_id,
+              receipt.purchase_order_line_id
+            )
           LEFT JOIN store.purchase_orders purchase_order
             ON purchase_order.id = purchase_order_line.purchase_order_id
           LEFT JOIN store.suppliers supplier ON supplier.id = receipt.supplier_id

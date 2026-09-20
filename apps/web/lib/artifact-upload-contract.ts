@@ -54,6 +54,7 @@ export type PendingUploadIntent =
       supplierId?: string
       supplierPriceId?: string
     }
+  | { kind: "store-guarantee-card"; purchaseOrderId: string }
   | { kind: "store-guarantee-card"; purchaseOrderLineId: string }
 
 function object(value: unknown): Record<string, unknown> {
@@ -191,14 +192,27 @@ export function parsePendingUploadIntent(value: unknown): PendingUploadIntent {
         ...(supplierPriceId ? { supplierPriceId } : {}),
       }
     }
-    case "store-guarantee-card":
+    case "store-guarantee-card": {
+      const purchaseOrderId = optionalText(
+        input.purchaseOrderId,
+        "purchaseOrderId"
+      )
+      const purchaseOrderLineId = optionalText(
+        input.purchaseOrderLineId,
+        "purchaseOrderLineId"
+      )
+      if (Boolean(purchaseOrderId) === Boolean(purchaseOrderLineId)) {
+        throw new Error(
+          "Guarantee card intent must select one Purchase Order or one Purchase Order line."
+        )
+      }
       return {
         kind,
-        purchaseOrderLineId: text(
-          input.purchaseOrderLineId,
-          "purchaseOrderLineId"
-        ),
+        ...(purchaseOrderId
+          ? { purchaseOrderId }
+          : { purchaseOrderLineId: purchaseOrderLineId! }),
       }
+    }
     default:
       throw new Error("Upload intent kind is unsupported.")
   }

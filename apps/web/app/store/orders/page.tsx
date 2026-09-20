@@ -99,19 +99,22 @@ export default async function StoreOrdersPage() {
           <CardTitle>Purchase Orders and Receipts</CardTitle>
         </CardHeader>
         <CardContent className="min-w-0">
-          {canManage ? (
-            <form
-              action={receiveRemainingStoreStockBatchAction}
-              id={bulkReceiptFormId}
-            />
-          ) : null}
           <OperationalTable
             filteredSelection={
-              canManage ? { checkboxName: "purchase_order_line_id" } : undefined
+              canManage
+                ? {
+                    checkboxName: "purchase_order_line_id",
+                    exclusiveGroup: true,
+                    label: "Select All PO Lines",
+                  }
+                : undefined
             }
             toolbarStart={
               canManage ? (
-                <BulkReceiveButton formId={bulkReceiptFormId} />
+                <BulkReceiveButton
+                  action={receiveRemainingStoreStockBatchAction}
+                  formId={bulkReceiptFormId}
+                />
               ) : null
             }
           >
@@ -154,6 +157,8 @@ export default async function StoreOrdersPage() {
                           <input
                             aria-label={`Select ${order.typeCode} from ${order.orderNumber}`}
                             className="size-4 accent-primary"
+                            data-selection-group={order.purchaseOrderId}
+                            data-selection-group-label={order.orderNumber}
                             form={bulkReceiptFormId}
                             name="purchase_order_line_id"
                             type="checkbox"

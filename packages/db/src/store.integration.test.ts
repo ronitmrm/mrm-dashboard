@@ -872,8 +872,12 @@ describe("Store requests", () => {
     )
   })
 
-  test("bulk receives the full remaining quantity for selected Purchase Order lines", async () => {
+  test("bulk receives selected lines from one Purchase Order under shared receipt details", async () => {
     const location = await store.ensurePrimaryStoreLocation({ organizationId })
+    const supplier = await store.createSupplier({
+      name: `Bulk Receipt Supplier ${suffix}`,
+      organizationId,
+    })
     const firstItem = await store.createItemType({
       ...(await createClassification("Bulk Receipt One")),
       assetType: "CONSUMABLE",
@@ -888,32 +892,91 @@ describe("Store requests", () => {
       organizationId,
       unit: "Nos",
     })
-    const firstOrder = await createPurchaseOrder(firstItem.id, 3, "25.00")
-    const secondOrder = await createPurchaseOrder(secondItem.id, 4, "50.00")
+    await store.createSupplierPrice({
+      itemTypeId: firstItem.id,
+      organizationId,
+      supplierId: supplier.id,
+      unitPrice: "25.00",
+      validFrom: "2026-08-17",
+    })
+    await store.createSupplierPrice({
+      itemTypeId: secondItem.id,
+      organizationId,
+      supplierId: supplier.id,
+      unitPrice: "50.00",
+      validFrom: "2026-08-17",
+    })
+    const created = await store.createPurchaseOrdersFromSelection({
+      issuanceId: randomUUID(),
+      items: [
+        { itemTypeId: firstItem.id, quantity: 3 },
+        { itemTypeId: secondItem.id, quantity: 4 },
+      ],
+      orderDate: "2026-08-17",
+      organizationId,
+      storeIssuedPdf,
+    })
+    const orderLines = (await store.listPurchaseOrders(organizationId)).filter(
+      (line) => line.purchaseOrderId === created.orders[0]!.id
+    )
+    expect(orderLines).toHaveLength(2)
+    const firstOrderLine = orderLines.find(
+      (line) => line.itemTypeId === firstItem.id
+    )!
+    const secondOrderLine = orderLines.find(
+      (line) => line.itemTypeId === secondItem.id
+    )!
     await store.receiveStock({
       locationId: location.id,
       organizationId,
-      purchaseOrderLineId: firstOrder.id,
+      purchaseOrderLineId: firstOrderLine.id,
       quantity: 1,
     })
 
     const result = await store.receiveRemainingStockBatch({
+      billDate: "2026-09-20",
+      billNumber: "BULK-BILL-100",
       locationId: location.id,
       organizationId,
-      purchaseOrderLineIds: [firstOrder.id, secondOrder.id],
+      purchaseOrderId: created.orders[0]!.id,
+      purchaseOrderLineIds: orderLines.map((line) => line.id),
+      warrantyUntil: "2027-09-20",
     })
 
-    expect(result.receipts).toHaveLength(2)
+    const receipt = await pool.query<{
+      billDate: string
+      billNumber: string
+      lineCount: number
+      purchaseOrderId: string
+      warrantyDates: string[]
+    }>(
+      `SELECT receipt.purchase_order_id AS "purchaseOrderId",
+        receipt.bill_number AS "billNumber", receipt.bill_date::text AS "billDate",
+        count(line.id)::int AS "lineCount",
+        array_agg(line.warranty_until::text ORDER BY line.id) AS "warrantyDates"
+       FROM store.receipts receipt
+       JOIN store.receipt_lines line ON line.receipt_id = receipt.id
+       WHERE receipt.id = $1
+       GROUP BY receipt.id`,
+      [result.receiptId]
+    )
+    expect(receipt.rows[0]).toEqual({
+      billDate: "2026-09-20",
+      billNumber: "BULK-BILL-100",
+      lineCount: 2,
+      purchaseOrderId: created.orders[0]!.id,
+      warrantyDates: ["2027-09-20", "2027-09-20"],
+    })
     expect(await store.listPurchaseOrders(organizationId)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          id: firstOrder.id,
+          id: firstOrderLine.id,
           orderedQuantity: "3",
           receivedQuantity: "3",
           status: "Received",
         }),
         expect.objectContaining({
-          id: secondOrder.id,
+          id: secondOrderLine.id,
           orderedQuantity: "4",
           receivedQuantity: "4",
           status: "Received",
@@ -922,7 +985,36 @@ describe("Store requests", () => {
     )
   })
 
-  test("bulk allocates selected request lines in full", async () => {
+  test("bulk receipt rejects lines from different Purchase Orders", async () => {
+    const location = await store.ensurePrimaryStoreLocation({ organizationId })
+    const firstItem = await store.createItemType({
+      ...(await createClassification("Mixed Receipt One")),
+      assetType: "CONSUMABLE",
+      identificationName: `Mixed Receipt One ${suffix}`,
+      organizationId,
+      unit: "Nos",
+    })
+    const secondItem = await store.createItemType({
+      ...(await createClassification("Mixed Receipt Two")),
+      assetType: "CONSUMABLE",
+      identificationName: `Mixed Receipt Two ${suffix}`,
+      organizationId,
+      unit: "Nos",
+    })
+    const firstOrder = await createPurchaseOrder(firstItem.id, 3, "25.00")
+    const secondOrder = await createPurchaseOrder(secondItem.id, 4, "50.00")
+
+    await expect(
+      store.receiveRemainingStockBatch({
+        locationId: location.id,
+        organizationId,
+        purchaseOrderId: firstOrder.purchaseOrderId,
+        purchaseOrderLineIds: [firstOrder.id, secondOrder.id],
+      })
+    ).rejects.toThrow("one Purchase Order")
+  })
+
+  test("bulk allocates one Department with explicitly selected Unit IDs", async () => {
     const location = await store.ensurePrimaryStoreLocation({ organizationId })
     const consumable = await store.createItemType({
       ...(await createClassification("Bulk Allocation Consumable")),
@@ -955,26 +1047,39 @@ describe("Store requests", () => {
       quantity: 2,
     })
     const consumableRequest = await store.createRequisition({
-      department: "Production",
+      department: "Quality Control",
       itemTypeId: consumable.id,
       locationId: location.id,
       organizationId,
       quantity: 3,
-      requestedBy: "Production Supervisor",
+      requestedBy: "QC Supervisor",
     })
     const serializedRequest = await store.createRequisition({
       department: "Quality Control",
       itemTypeId: serialized.id,
       locationId: location.id,
       organizationId,
-      quantity: 2,
+      quantity: 1,
       requestedBy: "QC Inspector",
     })
+    const serializedRow = (
+      await store.listRequisitions({ organizationId })
+    ).rows.find((request) => request.id === serializedRequest.id)!
+    const selectedUnitId = serializedRow.availableUnitIds.at(-1)!
+    const unselectedUnitId = serializedRow.availableUnitIds.find(
+      (unitId) => unitId !== selectedUnitId
+    )!
 
     const result = await store.issueRemainingRequisitionBatch({
       issuedBy: "store.manager@mayankrawmint.com",
+      lines: [
+        { requisitionId: consumableRequest.id },
+        {
+          assetCodes: [selectedUnitId],
+          requisitionId: serializedRequest.id,
+        },
+      ],
       organizationId,
-      requisitionIds: [consumableRequest.id, serializedRequest.id],
     })
 
     expect(result.allocations).toHaveLength(2)
@@ -990,13 +1095,66 @@ describe("Store requests", () => {
       (await store.listAssets({ organizationId }))
         .filter((asset) => asset.itemTypeId === serialized.id)
         .map((asset) => ({
+          assetCode: asset.assetCode,
           holderName: asset.holderName,
           status: asset.status,
         }))
-    ).toEqual([
-      { holderName: "Quality Control", status: "ASSIGNED" },
-      { holderName: "Quality Control", status: "ASSIGNED" },
-    ])
+    ).toEqual(
+      expect.arrayContaining([
+        {
+          assetCode: selectedUnitId,
+          holderName: "Quality Control",
+          status: "ASSIGNED",
+        },
+        expect.objectContaining({
+          assetCode: unselectedUnitId,
+          status: "AVAILABLE",
+        }),
+      ])
+    )
+  })
+
+  test("bulk allocation rejects request lines for different Departments", async () => {
+    const location = await store.ensurePrimaryStoreLocation({ organizationId })
+    const item = await store.createItemType({
+      ...(await createClassification("Mixed Department Allocation")),
+      assetType: "CONSUMABLE",
+      identificationName: `Mixed Department Allocation ${suffix}`,
+      organizationId,
+      unit: "Nos",
+    })
+    await store.receiveStock({
+      locationId: location.id,
+      organizationId,
+      purchaseOrderLineId: (await createPurchaseOrder(item.id, 2, "10.00")).id,
+      quantity: 2,
+    })
+    const productionRequest = await store.createRequisition({
+      department: "Production",
+      itemTypeId: item.id,
+      locationId: location.id,
+      organizationId,
+      quantity: 1,
+      requestedBy: "Production Supervisor",
+    })
+    const qualityRequest = await store.createRequisition({
+      department: "Quality Control",
+      itemTypeId: item.id,
+      locationId: location.id,
+      organizationId,
+      quantity: 1,
+      requestedBy: "QC Inspector",
+    })
+
+    await expect(
+      store.issueRemainingRequisitionBatch({
+        lines: [
+          { requisitionId: productionRequest.id },
+          { requisitionId: qualityRequest.id },
+        ],
+        organizationId,
+      })
+    ).rejects.toThrow("one Department")
   })
 
   test("uses classification masters and generates immutable Asset Codes", async () => {
