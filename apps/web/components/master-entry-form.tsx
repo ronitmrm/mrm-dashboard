@@ -13,10 +13,12 @@ export function MasterEntryForm({
   action,
   children,
   uploads = [],
+  onSuccess,
   ...props
 }: Omit<ComponentProps<"form">, "action" | "onSubmit"> & {
   action: (formData: FormData) => Promise<unknown>
   uploads?: readonly RetainedUploadRegistration[]
+  onSuccess?: () => void
 }) {
   const upload = usePendingRetainedUploads()
   const busy = useRef(false)
@@ -56,6 +58,7 @@ export function MasterEntryForm({
             } else {
               form.reset()
               upload.client.abandonUnused()
+              onSuccess?.()
             }
           } finally {
             busy.current = false
