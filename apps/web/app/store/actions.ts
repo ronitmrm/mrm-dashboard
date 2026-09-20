@@ -836,6 +836,29 @@ export async function issueStoreRequisitionAction(formData: FormData) {
   revalidateStore()
 }
 
+export async function issueRemainingStoreRequisitionBatchAction(
+  formData: FormData
+) {
+  const requisitionIds = formData
+    .getAll("requisition_id")
+    .map((value) => value.toString().trim())
+    .filter(Boolean)
+  if (!requisitionIds.length) {
+    throw new Error("Select at least one Store request line to allocate.")
+  }
+  await withStore(
+    "store.requests.issue",
+    async (repository, actorUserId, organizationId, actorEmail) =>
+      repository.issueRemainingRequisitionBatch({
+        actorUserId,
+        issuedBy: actorEmail,
+        organizationId,
+        requisitionIds,
+      })
+  )
+  revalidateStore()
+}
+
 export async function receiveStoreStockAction(formData: FormData) {
   const guaranteeUploadId = pendingUploadId(formData, "guarantee_card")
   const purchaseOrderLineId = requiredText(formData, "purchase_order_line_id")

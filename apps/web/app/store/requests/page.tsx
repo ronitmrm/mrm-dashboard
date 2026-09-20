@@ -3,7 +3,7 @@ import { createStoreRepository } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
- SectionCard,
+  SectionCard,
   CardContent,
   CardHeader,
   CardTitle,
@@ -14,7 +14,7 @@ import {
   NativeSelectOption,
 } from "@workspace/ui/components/native-select"
 import {
- OperationalTable,
+  OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -23,16 +23,20 @@ import {
 } from "@workspace/ui/components/table"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
+import { BulkAllocationButton } from "@/components/store/bulk-allocation-button"
 import { MetricSummary } from "@/components/ui/golden-patterns"
-import {
-  requireCapability,
-} from "@/lib/auth/require-capability"
+import { requireCapability } from "@/lib/auth/require-capability"
 import { listGrantedStoreActions } from "@/lib/auth/store-action-access"
 import { formatIstDateTime } from "@/lib/date-time"
 import { createStoreIssueFormModel } from "@/lib/store-issue-form"
 import { storePurchaseOrderHref } from "@/lib/unified-navigation"
 
-import { issueStoreRequisitionAction } from "../actions"
+import {
+  issueRemainingStoreRequisitionBatchAction,
+  issueStoreRequisitionAction,
+} from "../actions"
+
+const bulkAllocationFormId = "store-bulk-allocation-form"
 
 export default async function StoreRequestsPage() {
   const session = await requireCapability(
@@ -57,7 +61,8 @@ export default async function StoreRequestsPage() {
           Requests & Issues
         </h2>
         <p className="text-sm text-muted-foreground">
-          Allocate coded item request lines. Saving a line immediately updates
+          Allocate coded item request lines individually, or select fully
+          available lines to allocate them together. Saving immediately updates
           Current Stock.
         </p>
       </div>
@@ -68,30 +73,46 @@ export default async function StoreRequestsPage() {
           {
             label: "Requests",
             value: new Set(requests.map((row) => row.requestNumber)).size,
-            tone: "information"
+            tone: "information",
           },
           {
             label: "Pending Lines",
             value: requests.filter((row) => row.status === "Pending").length,
-            tone: "warning"
+            tone: "warning",
           },
           {
             label: "Partly Issued Lines",
             value: requests.filter((row) => row.status === "Partially Issued")
               .length,
-            tone: "brand"
-          }
+            tone: "brand",
+          },
         ]}
       />
 
- <SectionCard>
+      <SectionCard>
         <CardHeader>
           <CardTitle>Request Allocation Queue</CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-4 min-w-0">
- <OperationalTable>
+        <CardContent className="grid min-w-0 gap-4">
+          {canManage ? (
+            <form
+              action={issueRemainingStoreRequisitionBatchAction}
+              id={bulkAllocationFormId}
+            />
+          ) : null}
+          <OperationalTable
+            filteredSelection={
+              canManage ? { checkboxName: "requisition_id" } : undefined
+            }
+            toolbarStart={
+              canManage ? (
+                <BulkAllocationButton formId={bulkAllocationFormId} />
+              ) : null
+            }
+          >
             <TableHeader>
               <TableRow>
+                {canManage ? <TableHead>Select</TableHead> : null}
                 <TableHead>Request No.</TableHead>
                 <TableHead>Department / Individual</TableHead>
                 <TableHead>Item</TableHead>
@@ -108,6 +129,11 @@ export default async function StoreRequestsPage() {
                 const isOpen = ["Pending", "Partially Issued"].includes(
                   request.status
                 )
+                const canAllocateInFull =
+                  isOpen &&
+                  Number(request.remainingQuantity) > 0 &&
+                  Number(request.availableStock) >=
+                    Number(request.remainingQuantity)
                 const issueForm = createStoreIssueFormModel({
                   actorEmail: session.user.email,
                   availableUnitIds: request.availableUnitIds,
@@ -116,6 +142,20 @@ export default async function StoreRequestsPage() {
                 })
                 return (
                   <TableRow key={request.id}>
+                    {canManage ? (
+                      <TableCell>
+                        {canAllocateInFull ? (
+                          <input
+                            aria-label={`Select ${request.typeCode} from ${request.requestNumber}`}
+                            className="size-4 accent-primary"
+                            form={bulkAllocationFormId}
+                            name="requisition_id"
+                            type="checkbox"
+                            value={request.id}
+                          />
+                        ) : null}
+                      </TableCell>
+                    ) : null}
                     <TableCell className="font-medium whitespace-nowrap">
                       {request.requestNumber}
                       <span className="block text-xs font-normal text-muted-foreground">
@@ -250,16 +290,16 @@ export default async function StoreRequestsPage() {
                 <TableRow>
                   <TableCell
                     className="h-24 text-center text-muted-foreground"
-                    colSpan={canManage ? 9 : 8}
+                    colSpan={canManage ? 10 : 8}
                   >
                     No coded item request lines available.
                   </TableCell>
                 </TableRow>
               ) : null}
             </TableBody>
- </OperationalTable>
+          </OperationalTable>
         </CardContent>
- </SectionCard>
+      </SectionCard>
     </div>
   )
 }

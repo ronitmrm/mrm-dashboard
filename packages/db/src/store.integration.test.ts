@@ -922,6 +922,83 @@ describe("Store requests", () => {
     )
   })
 
+  test("bulk allocates selected request lines in full", async () => {
+    const location = await store.ensurePrimaryStoreLocation({ organizationId })
+    const consumable = await store.createItemType({
+      ...(await createClassification("Bulk Allocation Consumable")),
+      assetType: "CONSUMABLE",
+      identificationName: `Bulk Allocation Consumable ${suffix}`,
+      organizationId,
+      unit: "Nos",
+    })
+    const serialized = await store.createItemType({
+      ...(await createClassification("Bulk Allocation Serialized")),
+      assetType: "NON_CONSUMABLE",
+      identificationName: `Bulk Allocation Serialized ${suffix}`,
+      organizationId,
+      unit: "Nos",
+    })
+    await store.receiveStock({
+      locationId: location.id,
+      organizationId,
+      purchaseOrderLineId: (
+        await createPurchaseOrder(consumable.id, 3, "10.00")
+      ).id,
+      quantity: 3,
+    })
+    await store.receiveStock({
+      locationId: location.id,
+      organizationId,
+      purchaseOrderLineId: (
+        await createPurchaseOrder(serialized.id, 2, "100.00")
+      ).id,
+      quantity: 2,
+    })
+    const consumableRequest = await store.createRequisition({
+      department: "Production",
+      itemTypeId: consumable.id,
+      locationId: location.id,
+      organizationId,
+      quantity: 3,
+      requestedBy: "Production Supervisor",
+    })
+    const serializedRequest = await store.createRequisition({
+      department: "Quality Control",
+      itemTypeId: serialized.id,
+      locationId: location.id,
+      organizationId,
+      quantity: 2,
+      requestedBy: "QC Inspector",
+    })
+
+    const result = await store.issueRemainingRequisitionBatch({
+      issuedBy: "store.manager@mayankrawmint.com",
+      organizationId,
+      requisitionIds: [consumableRequest.id, serializedRequest.id],
+    })
+
+    expect(result.allocations).toHaveLength(2)
+    const requests = await store.listRequisitions({ organizationId })
+    expect(
+      requests.rows
+        .filter((request) =>
+          [consumableRequest.id, serializedRequest.id].includes(request.id)
+        )
+        .map((request) => request.status)
+    ).toEqual(["Fulfilled", "Fulfilled"])
+    expect(
+      (await store.listAssets({ organizationId }))
+        .filter((asset) => asset.itemTypeId === serialized.id)
+        .map((asset) => ({
+          holderName: asset.holderName,
+          status: asset.status,
+        }))
+    ).toEqual([
+      { holderName: "Quality Control", status: "ASSIGNED" },
+      { holderName: "Quality Control", status: "ASSIGNED" },
+    ])
+  })
+
   test("uses classification masters and generates immutable Asset Codes", async () => {
     const category = await store.createAssetCategory({
       name: `Safety ${suffix}`,

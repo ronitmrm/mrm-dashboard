@@ -653,6 +653,218 @@ async function receiveStockWithClient(
   return { assetCodes, receiptId: receipt.rows[0]!.id, receiptNumber }
 }
 
+type StoreRequisitionIssueInput = {
+  actorUserId?: string | null
+  assetCode?: string | null
+  automaticallySelectUnits?: boolean
+  holderName?: string | null
+  holderReference?: string | null
+  holderType?: StoreHolderType
+  issuedBy?: string | null
+  organizationId: string
+  quantity: number | "remaining"
+  remark?: string | null
+  requisitionId: string
+}
+
+async function issueRequisitionWithClient(
+  client: PoolClient,
+  input: StoreRequisitionIssueInput
+) {
+  const request = await client.query<{
+    department: string
+    issued_quantity: string
+    item_type_id: string
+    location_id: string
+    requested_quantity: string
+    status: string
+    tracking_mode: StoreTrackingMode
+  }>(
+    `
+      SELECT request.item_type_id, request.location_id,
+        request.requested_quantity::text, request.issued_quantity::text,
+        request.status, header.department, item.tracking_mode
+      FROM store.requisitions request
+      JOIN store.requisition_headers header
+        ON header.id = request.request_header_id
+      JOIN store.item_types item ON item.id = request.item_type_id
+      WHERE request.id = $1 AND request.organization_id = $2
+      FOR UPDATE OF request, item
+    `,
+    [input.requisitionId, input.organizationId]
+  )
+  const row = request.rows[0]
+  if (!row) throw new Error("Store request was not found.")
+  if (row.status === "Cancelled" || row.status === "Fulfilled") {
+    throw new Error("This Store request is already closed.")
+  }
+  const remaining = Number(row.requested_quantity) - Number(row.issued_quantity)
+  const quantity = positiveQuantity(
+    input.quantity === "remaining" ? remaining : input.quantity
+  )
+  if (quantity > remaining) {
+    throw new Error(`Only ${remaining} remains to be issued.`)
+  }
+  const holderType = input.holderType ?? "DEPARTMENT"
+  const holderReference = input.holderReference?.trim() || row.department
+  const holderName = input.holderName?.trim() || row.department
+  if (row.tracking_mode === "SERIALIZED") {
+    if (!Number.isInteger(quantity)) {
+      throw new Error("Non Consumable quantity must be a whole number.")
+    }
+    if (!input.automaticallySelectUnits && quantity !== 1) {
+      throw new Error("Issue Non Consumables one Unit ID at a time.")
+    }
+    const machineId =
+      holderType === "MACHINE"
+        ? await machineIdForReference(
+            client,
+            input.organizationId,
+            holderReference
+          )
+        : null
+    const selectedAssets = input.automaticallySelectUnits
+      ? await client.query<{ id: string }>(
+          `
+            SELECT id
+            FROM store.assets
+            WHERE organization_id = $1
+              AND item_type_id = $2
+              AND current_location_id = $3
+              AND status = 'AVAILABLE'
+            ORDER BY asset_code
+            LIMIT $4
+            FOR UPDATE
+          `,
+          [input.organizationId, row.item_type_id, row.location_id, quantity]
+        )
+      : await client.query<{ id: string }>(
+          `
+            SELECT id
+            FROM store.assets
+            WHERE organization_id = $1
+              AND lower(asset_code) = lower($2)
+              AND item_type_id = $3
+              AND current_location_id = $4
+              AND status = 'AVAILABLE'
+            FOR UPDATE
+          `,
+          [
+            input.organizationId,
+            requiredText(input.assetCode, "Unit ID"),
+            row.item_type_id,
+            row.location_id,
+          ]
+        )
+    if (selectedAssets.rows.length !== quantity) {
+      throw new Error(
+        input.automaticallySelectUnits
+          ? "Insufficient available Unit IDs in the selected Store."
+          : "Unit ID is not available in the selected Store."
+      )
+    }
+    const assetIds = selectedAssets.rows.map((asset) => asset.id)
+    await client.query(
+      `
+        UPDATE store.assets
+        SET status = 'ASSIGNED', current_holder_type = $1,
+          current_holder_reference = $2, current_holder_name = $3,
+          current_machine_id = $4, current_vendor_id = NULL,
+          current_supplier_id = NULL, current_location_id = NULL,
+          updated_at = now(), updated_by_user_id = $5
+        WHERE id = ANY($6::uuid[])
+      `,
+      [
+        holderType,
+        holderReference,
+        holderName,
+        machineId,
+        input.actorUserId ?? null,
+        assetIds,
+      ]
+    )
+    await client.query(
+      `
+        INSERT INTO store.stock_movements (
+          organization_id, item_type_id, asset_id, location_id,
+          requisition_id, movement_type, quantity,
+          from_holder_type, from_holder_reference,
+          to_holder_type, to_holder_reference, to_holder_name,
+          moved_by, remark, created_by_user_id
+        )
+        SELECT $1, $2, asset_id, $3, $4, 'ISSUE', -1,
+          'STORE', $3::uuid::text, $5, $6, $7, $8, $9, $10
+        FROM unnest($11::uuid[]) AS selected_asset(asset_id)
+      `,
+      [
+        input.organizationId,
+        row.item_type_id,
+        row.location_id,
+        input.requisitionId,
+        holderType,
+        holderReference,
+        holderName,
+        input.issuedBy?.trim() || null,
+        input.remark?.trim() || null,
+        input.actorUserId ?? null,
+        assetIds,
+      ]
+    )
+  } else {
+    const balance = await client.query<{ available: string }>(
+      `
+        SELECT COALESCE(sum(quantity), 0)::text AS available
+        FROM store.stock_movements
+        WHERE organization_id = $1 AND item_type_id = $2 AND location_id = $3
+      `,
+      [input.organizationId, row.item_type_id, row.location_id]
+    )
+    if (Number(balance.rows[0]!.available) < quantity) {
+      throw new Error("Insufficient current stock for this issue.")
+    }
+    await client.query(
+      `
+        INSERT INTO store.stock_movements (
+          organization_id, item_type_id, location_id, requisition_id,
+          movement_type, quantity, from_holder_type,
+          from_holder_reference, to_holder_type, to_holder_reference,
+          to_holder_name, moved_by, remark, created_by_user_id
+        ) VALUES ($1, $2, $3, $4, 'ISSUE', $5 * -1,
+          'STORE', $3::uuid::text, $6, $7, $8, $9, $10, $11)
+      `,
+      [
+        input.organizationId,
+        row.item_type_id,
+        row.location_id,
+        input.requisitionId,
+        quantity,
+        holderType,
+        holderReference,
+        holderName,
+        input.issuedBy?.trim() || null,
+        input.remark?.trim() || null,
+        input.actorUserId ?? null,
+      ]
+    )
+  }
+  const issuedQuantity = Number(row.issued_quantity) + quantity
+  const status =
+    issuedQuantity === Number(row.requested_quantity)
+      ? "Fulfilled"
+      : "Partially Issued"
+  await client.query(
+    `
+      UPDATE store.requisitions
+      SET issued_quantity = $1, status = $2, updated_at = now(),
+        updated_by_user_id = $3
+      WHERE id = $4
+    `,
+    [issuedQuantity, status, input.actorUserId ?? null, input.requisitionId]
+  )
+
+  return { issuedQuantity: String(issuedQuantity), status }
+}
+
 export function createStoreRepository(options: RepositoryPoolOptions) {
   const { close, pool } = repositoryPool(options)
 
@@ -3079,169 +3291,51 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
     }) {
       return withTransaction(pool, async (client) => {
         await lockToolingAllocation(client, input.organizationId)
-        const quantity = positiveQuantity(input.quantity)
-        const request = await client.query<{
-          department: string
-          issued_quantity: string
-          item_type_id: string
-          location_id: string
-          requested_quantity: string
-          status: string
-          tracking_mode: StoreTrackingMode
-        }>(
-          `
-            SELECT request.item_type_id, request.location_id,
-              request.requested_quantity::text, request.issued_quantity::text,
-              request.status, header.department, item.tracking_mode
-            FROM store.requisitions request
-            JOIN store.requisition_headers header
-              ON header.id = request.request_header_id
-            JOIN store.item_types item ON item.id = request.item_type_id
-            WHERE request.id = $1 AND request.organization_id = $2
-            FOR UPDATE OF request, item
-          `,
-          [input.requisitionId, input.organizationId]
-        )
-        const row = request.rows[0]
-        if (!row) throw new Error("Store request was not found.")
-        if (row.status === "Cancelled" || row.status === "Fulfilled") {
-          throw new Error("This Store request is already closed.")
-        }
-        const remaining =
-          Number(row.requested_quantity) - Number(row.issued_quantity)
-        if (quantity > remaining) {
-          throw new Error(`Only ${remaining} remains to be issued.`)
-        }
-        const holderType = input.holderType ?? "DEPARTMENT"
-        const holderReference = input.holderReference?.trim() || row.department
-        const holderName = input.holderName?.trim() || row.department
-        if (row.tracking_mode === "SERIALIZED") {
-          if (quantity !== 1) {
-            throw new Error("Issue Non Consumables one Unit ID at a time.")
-          }
-          const assetCode = requiredText(input.assetCode, "Unit ID")
-          const machineId =
-            holderType === "MACHINE"
-              ? await machineIdForReference(
-                  client,
-                  input.organizationId,
-                  holderReference
-                )
-              : null
-          const asset = await client.query<{ id: string }>(
-            `
-              UPDATE store.assets
-              SET status = 'ASSIGNED', current_holder_type = $1,
-                current_holder_reference = $2, current_holder_name = $3,
-                current_machine_id = $4, current_vendor_id = NULL,
-                current_supplier_id = NULL, current_location_id = NULL,
-                updated_at = now(), updated_by_user_id = $5
-              WHERE organization_id = $6
-                AND lower(asset_code) = lower($7)
-                AND item_type_id = $8
-                AND current_location_id = $9
-                AND status = 'AVAILABLE'
-              RETURNING id
-            `,
-            [
-              holderType,
-              holderReference,
-              holderName,
-              machineId,
-              input.actorUserId ?? null,
-              input.organizationId,
-              assetCode,
-              row.item_type_id,
-              row.location_id,
-            ]
-          )
-          if (!asset.rows[0]) {
-            throw new Error("Unit ID is not available in the selected Store.")
-          }
-          await client.query(
-            `
-              INSERT INTO store.stock_movements (
-                organization_id, item_type_id, asset_id, location_id,
-                requisition_id, movement_type, quantity,
-                from_holder_type, from_holder_reference,
-                to_holder_type, to_holder_reference, to_holder_name,
-                moved_by, remark, created_by_user_id
-              ) VALUES ($1, $2, $3, $4, $5, 'ISSUE', -1,
-                'STORE', $4::uuid::text, $6, $7, $8, $9, $10, $11)
-            `,
-            [
-              input.organizationId,
-              row.item_type_id,
-              asset.rows[0].id,
-              row.location_id,
-              input.requisitionId,
-              holderType,
-              holderReference,
-              holderName,
-              input.issuedBy?.trim() || null,
-              input.remark?.trim() || null,
-              input.actorUserId ?? null,
-            ]
-          )
-        } else {
-          const balance = await client.query<{ available: string }>(
-            `
-              SELECT COALESCE(sum(quantity), 0)::text AS available
-              FROM store.stock_movements
-              WHERE organization_id = $1 AND item_type_id = $2 AND location_id = $3
-            `,
-            [input.organizationId, row.item_type_id, row.location_id]
-          )
-          if (Number(balance.rows[0]!.available) < quantity) {
-            throw new Error("Insufficient current stock for this issue.")
-          }
-          await client.query(
-            `
-              INSERT INTO store.stock_movements (
-                organization_id, item_type_id, location_id, requisition_id,
-                movement_type, quantity, from_holder_type,
-                from_holder_reference, to_holder_type, to_holder_reference,
-                to_holder_name, moved_by, remark, created_by_user_id
-              ) VALUES ($1, $2, $3, $4, 'ISSUE', $5 * -1,
-                'STORE', $3::uuid::text, $6, $7, $8, $9, $10, $11)
-            `,
-            [
-              input.organizationId,
-              row.item_type_id,
-              row.location_id,
-              input.requisitionId,
-              quantity,
-              holderType,
-              holderReference,
-              holderName,
-              input.issuedBy?.trim() || null,
-              input.remark?.trim() || null,
-              input.actorUserId ?? null,
-            ]
-          )
-        }
-        const issuedQuantity = Number(row.issued_quantity) + quantity
-        const status =
-          issuedQuantity === Number(row.requested_quantity)
-            ? "Fulfilled"
-            : "Partially Issued"
-        await client.query(
-          `
-            UPDATE store.requisitions
-            SET issued_quantity = $1, status = $2, updated_at = now(),
-              updated_by_user_id = $3
-            WHERE id = $4
-          `,
-          [
-            issuedQuantity,
-            status,
-            input.actorUserId ?? null,
-            input.requisitionId,
-          ]
-        )
+        const allocation = await issueRequisitionWithClient(client, input)
         await queueDashboardRefresh(client, input.organizationId)
+        return allocation
+      })
+    },
 
-        return { issuedQuantity: String(issuedQuantity), status }
+    async issueRemainingRequisitionBatch(input: {
+      actorUserId?: string | null
+      issuedBy?: string | null
+      organizationId: string
+      requisitionIds: string[]
+    }) {
+      const requisitionIds = [
+        ...new Set(
+          input.requisitionIds
+            .map((requisitionId) => requisitionId.trim())
+            .filter(Boolean)
+        ),
+      ].sort()
+      if (!requisitionIds.length) {
+        throw new Error("Select at least one Store request line to allocate.")
+      }
+      if (requisitionIds.length > 500) {
+        throw new Error(
+          "Bulk allocation is limited to 500 Store request lines."
+        )
+      }
+      return withTransaction(pool, async (client) => {
+        await lockToolingAllocation(client, input.organizationId)
+        const allocations = []
+        for (const requisitionId of requisitionIds) {
+          allocations.push(
+            await issueRequisitionWithClient(client, {
+              actorUserId: input.actorUserId,
+              automaticallySelectUnits: true,
+              holderType: "DEPARTMENT",
+              issuedBy: input.issuedBy,
+              organizationId: input.organizationId,
+              quantity: "remaining",
+              requisitionId,
+            })
+          )
+        }
+        await queueDashboardRefresh(client, input.organizationId)
+        return { allocations }
       })
     },
 
