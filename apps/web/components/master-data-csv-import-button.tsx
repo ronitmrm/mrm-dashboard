@@ -4,9 +4,12 @@ import { Upload } from "lucide-react"
 import { useRef, useState } from "react"
 
 import { Button } from "@workspace/ui/components/button"
+import { StandardState } from "@workspace/ui/components/standard-state"
 import { DataDownloadButton } from "@/components/data-download-button"
 
-type CsvImportAction = (formData: FormData) => void | Promise<void>
+type CsvImportAction = (
+  formData: FormData
+) => void | Promise<void | { error: string }>
 
 function csvCell(value: string) {
   return /[",\r\n]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value
@@ -58,14 +61,30 @@ export function MasterDataCsvImportButton({
   const formRef = useRef<HTMLFormElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string>()
 
   return (
     <form
-      action={action}
+      action={async (formData) => {
+        setSubmitting(true)
+        setError(undefined)
+        try {
+          const result = await action(formData)
+          if (result?.error) setError(result.error)
+        } finally {
+          setSubmitting(false)
+        }
+      }}
       className="contents"
       ref={formRef}
-      onSubmit={() => setSubmitting(true)}
     >
+      {error ? (
+        <StandardState
+          variant="error"
+          title="CSV import stopped"
+          description={error}
+        />
+      ) : null}
       {Object.entries(fields).map(([name, value]) => (
         <input key={name} name={name} type="hidden" value={value} />
       ))}
