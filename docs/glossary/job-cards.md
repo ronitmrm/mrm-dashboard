@@ -53,12 +53,15 @@ Missing timestamps remain unknown and are never treated as zero minutes.
 
 ## Material Yield
 
-- Expected pieces from material: received kilograms multiplied by Product Master pieces/kg.
-- Remaining material equivalent: remaining kilograms multiplied by pieces/kg.
+- Expected pieces from material: total received kilograms across every RM receipt,
+  converted to grams and divided by Product Master Blank Piece Weight in grams.
+- Remaining material equivalent: remaining kilograms converted to grams and
+  divided by the same Blank Piece Weight.
 - Unexplained process loss: expected pieces minus remaining-material equivalent minus first-setup output pieces. Later setup output is not subtracted again because it is the same material moving through the route.
 - Order short: ordered pieces minus good produced pieces.
 
-These values are estimates until remaining RM is maintained accurately.
+Casting is not an input to material yield. These values are unavailable without
+Blank Piece Weight and remain estimates until remaining RM is maintained accurately.
 
 ## Delivery Target And Rating
 

@@ -1801,8 +1801,9 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
       )
       const jobCard = workOrderResult.rows[0]
       if (!jobCard) throw new Error("Job card was not found.")
+      const blankPieceWeightGrams = Number(jobCard.casting ?? 0)
       const casting = calculateCasting(
-        Number(jobCard.casting ?? 0),
+        blankPieceWeightGrams,
         Number(jobCard.weight100Pieces ?? 0)
       )
 
@@ -2366,8 +2367,8 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
       const materialYield = buildMaterialYield({
         actualGoodPieces: analyticsSummary.actualGoodPieces,
         actualProducedPieces: analyticsSummary.materialOutputPieces,
+        blankPieceWeightGrams,
         orderedQuantity: Number(jobCard.orderedQuantity ?? 0),
-        piecesPerKg: Number(jobCard.piecesPerKg ?? 0),
         receivedKg: material.receivedKg,
         rejectedPieces: analyticsSummary.rejectedPieces,
         remainingKg: material.remainingKg,
