@@ -3186,14 +3186,21 @@ function taskBlockersWithoutPlannedDate(value: string) {
 
 function finalizeMachineAndSetupSchedule(details: Array<Record<string, unknown>>, planningCalendar: PlanningCalendar, machineRows: Array<Record<string, unknown>>) {
   let previousSignature = "";
-  for (let iteration = 0; iteration < 50; iteration += 1) {
+  let lastBalancedMachine = "";
+  // Gap balancing moves at most one setup stream per pass. Rotate the next pass
+  // past that machine and scale convergence to the plan so every machine is
+  // reviewed before earlier machine numbers can consume another gap.
+  const maximumGapBalancePasses = Math.max(50, details.length);
+  for (let iteration = 0; iteration < maximumGapBalancePasses; iteration += 1) {
     refreshSetupDependencyReadyDates(details, planningCalendar);
     rescheduleMachineQueues(details, planningCalendar);
     if (revertInvalidFamilyIdleGapMoves(details)) {
       previousSignature = "";
       continue;
     }
-    if (balanceMachineFamilyIdleGaps(details, planningCalendar, machineRows)) {
+    const balancedMachine = balanceMachineFamilyIdleGaps(details, planningCalendar, machineRows, lastBalancedMachine);
+    if (balancedMachine) {
+      lastBalancedMachine = balancedMachine;
       previousSignature = "";
       continue;
     }
@@ -3209,7 +3216,7 @@ function finalizeMachineAndSetupSchedule(details: Array<Record<string, unknown>>
   return details;
 }
 
-function balanceMachineFamilyIdleGaps(details: Array<Record<string, unknown>>, planningCalendar: PlanningCalendar, masterRows: Array<Record<string, unknown>>) {
+function balanceMachineFamilyIdleGaps(details: Array<Record<string, unknown>>, planningCalendar: PlanningCalendar, masterRows: Array<Record<string, unknown>>, afterMachine: string) {
   const byMachine = new Map<string, Array<Record<string, unknown>>>();
   for (const row of details) {
     const machine = rowText(row, "machine");
@@ -3219,7 +3226,12 @@ function balanceMachineFamilyIdleGaps(details: Array<Record<string, unknown>>, p
     byMachine.set(machine, rows);
   }
 
-  for (const [machine, machineRows] of [...byMachine.entries()].sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }))) {
+  const sortedMachines = [...byMachine.entries()].sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }));
+  const afterIndex = sortedMachines.findIndex(([machine]) => canonicalKey(machine) === canonicalKey(afterMachine));
+  const machines = afterIndex < 0
+    ? sortedMachines
+    : [...sortedMachines.slice(afterIndex + 1), ...sortedMachines.slice(0, afterIndex + 1)];
+  for (const [machine, machineRows] of machines) {
     const sorted = machineRows
       .filter((row) => parseDate(rowText(row, "setupPlannedDate", "plannedDate")))
       .sort((a, b) => machineQueueSortDate(a).localeCompare(machineQueueSortDate(b)) || rowText(a, "jcNo").localeCompare(rowText(b, "jcNo"), undefined, { numeric: true }));
@@ -3244,7 +3256,7 @@ function balanceMachineFamilyIdleGaps(details: Array<Record<string, unknown>>, p
         leadingCandidate.familyIdleGapTargetStart = gapStart;
         leadingCandidate.familyIdleGapTargetEnd = leadingGapEnd;
         leadingCandidate.familyIdleGapReason = `Moved from ${fromMachine} to fill ${machine} idle gap from ${dateLabel(gapStart)} to ${dateLabel(leadingGapEnd)}`;
-        return true;
+        return machine;
       }
     }
     for (let index = 0; index < sorted.length - 1; index += 1) {
@@ -3275,10 +3287,10 @@ function balanceMachineFamilyIdleGaps(details: Array<Record<string, unknown>>, p
       candidate.familyIdleGapTargetStart = gapStart;
       candidate.familyIdleGapTargetEnd = gapEnd;
       candidate.familyIdleGapReason = `Moved from ${fromMachine} to fill ${machine} idle gap from ${dateLabel(gapStart)} to ${dateLabel(gapEnd)}`;
-      return true;
+      return machine;
     }
   }
-  return false;
+  return "";
 }
 
 function familyIdleGapCandidate(

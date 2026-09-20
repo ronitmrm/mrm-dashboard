@@ -135,6 +135,12 @@ T25 and T26 are different families). Machine numbers and names never determine
 family. Machines without a family cannot receive automatic allocations or be
 offered as compatible switch destinations or proposal capacity.
 
+Operational replanning after Raw Material receipt checks leading and internal
+idle gaps across every active physical machine in the compatible family. Ready,
+unstarted setup streams may fill a gap only when they fit before the machine's
+next reserved work. WIP availability, tooling capacity, physical machine locks,
+planner decisions and minimum parallel-run rules remain binding.
+
 **Master Identity**: The permanent system identity and generated code of one
 master record. Editing its permitted details does not create a second master
 or change its identity.
