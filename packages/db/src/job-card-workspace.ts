@@ -169,8 +169,8 @@ export function normalizeDeliveryTargets(input: {
 export function buildMaterialYield(input: {
   actualGoodPieces: number
   actualProducedPieces: number
+  blankPieceWeightGrams: number
   orderedQuantity: number
-  piecesPerKg: number
   receivedKg: number
   rejectedPieces: number
   remainingKg: number
@@ -178,8 +178,8 @@ export function buildMaterialYield(input: {
   const orderedQuantity = finite(input.orderedQuantity)
   const goodPieces = finite(input.actualGoodPieces)
   const totalProduced = finite(input.actualProducedPieces)
-  const piecesPerKg = finite(input.piecesPerKg)
-  if (!(piecesPerKg > 0)) {
+  const blankPieceWeightGrams = finite(input.blankPieceWeightGrams)
+  if (!(blankPieceWeightGrams > 0)) {
     return {
       available: false,
       expectedPiecesFromMaterial: null,
@@ -191,12 +191,13 @@ export function buildMaterialYield(input: {
       unexplainedLossPieces: null,
     }
   }
+  const piecesPerKgOfRawMaterial = 1000 / blankPieceWeightGrams
   const expectedPiecesFromMaterial = Math.max(
-    Math.round(finite(input.receivedKg) * piecesPerKg),
+    Math.round(finite(input.receivedKg) * piecesPerKgOfRawMaterial),
     0
   )
   const remainingMaterialEquivalentPieces = Math.max(
-    Math.round(finite(input.remainingKg) * piecesPerKg),
+    Math.round(finite(input.remainingKg) * piecesPerKgOfRawMaterial),
     0
   )
   return {

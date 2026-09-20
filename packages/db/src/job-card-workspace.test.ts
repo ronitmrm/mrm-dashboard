@@ -165,15 +165,15 @@ describe("job card workspace", () => {
     })
   })
 
-  it("uses good production as progress and explains the material shortfall", () => {
+  it("uses total received kilograms and blank piece weight to explain material shortfall", () => {
     expect(
       buildMaterialYield({
         actualGoodPieces: 40_000,
         actualProducedPieces: 48_000,
+        blankPieceWeightGrams: 5,
         orderedQuantity: 50_000,
-        piecesPerKg: 100,
-        receivedKg: 520,
-        remainingKg: 20,
+        receivedKg: 260,
+        remainingKg: 10,
         rejectedPieces: 8_000,
       })
     ).toEqual({
@@ -199,12 +199,12 @@ describe("job card workspace", () => {
     }).completionPercent).toBe(100)
   })
 
-  it("does not invent a material shortage when pieces per kilogram is missing", () => {
+  it("does not invent a material shortage when blank piece weight is missing", () => {
     expect(buildMaterialYield({
       actualGoodPieces: 100,
       actualProducedPieces: 110,
+      blankPieceWeightGrams: 0,
       orderedQuantity: 1_000,
-      piecesPerKg: 0,
       receivedKg: 50,
       rejectedPieces: 10,
       remainingKg: 20,
