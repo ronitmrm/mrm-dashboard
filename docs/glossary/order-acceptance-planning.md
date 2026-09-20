@@ -28,5 +28,8 @@ orders, job cards, reservations, priorities or production commitments.
 Plans are estimates, not shop-floor instructions. Missing master data or unknown
 existing workload prevents approval rather than silently treating it as zero.
 Changed inputs or refreshed workload require recalculation before approval.
+Existing physical WIP retains its canonical machine reservations even after
+final good output meets customer demand. Demand completion alone does not finish
+a setup or free its capacity.
 An approved proposal reserves no capacity; a later PO needs current capacity
 review if intervening commitments have changed.

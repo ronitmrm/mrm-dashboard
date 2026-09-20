@@ -134,12 +134,20 @@ export function proposalContext(snapshot: unknown, planningStart?: string) {
   for (const work of rows(source.workOrders)) {
     if (text(work.dispatchStatus) === "Shifted to dispatch") continue
     const quantity = Number(work.orderPcs)
-    if (!(quantity > 0) || Number(work.finalSetupGoodPieces) >= quantity)
-      continue
+    if (!(quantity > 0)) continue
     const id = text(work.jcNo)
     const own = details.filter(
       (row) => same(row.jcNo, id) && same(row.partCode, work.partCode)
     )
+    const unfinished = own.filter((row) =>
+      text(row.shopFloorStage) !== "item_complete" &&
+      text(row.runningStatus) !== "Complete" &&
+      (row.pendingGoodQty == null
+        ? Number(row.rawActualQty) < Number(row.orderPcs)
+        : Number(row.pendingGoodQty) > 0)
+    )
+    if (Number(work.finalSetupGoodPieces) >= quantity && own.length && !unfinished.length)
+      continue
     const line = resolve({
       id,
       part: text(work.partCode),
@@ -156,12 +164,7 @@ export function proposalContext(snapshot: unknown, planningStart?: string) {
       if (!own.length)
         line.issue =
           "Existing received work has no canonical machine schedule; recalculate the production plan."
-      for (const row of own) {
-        if (
-          text(row.runningStatus) === "Complete" ||
-          Number(row.rawActualQty) >= Number(row.orderPcs)
-        )
-          continue
+      for (const row of unfinished) {
         const machine = text(row.machine)
         const start = date(row.plannedStartDate)
         const end = date(

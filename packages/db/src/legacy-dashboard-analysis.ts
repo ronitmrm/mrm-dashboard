@@ -1168,6 +1168,7 @@ function buildProductionControl({
       plannerPriority: priorityLabel(plannerPriorityValue),
       plannerPriorityScore: plannerPriority ? priorityScore(plannerPriorityValue) : 0,
       priorityApprovalMode: plannerPriority ? priorityApprovalMode(plannerPriority) : "idle_queue_only",
+      priorityDecisionAt: plannerPriority ? rowText(plannerPriority, "createdAt") : "",
       priorityInterruptedJcNo: plannerPriority ? rowText(plannerPriority, "interruptedJcNo", "INTERRUPTED JC NO", "STOPPED JC NO") : "",
       priorityInterruptedSetupNo: plannerPriority ? rowText(plannerPriority, "interruptedSetupNo", "INTERRUPTED SETUP NO", "STOPPED SETUP NO") : "",
       priorityInterruptedMachine: plannerPriority ? rowText(plannerPriority, "interruptedMachine", "INTERRUPTED MACHINE", "STOPPED MACHINE") : "",
@@ -2949,6 +2950,7 @@ function machinePlanDetails(
         plannerPriority: rowText(row, "plannerPriority"),
         plannerPriorityScore: safeNumber(rowValue(row, "plannerPriorityScore")),
         priorityApprovalMode: rowText(row, "priorityApprovalMode"),
+        priorityDecisionAt: rowText(row, "priorityDecisionAt"),
         priorityInterruptedJcNo: rowText(row, "priorityInterruptedJcNo"),
         priorityInterruptedSetupNo: rowText(row, "priorityInterruptedSetupNo"),
         priorityInterruptedMachine: rowText(row, "priorityInterruptedMachine"),
@@ -2992,6 +2994,7 @@ function machinePlanDetails(
         shopFloorTaskBlocker: taskReadiness.blocker,
         planVsActual: setupPlanVsActual(plannedCompletionDate, setupCompletionDate),
         planOverrideReason: override ? rowText(override, "reason", "REASON") : "",
+        planOverrideDecisionAt: override ? rowText(override, "createdAt") : "",
         plannerActionConflict: planOverrideConflict ? planOverrideConflict.message : "",
         plannerActionConflictChoices: planOverrideConflict ? planOverrideConflict.choices : [],
         planOverrideInterruptedSetups: override && Array.isArray(override.interruptedSetups) ? override.interruptedSetups : [],
@@ -3693,13 +3696,21 @@ function machineUnavailableQueueBeforeMatchesRow(queueBefore: MachineUnavailable
     && plannerSetupKey(queueBefore.setupNo) === plannerSetupKey(rowText(row, "setupNo", "SETUP NO", "SETUP"))
     && (!queueBefore.machine || queueBefore.machine === canonicalKey(rowText(row, "machine", "machineNo", "MACHINE NO", "M/C NO")));
 }
+function shopFloorSupersedesStop(row: Record<string, unknown>, decisionAt: unknown) {
+  const stage = rowText(row, "shopFloorStage");
+  if (!stage || stage === "planned") return false;
+  const workflowTime = Date.parse(rowText(row, "shopFloorUpdatedAt"));
+  const decisionTime = Date.parse(String(decisionAt ?? ""));
+  return Number.isFinite(workflowTime) && Number.isFinite(decisionTime) && workflowTime > decisionTime;
+}
+
 function applyPlanOverrideInterruptionQuantities(details: Array<Record<string, unknown>>) {
   const stopOverrides = details.filter((row) => planOverrideInterruptionHasFinishedQty(row));
   for (const overrideRow of stopOverrides) {
     const setupInterruptions = planOverrideInterruptedSetups(overrideRow);
     for (const row of details) {
       const matchingInterruption = setupInterruptions.find((interruption) => priorityInterruptionMatchesRow(interruption, row));
-      if (!matchingInterruption) continue;
+      if (!matchingInterruption || shopFloorSupersedesStop(row, overrideRow.planOverrideDecisionAt)) continue;
       const meta = planningMeta(row);
       if (!meta.productionActual && matchingInterruption.finishedQty > 0) {
         const actualDate = parseDate(rowText(row, "setupPlannedDate")) || "";
@@ -3745,6 +3756,7 @@ function planOverrideInterruptedSetups(row: Record<string, unknown>) {
 }
 
 function planOverridePlacesRowBeforeStoppedRow(targetRow: Record<string, unknown>, blockingRow: Record<string, unknown>) {
+  if (shopFloorSupersedesStop(blockingRow, targetRow.planOverrideDecisionAt)) return false;
   if (!machineUnavailableHasQueuePlacement(targetRow)) return false;
   if (scheduleRowKey(targetRow) === scheduleRowKey(blockingRow)) return false;
   if (canonicalKey(rowText(targetRow, "machine", "machineNo")) !== canonicalKey(rowText(blockingRow, "machine", "machineNo"))) return false;
@@ -3780,6 +3792,7 @@ function canPriorityPreempt(blockingRow: Record<string, unknown>, priorityRow: R
 }
 
 function priorityInterruptsRow(priorityRow: Record<string, unknown>, row: Record<string, unknown>) {
+  if (shopFloorSupersedesStop(row, priorityRow.priorityDecisionAt)) return false;
   const setupInterruptions = priorityInterruptedSetups(priorityRow);
   if (setupInterruptions.length) return setupInterruptions.some((interruption) => priorityInterruptionMatchesRow(interruption, row));
 

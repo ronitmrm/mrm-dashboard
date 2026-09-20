@@ -3,6 +3,19 @@ import { buildLegacyDashboardSnapshot } from "@workspace/db/dashboard-analysis"
 import { compatibleDestinationMachineOptions } from "./machine-constraint-review"
 import { proposalContext } from "./order-acceptance-context"
 
+it("reserves physical WIP after customer demand is met", () => {
+  const context = proposalContext({ productionControl: {
+    routeMasterRows: [{ partNo: "P", optionNumber: "1", setupNo: "2", machineFamily: "CNC" }],
+    cycleMasterRows: [{ partNo: "P", optionNumber: "1", setupNo: "2", totalTime: 60 }],
+    machinePlanningRows: [{ machine: "M1", machineFamily: "CNC" }],
+    workOrders: [{ jcNo: "WIP", partCode: "P", optionNumber: "1", orderPcs: 6000, finalSetupGoodPieces: 6085, rmStatus: "Received" }],
+    machinePlanDetailRows: [{ jcNo: "WIP", partCode: "P", machine: "M1", orderPcs: 7313, rawActualQty: 6085,
+      pendingGoodQty: 1228, plannedStartDate: "21-Sept-26", plannedProductionEndDate: "23-Sept-26" }],
+  } }).context
+  expect(context.reservations).toEqual([{ machine: "M1", start: "2026-09-21", end: "2026-09-23" }])
+  expect(context.existing).toHaveLength(1)
+})
+
 it("uses only the dedicated family across planning, switches and proposal capacity", () => {
   const machineRows = [
     { machineNo: "ACE-01", machineFamily: "T25", machineType: "CNC", status: "Active" },

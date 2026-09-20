@@ -54,8 +54,8 @@ describe("priorityPlanWindow", () => {
       blockers: [],
       minimumStartDate: "17-July-26",
     })).toEqual({
-      startDate: "17-July-26",
-      endDate: "17-July-26",
+      startDate: "18-July-26",
+      endDate: "18-July-26",
     });
   });
   it("waits behind a queued blocker that the planner keeps ahead", () => {

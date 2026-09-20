@@ -1,5 +1,5 @@
 import { dateSortValue } from "./dashboard-view-model";
-import { nextCalendarDateLabel, priorityPlanWindow, type PriorityPlanWindow, type PriorityPlanWindowBlocker } from "./priority-plan-scenarios";
+import { nextCalendarDateLabel, priorityPlanWindow, type PriorityPlanWindow, type PriorityPlanWindowBlocker, type PriorityToolingReservation } from "./priority-plan-scenarios";
 
 export type DashboardPayload = Record<string, unknown>;
 
@@ -23,6 +23,9 @@ export type PriorityPlanStep = {
   startDate: string;
   endDate: string;
   blockers: PriorityPlanBlocker[];
+  holidays?: unknown[];
+  toolingCapacity?: Record<string, number>;
+  toolingReservations?: PriorityToolingReservation[];
 };
 
 export type PriorityPlanSetupReference = {
@@ -42,7 +45,9 @@ export function priorityChangePlan(productionControl: DashboardPayload, partCode
     .sort(jobCardSetupSort);
 
   return {
-    steps: targetRows.map((targetRow) => {
+    steps: targetRows.map((targetRow, targetIndex) => {
+      const laterQueuedSteps = new Set(targetRows.slice(targetIndex + 1)
+        .filter((row) => priorityPlanBlockerState(row) === "queued").map(priorityPlanRowKey));
       const targetMachine = machineValue(targetRow, "machine");
       const targetMachineKey = machineKey(targetMachine);
       const targetDate = dateSortValue(plannedSetupDate(targetRow));
@@ -61,6 +66,16 @@ export function priorityChangePlan(productionControl: DashboardPayload, partCode
         startDate: displayValue(plannedSetupDate(targetRow)),
         endDate: displayValue(targetRow.plannedProductionEndDate || targetRow.endDate),
         blockers,
+        holidays: asArray(productionControl.planningHolidayRows).map((row) => row.date ?? row.holidayDate),
+        toolingCapacity: Object.fromEntries(toolingCodes(targetRow).map((code) => [code,
+          Number(asRecord(targetRow.toolingAllocatedQuantities)[code] ?? 0) - Math.max(0,
+            Number(asRecord(targetRow.toolingOccupiedQuantities)[code] ?? 0) - plannedRows.filter((row) =>
+              toolingCodes(row).includes(code) && ["presetting", "setting", "quality_approval", "operator_started"].includes(str(row.shopFloorStage))
+            ).length),
+        ])),
+        toolingReservations: plannedRows.filter((row) => priorityPlanRowKey(row) !== priorityPlanRowKey(targetRow) && !laterQueuedSteps.has(priorityPlanRowKey(row)))
+          .map((row) => ({ key: priorityPlanRowKey(row), codes: toolingCodes(row),
+            startDate: plannedSetupDate(row), endDate: row.plannedProductionEndDate || row.endDate })),
       };
     }),
   };
@@ -81,6 +96,9 @@ function priorityPlanStepWindow(
       .map((blocker) => blocker.key)),
     heldBlockerKeys: priorityPlanHeldBlockerKeys(step, queueAfterKey),
     minimumStartDate,
+    holidays: step.holidays,
+    toolingCapacity: step.toolingCapacity,
+    toolingReservations: step.toolingReservations,
   });
 }
 
@@ -91,12 +109,26 @@ export function priorityPlanStepWindows(
 ) {
   const windows = new Map<string, PriorityPlanWindow>();
   let minimumStartDate = "";
+  let blocked = false;
   for (const step of steps) {
-    const window = priorityPlanStepWindow(step, selectedInterruptions, queueAfterByStep[step.key], minimumStartDate);
+    const adjustedStep = { ...step, toolingReservations: step.toolingReservations?.map((row) => ({
+      ...row, ...(windows.get(row.key) ?? {}),
+    })) };
+    const window: PriorityPlanWindow = blocked ? { startDate: "", endDate: "" }
+      : priorityPlanStepWindow(adjustedStep, selectedInterruptions, queueAfterByStep[step.key], minimumStartDate);
     windows.set(step.key, window);
+    blocked = !window.endDate;
     minimumStartDate = nextCalendarDateLabel(window.endDate);
   }
   return windows;
+}
+
+function asRecord(value: unknown): DashboardPayload {
+  return value !== null && typeof value === "object" && !Array.isArray(value) ? value as DashboardPayload : {};
+}
+
+function toolingCodes(row: DashboardPayload) {
+  return Array.isArray(row.requiredToolingCodes) ? [...new Set(row.requiredToolingCodes.map(String))] : [];
 }
 
 export function priorityPlanStepPreviewState(
