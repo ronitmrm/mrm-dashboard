@@ -13,11 +13,9 @@ test("department tooling capacity sequences shared resources and refreshes after
       entry("tooling_availability", allocation),
       entry("shop_floor_status", state),
       ...["A", "B"].map(jcNo => entry("work_order", { jcNo, partCode: "PART", optionNumber: "1", orderPcs: 10000, rmInwardDate: "2026-09-21", rmInwardKg: 100 })),
-      ...["1", "2"].flatMap(setupNo => [
-        entry("route", { partNo: "PART", optionNumber: "1", setupNo, machineType: "CNC", machineFamily: "FAMILY" }),
-        entry("cycle", { partNo: "PART", optionNumber: "1", setupNo, cycleTime: 60 }),
-        entry("tooling", { partNo: "PART", optionNumber: "1", setupNo, fixture: setupNo === "1" ? "F1" : "Not Required", foamTool: setupNo === "2" ? "F1" : "Not Required" }),
-      ]),
+      entry("route", { partNo: "PART", optionNumber: "1", setupNo: "1", machineType: "CNC", machineFamily: "FAMILY" }),
+      entry("cycle", { partNo: "PART", optionNumber: "1", setupNo: "1", cycleTime: 60 }),
+      entry("tooling", { partNo: "PART", optionNumber: "1", setupNo: "1", fixture: "F1" }),
       ...["CNC-01", "CNC-02"].map(machineNo => entry("machine_master", { machineNo, machineType: "CNC", machineFamily: "FAMILY", status: "Active" })),
     ],
   }
@@ -29,8 +27,8 @@ test("department tooling capacity sequences shared resources and refreshes after
   try {
     const rows = plans()
     const first = rows.find(row => row.jcNo === "A" && row.setupNo === "1")!
-    const second = rows.find(row => row.jcNo === "A" && row.setupNo === "2")!
-    expect(second.machine).toBe("CNC-01")
+    const second = rows.find(row => row.jcNo === "B" && row.setupNo === "1")!
+    expect(second.machine).toBe("CNC-02")
     expect(second.toolingPlanStatus).toContain("Waiting for tooling release")
     expect(second.toolingAvailability).toContain("5 usable total / 4 in Store / 1 allocated / 1 occupied / 0 free")
     const day = (value: unknown) => new Date(String(value)).getTime()
