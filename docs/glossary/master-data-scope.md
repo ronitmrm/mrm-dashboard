@@ -157,6 +157,12 @@ planning moves the ready setup forward instead of leaving the machine idle. A
 setup at Raw Material at Machine or any later shop-floor stage retains its queue
 position unless an explicit planner action moves or stops it.
 
+Forecast upstream production does not reserve a physical machine for an unstarted
+downstream setup. The planner allocates that setup only after recorded upstream
+good output satisfies its pooled WIP buffer for the assigned machine count; until
+then, the machine remains available for other material-ready work. Recorded setup
+or production execution retains its physical assignment.
+
 Raw Material receipt or pooled WIP availability is the earliest setup forecast
 date, not a permanently retained overdue date. On recalculation, an unstarted
 setup whose forecast is already past moves to the current planning date (or the

@@ -67,9 +67,11 @@ test("checks every compatible machine gap after raw material becomes ready", () 
     }).productionControl!
     if (!("machinePlanDetailRows" in control)) throw new Error("Missing plan")
 
-    const machineFor = (jobCard: string) => control.machinePlanDetailRows.find((row) => row.jcNo === jobCard)?.machine
-    expect(machineFor("READY-001-001")).toBe("CNC-001-A")
-    expect(machineFor("READY-005-013")).toBe("CNC-005-A")
+    const readyMachines = (family: string) => [...new Set(control.machinePlanDetailRows
+      .filter((row) => String(row.jcNo).startsWith(`READY-${family}-`))
+      .map((row) => row.machine))].sort()
+    expect(readyMachines("001")).toEqual(["CNC-001-A", "CNC-001-B"])
+    expect(readyMachines("005")).toEqual(["CNC-005-A", "CNC-005-B"])
     expect(control.machinePlanDetailRows.find((row) => row.jcNo === "BLOCK-001")).toMatchObject({
       setupPlannedDate: "20-Sept-26",
       plannedProductionStartDate: "20-Sept-26",
@@ -80,7 +82,7 @@ test("checks every compatible machine gap after raw material becomes ready", () 
   }
 }, 15_000)
 
-test("moves an unstarted queued setup ahead when its WIP is ready first", () => {
+test("keeps downstream machines available until actual WIP is ready", () => {
   vi.useFakeTimers()
   vi.setSystemTime(new Date("2026-09-20T06:00:00Z"))
 
@@ -95,12 +97,15 @@ test("moves an unstarted queued setup ahead when its WIP is ready first", () => 
   ]
 
   try {
-    const control = buildLegacyDashboardSnapshot({
+    const input: Parameters<typeof buildLegacyDashboardSnapshot>[0] = {
       workbookName: "PostgreSQL",
       productionEntries: [],
       dataEntries: [
         ...job("FIRST-QUEUED", "SLOW-WIP", 1_440),
         ...job("SECOND-QUEUED", "READY-WIP", 288),
+        entry("work_order", { jcNo: "OTHER-READY", partCode: "OTHER-PART", optionNumber: "1", orderPcs: 100, rmInwardDate: "2026-09-20", rmInwardKg: 1 }),
+        entry("route", { partNo: "OTHER-PART", optionNumber: "1", setupNo: "1", machineType: "CNC", machineFamily: "DOWNSTREAM" }),
+        entry("cycle", { partNo: "OTHER-PART", optionNumber: "1", setupNo: "1", cycleTime: 288 }),
         entry("machine_master", { machineNo: "CNC-UP-SLOW", machineType: "CNC", machineFamily: "UPSTREAM", status: "Active" }),
         entry("machine_master", { machineNo: "CNC-UP-FAST", machineType: "CNC", machineFamily: "UPSTREAM", status: "Active" }),
         entry("machine_master", { machineNo: "CNC-DOWN", machineType: "CNC", machineFamily: "DOWNSTREAM", status: "Active" }),
@@ -110,20 +115,31 @@ test("moves an unstarted queued setup ahead when its WIP is ready first", () => 
         { jcNo: "FIRST-QUEUED", partCode: "SLOW-WIP", optionNumber: "1", setupNo: "2", routeMachine: "DOWNSTREAM", machine: "CNC-DOWN" },
         { jcNo: "SECOND-QUEUED", partCode: "READY-WIP", optionNumber: "1", setupNo: "1", routeMachine: "UPSTREAM", machine: "CNC-UP-FAST" },
         { jcNo: "SECOND-QUEUED", partCode: "READY-WIP", optionNumber: "1", setupNo: "2", routeMachine: "DOWNSTREAM", machine: "CNC-DOWN" },
+        { jcNo: "OTHER-READY", partCode: "OTHER-PART", optionNumber: "1", setupNo: "1", routeMachine: "DOWNSTREAM", machine: "CNC-DOWN" },
       ],
-    }).productionControl!
+    }
+    const control = buildLegacyDashboardSnapshot(input).productionControl!
     if (!("machinePlanDetailRows" in control)) throw new Error("Missing plan")
 
-    const setupTwo = control.machinePlanDetailRows.filter((row) => row.machine === "CNC-DOWN" && row.setupNo === "2")
-    const firstQueued = setupTwo.find((row) => row.jcNo === "FIRST-QUEUED")!
-    const secondQueued = setupTwo.find((row) => row.jcNo === "SECOND-QUEUED")!
-    const dateOrdinal = (value: unknown) => {
-      const [day, month, year] = String(value).split("-")
-      const monthIndex = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sept", "Oct", "Nov", "Dec"].indexOf(month ?? "")
-      return Number(year) * 400 + monthIndex * 32 + Number(day)
-    }
-    expect(dateOrdinal(secondQueued.setupPlannedDate)).toBeLessThan(dateOrdinal(firstQueued.setupPlannedDate))
-    expect(setupTwo.every((row) => row.runningStatus === "Planned")).toBe(true)
+    const downstreamMachineRows = control.machinePlanDetailRows.filter((row) => row.machine === "CNC-DOWN")
+    expect(downstreamMachineRows.map((row) => `${row.jcNo}:${row.setupNo}`)).toEqual(["OTHER-READY:1"])
+
+    input.productionEntries.push({
+      jobCard: "SECOND-QUEUED",
+      partCode: "READY-WIP",
+      setupNo: "1",
+      machine: "CNC-UP-FAST",
+      machineType: "CNC",
+      operatorId: "OP-1",
+      prodDate: "2026-09-20",
+      outputQty: 100,
+      actualQty: 100,
+      rejectQty: 0,
+      targetQty: 100,
+    })
+    const refreshed = buildLegacyDashboardSnapshot(input).productionControl!
+    if (!("machinePlanDetailRows" in refreshed)) throw new Error("Missing refreshed plan")
+    expect(refreshed.machinePlanDetailRows.some((row) => row.jcNo === "SECOND-QUEUED" && row.setupNo === "2")).toBe(true)
   } finally {
     vi.useRealTimers()
   }
