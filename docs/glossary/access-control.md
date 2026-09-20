@@ -135,7 +135,7 @@ user to inspect Artifact metadata and retrieve bytes through the
 Organization-scoped Administration ledger. Every byte request requires current
 session and capability authorization; a copied link grants no access by itself.
 This is the approved [private Artifact contract](./artifacts.md); its rollout
-status is tracked in the [delivery specification](../specs/private-google-cloud-artifacts.md).
+behavior is described in the [Artifact architecture](../codebase/artifact-storage.md).
 
 **Artifact Delete Access**: The separate `artifacts.delete` capability permits
 audited manual deletion with exact-target confirmation and a reason. Read access

@@ -29,17 +29,17 @@ All four types use MRM Brand Guide B §15.1 at 100% print scale, with 0.5-inch
 content additionally reserves space for them. The guide's CSS pixel baseline is
 used directly (1px = 0.75pt). No author-selected fonts or sizes, italic or underline.
 
-| Role | Font | Weight | Size | Line height | Tracking |
-| --- | --- | --- | --- | --- | --- |
-| Display/title | Outfit | 800 | 40px | 1.10 | -0.01em |
-| Section heading | Outfit | 800 | 27px | 1.10 | -0.01em |
-| Subsection | Outfit | 600 | 16px | 1.30 | 0 |
-| Introduction | Outfit | 400 | 17px | 1.60 | 0 |
-| Body | Outfit | 400 | 15px | 1.68 | 0 |
-| Caption/metadata | Outfit | 500 | 13px | 1.60 | 0 |
-| Eyebrow | Outfit | 600 | 12px | 1.30 | 0.16em |
-| Gujarati heading/body | Hind Vadodara | 700/400 | 23/15px | 1.35/1.60 | 0 |
-| Hindi heading/body | Hind | 700/400 | 23/15px | 1.35/1.60 | 0 |
+| Role                  | Font          | Weight  | Size    | Line height | Tracking |
+| --------------------- | ------------- | ------- | ------- | ----------- | -------- |
+| Display/title         | Outfit        | 800     | 40px    | 1.10        | -0.01em  |
+| Section heading       | Outfit        | 800     | 27px    | 1.10        | -0.01em  |
+| Subsection            | Outfit        | 600     | 16px    | 1.30        | 0        |
+| Introduction          | Outfit        | 400     | 17px    | 1.60        | 0        |
+| Body                  | Outfit        | 400     | 15px    | 1.68        | 0        |
+| Caption/metadata      | Outfit        | 500     | 13px    | 1.60        | 0        |
+| Eyebrow               | Outfit        | 600     | 12px    | 1.30        | 0.16em   |
+| Gujarati heading/body | Hind Vadodara | 700/400 | 23/15px | 1.35/1.60   | 0        |
+| Hindi heading/body    | Hind          | 700/400 | 23/15px | 1.35/1.60   | 0        |
 
 SOP/Policy text never shrinks; additional body content flows to further pages.
 Notice/WI text uses these sizes as proportional baselines. As approved on

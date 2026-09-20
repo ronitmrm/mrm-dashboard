@@ -77,19 +77,3 @@ revision number; its revision and effective date never change during upload.
 - Rejection requires remarks.
 - Portfolio, Drawing History, attachment preview, and download remain
   authenticated reads.
-
-## Migration and backfill
-
-- Seed revision `00` from each existing controlled Product and current canonical
-  BOM without rewriting either source.
-- Seed selected processes once from existing Design dossier fields. Only legacy
-  rows without a canonical selection may use positive process prices for this
-  one-time backfill.
-- Stage one provisional Drawing row per released Product from the approved
-  legacy register, including Products with no matched file yet. Attach and
-  release only an unambiguous UID-matched file. Keep unmatched legacy evidence
-  available and report it; do not invent links.
-- Existing open ECNs remain in their current stage. An ECN still in
-  `Pending Design` adopts HOD review on its next submission. Already published
-  ECN evidence is not rewritten.
-- Backfills are idempotent and never delete or overwrite historical files.

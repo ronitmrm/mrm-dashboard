@@ -23,7 +23,7 @@ state, or committing a credential.
   backup branch Neon preserves.
 
 Provider resource IDs, endpoint hostnames, connection strings, passwords, and
-tokens must not appear in Git, logs, tickets, or `migration.json`.
+tokens must not appear in Git, logs, tickets, or documentation.
 
 ## Prerequisites
 

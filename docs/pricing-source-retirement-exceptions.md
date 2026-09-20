@@ -1,8 +1,5 @@
 # Pricing source-retirement exception register
 
-Date: 2026-07-22  
-Decision basis: the user-approved LM-00 no-functional-change precedence and
-scope decisions recorded in `migration.json` on 2026-07-21  
 Status: accepted migration exceptions; source destruction remains separately
 blocked on retention approval
 

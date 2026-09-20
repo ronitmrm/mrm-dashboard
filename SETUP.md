@@ -19,8 +19,7 @@ Redis is disposable acceleration state.
 
 Install the workspace dependencies and create the untracked environment file:
 
-This repository intentionally uses the pnpm version installed on the machine;
-it does not pin pnpm through the root `package.json`.
+Use the pnpm version pinned by the root `packageManager` field.
 
 ```bash
 pnpm install

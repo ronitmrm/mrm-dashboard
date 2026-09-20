@@ -40,16 +40,16 @@ References:
   checks are navigation optimization only.
 - PostgreSQL is authoritative for sessions and revocation. Better Auth cookie
   session caching is disabled for the initial release.
-- Redis is optional, disposable acceleration for auth rate limits,
+- Redis is disposable acceleration for auth rate limits,
   application caches, permission-cache entries, and invalidation fan-out. The
-  initial application must remain correct when Redis is empty or unavailable.
+  application remains correct when Redis is empty or unavailable.
 - Redis does not own machine locks, quote supersession, durable jobs, audit
   records, refresh watermarks, or user-role assignments.
 - Canonical writes insert a PostgreSQL outbox event in the same transaction.
   A worker publishes invalidations or warms Redis after commit. Consumers and
   jobs use idempotency keys.
 - The first administrator is created only by an explicit one-time command.
-  Public self-registration is disabled for the initial release.
+  Public self-registration is disabled.
 
 ## Consequences
 
@@ -61,13 +61,3 @@ References:
   trade-off require a separate ADR amendment.
 - Better Auth schema changes are generated and reviewed; production request
   startup never auto-migrates the database.
-
-## Verification
-
-- Tests prove that legacy auth source tables are deny-listed before staging.
-- Authorization tests use server-facing capability checks rather than client
-  visibility alone.
-- A Redis-unavailable test proves that authoritative session and capability
-  decisions still work.
-- Outbox retry tests prove that duplicate delivery does not duplicate derived
-  state.
