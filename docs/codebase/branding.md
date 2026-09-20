@@ -4,7 +4,7 @@ Domain contract: [Document Templates](../glossary/branding.md). The domain model
 permissions and issue lifecycle are shared by generated templates and uploaded
 Controlled Documents; PDFKit replaces only generated PDF rendering.
 
-## Generated PDFs (2026-09-19)
+## Generated PDFs
 
 `apps/web/lib/branding/pdf.ts` exports the asynchronous `generateBrandingPdf`
 entry point used by draft preview and the repository's injected issue callback.
@@ -96,23 +96,3 @@ those exact bytes in `pdf`, clears the draft upload and never invokes generation
 The marker remains `uploaded-pdf-v1`; new revisions start without an upload.
 Author-supplied document numbers lock after release and are checked
 case-insensitively under an advisory lock.
-
-## Verification and packaging
-
-Run the repository lint, typecheck, web tests and production build. Renderer
-output checks use existing Vitest, pdf-lib and PDF.js. The repository integration
-check covers upload immutability/bypass and a failed generated issue rollback.
-Published-register authentication checks retain the existing access contract.
-
-`verification-fixtures.ts` and `scripts/capture-branding-pdf-baseline.ts` provide
-six normalized representative documents for paired visual review and fresh/repeated
-process timing/RSS. `scripts/verify-pdfkit-font-proof.ts` exercises actual bundled
-fonts. See [migration checklist](./pdfkit-migration-checklist.html) and the measured
-[verification report](./pdfkit-migration-verification.md) for reviewed output and
-package sizes.
-
-Vercel packaging must be checked after Next.js server-action grouping. Count each
-physical function group once, deduplicate route aliases, and report regional
-replication separately. Local production-equivalent packaging is not a deployed
-storage measurement. Retention, historical deployments and paid settings are
-outside this renderer migration.

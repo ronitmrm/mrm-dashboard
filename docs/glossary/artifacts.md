@@ -1,7 +1,7 @@
 # Artifacts
 
 Approved target contract for [issue #88](https://github.com/ronitmrm/mrm-dashboard/issues/88).
-Implementation and cutover status: [delivery specification](../specs/private-google-cloud-artifacts.md).
+Implementation and cutover rules: [Artifact architecture](../codebase/artifact-storage.md).
 
 **Artifact**: One immutable logical business file in PostgreSQL. It retains its
 Organization, filename, media type, byte size, SHA-256, uploaded or generated

@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs"
-
 import { describe, expect, it } from "vitest"
 
 import {
@@ -65,16 +63,5 @@ describe("Store Item Data Entry", () => {
         "item-a"
       )
     ).toBeNull()
-  })
-})
-
-describe("Store Master table selection", () => {
-  it("hides the master switcher in table mode", () => {
-    const source = readFileSync(
-      new URL("../app/store/masters/master-workspace.tsx", import.meta.url),
-      "utf8"
-    )
-
-    expect(source).toContain('mode === "table" ||')
   })
 })

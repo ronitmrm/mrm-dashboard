@@ -15,7 +15,6 @@ canonical write or dashboard read model.
 - `packages/db` — typed PostgreSQL schema, repositories, and unchanged domain logic
 - `packages/runtime` — durable read-model worker and Redis delivery
 - `packages/migration` — read-only loaders and deterministic migration rehearsals
-- `migration.json` — ticket and implementation ledger
 
 ## Local setup
 
@@ -107,8 +106,10 @@ pnpm --filter @workspace/migration rehearse:pricing -- <arguments>
 pnpm --filter @workspace/migration rehearse:convex -- <arguments>
 ```
 
-The complete mapping, reconciliation, cutover, and rollback contract is in
-`docs/postgresql-migration-spec.md`.
+Migration behavior lives in `packages/migration`; retained source-data
+exceptions and destruction gates are documented in
+[`docs/pricing-source-retirement-exceptions.md`](docs/pricing-source-retirement-exceptions.md)
+and [`docs/data-classification-retention.md`](docs/data-classification-retention.md).
 
 ## Artifact storage
 

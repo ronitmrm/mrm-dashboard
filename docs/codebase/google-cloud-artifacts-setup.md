@@ -97,21 +97,13 @@ keys are restricted. No object lifecycle expiration or bucket CORS setup was
 added. Public Access Prevention alone does not prohibit signed URLs; the
 application implements private delivery without signing.
 
-## Remaining verification
-
-CLI configuration reads and the application's pure configuration check passed.
-Google's exact Development condition and service-account binding, the six Vercel
-Development variables, and real local provider traffic are verified. The probe
-used a fresh 12-hour Development token and the provider's existing custom-
-audience exchange; it did not use gcloud, ADC, or an injected client. No deployed
-application token exchange or application deployment has been performed by this
-task. Browser workflow acceptance remains pending.
+## Cutover gate
 
 Before cutover, verify production federation, exact private write/read bytes,
-unauthorized application access denial, anonymous object denial, the permitted
-25 MiB upload, a ZIP larger than 4.5 MB, multipage PDF preview, and controlled
-final-reference deletion. Keep source cleanup and compatibility removal gated
-by the migration runbook and agreed zero-active-users window.
+unauthorized and anonymous access denial, the permitted 25 MiB upload, large ZIP
+delivery, multipage PDF preview, and final-reference deletion. Keep source
+cleanup and compatibility removal gated by the migration runbook and an agreed
+zero-active-users window.
 
 ## References
 
