@@ -106,6 +106,15 @@ Route Master does not accept an independently entered Machine Type;
 Cycle Time Master and Tooling Master select an existing Route Master Line and
 cannot redefine its identity.
 
+**Part Readiness**: The production-unit workspace for resolving master-data
+gaps before planning. Both its Production Validation and Whole Work-Order
+Missing Details tables show the Job Card ordered quantity, selected option, and
+setup number. Work-order-level gaps without a selected route remain one row per
+Job Card. Setup-scoped gaps, including Cycle Time, Tooling, and Machine Master,
+produce one row for each affected Route Master setup; gaps on the same setup
+share that setup row. Production Validation is the Raw-Material-received subset
+of the whole work-order list.
+
 **Route corrections and new options**: In every Production Unit, an existing
 setup's number/sequence and the option's declared number of setups are fixed.
 An unused draft option may be completed with its remaining setups. Once selected

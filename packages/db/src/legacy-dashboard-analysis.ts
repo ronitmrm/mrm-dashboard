@@ -55,6 +55,20 @@ type MonthlyMachineTypeTotal = Totals & {
   machineType: string;
 };
 type PriorityTuple = [number, number, number, number];
+type ReadinessSetupGap = {
+  missingSetupNo: string;
+  missingSetupName: string;
+  setupNo: string;
+  setupName: string;
+  machineFamily: string;
+  machineUsed: string;
+  machineType: string;
+  stageWeight: number;
+  operationWeight: number;
+  cycleTimeMissing: boolean;
+  toolingPlanMissing: boolean;
+  machineMasterMissing: boolean;
+};
 type PlanningCalendar = {
   holidayDates: Set<string>;
 };
@@ -1088,6 +1102,7 @@ function buildProductionControl({
     }
   }
   const dispatchJcKeys = new Set(dispatchRows.map((row) => canonicalKey(rowText(row, "JC NO.", "JC NO", "jcNo"))).filter(Boolean));
+  const readinessSetupGapsByWorkOrder = new WeakMap<object, ReadinessSetupGap[]>();
   const workOrderOutputRows = workOrderRows.map((row) => {
     const jcNo = rowText(row, "JC NO.", "JC NO", "jcNo");
     const partCode = rowText(row, "PART CODE", "PART NO", "partCode");
@@ -1115,13 +1130,22 @@ function buildProductionControl({
       : selectedRoutes.length
         ? (routeChange ? "Route change plan" : (optionNumber || selectedOptionNumber ? "Ready" : "Auto single option"))
         : "Route master missing";
-    const missingCycleRoutes = selectedRoutes.filter((route) => !cycleKeys.has(masterKey(route)));
-    const missingToolingRoutes = selectedRoutes.filter((route) => !toolingKeys.has(masterKey(route)));
-    const missingMachineRoutes = selectedRoutes.filter((route) => !activePhysicalMachineRows(
-      machineMasterFamily(route) || rowText(route, "MACHINE USED", "machineUsed", "machine", "M/C NO", "MACHINE NO"),
-      rowText(route, "MACHINE TYPE", "machineType"),
-      machineRows,
-    ).length);
+    const routeReadiness = selectedRoutes.map((route) => {
+      const machineFamily = machineMasterFamily(route)
+        || rowText(route, "MACHINE USED", "machineUsed", "machine", "M/C NO", "MACHINE NO");
+      const machineType = rowText(route, "MACHINE TYPE", "machineType");
+      return {
+        route,
+        cycleTimeMissing: !cycleKeys.has(masterKey(route)),
+        toolingPlanMissing: !toolingKeys.has(masterKey(route)),
+        machineMasterMissing: !activePhysicalMachineRows(machineFamily, machineType, machineRows).length,
+        machineFamily,
+        machineType,
+      };
+    });
+    const missingCycleRoutes = routeReadiness.filter((row) => row.cycleTimeMissing).map((row) => row.route);
+    const missingToolingRoutes = routeReadiness.filter((row) => row.toolingPlanMissing).map((row) => row.route);
+    const missingMachineRoutes = routeReadiness.filter((row) => row.machineMasterMissing).map((row) => row.route);
     const missingCycle = missingCycleRoutes.map((route) => setupStepKey(rowText(route, "SETUP NO.", "SETUP CODE", "setupNo"), effectiveOption));
     const missingTooling = missingToolingRoutes.map((route) => setupStepKey(rowText(route, "SETUP NO.", "SETUP CODE", "setupNo"), effectiveOption));
     const missingMachine = missingMachineRoutes.map((route) => setupStepKey(rowText(route, "SETUP NO.", "SETUP CODE", "setupNo"), effectiveOption));
@@ -1140,7 +1164,24 @@ function buildProductionControl({
       || rowText(row, "planningItemPending").toLowerCase() === "true";
     const routeReadyForPlanning = ["Ready", "Auto single option", "Route change plan"].includes(routeStatus);
     const machineFamily = machineMasterFamily(firstMissingRoute) || rowText(firstMissingRoute, "MACHINE USED", "machineUsed", "machine", "M/C NO", "MACHINE NO");
-    return {
+    const readinessSetupGaps = routeReadiness
+      .filter((setup) => setup.cycleTimeMissing || setup.toolingPlanMissing || setup.machineMasterMissing)
+      .map((setup) => ({
+        missingSetupNo: setupStepKey(rowText(setup.route, "SETUP NO.", "SETUP CODE", "setupNo"), effectiveOption),
+        missingSetupName: rowText(setup.route, "SETUP NAME", "setupName"),
+        setupNo: setupStepKey(rowText(setup.route, "SETUP NO.", "SETUP CODE", "setupNo"), effectiveOption),
+        setupName: rowText(setup.route, "SETUP NAME", "setupName"),
+        machineFamily: setup.machineFamily,
+        machineUsed: rowText(setup.route, "MACHINE USED", "machineUsed"),
+        machineType: setup.machineType,
+        stageWeight: safeNumber(rowValue(setup.route, "STAGE WEIGHT (GRAM)", "stageWeight")),
+        operationWeight: safeNumber(rowValue(setup.route, "OPERATION WISE WEIGHT (GRAM)", "operationWeight"))
+          || safeNumber(rowValue(setup.route, "STAGE WEIGHT (GRAM)", "stageWeight")),
+        cycleTimeMissing: setup.cycleTimeMissing,
+        toolingPlanMissing: setup.toolingPlanMissing,
+        machineMasterMissing: setup.machineMasterMissing,
+      }));
+    const outputRow = {
       jcNo,
       fgPoNo: rowText(row, "FG PO NO.", "fgPoNo"),
       rmPoNo: rowText(row, "RM PO NO.", "rmPoNo"),
@@ -1197,28 +1238,58 @@ function buildProductionControl({
                 : (missingMachine.length ? `Add active machine for family ${machineFamily || "route machine"}` : "All checks ready")))
         : routeStatus,
     };
+    readinessSetupGapsByWorkOrder.set(outputRow, readinessSetupGaps);
+    return outputRow;
+  });
+  const allWorkOrderGaps = workOrderOutputRows.flatMap((row) => {
+    const readinessSetupGaps = readinessSetupGapsByWorkOrder.get(row) ?? [];
+    const workOrderRow = row;
+    const planningItemMissing = row.planningItemPending;
+    const routeSelectionMissing = row.optionSource === "Planner required" && row.availableOptions.length > 1;
+    const routeMasterMissing = row.routeStatus === "Route master missing";
+    const workOrderGapRows = planningItemMissing || routeSelectionMissing || routeMasterMissing
+      ? [{
+          ...workOrderRow,
+          missingSetupNo: "",
+          missingSetupName: "",
+          machineUsed: "",
+          machineType: "",
+          stageWeight: 0,
+          operationWeight: 0,
+          planningItemMissing,
+          routeSelectionMissing,
+          routeMasterMissing,
+          cycleTimeMissing: false,
+          toolingPlanMissing: false,
+          machineMasterMissing: false,
+          missingAreas: [
+            planningItemMissing ? "Planning item" : "",
+            routeSelectionMissing ? "Route option" : "",
+            routeMasterMissing ? "Route master" : "",
+          ].filter(Boolean).join(", "),
+          nextAction: row.planningBlocker,
+        }]
+      : [];
+    const setupGapRows = readinessSetupGaps.map((setup) => ({
+      ...workOrderRow,
+      ...setup,
+      planningItemMissing: false,
+      routeSelectionMissing: false,
+      routeMasterMissing: false,
+      missingAreas: [
+        setup.cycleTimeMissing ? "Cycle time" : "",
+        setup.toolingPlanMissing ? "Tooling plan" : "",
+        setup.machineMasterMissing ? "Machine master" : "",
+      ].filter(Boolean).join(", "),
+      nextAction: setup.cycleTimeMissing
+        ? `Add cycle time for setup ${setup.missingSetupNo}`
+        : setup.toolingPlanMissing
+          ? `Add tooling plan for setup ${setup.missingSetupNo}`
+          : `Add active machine for family ${setup.machineFamily || "route machine"}`,
+    }));
+    return [...workOrderGapRows, ...setupGapRows];
   });
   const prioritizedWorkOrderRows = [...workOrderOutputRows].sort(workOrderPlanningSort);
-  const allWorkOrderGaps = workOrderOutputRows
-    .map((row) => ({
-      ...row,
-      planningItemMissing: row.planningItemPending,
-      routeSelectionMissing: row.optionSource === "Planner required" && row.availableOptions.length > 1,
-      routeMasterMissing: row.routeStatus === "Route master missing",
-      cycleTimeMissing: row.cycleStatus.startsWith("Missing"),
-      toolingPlanMissing: row.toolingStatus.startsWith("Missing"),
-      machineMasterMissing: row.machineMasterStatus.startsWith("Missing"),
-      missingAreas: [
-        row.planningItemPending ? "Planning item" : "",
-        row.optionSource === "Planner required" && row.availableOptions.length > 1 ? "Route option" : "",
-        row.routeStatus === "Route master missing" ? "Route master" : "",
-        row.cycleStatus.startsWith("Missing") ? "Cycle time" : "",
-        row.toolingStatus.startsWith("Missing") ? "Tooling plan" : "",
-        row.machineMasterStatus.startsWith("Missing") ? "Machine master" : "",
-      ].filter(Boolean).join(", "),
-      nextAction: row.planningBlocker,
-    }))
-    .filter((row) => row.planningItemMissing || row.routeSelectionMissing || row.routeMasterMissing || row.cycleTimeMissing || row.toolingPlanMissing || row.machineMasterMissing);
   const masterGaps = allWorkOrderGaps.filter((row) => row.rmStatus === "Received");
   const combinedBatches = combinedRows(prioritizedWorkOrderRows, rawByJc, routeGroups, cycleKeys, toolingKeys);
   const machinePlanDetailRows = machinePlanDetails(prioritizedWorkOrderRows, rawBySetup, rawBySetupAnyMachine, routeGroups, cycleRows, toolingRows, toolingAvailability, machineRows, machineConstraints, planOverrides, shopFloorStatusRows, previousMachineAssignmentsBySetup(previousMachinePlanDetailRows), planningCalendar);

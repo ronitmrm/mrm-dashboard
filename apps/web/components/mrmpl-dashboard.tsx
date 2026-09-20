@@ -8555,6 +8555,13 @@ function WorkOrderGapTable({
               <TableRow>
                 <TableHead>Job Card</TableHead>
                 <TableHead>Item</TableHead>
+                <TableHead>Ordered Qty</TableHead>
+                <TableHead data-filter-all-label="All Options">
+                  Option No.
+                </TableHead>
+                <TableHead data-filter-all-label="All Setups">
+                  Setup No.
+                </TableHead>
                 <TableHead data-filter-all-label="All Work Orders">
                   Rm
                 </TableHead>
@@ -8577,7 +8584,7 @@ function WorkOrderGapTable({
               ) : (
                 <TableRow>
                   <TableCell
-                    colSpan={5}
+                    colSpan={8}
                     className="h-24 text-center text-muted-foreground"
                   >
                     No Work-Order Gaps Match The Selected Filters
@@ -8622,6 +8629,13 @@ function WorkOrderGapRow({
         <div className="text-xs text-muted-foreground">
           {displayValue(row.description)}
         </div>
+      </TableCell>
+      <TableCell className="tabular-nums">
+        {displayValue(row.orderPcs, true)}
+      </TableCell>
+      <TableCell>{displayValue(row.optionNumber)}</TableCell>
+      <TableCell>
+        {displayValue(row.missingSetupNo || row.setupNo)}
       </TableCell>
       <TableCell
         data-filter-value={
