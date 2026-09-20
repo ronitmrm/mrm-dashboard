@@ -33,7 +33,6 @@ export async function GET(request: Request) {
       ).subcategories
       return masterCsvResponse(
         rows.map((row) => ({
-          "Category Id": row.categoryId,
           Category: row.categoryName,
           Name: row.name,
         })),
@@ -46,7 +45,6 @@ export async function GET(request: Request) {
       ).assetNames
       return masterCsvResponse(
         rows.map((row) => ({
-          "Subcategory Id": row.subcategoryId,
           Category: row.categoryName,
           Subcategory: row.subcategoryName,
           Name: row.name,
@@ -83,9 +81,7 @@ export async function GET(request: Request) {
       const rows = await repository.listSupplierPrices(organizationId)
       return masterCsvResponse(
         rows.map((row) => ({
-          "Item Type Id": row.itemTypeId,
-          "Supplier Id": row.supplierId,
-          "Item Code": row.typeCode,
+          "Asset Code": row.typeCode,
           Supplier: row.supplierName,
           "Unit Price": row.unitPrice,
           "Valid From": row.validFrom,
@@ -109,9 +105,9 @@ export async function GET(request: Request) {
     return masterCsvResponse(
       rows.map((row) => ({
         "Asset Code": row.typeCode,
-        "Asset Category Id": row.assetCategoryId,
-        "Asset Subcategory Id": row.assetSubcategoryId,
-        "Asset Name Id": row.assetNameId,
+        "Asset Category": row.assetCategory,
+        "Asset Subcategory": row.assetSubcategory,
+        "Asset Name": row.assetName,
         "Asset Type": row.assetType,
         Identification: row.identificationName,
         "Applicable Item Code": row.applicableItemCode,

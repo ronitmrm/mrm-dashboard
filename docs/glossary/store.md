@@ -31,6 +31,15 @@ Subcategory is resolved within its Category and Asset Name within its Subcategor
 Unknown or ambiguous names are rejected with a row error; imports do not create
 classification masters. Existing CSVs with internal IDs remain accepted.
 
+All Store master CSV templates use readable references: Subcategory uses Category
+name; Asset Name uses Category and Subcategory names; Supplier Price uses Supplier
+name (or Supplier Code) and Store Asset Code. Category can be omitted for Asset
+Name only when the Subcategory uniquely identifies one record. Unknown or
+ambiguous references stop the import with a row error. Legacy ID columns remain
+accepted. Unit and Location Type accept the form's displayed labels; units are
+stored using the same values as the form. Master exports include readable
+references as well.
+
 **Asset Type**: The stock-control choice for a Store Item Type. It is either
 Consumable or Non Consumable; users select it from a dropdown and never enter
 another value.

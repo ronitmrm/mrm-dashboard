@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache"
 import { unstable_rethrow } from "next/navigation"
 import { createStoreRepository } from "@workspace/db"
+import { storeUnitValue } from "@/lib/store-units"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 
 import {
@@ -42,11 +43,11 @@ export async function importStoreMasterCsvAction(formData: FormData) {
   let imported = 0
   try {
     const rows = await readMasterCsv(formData.get("master_csv_file"))
-    const classifications = master === "ITEM_TYPE" ? await readClassifications() : null
+    const references = await readReferences(master)
     for (const row of rows) {
       const result = await importRow(
         master,
-        classifications ? resolveClassification(row, classifications) : row
+        resolveReferences(master, row, references)
       )
       if (result?.error) throw new Error(result.error)
       imported += 1
@@ -62,53 +63,91 @@ export async function importStoreMasterCsvAction(formData: FormData) {
   }
 }
 
-async function readClassifications() {
+async function readReferences(master: StoreMasterKey) {
+  if (!["ITEM_TYPE", "SUBCATEGORY", "ASSET_NAME", "SUPPLIER_PRICE"].includes(master)) return null
   const repository = createStoreRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
   try {
     const organizationId = await repository.organizationIdForCode("MRMPL")
-    return await repository.listAssetClassificationMasters(organizationId)
+    if (master === "SUPPLIER_PRICE") {
+      const [suppliers, items] = await Promise.all([
+        repository.listSuppliers(organizationId),
+        repository.listItemTypes(organizationId),
+      ])
+      return { kind: "prices" as const, suppliers, items }
+    }
+    return { kind: "classification" as const, ...await repository.listAssetClassificationMasters(organizationId) }
   } finally {
     await repository.close()
   }
 }
 
-function classificationId(
+function referenceId(
   value: string,
-  options: { id: string; name: string }[],
+  options: { id: string; name: string; code?: string }[],
   label: string
 ) {
   const normalized = value.trim().toLowerCase()
   if (!normalized) throw new Error(`${label} is required.`)
   const matches = options.filter(
-    (option) => option.id.toLowerCase() === normalized || option.name.trim().toLowerCase() === normalized
+    (option) => option.id.toLowerCase() === normalized || option.name.trim().toLowerCase() === normalized || option.code?.toLowerCase() === normalized
   )
   if (matches.length !== 1) {
     throw new Error(
       matches.length
-        ? `${label} "${value}" is ambiguous. Use its master ID.`
-        : `${label} "${value}" was not found in the selected classification. Check the Store Classification Master.`
+        ? `${label} "${value}" is ambiguous. Specify its parent Category, unique code, or master ID.`
+        : `${label} "${value}" was not found in the selected master records. Check the name/code and parent classification.`
     )
   }
   return matches[0]!.id
 }
 
-function resolveClassification(
+function resolveReferences(
+  master: StoreMasterKey,
   row: MasterCsvRow,
-  masters: Awaited<ReturnType<typeof readClassifications>>
+  masters: Awaited<ReturnType<typeof readReferences>>
 ) {
-  const categoryId = classificationId(
-    csvValue(row, "asset_category", "asset_category_name", "category", "asset_category_id"),
+  if (!masters) return row
+  if (masters.kind === "prices") {
+    return {
+      ...row,
+      supplier_id: referenceId(
+        csvValue(row, "supplier", "supplier_name", "supplier_code", "supplier_id"),
+        masters.suppliers,
+        "Supplier"
+      ),
+      item_type_id: referenceId(
+        csvValue(row, "asset_code", "item_code", "item_type_id"),
+        masters.items.map((item) => ({ id: item.id, name: item.typeCode })),
+        "Asset Code"
+      ),
+    }
+  }
+  const category = csvValue(row, "asset_category", "asset_category_name", "category", "asset_category_id", "category_id")
+  if (master === "ASSET_NAME") {
+    const categoryId = category ? referenceId(category, masters.categories, "Asset Category") : null
+    return {
+      ...row,
+      asset_subcategory_id: referenceId(
+        csvValue(row, "asset_subcategory", "asset_subcategory_name", "subcategory", "asset_subcategory_id", "subcategory_id"),
+        masters.subcategories.filter((option) => !categoryId || option.categoryId === categoryId),
+        "Asset Subcategory"
+      ),
+    }
+  }
+  const categoryId = referenceId(
+    category,
     masters.categories,
     "Asset Category"
   )
-  const subcategoryId = classificationId(
+  if (master === "SUBCATEGORY") return { ...row, asset_category_id: categoryId }
+  const subcategoryId = referenceId(
     csvValue(row, "asset_subcategory", "asset_subcategory_name", "subcategory", "asset_subcategory_id"),
     masters.subcategories.filter((option) => option.categoryId === categoryId),
     "Asset Subcategory"
   )
-  const assetNameId = classificationId(
+  const assetNameId = referenceId(
     csvValue(row, "asset_name", "asset_name_id"),
     masters.assetNames.filter((option) => option.subcategoryId === subcategoryId),
     "Asset Name"
@@ -126,7 +165,7 @@ async function importRow(master: StoreMasterKey, row: MasterCsvRow) {
       return createStoreAssetSubcategoryAction(
         form(row, {
           asset_category_id: ["category_id"],
-          asset_subcategory_name: ["name", "subcategory"],
+          asset_subcategory_name: ["name", "subcategory", "asset_subcategory"],
         })
       )
     case "ASSET_NAME":
@@ -138,7 +177,7 @@ async function importRow(master: StoreMasterKey, row: MasterCsvRow) {
       )
     case "LOCATION":
       return createStoreLocationAction(
-        form(row, {
+        form({ ...row, location_type: csvValue(row, "location_type", "type").toUpperCase() }, {
           location_code: ["code"],
           location_name: ["name"],
           location_type: ["type"],
@@ -177,6 +216,7 @@ async function importRow(master: StoreMasterKey, row: MasterCsvRow) {
         form(
           {
             ...row,
+            unit: storeUnitValue(csvValue(row, "unit")),
             asset_type: csvValue(row, "asset_type")
               .toUpperCase()
               .replace(/[\s-]+/g, "_"),
