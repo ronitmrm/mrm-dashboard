@@ -363,7 +363,6 @@ const storeMasterCsvColumns = {
     "asset_name_id",
     "asset_subcategory_id",
     "asset_type",
-    "drawing_number",
     "identification_name",
     "minimum_stock",
     "unit",
