@@ -213,12 +213,19 @@ describe("Store requests", () => {
       unit: "No.",
     }
     const item = await store.createItemType(input)
-    await store.updateItemType({ ...input, id: item.id, identificationName: " " })
+    await store.updateItemType({
+      ...input,
+      id: item.id,
+      identificationName: " ",
+    })
     const order = await createPurchaseOrder(item.id, 1, "100.00")
     const location = await store.ensurePrimaryStoreLocation({ organizationId })
     const receipt = await store.receiveStock({
-      locationId: location.id, organizationId, purchaseOrderLineId: order.id,
-      quantity: 1, receivedBy: "store.integration@example.com",
+      locationId: location.id,
+      organizationId,
+      purchaseOrderLineId: order.id,
+      quantity: 1,
+      receivedBy: "store.integration@example.com",
     })
     const result = await pool.query<{ identification_name: string }>(
       "SELECT identification_name FROM store.assets WHERE asset_code = $1 AND organization_id = $2",
@@ -862,6 +869,56 @@ describe("Store requests", () => {
         id: itemType.id,
         storageLocations: "Purchase Receipt Store",
       })
+    )
+  })
+
+  test("bulk receives the full remaining quantity for selected Purchase Order lines", async () => {
+    const location = await store.ensurePrimaryStoreLocation({ organizationId })
+    const firstItem = await store.createItemType({
+      ...(await createClassification("Bulk Receipt One")),
+      assetType: "CONSUMABLE",
+      identificationName: `Bulk Receipt One ${suffix}`,
+      organizationId,
+      unit: "Nos",
+    })
+    const secondItem = await store.createItemType({
+      ...(await createClassification("Bulk Receipt Two")),
+      assetType: "CONSUMABLE",
+      identificationName: `Bulk Receipt Two ${suffix}`,
+      organizationId,
+      unit: "Nos",
+    })
+    const firstOrder = await createPurchaseOrder(firstItem.id, 3, "25.00")
+    const secondOrder = await createPurchaseOrder(secondItem.id, 4, "50.00")
+    await store.receiveStock({
+      locationId: location.id,
+      organizationId,
+      purchaseOrderLineId: firstOrder.id,
+      quantity: 1,
+    })
+
+    const result = await store.receiveRemainingStockBatch({
+      locationId: location.id,
+      organizationId,
+      purchaseOrderLineIds: [firstOrder.id, secondOrder.id],
+    })
+
+    expect(result.receipts).toHaveLength(2)
+    expect(await store.listPurchaseOrders(organizationId)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: firstOrder.id,
+          orderedQuantity: "3",
+          receivedQuantity: "3",
+          status: "Received",
+        }),
+        expect.objectContaining({
+          id: secondOrder.id,
+          orderedQuantity: "4",
+          receivedQuantity: "4",
+          status: "Received",
+        }),
+      ])
     )
   })
 

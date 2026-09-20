@@ -247,7 +247,6 @@ export async function createStoreSupplierAction(formData: FormData) {
   })
 }
 
-
 async function storeSupplierQuoteArtifact(input: {
   actorUserId: string
   bytes: Buffer
@@ -360,7 +359,6 @@ export async function createStoreSupplierPriceAction(formData: FormData) {
   })
 }
 
-
 export async function uploadStoreSupplierQuoteAction(formData: FormData) {
   await requireCapability(masterCapability("SUPPLIER_PRICE", "save"), storePath)
   const quoteUploadId = pendingUploadId(formData, "supplier_quote")
@@ -373,32 +371,32 @@ export async function uploadStoreSupplierQuoteAction(formData: FormData) {
       const supplierPriceId = requiredText(formData, "supplier_price_id")
       const authorization = await pendingUploadAuthorizationForUser(actorUserId)
       await consumePendingArtifactUpload({
-          authorization,
-          expectedIntent: {
-            kind: "store-supplier-quote",
+        authorization,
+        expectedIntent: {
+          kind: "store-supplier-quote",
+          supplierPriceId,
+        },
+        finalize: async (source) => {
+          const artifact = await storeSupplierQuoteArtifact({
+            ...source,
+            actorUserId,
+            organizationId,
             supplierPriceId,
-          },
-          finalize: async (source) => {
-            const artifact = await storeSupplierQuoteArtifact({
-              ...source,
-              actorUserId,
-              organizationId,
-              supplierPriceId,
-            })
-            return {
-              binding: {
-                artifactId: artifact.id,
-                purpose: "supplier_quote",
-                target: {
-                  id: supplierPriceId,
-                  schema: "store",
-                  table: "supplier_prices",
-                },
+          })
+          return {
+            binding: {
+              artifactId: artifact.id,
+              purpose: "supplier_quote",
+              target: {
+                id: supplierPriceId,
+                schema: "store",
+                table: "supplier_prices",
               },
-              value: undefined,
-            }
-          },
-          recover: () => undefined,
+            },
+            value: undefined,
+          }
+        },
+        recover: () => undefined,
         uploadId: quoteUploadId,
       })
     }
@@ -555,7 +553,8 @@ export async function createStoreItemTypeAction(formData: FormData) {
           assetSubcategoryId: requiredText(formData, "asset_subcategory_id"),
           assetType: assetType(formData),
           applicableItemCode: optionalText(formData, "applicable_item_code"),
-          identificationName: optionalText(formData, "identification_name") ?? "",
+          identificationName:
+            optionalText(formData, "identification_name") ?? "",
           minimumStock: Number(optionalText(formData, "minimum_stock") ?? 0),
           organizationId,
           unit: requiredText(formData, "unit"),
@@ -599,7 +598,6 @@ export async function createStoreItemTypeAction(formData: FormData) {
     revalidateStore()
   })
 }
-
 
 async function storeItemDrawingArtifact(input: {
   actorUserId: string
@@ -656,29 +654,29 @@ export async function uploadStoreItemDrawingAction(formData: FormData) {
       const itemTypeId = requiredText(formData, "item_type_id")
       const authorization = await pendingUploadAuthorizationForUser(actorUserId)
       await consumePendingArtifactUpload({
-          authorization,
-          expectedIntent: { itemTypeId, kind: "store-item-drawing" },
-          finalize: async (source) => {
-            const artifact = await storeItemDrawingArtifact({
-              ...source,
-              actorUserId,
-              itemTypeId,
-              organizationId,
-            })
-            return {
-              binding: {
-                artifactId: artifact.id,
-                purpose: "asset_drawing",
-                target: {
-                  id: itemTypeId,
-                  schema: "store",
-                  table: "item_types",
-                },
+        authorization,
+        expectedIntent: { itemTypeId, kind: "store-item-drawing" },
+        finalize: async (source) => {
+          const artifact = await storeItemDrawingArtifact({
+            ...source,
+            actorUserId,
+            itemTypeId,
+            organizationId,
+          })
+          return {
+            binding: {
+              artifactId: artifact.id,
+              purpose: "asset_drawing",
+              target: {
+                id: itemTypeId,
+                schema: "store",
+                table: "item_types",
               },
-              value: undefined,
-            }
-          },
-          recover: () => undefined,
+            },
+            value: undefined,
+          }
+        },
+        recover: () => undefined,
         uploadId: drawingUploadId,
       })
     }
@@ -700,7 +698,10 @@ const storeMasterKinds = new Set<MasterDataKind>([
 export async function deleteStoreMasterAction(formData: FormData) {
   const kind = requiredText(formData, "master_kind") as MasterDataKind
   if (!storeMasterKinds.has(kind)) throw new Error("Store master is invalid.")
-  const session = await requireCapability(masterCapability(kind.slice("store_".length).toUpperCase(), "delete"), storePath)
+  const session = await requireCapability(
+    masterCapability(kind.slice("store_".length).toUpperCase(), "delete"),
+    storePath
+  )
   const connectionString = readAuthEnvironment().connectionString
   const store = createStoreRepository({ connectionString })
   const lifecycle = createMasterDataLifecycleRepository({ connectionString })
@@ -919,24 +920,24 @@ export async function receiveStoreStockAction(formData: FormData) {
             })
           }
           await consumePendingArtifactUpload({
-              authorization: pendingAuthorization,
-              expectedIntent: guaranteeIntent,
-              finalize: async (source) => {
-                const artifact = await retain(source)
-                return {
-                  binding: {
-                    artifactId: artifact.id,
-                    purpose: "guarantee_card",
-                    target: {
-                      id: received.receiptId,
-                      schema: "store",
-                      table: "receipts",
-                    },
+            authorization: pendingAuthorization,
+            expectedIntent: guaranteeIntent,
+            finalize: async (source) => {
+              const artifact = await retain(source)
+              return {
+                binding: {
+                  artifactId: artifact.id,
+                  purpose: "guarantee_card",
+                  target: {
+                    id: received.receiptId,
+                    schema: "store",
+                    table: "receipts",
                   },
-                  value: undefined,
-                }
-              },
-              recover: () => undefined,
+                },
+                value: undefined,
+              }
+            },
+            recover: () => undefined,
             uploadId: guaranteeUploadId,
           })
         } finally {
@@ -949,6 +950,41 @@ export async function receiveStoreStockAction(formData: FormData) {
   revalidateStore()
 }
 
+export async function receiveRemainingStoreStockBatchAction(
+  formData: FormData
+) {
+  const purchaseOrderLineIds = formData
+    .getAll("purchase_order_line_id")
+    .map((value) => value.toString().trim())
+    .filter(Boolean)
+  if (!purchaseOrderLineIds.length) {
+    throw new Error("Select at least one Purchase Order line to receive.")
+  }
+  await withStore(
+    "store.receipts.receive",
+    async (repository, actorUserId, organizationId) => {
+      const [requestContext, location] = await Promise.all([
+        repository.requisitionRequestContext({
+          organizationId,
+          userId: actorUserId,
+        }),
+        repository.ensurePrimaryStoreLocation({
+          actorUserId,
+          organizationId,
+        }),
+      ])
+      return repository.receiveRemainingStockBatch({
+        actorUserId,
+        locationId: location.id,
+        organizationId,
+        purchaseOrderLineIds,
+        receivedBy: requestContext.requesterEmail,
+      })
+    }
+  )
+  revalidateStore()
+}
+
 export async function createStorePurchaseOrdersAction(formData: FormData) {
   const itemTypeIds = formData
     .getAll("item_type_id")
@@ -956,65 +992,63 @@ export async function createStorePurchaseOrdersAction(formData: FormData) {
   if (!itemTypeIds.length) {
     throw new Error("Select at least one Store item to order.")
   }
-  await withStore("store.purchase_orders.create", async (
-    repository,
-    actorUserId,
-    organizationId
-  ) => {
-    const artifacts = createArtifactService({
-      connectionString: readAuthEnvironment().connectionString,
-      provider: createGoogleCloudArtifactProvider(),
-    })
-    try {
-      return await repository.createPurchaseOrdersFromSelection({
-        actorUserId,
-        issuanceId: requiredText(formData, "issuance_id"),
-        items: itemTypeIds.map((itemTypeId) => ({
-          itemTypeId,
-          quantity: positiveNumber(formData, `quantity_${itemTypeId}`),
-          supplierId: optionalText(formData, `supplier_${itemTypeId}`),
-        })),
-        orderDate: optionalText(formData, "order_date"),
-        organizationId,
-        remark: optionalText(formData, "remark"),
-        storeIssuedPdf: storeIssuedPurchaseOrderPdf(artifacts, actorUserId),
+  await withStore(
+    "store.purchase_orders.create",
+    async (repository, actorUserId, organizationId) => {
+      const artifacts = createArtifactService({
+        connectionString: readAuthEnvironment().connectionString,
+        provider: createGoogleCloudArtifactProvider(),
       })
-    } finally {
-      await artifacts.close()
+      try {
+        return await repository.createPurchaseOrdersFromSelection({
+          actorUserId,
+          issuanceId: requiredText(formData, "issuance_id"),
+          items: itemTypeIds.map((itemTypeId) => ({
+            itemTypeId,
+            quantity: positiveNumber(formData, `quantity_${itemTypeId}`),
+            supplierId: optionalText(formData, `supplier_${itemTypeId}`),
+          })),
+          orderDate: optionalText(formData, "order_date"),
+          organizationId,
+          remark: optionalText(formData, "remark"),
+          storeIssuedPdf: storeIssuedPurchaseOrderPdf(artifacts, actorUserId),
+        })
+      } finally {
+        await artifacts.close()
+      }
     }
-  })
+  )
   revalidateStore()
   redirect("/store/orders")
 }
 
 export async function createStoreRepairPurchaseOrderAction(formData: FormData) {
   const assetCode = requiredText(formData, "asset_code")
-  await withStore("store.asset_repair.write", async (
-    repository,
-    actorUserId,
-    organizationId
-  ) => {
-    const artifacts = createArtifactService({
-      connectionString: readAuthEnvironment().connectionString,
-      provider: createGoogleCloudArtifactProvider(),
-    })
-    try {
-      return await repository.createRepairPurchaseOrder({
-        actorUserId,
-        assetCode,
-        issuanceId: requiredText(formData, "issuance_id"),
-        orderDate: optionalText(formData, "order_date"),
-        organizationId,
-        remark: optionalText(formData, "remark"),
-        serviceDescription: requiredText(formData, "service_description"),
-        servicePrice: requiredText(formData, "service_price"),
-        storeIssuedPdf: storeIssuedPurchaseOrderPdf(artifacts, actorUserId),
-        supplierId: requiredText(formData, "supplier_id"),
+  await withStore(
+    "store.asset_repair.write",
+    async (repository, actorUserId, organizationId) => {
+      const artifacts = createArtifactService({
+        connectionString: readAuthEnvironment().connectionString,
+        provider: createGoogleCloudArtifactProvider(),
       })
-    } finally {
-      await artifacts.close()
+      try {
+        return await repository.createRepairPurchaseOrder({
+          actorUserId,
+          assetCode,
+          issuanceId: requiredText(formData, "issuance_id"),
+          orderDate: optionalText(formData, "order_date"),
+          organizationId,
+          remark: optionalText(formData, "remark"),
+          serviceDescription: requiredText(formData, "service_description"),
+          servicePrice: requiredText(formData, "service_price"),
+          storeIssuedPdf: storeIssuedPurchaseOrderPdf(artifacts, actorUserId),
+          supplierId: requiredText(formData, "supplier_id"),
+        })
+      } finally {
+        await artifacts.close()
+      }
     }
-  })
+  )
   revalidatePath(`/store/assets/${encodeURIComponent(assetCode)}`)
   revalidateStore()
   redirect(`/store/assets/${encodeURIComponent(assetCode)}`)

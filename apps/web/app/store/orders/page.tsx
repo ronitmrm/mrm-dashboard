@@ -3,7 +3,7 @@ import { createStoreRepository } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
- SectionCard,
+  SectionCard,
   CardContent,
   CardHeader,
   CardTitle,
@@ -21,7 +21,7 @@ import {
 import { Field, FieldGroup, FieldLabel } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
 import {
- OperationalTable,
+  OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -30,12 +30,18 @@ import {
 } from "@workspace/ui/components/table"
 
 import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
+import { BulkReceiveButton } from "@/components/store/bulk-receive-button"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { MetricSummary } from "@/components/ui/golden-patterns"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { listGrantedStoreActions } from "@/lib/auth/store-action-access"
 
-import { receiveStoreStockAction } from "../actions"
+import {
+  receiveRemainingStoreStockBatchAction,
+  receiveStoreStockAction,
+} from "../actions"
+
+const bulkReceiptFormId = "store-bulk-receipt-form"
 
 export default async function StoreOrdersPage() {
   const session = await requireCapability(
@@ -71,7 +77,7 @@ export default async function StoreOrdersPage() {
           {
             label: "Purchase Orders",
             value: new Set(data.map((row) => row.purchaseOrderId)).size,
-            tone: "information"
+            tone: "information",
           },
           { tone: "brand", label: "Order Lines", value: data.length },
           {
@@ -83,19 +89,35 @@ export default async function StoreOrdersPage() {
                 Number(row.remainingQuantity) > 0
             ).length,
             description: "Goods lines with quantity remaining",
-            tone: "warning"
-          }
+            tone: "warning",
+          },
         ]}
       />
 
- <SectionCard>
+      <SectionCard>
         <CardHeader>
           <CardTitle>Purchase Orders and Receipts</CardTitle>
         </CardHeader>
         <CardContent className="min-w-0">
- <OperationalTable>
+          {canManage ? (
+            <form
+              action={receiveRemainingStoreStockBatchAction}
+              id={bulkReceiptFormId}
+            />
+          ) : null}
+          <OperationalTable
+            filteredSelection={
+              canManage ? { checkboxName: "purchase_order_line_id" } : undefined
+            }
+            toolbarStart={
+              canManage ? (
+                <BulkReceiveButton formId={bulkReceiptFormId} />
+              ) : null
+            }
+          >
             <TableHeader>
               <TableRow>
+                {canManage ? <TableHead>Select</TableHead> : null}
                 <TableHead>Order</TableHead>
                 <TableHead>Date</TableHead>
                 <TableHead>Type</TableHead>
@@ -126,6 +148,20 @@ export default async function StoreOrdersPage() {
                   : null
                 return (
                   <TableRow key={order.id}>
+                    {canManage ? (
+                      <TableCell>
+                        {canReceive ? (
+                          <input
+                            aria-label={`Select ${order.typeCode} from ${order.orderNumber}`}
+                            className="size-4 accent-primary"
+                            form={bulkReceiptFormId}
+                            name="purchase_order_line_id"
+                            type="checkbox"
+                            value={order.id}
+                          />
+                        ) : null}
+                      </TableCell>
+                    ) : null}
                     <TableCell className="font-medium">
                       {order.orderNumber}
                     </TableCell>
@@ -194,7 +230,10 @@ export default async function StoreOrdersPage() {
                                 uploads={[
                                   {
                                     field: "guarantee_card",
-                                    intent: { kind: "store-guarantee-card", purchaseOrderLineId: order.id },
+                                    intent: {
+                                      kind: "store-guarantee-card",
+                                      purchaseOrderLineId: order.id,
+                                    },
                                   },
                                 ]}
                                 className="grid gap-5"
@@ -308,7 +347,7 @@ export default async function StoreOrdersPage() {
                 <TableRow>
                   <TableCell
                     className="h-24 text-center text-muted-foreground"
-                    colSpan={canManage ? 12 : 11}
+                    colSpan={canManage ? 13 : 11}
                   >
                     No Purchase Orders yet. Select an item from Stock to create
                     one.
@@ -316,9 +355,9 @@ export default async function StoreOrdersPage() {
                 </TableRow>
               ) : null}
             </TableBody>
- </OperationalTable>
+          </OperationalTable>
         </CardContent>
- </SectionCard>
+      </SectionCard>
     </div>
   )
 }
