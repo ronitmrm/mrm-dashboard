@@ -1,6 +1,12 @@
-import { lockToolingAllocation, assertToolingTransferAvailable } from "./tooling-availability"
+import {
+  lockToolingAllocation,
+  assertToolingTransferAvailable,
+} from "./tooling-availability"
 import { queueDashboardRefresh } from "./dashboard-refresh-queue"
-import { rejectDuplicateMaster, assertMasterAvailable } from "./master-duplicate"
+import {
+  rejectDuplicateMaster,
+  assertMasterAvailable,
+} from "./master-duplicate"
 import { createHash } from "node:crypto"
 
 import type { PoolClient } from "pg"
@@ -260,7 +266,11 @@ async function getStorePurchaseOrderWithClient(
       WHERE purchase_order.id = $1 AND purchase_order.organization_id = $2
         AND ($3::boolean OR purchase_order.issuance_state = 'issued')
     `,
-    [input.purchaseOrderId, input.organizationId, options.includePending ?? false]
+    [
+      input.purchaseOrderId,
+      input.organizationId,
+      options.includePending ?? false,
+    ]
   )
   if (!order.rows[0]) return null
   const lines = await client.query<StorePurchaseOrderDocument["lines"][number]>(
@@ -336,10 +346,16 @@ export async function authorizeStorePurchaseOrderArtifactTarget(
       WHERE id = $1 AND organization_id = $2
       FOR KEY SHARE
     `,
-    [requiredText(input.purchaseOrderId, "Store Purchase Order"), input.organizationId]
+    [
+      requiredText(input.purchaseOrderId, "Store Purchase Order"),
+      input.organizationId,
+    ]
   )
   if (!target.rows[0]) throw new Error("Store Purchase Order was not found.")
-  if (options.requirePendingState && target.rows[0].issuance_state !== "pending") {
+  if (
+    options.requirePendingState &&
+    target.rows[0].issuance_state !== "pending"
+  ) {
     throw new Error("Issued Store Purchase Order PDFs cannot be replaced.")
   }
 }
@@ -390,6 +406,251 @@ export async function authorizeStoreReceiptArtifactTarget(
     [requiredText(input.receiptId, "Store receipt"), input.organizationId]
   )
   if (!target.rows[0]) throw new Error("Store receipt was not found.")
+}
+
+type StoreReceiptInput = {
+  actorUserId?: string | null
+  billDate?: string | null
+  billNumber?: string | null
+  locationId: string
+  manufacturerSerialNumbers?: string[]
+  organizationId: string
+  purchaseOrderLineId: string
+  quantity: number | "remaining"
+  receivedBy?: string | null
+  warrantyUntil?: string | null
+}
+
+async function receiveStockWithClient(
+  client: PoolClient,
+  input: StoreReceiptInput
+) {
+  const order = await client.query<{
+    identification_name: string
+    item_type_id: string
+    next_asset_number: number
+    order_number: string
+    ordered_quantity: string
+    received_quantity: string
+    status: string
+    supplier_id: string
+    tracking_mode: StoreTrackingMode
+    type_code: string
+    unit_price: string
+  }>(
+    `
+      SELECT line.item_type_id, purchase_order.supplier_id,
+        purchase_order.order_number, line.ordered_quantity::text,
+        line.received_quantity::text, line.unit_price::text,
+        purchase_order.status, item.type_code, item.identification_name,
+        item.tracking_mode, item.next_asset_number
+      FROM store.purchase_order_lines line
+      JOIN store.purchase_orders purchase_order
+        ON purchase_order.id = line.purchase_order_id
+      JOIN store.item_types item ON item.id = line.item_type_id
+      WHERE line.id = $1 AND line.organization_id = $2
+        AND purchase_order.issuance_state = 'issued'
+      FOR UPDATE OF line, purchase_order, item
+    `,
+    [input.purchaseOrderLineId, input.organizationId]
+  )
+  if (!order.rows[0]) throw new Error("Purchase Order was not found.")
+  if (order.rows[0].status === "Cancelled") {
+    throw new Error("A cancelled Purchase Order cannot be received.")
+  }
+  const remainingQuantity =
+    Number(order.rows[0].ordered_quantity) -
+    Number(order.rows[0].received_quantity)
+  if (remainingQuantity <= 0) {
+    throw new Error(
+      `Purchase Order ${order.rows[0].order_number} has no remaining quantity for this line.`
+    )
+  }
+  const quantity = positiveQuantity(
+    input.quantity === "remaining" ? remainingQuantity : input.quantity
+  )
+  if (quantity > remainingQuantity) {
+    throw new Error(
+      `Receipt quantity exceeds the remaining Purchase Order quantity of ${remainingQuantity}.`
+    )
+  }
+  if (
+    order.rows[0].tracking_mode === "SERIALIZED" &&
+    !Number.isInteger(quantity)
+  ) {
+    throw new Error("Non Consumable quantity must be a whole number.")
+  }
+  const receiptNumber = await nextDocumentNumber(client, {
+    counterKey: "RECEIPT",
+    organizationId: input.organizationId,
+    prefix: "STR-GRN",
+  })
+  const receipt = await client.query<{ id: string }>(
+    `
+      INSERT INTO store.receipts (
+        organization_id, receipt_number, purchase_order_line_id, location_id,
+        supplier_id, bill_number, bill_date, received_by, created_by_user_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, '')::date, $8, $9)
+      RETURNING id
+    `,
+    [
+      input.organizationId,
+      receiptNumber,
+      input.purchaseOrderLineId,
+      input.locationId,
+      order.rows[0].supplier_id,
+      input.billNumber?.trim() || null,
+      input.billDate ?? null,
+      input.receivedBy?.trim() || null,
+      input.actorUserId ?? null,
+    ]
+  )
+  const line = await client.query<{ id: string }>(
+    `
+      INSERT INTO store.receipt_lines (
+        organization_id, receipt_id, item_type_id, quantity,
+        unit_price, warranty_until
+      ) VALUES ($1, $2, $3, $4, $5, NULLIF($6, '')::date)
+      RETURNING id
+    `,
+    [
+      input.organizationId,
+      receipt.rows[0]!.id,
+      order.rows[0].item_type_id,
+      quantity,
+      order.rows[0].unit_price,
+      input.warrantyUntil ?? null,
+    ]
+  )
+  if (input.billNumber?.trim()) {
+    await client.query(
+      `
+        INSERT INTO store.documents (
+          organization_id, receipt_id, document_type, bill_number,
+          created_by_user_id
+        ) VALUES ($1, $2, 'BILL', $3, $4)
+      `,
+      [
+        input.organizationId,
+        receipt.rows[0]!.id,
+        input.billNumber.trim(),
+        input.actorUserId ?? null,
+      ]
+    )
+  }
+  const assetCodes: string[] = []
+  if (order.rows[0].tracking_mode === "SERIALIZED") {
+    for (let index = 0; index < quantity; index += 1) {
+      const number = order.rows[0].next_asset_number + index
+      const assetCode = storeUnitId(order.rows[0].type_code, number)
+      const asset = await client.query<{ id: string }>(
+        `
+          INSERT INTO store.assets (
+            organization_id, item_type_id, receipt_line_id, asset_code,
+            identification_name, manufacturer_serial_number,
+            current_location_id, warranty_until, acquired_on,
+            created_by_user_id, updated_by_user_id
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7,
+            NULLIF($8, '')::date, COALESCE(NULLIF($9, '')::date, current_date), $10, $10)
+          RETURNING id
+        `,
+        [
+          input.organizationId,
+          order.rows[0].item_type_id,
+          line.rows[0]!.id,
+          assetCode,
+          order.rows[0].identification_name,
+          input.manufacturerSerialNumbers?.[index]?.trim() || null,
+          input.locationId,
+          input.warrantyUntil ?? null,
+          input.billDate ?? null,
+          input.actorUserId ?? null,
+        ]
+      )
+      assetCodes.push(assetCode)
+      await client.query(
+        `
+          INSERT INTO store.stock_movements (
+            organization_id, item_type_id, asset_id, location_id,
+            receipt_line_id, movement_type, quantity,
+            to_holder_type, to_holder_reference, moved_by,
+            created_by_user_id
+          ) VALUES ($1, $2, $3, $4, $5, 'RECEIPT', 1,
+            'STORE', $4::uuid::text, $6, $7)
+        `,
+        [
+          input.organizationId,
+          order.rows[0].item_type_id,
+          asset.rows[0]!.id,
+          input.locationId,
+          line.rows[0]!.id,
+          input.receivedBy?.trim() || null,
+          input.actorUserId ?? null,
+        ]
+      )
+    }
+    await client.query(
+      `UPDATE store.item_types
+       SET next_asset_number = next_asset_number + $1, updated_at = now()
+       WHERE id = $2`,
+      [quantity, order.rows[0].item_type_id]
+    )
+  } else {
+    await client.query(
+      `
+        INSERT INTO store.stock_movements (
+          organization_id, item_type_id, location_id, receipt_line_id,
+          movement_type, quantity, to_holder_type,
+          to_holder_reference, moved_by, created_by_user_id
+        ) VALUES ($1, $2, $3, $4, 'RECEIPT', $5,
+          'STORE', $3::uuid::text, $6, $7)
+      `,
+      [
+        input.organizationId,
+        order.rows[0].item_type_id,
+        input.locationId,
+        line.rows[0]!.id,
+        quantity,
+        input.receivedBy?.trim() || null,
+        input.actorUserId ?? null,
+      ]
+    )
+  }
+  await client.query(
+    `
+      UPDATE store.purchase_order_lines
+      SET received_quantity = received_quantity + $1,
+        updated_at = now(), updated_by_user_id = $2
+      WHERE id = $3
+    `,
+    [quantity, input.actorUserId ?? null, input.purchaseOrderLineId]
+  )
+  await client.query(
+    `
+      UPDATE store.purchase_orders purchase_order
+      SET status = CASE
+          WHEN NOT EXISTS (
+            SELECT 1 FROM store.purchase_order_lines line
+            WHERE line.purchase_order_id = purchase_order.id
+              AND line.received_quantity < line.ordered_quantity
+          ) THEN 'Received'
+          WHEN EXISTS (
+            SELECT 1 FROM store.purchase_order_lines line
+            WHERE line.purchase_order_id = purchase_order.id
+              AND line.received_quantity > 0
+          ) THEN 'Partially Received'
+          ELSE 'Open'
+        END,
+        updated_at = now(), updated_by_user_id = $1
+      WHERE purchase_order.id = (
+        SELECT line.purchase_order_id
+        FROM store.purchase_order_lines line
+        WHERE line.id = $2
+      )
+    `,
+    [input.actorUserId ?? null, input.purchaseOrderLineId]
+  )
+  return { assetCodes, receiptId: receipt.rows[0]!.id, receiptNumber }
 }
 
 export function createStoreRepository(options: RepositoryPoolOptions) {
@@ -541,8 +802,16 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         )
       }
       if (order.rows[0].order_type === "REPAIR") {
-        const unit = await client.query<{ asset_code: string }>("SELECT asset_code FROM store.assets WHERE id=$1", [order.rows[0].repair_asset_id])
-        if (unit.rows[0]) await assertToolingTransferAvailable(client, input.organizationId, unit.rows[0].asset_code)
+        const unit = await client.query<{ asset_code: string }>(
+          "SELECT asset_code FROM store.assets WHERE id=$1",
+          [order.rows[0].repair_asset_id]
+        )
+        if (unit.rows[0])
+          await assertToolingTransferAvailable(
+            client,
+            input.organizationId,
+            unit.rows[0].asset_code
+          )
       }
       await queueDashboardRefresh(client, input.organizationId)
       return prepared
@@ -653,10 +922,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       return result.rows[0].id
     },
 
-    async overviewMetrics(input: {
-      istToday: string
-      organizationId: string
-    }) {
+    async overviewMetrics(input: { istToday: string; organizationId: string }) {
       const result = await pool.query<{
         item_types: string
         locations: string
@@ -876,7 +1142,10 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             input.actorUserId ?? null,
           ]
         )
-        rejectDuplicateMaster(input.rejectDuplicates, result.rows[0]?.inserted === false)
+        rejectDuplicateMaster(
+          input.rejectDuplicates,
+          result.rows[0]?.inserted === false
+        )
         return result.rows[0]!
       })
     },
@@ -947,7 +1216,10 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             input.actorUserId ?? null,
           ]
         )
-        rejectDuplicateMaster(input.rejectDuplicates, result.rows[0]?.inserted === false)
+        rejectDuplicateMaster(
+          input.rejectDuplicates,
+          result.rows[0]?.inserted === false
+        )
         return result.rows[0]!
       })
     },
@@ -1008,7 +1280,10 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           ]
         )
         if (!result.rows[0]) throw new Error("Store Category was not found.")
-        rejectDuplicateMaster(input.rejectDuplicates, result.rows[0]?.inserted === false)
+        rejectDuplicateMaster(
+          input.rejectDuplicates,
+          result.rows[0]?.inserted === false
+        )
         return result.rows[0]
       })
     },
@@ -1088,7 +1363,10 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           ]
         )
         if (!result.rows[0]) throw new Error("Store Subcategory was not found.")
-        rejectDuplicateMaster(input.rejectDuplicates, result.rows[0]?.inserted === false)
+        rejectDuplicateMaster(
+          input.rejectDuplicates,
+          result.rows[0]?.inserted === false
+        )
         return result.rows[0]
       })
     },
@@ -1320,7 +1598,12 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           input,
           "store.supplier_prices",
           "supplier_id = $2 AND item_type_id = $3 AND valid_from = COALESCE(NULLIF($4, '')::date, CURRENT_DATE) AND unit_price = $5::numeric",
-          [input.supplierId, input.itemTypeId, input.validFrom ?? null, unitPrice]
+          [
+            input.supplierId,
+            input.itemTypeId,
+            input.validFrom ?? null,
+            unitPrice,
+          ]
         )
         await client.query(
           "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
@@ -1402,7 +1685,10 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             input.actorUserId ?? null,
           ]
         )
-        rejectDuplicateMaster(input.rejectDuplicates, result.rows[0]?.inserted === false)
+        rejectDuplicateMaster(
+          input.rejectDuplicates,
+          result.rows[0]?.inserted === false
+        )
         return result.rows[0]!
       })
     },
@@ -1499,7 +1785,9 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           )
           if (existing.rows[0]) {
             if (existing.rows[0].issuance_fingerprint !== fingerprint) {
-              throw new Error("Issuance ID was already used for another Store PO.")
+              throw new Error(
+                "Issuance ID was already used for another Store PO."
+              )
             }
             return {
               id: existing.rows[0].id,
@@ -1671,7 +1959,9 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         const fingerprint = issuanceFingerprint({
           items: [...selections]
             .map(([itemTypeId, selection]) => ({ itemTypeId, ...selection }))
-            .sort((left, right) => left.itemTypeId.localeCompare(right.itemTypeId)),
+            .sort((left, right) =>
+              left.itemTypeId.localeCompare(right.itemTypeId)
+            ),
           orderDate,
           orderType: "GOODS",
           remark: input.remark?.trim() || null,
@@ -1706,7 +1996,9 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
               (order) => order.issuance_fingerprint !== fingerprint
             )
           ) {
-            throw new Error("Issuance ID was already used for another Store PO.")
+            throw new Error(
+              "Issuance ID was already used for another Store PO."
+            )
           }
           return {
             orders: existing.rows.map((order) => ({
@@ -2637,226 +2929,48 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       warrantyUntil?: string | null
     }) {
       return withTransaction(pool, async (client) => {
-        const quantity = positiveQuantity(input.quantity)
-        const order = await client.query<{
-          identification_name: string
-          item_type_id: string
-          next_asset_number: number
-          order_number: string
-          ordered_quantity: string
-          received_quantity: string
-          status: string
-          supplier_id: string
-          tracking_mode: StoreTrackingMode
-          type_code: string
-          unit_price: string
-        }>(
-          `
-            SELECT line.item_type_id, purchase_order.supplier_id,
-              purchase_order.order_number, line.ordered_quantity::text,
-              line.received_quantity::text, line.unit_price::text,
-              purchase_order.status, item.type_code, item.identification_name,
-              item.tracking_mode, item.next_asset_number
-            FROM store.purchase_order_lines line
-            JOIN store.purchase_orders purchase_order
-              ON purchase_order.id = line.purchase_order_id
-            JOIN store.item_types item ON item.id = line.item_type_id
-            WHERE line.id = $1 AND line.organization_id = $2
-              AND purchase_order.issuance_state = 'issued'
-            FOR UPDATE OF line, purchase_order, item
-          `,
-          [input.purchaseOrderLineId, input.organizationId]
-        )
-        if (!order.rows[0]) throw new Error("Purchase Order was not found.")
-        if (order.rows[0].status === "Cancelled") {
-          throw new Error("A cancelled Purchase Order cannot be received.")
-        }
-        const remainingQuantity =
-          Number(order.rows[0].ordered_quantity) -
-          Number(order.rows[0].received_quantity)
-        if (quantity > remainingQuantity) {
-          throw new Error(
-            `Receipt quantity exceeds the remaining Purchase Order quantity of ${remainingQuantity}.`
-          )
-        }
-        if (
-          order.rows[0].tracking_mode === "SERIALIZED" &&
-          !Number.isInteger(quantity)
-        ) {
-          throw new Error("Non Consumable quantity must be a whole number.")
-        }
-        const receiptNumber = await nextDocumentNumber(client, {
-          counterKey: "RECEIPT",
-          organizationId: input.organizationId,
-          prefix: "STR-GRN",
-        })
-        const receipt = await client.query<{ id: string }>(
-          `
-            INSERT INTO store.receipts (
-              organization_id, receipt_number, purchase_order_line_id, location_id,
-              supplier_id, bill_number, bill_date, received_by, created_by_user_id
-            ) VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, '')::date, $8, $9)
-            RETURNING id
-          `,
-          [
-            input.organizationId,
-            receiptNumber,
-            input.purchaseOrderLineId,
-            input.locationId,
-            order.rows[0].supplier_id,
-            input.billNumber?.trim() || null,
-            input.billDate ?? null,
-            input.receivedBy?.trim() || null,
-            input.actorUserId ?? null,
-          ]
-        )
-        const line = await client.query<{ id: string }>(
-          `
-            INSERT INTO store.receipt_lines (
-              organization_id, receipt_id, item_type_id, quantity,
-              unit_price, warranty_until
-            ) VALUES ($1, $2, $3, $4, $5, NULLIF($6, '')::date)
-            RETURNING id
-          `,
-          [
-            input.organizationId,
-            receipt.rows[0]!.id,
-            order.rows[0].item_type_id,
-            quantity,
-            order.rows[0].unit_price,
-            input.warrantyUntil ?? null,
-          ]
-        )
-        if (input.billNumber?.trim()) {
-          await client.query(
-            `
-              INSERT INTO store.documents (
-                organization_id, receipt_id, document_type, bill_number,
-                created_by_user_id
-              ) VALUES ($1, $2, 'BILL', $3, $4)
-            `,
-            [
-              input.organizationId,
-              receipt.rows[0]!.id,
-              input.billNumber.trim(),
-              input.actorUserId ?? null,
-            ]
-          )
-        }
-        const assetCodes: string[] = []
-        if (order.rows[0].tracking_mode === "SERIALIZED") {
-          for (let index = 0; index < quantity; index += 1) {
-            const number = order.rows[0].next_asset_number + index
-            const assetCode = storeUnitId(order.rows[0].type_code, number)
-            const asset = await client.query<{ id: string }>(
-              `
-                INSERT INTO store.assets (
-                  organization_id, item_type_id, receipt_line_id, asset_code,
-                  identification_name, manufacturer_serial_number,
-                  current_location_id, warranty_until, acquired_on,
-                  created_by_user_id, updated_by_user_id
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7,
-                  NULLIF($8, '')::date, COALESCE(NULLIF($9, '')::date, current_date), $10, $10)
-                RETURNING id
-              `,
-              [
-                input.organizationId,
-                order.rows[0].item_type_id,
-                line.rows[0]!.id,
-                assetCode,
-                order.rows[0].identification_name,
-                input.manufacturerSerialNumbers?.[index]?.trim() || null,
-                input.locationId,
-                input.warrantyUntil ?? null,
-                input.billDate ?? null,
-                input.actorUserId ?? null,
-              ]
-            )
-            assetCodes.push(assetCode)
-            await client.query(
-              `
-                INSERT INTO store.stock_movements (
-                  organization_id, item_type_id, asset_id, location_id,
-                  receipt_line_id, movement_type, quantity,
-                  to_holder_type, to_holder_reference, moved_by,
-                  created_by_user_id
-                ) VALUES ($1, $2, $3, $4, $5, 'RECEIPT', 1,
-                  'STORE', $4::uuid::text, $6, $7)
-              `,
-              [
-                input.organizationId,
-                order.rows[0].item_type_id,
-                asset.rows[0]!.id,
-                input.locationId,
-                line.rows[0]!.id,
-                input.receivedBy?.trim() || null,
-                input.actorUserId ?? null,
-              ]
-            )
-          }
-          await client.query(
-            `UPDATE store.item_types
-             SET next_asset_number = next_asset_number + $1, updated_at = now()
-             WHERE id = $2`,
-            [quantity, order.rows[0].item_type_id]
-          )
-        } else {
-          await client.query(
-            `
-              INSERT INTO store.stock_movements (
-                organization_id, item_type_id, location_id, receipt_line_id,
-                movement_type, quantity, to_holder_type,
-                to_holder_reference, moved_by, created_by_user_id
-              ) VALUES ($1, $2, $3, $4, 'RECEIPT', $5,
-                'STORE', $3::uuid::text, $6, $7)
-            `,
-            [
-              input.organizationId,
-              order.rows[0].item_type_id,
-              input.locationId,
-              line.rows[0]!.id,
-              quantity,
-              input.receivedBy?.trim() || null,
-              input.actorUserId ?? null,
-            ]
-          )
-        }
-        await client.query(
-          `
-            UPDATE store.purchase_order_lines
-            SET received_quantity = received_quantity + $1,
-              updated_at = now(), updated_by_user_id = $2
-            WHERE id = $3
-          `,
-          [quantity, input.actorUserId ?? null, input.purchaseOrderLineId]
-        )
-        await client.query(
-          `
-            UPDATE store.purchase_orders purchase_order
-            SET status = CASE
-                WHEN NOT EXISTS (
-                  SELECT 1 FROM store.purchase_order_lines line
-                  WHERE line.purchase_order_id = purchase_order.id
-                    AND line.received_quantity < line.ordered_quantity
-                ) THEN 'Received'
-                WHEN EXISTS (
-                  SELECT 1 FROM store.purchase_order_lines line
-                  WHERE line.purchase_order_id = purchase_order.id
-                    AND line.received_quantity > 0
-                ) THEN 'Partially Received'
-                ELSE 'Open'
-              END,
-              updated_at = now(), updated_by_user_id = $1
-            WHERE purchase_order.id = (
-              SELECT line.purchase_order_id
-              FROM store.purchase_order_lines line
-              WHERE line.id = $2
-            )
-          `,
-          [input.actorUserId ?? null, input.purchaseOrderLineId]
-        )
+        const received = await receiveStockWithClient(client, input)
         await queueDashboardRefresh(client, input.organizationId)
-        return { assetCodes, receiptId: receipt.rows[0]!.id, receiptNumber }
+        return received
+      })
+    },
+
+    async receiveRemainingStockBatch(input: {
+      actorUserId?: string | null
+      locationId: string
+      organizationId: string
+      purchaseOrderLineIds: string[]
+      receivedBy?: string | null
+    }) {
+      const purchaseOrderLineIds = [
+        ...new Set(
+          input.purchaseOrderLineIds
+            .map((purchaseOrderLineId) => purchaseOrderLineId.trim())
+            .filter(Boolean)
+        ),
+      ].sort()
+      if (!purchaseOrderLineIds.length) {
+        throw new Error("Select at least one Purchase Order line to receive.")
+      }
+      if (purchaseOrderLineIds.length > 500) {
+        throw new Error("Bulk receipt is limited to 500 Purchase Order lines.")
+      }
+      return withTransaction(pool, async (client) => {
+        const receipts = []
+        for (const purchaseOrderLineId of purchaseOrderLineIds) {
+          receipts.push(
+            await receiveStockWithClient(client, {
+              actorUserId: input.actorUserId,
+              locationId: input.locationId,
+              organizationId: input.organizationId,
+              purchaseOrderLineId,
+              quantity: "remaining",
+              receivedBy: input.receivedBy,
+            })
+          )
+        }
+        await queueDashboardRefresh(client, input.organizationId)
+        return { receipts }
       })
     },
 
@@ -3752,7 +3866,11 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           ]
         )
 
-        await assertToolingTransferAvailable(client, input.organizationId, input.assetCode)
+        await assertToolingTransferAvailable(
+          client,
+          input.organizationId,
+          input.assetCode
+        )
         await queueDashboardRefresh(client, input.organizationId)
       })
     },

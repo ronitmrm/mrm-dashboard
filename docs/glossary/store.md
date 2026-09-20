@@ -123,9 +123,12 @@ Maintenance History flows; it does not create stock receipt quantity.
 Order and its received quantity. Goods are received against the same order row;
 Purchase Order entry and receipt are not separate workspaces.
 
-**Store Receipt**: A goods receipt recorded against one Store Purchase Order.
-It cannot exceed the order's remaining quantity and inherits its Supplier,
-Store Item Type, and agreed unit price.
+**Store Receipt**: A goods receipt recorded against one Store Purchase Order
+line. It cannot exceed the line's remaining quantity and inherits its Supplier,
+Store Item Type, and agreed unit price. Bulk receipt accepts selected open goods
+lines and receives each selected line's full remaining quantity into the primary
+Store in one atomic operation; it does not add optional bill, warranty, or serial
+number details.
 
 **Store Request**: One numbered demand submitted by a Department and an
 individual to one Store location. It contains one or more Coded Item Request
@@ -214,7 +217,6 @@ A Route Master Line may explicitly require no special tooling. Fixture,
 Tooling and Foam Tool can all be Not Required; saving still records the
 completed tooling master for planning readiness. This record has no Asset Code
 and does not create a Store asset or a physical tool requirement.
-
 
 **Production tooling capacity**: Fixture, Tooling and Foam Tool are reusable
 resources identified by their existing Store Asset Code. Each required code uses
