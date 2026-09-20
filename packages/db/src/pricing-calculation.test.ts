@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest"
 
 import {
   calculateBomPieceWeight,
+  calculateCasting,
   calculateCosting,
   calculatePackageCosting,
   calculatePackageRevisionCostingFromBase,
@@ -22,6 +23,11 @@ const noOptionalProcess = {
 }
 
 describe("approved Pricing formulas", () => {
+  test("calculates Casting from Product Master piece weights", () => {
+    expect(calculateCasting(5.022, 0.9)).toBe(5.58)
+    expect(calculateCasting(5.022, 0)).toBe(0)
+  })
+
   test("uses blank-to-finished piece weight ratio for rod and scrap costing", () => {
     const result = calculateCosting(
       {

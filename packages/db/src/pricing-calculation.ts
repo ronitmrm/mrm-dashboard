@@ -79,6 +79,15 @@ export type CostingResult = {
 
 const safeNumber = (value: number) => (Number.isFinite(value) ? value : 0)
 
+export function calculateCasting(
+  blankPieceWeight: number,
+  onePieceWeight: number
+) {
+  return onePieceWeight > 0
+    ? safeNumber(blankPieceWeight / onePieceWeight)
+    : 0
+}
+
 export type BomPieceWeightComponent = {
   components?: readonly BomPieceWeightComponent[]
   pieceWeightGrams: number
@@ -290,8 +299,10 @@ export function calculateCosting(
   quote: QuoteCostingInput
 ): CostingResult {
   const piecesPerKg = product.weight100Pcs > 0 ? 1000 / product.weight100Pcs : 0
-  const blankToFinishedWeightRatio =
-    product.weight100Pcs > 0 ? product.casting / product.weight100Pcs : 0
+  const blankToFinishedWeightRatio = calculateCasting(
+    product.casting,
+    product.weight100Pcs
+  )
   const netRateWithoutAlloy =
     quote.scrapRate + quote.extCost + quote.forgingCost
   const netRateWithAlloy =

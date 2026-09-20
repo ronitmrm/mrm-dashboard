@@ -24,6 +24,10 @@ The workspace separates Overview, Masters, Setup, Production, Rejection,
 Downtime, Delivery, and Complete Log so each view shows only its own metrics and
 records.
 
+In Masters, Casting is the unitless material ratio calculated as Product Master
+Blank Piece Weight divided by One-Piece Weight. For example, `5.022 / 0.90`
+displays as `5.58`. A missing or zero One-Piece Weight leaves Casting unavailable.
+
 Current Stage recognizes running work from an open Production Session or the current
 machine plan, including imported opening production. Missing receipt history must
 not label running work as awaiting raw material.

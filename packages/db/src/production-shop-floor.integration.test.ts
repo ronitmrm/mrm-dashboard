@@ -68,9 +68,13 @@ beforeAll(async () => {
     `
       INSERT INTO catalog.items (
         organization_id, uid, uid_kind, lifecycle_status, description,
-        item_type, source_system, source_table, source_id
+        item_type, casting, weight_100_pcs,
+        source_system, source_table, source_id
       )
-      VALUES ($1, $2, 'INTERNAL', 'M', $2, 'List', 'test', 'items', $3)
+      VALUES (
+        $1, $2, 'INTERNAL', 'M', $2, 'List', 5.022, 0.90,
+        'test', 'items', $3
+      )
     `,
     [organizationId, itemUid, randomUUID()]
   )
@@ -176,6 +180,16 @@ afterAll(async () => {
 })
 
 describe("production and shop-floor workflows", () => {
+  test("calculates Casting from Blank Piece Weight divided by One-Piece Weight", async () => {
+    const workspace = await repository.readJobCardWorkspace({
+      jobCardNumber: firstJobCard,
+      organizationId,
+      productionFloorCode: "conventional",
+    })
+
+    expect(workspace.jobCard.casting).toBe("5.58")
+  })
+
   test("keeps every received item when one RM PO covers multiple job cards", async () => {
     const jobCards = [firstJobCard, secondJobCard, thirdJobCard, fourthJobCard]
 

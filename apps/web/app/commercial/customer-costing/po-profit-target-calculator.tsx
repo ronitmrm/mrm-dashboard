@@ -2,7 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 
-import { calculateStoredProductCosting } from "@workspace/db/pricing-calculation"
+import {
+  calculateCasting,
+  calculateStoredProductCosting,
+} from "@workspace/db/pricing-calculation"
 import { Button } from "@workspace/ui/components/button"
 import { MetricCard } from "@workspace/ui/components/card"
 
@@ -89,8 +92,10 @@ function baseCost(product: ProductInputs, values: FormValues) {
 
   const piecesPerKg =
     product.weight100Pcs > 0 ? 1000 / product.weight100Pcs : 0
-  const blankToFinishedWeightRatio =
-    product.weight100Pcs > 0 ? product.casting / product.weight100Pcs : 0
+  const blankToFinishedWeightRatio = calculateCasting(
+    product.casting,
+    product.weight100Pcs
+  )
   const netRateWithoutAlloy =
     values.scrapRate + product.extrusionCost + product.forgingCost
   const netRateWithAlloy = netRateWithoutAlloy + product.alloyPremium

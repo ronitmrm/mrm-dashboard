@@ -34,6 +34,7 @@ import {
   normalizeDeliveryTargets,
   normalizePlannerMovementActionType,
 } from "./job-card-workspace"
+import { calculateCasting } from "./pricing-calculation"
 
 
 type RawMaterialReceiptInput = {
@@ -1800,6 +1801,10 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
       )
       const jobCard = workOrderResult.rows[0]
       if (!jobCard) throw new Error("Job card was not found.")
+      const casting = calculateCasting(
+        Number(jobCard.casting ?? 0),
+        Number(jobCard.weight100Pieces ?? 0)
+      )
 
       const routesResult = await pool.query<Record<string, unknown>>(
         `
@@ -2435,6 +2440,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         events: eventLog,
         jobCard: {
           ...jobCard,
+          casting: casting > 0 ? String(casting) : null,
           effectiveRouteSource: explicitRouteId && selectedRoute?.id === explicitRouteId
             ? "planner_selected"
             : selectedRoute
