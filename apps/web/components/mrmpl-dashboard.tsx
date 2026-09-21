@@ -3237,7 +3237,6 @@ function PlannerDecisionConsole({
       historyCount={history.length}
       pendingCount={conflicts.length + overdueIssues.length}
       onActionChange={setActiveAction}
-      onRecalculate={() => void submitAction("reschedule", {})}
       onViewChange={setActiveView}
       panels={{
         priority: (
