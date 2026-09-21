@@ -27,7 +27,7 @@ test("removes or limits plans after full and partial raw-material rejection", ()
         partCode: "RM-REJECT-PART",
         optionNumber: "1",
         orderKg: 100,
-        orderPcs: 10_000,
+        orderPcs: 9_900,
       }),
       entry("rm_inward", {
         jcNo: "RM-REJECT-JC",
@@ -47,7 +47,7 @@ test("removes or limits plans after full and partial raw-material rejection", ()
           partNo: "RM-REJECT-PART",
           optionNumber: "1",
           setupNo,
-          cycleTime: 288,
+          cycleTime: 180,
         }),
         entry("tooling", {
           partNo: "RM-REJECT-PART",
@@ -63,7 +63,7 @@ test("removes or limits plans after full and partial raw-material rejection", ()
       ]),
     ],
   }
-  const planRows = (
+  const planningControl = (
     rejectedKg: number,
     planningAction: "continue_accepted_quantity" | "wait_for_replacement",
     options: { producedSetupOne?: number; replacementKg?: number } = {}
@@ -91,7 +91,7 @@ test("removes or limits plans after full and partial raw-material rejection", ()
             outputQty: options.producedSetupOne,
             actualQty: options.producedSetupOne,
             rejectQty: 0,
-            targetQty: 10_000,
+            targetQty: 9_900,
           },
         ]
       : []
@@ -110,16 +110,26 @@ test("removes or limits plans after full and partial raw-material rejection", ()
       dataEntries: [...(baseInput.dataEntries ?? []), ...replacement],
     }).productionControl
     if (!("machinePlanDetailRows" in control)) throw new Error("Missing plan")
-    return control.machinePlanDetailRows.filter(
+    return control
+  }
+  const planRows = (
+    rejectedKg: number,
+    planningAction: "continue_accepted_quantity" | "wait_for_replacement",
+    options: { producedSetupOne?: number; replacementKg?: number } = {}
+  ) => planningControl(rejectedKg, planningAction, options).machinePlanDetailRows.filter(
       (row) => row.jcNo === "RM-REJECT-JC"
     )
-  }
 
   expect(planRows(100, "wait_for_replacement")).toEqual([])
   expect(
     planRows(100, "wait_for_replacement", { producedSetupOne: 1_000 })
   ).toEqual([])
 
+  const estimated = planRows(50, "continue_accepted_quantity")
+  expect(estimated.find((row) => row.setupNo === "1")).toMatchObject({
+    totalOrderPcs: 4_950,
+    pendingGoodQty: 4_950,
+  })
   const continued = planRows(50, "continue_accepted_quantity", {
     producedSetupOne: 5_000,
   })
@@ -132,6 +142,13 @@ test("removes or limits plans after full and partial raw-material rejection", ()
   expect(continued.find((row) => row.setupNo === "2")).toMatchObject({
     totalOrderPcs: 5_000,
   })
+  expect(
+    planningControl(50, "continue_accepted_quantity", {
+      producedSetupOne: 5_000,
+    }).productionDashboardRows.find((row) => row.jcNo === "RM-REJECT-JC")
+  ).toMatchObject({
+    currentProbableDispatchDate: "7-Oct-26",
+  })
   expect(planRows(99.9999, "continue_accepted_quantity")).toEqual([])
 
   expect(
@@ -143,7 +160,7 @@ test("removes or limits plans after full and partial raw-material rejection", ()
     replacementKg: 50,
   })
   expect(restored.find((row) => row.setupNo === "1")).toMatchObject({
-    totalOrderPcs: 10_000,
+    totalOrderPcs: 9_900,
     rmRejectedKg: 50,
     rmUsableKg: 100,
     rmReplanRequired: true,
@@ -153,7 +170,7 @@ test("removes or limits plans after full and partial raw-material rejection", ()
     actualProductionStartDate: "21-Sept-26",
   })
   expect(restored.find((row) => row.setupNo === "2")).toMatchObject({
-    totalOrderPcs: 10_000,
+    totalOrderPcs: 9_900,
     rmReplanRequired: false,
     setupPlannedDate: "23-Sept-26",
   })

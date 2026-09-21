@@ -3475,7 +3475,10 @@ function RawMaterialRejectionPlannerForm({
                 <div className="text-xs text-muted-foreground">After rejection</div>
                 <div className="mt-1 font-semibold">{formatNumber(remainingKg)} kg usable</div>
                 <div className="mt-1 text-xs text-muted-foreground">
-                  Material-supported order quantity: {formatNumber(supportedPieces)} pcs
+                  Provisional Setup 1 quantity from RM: {formatNumber(supportedPieces)} pcs
+                </div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  Recorded good production becomes the downstream cumulative quantity.
                 </div>
               </div>
               <div className="rounded-md border bg-background p-3">
