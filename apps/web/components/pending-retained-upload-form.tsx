@@ -1,5 +1,7 @@
 "use client"
 
+import { unstable_rethrow } from "next/navigation"
+
 import {
   useEffect,
   useRef,
@@ -13,6 +15,10 @@ import {
   PendingRetainedUploadClient,
   type RetainedUploadRegistration,
 } from "@/lib/pending-retained-upload-client"
+import {
+  getUploadErrorMessage,
+  getUploadResultError,
+} from "@/lib/upload-error-message"
 
 export function usePendingRetainedUploads() {
   const [client] = useState(() => new PendingRetainedUploadClient())
@@ -56,6 +62,10 @@ export function usePendingRetainedUploads() {
     finish() {
       setMessage(undefined)
     },
+    fail(reason: unknown) {
+      setMessage(undefined)
+      setError(getUploadErrorMessage(reason, "Upload failed."))
+    },
   }
 }
 
@@ -97,11 +107,18 @@ export function PendingRetainedUploadForm({
           try {
             const prepared = await upload.prepare(data, uploads)
             if (!prepared) return
-            // Action errors/Next redirects deliberately remain outside the transport catch.
             upload.client.markSubmitted()
-            await action(prepared)
+            const result = await action(prepared)
+            const actionError = getUploadResultError(result)
+            if (actionError) {
+              upload.fail(actionError)
+              return
+            }
             form.reset()
             upload.client.abandonUnused()
+          } catch (error) {
+            unstable_rethrow(error)
+            upload.fail(error)
           } finally {
             busy.current = false
             upload.finish()

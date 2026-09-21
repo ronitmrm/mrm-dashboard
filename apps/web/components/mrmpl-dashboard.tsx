@@ -9157,8 +9157,6 @@ function DataEntryPanel({
         },
         { throwOnError: true }
       )
-    } catch {
-      // submitAction already shows the import error; keep the file selected for correction.
     } finally {
       setIsImporting(false)
     }

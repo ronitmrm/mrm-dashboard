@@ -11,10 +11,12 @@ import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { externalMasterViewHref } from "@/lib/external-master-workspace"
 import { csvValue, readMasterCsv } from "@/lib/master-data-csv"
+import { withCsvImportFeedback } from "@/lib/csv-import-action-feedback"
 
 const websiteProductsPath = "/commercial/website-products"
 
 export async function importWebsiteProductsCsvAction(formData: FormData) {
+  return withCsvImportFeedback(async () => {
   const session = await requireCapability(
     "masters.universal.commercial_website_products.save",
     websiteProductsPath
@@ -73,4 +75,5 @@ export async function importWebsiteProductsCsvAction(formData: FormData) {
   }
   revalidatePath(websiteProductsPath)
   redirect(externalMasterViewHref(websiteProductsPath, "dataEntry"))
+  }, "Website products CSV import failed.")
 }
