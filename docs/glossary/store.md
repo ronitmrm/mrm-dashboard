@@ -117,9 +117,10 @@ supplier document.
 **Issued Store Purchase Order Format**: The supplier-facing PDF uses the
 approved centered company header, centered numeric price columns, centered
 amount-in-words value, and the authorized company signature-and-stamp block.
-Continuation pages repeat the same full-size company logo, name, and
-`Precision Brass Fittings & Metal Components` line as the first page, with the
-entire brand block left aligned.
+Continuation pages use a compact, left-aligned company logo, name, and
+`Precision Brass Fittings & Metal Components` line. The PO number remains
+right aligned on the same header row. Their green Purchase Order title band
+matches the first page's height and title scale.
 
 **Repair Purchase Order**: A Purchase Order for one individually tracked Non
 Consumable Unit ID sent to one Supplier for repair or calibration. It records
