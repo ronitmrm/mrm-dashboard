@@ -54,6 +54,7 @@ type RawMaterialWorkOrder = {
   part_code: string
   rm_po_number: string
   source_payload: unknown
+  status: string
 }
 
 type WorkOrderContext = {
@@ -61,6 +62,7 @@ type WorkOrderContext = {
   route_option_id: string | null
   work_order_id: string
   source_payload: unknown
+  status: string
 }
 
 type ProductionSessionEndReason =
@@ -218,7 +220,8 @@ async function writeRawMaterialReceipt(
 
   const workOrderResult = await client.query<RawMaterialWorkOrder>(
     `
-      SELECT work_order.job_card_number, work_order.source_payload, item.uid AS part_code,
+      SELECT work_order.job_card_number, work_order.source_payload,
+        work_order.status, item.uid AS part_code,
         COALESCE(
           NULLIF(btrim(work_order.source_payload->>'rmPoNo'), ''),
           NULLIF(btrim(work_order.source_payload->>'RM PO NO.'), ''),
@@ -236,6 +239,11 @@ async function writeRawMaterialReceipt(
   if (!workOrder) {
     throw new Error(
       `RM receipt rejected: Job Card "${requestedJobCard}" was not found in Work Orders.`
+    )
+  }
+  if (workOrder.status === "Cancelled") {
+    throw new Error(
+      `RM receipt rejected: Work Order for Job Card "${workOrder.job_card_number}" is cancelled.`
     )
   }
   if (input.requiredProductionFloorCode && productionFloorCodeForRecord({ sourcePayload: workOrder.source_payload }) !== input.requiredProductionFloorCode) {
@@ -336,7 +344,8 @@ async function workOrderContext(
 ) {
   const result = await client.query<WorkOrderContext>(
     `
-      SELECT work_order.id AS work_order_id, work_order.item_id, work_order.source_payload,
+      SELECT work_order.id AS work_order_id, work_order.item_id,
+        work_order.source_payload, work_order.status,
         COALESCE(selection.route_option_id, automatic_route.route_option_id)
           AS route_option_id
       FROM manufacturing.work_orders work_order
@@ -367,6 +376,9 @@ async function workOrderContext(
     ]
   )
   if (!result.rows[0]) throw new Error("Production work order was not found.")
+  if (result.rows[0].status === "Cancelled") {
+    throw new Error("Cancelled Work Order lines cannot receive production activity.")
+  }
   return result.rows[0]
 }
 
@@ -1715,14 +1727,20 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         const workOrderResult = await client.query<{
           id: string
           item_id: string
+          status: string
         }>(
-          `SELECT id, item_id FROM manufacturing.work_orders
+          `SELECT id, item_id, status FROM manufacturing.work_orders
            WHERE organization_id = $1 AND lower(job_card_number) = lower($2)
            FOR UPDATE`,
           [input.organizationId, jobCardNumber]
         )
         const workOrder = workOrderResult.rows[0]
         if (!workOrder) throw new Error("Job card was not found.")
+        if (workOrder.status === "Cancelled") {
+          throw new Error(
+            "Cancelled Work Order lines cannot change delivery targets."
+          )
+        }
 
         const productPatch = targets.productDefaultWorkingDays === null
           ? {}

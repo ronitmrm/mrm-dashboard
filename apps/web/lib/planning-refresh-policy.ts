@@ -6,6 +6,7 @@ const autoRefreshActionPaths = new Set([
   "machine-constraint-review",
   "plan-override",
   "raw-material-rejection",
+  "work-order-cancellation",
   "route-change",
   "route-selection",
   "mark-complete",

@@ -292,6 +292,7 @@ async function qualityContextFor(
         ON floor.id = route.production_floor_id
       WHERE work_order.organization_id = $1
         AND lower(work_order.job_card_number) = lower($2)
+        AND work_order.status <> 'Cancelled'
         AND floor.code = $4
         AND (
           lower(COALESCE(setup.legacy_setup_code, '')) = lower($3)

@@ -103,6 +103,162 @@ afterAll(async () => {
 })
 
 describe("dashboard planning writes", () => {
+  test("cancels an RM-received work order and releases its active setup", async () => {
+    const jobCardNumber = `JC-CANCEL-${suffix}`
+    const machineNumber = `MC-CANCEL-${suffix}`
+    const rmPoNumber = `RM-CANCEL-${suffix}`
+
+    await repository.upsertRouteOption({
+      itemUid,
+      organizationId,
+      productionFloorCode: "cnc",
+      routeCode: "CANCEL",
+      setups: [{ operationCode: "TURN", sequence: 1, setupNumber: 1 }],
+    })
+    await repository.upsertWorkOrder({
+      itemUid,
+      jobCardNumber,
+      orderedQuantity: 10_000,
+      organizationId,
+      requiredProductionFloorCode: "cnc",
+      sourcePayload: {
+        jcNo: jobCardNumber,
+        orderKg: 100,
+        orderPcs: 10_000,
+        partCode: itemUid,
+        productionFloorCode: "cnc",
+        rmPoNo: rmPoNumber,
+      },
+      workOrderNumber: `WO-CANCEL-${suffix}`,
+    })
+    await repository.selectRoute({
+      jobCardNumber,
+      organizationId,
+      productionFloorCode: "cnc",
+      routeCode: "CANCEL",
+    })
+    await repository.upsertMachine({
+      machineNumber,
+      organizationId,
+      productionFloorCode: "cnc",
+    })
+    await jobCards.upsertRawMaterialReceipt({
+      organizationId,
+      payload: {
+        jcNo: jobCardNumber,
+        partCode: itemUid,
+        productionFloorCode: "cnc",
+        rmPoNo: rmPoNumber,
+      },
+      quantityKg: 100,
+      receiptNumber: rmPoNumber,
+      receivedOn: "2026-09-21",
+      requiredProductionFloorCode: "cnc",
+    })
+
+    const ids = await pool.query<{
+      machine_id: string
+      route_option_id: string
+      setup_id: string
+      work_order_id: string
+    }>(
+      `SELECT machine.id AS machine_id, route.id AS route_option_id,
+         setup.id AS setup_id, work_order.id AS work_order_id
+       FROM manufacturing.work_orders work_order
+       JOIN manufacturing.route_options route
+         ON route.item_id = work_order.item_id AND route.route_code = 'CANCEL'
+       JOIN manufacturing.operation_setups setup
+         ON setup.route_option_id = route.id AND setup.setup_number = 1
+       CROSS JOIN catalog.machines machine
+       WHERE work_order.organization_id = $1
+         AND work_order.job_card_number = $2
+         AND machine.machine_number = $3`,
+      [organizationId, jobCardNumber, machineNumber]
+    )
+    const idsRow = ids.rows[0]!
+    await pool.query(
+      `INSERT INTO manufacturing.shop_floor_setup_state (
+         organization_id, work_order_id, route_option_id,
+         operation_setup_id, machine_id, stage, active,
+         source_system, source_table, source_id
+       ) VALUES ($1, $2, $3, $4, $5, 'planned', true,
+         'test', 'shop_floor_setup_state', $6)`,
+      [
+        organizationId,
+        idsRow.work_order_id,
+        idsRow.route_option_id,
+        idsRow.setup_id,
+        idsRow.machine_id,
+        randomUUID(),
+      ]
+    )
+
+    await expect(repository.cancelWorkOrder({
+      jobCardNumber,
+      organizationId,
+      productionFloorCode: "cnc",
+      reason: "Customer cancelled the order line",
+    })).resolves.toMatchObject({ jobCardNumber, ok: true })
+
+    const persisted = await pool.query<{
+      active: boolean
+      audit_count: string
+      cancellation_reason: string
+      receipt_count: string
+      stage_event_count: string
+      stage: string
+      status: string
+    }>(
+      `SELECT work_order.status, work_order.cancellation_reason,
+         state.active, state.stage,
+         (SELECT count(*) FROM manufacturing.raw_material_receipts receipt
+          WHERE receipt.work_order_id = work_order.id) AS receipt_count,
+         (SELECT count(*) FROM audit.events event
+          WHERE event.target_id = work_order.id
+            AND event.event_type = 'manufacturing.work_order.cancelled') AS audit_count,
+         (SELECT count(*) FROM manufacturing.shop_floor_stage_events event
+          WHERE event.setup_state_id = state.id
+            AND event.to_stage = 'cancelled') AS stage_event_count
+       FROM manufacturing.work_orders work_order
+       JOIN manufacturing.shop_floor_setup_state state
+         ON state.work_order_id = work_order.id
+       WHERE work_order.id = $1`,
+      [idsRow.work_order_id]
+    )
+    expect(persisted.rows[0]).toEqual({
+      active: false,
+      audit_count: "1",
+      cancellation_reason: "Customer cancelled the order line",
+      receipt_count: "1",
+      stage: "cancelled",
+      stage_event_count: "1",
+      status: "Cancelled",
+    })
+
+    await expect(jobCards.upsertRawMaterialReceipt({
+      organizationId,
+      payload: {
+        jcNo: jobCardNumber,
+        partCode: itemUid,
+        productionFloorCode: "cnc",
+        rmPoNo: rmPoNumber,
+      },
+      quantityKg: 10,
+      receiptNumber: `${rmPoNumber}-2`,
+      receivedOn: "2026-09-22",
+      requiredProductionFloorCode: "cnc",
+    })).rejects.toThrow(`Work Order for Job Card "${jobCardNumber}" is cancelled`)
+
+    await expect(repository.upsertWorkOrder({
+      itemUid,
+      jobCardNumber,
+      orderedQuantity: 12_000,
+      organizationId,
+      requiredProductionFloorCode: "cnc",
+      workOrderNumber: `WO-CANCEL-${suffix}`,
+    })).rejects.toThrow("Cancelled Work Order lines cannot be updated")
+  })
+
   test("records raw-material rejection against the usable Job Card balance", async () => {
     const jobCardNumber = `JC-RM-REJECT-${suffix}`
     const rmPoNumber = `RM-REJECT-${suffix}`

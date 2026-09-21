@@ -385,6 +385,16 @@ async function preauthorizeDashboardMutation(
   path: string,
   body: Record<string, unknown>
 ) {
+  if (path === "work-order-cancellation") {
+    const scope = operationalEntryWriteScope(
+      "work_order",
+      "save",
+      body.productionFloorCode,
+      { productionFloorCode: body.productionFloorCode }
+    )
+    await authorizedDashboardSession(request, scope.capability)
+    return
+  }
   if (path === "master-delete") {
     const capability = productionMasterCapability(String(body.kind || ""), "delete", body.productionFloorCode)
     if (!capability) throw new RouteError(400, "This endpoint only deletes production masters.")
@@ -1072,6 +1082,34 @@ async function post(request: NextRequest, context: RouteContext) {
         await withPlanningRefresh(request, path, body, {
           ...result,
           message: "Raw Material rejection saved.",
+          rowsUpdated: 1,
+        })
+      )
+    }
+
+    if (path === "work-order-cancellation") {
+      const scope = operationalEntryWriteScope(
+        "work_order",
+        "save",
+        body.productionFloorCode,
+        { productionFloorCode: body.productionFloorCode }
+      )
+      const result = await withPlanningRepository(
+        request,
+        scope.capability,
+        ({ actorUserId, organizationId, repository }) =>
+          repository.cancelWorkOrder({
+            actorUserId,
+            jobCardNumber: text(body.jcNo),
+            organizationId,
+            productionFloorCode: scope.floor,
+            reason: text(body.reason),
+          })
+      )
+      return json(
+        await withPlanningRefresh(request, path, body, {
+          ...result,
+          message: "Work Order line cancelled and removed from planning.",
           rowsUpdated: 1,
         })
       )
@@ -1984,6 +2022,7 @@ const knownDashboardApiPaths = new Set([
   "setup-checklist",
   "status",
   "training",
+  "work-order-cancellation",
 ])
 
 function dashboardApiOperation(method: "get" | "post", path: string) {
