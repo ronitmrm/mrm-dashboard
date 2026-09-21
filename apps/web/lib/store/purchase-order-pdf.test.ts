@@ -1,9 +1,20 @@
 import { PDFDocument } from "pdf-lib"
 import { describe, expect, test } from "vitest"
 
-import { buildStorePurchaseOrderPdf } from "./purchase-order-pdf"
+import {
+  buildStorePurchaseOrderPdf,
+  formatPurchaseOrderDate,
+  purchaseOrderAmountInWords,
+} from "./purchase-order-pdf"
 
 describe("Store Purchase Order PDF", () => {
+  test("formats the reference PO date and Indian amount in words", () => {
+    expect(formatPurchaseOrderDate("2026-04-02")).toBe("02 April 2026")
+    expect(purchaseOrderAmountInWords(5253)).toBe(
+      "FIVE THOUSAND TWO HUNDRED FIFTY THREE"
+    )
+  })
+
   test("creates a priced multi-line supplier Purchase Order document", async () => {
     const bytes = await buildStorePurchaseOrderPdf({
       lines: [
