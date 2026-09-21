@@ -205,20 +205,22 @@ function loadSignatureStamp() {
   ))
 }
 
-function drawBrandHeader(ctx: PdfContext) {
-  const { doc } = ctx
-  const logoWidth = 54
-  const gap = 15
+function brandTextWidth(doc: PDFKit.PDFDocument) {
   doc.font("Outfit-800").fontSize(31)
   const titleWidth = doc.widthOfString("MAYANK RAW MINT")
   doc.font("Outfit-400").fontSize(17)
   const taglineWidth = doc.widthOfString(
     "Precision Brass Fittings & Metal Components"
   )
-  const textWidth = Math.max(titleWidth, taglineWidth)
-  const brandX = (PAGE_WIDTH - logoWidth - gap - textWidth) / 2
-  const textX = brandX + logoWidth + gap
-  drawLogo(ctx, brandX, 33, logoWidth)
+  return Math.max(titleWidth, taglineWidth)
+}
+
+function drawFullBrandBlock(ctx: PdfContext, x: number) {
+  const { doc } = ctx
+  const logoWidth = 54
+  const gap = 15
+  const textX = x + logoWidth + gap
+  drawLogo(ctx, x, 33, logoWidth)
   doc
     .font("Outfit-800")
     .fontSize(31)
@@ -231,6 +233,12 @@ function drawBrandHeader(ctx: PdfContext) {
     .text("Precision Brass Fittings & Metal Components", textX, 68, {
       lineBreak: false,
     })
+}
+
+function drawBrandHeader(ctx: PdfContext) {
+  const { doc } = ctx
+  const brandWidth = 54 + 15 + brandTextWidth(doc)
+  drawFullBrandBlock(ctx, (PAGE_WIDTH - brandWidth) / 2)
   doc.rect(0, 121, PAGE_WIDTH, 64).fill(GREEN)
   doc
     .font("Outfit-800")
@@ -306,27 +314,22 @@ function drawContinuationHeader(
   document: StorePurchaseOrderDocument
 ) {
   const { doc } = ctx
-  drawLogo(ctx, MARGIN, 26, 32)
-  doc
-    .font("Outfit-800")
-    .fontSize(18)
-    .fillColor(GREEN)
-    .text("MAYANK RAW MINT", 70, 27, { lineBreak: false })
+  drawFullBrandBlock(ctx, MARGIN)
   doc
     .font("Outfit-500")
     .fontSize(8.5)
     .fillColor(BLACK)
-    .text(cleanText(document.orderNumber), 390, 29, {
+    .text(cleanText(document.orderNumber), 390, 7, {
       align: "right",
       lineBreak: false,
       width: PAGE_WIDTH - MARGIN - 390,
     })
-  doc.rect(0, 76, PAGE_WIDTH, 36).fill(GREEN)
+  doc.rect(0, 96, PAGE_WIDTH, 36).fill(GREEN)
   doc
     .font("Outfit-700")
     .fontSize(17)
     .fillColor(WHITE)
-    .text("PURCHASE ORDER / CONTINUED", 0, 85, {
+    .text("PURCHASE ORDER / CONTINUED", 0, 105, {
       align: "center",
       lineBreak: false,
       width: PAGE_WIDTH,
@@ -662,8 +665,8 @@ export async function buildStorePurchaseOrderPdf(
     if (y + rowHeight > availableBottom) {
       doc.addPage({ margin: 0, size: [PAGE_WIDTH, PAGE_HEIGHT] })
       drawContinuationHeader(ctx, document)
-      drawItemsHeading(doc, 122)
-      y = drawTableHeader(doc, 140)
+      drawItemsHeading(doc, 138)
+      y = drawTableHeader(doc, 156)
     }
     y = drawTableRow(doc, line, index, y, rowHeight)
   })
