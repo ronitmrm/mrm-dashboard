@@ -56,6 +56,8 @@ type QueuePlacementInput = {
   targetSourceMachineNumber?: string | null
 }
 
+type PlanOverrideAssignmentMode = "move" | "add_parallel_machine"
+
 type RemainingSetupInput = {
   plan: boolean
   quantity: number
@@ -2467,6 +2469,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
 
     async recordPlanOverride(input: {
       actorUserId?: string | null
+      assignmentMode?: PlanOverrideAssignmentMode
       fromMachineNumber?: string | null
       interruptedSetups?: InterruptedSetupInput[]
       jobCardNumber: string
@@ -2478,6 +2481,10 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
       toMachineNumber: string
     }) {
       return transaction(pool, async (client) => {
+        const assignmentMode = input.assignmentMode ?? "move"
+        if (assignmentMode === "add_parallel_machine" && !input.setupNumber) {
+          throw new Error("Setup number is required to add a parallel machine.")
+        }
         const workOrder = await workOrderFor(
           client,
           input.organizationId,
@@ -2536,6 +2543,9 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           `,
           [targetMachineId]
         )
+        if (assignmentMode === "add_parallel_machine" && targetLock.rows[0]) {
+          throw new Error("Target machine is not idle. Finish or move its active setup first.")
+        }
         if (
           targetLock.rows[0] &&
           targetLock.rows[0].work_order_id !== workOrder.id &&
@@ -2569,7 +2579,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           )
           operationSetupId = setup.rows[0]?.id ?? null
         }
-        const sourcePayload = { ...input, interruptedSetups }
+        const sourcePayload = { ...input, assignmentMode, interruptedSetups }
         const created = await client.query<{ id: string }>(
           `
             INSERT INTO manufacturing.plan_override_events (

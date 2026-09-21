@@ -145,6 +145,15 @@ Planner Actions never accept a second produced-quantity figure. When a planner d
 
 Saving an approved machine move, priority stop, or machine-constraint move also releases each stopped setup's active machine ownership in the same transaction. Its workflow returns to Planned without marking the setup complete, the planner history retains the stop evidence, and the destination machine can immediately accept the approved setup.
 
+A Planner may add an idle, compatible physical machine to a planned or running
+setup even when the normal minimum-run rule would not split the quantity again.
+This decision is additive: current machines keep their work, no running session
+is stopped, and planning recalculates the shared remaining allocation and
+downstream probable dates across the combined machines. The added machine must
+have no active setup, and its queue position must be reviewed before saving.
+Shop Floor still completes the normal setup, quality approval, and machine-start
+workflow on that machine before production begins.
+
 A subsequent shop-floor transition supersedes that stop's workflow and preemption
 effects. Historical stop evidence must not reset a resumed or completed setup.
 

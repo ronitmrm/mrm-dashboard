@@ -1126,6 +1126,10 @@ async function post(request: NextRequest, context: RouteContext) {
         ({ actorUserId, organizationId, repository }) =>
           repository.recordPlanOverride({
             actorUserId,
+            assignmentMode:
+              body.assignmentMode === "add_parallel_machine"
+                ? "add_parallel_machine"
+                : "move",
             fromMachineNumber: body.fromMachine
               ? String(body.fromMachine)
               : undefined,
@@ -1144,7 +1148,10 @@ async function post(request: NextRequest, context: RouteContext) {
       return json(
         await withPlanningRefresh(request, path, body, {
           ...result,
-          message: "Plan override saved.",
+          message:
+            body.assignmentMode === "add_parallel_machine"
+              ? "Parallel machine added and planning recalculated."
+              : "Plan override saved.",
         })
       )
     }
