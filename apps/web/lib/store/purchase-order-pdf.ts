@@ -314,22 +314,34 @@ function drawContinuationHeader(
   document: StorePurchaseOrderDocument
 ) {
   const { doc } = ctx
-  drawFullBrandBlock(ctx, MARGIN)
+  drawLogo(ctx, MARGIN, 26, 32)
+  doc
+    .font("Outfit-800")
+    .fontSize(18)
+    .fillColor(GREEN)
+    .text("MAYANK RAW MINT", 70, 27, { lineBreak: false })
+  doc
+    .font("Outfit-400")
+    .fontSize(9.5)
+    .fillColor(GREEN)
+    .text("Precision Brass Fittings & Metal Components", 70, 50, {
+      lineBreak: false,
+    })
   doc
     .font("Outfit-500")
     .fontSize(8.5)
     .fillColor(BLACK)
-    .text(cleanText(document.orderNumber), 390, 7, {
+    .text(cleanText(document.orderNumber), 390, 29, {
       align: "right",
       lineBreak: false,
       width: PAGE_WIDTH - MARGIN - 390,
     })
-  doc.rect(0, 96, PAGE_WIDTH, 36).fill(GREEN)
+  doc.rect(0, 76, PAGE_WIDTH, 64).fill(GREEN)
   doc
-    .font("Outfit-700")
-    .fontSize(17)
+    .font("Outfit-800")
+    .fontSize(31)
     .fillColor(WHITE)
-    .text("PURCHASE ORDER / CONTINUED", 0, 105, {
+    .text("PURCHASE ORDER / CONTINUED", 0, 92, {
       align: "center",
       lineBreak: false,
       width: PAGE_WIDTH,
@@ -665,8 +677,8 @@ export async function buildStorePurchaseOrderPdf(
     if (y + rowHeight > availableBottom) {
       doc.addPage({ margin: 0, size: [PAGE_WIDTH, PAGE_HEIGHT] })
       drawContinuationHeader(ctx, document)
-      drawItemsHeading(doc, 138)
-      y = drawTableHeader(doc, 156)
+      drawItemsHeading(doc, 150)
+      y = drawTableHeader(doc, 168)
     }
     y = drawTableRow(doc, line, index, y, rowHeight)
   })
