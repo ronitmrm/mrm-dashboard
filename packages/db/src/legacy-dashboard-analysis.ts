@@ -3195,6 +3195,10 @@ function machinePlanDetails(
         operationReadyCanPullForward = false;
         continue;
       }
+      const appliedParallelOverrides = parallelOverrides.filter((parallelOverride) => {
+        const targetMachine = canonicalKey(rowText(parallelOverride, "toMachine", "TO MACHINE", "PLAN ON MACHINE", "TARGET MACHINE"));
+        return assignedMachines.some((machine) => canonicalKey(machine) === targetMachine);
+      });
       if (previousRoute && !setupHasExecution) {
         const actualWipReady = actualWipBufferAvailable({
           orderPcs: setupOrderPcs,
@@ -3240,7 +3244,7 @@ function machinePlanDetails(
             return {
               machine,
               role: "" as MachineUnavailableSplitRole | "",
-              orderPcs: parallelOverrides.length
+              orderPcs: appliedParallelOverrides.length
                 ? (actual?.actualQty ?? 0) + plannerParallelRemainingPerMachine
                 : fallbackMachineOrderPcs,
             };
@@ -3248,9 +3252,9 @@ function machinePlanDetails(
       for (const assignment of machineAssignments) {
         const machine = assignment.machine;
         const machineKeyValue = canonicalKey(machine);
-        const parallelAssignmentOverride = parallelOverrides.find((parallelOverride) =>
+        const parallelAssignmentOverride = appliedParallelOverrides.find((parallelOverride) =>
           canonicalKey(rowText(parallelOverride, "toMachine", "TO MACHINE", "PLAN ON MACHINE", "TARGET MACHINE")) === machineKeyValue);
-        const effectivePlanOverride = parallelAssignmentOverride ?? override ?? parallelOverrides[0];
+        const effectivePlanOverride = parallelAssignmentOverride ?? override ?? appliedParallelOverrides[0];
         const assignmentQueuePlacement = parallelPlanOverridePlacements.find((placement) => placement.targetMachine === machineKeyValue)
           ?? queuePlacement;
         const machineOrderPcs = assignment.orderPcs;
@@ -3427,8 +3431,8 @@ function machinePlanDetails(
         machineUnavailableQueueBeforeSetups,
         machineUnavailableQueuePlacementTarget: Boolean(assignmentQueuePlacement && assignmentQueuePlacement.targetMachine === canonicalKey(machine)),
         plannerParallelMachineAdded: Boolean(parallelAssignmentOverride),
-        plannerParallelMachineTargets: parallelOverrides.map((parallelOverride) => rowText(parallelOverride, "toMachine", "TO MACHINE", "PLAN ON MACHINE", "TARGET MACHINE")),
-        machineAssignment: splitRole === "produced_on_unavailable_machine" ? "Breakdown produced quantity locked on stopped machine" : splitRole === "remaining_moved_to_alternate_machine" ? "Breakdown remaining quantity replanned by system rules" : splitRole === "remaining_delayed_on_same_machine" ? "Breakdown remaining quantity delayed on same machine" : parallelAssignmentOverride ? "Planner-added parallel machine" : parallelOverrides.length ? "Planner-retained parallel machine" : machine === routeMachine ? "Route family fallback" : assignedMachines.length > 1 ? "Parallel 25-day plan" : "Assigned physical machine",
+        plannerParallelMachineTargets: appliedParallelOverrides.map((parallelOverride) => rowText(parallelOverride, "toMachine", "TO MACHINE", "PLAN ON MACHINE", "TARGET MACHINE")),
+        machineAssignment: splitRole === "produced_on_unavailable_machine" ? "Breakdown produced quantity locked on stopped machine" : splitRole === "remaining_moved_to_alternate_machine" ? "Breakdown remaining quantity replanned by system rules" : splitRole === "remaining_delayed_on_same_machine" ? "Breakdown remaining quantity delayed on same machine" : parallelAssignmentOverride ? "Planner-added parallel machine" : appliedParallelOverrides.length ? "Planner-retained parallel machine" : machine === routeMachine ? "Route family fallback" : assignedMachines.length > 1 ? "Parallel 25-day plan" : "Assigned physical machine",
         parallelMachineCount: assignedMachines.length,
         planningAssumption: `${planningCalendar.productiveHoursPerDay} hrs/day; Friday is plant shutdown; manual planning holidays are skipped; parallel setup WIP is pooled after each machine stream produces it; forecast WIP does not reserve a downstream physical machine; an unstarted downstream setup is assigned only after recorded WIP satisfies its pooled buffer; next setup waits for cumulative downstream WIP availability through the full run plus ${wipAvailabilityBufferDays} buffer day; stopped-machine WIP starts downstream only when it can feed ${minimumParallelMachineWorkDays} days or complete the order; downstream setup end includes ${interSetupTransferBufferDays} handoff buffer day after previous setup end; RM-at-machine, started shop-floor, or production-actual machines stay locked during recalculation; the same setup keeps its previously planned physical machine unless a material load/date gain justifies moving it; downstream setups are assigned independently; automatic parallel machines require at least ${minimumParallelMachineWorkDays} production days each; a planner-added idle machine overrides only that minimum-run split rule`,
         };
