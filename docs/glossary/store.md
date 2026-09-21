@@ -110,7 +110,13 @@ Cancelled.
 **Store Purchase Order Line**: One Store Item Type, ordered quantity, chosen
 Supplier Price Revision snapshot, and received quantity within a Store Purchase
 Order. Receiving is saved against the line and cannot exceed its remaining
-quantity.
+quantity. The issued Purchase Order identifies each line as `Item Code - Asset
+Name`; the optional Identification Name does not replace the Asset Name on the
+supplier document.
+
+**Issued Store Purchase Order Format**: The supplier-facing PDF uses the
+approved centered company header, centered numeric price columns, centered
+amount-in-words value, and the authorized company signature-and-stamp block.
 
 **Repair Purchase Order**: A Purchase Order for one individually tracked Non
 Consumable Unit ID sent to one Supplier for repair or calibration. It records

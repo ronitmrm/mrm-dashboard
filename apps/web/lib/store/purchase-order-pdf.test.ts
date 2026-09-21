@@ -5,6 +5,7 @@ import {
   buildStorePurchaseOrderPdf,
   formatPurchaseOrderDate,
   purchaseOrderAmountInWords,
+  purchaseOrderItemDescription,
 } from "./purchase-order-pdf"
 
 describe("Store Purchase Order PDF", () => {
@@ -15,10 +16,24 @@ describe("Store Purchase Order PDF", () => {
     )
   })
 
+  test("prints the item code with the asset name", () => {
+    expect(
+      purchaseOrderItemDescription({
+        assetName: "Revolving Chair",
+        itemName: "",
+        orderedQuantity: "1",
+        typeCode: "NC146",
+        unit: "No.",
+        unitPrice: "3000",
+      })
+    ).toBe("NC146 - Revolving Chair")
+  })
+
   test("creates a priced multi-line supplier Purchase Order document", async () => {
     const bytes = await buildStorePurchaseOrderPdf({
       lines: [
         {
+          assetName: "Cutting Oil",
           itemName: "Cutting Oil",
           orderedQuantity: "10",
           typeCode: "C001",
@@ -26,6 +41,7 @@ describe("Store Purchase Order PDF", () => {
           unitPrice: "125.00",
         },
         {
+          assetName: "Safety Gloves",
           itemName: "Safety Gloves",
           orderedQuantity: "5",
           typeCode: "NC001",
