@@ -2,6 +2,10 @@ import { NextRequest } from "next/server"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const dashboardMocks = vi.hoisted(() => ({
+  latest: vi.fn(),
+  rawMaterialInwardTemplateRows: vi.fn(),
+  readRequestAuthenticatedSession: vi.fn(),
+  readRequestGrantedCapabilitySet: vi.fn(),
   readPostgresDashboardState: vi.fn(),
 }))
 let telemetryLog: ReturnType<typeof vi.spyOn>
@@ -12,7 +16,14 @@ vi.mock("@/lib/production-module", () => ({
 
 vi.mock("@/lib/auth/auth", () => ({
   getAuth: vi.fn(),
-  readAuthEnvironment: vi.fn(),
+  readAuthEnvironment: () => ({ connectionString: "postgres://test" }),
+}))
+
+vi.mock("../../lib/auth/request-authorization", () => ({
+  readRequestAuthenticatedSession:
+    dashboardMocks.readRequestAuthenticatedSession,
+  readRequestGrantedCapabilitySet:
+    dashboardMocks.readRequestGrantedCapabilitySet,
 }))
 
 vi.mock("@/lib/dashboard-api-policy", () => ({
@@ -46,6 +57,17 @@ vi.mock("@/lib/postgres-dashboard-read-server", () => ({
   readPostgresDashboardStatus: vi.fn(),
   requestPostgresDashboardCorrection: vi.fn(),
   requestPostgresDashboardRefresh: vi.fn(),
+  withDashboardReadRepository: vi.fn(async (_request, operation) =>
+    operation({
+      actorUserId: "user-1",
+      organizationId: "organization-1",
+      repository: {
+        latest: dashboardMocks.latest,
+        rawMaterialInwardTemplateRows:
+          dashboardMocks.rawMaterialInwardTemplateRows,
+      },
+    })
+  ),
 }))
 
 vi.mock("@/lib/postgres-operational-entry-server", () => ({
@@ -63,11 +85,45 @@ import { GET } from "./[...path]/route"
 
 describe("dashboard-state route", () => {
   beforeEach(() => {
-    dashboardMocks.readPostgresDashboardState.mockReset()
+    for (const mock of Object.values(dashboardMocks)) mock.mockReset()
     telemetryLog = vi.spyOn(console, "info").mockImplementation(() => undefined)
   })
 
   afterEach(() => telemetryLog.mockRestore())
+
+  it("builds RM Inward CSV from current pending receipts, not stale dashboard rows", async () => {
+    dashboardMocks.readRequestAuthenticatedSession.mockResolvedValue({
+      user: { id: "user-1" },
+    })
+    dashboardMocks.readRequestGrantedCapabilitySet.mockResolvedValue(
+      new Set(["entries.cnc.rm_inward.read"])
+    )
+    dashboardMocks.latest.mockResolvedValue({
+      productionControl: {
+        workOrders: [{ jcNo: "JC-ALREADY-INWARDED", rmStatus: "Waiting" }],
+      },
+    })
+    dashboardMocks.rawMaterialInwardTemplateRows.mockResolvedValue([
+      { jcNo: "JC-PENDING", partCode: "PART-1", rmPoNo: "RM-PO-1" },
+    ])
+
+    const request = new NextRequest(
+      "http://localhost/api/data-template?entryType=rm_inward&floor=cnc"
+    )
+    const response = await GET(request, {
+      params: Promise.resolve({ path: ["data-template"] }),
+    })
+    const csv = await response.text()
+
+    expect(response.status).toBe(200)
+    expect(csv).toContain("JC-PENDING")
+    expect(csv).not.toContain("JC-ALREADY-INWARDED")
+    expect(dashboardMocks.rawMaterialInwardTemplateRows).toHaveBeenCalledWith(
+      "organization-1",
+      "cnc"
+    )
+    expect(dashboardMocks.latest).not.toHaveBeenCalled()
+  })
 
   it("passes floor and known-version bounds to the dashboard state reader", async () => {
     dashboardMocks.readPostgresDashboardState.mockResolvedValue({

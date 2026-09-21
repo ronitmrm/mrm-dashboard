@@ -291,22 +291,26 @@ async function rmInwardTemplateResponse(
 ) {
   const floor = parseProductionFloorCode(request.nextUrl.searchParams.get("floor"))
   if (!floor) throw new RouteError(400, "A valid Production Unit is required.")
-  const snapshot = await withDashboardReadRepository(request, ({ organizationId, repository }) => repository.latest(organizationId, {}, floor), operationalEntryCapability("rm_inward", "read", floor), floor)
-  const productionControl = plainRecord(plainRecord(snapshot).productionControl)
-  const workOrders = Array.isArray(productionControl.workOrders)
-    ? productionControl.workOrders
-    : []
-  const pendingRows = workOrders
-    .map((row) => plainRecord(row))
-    .filter((row) => text(row.rmStatus).toLowerCase() !== "received")
-    .map((row) => ({
-      jcNo: row.jcNo,
-      rmPoNo: row.rmPoNo,
-      partCode: row.partCode,
-      rmInwardDate: "",
-      rmInwardKg: "",
-    }))
-  return csvResponse("rm_inward_template.csv", csvRows(fields, pendingRows))
+  const pendingRows = await withDashboardReadRepository(
+    request,
+    ({ organizationId, repository }) =>
+      repository.rawMaterialInwardTemplateRows(organizationId, floor),
+    operationalEntryCapability("rm_inward", "read", floor),
+    floor
+  )
+  return csvResponse(
+    "rm_inward_template.csv",
+    csvRows(
+      fields,
+      pendingRows.map((row) => ({
+        jcNo: row.jcNo,
+        rmPoNo: row.rmPoNo,
+        partCode: row.partCode,
+        rmInwardDate: "",
+        rmInwardKg: "",
+      }))
+    )
+  )
 }
 
 function csvResponse(filename: string, body: string) {
