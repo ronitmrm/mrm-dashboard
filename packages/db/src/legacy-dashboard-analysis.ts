@@ -1644,6 +1644,10 @@ function projectedRouteDispatchDate({
   if (!routes.length) return physicalPlanEndDate;
 
   const customerOrderPcs = safeNumber(rowValue(workOrder, "orderPcs"));
+  const materialPlanPcsValue = rowValue(workOrder, "materialPlanPcs");
+  const materialPlanPcs = materialPlanPcsValue === undefined || materialPlanPcsValue === null || materialPlanPcsValue === ""
+    ? customerOrderPcs
+    : safeNumber(materialPlanPcsValue);
   const rmInwardDate = rowText(workOrder, "rmInwardDate");
   const deadlineDate = dispatchTargetDate(rmInwardDate, planningCalendar);
   let previousCycle: Record<string, unknown> | undefined;
@@ -1683,7 +1687,16 @@ function projectedRouteDispatchDate({
     const candidates = activePhysicalMachineRows(routeMachine, machineType, machineRows);
     if (!candidates.length) return physicalPlanEndDate;
 
-    const setupOrderPcs = remainingQtyBySetup.get(canonicalKey(displaySetupNo)) ?? customerOrderPcs;
+    const routeChangeQty = remainingQtyBySetup.get(canonicalKey(displaySetupNo));
+    const requestedGoodQty = routeChangeQty === undefined
+      ? materialPlanPcs
+      : safeNumber(rowValue(workOrder, "rmRejectedKg")) > 0
+        ? Math.min(routeChangeQty, materialPlanPcs)
+        : routeChangeQty;
+    // RM pieces are provisional; downstream forecasts follow the larger
+    // cumulative quantity already established by upstream plan or actuals.
+    const upstreamPlannedPcs = sum(previousStreams.map((stream) => stream.quantity));
+    const setupOrderPcs = Math.max(requestedGoodQty, upstreamPlannedPcs);
     const readyDate = maxDateValue(...previousStreams.map((stream) => stream.endDate));
     const machineCount = requiredMachineCountForTarget({
       orderPcs: setupOrderPcs,

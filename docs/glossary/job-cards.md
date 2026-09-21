@@ -91,10 +91,13 @@ Session.
   events remain auditable, but every setup leaves the active plan until
   replacement Raw Material restores availability.
 - A partial rejection requires the Planner to choose either **Continue Accepted
-  Quantity** or **Wait For Replacement**. Continue Accepted Quantity limits the
-  Job Card plan to the pieces supported by net usable kilograms. Wait For
-  Replacement removes all active setup plans until net usable kilograms again
-  cover the ordered Raw Material.
+  Quantity** or **Wait For Replacement**. Continue Accepted Quantity uses the
+  pieces supported by net usable kilograms as the provisional Setup 1 quantity
+  and end-date basis. Once a setup records good production, that actual good
+  quantity becomes the cumulative planning quantity for downstream setups, even
+  when it exceeds the kilogram-derived estimate. Wait For Replacement removes
+  all active setup plans until net usable kilograms again cover the ordered Raw
+  Material.
 
 Net usable Raw Material equals cumulative receipt kilograms minus active Raw
 Material Rejection kilograms. Later replacement receipts add to this balance.
