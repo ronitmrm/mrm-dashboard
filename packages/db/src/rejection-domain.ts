@@ -20,6 +20,32 @@ export type RejectionRegisterRow = {
   weightBasis: string
 }
 
+export function rawMaterialRejectionBalance(input: {
+  orderKg: number
+  orderPcs: number
+  rejectedKg: number
+  usableKgBefore: number
+}) {
+  const remainingKg = Math.max(input.usableKgBefore - input.rejectedKg, 0)
+  const supportedPieces = input.orderKg > 0 && input.orderPcs > 0
+    ? Math.min(
+        input.orderPcs,
+        Math.max(
+          Math.floor((input.orderPcs * remainingKg) / input.orderKg),
+          0
+        )
+      )
+    : 0
+  const displayedRemainingKg = Math.round(remainingKg * 10) / 10
+
+  return {
+    canContinueAcceptedQuantity:
+      displayedRemainingKg > 0 && supportedPieces > 0,
+    remainingKg,
+    supportedPieces,
+  }
+}
+
 export function validateRejectionEntry(input: {
   date: string
   stage: string
