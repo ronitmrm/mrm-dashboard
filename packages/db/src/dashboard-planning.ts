@@ -1516,7 +1516,6 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           && input.recordId !== existing.rows[0]?.source_id) {
           throw new Error("The cycle time record to edit was not found for this route setup. Reload the master.")
         }
-        rejectDuplicateMaster(input.rejectDuplicates && !input.recordId, !!existing.rows[0])
         const result = existing.rows[0]
           ? await client.query<{ id: string }>(
               `

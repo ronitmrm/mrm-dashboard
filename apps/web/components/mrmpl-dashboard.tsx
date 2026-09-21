@@ -11872,6 +11872,13 @@ function PlanningMasterRelationForm({
         <CardDescription>
           Select One Existing Route Master Line. Its Part, Option, Setup, Setup
           Name, And Machine Family Cannot Be Retyped Here.
+          {kind === "cycle" ? (
+            <>
+              {" "}A revised cycle time applies immediately to open sessions
+              and remaining planning. Closed sessions and recorded output
+              remain unchanged.
+            </>
+          ) : null}
         </CardDescription>
       </CardHeader>
       <CardContent>
