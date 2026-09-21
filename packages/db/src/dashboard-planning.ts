@@ -68,6 +68,24 @@ const requiredText = (value: string, label: string) => {
   return normalized
 }
 
+function sourcePayloadRecord(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {}
+}
+
+function sourcePayloadNumber(value: unknown, ...keys: string[]) {
+  const record = sourcePayloadRecord(value)
+  const nested = sourcePayloadRecord(record.payload)
+  for (const key of keys) {
+    const raw = record[key] ?? nested[key]
+    if (raw === undefined || raw === null || raw === "") continue
+    const parsed = Number(raw)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return 0
+}
+
 
 async function businessKeyLock(
   client: PoolClient,
@@ -1966,6 +1984,174 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
         }
         await queueDashboardRefresh(client, input.organizationId)
         return { id: created.rows[0]!.id, ok: true }
+      })
+    },
+
+    async recordRawMaterialRejection(input: {
+      actorUserId?: string | null
+      jobCardNumber: string
+      organizationId: string
+      planningAction: "continue_accepted_quantity" | "wait_for_replacement"
+      productionFloorCode?: string
+      reason: string
+      rejectedKg: number
+    }) {
+      return transaction(pool, async (client) => {
+        const jobCardNumber = requiredText(input.jobCardNumber, "Job card")
+        const reason = requiredText(input.reason, "Rejection reason")
+        const rejectedKg = Number(input.rejectedKg)
+        if (!Number.isFinite(rejectedKg) || rejectedKg <= 0) {
+          throw new Error("Rejected kilograms must be greater than zero.")
+        }
+        const productionFloorCode = normalizeProductionFloorCode(
+          input.productionFloorCode
+        )
+        await businessKeyLock(
+          client,
+          "manufacturing.raw-material-rejection",
+          `${input.organizationId}:${jobCardNumber}`
+        )
+        const workOrderResult = await client.query<{
+          id: string
+          item_uid: string
+          source_payload: unknown
+        }>(
+          `
+            SELECT work_order.id, item.uid AS item_uid,
+              work_order.source_payload
+            FROM manufacturing.work_orders work_order
+            JOIN catalog.items item ON item.id = work_order.item_id
+            WHERE work_order.organization_id = $1
+              AND lower(work_order.job_card_number) = lower($2)
+            FOR UPDATE OF work_order
+          `,
+          [input.organizationId, jobCardNumber]
+        )
+        const workOrder = workOrderResult.rows[0]
+        if (!workOrder) throw new Error("Planning work order was not found.")
+        if (
+          productionFloorCodeForRecord({ sourcePayload: workOrder.source_payload })
+          !== productionFloorCode
+        ) {
+          throw new ProductionUnitAccessError(
+            "This Job Card belongs to another Production Unit."
+          )
+        }
+        const openSession = await client.query<{ session_reference: string | null }>(
+          `
+            SELECT session_reference
+            FROM manufacturing.production_sessions
+            WHERE organization_id = $1 AND work_order_id = $2
+              AND status = 'open' AND reversed_at IS NULL
+            ORDER BY started_at DESC
+            LIMIT 1
+          `,
+          [input.organizationId, workOrder.id]
+        )
+        if (openSession.rows[0]) {
+          const reference = openSession.rows[0].session_reference
+          throw new Error(
+            `Close Production Session${reference ? ` ${reference}` : ""} before recording Raw Material rejection.`
+          )
+        }
+        const balance = await client.query<{
+          received_kg: string
+          rejected_kg: string
+        }>(
+          `
+            SELECT
+              COALESCE((
+                SELECT sum(receipt.quantity_kg)
+                FROM manufacturing.raw_material_receipts receipt
+                WHERE receipt.organization_id = $1
+                  AND lower(receipt.job_card_number) = lower($2)
+              ), 0)::text AS received_kg,
+              COALESCE((
+                SELECT sum(rejection.rejected_kg)
+                FROM manufacturing.raw_material_rejection_events rejection
+                WHERE rejection.organization_id = $1
+                  AND rejection.work_order_id = $3
+              ), 0)::text AS rejected_kg
+          `,
+          [input.organizationId, jobCardNumber, workOrder.id]
+        )
+        const receivedKg = Number(balance.rows[0]?.received_kg ?? 0)
+        const previouslyRejectedKg = Number(balance.rows[0]?.rejected_kg ?? 0)
+        const usableKgBefore = Math.max(receivedKg - previouslyRejectedKg, 0)
+        if (rejectedKg > usableKgBefore + 0.00000001) {
+          throw new Error(
+            "Rejected kilograms cannot exceed the usable Raw Material balance."
+          )
+        }
+        const usableKgAfter = Math.max(usableKgBefore - rejectedKg, 0)
+        const rejectionScope = usableKgAfter <= 0.00000001 ? "full" : "partial"
+        const requestedAction = input.planningAction?.trim().toLowerCase()
+        if (
+          rejectionScope === "partial" &&
+          requestedAction !== "continue_accepted_quantity" &&
+          requestedAction !== "wait_for_replacement"
+        ) {
+          throw new Error(
+            "Choose Continue Accepted Quantity or Wait For Replacement."
+          )
+        }
+        const planningAction = rejectionScope === "full"
+          ? "wait_for_replacement"
+          : requestedAction as "continue_accepted_quantity" | "wait_for_replacement"
+        const orderedKg = sourcePayloadNumber(
+          workOrder.source_payload,
+          "orderKg",
+          "ORD. KG."
+        )
+        const occurredAt = new Date().toISOString()
+        const sourceId = randomUUID()
+        const sourcePayload = {
+          jcNo: jobCardNumber,
+          orderedKg,
+          partCode: workOrder.item_uid,
+          planningAction,
+          productionFloorCode,
+          reason,
+          receivedKg,
+          rejectedKg,
+          rejectionScope,
+          usableKgAfter,
+          usableKgBefore,
+        }
+        const created = await client.query<{ id: string }>(
+          `
+            INSERT INTO manufacturing.raw_material_rejection_events (
+              organization_id, work_order_id, production_floor_code,
+              rejected_kg, rejection_scope, planning_action, reason,
+              occurred_at, actor_user_id, source_system, source_table,
+              source_id, source_payload
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9,
+              'mrm-dashboard', 'rawMaterialRejections', $10, $11)
+            RETURNING id
+          `,
+          [
+            input.organizationId,
+            workOrder.id,
+            productionFloorCode,
+            rejectedKg,
+            rejectionScope,
+            planningAction,
+            reason,
+            occurredAt,
+            input.actorUserId ?? null,
+            sourceId,
+            sourcePayload,
+          ]
+        )
+        await queueDashboardRefresh(client, input.organizationId)
+        return {
+          id: created.rows[0]!.id,
+          ok: true,
+          planningAction,
+          rejectionScope,
+          usableKgAfter,
+        }
       })
     },
 

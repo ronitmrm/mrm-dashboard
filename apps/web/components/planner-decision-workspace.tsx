@@ -9,6 +9,7 @@ import {
   Eye,
   FilePenLine,
   ListPlus,
+  PackageX,
   Route,
   Wrench,
 } from "lucide-react"
@@ -26,6 +27,7 @@ export type PlannerDecisionAction =
   | "priority"
   | "machine-unavailable"
   | "machine-switch"
+  | "raw-material-rejection"
   | "route-change"
 
 export type PlannerDecisionView = "new" | "pending" | "issues" | "history"
@@ -37,6 +39,7 @@ type PlannerDecisionPanels = {
   machineSwitch: ReactNode
   pending: ReactNode
   priority: ReactNode
+  rawMaterialRejection: ReactNode
   routeChange: ReactNode
 }
 
@@ -74,6 +77,13 @@ const actionChoices = [
     icon: ArrowRightLeft,
   },
   {
+    key: "raw-material-rejection",
+    title: "Reject Raw Material",
+    description: "Dispatch rejected Raw Material back and recalculate this Job Card.",
+    detail: "Remove all setups or continue only the quantity supported by accepted material.",
+    icon: PackageX,
+  },
+  {
     key: "route-change",
     title: "Change Route",
     description: "Change the route for the remaining production quantity.",
@@ -104,6 +114,7 @@ export function PlannerDecisionWorkspace({
         priority: panels.priority,
         "machine-unavailable": panels.machineUnavailable,
         "machine-switch": panels.machineSwitch,
+        "raw-material-rejection": panels.rawMaterialRejection,
         "route-change": panels.routeChange,
       }[activeAction]
     : null

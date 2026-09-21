@@ -60,6 +60,7 @@ export type CanonicalDashboardSource = {
   planOverrides: JsonRecord[]
   plannerPriorities: JsonRecord[]
   productionEntries: JsonRecord[]
+  rawMaterialRejections: JsonRecord[]
   routeChanges: JsonRecord[]
   routeSelections: JsonRecord[]
   setupCompletions: JsonRecord[]
@@ -167,6 +168,7 @@ const physicalSourceBudgets = {
   planOverrides: 2000,
   plannerPriorities: 2000,
   productionEntries: 10000,
+  rawMaterialRejections: 2000,
   routeChanges: 2000,
   routeSelections: 2500,
   setupCompletions: 5000,
@@ -515,6 +517,7 @@ export async function readCanonicalDashboardSource(
     planOverrides: group("planOverrides"),
     plannerPriorities: group("plannerPriorities"),
     productionEntries: group("productionEntries"),
+    rawMaterialRejections: group("rawMaterialRejections"),
     routeChanges: group("routeChanges"),
     routeSelections: group("routeSelections"),
     setupCompletions: group("setupCompletions"),
@@ -762,6 +765,7 @@ export async function buildCanonicalDashboardReadModel(
       floorRows(source.plannerPriorities, floorCode),
       floorRows(source.machineConstraints, floorCode),
       floorRows(source.planOverrides, floorCode),
+      floorRows(source.rawMaterialRejections, floorCode),
       floorRows(source.routeChanges, floorCode),
       floorRows(source.dispatchApprovals, floorCode),
       floorRows(source.setupCompletions, floorCode),
@@ -806,6 +810,10 @@ export async function buildCanonicalDashboardReadModel(
         corrected(source.productionEntries, "productionEntries"),
         floorCode
       ) as never,
+      rawMaterialRejections: floorRows(
+        source.rawMaterialRejections,
+        floorCode
+      ),
       routeChanges: floorRows(
         corrected(source.routeChanges, "routeChanges"),
         floorCode
@@ -866,6 +874,7 @@ export async function buildCanonicalDashboardReadModel(
     source.plannerPriorities,
     source.machineConstraints,
     source.planOverrides,
+    source.rawMaterialRejections,
     source.routeChanges,
     source.dispatchApprovals,
     source.setupCompletions,

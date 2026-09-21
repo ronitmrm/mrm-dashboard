@@ -1043,6 +1043,40 @@ async function post(request: NextRequest, context: RouteContext) {
       }))
     }
 
+    if (path === "raw-material-rejection") {
+      const planningAction = text(body.planningAction)
+      if (
+        planningAction !== "continue_accepted_quantity" &&
+        planningAction !== "wait_for_replacement"
+      ) {
+        throw new RouteError(
+          400,
+          "Choose Continue Accepted Quantity or Wait For Replacement."
+        )
+      }
+      const result = await withPlanningRepository(
+        request,
+        "planning.raw_material_rejection.write",
+        ({ actorUserId, organizationId, repository }) =>
+          repository.recordRawMaterialRejection({
+            actorUserId,
+            jobCardNumber: text(body.jcNo),
+            organizationId,
+            planningAction,
+            productionFloorCode: text(body.productionFloorCode),
+            reason: text(body.reason),
+            rejectedKg: numeric(body.rejectedKg),
+          })
+      )
+      return json(
+        await withPlanningRefresh(request, path, body, {
+          ...result,
+          message: "Raw Material rejection saved.",
+          rowsUpdated: 1,
+        })
+      )
+    }
+
     if (path === "plan-override") {
       const result = await withPlanningRepository(
         request,
@@ -1941,6 +1975,7 @@ const knownDashboardApiPaths = new Set([
   "mark-complete",
   "plan-override",
   "planner-priority",
+  "raw-material-rejection",
   "production-sessions",
   "reschedule",
   "reverse-entry",

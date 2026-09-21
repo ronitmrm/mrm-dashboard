@@ -103,6 +103,62 @@ afterAll(async () => {
 })
 
 describe("dashboard planning writes", () => {
+  test("records raw-material rejection against the usable Job Card balance", async () => {
+    const jobCardNumber = `JC-RM-REJECT-${suffix}`
+    const rmPoNumber = `RM-REJECT-${suffix}`
+    await repository.upsertWorkOrder({
+      itemUid,
+      jobCardNumber,
+      orderedQuantity: 10_000,
+      organizationId,
+      requiredProductionFloorCode: "cnc",
+      sourcePayload: {
+        jcNo: jobCardNumber,
+        orderKg: 100,
+        orderPcs: 10_000,
+        partCode: itemUid,
+        productionFloorCode: "cnc",
+        rmPoNo: rmPoNumber,
+      },
+      workOrderNumber: `WO-RM-REJECT-${suffix}`,
+    })
+    await jobCards.upsertRawMaterialReceipt({
+      organizationId,
+      payload: {
+        jcNo: jobCardNumber,
+        partCode: itemUid,
+        productionFloorCode: "cnc",
+        rmPoNo: rmPoNumber,
+      },
+      quantityKg: 100,
+      receiptNumber: rmPoNumber,
+      receivedOn: "2026-09-21",
+      requiredProductionFloorCode: "cnc",
+    })
+
+    await expect(repository.recordRawMaterialRejection({
+      jobCardNumber,
+      organizationId,
+      planningAction: "continue_accepted_quantity",
+      productionFloorCode: "cnc",
+      reason: "Material chemistry rejected",
+      rejectedKg: 50,
+    })).resolves.toMatchObject({
+      planningAction: "continue_accepted_quantity",
+      rejectionScope: "partial",
+      usableKgAfter: 50,
+    })
+
+    await expect(repository.recordRawMaterialRejection({
+      jobCardNumber,
+      organizationId,
+      planningAction: "wait_for_replacement",
+      productionFloorCode: "cnc",
+      reason: "Invalid second dispatch",
+      rejectedKg: 51,
+    })).rejects.toThrow("cannot exceed the usable Raw Material balance")
+  })
+
   test("reviews a machine issue in its unit and preserves the original decision", async () => {
     const machineNumber = `REVIEW-${suffix}`
     await repository.upsertMachine({ machineNumber, organizationId, productionFloorCode: "cnc" })
