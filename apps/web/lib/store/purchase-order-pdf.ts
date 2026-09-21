@@ -1,10 +1,7 @@
-import {
-  PDFDocument,
-  type PDFFont,
-  type PDFPage,
-  StandardFonts,
-  rgb,
-} from "pdf-lib"
+import PDFDocument from "pdfkit"
+
+import { drawLogo, type PdfContext } from "../branding/pdfkit-layout"
+import { registerPdfKitBrandFonts } from "../branding/pdfkit-fonts"
 
 export type StorePurchaseOrderDocument = {
   lines: Array<{
@@ -26,20 +23,43 @@ export type StorePurchaseOrderDocument = {
 
 const PAGE_WIDTH = 595.28
 const PAGE_HEIGHT = 841.89
-const MARGIN = 32
+const MARGIN = 27
 const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2
-const GREEN = rgb(0.02, 0.36, 0.22)
-const DARK_GREEN = rgb(0.03, 0.2, 0.13)
-const PALE_GREEN = rgb(0.92, 0.97, 0.94)
-const INK = rgb(0.09, 0.13, 0.11)
-const MUTED = rgb(0.36, 0.42, 0.39)
-const BORDER = rgb(0.77, 0.82, 0.79)
-const WHITE = rgb(1, 1, 1)
+const FOOTER_TOP = 781
+const GREEN = "#006A49"
+const BLACK = "#050505"
+const CREAM = "#F7F7F2"
+const BORDER = "#D7D9D5"
+const WHITE = "#FFFFFF"
 
-function ascii(value: unknown) {
-  return String(value ?? "-")
-    .normalize("NFKD")
-    .replace(/[^\x20-\x7E]/g, "")
+const COMPANY_NAME = "Mayank Raw Mint Pvt. Ltd."
+const COMPANY_ADDRESS =
+  "Plot no. 10 to 15, B/h Murlidhar Tractor, Hapa Industrial Area, Jamnagar, Gujarat, 361120, India"
+const COMPANY_GSTIN = "24AAECM2045G1ZV"
+
+const columns = [
+  { align: "center", label: "Sr. No.", width: 55 },
+  { align: "center", label: "Delivery", width: 90 },
+  { align: "left", label: "Item Description", width: 179 },
+  { align: "center", label: "QTY", width: 72 },
+  { align: "right", label: "Unit Price", width: 72 },
+  { align: "right", label: "TOTAL", width: CONTENT_WIDTH - 468 },
+] as const
+
+const terms = [
+  "GST as applicable.",
+  "Acceptance of material is subject to approval of quality and quantity at our factory.",
+  "Our order number must appear on the invoice, packing list, and correspondence.",
+  "Material should be in accordance with the PO / quote.",
+  "Freight and freight insurance are included in the above price.",
+]
+
+function cleanText(value: unknown) {
+  return (
+    String(value ?? "-")
+      .replace(/[\u2010-\u2015\u2212]/g, "-")
+      .trim() || "-"
+  )
 }
 
 function number(value: string) {
@@ -47,447 +67,584 @@ function number(value: string) {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
-function amount(quantity: string, unitPrice: string) {
+function lineAmount(quantity: string, unitPrice: string) {
   return number(quantity) * number(unitPrice)
 }
 
-function money(value: number) {
-  return `INR ${value.toLocaleString("en-IN", {
-    maximumFractionDigits: 2,
-    minimumFractionDigits: 2,
-  })}`
+function formatNumber(value: number, maximumFractionDigits = 2) {
+  return value.toLocaleString("en-IN", {
+    maximumFractionDigits,
+    minimumFractionDigits: 0,
+  })
 }
 
-function wrapText(
-  value: unknown,
-  font: PDFFont,
-  size: number,
-  maxWidth: number
-) {
-  const words = ascii(value).split(/\s+/).filter(Boolean)
-  if (!words.length) return ["-"]
-  const lines: string[] = []
-  let line = ""
-  for (const word of words) {
-    const candidate = line ? `${line} ${word}` : word
-    if (font.widthOfTextAtSize(candidate, size) <= maxWidth || !line) {
-      line = candidate
-    } else {
-      lines.push(line)
-      line = word
+export function formatPurchaseOrderDate(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim())
+  if (!match) return cleanText(value)
+  const months = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+  ]
+  const month = months[Number(match[2]) - 1]
+  if (!month) return cleanText(value)
+  return `${match[3]} ${month} ${match[1]}`
+}
+
+function underThousand(value: number) {
+  const ones = [
+    "",
+    "ONE",
+    "TWO",
+    "THREE",
+    "FOUR",
+    "FIVE",
+    "SIX",
+    "SEVEN",
+    "EIGHT",
+    "NINE",
+    "TEN",
+    "ELEVEN",
+    "TWELVE",
+    "THIRTEEN",
+    "FOURTEEN",
+    "FIFTEEN",
+    "SIXTEEN",
+    "SEVENTEEN",
+    "EIGHTEEN",
+    "NINETEEN",
+  ]
+  const tens = [
+    "",
+    "",
+    "TWENTY",
+    "THIRTY",
+    "FORTY",
+    "FIFTY",
+    "SIXTY",
+    "SEVENTY",
+    "EIGHTY",
+    "NINETY",
+  ]
+  const parts: string[] = []
+  let remaining = value
+  if (remaining >= 100) {
+    parts.push(`${ones[Math.floor(remaining / 100)]} HUNDRED`)
+    remaining %= 100
+  }
+  if (remaining >= 20) {
+    parts.push(tens[Math.floor(remaining / 10)]!)
+    remaining %= 10
+  }
+  if (remaining) parts.push(ones[remaining]!)
+  return parts.join(" ")
+}
+
+function integerInWords(value: number) {
+  if (!value) return "ZERO"
+  const parts: string[] = []
+  let remaining = value
+  for (const [size, label] of [
+    [10_000_000, "CRORE"],
+    [100_000, "LAKH"],
+    [1_000, "THOUSAND"],
+  ] as const) {
+    if (remaining >= size) {
+      parts.push(`${integerInWords(Math.floor(remaining / size))} ${label}`)
+      remaining %= size
     }
   }
-  if (line) lines.push(line)
-  return lines
+  if (remaining) parts.push(underThousand(remaining))
+  return parts.join(" ")
 }
 
-function drawWrappedText(input: {
-  color?: ReturnType<typeof rgb>
-  font: PDFFont
-  maxLines?: number
-  page: PDFPage
-  size: number
-  value: unknown
-  width: number
-  x: number
-  y: number
-}) {
-  const lines = wrapText(
-    input.value,
-    input.font,
-    input.size,
-    input.width
-  ).slice(0, input.maxLines)
-  lines.forEach((line, index) => {
-    input.page.drawText(line, {
-      color: input.color ?? INK,
-      font: input.font,
-      size: input.size,
-      x: input.x,
-      y: input.y - index * (input.size + 3),
-    })
+export function purchaseOrderAmountInWords(value: number) {
+  const paiseTotal = Math.max(0, Math.round(value * 100))
+  const rupees = Math.floor(paiseTotal / 100)
+  const paise = paiseTotal % 100
+  return [
+    integerInWords(rupees),
+    paise ? `AND ${integerInWords(paise)} PAISE` : null,
+  ]
+    .filter(Boolean)
+    .join(" ")
+}
+
+function collectPdfBytes(doc: PDFKit.PDFDocument) {
+  return new Promise<Uint8Array>((resolve, reject) => {
+    const chunks: Buffer[] = []
+    doc.on("data", (chunk: Buffer) => chunks.push(chunk))
+    doc.once("error", reject)
+    doc.once("end", () => resolve(Buffer.concat(chunks)))
   })
-  return lines.length
+}
+
+function drawBrandHeader(ctx: PdfContext) {
+  const { doc } = ctx
+  drawLogo(ctx, 56, 33, 54)
+  doc
+    .font("Outfit-800")
+    .fontSize(31)
+    .fillColor(GREEN)
+    .text("MAYANK RAW MINT", 125, 29, { lineBreak: false })
+  doc
+    .font("Outfit-400")
+    .fontSize(17)
+    .fillColor(GREEN)
+    .text("Precision Brass Fittings & Metal Components", 127, 68, {
+      lineBreak: false,
+    })
+  doc.rect(0, 121, PAGE_WIDTH, 64).fill(GREEN)
+  doc
+    .font("Outfit-800")
+    .fontSize(31)
+    .fillColor(WHITE)
+    .text("PURCHASE ORDER", 0, 137, {
+      align: "center",
+      lineBreak: false,
+      width: PAGE_WIDTH,
+    })
+}
+
+function drawMetadata(
+  doc: PDFKit.PDFDocument,
+  document: StorePurchaseOrderDocument
+) {
+  const labels = [
+    { label: "GST. No.", value: document.supplierGstNumber || "-", x: MARGIN },
+    { label: "PO. No.", value: document.orderNumber, x: 226 },
+    {
+      label: "PO. DATE",
+      value: formatPurchaseOrderDate(document.orderDate),
+      x: 424,
+    },
+  ]
+  for (const item of labels) {
+    doc
+      .font("Outfit-600")
+      .fontSize(11.5)
+      .fillColor(GREEN)
+      .text(item.label, item.x, 202, { lineBreak: false })
+    doc
+      .font("Outfit-500")
+      .fontSize(10.5)
+      .fillColor(BLACK)
+      .text(cleanText(item.value), item.x, 220, {
+        lineBreak: false,
+        width: item.x === MARGIN ? 170 : 145,
+      })
+  }
+
+  doc
+    .font("Outfit-600")
+    .fontSize(11.5)
+    .fillColor(GREEN)
+    .text("Bill To", MARGIN, 249, { lineBreak: false })
+  doc
+    .font("Outfit-600")
+    .fontSize(10.5)
+    .fillColor(BLACK)
+    .text(cleanText(document.supplierName), MARGIN, 267, {
+      lineBreak: false,
+      width: 270,
+    })
+  doc
+    .font("Outfit-400")
+    .fontSize(9.5)
+    .fillColor(BLACK)
+    .text(
+      cleanText(document.supplierAddress || "Address not recorded"),
+      MARGIN,
+      285,
+      {
+        height: 42,
+        lineGap: 2,
+        width: 285,
+      }
+    )
+}
+
+function drawContinuationHeader(
+  ctx: PdfContext,
+  document: StorePurchaseOrderDocument
+) {
+  const { doc } = ctx
+  drawLogo(ctx, MARGIN, 26, 32)
+  doc
+    .font("Outfit-800")
+    .fontSize(18)
+    .fillColor(GREEN)
+    .text("MAYANK RAW MINT", 70, 27, { lineBreak: false })
+  doc
+    .font("Outfit-500")
+    .fontSize(8.5)
+    .fillColor(BLACK)
+    .text(cleanText(document.orderNumber), 390, 29, {
+      align: "right",
+      lineBreak: false,
+      width: PAGE_WIDTH - MARGIN - 390,
+    })
+  doc.rect(0, 76, PAGE_WIDTH, 36).fill(GREEN)
+  doc
+    .font("Outfit-700")
+    .fontSize(17)
+    .fillColor(WHITE)
+    .text("PURCHASE ORDER / CONTINUED", 0, 85, {
+      align: "center",
+      lineBreak: false,
+      width: PAGE_WIDTH,
+    })
+}
+
+function drawItemsHeading(doc: PDFKit.PDFDocument, y: number) {
+  doc
+    .font("Outfit-600")
+    .fontSize(11.5)
+    .fillColor(GREEN)
+    .text("Items", MARGIN, y, { lineBreak: false })
+}
+
+function drawTableHeader(doc: PDFKit.PDFDocument, y: number) {
+  const height = 27
+  let x = MARGIN
+  doc.lineWidth(0.55)
+  for (const column of columns) {
+    doc.rect(x, y, column.width, height).fillAndStroke(CREAM, BORDER)
+    doc
+      .font("Outfit-600")
+      .fontSize(9.2)
+      .fillColor(BLACK)
+      .text(column.label, x + 6, y + 8, {
+        align: column.align,
+        height: height - 12,
+        lineBreak: false,
+        width: column.width - 12,
+      })
+    x += column.width
+  }
+  return y + height
+}
+
+function descriptionForLine(line: StorePurchaseOrderDocument["lines"][number]) {
+  return `${cleanText(line.typeCode)} - ${cleanText(line.itemName)}`
+}
+
+function tableRowHeight(
+  doc: PDFKit.PDFDocument,
+  line: StorePurchaseOrderDocument["lines"][number]
+) {
+  doc.font("Outfit-400").fontSize(9.7)
+  const descriptionHeight = doc.heightOfString(descriptionForLine(line), {
+    lineGap: 2,
+    width: columns[2].width - 12,
+  })
+  return Math.max(36, Math.min(96, descriptionHeight + 14))
+}
+
+function drawTableRow(
+  doc: PDFKit.PDFDocument,
+  line: StorePurchaseOrderDocument["lines"][number],
+  index: number,
+  y: number,
+  height: number
+) {
+  const values = [
+    String(index + 1),
+    "MRMPL",
+    descriptionForLine(line),
+    formatNumber(number(line.orderedQuantity), 3),
+    formatNumber(number(line.unitPrice)),
+    formatNumber(lineAmount(line.orderedQuantity, line.unitPrice)),
+  ]
+  let x = MARGIN
+  doc.lineWidth(0.55)
+  values.forEach((value, columnIndex) => {
+    const column = columns[columnIndex]!
+    doc.rect(x, y, column.width, height).fillAndStroke(WHITE, BORDER)
+    doc.font("Outfit-400").fontSize(9.7)
+    const textHeight = Math.min(
+      height - 10,
+      doc.heightOfString(value, {
+        lineGap: 2,
+        width: column.width - 12,
+      })
+    )
+    doc
+      .fillColor(BLACK)
+      .text(value, x + 6, y + Math.max(5, (height - textHeight) / 2), {
+        align: column.align,
+        ellipsis: true,
+        height: height - 10,
+        lineGap: 2,
+        width: column.width - 12,
+      })
+    x += column.width
+  })
+  return y + height
+}
+
+function totalAmount(document: StorePurchaseOrderDocument) {
+  return document.lines.reduce(
+    (sum, line) => sum + lineAmount(line.orderedQuantity, line.unitPrice),
+    0
+  )
+}
+
+function totalQuantity(document: StorePurchaseOrderDocument) {
+  return document.lines.reduce(
+    (sum, line) => sum + number(line.orderedQuantity),
+    0
+  )
+}
+
+function drawTotals(
+  doc: PDFKit.PDFDocument,
+  document: StorePurchaseOrderDocument,
+  y: number
+) {
+  const total = totalAmount(document)
+  const firstWidth = columns[0].width + columns[1].width + columns[2].width
+  const totalHeight = 27
+  const amountHeight = 41
+  const summaryCells = [
+    { align: "center" as const, text: "TOTAL", width: firstWidth },
+    {
+      align: "center" as const,
+      text: formatNumber(totalQuantity(document), 3),
+      width: columns[3].width,
+    },
+    { align: "right" as const, text: "", width: columns[4].width },
+    {
+      align: "right" as const,
+      text: formatNumber(total),
+      width: columns[5].width,
+    },
+  ]
+  let x = MARGIN
+  for (const cell of summaryCells) {
+    doc.rect(x, y, cell.width, totalHeight).fillAndStroke(CREAM, BORDER)
+    doc
+      .font("Outfit-600")
+      .fontSize(9.7)
+      .fillColor(BLACK)
+      .text(cell.text, x + 6, y + 8, {
+        align: cell.align,
+        lineBreak: false,
+        width: cell.width - 12,
+      })
+    x += cell.width
+  }
+  y += totalHeight
+
+  const labelWidth = columns[0].width + columns[1].width
+  doc.rect(MARGIN, y, labelWidth, amountHeight).fillAndStroke(CREAM, BORDER)
+  doc
+    .font("Outfit-600")
+    .fontSize(9.3)
+    .fillColor(BLACK)
+    .text("Amount (in words)", MARGIN + 6, y + 14, {
+      align: "center",
+      lineBreak: false,
+      width: labelWidth - 12,
+    })
+  doc
+    .rect(MARGIN + labelWidth, y, CONTENT_WIDTH - labelWidth, amountHeight)
+    .fillAndStroke(CREAM, BORDER)
+  doc
+    .font("Outfit-500")
+    .fontSize(9.5)
+    .fillColor(BLACK)
+    .text(purchaseOrderAmountInWords(total), MARGIN + labelWidth + 7, y + 9, {
+      height: amountHeight - 14,
+      lineGap: 2,
+      width: CONTENT_WIDTH - labelWidth - 14,
+    })
+  return y + amountHeight
+}
+
+function commercialTerms(document: StorePurchaseOrderDocument) {
+  return document.remark
+    ? [...terms, `Remark: ${cleanText(document.remark)}`]
+    : terms
+}
+
+function termsBoxHeight(
+  doc: PDFKit.PDFDocument,
+  document: StorePurchaseOrderDocument
+) {
+  doc.font("Outfit-400").fontSize(9.4)
+  const bodyWidth = CONTENT_WIDTH - 54
+  return (
+    18 +
+    commercialTerms(document).reduce(
+      (sum, term) =>
+        sum +
+        Math.max(
+          14,
+          doc.heightOfString(term, { lineGap: 2, width: bodyWidth }) + 3
+        ),
+      0
+    )
+  )
+}
+
+function finalSectionHeight(
+  doc: PDFKit.PDFDocument,
+  document: StorePurchaseOrderDocument
+) {
+  return 27 + 41 + 31 + 20 + termsBoxHeight(doc, document) + 80
+}
+
+function drawTermsAndSignature(
+  doc: PDFKit.PDFDocument,
+  document: StorePurchaseOrderDocument,
+  y: number
+) {
+  const headingY = y + 31
+  doc
+    .font("Outfit-600")
+    .fontSize(13)
+    .fillColor(GREEN)
+    .text("Terms & Conditions", MARGIN + 2, headingY, { lineBreak: false })
+
+  const boxY = headingY + 20
+  const boxHeight = termsBoxHeight(doc, document)
+  doc.rect(MARGIN, boxY, CONTENT_WIDTH, boxHeight).fill(CREAM)
+  let termY = boxY + 11
+  commercialTerms(document).forEach((term, index) => {
+    doc
+      .font("Outfit-500")
+      .fontSize(9.4)
+      .fillColor(BLACK)
+      .text(`${index + 1}.`, MARGIN + 14, termY, {
+        align: "right",
+        lineBreak: false,
+        width: 15,
+      })
+    doc.font("Outfit-400").fontSize(9.4)
+    const bodyX = MARGIN + 34
+    const bodyWidth = CONTENT_WIDTH - 54
+    const height = doc.heightOfString(term, {
+      lineGap: 2,
+      width: bodyWidth,
+    })
+    doc.text(term, bodyX, termY, { lineGap: 2, width: bodyWidth })
+    termY += Math.max(14, height + 3)
+  })
+
+  const signatureY = boxY + boxHeight + 13
+  const signatureX = PAGE_WIDTH - MARGIN - 190
+  doc
+    .font("Outfit-600")
+    .fontSize(11)
+    .fillColor(GREEN)
+    .text(COMPANY_NAME, signatureX, signatureY, {
+      align: "right",
+      lineBreak: false,
+      width: 190,
+    })
+  doc
+    .font("Outfit-600")
+    .fontSize(10.5)
+    .fillColor(GREEN)
+    .text("Authorized Signatory", signatureX, signatureY + 45, {
+      align: "right",
+      lineBreak: false,
+      width: 190,
+    })
+}
+
+function drawFooter(doc: PDFKit.PDFDocument) {
+  doc.rect(0, FOOTER_TOP, PAGE_WIDTH, PAGE_HEIGHT - FOOTER_TOP).fill(GREEN)
+  doc
+    .font("Outfit-600")
+    .fontSize(9.8)
+    .fillColor(WHITE)
+    .text(COMPANY_NAME, 0, FOOTER_TOP + 9, {
+      align: "center",
+      lineBreak: false,
+      width: PAGE_WIDTH,
+    })
+  doc
+    .font("Outfit-500")
+    .fontSize(8.4)
+    .fillColor(WHITE)
+    .text(COMPANY_ADDRESS, MARGIN, FOOTER_TOP + 25, {
+      align: "center",
+      lineBreak: false,
+      width: CONTENT_WIDTH,
+    })
+  doc
+    .font("Outfit-600")
+    .fontSize(9)
+    .fillColor(WHITE)
+    .text(`GSTIN No. ${COMPANY_GSTIN}`, 0, FOOTER_TOP + 42, {
+      align: "center",
+      lineBreak: false,
+      width: PAGE_WIDTH,
+    })
 }
 
 export async function buildStorePurchaseOrderPdf(
   document: StorePurchaseOrderDocument
 ) {
-  const pdf = await PDFDocument.create()
-  pdf.setTitle(`${document.orderNumber} Purchase Order`)
-  pdf.setSubject("Branded Store Purchase Order")
-  pdf.setCreator("MRM Dashboard")
-  pdf.setProducer("MRM Dashboard")
-  const regular = await pdf.embedFont(StandardFonts.Helvetica)
-  const bold = await pdf.embedFont(StandardFonts.HelveticaBold)
-  let page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT])
-  let y = 0
+  const doc = new PDFDocument({
+    autoFirstPage: false,
+    bufferPages: true,
+    compress: true,
+    fontLayoutCache: false,
+    info: {
+      Author: COMPANY_NAME,
+      Creator: "MRM Dashboard",
+      Producer: "MRM Dashboard",
+      Subject: "Branded Store Purchase Order",
+      Title: `${cleanText(document.orderNumber)} Purchase Order`,
+    },
+    margin: 0,
+    size: [PAGE_WIDTH, PAGE_HEIGHT],
+  })
+  const output = collectPdfBytes(doc)
+  const fonts = await registerPdfKitBrandFonts(doc)
+  const ctx = { doc, fonts }
 
-  const drawBrandHeader = (continuation = false) => {
-    page.drawRectangle({
-      color: GREEN,
-      height: 7,
-      width: 32,
-      x: MARGIN,
-      y: 792,
-    })
-    page.drawRectangle({
-      color: GREEN,
-      height: 7,
-      width: 26,
-      x: MARGIN,
-      y: 781,
-    })
-    page.drawRectangle({
-      color: GREEN,
-      height: 7,
-      width: 20,
-      x: MARGIN,
-      y: 770,
-    })
-    page.drawText("MAYANK", {
-      color: DARK_GREEN,
-      font: bold,
-      size: 13,
-      x: 72,
-      y: 786,
-    })
-    page.drawText("RAW MINT", {
-      color: GREEN,
-      font: bold,
-      size: 13,
-      x: 72,
-      y: 771,
-    })
-    page.drawText(
-      continuation ? "PURCHASE ORDER / CONTINUED" : "PURCHASE ORDER",
-      {
-        color: DARK_GREEN,
-        font: bold,
-        size: continuation ? 11 : 17,
-        x: continuation ? 390 : 404,
-        y: 783,
-      }
-    )
-    page.drawText(ascii(document.orderNumber), {
-      color: MUTED,
-      font: regular,
-      size: 8,
-      x: 404,
-      y: 768,
-    })
-    page.drawRectangle({
-      color: GREEN,
-      height: 30,
-      width: CONTENT_WIDTH,
-      x: MARGIN,
-      y: 724,
-    })
-    page.drawText(
-      document.orderType === "REPAIR"
-        ? "REPAIR PURCHASE ORDER"
-        : "STORE PURCHASE ORDER",
-      { color: WHITE, font: bold, size: 14, x: MARGIN + 12, y: 734 }
-    )
-    y = 706
-  }
-
-  const drawOrderDetails = () => {
-    const gap = 10
-    const boxWidth = (CONTENT_WIDTH - gap) / 2
-    const boxHeight = 88
-    const boxY = y - boxHeight
-    page.drawRectangle({
-      borderColor: BORDER,
-      borderWidth: 0.8,
-      height: boxHeight,
-      width: boxWidth,
-      x: MARGIN,
-      y: boxY,
-    })
-    page.drawRectangle({
-      borderColor: BORDER,
-      borderWidth: 0.8,
-      height: boxHeight,
-      width: boxWidth,
-      x: MARGIN + boxWidth + gap,
-      y: boxY,
-    })
-    page.drawRectangle({
-      color: PALE_GREEN,
-      height: 22,
-      width: boxWidth,
-      x: MARGIN,
-      y: y - 22,
-    })
-    page.drawRectangle({
-      color: PALE_GREEN,
-      height: 22,
-      width: boxWidth,
-      x: MARGIN + boxWidth + gap,
-      y: y - 22,
-    })
-    page.drawText("ORDER DETAILS", {
-      color: DARK_GREEN,
-      font: bold,
-      size: 9,
-      x: MARGIN + 10,
-      y: y - 14,
-    })
-    page.drawText("SUPPLIER", {
-      color: DARK_GREEN,
-      font: bold,
-      size: 9,
-      x: MARGIN + boxWidth + gap + 10,
-      y: y - 14,
-    })
-    const leftX = MARGIN + 10
-    const rightX = MARGIN + boxWidth + gap + 10
-    page.drawText(`PO Number: ${ascii(document.orderNumber)}`, {
-      font: bold,
-      size: 8.5,
-      x: leftX,
-      y: y - 39,
-    })
-    page.drawText(`Order Date: ${ascii(document.orderDate)}`, {
-      font: regular,
-      size: 8.5,
-      x: leftX,
-      y: y - 56,
-    })
-    page.drawText(
-      `Order Type: ${document.orderType === "REPAIR" ? "Repair" : "Goods"}`,
-      { font: regular, size: 8.5, x: leftX, y: y - 73 }
-    )
-    drawWrappedText({
-      font: bold,
-      maxLines: 2,
-      page,
-      size: 8.5,
-      value: `${document.supplierCode} - ${document.supplierName}`,
-      width: boxWidth - 20,
-      x: rightX,
-      y: y - 39,
-    })
-    const supplierLine = document.supplierGstNumber
-      ? `GST: ${document.supplierGstNumber}`
-      : document.supplierAddress || "Address not recorded"
-    drawWrappedText({
-      color: MUTED,
-      font: regular,
-      maxLines: 2,
-      page,
-      size: 8,
-      value: supplierLine,
-      width: boxWidth - 20,
-      x: rightX,
-      y: y - 69,
-    })
-    y = boxY - 18
-  }
-
-  const columns = [
-    { key: "number", label: "#", width: 26 },
-    { key: "code", label: "ASSET CODE", width: 67 },
-    { key: "item", label: "DESCRIPTION", width: 170 },
-    { key: "quantity", label: "QTY", width: 53 },
-    { key: "unit", label: "UNIT", width: 45 },
-    { key: "rate", label: "RATE", width: 78 },
-    { key: "amount", label: "AMOUNT", width: 92 },
-  ] as const
-
-  const drawTableHeader = () => {
-    page.drawRectangle({
-      color: DARK_GREEN,
-      height: 26,
-      width: CONTENT_WIDTH,
-      x: MARGIN,
-      y: y - 26,
-    })
-    let x = MARGIN
-    for (const column of columns) {
-      page.drawText(column.label, {
-        color: WHITE,
-        font: bold,
-        size: 7.3,
-        x: x + 5,
-        y: y - 17,
-      })
-      x += column.width
-    }
-    y -= 26
-  }
-
-  const newContinuationPage = () => {
-    page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT])
-    drawBrandHeader(true)
-    drawTableHeader()
-  }
-
-  drawBrandHeader()
-  drawOrderDetails()
-  drawTableHeader()
+  doc.addPage({ margin: 0, size: [PAGE_WIDTH, PAGE_HEIGHT] })
+  drawBrandHeader(ctx)
+  drawMetadata(doc, document)
+  drawItemsHeading(doc, 337)
+  let y = drawTableHeader(doc, 356)
 
   document.lines.forEach((line, index) => {
-    const descriptionLines = wrapText(
-      line.itemName,
-      regular,
-      8,
-      columns[2].width - 10
-    )
-    const rowHeight = Math.max(28, descriptionLines.length * 11 + 12)
-    if (y - rowHeight < 145) newContinuationPage()
-    page.drawRectangle({
-      color: index % 2 === 0 ? WHITE : rgb(0.975, 0.985, 0.98),
-      height: rowHeight,
-      width: CONTENT_WIDTH,
-      x: MARGIN,
-      y: y - rowHeight,
-    })
-    page.drawLine({
-      start: { x: MARGIN, y: y - rowHeight },
-      end: { x: MARGIN + CONTENT_WIDTH, y: y - rowHeight },
-      color: BORDER,
-      thickness: 0.5,
-    })
-    const values = [
-      String(index + 1),
-      line.typeCode,
-      line.itemName,
-      line.orderedQuantity,
-      line.unit,
-      money(number(line.unitPrice)).replace("INR ", ""),
-      money(amount(line.orderedQuantity, line.unitPrice)).replace("INR ", ""),
-    ]
-    let x = MARGIN
-    values.forEach((value, columnIndex) => {
-      drawWrappedText({
-        font: columnIndex === 1 ? bold : regular,
-        maxLines: columnIndex === 2 ? 4 : 2,
-        page,
-        size: 8,
-        value,
-        width: columns[columnIndex]!.width - 10,
-        x: x + 5,
-        y: y - 17,
-      })
-      x += columns[columnIndex]!.width
-    })
-    y -= rowHeight
+    const rowHeight = tableRowHeight(doc, line)
+    const lastLine = index === document.lines.length - 1
+    const availableBottom = lastLine
+      ? FOOTER_TOP - finalSectionHeight(doc, document)
+      : FOOTER_TOP - 10
+    if (y + rowHeight > availableBottom) {
+      doc.addPage({ margin: 0, size: [PAGE_WIDTH, PAGE_HEIGHT] })
+      drawContinuationHeader(ctx, document)
+      drawItemsHeading(doc, 122)
+      y = drawTableHeader(doc, 140)
+    }
+    y = drawTableRow(doc, line, index, y, rowHeight)
   })
 
-  const total = document.lines.reduce(
-    (sum, line) => sum + amount(line.orderedQuantity, line.unitPrice),
-    0
-  )
-  if (y < 250) {
-    page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT])
-    drawBrandHeader(true)
+  y = drawTotals(doc, document, y)
+  drawTermsAndSignature(doc, document, y)
+
+  const range = doc.bufferedPageRange()
+  for (let index = range.start; index < range.start + range.count; index++) {
+    doc.switchToPage(index)
+    drawFooter(doc)
   }
-  page.drawRectangle({
-    color: PALE_GREEN,
-    height: 38,
-    width: 220,
-    x: PAGE_WIDTH - MARGIN - 220,
-    y: y - 38,
-  })
-  page.drawText("TOTAL", {
-    color: DARK_GREEN,
-    font: bold,
-    size: 9,
-    x: PAGE_WIDTH - MARGIN - 208,
-    y: y - 24,
-  })
-  const totalText = money(total)
-  page.drawText(totalText, {
-    color: DARK_GREEN,
-    font: bold,
-    size: 11,
-    x: PAGE_WIDTH - MARGIN - 12 - bold.widthOfTextAtSize(totalText, 11),
-    y: y - 25,
-  })
-  y -= 58
-
-  page.drawText("COMMERCIAL NOTES", {
-    color: DARK_GREEN,
-    font: bold,
-    size: 9,
-    x: MARGIN,
-    y,
-  })
-  y -= 16
-  const notes = [
-    "Supply against the Asset Codes, quantities, and rates shown above.",
-    "Supplier invoice and delivery documents must reference this PO number.",
-    "Taxes, delivery, payment, and warranty terms remain as mutually approved.",
-  ]
-  if (document.remark) notes.push(`Remark: ${document.remark}`)
-  notes.forEach((note, index) => {
-    page.drawText(`${index + 1}.`, {
-      color: GREEN,
-      font: bold,
-      size: 8,
-      x: MARGIN,
-      y,
-    })
-    const lines = drawWrappedText({
-      font: regular,
-      maxLines: 3,
-      page,
-      size: 8,
-      value: note,
-      width: 345,
-      x: MARGIN + 14,
-      y,
-    })
-    y -= lines * 11 + 4
-  })
-
-  page.drawLine({
-    start: { x: 410, y: y + 8 },
-    end: { x: PAGE_WIDTH - MARGIN, y: y + 8 },
-    color: BORDER,
-    thickness: 0.8,
-  })
-  page.drawText("For Mayank Raw Mint Private Limited", {
-    color: DARK_GREEN,
-    font: bold,
-    size: 8,
-    x: 389,
-    y: y - 8,
-  })
-  page.drawText("Authorized Signatory", {
-    color: MUTED,
-    font: regular,
-    size: 8,
-    x: 430,
-    y: y - 24,
-  })
-
-  const pages = pdf.getPages()
-  pages.forEach((currentPage, index) => {
-    currentPage.drawLine({
-      start: { x: MARGIN, y: 32 },
-      end: { x: PAGE_WIDTH - MARGIN, y: 32 },
-      color: GREEN,
-      thickness: 1,
-    })
-    currentPage.drawText("Generated from the approved MRM Store workflow", {
-      color: MUTED,
-      font: regular,
-      size: 7,
-      x: MARGIN,
-      y: 18,
-    })
-    const pageNumber = `Page ${index + 1} of ${pages.length}`
-    currentPage.drawText(pageNumber, {
-      color: MUTED,
-      font: regular,
-      size: 7,
-      x: PAGE_WIDTH - MARGIN - regular.widthOfTextAtSize(pageNumber, 7),
-      y: 18,
-    })
-  })
-
-  return pdf.save()
+  doc.end()
+  return output
 }
