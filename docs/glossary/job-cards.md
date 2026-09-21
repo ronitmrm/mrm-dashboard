@@ -76,6 +76,19 @@ Each RM inward entry is append-only for normal receiving; later inward entries a
 to the Job Card total instead of replacing the previous receipt. An exact import
 retry reuses its receipt identity so the tally is not duplicated.
 
+## Work Order Line Cancellation
+
+A Work Order Line may be cancelled before or after Raw Material is received.
+Cancellation records a reason and time instead of deleting the Work Order, its
+receipts, or its production history. The cancelled line and every setup leave
+active planning immediately, and any active setup state releases its machine.
+
+An open Production Session must be closed before cancellation. A dispatched
+line cannot be cancelled. After cancellation, the Job Card cannot accept new
+Raw Material receipts, production activity, route or planner actions. Reusing or
+returning already received Raw Material is a separate inventory action and does
+not change the preserved receipt history.
+
 ## Raw Material Rejection
 
 A Raw Material Rejection is a Planner action against one Job Card. It records the
@@ -98,6 +111,9 @@ Session.
   when it exceeds the kilogram-derived estimate. Wait For Replacement removes
   all active setup plans until net usable kilograms again cover the ordered Raw
   Material.
+- When the remaining usable balance rounds to `0 kg` at the displayed `0.1 kg`
+  precision, **Continue Accepted Quantity** is not available. The rejection is
+  treated as full for planning and **Wait For Replacement** is enforced.
 
 Net usable Raw Material equals cumulative receipt kilograms minus active Raw
 Material Rejection kilograms. Later replacement receipts add to this balance.

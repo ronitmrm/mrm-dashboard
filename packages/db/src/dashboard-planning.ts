@@ -248,15 +248,19 @@ async function workOrderFor(
   const result = await client.query<{
     id: string
     item_id: string
+    status: string
   }>(
     `
-      SELECT id, item_id FROM manufacturing.work_orders
+      SELECT id, item_id, status FROM manufacturing.work_orders
       WHERE organization_id = $1 AND lower(job_card_number) = lower($2)
       FOR UPDATE
     `,
     [organizationId, requiredText(jobCardNumber, "Job card")]
   )
   if (!result.rows[0]) throw new Error("Planning work order was not found.")
+  if (result.rows[0].status === "Cancelled") {
+    throw new Error("Cancelled Work Order lines cannot receive planner actions.")
+  }
   return result.rows[0]
 }
 
@@ -1003,10 +1007,11 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           id: string
           item_id: string
           source_payload: unknown
+          status: string
           work_order_number: string
         }>(
           `
-            SELECT id, item_id, work_order_number, source_payload
+            SELECT id, item_id, work_order_number, source_payload, status
             FROM manufacturing.work_orders
             WHERE organization_id = $1 AND lower(job_card_number) = lower($2)
             FOR UPDATE
@@ -1018,6 +1023,11 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           productionFloorCodeForRecord({ sourcePayload: existing.rows[0].source_payload }) !== input.requiredProductionFloorCode
         ) {
           throw new ProductionUnitAccessError("This Job Card belongs to another Production Unit.")
+        }
+        if (existing.rows[0]?.status === "Cancelled") {
+          throw new Error(
+            "Cancelled Work Order lines cannot be updated or reimported."
+          )
         }
         if (
           existing.rows[0] &&
@@ -1192,7 +1202,9 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           if (sole.rows.length === 1) {
             const jobs = await client.query<{ id: string; job_card_number: string; source_payload: Record<string, unknown> | null }>(
               `SELECT id, job_card_number, source_payload FROM manufacturing.work_orders
-               WHERE item_id = $1 AND organization_id = $2 FOR UPDATE`, [itemId, input.organizationId]
+               WHERE item_id = $1 AND organization_id = $2
+                 AND status <> 'Cancelled'
+               FOR UPDATE`, [itemId, input.organizationId]
             )
             for (const job of jobs.rows) {
               if (productionFloorCodeForRecord({ sourcePayload: job.source_payload }) !== productionFloorCode) continue
@@ -2016,10 +2028,11 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           id: string
           item_uid: string
           source_payload: unknown
+          status: string
         }>(
           `
             SELECT work_order.id, item.uid AS item_uid,
-              work_order.source_payload
+              work_order.source_payload, work_order.status
             FROM manufacturing.work_orders work_order
             JOIN catalog.items item ON item.id = work_order.item_id
             WHERE work_order.organization_id = $1
@@ -2030,6 +2043,11 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
         )
         const workOrder = workOrderResult.rows[0]
         if (!workOrder) throw new Error("Planning work order was not found.")
+        if (workOrder.status === "Cancelled") {
+          throw new Error(
+            "Cancelled Work Order lines cannot receive Raw Material rejection actions."
+          )
+        }
         if (
           productionFloorCodeForRecord({ sourcePayload: workOrder.source_payload })
           !== productionFloorCode
@@ -2165,6 +2183,227 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           planningAction,
           rejectionScope,
           usableKgAfter,
+        }
+      })
+    },
+
+    async cancelWorkOrder(input: {
+      actorUserId?: string | null
+      jobCardNumber: string
+      organizationId: string
+      productionFloorCode: string
+      reason: string
+    }) {
+      return transaction(pool, async (client) => {
+        const jobCardNumber = requiredText(input.jobCardNumber, "Job card")
+        const reason = requiredText(input.reason, "Cancellation reason")
+        const productionFloorCode = normalizeProductionFloorCode(
+          input.productionFloorCode
+        )
+        await businessKeyLock(
+          client,
+          "manufacturing.work_order_cancellation",
+          jobCardNumber
+        )
+        const result = await client.query<{
+          id: string
+          source_payload: unknown
+          status: string
+          work_order_number: string
+        }>(
+          `
+            SELECT id, source_payload, status, work_order_number
+            FROM manufacturing.work_orders
+            WHERE organization_id = $1
+              AND lower(job_card_number) = lower($2)
+            FOR UPDATE
+          `,
+          [input.organizationId, jobCardNumber]
+        )
+        const workOrder = result.rows[0]
+        if (!workOrder) throw new Error("Planning work order was not found.")
+        if (
+          productionFloorCodeForRecord({
+            sourcePayload: workOrder.source_payload,
+          }) !== productionFloorCode
+        ) {
+          throw new ProductionUnitAccessError(
+            "This Job Card belongs to another Production Unit."
+          )
+        }
+        if (workOrder.status === "Cancelled") {
+          throw new Error("This Work Order line is already cancelled.")
+        }
+
+        const openSession = await client.query<{
+          session_reference: string | null
+        }>(
+          `
+            SELECT session_reference
+            FROM manufacturing.production_sessions
+            WHERE organization_id = $1 AND work_order_id = $2
+              AND status = 'open' AND reversed_at IS NULL
+            ORDER BY started_at DESC
+            LIMIT 1
+          `,
+          [input.organizationId, workOrder.id]
+        )
+        if (openSession.rows[0]) {
+          const reference = openSession.rows[0].session_reference
+          throw new Error(
+            `Close Production Session${reference ? ` ${reference}` : ""} before cancelling the Work Order line.`
+          )
+        }
+
+        const dispatched = await client.query<{ id: string }>(
+          `
+            SELECT id
+            FROM manufacturing.dispatch_approval_events
+            WHERE organization_id = $1 AND work_order_id = $2
+              AND decision = 'approved' AND reversed_at IS NULL
+            LIMIT 1
+          `,
+          [input.organizationId, workOrder.id]
+        )
+        if (dispatched.rows[0]) {
+          throw new Error("A dispatched Work Order line cannot be cancelled.")
+        }
+
+        const cancelledAt = new Date().toISOString()
+        const previousSourcePayload = sourcePayloadRecord(
+          workOrder.source_payload
+        )
+        const cancellationPayload = {
+          cancellationReason: reason,
+          cancelledAt,
+          cancelledByUserId: input.actorUserId ?? null,
+          status: "Cancelled",
+        }
+        const sourcePayload = "payload" in previousSourcePayload
+          ? {
+              ...previousSourcePayload,
+              ...cancellationPayload,
+              payload: {
+                ...sourcePayloadRecord(previousSourcePayload.payload),
+                ...cancellationPayload,
+              },
+            }
+          : { ...previousSourcePayload, ...cancellationPayload }
+        await client.query(
+          `
+            UPDATE manufacturing.work_orders
+            SET status = 'Cancelled', cancellation_reason = $1,
+              cancelled_at = $2, cancelled_by_user_id = $3,
+              updated_by_user_id = $3, updated_at = now(),
+              row_version = row_version + 1, source_payload = $4
+            WHERE id = $5
+          `,
+          [
+            reason,
+            cancelledAt,
+            input.actorUserId ?? null,
+            sourcePayload,
+            workOrder.id,
+          ]
+        )
+        const activeSetups = await client.query<{
+          id: string
+          machine_id: string | null
+          source_payload: Record<string, unknown> | null
+          stage: string
+        }>(
+          `
+            SELECT id, machine_id, source_payload, stage
+            FROM manufacturing.shop_floor_setup_state
+            WHERE organization_id = $1 AND work_order_id = $2 AND active
+            FOR UPDATE
+          `,
+          [input.organizationId, workOrder.id]
+        )
+        await client.query(
+          `
+            UPDATE manufacturing.shop_floor_setup_state
+            SET stage = 'cancelled', active = false, completed_at = NULL,
+              updated_by_user_id = $1, updated_at = now(),
+              row_version = row_version + 1,
+              source_payload = COALESCE(source_payload, '{}'::jsonb) ||
+                jsonb_build_object(
+                  'status', 'cancelled',
+                  'cancellationReason', $2::text,
+                  'cancelledAt', $3::text
+                )
+            WHERE organization_id = $4 AND work_order_id = $5 AND active
+          `,
+          [
+            input.actorUserId ?? null,
+            reason,
+            cancelledAt,
+            input.organizationId,
+            workOrder.id,
+          ]
+        )
+        for (const setup of activeSetups.rows) {
+          await client.query(
+            `
+              INSERT INTO manufacturing.shop_floor_stage_events (
+                organization_id, setup_state_id, from_stage, to_stage,
+                machine_id, actor_user_id, reason, source_system,
+                source_table, source_id, source_payload
+              )
+              VALUES ($1, $2, $3, 'cancelled', $4, $5, $6,
+                'mrm-dashboard', 'work_order_cancellation', $7, $8)
+            `,
+            [
+              input.organizationId,
+              setup.id,
+              setup.stage,
+              setup.machine_id,
+              input.actorUserId ?? null,
+              reason,
+              randomUUID(),
+              {
+                ...sourcePayloadRecord(setup.source_payload),
+                cancellationReason: reason,
+                cancelledAt,
+                status: "cancelled",
+              },
+            ]
+          )
+        }
+        await client.query(
+          `
+            INSERT INTO audit.events (
+              organization_id, event_type, target_schema, target_table,
+              target_id, actor_user_id, reason, before_state, after_state,
+              source_system, source_table, source_id
+            )
+            VALUES ($1, 'manufacturing.work_order.cancelled',
+              'manufacturing', 'work_orders', $2, $3, $4, $5, $6,
+              'mrm-dashboard', 'work_order_cancellation', $7)
+          `,
+          [
+            input.organizationId,
+            workOrder.id,
+            input.actorUserId ?? null,
+            reason,
+            {
+              sourcePayload: sourcePayloadRecord(workOrder.source_payload),
+              status: workOrder.status,
+            },
+            {
+              cancellationReason: reason,
+              cancelledAt,
+              status: "Cancelled",
+            },
+            randomUUID(),
+          ]
+        )
+        await queueDashboardRefresh(client, input.organizationId)
+        return {
+          cancelledAt,
+          id: workOrder.id,
+          jobCardNumber,
+          ok: true,
         }
       })
     },

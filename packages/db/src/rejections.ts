@@ -40,7 +40,7 @@ export function createRejectionRepository(options: RepositoryPoolOptions) {
         pool.query<Job>(
           `SELECT w.id, w.job_card_number AS "jobCard", i.uid AS "partCode", ${unitSql} AS unit
           FROM manufacturing.work_orders w JOIN catalog.items i ON i.id = w.item_id
-          WHERE w.organization_id = $1 AND ($2 = '' OR ${unitSql} = $2)
+          WHERE w.organization_id = $1 AND w.status <> 'Cancelled' AND ($2 = '' OR ${unitSql} = $2)
             AND ($3 = '' OR i.uid ILIKE '%' || $3 || '%') AND ($4 = '' OR w.job_card_number ILIKE '%' || $4 || '%')
           ORDER BY w.job_card_number, w.id LIMIT 101`,
           [organizationId, filters.unit, filters.part, filters.job]
@@ -88,7 +88,9 @@ export function createRejectionRepository(options: RepositoryPoolOptions) {
       return withTransaction(pool, async (client) => {
         const job = (
           await client.query<Job>(
-            `SELECT w.id, ${unitSql} AS unit FROM manufacturing.work_orders w WHERE w.id = $1 AND w.organization_id = $2 FOR SHARE`,
+            `SELECT w.id, ${unitSql} AS unit FROM manufacturing.work_orders w
+             WHERE w.id = $1 AND w.organization_id = $2 AND w.status <> 'Cancelled'
+             FOR SHARE`,
             [input.jobId, input.organizationId]
           )
         ).rows[0]

@@ -1251,6 +1251,9 @@ function buildProductionControl({
       rmPoNo: rowText(row, "RM PO NO.", "rmPoNo"),
       poDate: rowText(row, "PO DATE", "poDate"),
       partCode,
+      status: rowText(row, "status", "workOrderStatus") || "Open",
+      cancellationReason: rowText(row, "cancellationReason"),
+      cancelledAt: rowText(row, "cancelledAt"),
       planningItemPending,
       description: rowText(row, "DESCRIPTION", "description"),
       optionNumber: effectiveOption || "Not selected",
@@ -1313,7 +1316,10 @@ function buildProductionControl({
     readinessSetupGapsByWorkOrder.set(outputRow, readinessSetupGaps);
     return outputRow;
   });
-  const allWorkOrderGaps = workOrderOutputRows.flatMap((row) => {
+  const activeWorkOrderRows = workOrderOutputRows.filter(
+    (row) => !isCancelledWorkOrder(row)
+  );
+  const allWorkOrderGaps = activeWorkOrderRows.flatMap((row) => {
     const readinessSetupGaps = readinessSetupGapsByWorkOrder.get(row) ?? [];
     const workOrderRow = row;
     const planningItemMissing = row.planningItemPending;
@@ -1361,7 +1367,8 @@ function buildProductionControl({
     }));
     return [...workOrderGapRows, ...setupGapRows];
   });
-  const prioritizedWorkOrderRows = [...workOrderOutputRows].sort(workOrderPlanningSort);
+  const prioritizedWorkOrderRows = [...activeWorkOrderRows].sort(workOrderPlanningSort);
+  const workOrderRegisterRows = [...workOrderOutputRows].sort(workOrderPlanningSort);
   const masterGaps = allWorkOrderGaps.filter(isMaterialPlanningReady);
   const combinedBatches = combinedRows(prioritizedWorkOrderRows, rawByJc, routeGroups, cycleKeys, toolingKeys);
   const machinePlanDetailRows = machinePlanDetails(prioritizedWorkOrderRows, rawBySetup, rawBySetupAnyMachine, routeGroups, cycleRows, toolingRows, toolingAvailability, machineRows, machineConstraints, planOverrides, shopFloorStatusRows, previousMachineAssignmentsBySetup(previousMachinePlanDetailRows), planningCalendar);
@@ -1380,7 +1387,7 @@ function buildProductionControl({
   const plannerActionConflicts = plannerActionConflictRows(machinePlanDetailRows);
   const setupChecklistHistoryRows: Record<string, unknown>[] = [];
   const setupChecklistMismatchRows: Record<string, unknown>[] = [];
-  const machinePlanReady = workOrderOutputRows.filter((row) => isMaterialPlanningReady(row) && !row.routeStatus.includes("missing") && row.cycleStatus === "Ready" && row.toolingStatus === "Ready" && row.machineMasterStatus === "Ready").length;
+  const machinePlanReady = activeWorkOrderRows.filter((row) => isMaterialPlanningReady(row) && !row.routeStatus.includes("missing") && row.cycleStatus === "Ready" && row.toolingStatus === "Ready" && row.machineMasterStatus === "Ready").length;
   const latestSetupDate = maxDate(setupChecklistRows.map((row) => parseDate(rowValue(row, "SETUP DATE", "setupDate"))));
   const totalOutputQty = sum([...rawByJc.values()].map((row) => row.outputQty));
   const totalActualQty = sum([...rawByJc.values()].map((row) => row.actualQty));
@@ -1417,28 +1424,29 @@ function buildProductionControl({
   return {
     sourceMap: productionSourceMap(),
     summary: {
-      workOrders: workOrderRows.length,
-      totalOrderQty: round(sum(workOrderRows.map((row) => safeNumber(rowValue(row, "ORD. PCS.", "orderPcs"))))),
+      workOrders: activeWorkOrderRows.length,
+      cancelledWorkOrders: workOrderOutputRows.length - activeWorkOrderRows.length,
+      totalOrderQty: round(sum(activeWorkOrderRows.map((row) => safeNumber(rowValue(row, "orderPcs"))))),
       rawRows: productionRows.length,
       rawJobCards: rawByJc.size,
-      matchedJobCards: workOrderOutputRows.filter((row) => rawByJc.has(canonicalKey(row.jcNo))).length,
-      workOrdersWithoutRawActual: workOrderOutputRows.filter((row) => !rawByJc.has(canonicalKey(row.jcNo))).length,
-      routeReady: workOrderOutputRows.filter((row) => row.routeStatus === "Ready" || row.routeStatus === "Auto single option").length,
-      cycleReady: workOrderOutputRows.filter((row) => row.cycleStatus === "Ready").length,
-      toolingReady: workOrderOutputRows.filter((row) => row.toolingStatus === "Ready").length,
-      rmReady: workOrderOutputRows.filter(isMaterialPlanningReady).length,
-      optionMissing: workOrderOutputRows.filter((row) => row.optionSource === "Planner required").length,
-      routeSelectionRequired: workOrderOutputRows.filter((row) => row.optionSource === "Planner required" && isMaterialPlanningReady(row)).length,
-      routeSelectionWaitingRm: workOrderOutputRows.filter((row) => row.optionSource === "Planner required" && !isMaterialPlanningReady(row)).length,
+      matchedJobCards: activeWorkOrderRows.filter((row) => rawByJc.has(canonicalKey(row.jcNo))).length,
+      workOrdersWithoutRawActual: activeWorkOrderRows.filter((row) => !rawByJc.has(canonicalKey(row.jcNo))).length,
+      routeReady: activeWorkOrderRows.filter((row) => row.routeStatus === "Ready" || row.routeStatus === "Auto single option").length,
+      cycleReady: activeWorkOrderRows.filter((row) => row.cycleStatus === "Ready").length,
+      toolingReady: activeWorkOrderRows.filter((row) => row.toolingStatus === "Ready").length,
+      rmReady: activeWorkOrderRows.filter(isMaterialPlanningReady).length,
+      optionMissing: activeWorkOrderRows.filter((row) => row.optionSource === "Planner required").length,
+      routeSelectionRequired: activeWorkOrderRows.filter((row) => row.optionSource === "Planner required" && isMaterialPlanningReady(row)).length,
+      routeSelectionWaitingRm: activeWorkOrderRows.filter((row) => row.optionSource === "Planner required" && !isMaterialPlanningReady(row)).length,
       masterGapCount: masterGaps.length,
-      awaitingShopFloorApproval: workOrderOutputRows.filter((row) => row.dispatchStatus === "Waiting shop floor approval").length,
-      shiftedToDispatch: workOrderOutputRows.filter((row) => row.dispatchStatus === "Shifted to dispatch").length,
+      awaitingShopFloorApproval: activeWorkOrderRows.filter((row) => row.dispatchStatus === "Waiting shop floor approval").length,
+      shiftedToDispatch: activeWorkOrderRows.filter((row) => row.dispatchStatus === "Shifted to dispatch").length,
       totalActualQty: round(totalActualQty),
       totalOutputQty: round(totalOutputQty),
       totalRejectQty: round(totalRejectQty),
       dispatchShortQty: round(sum(dispatchRows.map((row) => safeNumber(rowValue(row, "DISPATCH SHORT QTY", "dispatchShortQty"))))),
       machinePlanReady,
-      machinePlanReadyGroups: new Set(workOrderOutputRows.filter(isMaterialPlanningReady).map((row) => [canonicalKey(row.partCode), row.optionNumber].join("|"))).size,
+      machinePlanReadyGroups: new Set(activeWorkOrderRows.filter(isMaterialPlanningReady).map((row) => [canonicalKey(row.partCode), row.optionNumber].join("|"))).size,
       parallelSetupNeeded: combinedBatches.filter((row) => Number(row.orders) > 1).length,
       deliveryRiskSetups: 0,
       activeMachineConstraints,
@@ -1469,12 +1477,13 @@ function buildProductionControl({
       issues: masterGaps.map((row) => ({ severity: "warning", sourceSheet: "Work_Order_Import", key: row.jcNo || row.partCode, message: row.nextAction })),
     },
     workOrders: prioritizedWorkOrderRows,
+    workOrderRegisterRows,
     rmInwardRows,
     productionOutputRows,
     productionDashboardRows,
-    jobCardStatusTiles: workOrderOutputRows,
-    routeSelectionRequired: workOrderOutputRows.filter((row) => row.optionSource === "Planner required" && isMaterialPlanningReady(row)),
-    routeSelectionWaitingRm: workOrderOutputRows.filter((row) => row.optionSource === "Planner required" && !isMaterialPlanningReady(row)),
+    jobCardStatusTiles: activeWorkOrderRows,
+    routeSelectionRequired: activeWorkOrderRows.filter((row) => row.optionSource === "Planner required" && isMaterialPlanningReady(row)),
+    routeSelectionWaitingRm: activeWorkOrderRows.filter((row) => row.optionSource === "Planner required" && !isMaterialPlanningReady(row)),
     masterGaps,
     allWorkOrderGaps,
     runningParts: [],
@@ -2837,6 +2846,10 @@ function accumulatedRawMaterialRejectionByJobCard(rows: ActionRow[]) {
 function isMaterialPlanningReady(row: Record<string, unknown>) {
   const explicit = rowValue(row, "materialPlanningReady");
   return typeof explicit === "boolean" ? explicit : rowText(row, "rmStatus") === "Received";
+}
+
+function isCancelledWorkOrder(row: Record<string, unknown>) {
+  return rowText(row, "status", "workOrderStatus").toLowerCase() === "cancelled";
 }
 
 function latestRouteSelectionByJobCard(rows: Array<Record<string, unknown>>) {

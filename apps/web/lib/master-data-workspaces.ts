@@ -44,7 +44,7 @@ export function masterDataMainMasterKey(entryType: string) {
 const operationalRowSourceByEntryType: Record<string, string> = {
   rm_inward: "rmInwardRows",
   software_raw: "productionOutputRows",
-  work_order: "workOrders",
+  work_order: "workOrderRegisterRows",
 }
 
 function recordRows(value: unknown) {
@@ -64,10 +64,14 @@ export function operationalEntryRows(
   const projectedRows = recordRows(
     productionControl[operationalRowSourceByEntryType[entryType] ?? ""]
   )
+  const compatibleProjectedRows =
+    entryType === "work_order" && !projectedRows.length
+      ? recordRows(productionControl.workOrders)
+      : projectedRows
   const savedRows = recordRows(dataEntry.rows).filter(
     (row) => row.entryType === entryType
   )
-  return [...projectedRows, ...savedRows]
+  return [...compatibleProjectedRows, ...savedRows]
 }
 
 const identityFieldsByEntryType: Record<string, readonly string[]> = {

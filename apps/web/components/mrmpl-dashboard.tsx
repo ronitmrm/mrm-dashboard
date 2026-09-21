@@ -21,6 +21,7 @@ import {
   Activity,
   ArrowDown,
   ArrowUp,
+  Ban,
   CalendarDays,
   ChevronDown,
   ChevronRight,
@@ -2718,6 +2719,7 @@ function DashboardContent({
         <OperationalTablesPanel
           payload={payload}
           productionControl={productionControl}
+          submitAction={submitAction}
           openDataEntry={openDataEntry}
           preferredEntryType={preferredDataEntryType}
           productionFloorCode={productionFloorCode}
@@ -9318,6 +9320,7 @@ function DataEntryPanel({
 function OperationalTablesPanel({
   payload,
   productionControl,
+  submitAction,
   openDataEntry,
   preferredEntryType,
   productionFloorCode,
@@ -9328,6 +9331,7 @@ function OperationalTablesPanel({
 }: {
   payload: DashboardPayload
   productionControl: DashboardPayload
+  submitAction: SubmitAction
   openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void
   preferredEntryType?: string
   productionFloorCode: ProductionFloorCode
@@ -9358,6 +9362,10 @@ function OperationalTablesPanel({
   )
   const [searchQuery, setSearchQuery] = useState("")
   const [tableResetKey, setTableResetKey] = useState(0)
+  const [cancellationRow, setCancellationRow] =
+    useState<DashboardPayload | null>(null)
+  const [cancellationReason, setCancellationReason] = useState("")
+  const [isCancelling, setIsCancelling] = useState(false)
   const selectedSpec =
     specs.find((spec) => spec.entryType === entryType) ?? specs[0]
   const dataEntry = asRecord(payload.dataEntry)
@@ -9381,6 +9389,29 @@ function OperationalTablesPanel({
       rows.filter((row) => masterTableRowMatches(row, columns, searchQuery)),
     [columns, rows, searchQuery]
   )
+  const canCancelWorkOrders =
+    selectedSpec?.entryType === "work_order" &&
+    canUseOperationalEntry("work_order", "save", productionFloorCode)
+
+  async function cancelWorkOrderLine() {
+    if (!cancellationRow || !cancellationReason.trim() || isCancelling) return
+    setIsCancelling(true)
+    try {
+      await submitAction(
+        "work-order-cancellation",
+        {
+          jcNo: str(cancellationRow.jcNo),
+          productionFloorCode,
+          reason: cancellationReason.trim(),
+        },
+        { throwOnError: true }
+      )
+      setCancellationRow(null)
+      setCancellationReason("")
+    } finally {
+      setIsCancelling(false)
+    }
+  }
 
   if (!selectedSpec) {
     return (
@@ -9547,6 +9578,11 @@ function OperationalTablesPanel({
                         {column.label}
                       </TableHead>
                     ))}
+                    {canCancelWorkOrders ? (
+                      <TableHead className="h-10 w-28 px-2 py-1 text-right text-xs">
+                        Actions
+                      </TableHead>
+                    ) : null}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -9563,9 +9599,33 @@ function OperationalTablesPanel({
                           key={column.key}
                           className="max-w-64 px-2 py-1.5 align-top text-xs leading-5 whitespace-normal"
                         >
-                          {masterTableCellText(row, column.key)}
+                          {column.key === "status" ? (
+                            <StatusBadge value={row.status || "Open"} />
+                          ) : (
+                            masterTableCellText(row, column.key)
+                          )}
                         </TableCell>
                       ))}
+                      {canCancelWorkOrders ? (
+                        <TableCell className="px-2 py-1.5 text-right align-top">
+                          <Button
+                            disabled={
+                              !str(row.jcNo) ||
+                              str(row.status).toLowerCase() === "cancelled"
+                            }
+                            onClick={() => {
+                              setCancellationRow(row)
+                              setCancellationReason("")
+                            }}
+                            size="sm"
+                            type="button"
+                            variant="outline"
+                          >
+                            <Ban className="size-3.5" />
+                            Cancel Line
+                          </Button>
+                        </TableCell>
+                      ) : null}
                     </TableRow>
                   ))}
                 </TableBody>
@@ -9574,6 +9634,70 @@ function OperationalTablesPanel({
           )}
         </CardContent>
       </SectionCard>
+      <Dialog
+        open={canCancelWorkOrders && Boolean(cancellationRow)}
+        onOpenChange={(open) => {
+          if (!open && !isCancelling) {
+            setCancellationRow(null)
+            setCancellationReason("")
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cancel Work Order Line</DialogTitle>
+            <DialogDescription>
+              Remove this Job Card and all its setups from active planning. Its
+              Work Order, RM receipts, and production history remain available
+              for audit.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4">
+            <div className="rounded-md border bg-muted/40 p-3 text-sm">
+              <div className="font-medium">
+                {cancellationRow
+                  ? `${displayValue(cancellationRow.partCode)} / ${displayValue(cancellationRow.jcNo)}`
+                  : ""}
+              </div>
+              <div className="mt-1 text-muted-foreground">
+                {Number(cancellationRow?.rmInwardKg) > 0
+                  ? `${formatNumber(Number(cancellationRow?.rmInwardKg))} kg RM received; receipt history will be preserved.`
+                  : "No Raw Material receipt is recorded for this line."}
+              </div>
+            </div>
+            <Field label="Cancellation Reason">
+              <Input
+                disabled={isCancelling}
+                onChange={(event) => setCancellationReason(event.target.value)}
+                placeholder="Customer cancelled / Raw Material unavailable"
+                required
+                value={cancellationReason}
+              />
+            </Field>
+          </div>
+          <DialogFooter>
+            <Button
+              disabled={isCancelling}
+              onClick={() => {
+                setCancellationRow(null)
+                setCancellationReason("")
+              }}
+              type="button"
+              variant="outline"
+            >
+              Keep Line
+            </Button>
+            <Button
+              disabled={!cancellationReason.trim() || isCancelling}
+              onClick={() => void cancelWorkOrderLine()}
+              type="button"
+              variant="destructive"
+            >
+              {isCancelling ? "Cancelling..." : "Cancel Work Order Line"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   )
 }
@@ -9953,7 +10077,15 @@ function dedupeMasterTableRows(entryType: string, rows: DashboardPayload[]) {
 }
 
 function masterTableColumns(spec: DataEntrySpec): MasterTableColumn[] {
-  return columnsForProductionMaster(spec.fields)
+  const columns = columnsForProductionMaster(spec.fields)
+  return spec.entryType === "work_order"
+    ? [
+        ...columns,
+        { key: "status", label: "Status" },
+        { key: "cancellationReason", label: "Cancellation Reason" },
+        { key: "cancelledAt", label: "Cancelled At" },
+      ]
+    : columns
 }
 
 function masterTableCellText(row: DashboardPayload, key: string) {

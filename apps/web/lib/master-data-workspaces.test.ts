@@ -52,6 +52,7 @@ describe("master data workspaces", () => {
 
   it("reads saved rows for every operational entry table", () => {
     const workOrder = { jcNo: "JC-101" }
+    const cancelledWorkOrder = { jcNo: "JC-100", status: "Cancelled" }
     const receipt = { jcNo: "JC-101", rmInwardDate: "2026-08-19", rmInwardKg: 250 }
     const secondReceipt = {
       jcNo: "JC-101",
@@ -63,6 +64,12 @@ describe("master data workspaces", () => {
     expect(
       operationalEntryRows("work_order", {}, { workOrders: [workOrder] })
     ).toEqual([workOrder])
+    expect(
+      operationalEntryRows("work_order", {}, {
+        workOrderRegisterRows: [workOrder, cancelledWorkOrder],
+        workOrders: [workOrder],
+      })
+    ).toEqual([workOrder, cancelledWorkOrder])
     expect(
       operationalEntryRows("rm_inward", {}, {
         rmInwardRows: [receipt, secondReceipt],
