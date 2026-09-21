@@ -26,6 +26,7 @@ const preservedFieldNames = new Set([
   "option",
   "part",
   "phase",
+  "planningaction",
   "planningmode",
   "productionfloor",
   "returntab",
