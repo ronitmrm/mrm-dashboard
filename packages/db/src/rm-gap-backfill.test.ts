@@ -2,6 +2,38 @@ import { expect, test, vi } from "vitest"
 
 import { buildLegacyDashboardSnapshot } from "./legacy-dashboard-analysis"
 
+test("uses the India plant date for overdue planning when the server is still on the prior UTC date", () => {
+  vi.useFakeTimers()
+  vi.stubEnv("TZ", "UTC")
+  vi.setSystemTime(new Date("2026-09-20T20:50:00Z"))
+
+  const createdAt = "2026-09-20T20:00:00Z"
+  const entry = (entryType: string, payload: Record<string, unknown>) => ({ entryType, payload, createdAt })
+
+  try {
+    const control = buildLegacyDashboardSnapshot({
+      workbookName: "PostgreSQL",
+      productionEntries: [],
+      dataEntries: [
+        entry("work_order", { jcNo: "IST-DATE", partCode: "IST-PART", optionNumber: "1", orderPcs: 100, rmInwardDate: "2026-09-18", rmInwardKg: 1 }),
+        entry("route", { partNo: "IST-PART", optionNumber: "1", setupNo: "1", machineType: "CNC", machineFamily: "IST-FAMILY" }),
+        entry("cycle", { partNo: "IST-PART", optionNumber: "1", setupNo: "1", cycleTime: 288 }),
+        entry("machine_master", { machineNo: "CNC-IST", machineType: "CNC", machineFamily: "IST-FAMILY", status: "Active" }),
+      ],
+    }).productionControl!
+    if (!("machinePlanDetailRows" in control)) throw new Error("Missing plan")
+
+    expect(control.machinePlanDetailRows.find((row) => row.jcNo === "IST-DATE")).toMatchObject({
+      setupPlannedDate: "21-Sept-26",
+      plannedProductionStartDate: "21-Sept-26",
+      plannedProductionEndDate: "21-Sept-26",
+    })
+  } finally {
+    vi.unstubAllEnvs()
+    vi.useRealTimers()
+  }
+})
+
 test("checks every compatible machine gap after raw material becomes ready", () => {
   vi.useFakeTimers()
   vi.setSystemTime(new Date("2026-09-20T06:00:00Z"))
