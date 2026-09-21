@@ -9,7 +9,6 @@ import {
   Eye,
   FilePenLine,
   ListPlus,
-  RefreshCw,
   Route,
   Wrench,
 } from "lucide-react"
@@ -49,7 +48,6 @@ type PlannerDecisionWorkspaceProps = {
   panels: PlannerDecisionPanels
   pendingCount: number
   onActionChange: (action: PlannerDecisionAction | null) => void
-  onRecalculate: () => void
   onViewChange: (view: PlannerDecisionView) => void
 }
 
@@ -98,7 +96,6 @@ export function PlannerDecisionWorkspace({
   panels,
   pendingCount,
   onActionChange,
-  onRecalculate,
   onViewChange,
 }: PlannerDecisionWorkspaceProps) {
   const activeChoice = actionChoices.find((choice) => choice.key === activeAction)
@@ -112,17 +109,9 @@ export function PlannerDecisionWorkspace({
     : null
 
   return (
- <SectionCard className="overflow-hidden">
+    <SectionCard className="overflow-hidden">
       <CardHeader className="gap-3 border-b bg-muted/15">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <CardTitle>Planner Actions</CardTitle>
-          </div>
-          <Button type="button" variant="outline" onClick={onRecalculate}>
-            <RefreshCw className="size-4" />
-            Recalculate Plan
-          </Button>
-        </div>
+        <CardTitle>Planner Actions</CardTitle>
         <div className="grid gap-1 rounded-lg border bg-background p-1 sm:grid-cols-2 xl:grid-cols-4" role="tablist" aria-label="Planner workspace">
           <Button
             type="button"
