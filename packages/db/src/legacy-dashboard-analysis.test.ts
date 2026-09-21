@@ -128,6 +128,45 @@ describe("legacy dashboard route selections", () => {
     })
   })
 
+  test("accumulates every RM receipt and keeps the first receipt date for planning", () => {
+    const entry = (entryType: string, payload: Record<string, unknown>, createdAt: string) => ({
+      entryType,
+      payload,
+      createdAt,
+    })
+    const snapshot = buildLegacyDashboardSnapshot({
+      workbookName: "PostgreSQL",
+      productionEntries: [],
+      dataEntries: [
+        entry("work_order", {
+          jcNo: "JC-MULTI-RM",
+          partCode: "PART-MULTI-RM",
+          optionNumber: "1",
+          orderPcs: 1_000,
+        }, "2026-09-18T08:00:00.000Z"),
+        entry("rm_inward", {
+          jcNo: "JC-MULTI-RM",
+          rmInwardDate: "2026-09-18",
+          rmInwardKg: 40,
+        }, "2026-09-18T09:00:00.000Z"),
+        entry("rm_inward", {
+          jcNo: "JC-MULTI-RM",
+          rmInwardDate: "2026-09-20",
+          rmInwardKg: 60,
+        }, "2026-09-20T09:00:00.000Z"),
+      ],
+    })
+
+    expect(snapshot.productionControl).toMatchObject({
+      jobCardStatusTiles: [{
+        jcNo: "JC-MULTI-RM",
+        rmInwardDate: "2026-09-18",
+        rmInwardKg: 100,
+        rmStatus: "Received",
+      }],
+    })
+  })
+
   test("creates one readiness row per setup missing cycle time", () => {
     const createdAt = "2026-09-20T10:00:00.000Z"
     const entry = (entryType: string, payload: Record<string, unknown>) => ({

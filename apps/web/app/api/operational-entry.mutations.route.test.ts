@@ -224,6 +224,7 @@ describe("production entry mutation API authorization", () => {
         productionFloorCode: "cnc",
         requiredProductionFloorCode: "cnc",
         quantityKg: 12,
+        sourceId: expect.stringMatching(/^csv:/),
       }),
     ])
   })
