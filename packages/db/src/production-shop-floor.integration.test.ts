@@ -654,14 +654,9 @@ describe("production and shop-floor workflows", () => {
       startCount: 10_850,
     })
 
-    const cycleSource = await pool.query<{ source_id: string }>(
-      "SELECT source_id FROM manufacturing.operation_cycle_standards WHERE id = $1", [cycle.id]
-    )
-    await expect(planning.upsertCycleStandard({ ...cycleInput, rejectDuplicates: true }))
-      .rejects.toThrow("already exists")
     await planning.upsertCycleStandard({
-      ...cycleInput, cycleTimeSeconds: 30, recordId: cycleSource.rows[0]!.source_id,
-      rejectDuplicates: true, setupTimeMinutes: undefined,
+      ...cycleInput, cycleTimeSeconds: 30, rejectDuplicates: true,
+      setupTimeMinutes: undefined,
       sourcePayload: { partNo: itemUid, optionNumber: "CNC-1", setupNo: "1", cycleTime: 30 },
     })
     const retainedSettings = await pool.query(

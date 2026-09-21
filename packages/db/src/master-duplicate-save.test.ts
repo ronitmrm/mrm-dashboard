@@ -301,6 +301,47 @@ test("manual Setup Name saves reject an existing name in the selected unit", asy
   await pool.end()
 })
 
+test("manual Cycle Time saves update the selected route setup without an edit record id", async () => {
+  const pool = new Pool()
+  const query = vi.fn(async (sql: string) => ({
+    rows: sql.includes("FROM catalog.items")
+      ? [{ id: "item" }]
+      : sql.includes("FROM manufacturing.route_options")
+        ? [{ id: "route" }]
+        : sql.includes("FROM manufacturing.operation_setups")
+          ? [{ id: "setup" }]
+          : sql.includes("FROM manufacturing.operation_cycle_standards")
+            ? [{ id: "cycle", pieces_per_cycle: "1", setup_time_minutes: "0", source_id: "cycle-source" }]
+            : sql.includes("UPDATE manufacturing.operation_cycle_standards")
+              ? [{ id: "cycle" }]
+              : sql.includes("INSERT INTO derived.refresh_jobs")
+                ? [{ id: "refresh", inserted: false }]
+                : [],
+  }))
+  vi.spyOn(pool, "connect").mockImplementation(
+    async () => ({ query, release: vi.fn() }) as unknown as PoolClient
+  )
+
+  await expect(createDashboardPlanningRepository({ pool }).upsertCycleStandard({
+    cycleTimeSeconds: 80, itemUid: "R131", organizationId: "organization",
+    productionFloorCode: "cnc", rejectDuplicates: true, routeCode: "1", setupNumber: 1,
+  })).resolves.toEqual({ id: "cycle" })
+  expect(query).toHaveBeenCalledWith(
+    expect.stringContaining("UPDATE manufacturing.operation_cycle_standards"),
+    expect.arrayContaining([80, "cycle"])
+  )
+  expect(query).toHaveBeenCalledWith(
+    expect.stringMatching(/UPDATE manufacturing\.production_sessions[\s\S]*status = 'open'/),
+    ["organization", "setup", 80]
+  )
+  expect(query).toHaveBeenCalledWith(
+    expect.stringContaining("INSERT INTO derived.refresh_jobs"),
+    expect.any(Array)
+  )
+  expect(query).toHaveBeenLastCalledWith("COMMIT")
+  await pool.end()
+})
+
 test("manual Store category creation rejects a duplicate instead of reactivating it", async () => {
   const pool = new Pool()
   const query = vi.fn(async () => ({
