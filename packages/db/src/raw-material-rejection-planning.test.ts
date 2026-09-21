@@ -1,9 +1,24 @@
 import { afterEach, expect, test, vi } from "vitest"
 
 import { buildLegacyDashboardSnapshot } from "./legacy-dashboard-analysis"
+import { rawMaterialRejectionBalance } from "./rejection-domain"
 
 afterEach(() => {
   vi.useRealTimers()
+})
+
+test("does not continue accepted-quantity planning when usable kg displays as zero", () => {
+  expect(
+    rawMaterialRejectionBalance({
+      orderKg: 28.1,
+      orderPcs: 10_000,
+      rejectedKg: 28.1,
+      usableKgBefore: 28.11,
+    })
+  ).toMatchObject({
+    canContinueAcceptedQuantity: false,
+    supportedPieces: 3,
+  })
 })
 
 test("removes or limits plans after full and partial raw-material rejection", () => {

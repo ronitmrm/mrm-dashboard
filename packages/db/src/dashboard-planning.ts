@@ -16,6 +16,7 @@ import {
   workOrderIdentityMatches,
 } from "./planning-rules"
 import { plannerInterruptionRequirement } from "./planner-interruption-settlement"
+import { rawMaterialRejectionBalance } from "./rejection-domain"
 import {
   normalizeProductionFloorCode,
   ProductionUnitAccessError,
@@ -2083,8 +2084,26 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
             "Rejected kilograms cannot exceed the usable Raw Material balance."
           )
         }
-        const usableKgAfter = Math.max(usableKgBefore - rejectedKg, 0)
-        const rejectionScope = usableKgAfter <= 0.00000001 ? "full" : "partial"
+        const orderedKg = sourcePayloadNumber(
+          workOrder.source_payload,
+          "orderKg",
+          "ORD. KG."
+        )
+        const orderedPieces = sourcePayloadNumber(
+          workOrder.source_payload,
+          "orderPcs",
+          "ORD. PCS."
+        )
+        const rejectionBalance = rawMaterialRejectionBalance({
+          orderKg: orderedKg,
+          orderPcs: orderedPieces,
+          rejectedKg,
+          usableKgBefore,
+        })
+        const { remainingKg: usableKgAfter } = rejectionBalance
+        const rejectionScope = rejectionBalance.canContinueAcceptedQuantity
+          ? "partial"
+          : "full"
         const requestedAction = input.planningAction?.trim().toLowerCase()
         if (
           rejectionScope === "partial" &&
@@ -2098,11 +2117,6 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
         const planningAction = rejectionScope === "full"
           ? "wait_for_replacement"
           : requestedAction as "continue_accepted_quantity" | "wait_for_replacement"
-        const orderedKg = sourcePayloadNumber(
-          workOrder.source_payload,
-          "orderKg",
-          "ORD. KG."
-        )
         const occurredAt = new Date().toISOString()
         const sourceId = randomUUID()
         const sourcePayload = {

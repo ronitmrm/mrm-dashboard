@@ -45,6 +45,7 @@ import {
 
 import { Badge, StatusBadge } from "@workspace/ui/components/badge"
 import type { MaintenanceRequestRow } from "@workspace/db"
+import { rawMaterialRejectionBalance } from "@workspace/db/rejection-domain"
 import { Button } from "@workspace/ui/components/button"
 import {
   SectionCard,
@@ -3339,15 +3340,19 @@ function RawMaterialRejectionPlannerForm({
   const orderKg = Number(selectedWorkOrder?.orderKg) || 0
   const orderPcs = Number(selectedWorkOrder?.orderPcs) || 0
   const enteredRejectedKg = Number(rejectedKg) || 0
-  const remainingKg = Math.max(usableKg - enteredRejectedKg, 0)
   const validQuantity = enteredRejectedKg > 0 && enteredRejectedKg <= usableKg
-  const isFullRejection = validQuantity && remainingKg <= 0.00000001
+  const rejectionBalance = rawMaterialRejectionBalance({
+    orderKg,
+    orderPcs,
+    rejectedKg: enteredRejectedKg,
+    usableKgBefore: usableKg,
+  })
+  const { remainingKg, supportedPieces } = rejectionBalance
+  const isFullRejection =
+    validQuantity && !rejectionBalance.canContinueAcceptedQuantity
   const effectivePlanningAction = isFullRejection
     ? "wait_for_replacement"
     : planningAction
-  const supportedPieces = orderKg > 0
-    ? Math.min(orderPcs, Math.floor(orderPcs * remainingKg / orderKg))
-    : 0
   const openSession = productionSessions.find((session) => {
     const sessionJc = str(
       session.jobCardNumber || session.jobCard || session.jcNo
