@@ -1056,7 +1056,7 @@ function buildProductionControl({
   const routeOptionsByPart = routeOptionSummariesByPart(dedupedRouteRows);
   const cycleKeys = new Set(latestMasterRows(cycleRows).keys());
   const toolingKeys = new Set(latestMasterRows(toolingRows).keys());
-  const rmInwardByJc = latestRmInwardByJobCard(rmInwardRows);
+  const rmInwardByJc = accumulatedRmInwardByJobCard(rmInwardRows);
   const selectedRouteByJc = latestRouteSelectionByJobCard(routeSelections);
   const routeChangeByTarget = latestRouteChangeByTarget(routeChanges);
   const priorityByTarget = latestPlannerPriorityByTarget(plannerPriorities);
@@ -2687,15 +2687,24 @@ function combinedRows(workOrderRows: Array<Record<string, unknown>>, rawByJc: Ma
   }).sort((a, b) => b.plannerPriorityScore - a.plannerPriorityScore || (a.action === "Can combine planning" ? 0 : 1) - (b.action === "Can combine planning" ? 0 : 1) || b.orderPcs - a.orderPcs);
 }
 
-function latestRmInwardByJobCard(rows: Array<Record<string, unknown>>) {
+function accumulatedRmInwardByJobCard(rows: Array<Record<string, unknown>>) {
   const byJc = new Map<string, Record<string, unknown>>();
   for (const row of rows) {
     const key = canonicalKey(rowText(row, "JC NO.", "JC NO", "jcNo"));
     if (!key) continue;
+    const receivedDate = parseDate(rowValue(row, "RM I/W DATE", "rmInwardDate"));
+    const receivedKg = safeNumber(rowValue(row, "RM INWARD KG.", "rmInwardKg"));
     const current = byJc.get(key);
-    if (!current || rowText(row, "createdAt") >= rowText(current, "createdAt")) {
-      byJc.set(key, row);
+    if (!current) {
+      byJc.set(key, {
+        ...row,
+        rmInwardDate: receivedDate,
+        rmInwardKg: receivedKg,
+      });
+      continue;
     }
+    current.rmInwardDate = minDateValue(rowText(current, "rmInwardDate"), receivedDate);
+    current.rmInwardKg = safeNumber(rowValue(current, "rmInwardKg")) + receivedKg;
   }
   return byJc;
 }

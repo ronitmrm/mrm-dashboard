@@ -172,6 +172,12 @@ setup whose forecast is already past moves to the current planning date (or the
 next working date), and its planned production start and finish move with it.
 Recorded setup or production actuals remain locked.
 
+Every Raw Material inward event remains a separate receipt against its Job Card.
+Planning sums the kilograms across all those receipts and uses the first receipt
+date as Raw Material availability; a later receipt adds to the tally and never
+replaces the earlier quantity or date. Replaying the same imported receipt row is
+idempotent and does not add its kilograms twice.
+
 **Master Identity**: The permanent system identity and generated code of one
 master record. Editing its permitted details does not create a second master
 or change its identity.

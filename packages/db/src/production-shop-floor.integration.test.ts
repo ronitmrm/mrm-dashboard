@@ -302,7 +302,7 @@ describe("production and shop-floor workflows", () => {
     expect(persisted.rows[0]?.quantity_kg).toBe("25.00000000")
   })
 
-  test("keeps the production-card merge behavior and records append-only production", async () => {
+  test("records separate RM receipts while keeping import retries idempotent", async () => {
     const receipt = await repository.upsertRawMaterialReceipt({
       organizationId,
       payload: {
@@ -313,20 +313,49 @@ describe("production and shop-floor workflows", () => {
       quantityKg: 125.5,
       receiptNumber: rmPoNumber,
       receivedOn: "2026-07-20",
+      sourceId: `test:rm-receipt:${suffix}:1`,
     })
-    const sameReceipt = await repository.upsertRawMaterialReceipt({
+    const retriedReceipt = await repository.upsertRawMaterialReceipt({
       organizationId,
       payload: {
         jcNo: firstJobCard,
         remark: "Weighed",
         rmPoNo: rmPoNumber,
       },
-      quantityKg: 126,
+      quantityKg: 125.5,
       receiptNumber: rmPoNumber,
       receivedOn: "2026-07-20",
+      sourceId: `test:rm-receipt:${suffix}:1`,
     })
-    expect(sameReceipt.id).toBe(receipt.id)
+    const laterReceipt = await repository.upsertRawMaterialReceipt({
+      organizationId,
+      payload: {
+        jcNo: firstJobCard,
+        rmPoNo: rmPoNumber,
+        status: "Received",
+      },
+      quantityKg: 126,
+      receiptNumber: rmPoNumber,
+      receivedOn: "2026-07-22",
+      sourceId: `test:rm-receipt:${suffix}:2`,
+    })
+    expect(retriedReceipt.id).toBe(receipt.id)
+    expect(laterReceipt.id).not.toBe(receipt.id)
 
+    const received = await pool.query<{ quantity_kg: string; received_on: string }>(
+      `SELECT quantity_kg::text, received_on::text
+       FROM manufacturing.raw_material_receipts
+       WHERE organization_id = $1 AND source_id = ANY($2::text[])
+       ORDER BY received_on`,
+      [organizationId, [`test:rm-receipt:${suffix}:1`, `test:rm-receipt:${suffix}:2`]]
+    )
+    expect(received.rows).toEqual([
+      { quantity_kg: "125.50000000", received_on: "2026-07-20" },
+      { quantity_kg: "126.00000000", received_on: "2026-07-22" },
+    ])
+  })
+
+  test("records append-only production", async () => {
     const card = await repository.upsertProductionCard({
       cardNumber: `CARD-${suffix}`,
       jobCardNumber: firstJobCard,

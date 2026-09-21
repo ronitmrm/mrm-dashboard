@@ -538,7 +538,8 @@ const dataEntrySpecs: DataEntrySpec[] = [
   {
     entryType: "rm_inward",
     title: "Rm Inward",
-    description: "Raw-Material Inward Status Against Job Card.",
+    description:
+      "Record Each Raw-Material Receipt Against The Job Card; Received Kilograms Accumulate.",
     fields: [
       { name: "jcNo", label: "Jc No.", required: true },
       {
@@ -9805,7 +9806,7 @@ function masterTableRowKey(
   row: DashboardPayload,
   index: number
 ) {
-  return `${entryType}|${dataEntryKey(entryType, row) || JSON.stringify(row) || index}`
+  return `${entryType}|${masterTableRecordId(row) || dataEntryKey(entryType, row) || JSON.stringify(row) || index}`
 }
 
 const centralMachineMasterRowKeys = [

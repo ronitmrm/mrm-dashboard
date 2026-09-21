@@ -46,6 +46,7 @@ type RawMaterialReceiptInput = {
   quantityKg: number
   receiptNumber: string
   receivedOn: string
+  sourceId?: string
 }
 
 type RawMaterialWorkOrder = {
@@ -263,6 +264,7 @@ async function writeRawMaterialReceipt(
   }
 
   const receiptNumber = workOrder.rm_po_number
+  const sourceId = input.sourceId?.trim() || randomUUID()
   const sourcePayload = {
     ...input.payload,
     jcNo: workOrder.job_card_number,
@@ -273,64 +275,57 @@ async function writeRawMaterialReceipt(
     "SELECT pg_advisory_xact_lock(hashtext('production.raw-material'), hashtext(lower($1) || '|' || lower($2)))",
     [receiptNumber, workOrder.job_card_number]
   )
-  const existing = await client.query<{ id: string; source_payload: unknown }>(
+  const existing = await client.query<{
+    id: string
+    job_card_number: string
+    receipt_number: string
+    source_payload: unknown
+  }>(
     `
-      SELECT id, source_payload FROM manufacturing.raw_material_receipts
-      WHERE organization_id = $1 AND lower(receipt_number) = lower($2)
-        AND lower(job_card_number) = lower($3)
+      SELECT id, job_card_number, receipt_number, source_payload
+      FROM manufacturing.raw_material_receipts
+      WHERE organization_id = $1 AND source_system = 'mrm-dashboard'
+        AND source_table = 'rm_inward' AND source_id = $2
       FOR UPDATE
     `,
-    [input.organizationId, receiptNumber, workOrder.job_card_number]
+    [input.organizationId, sourceId]
   )
+  if (
+    existing.rows[0] &&
+    (!sameIdentifier(existing.rows[0].receipt_number, receiptNumber) ||
+      !sameIdentifier(existing.rows[0].job_card_number, workOrder.job_card_number))
+  ) {
+    throw new Error("RM receipt source identity already belongs to another receipt.")
+  }
   if (existing.rows[0] && input.requiredProductionFloorCode && productionFloorCodeForRecord({ sourcePayload: existing.rows[0].source_payload }) !== input.requiredProductionFloorCode) {
     throw new ProductionUnitAccessError("This raw-material receipt belongs to another Production Unit.")
   }
-  return existing.rows[0]
-    ? (
-        await client.query<{ id: string }>(
-          `
-            UPDATE manufacturing.raw_material_receipts
-            SET received_on = COALESCE(migration.try_date($1), received_on),
-              quantity_kg = $2, remaining_quantity_kg = $2,
-              updated_by_user_id = $3, source_payload = $4,
-              updated_at = now(), row_version = row_version + 1
-            WHERE id = $5 RETURNING id
-          `,
-          [
-            input.receivedOn,
-            input.quantityKg,
-            input.actorUserId ?? null,
-            sourcePayload,
-            existing.rows[0].id,
-          ]
+  return existing.rows[0] ?? (
+    await client.query<{ id: string }>(
+      `
+        INSERT INTO manufacturing.raw_material_receipts (
+          organization_id, receipt_number, job_card_number,
+          received_on, quantity_kg, remaining_quantity_kg,
+          created_by_user_id, updated_by_user_id, source_system,
+          source_table, source_id, source_payload
         )
-      ).rows[0]!
-    : (
-        await client.query<{ id: string }>(
-          `
-            INSERT INTO manufacturing.raw_material_receipts (
-              organization_id, receipt_number, job_card_number,
-              received_on, quantity_kg, remaining_quantity_kg,
-              created_by_user_id, updated_by_user_id, source_system,
-              source_table, source_id, source_payload
-            )
-            VALUES ($1, $2, $3,
-              COALESCE(migration.try_date($4), current_date),
-              $5, $5, $6, $6, 'mrm-dashboard', 'rm_inward', $7, $8)
-            RETURNING id
-          `,
-          [
-            input.organizationId,
-            receiptNumber,
-            workOrder.job_card_number,
-            input.receivedOn,
-            input.quantityKg,
-            input.actorUserId ?? null,
-            randomUUID(),
-            sourcePayload,
-          ]
-        )
-      ).rows[0]!
+        VALUES ($1, $2, $3,
+          COALESCE(migration.try_date($4), current_date),
+          $5, $5, $6, $6, 'mrm-dashboard', 'rm_inward', $7, $8)
+        RETURNING id
+      `,
+      [
+        input.organizationId,
+        receiptNumber,
+        workOrder.job_card_number,
+        input.receivedOn,
+        input.quantityKg,
+        input.actorUserId ?? null,
+        sourceId,
+        sourcePayload,
+      ]
+    )
+  ).rows[0]!
 }
 
 async function workOrderContext(

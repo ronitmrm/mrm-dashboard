@@ -62,6 +62,9 @@ Missing timestamps remain unknown and are never treated as zero minutes.
 
 Casting is not an input to material yield. These values are unavailable without
 Blank Piece Weight and remain estimates until remaining RM is maintained accurately.
+Each RM inward entry is append-only for normal receiving; later inward entries add
+to the Job Card total instead of replacing the previous receipt. An exact import
+retry reuses its receipt identity so the tally is not duplicated.
 
 ## Delivery Target And Rating
 

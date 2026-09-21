@@ -1535,6 +1535,7 @@ async function post(request: NextRequest, context: RouteContext) {
                 quantityKg: firstNumeric(payload.rmInwardKg),
                 receiptNumber: text(payload.rmPoNo) || text(payload.jcNo),
                 receivedOn: text(payload.rmInwardDate) || istDateValue(),
+                sourceId: csvImportRowSourceId(entryType, payload),
               }))
             )
             return importedRows.length
