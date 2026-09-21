@@ -161,7 +161,10 @@ Forecast upstream production does not reserve a physical machine for an unstarte
 downstream setup. The planner allocates that setup only after recorded upstream
 good output satisfies its pooled WIP buffer for the assigned machine count; until
 then, the machine remains available for other material-ready work. Recorded setup
-or production execution retains its physical assignment.
+or production execution retains its physical assignment. The unreserved downstream
+forecast still contributes every remaining route setup to the Job Card's current
+probable dispatch date; forecast visibility and physical machine reservation are
+separate planning decisions.
 
 Raw Material receipt or pooled WIP availability is the earliest setup forecast
 date, not a permanently retained overdue date. On recalculation, an unstarted

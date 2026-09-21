@@ -131,6 +131,9 @@ test("keeps every downstream stage off machines until its preceding actual WIP i
 
     const downstreamMachineRows = control.machinePlanDetailRows.filter((row) => row.machine === "CNC-DOWN")
     expect(downstreamMachineRows.map((row) => `${row.jcNo}:${row.setupNo}`)).toEqual(["OTHER-READY:1"])
+    expect(control.productionDashboardRows.find((row) => row.jcNo === "SECOND-QUEUED")).toMatchObject({
+      currentProbableDispatchDate: "23-Sept-26",
+    })
 
     input.productionEntries.push({
       jobCard: "SECOND-QUEUED",
