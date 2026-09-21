@@ -15,6 +15,7 @@ import {
   readMasterCsv,
   type MasterCsvRow,
 } from "@/lib/master-data-csv"
+import { withCsvImportFeedback } from "@/lib/csv-import-action-feedback"
 
 const customersPath = "/commercial/customers"
 
@@ -91,6 +92,7 @@ export async function createCustomerAction(formData: FormData) {
 
 
 export async function importCustomersCsvAction(formData: FormData) {
+  return withCsvImportFeedback(async () => {
   const rows = await readMasterCsv(formData.get("master_csv_file"))
   await withCustomers(
     "masters.universal.commercial_customers.import",
@@ -146,6 +148,7 @@ export async function importCustomersCsvAction(formData: FormData) {
     }
   )
   revalidatePath(customersPath)
+  }, "Customer CSV import failed.")
 }
 export async function updateCustomerAction(formData: FormData) {
   await withCustomers(

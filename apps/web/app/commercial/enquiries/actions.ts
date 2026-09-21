@@ -31,6 +31,7 @@ import {
   type DesignAttachmentKind,
 } from "@/lib/commercial-attachment"
 import { optionalText, requiredText } from "@/lib/form-data"
+import { withCsvImportFeedback } from "@/lib/csv-import-action-feedback"
 import {
   technicalReviewChecklistFromFormData,
   technicalReviewReturnPath,
@@ -237,28 +238,30 @@ export async function createEnquiryAction(formData: FormData) {
 }
 
 export async function importEnquiryRegisterAction(formData: FormData) {
-  const file = formData.get("enquiry_register_file")
-  if (!(file instanceof File) || file.size === 0) {
-    throw new Error("Enquiry register import file is required.")
-  }
-  const rows = parseEnquiryRegisterFile(
-    Buffer.from(await file.arrayBuffer()),
-    file.name
-  )
-  await withWorkflow(
-    commercialTaskCapabilities.importEnquiryRegister,
-    enquiriesPath,
-    (workflow, actorUserId) =>
-      workflow.importEnquiryRegister({
-        actorUserId,
-        organizationId: requiredText(formData, "organization_id"),
-        receivedOn: requiredText(formData, "received_on"),
-        rows,
-      })
-  )
-  revalidatePath(enquiriesPath)
-  revalidatePath("/commercial/sales")
-  redirect(enquiriesPath)
+  return withCsvImportFeedback(async () => {
+    const file = formData.get("enquiry_register_file")
+    if (!(file instanceof File) || file.size === 0) {
+      throw new Error("Enquiry register import file is required.")
+    }
+    const rows = parseEnquiryRegisterFile(
+      Buffer.from(await file.arrayBuffer()),
+      file.name
+    )
+    await withWorkflow(
+      commercialTaskCapabilities.importEnquiryRegister,
+      enquiriesPath,
+      (workflow, actorUserId) =>
+        workflow.importEnquiryRegister({
+          actorUserId,
+          organizationId: requiredText(formData, "organization_id"),
+          receivedOn: requiredText(formData, "received_on"),
+          rows,
+        })
+    )
+    revalidatePath(enquiriesPath)
+    revalidatePath("/commercial/sales")
+    redirect(enquiriesPath)
+  }, "Enquiry register CSV import failed.")
 }
 
 export async function addEnquiryItemAction(formData: FormData) {
@@ -950,6 +953,7 @@ export async function requestDesignClarificationAction(formData: FormData) {
 }
 
 export async function importEnquiryLinesAction(formData: FormData) {
+  return withCsvImportFeedback(async () => {
   const enquiryId = requiredText(formData, "enquiry_id")
   const organizationId = requiredText(formData, "organization_id")
   const uploadId = pendingUploadId(formData, "template_file")
@@ -1076,6 +1080,7 @@ export async function importEnquiryLinesAction(formData: FormData) {
   })
   revalidatePath(`${enquiriesPath}/${enquiryId}`)
   redirect(`${enquiriesPath}/${enquiryId}/import-review/${reviewId}`)
+  }, "Enquiry line import failed.")
 }
 
 export async function applyEnquiryImportReviewAction(formData: FormData) {

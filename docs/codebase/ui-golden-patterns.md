@@ -134,6 +134,13 @@ server action. Duplicate saves show `StandardState`, preserve entered values,
 and disable resubmission while pending. Existing redirect-based HR forms and
 dashboard API forms retain their own feedback paths.
 
+CSV and workbook imports use the shared upload controls in
+`apps/web/components/master-data-csv-import-button.tsx` or
+`PendingRetainedUploadForm`. Expected validation failures return `{ error }`
+through `withCsvImportFeedback`; the control shows that actionable message in an
+adjacent error `StandardState` and keeps the selected file available for
+correction or retry. Next.js navigation errors must still be rethrown.
+
 Preserve keyboard operation, visible focus, labelled controls, sufficient contrast, and touch-friendly controls. Tables remain horizontally scrollable at narrow widths. Dialogs and drawers require a title and use the standard content wrappers when the workflow is simple.
 
 User-facing PDF actions open the authenticated in-app attachment viewer through

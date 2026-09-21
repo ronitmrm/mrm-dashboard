@@ -14,6 +14,7 @@ import {
   employeeAssignmentInputFromCsvRow,
 } from "@/lib/hr-master-csv"
 import { csvValue, readMasterCsv } from "@/lib/master-data-csv"
+import { withCsvImportFeedback } from "@/lib/csv-import-action-feedback"
 
 const hrPath = "/hr"
 
@@ -55,7 +56,7 @@ export async function importApprovedPostsCsvAction(formData: FormData) {
       success: `${inputs.length} approved post${inputs.length === 1 ? "" : "s"} imported successfully.`,
     }
   } catch (error) {
-    outcome = {
+    return {
       error:
         error instanceof Error
           ? error.message
@@ -69,6 +70,7 @@ export async function importApprovedPostsCsvAction(formData: FormData) {
 }
 
 export async function importRecruitmentMastersCsvAction(formData: FormData) {
+  return withCsvImportFeedback(async () => {
   const kind =
     formData.get("master_kind")?.toString() === "designation"
       ? "designation"
@@ -93,9 +95,11 @@ export async function importRecruitmentMastersCsvAction(formData: FormData) {
   }
   revalidatePath(hrPath)
   redirect(`${hrPath}?panel=mastersPanel&masterView=dataEntry&kind=${kind}`)
+  }, "Recruitment master CSV import failed.")
 }
 
 export async function importJobTemplatesCsvAction(formData: FormData) {
+  return withCsvImportFeedback(async () => {
   const rows = await readMasterCsv(formData.get("master_csv_file"))
   const context = await repositoryContext(masterCapability("job_templates", "save"))
   try {
@@ -129,6 +133,7 @@ export async function importJobTemplatesCsvAction(formData: FormData) {
   }
   revalidatePath(hrPath)
   redirect(`${hrPath}?panel=postMasterPanel&masterView=dataEntry`)
+  }, "Job template CSV import failed.")
 }
 
 export async function importCandidatesCsvAction(formData: FormData) {
@@ -163,7 +168,7 @@ export async function importCandidatesCsvAction(formData: FormData) {
       success: `${inputs.length} candidate${inputs.length === 1 ? "" : "s"} imported successfully.`,
     }
   } catch (error) {
-    outcome = {
+    return {
       error:
         error instanceof Error
           ? error.message
@@ -232,7 +237,7 @@ export async function importCombinedRolesCsvAction(formData: FormData) {
       success: `${resolved.length} combined approved-post role${resolved.length === 1 ? "" : "s"} imported successfully.`,
     }
   } catch (error) {
-    outcome = {
+    return {
       error:
         error instanceof Error
           ? error.message
@@ -278,7 +283,7 @@ export async function importEmployeeAssignmentsCsvAction(formData: FormData) {
       success: `Uploaded ${result.assignmentCount} assignments across ${result.updatedPostCount} approved posts.`,
     }
   } catch (error) {
-    outcome = {
+    return {
       error:
         error instanceof Error
           ? error.message

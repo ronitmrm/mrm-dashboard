@@ -7,7 +7,9 @@ import { useRef, useState } from "react"
 
 import { Button } from "@workspace/ui/components/button"
 
-type EnquiryLineImportAction = (formData: FormData) => void | Promise<void>
+type EnquiryLineImportAction = (
+  formData: FormData
+) => void | Promise<void | { error: string }>
 
 export function EnquiryLineImportButton({
   action,

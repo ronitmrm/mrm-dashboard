@@ -15,6 +15,7 @@ import { redirect } from "next/navigation"
 import * as XLSX from "xlsx"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
+import { withCsvImportFeedback } from "@/lib/csv-import-action-feedback"
 import {
   listGrantedCapabilities,
   requireAuthenticatedSession,
@@ -324,21 +325,16 @@ export async function deleteCommercialMasterAction(formData: FormData) {
 }
 
 export async function importMastersWorkbookAction(formData: FormData) {
-  const returnPath = mastersReturnPath(formData)
-  const file = formData.get("masters_file")
-  if (!(file instanceof File) || file.size === 0) {
-    redirect(
-      `${returnPath}${returnPath.includes("?") ? "&" : "?"}error=Masters%20workbook%20is%20required`
-    )
-  }
-  if (!/\.(csv|xlsx|xls)$/i.test(file.name)) {
-    redirect(
-      `${returnPath}${returnPath.includes("?") ? "&" : "?"}error=Only%20CSV%2C%20XLSX%20or%20XLS%20files%20are%20accepted`
-    )
-  }
+  return withCsvImportFeedback(async () => {
+    const returnPath = mastersReturnPath(formData)
+    const file = formData.get("masters_file")
+    if (!(file instanceof File) || file.size === 0) {
+      throw new Error("Masters workbook is required.")
+    }
+    if (!/\.(csv|xlsx|xls)$/i.test(file.name)) {
+      throw new Error("Only CSV, XLSX or XLS files are accepted.")
+    }
 
-  let outcome: string
-  try {
     const workbook = XLSX.read(Buffer.from(await file.arrayBuffer()), {
       type: "buffer",
     })
@@ -368,17 +364,10 @@ export async function importMastersWorkbookAction(formData: FormData) {
           snapshot,
         })
     )
-    outcome = `Imported ${result.created} new and updated ${result.updated} master rows`
-  } catch (error) {
-    outcome =
-      error instanceof Error ? error.message : "Masters workbook import failed"
+    const outcome = `Imported ${result.created} new and updated ${result.updated} master rows`
+    revalidatePath(mastersPath)
     redirect(
-      `${returnPath}${returnPath.includes("?") ? "&" : "?"}error=${encodeURIComponent(outcome)}`
+      `${returnPath}${returnPath.includes("?") ? "&" : "?"}success=${encodeURIComponent(outcome)}`
     )
-  }
-
-  revalidatePath(mastersPath)
-  redirect(
-    `${returnPath}${returnPath.includes("?") ? "&" : "?"}success=${encodeURIComponent(outcome)}`
-  )
+  }, "Masters workbook import failed.")
 }

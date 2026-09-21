@@ -1,11 +1,16 @@
 "use client"
 
 import { Upload } from "lucide-react"
+import { unstable_rethrow } from "next/navigation"
 import { useRef, useState } from "react"
 
 import { Button } from "@workspace/ui/components/button"
 import { StandardState } from "@workspace/ui/components/standard-state"
 import { DataDownloadButton } from "@/components/data-download-button"
+import {
+  getUploadErrorMessage,
+  getUploadResultError,
+} from "@/lib/upload-error-message"
 
 type CsvImportAction = (
   formData: FormData
@@ -70,7 +75,10 @@ export function MasterDataCsvImportButton({
         setError(undefined)
         try {
           const result = await action(formData)
-          if (result?.error) setError(result.error)
+          setError(getUploadResultError(result))
+        } catch (error) {
+          unstable_rethrow(error)
+          setError(getUploadErrorMessage(error, "CSV import failed."))
         } finally {
           setSubmitting(false)
         }
@@ -124,8 +132,17 @@ export function MasterDataCsvClientImportButton({
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [pending, setPending] = useState(false)
+  const [error, setError] = useState<string>()
   return (
     <>
+      {error ? (
+        <StandardState
+          className="basis-full"
+          variant="error"
+          title="CSV import stopped"
+          description={error}
+        />
+      ) : null}
       <input
         accept=".csv,text/csv"
         className="sr-only"
@@ -137,9 +154,13 @@ export function MasterDataCsvClientImportButton({
           const file = input.files?.[0]
           if (!file) return
           setPending(true)
+          setError(undefined)
           try {
             await onFile(file)
             input.value = ""
+          } catch (error) {
+            unstable_rethrow(error)
+            setError(getUploadErrorMessage(error, "CSV import failed."))
           } finally {
             setPending(false)
           }

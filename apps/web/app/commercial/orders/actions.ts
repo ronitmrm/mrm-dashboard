@@ -16,6 +16,7 @@ import { redirect } from "next/navigation"
 import * as XLSX from "xlsx"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
+import { withCsvImportFeedback } from "@/lib/csv-import-action-feedback"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { commercialTaskCapabilities } from "@/lib/auth/task-capabilities"
 import { optionalText, requiredText } from "@/lib/form-data"
@@ -105,6 +106,7 @@ export async function createPurchaseOrderAction(formData: FormData) {
 }
 
 export async function importPurchaseOrderCsvAction(formData: FormData) {
+  return withCsvImportFeedback(async () => {
   const session = await requireCapability(
     commercialTaskCapabilities.createPurchaseOrder,
     ordersPath
@@ -156,6 +158,7 @@ export async function importPurchaseOrderCsvAction(formData: FormData) {
   }
   revalidatePath(ordersPath)
   redirect(`${ordersPath}/${purchaseOrderId}`)
+  }, "Purchase Order CSV import failed.")
 }
 
 export async function addPurchaseOrderLineAction(formData: FormData) {
