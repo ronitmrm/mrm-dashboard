@@ -1294,10 +1294,14 @@ function buildProductionControl({
   const combinedBatches = combinedRows(prioritizedWorkOrderRows, rawByJc, routeGroups, cycleKeys, toolingKeys);
   const machinePlanDetailRows = machinePlanDetails(prioritizedWorkOrderRows, rawBySetup, rawBySetupAnyMachine, routeGroups, cycleRows, toolingRows, toolingAvailability, machineRows, machineConstraints, planOverrides, shopFloorStatusRows, previousMachineAssignmentsBySetup(previousMachinePlanDetailRows), planningCalendar);
   const productionDashboardRows = buildProductionDashboardRows({
+    cycleRows,
     dispatchApprovals,
     dispatchRows,
     machinePlanDetailRows,
+    machineRows,
+    planningCalendar,
     previousRows: previousProductionDashboardRows,
+    routeGroups,
     workOrderRows: prioritizedWorkOrderRows,
   });
   const workflowExceptionRows = machinePlanDetailRows.filter((row) => row.rawProductionWithoutWorkflow);
@@ -1457,18 +1461,27 @@ function buildProductionControl({
 }
 
 function buildProductionDashboardRows({
+  cycleRows,
   dispatchApprovals,
   dispatchRows,
   machinePlanDetailRows,
+  machineRows,
+  planningCalendar,
   previousRows,
+  routeGroups,
   workOrderRows,
 }: {
+  cycleRows: Record<string, unknown>[];
   dispatchApprovals: ActionRow[];
   dispatchRows: Record<string, unknown>[];
   machinePlanDetailRows: Record<string, unknown>[];
+  machineRows: Record<string, unknown>[];
+  planningCalendar: PlanningCalendar;
   previousRows: Record<string, unknown>[];
+  routeGroups: Map<string, Record<string, unknown>[]>;
   workOrderRows: Record<string, unknown>[];
 }) {
+  const cycleByKey = latestMasterRows(cycleRows);
   const plansByWorkOrder = groupByRecord(machinePlanDetailRows, productionDashboardRowKey);
   const previousByWorkOrder = new Map(
     previousRows.map((row) => [productionDashboardRowKey(row), row]),
@@ -1487,9 +1500,18 @@ function buildProductionDashboardRows({
   return workOrderRows.map((workOrder) => {
     const key = productionDashboardRowKey(workOrder);
     const plans = plansByWorkOrder.get(key) ?? [];
-    const currentProbableDate = maxDateValue(...plans.map((row) =>
+    const physicalPlanEndDate = maxDateValue(...plans.map((row) =>
       parseDate(rowValue(row, "plannedProductionEndDate")) || rowText(row, "plannedProductionEndDate")
     ));
+    const currentProbableDate = projectedRouteDispatchDate({
+      cycleByKey,
+      machineRows,
+      physicalPlanEndDate,
+      planningCalendar,
+      plans,
+      routeGroups,
+      workOrder,
+    });
     const rmReceivedDate = parseDate(rowValue(workOrder, "rmInwardDate"));
     const previous = previousByWorkOrder.get(key);
     const previousRmReceivedDate = previous ? parseDate(rowValue(previous, "rmReceivedDate")) : "";
@@ -1517,6 +1539,112 @@ function buildProductionDashboardRows({
     compareDateValues(left.currentProbableDispatchDate, right.currentProbableDispatchDate) ||
     left.jcNo.localeCompare(right.jcNo, undefined, { numeric: true }),
   );
+}
+
+function projectedRouteDispatchDate({
+  cycleByKey,
+  machineRows,
+  physicalPlanEndDate,
+  planningCalendar,
+  plans,
+  routeGroups,
+  workOrder,
+}: {
+  cycleByKey: Map<string, Record<string, unknown>>;
+  machineRows: Record<string, unknown>[];
+  physicalPlanEndDate: string;
+  planningCalendar: PlanningCalendar;
+  plans: Record<string, unknown>[];
+  routeGroups: Map<string, Record<string, unknown>[]>;
+  workOrder: Record<string, unknown>;
+}) {
+  const partCode = rowText(workOrder, "partCode");
+  const optionNumber = rowText(workOrder, "optionNumber");
+  if (!partCode || !optionNumber || optionNumber === "Not selected") return physicalPlanEndDate;
+
+  const allRoutes = routeGroups.get([canonicalKey(partCode), optionNumber].join("|")) ?? [];
+  const remainingSetups = routeChangeRemainingPlan(workOrder).filter((setup) => setup.plan && safeNumber(setup.quantity) > 0);
+  const remainingQtyBySetup = new Map(remainingSetups.map((setup) => [canonicalKey(setup.setupNo), setup.quantity]));
+  const routes = remainingSetups.length
+    ? allRoutes.filter((route) => remainingQtyBySetup.has(canonicalKey(setupStepKey(rowText(route, "SETUP NO.", "SETUP CODE", "setupNo"), optionNumber))))
+    : allRoutes;
+  if (!routes.length) return physicalPlanEndDate;
+
+  const customerOrderPcs = safeNumber(rowValue(workOrder, "orderPcs"));
+  const rmInwardDate = rowText(workOrder, "rmInwardDate");
+  const deadlineDate = dispatchTargetDate(rmInwardDate, planningCalendar);
+  let previousCycle: Record<string, unknown> | undefined;
+  let previousStreams: WipProductionStream[] = [];
+  let projectedEndDate = "";
+
+  for (const [routeIndex, route] of routes.entries()) {
+    const routeSetupNo = rowText(route, "SETUP NO.", "SETUP CODE", "setupNo");
+    const displaySetupNo = setupStepKey(routeSetupNo, optionNumber) || routeSetupNo;
+    const cycle = cycleByKey.get(masterKey(route));
+    if (!cycle) return physicalPlanEndDate;
+
+    const routePlans = plans.filter((plan) => {
+      const plannedSetupNo = rowText(plan, "setupNo", "routeSetupNo");
+      return canonicalKey(plannedSetupNo) === canonicalKey(displaySetupNo)
+        || canonicalKey(plannedSetupNo) === canonicalKey(routeSetupNo);
+    });
+    if (routePlans.length) {
+      const streams = routePlans.map((plan, index) => ({
+        machine: rowText(plan, "machine") || `planned-${routeIndex}-${index}`,
+        startDate: parseDate(rowValue(plan, "plannedProductionStartDate")) || rowText(plan, "plannedProductionStartDate"),
+        endDate: parseDate(rowValue(plan, "plannedProductionEndDate")) || rowText(plan, "plannedProductionEndDate"),
+        quantity: safeNumber(rowValue(plan, "orderPcs")),
+        dailyQty: cycleDailyQty(cycle),
+      })).filter((stream) => stream.startDate && stream.endDate && stream.quantity > 0 && stream.dailyQty > 0);
+      if (!streams.length) return physicalPlanEndDate;
+      previousStreams = streams;
+      previousCycle = cycle;
+      projectedEndDate = maxDateValue(...streams.map((stream) => stream.endDate));
+      continue;
+    }
+
+    if (!routeIndex || !previousCycle || !previousStreams.length) return physicalPlanEndDate;
+    const routeMachine = machineMasterFamily(route)
+      || rowText(route, "MACHINE USED", "machineUsed", "machine", "M/C NO", "MACHINE NO");
+    const machineType = rowText(route, "MACHINE TYPE", "machineType");
+    const candidates = activePhysicalMachineRows(routeMachine, machineType, machineRows);
+    if (!candidates.length) return physicalPlanEndDate;
+
+    const setupOrderPcs = remainingQtyBySetup.get(canonicalKey(displaySetupNo)) ?? customerOrderPcs;
+    const readyDate = maxDateValue(...previousStreams.map((stream) => stream.endDate));
+    const machineCount = requiredMachineCountForTarget({
+      orderPcs: setupOrderPcs,
+      cycle,
+      candidates,
+      readyDate,
+      deadlineDate,
+      machineNextSetupDate: new Map<string, string>(),
+      planningCalendar,
+    });
+    const projectedStartDate = plannedWipBufferReadyDate({
+      productionStreams: previousStreams,
+      orderPcs: setupOrderPcs,
+      previousCycle,
+      nextCycle: cycle,
+      nextMachineCount: machineCount,
+      planningCalendar,
+    });
+    if (!projectedStartDate) return physicalPlanEndDate;
+
+    const machineOrderPcs = assignedMachineOrderPcs(setupOrderPcs, machineCount);
+    projectedEndDate = plannedProductionEnd(projectedStartDate, machineOrderPcs, cycle, undefined, planningCalendar);
+    if (!projectedEndDate) return physicalPlanEndDate;
+    previousStreams = Array.from({ length: machineCount }, (_, index) => ({
+      machine: `forecast-${routeIndex}-${index}`,
+      startDate: projectedStartDate,
+      endDate: projectedEndDate,
+      quantity: machineOrderPcs,
+      dailyQty: cycleDailyQty(cycle),
+    }));
+    previousCycle = cycle;
+  }
+
+  return projectedEndDate || physicalPlanEndDate;
 }
 
 function productionDashboardRowKey(row: Record<string, unknown>) {
