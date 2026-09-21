@@ -30,6 +30,7 @@ export type LegacyDashboardInput = {
   routeChanges?: ActionRow[];
   dispatchApprovals?: ActionRow[];
   setupCompletions?: ActionRow[];
+  rawMaterialRejections?: ActionRow[];
   previousMachinePlanDetailRows?: Array<Record<string, unknown>>;
   previousProductionDashboardRows?: Array<Record<string, unknown>>;
   filters?: DashboardFilters;
@@ -392,6 +393,7 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
     routeChanges: mergeSourceActionRows(sourcePlannerDecisions.routeChanges, input.routeChanges ?? [], routeChangeDecisionKey),
     dispatchApprovals: input.dispatchApprovals ?? [],
     setupCompletions: mergeSourceActionRows(sourcePlannerDecisions.setupCompletions, input.setupCompletions ?? [], setupCompletionDecisionKey),
+    rawMaterialRejections: input.rawMaterialRejections ?? [],
     previousMachinePlanDetailRows: input.previousMachinePlanDetailRows ?? [],
     previousProductionDashboardRows: input.previousProductionDashboardRows ?? [],
     filters: input.filters ?? {},
@@ -472,6 +474,7 @@ function buildProductionAnalysis({
   routeChanges,
   dispatchApprovals,
   setupCompletions,
+  rawMaterialRejections,
   previousMachinePlanDetailRows,
   previousProductionDashboardRows,
   filters,
@@ -521,6 +524,7 @@ function buildProductionAnalysis({
   routeChanges: ActionRow[];
   dispatchApprovals: ActionRow[];
   setupCompletions: ActionRow[];
+  rawMaterialRejections: ActionRow[];
   previousMachinePlanDetailRows: Array<Record<string, unknown>>;
   previousProductionDashboardRows: Array<Record<string, unknown>>;
   filters: DashboardFilters;
@@ -841,6 +845,7 @@ function buildProductionAnalysis({
     routeChanges,
     dispatchApprovals,
     setupCompletions,
+    rawMaterialRejections,
     previousMachinePlanDetailRows,
     previousProductionDashboardRows,
   });
@@ -1031,6 +1036,7 @@ function buildProductionControl({
   routeChanges,
   dispatchApprovals,
   setupCompletions,
+  rawMaterialRejections,
   previousMachinePlanDetailRows,
   previousProductionDashboardRows,
 }: {
@@ -1071,6 +1077,7 @@ function buildProductionControl({
   routeChanges: ActionRow[];
   dispatchApprovals: ActionRow[];
   setupCompletions: ActionRow[];
+  rawMaterialRejections: ActionRow[];
   previousMachinePlanDetailRows: Array<Record<string, unknown>>;
   previousProductionDashboardRows: Array<Record<string, unknown>>;
 }) {
@@ -1084,6 +1091,7 @@ function buildProductionControl({
   const cycleKeys = new Set(latestMasterRows(cycleRows).keys());
   const toolingKeys = new Set(latestMasterRows(toolingRows).keys());
   const rmInwardByJc = accumulatedRmInwardByJobCard(rmInwardRows);
+  const rawMaterialRejectionByJc = accumulatedRawMaterialRejectionByJobCard(rawMaterialRejections);
   const selectedRouteByJc = latestRouteSelectionByJobCard(routeSelections);
   const routeChangeByTarget = latestRouteChangeByTarget(routeChanges);
   const priorityByTarget = latestPlannerPriorityByTarget(plannerPriorities);
@@ -1152,6 +1160,7 @@ function buildProductionControl({
       })
       : allSelectedRoutes;
     const rmInward = rmInwardByJc.get(canonicalKey(jcNo));
+    const rawMaterialRejection = rawMaterialRejectionByJc.get(canonicalKey(jcNo));
     const routeStatus = !effectiveOption && optionNumbers.length > 1
       ? "Select option"
       : selectedRoutes.length
@@ -1186,6 +1195,34 @@ function buildProductionControl({
       : undefined;
     const actual = rawByJc.get(canonicalKey(jcNo));
     const orderPcs = safeNumber(rowValue(row, "ORD. PCS.", "orderPcs"));
+    const orderKg = safeNumber(rowValue(row, "ORD. KG.", "orderKg"));
+    const rmReceived = isRmReceived(row, rmInward);
+    const rmInwardKg = safeNumber(rowValue(rmInward ?? {}, "RM INWARD KG.", "rmInwardKg"))
+      || safeNumber(rowValue(row, "RM INWARD KG.", "rmInwardKg"));
+    const rmRejectedKg = rawMaterialRejection?.rejectedKg ?? 0;
+    const rmUsableKg = Math.max(rmInwardKg - rmRejectedKg, 0);
+    const rmPlanningAction = rawMaterialRejection?.planningAction ?? "";
+    const rejectionBalanceRestored = Boolean(rawMaterialRejection && orderKg > 0 && rmUsableKg >= orderKg);
+    const originalRmInwardDate = rowText(rmInward ?? {}, "RM I/W DATE", "rmInwardDate")
+      || rowText(row, "RM I/W DATE", "rmInwardDate");
+    const rmInwardDate = rejectionBalanceRestored
+      ? rawMaterialBalanceDate(rmInward, orderKg + rmRejectedKg) || originalRmInwardDate
+      : originalRmInwardDate;
+    const materialPlanPcs = rawMaterialRejection
+      ? rejectionBalanceRestored
+        ? orderPcs
+        : rmPlanningAction === "continue_accepted_quantity" && orderKg > 0
+          ? Math.min(orderPcs, Math.floor(orderPcs * rmUsableKg / orderKg))
+          : 0
+      : orderPcs;
+    const materialPlanningReady = rawMaterialRejection
+      ? rejectionBalanceRestored || (rmPlanningAction === "continue_accepted_quantity" && materialPlanPcs > 0)
+      : rmReceived;
+    const rmReplanFromSetupOne = Boolean(
+      rawMaterialRejection
+      && rmPlanningAction === "wait_for_replacement"
+      && rejectionBalanceRestored
+    );
     const dispatchStatus = dispatchJcKeys.has(canonicalKey(jcNo)) ? "Shifted to dispatch" : "In production";
     const planningItemPending = rowValue(row, "planningItemPending") === true
       || rowText(row, "planningItemPending").toLowerCase() === "true";
@@ -1222,7 +1259,7 @@ function buildProductionControl({
       candidateOption: !optionNumber && effectiveOption ? effectiveOption : "-",
       availableOptions,
       orderPcs: round(orderPcs),
-      orderKg: round(safeNumber(rowValue(row, "ORD. KG.", "orderKg"))),
+      orderKg: round(orderKg),
       deliveryDate: rowText(row, "DELIVERY DATE", "deliveryDate"),
       missingSetupNo: setupStepKey(rowText(firstMissingRoute, "SETUP NO.", "SETUP CODE", "setupNo"), effectiveOption),
       missingSetupName: rowText(firstMissingRoute, "SETUP NAME", "setupName"),
@@ -1230,9 +1267,17 @@ function buildProductionControl({
       machineType: rowText(firstMissingRoute, "MACHINE TYPE", "machineType"),
       stageWeight: safeNumber(rowValue(firstMissingRoute, "STAGE WEIGHT (GRAM)", "stageWeight")),
       operationWeight: safeNumber(rowValue(firstMissingRoute, "OPERATION WISE WEIGHT (GRAM)", "operationWeight")) || safeNumber(rowValue(firstMissingRoute, "STAGE WEIGHT (GRAM)", "stageWeight")),
-      rmStatus: isRmReceived(row, rmInward) ? "Received" : "Waiting",
-      rmInwardDate: rowText(rmInward ?? {}, "RM I/W DATE", "rmInwardDate") || rowText(row, "RM I/W DATE", "rmInwardDate"),
-      rmInwardKg: safeNumber(rowValue(rmInward ?? {}, "RM INWARD KG.", "rmInwardKg")) || safeNumber(rowValue(row, "RM INWARD KG.", "rmInwardKg")),
+      rmStatus: rawMaterialRejection && !rejectionBalanceRestored
+        ? materialPlanningReady ? "Partial RM available" : "Rejected - wait for replacement"
+        : rmReceived ? "Received" : "Waiting",
+      rmInwardDate,
+      rmInwardKg,
+      rmRejectedKg: round(rmRejectedKg),
+      rmUsableKg: round(rmUsableKg),
+      rmPlanningAction,
+      rmReplanFromSetupOne,
+      materialPlanningReady,
+      materialPlanPcs,
       plannerPriority: priorityLabel(plannerPriorityValue),
       plannerPriorityScore: plannerPriority ? priorityScore(plannerPriorityValue) : 0,
       priorityApprovalMode: plannerPriority ? priorityApprovalMode(plannerPriority) : "idle_queue_only",
@@ -1317,7 +1362,7 @@ function buildProductionControl({
     return [...workOrderGapRows, ...setupGapRows];
   });
   const prioritizedWorkOrderRows = [...workOrderOutputRows].sort(workOrderPlanningSort);
-  const masterGaps = allWorkOrderGaps.filter((row) => row.rmStatus === "Received");
+  const masterGaps = allWorkOrderGaps.filter(isMaterialPlanningReady);
   const combinedBatches = combinedRows(prioritizedWorkOrderRows, rawByJc, routeGroups, cycleKeys, toolingKeys);
   const machinePlanDetailRows = machinePlanDetails(prioritizedWorkOrderRows, rawBySetup, rawBySetupAnyMachine, routeGroups, cycleRows, toolingRows, toolingAvailability, machineRows, machineConstraints, planOverrides, shopFloorStatusRows, previousMachineAssignmentsBySetup(previousMachinePlanDetailRows), planningCalendar);
   const productionDashboardRows = buildProductionDashboardRows({
@@ -1335,7 +1380,7 @@ function buildProductionControl({
   const plannerActionConflicts = plannerActionConflictRows(machinePlanDetailRows);
   const setupChecklistHistoryRows: Record<string, unknown>[] = [];
   const setupChecklistMismatchRows: Record<string, unknown>[] = [];
-  const machinePlanReady = workOrderOutputRows.filter((row) => row.rmStatus === "Received" && !row.routeStatus.includes("missing") && row.cycleStatus === "Ready" && row.toolingStatus === "Ready" && row.machineMasterStatus === "Ready").length;
+  const machinePlanReady = workOrderOutputRows.filter((row) => isMaterialPlanningReady(row) && !row.routeStatus.includes("missing") && row.cycleStatus === "Ready" && row.toolingStatus === "Ready" && row.machineMasterStatus === "Ready").length;
   const latestSetupDate = maxDate(setupChecklistRows.map((row) => parseDate(rowValue(row, "SETUP DATE", "setupDate"))));
   const totalOutputQty = sum([...rawByJc.values()].map((row) => row.outputQty));
   const totalActualQty = sum([...rawByJc.values()].map((row) => row.actualQty));
@@ -1366,6 +1411,7 @@ function buildProductionControl({
     ...machineConstraints.map((row) => ({ ...row, actionType: "Machine Unavailable" })),
     ...planOverrides.map((row) => ({ ...row, actionType: "Machine Switch" })),
     ...routeChanges.map((row) => ({ ...row, actionType: "Route Change" })),
+    ...rawMaterialRejections.map((row) => ({ ...row, actionType: "Raw Material Rejection" })),
   ].sort((a, b) => rowText(b, "createdAt", "loggedOn").localeCompare(rowText(a, "createdAt", "loggedOn")));
 
   return {
@@ -1380,10 +1426,10 @@ function buildProductionControl({
       routeReady: workOrderOutputRows.filter((row) => row.routeStatus === "Ready" || row.routeStatus === "Auto single option").length,
       cycleReady: workOrderOutputRows.filter((row) => row.cycleStatus === "Ready").length,
       toolingReady: workOrderOutputRows.filter((row) => row.toolingStatus === "Ready").length,
-      rmReady: workOrderOutputRows.filter((row) => row.rmStatus === "Received").length,
+      rmReady: workOrderOutputRows.filter(isMaterialPlanningReady).length,
       optionMissing: workOrderOutputRows.filter((row) => row.optionSource === "Planner required").length,
-      routeSelectionRequired: workOrderOutputRows.filter((row) => row.optionSource === "Planner required" && row.rmStatus === "Received").length,
-      routeSelectionWaitingRm: workOrderOutputRows.filter((row) => row.optionSource === "Planner required" && row.rmStatus !== "Received").length,
+      routeSelectionRequired: workOrderOutputRows.filter((row) => row.optionSource === "Planner required" && isMaterialPlanningReady(row)).length,
+      routeSelectionWaitingRm: workOrderOutputRows.filter((row) => row.optionSource === "Planner required" && !isMaterialPlanningReady(row)).length,
       masterGapCount: masterGaps.length,
       awaitingShopFloorApproval: workOrderOutputRows.filter((row) => row.dispatchStatus === "Waiting shop floor approval").length,
       shiftedToDispatch: workOrderOutputRows.filter((row) => row.dispatchStatus === "Shifted to dispatch").length,
@@ -1392,7 +1438,7 @@ function buildProductionControl({
       totalRejectQty: round(totalRejectQty),
       dispatchShortQty: round(sum(dispatchRows.map((row) => safeNumber(rowValue(row, "DISPATCH SHORT QTY", "dispatchShortQty"))))),
       machinePlanReady,
-      machinePlanReadyGroups: new Set(workOrderOutputRows.filter((row) => row.rmStatus === "Received").map((row) => [canonicalKey(row.partCode), row.optionNumber].join("|"))).size,
+      machinePlanReadyGroups: new Set(workOrderOutputRows.filter(isMaterialPlanningReady).map((row) => [canonicalKey(row.partCode), row.optionNumber].join("|"))).size,
       parallelSetupNeeded: combinedBatches.filter((row) => Number(row.orders) > 1).length,
       deliveryRiskSetups: 0,
       activeMachineConstraints,
@@ -1427,8 +1473,8 @@ function buildProductionControl({
     productionOutputRows,
     productionDashboardRows,
     jobCardStatusTiles: workOrderOutputRows,
-    routeSelectionRequired: workOrderOutputRows.filter((row) => row.optionSource === "Planner required" && row.rmStatus === "Received"),
-    routeSelectionWaitingRm: workOrderOutputRows.filter((row) => row.optionSource === "Planner required" && row.rmStatus !== "Received"),
+    routeSelectionRequired: workOrderOutputRows.filter((row) => row.optionSource === "Planner required" && isMaterialPlanningReady(row)),
+    routeSelectionWaitingRm: workOrderOutputRows.filter((row) => row.optionSource === "Planner required" && !isMaterialPlanningReady(row)),
     masterGaps,
     allWorkOrderGaps,
     runningParts: [],
@@ -2670,7 +2716,7 @@ function combinedRows(workOrderRows: Array<Record<string, unknown>>, rawByJc: Ma
     group.fgPos.add(rowText(row, "fgPoNo"));
     group.orderPcs += safeNumber(rowValue(row, "orderPcs"));
     group.orders += 1;
-    if (rowText(row, "rmStatus") === "Received") group.rmReady += 1;
+    if (isMaterialPlanningReady(row)) group.rmReady += 1;
     const rowPriorityScore = safeNumber(rowValue(row, "plannerPriorityScore"));
     if (rowPriorityScore > group.plannerPriorityScore) {
       group.plannerPriority = rowText(row, "plannerPriority") || "Normal";
@@ -2727,13 +2773,57 @@ function accumulatedRmInwardByJobCard(rows: Array<Record<string, unknown>>) {
         ...row,
         rmInwardDate: receivedDate,
         rmInwardKg: receivedKg,
+        rmReceipts: [{ receivedDate, receivedKg }],
       });
       continue;
     }
     current.rmInwardDate = minDateValue(rowText(current, "rmInwardDate"), receivedDate);
     current.rmInwardKg = safeNumber(rowValue(current, "rmInwardKg")) + receivedKg;
+    const receipts = Array.isArray(current.rmReceipts) ? current.rmReceipts : [];
+    current.rmReceipts = [...receipts, { receivedDate, receivedKg }];
   }
   return byJc;
+}
+
+function rawMaterialBalanceDate(
+  rmInward: Record<string, unknown> | undefined,
+  requiredReceivedKg: number,
+) {
+  if (!rmInward || requiredReceivedKg <= 0 || !Array.isArray(rmInward.rmReceipts)) return "";
+  let receivedKg = 0;
+  for (const receipt of [...rmInward.rmReceipts]
+    .map(asRecord)
+    .sort((a, b) => rowText(a, "receivedDate").localeCompare(rowText(b, "receivedDate")))) {
+    receivedKg += safeNumber(rowValue(receipt, "receivedKg"));
+    if (receivedKg + 0.00000001 >= requiredReceivedKg) return rowText(receipt, "receivedDate");
+  }
+  return "";
+}
+
+function accumulatedRawMaterialRejectionByJobCard(rows: ActionRow[]) {
+  const byJc = new Map<string, { rejectedKg: number; planningAction: string; latestCreatedAt: string }>();
+  for (const row of rows) {
+    if (!isActivePlannerDecision(rowText(row, "status", "STATUS"))) continue;
+    const key = canonicalKey(rowText(row, "jcNo", "jobCardNumber", "JC NO.", "JC NO"));
+    if (!key) continue;
+    const rejectedKg = safeNumber(rowValue(row, "rejectedKg", "REJECTED KG"));
+    if (rejectedKg <= 0) continue;
+    const createdAt = rowText(row, "createdAt", "occurredAt");
+    const planningAction = rowText(row, "planningAction", "PLANNING ACTION");
+    const current = byJc.get(key) ?? { rejectedKg: 0, planningAction: "", latestCreatedAt: "" };
+    current.rejectedKg += rejectedKg;
+    if (!current.latestCreatedAt || createdAt >= current.latestCreatedAt) {
+      current.planningAction = planningAction;
+      current.latestCreatedAt = createdAt;
+    }
+    byJc.set(key, current);
+  }
+  return byJc;
+}
+
+function isMaterialPlanningReady(row: Record<string, unknown>) {
+  const explicit = rowValue(row, "materialPlanningReady");
+  return typeof explicit === "boolean" ? explicit : rowText(row, "rmStatus") === "Received";
 }
 
 function latestRouteSelectionByJobCard(rows: Array<Record<string, unknown>>) {
@@ -2876,7 +2966,7 @@ function machinePlanDetails(
     const partCode = rowText(row, "partCode");
     const optionNumber = rowText(row, "optionNumber");
     if (!partCode || !optionNumber || optionNumber === "Not selected") continue;
-    if (rowText(row, "rmStatus") !== "Received") continue;
+    if (!isMaterialPlanningReady(row)) continue;
     const routeKeyValue = [canonicalKey(partCode), optionNumber].join("|");
     const remainingSetups = routeChangeRemainingPlan(row).filter((setup) => setup.plan && safeNumber(setup.quantity) > 0);
     const remainingQtyBySetup = new Map(remainingSetups.map((setup) => [canonicalKey(setup.setupNo), setup.quantity]));
@@ -2895,7 +2985,16 @@ function machinePlanDetails(
       const setupNo = rowText(route, "SETUP NO.", "SETUP CODE", "setupNo");
       const displaySetupNo = setupStepKey(setupNo, optionNumber) || setupNo;
       const customerOrderPcs = safeNumber(rowValue(row, "orderPcs"));
-      const requestedGoodQty = remainingQtyBySetup.get(canonicalKey(displaySetupNo)) ?? customerOrderPcs;
+      const materialPlanPcsValue = rowValue(row, "materialPlanPcs");
+      const materialPlanPcs = materialPlanPcsValue === undefined || materialPlanPcsValue === null || materialPlanPcsValue === ""
+        ? customerOrderPcs
+        : safeNumber(materialPlanPcsValue);
+      const routeChangeQty = remainingQtyBySetup.get(canonicalKey(displaySetupNo));
+      const requestedGoodQty = routeChangeQty === undefined
+        ? materialPlanPcs
+        : safeNumber(rowValue(row, "rmRejectedKg")) > 0
+          ? Math.min(routeChangeQty, materialPlanPcs)
+          : routeChangeQty;
       const requiredTools = requiredToolingCodes(toolingByKey.get(masterKey(route)) ?? {});
       const machineType = rowText(route, "MACHINE TYPE", "machineType");
       const overrideDecision = planOverrideDecisionForSetup(planOverrides, row, setupNo, displaySetupNo);
@@ -2932,6 +3031,7 @@ function machinePlanDetails(
         setupNo: displaySetupNo,
       });
       const setupHasExecution = productionActualMachines.size > 0 || lockedShopFloorMachines.size > 0;
+      const rmReplanRequired = routeIndex === 0 && rowValue(row, "rmReplanFromSetupOne") === true;
       const setupMastersReady =
         (!cycleRows.length || Boolean(cycle)) &&
         (!toolingRows.length || toolingKeys.has(masterKey(route)));
@@ -3133,7 +3233,9 @@ function machinePlanDetails(
         const setupCompletionDate = settingDone ? parseDate(shopFloorCompletedAt) || shopFloorCompletedAt : "";
         const actualStartDate = productionActual?.startDate ?? "";
         const actualCompletionDate = itemComplete ? parseDate(shopFloorCompletedAt) || shopFloorCompletedAt : "";
-        const plannedProductionStartDate = actualStartDate || maxDateValue(plannedCompletionDate, setupCompletionDate);
+        const plannedProductionStartDate = rmReplanRequired
+          ? maxDateValue(plannedCompletionDate, setupCompletionDate)
+          : actualStartDate || maxDateValue(plannedCompletionDate, setupCompletionDate);
         const plannedProductionEndDate = plannedProductionEnd(plannedProductionStartDate, machineOrderPcs, cycle, productionActual, planningCalendar);
         if (plannedProductionEndDate) routeProductionEndDates.push(parseDate(plannedProductionEndDate) || plannedProductionEndDate);
         if (plannedProductionStartDate && plannedProductionEndDate) {
@@ -3194,6 +3296,12 @@ function machinePlanDetails(
         operationWeight: safeNumber(rowValue(cycle ?? {}, "operationWeight", "OPERATION WT.", "OPERATION WEIGHT")),
         stageWeight: safeNumber(rowValue(route ?? {}, "stageWeight", "STAGE WT.", "STAGE WEIGHT")),
         rmStatus: rowText(row, "rmStatus"),
+        rmInwardKg: safeNumber(rowValue(row, "rmInwardKg")),
+        rmRejectedKg: safeNumber(rowValue(row, "rmRejectedKg")),
+        rmUsableKg: safeNumber(rowValue(row, "rmUsableKg")),
+        rmPlanningAction: rowText(row, "rmPlanningAction"),
+        rmReplanRequired,
+        rmReplanDate: rmReplanRequired ? dateLabel(plannedStartDate) : "",
         routeStatus: rowText(row, "routeStatus"),
         cycleStatus: rowText(row, "cycleStatus"),
         toolingStatus: rowText(row, "toolingStatus"),
@@ -3826,21 +3934,23 @@ function rescheduleMachineQueues(details: Array<Record<string, unknown>>, planni
       const meta = planningMeta(row);
       const lockedStartDate = lockedProductionStartDate(row);
       const productionActualStartDate = actualProductionStartDate(meta);
+      const rmReplanRequired = rowValue(row, "rmReplanRequired") === true;
+      const planningActualStartDate = rmReplanRequired ? "" : productionActualStartDate;
       const readyDate = meta.readyDate || parseDate(rowText(row, "setupPlannedDate")) || "";
       const toolingDate = toolingHeld(row) ? "" : toolingReadyDate(row, slots);
       const currentUnstartedForecastDate = staleUnstartedForecastStartDate(row, planningCalendar);
       let plannedStartDate = maxDateValue(readyDate, lockedStartDate, machineNextDate, toolingDate, currentUnstartedForecastDate);
       const setupCompletionDate = parseDate(rowText(row, "setupCompletionDate", "completionDate", "setupCompletedOn"));
       const unenteredProductionStartDate = unenteredProductionForecastStartDate(row, planningCalendar);
-      let plannedProductionStartDate = (productionActualStartDate && (!requiredToolingCodesFromPlan(row).length || toolingHeld(row) || shopFloorRowIsComplete(row)))
-        ? productionActualStartDate : maxDateValue(plannedStartDate, setupCompletionDate, unenteredProductionStartDate);
+      let plannedProductionStartDate = (planningActualStartDate && (!requiredToolingCodesFromPlan(row).length || toolingHeld(row) || shopFloorRowIsComplete(row)))
+        ? planningActualStartDate : maxDateValue(plannedStartDate, setupCompletionDate, unenteredProductionStartDate);
       let plannedProductionEndDate = maxDateValue(
         plannedProductionEnd(plannedProductionStartDate, meta.orderPcs ?? 0, meta.cycle, meta.productionActual, planningCalendar),
         meta.minimumProductionEndDate ?? "",
         liveRunningMinimumEndDate(row, planningCalendar),
       );
       const unavailableDelay = machineUnavailableProductionDelay(row, plannedProductionStartDate, plannedProductionEndDate, planningCalendar);
-      if (!productionActualStartDate && unavailableDelay.productionStartDate) {
+      if (!planningActualStartDate && unavailableDelay.productionStartDate) {
         plannedProductionStartDate = unavailableDelay.productionStartDate;
         if (machineUnavailableCanMoveSetupDate(row)) plannedStartDate = maxDateValue(plannedStartDate, plannedProductionStartDate);
         plannedProductionEndDate = maxDateValue(
@@ -3848,7 +3958,7 @@ function rescheduleMachineQueues(details: Array<Record<string, unknown>>, planni
           meta.minimumProductionEndDate ?? "",
           liveRunningMinimumEndDate(row, planningCalendar),
         );
-      } else if (productionActualStartDate && unavailableDelay.window) {
+      } else if (planningActualStartDate && unavailableDelay.window) {
         plannedProductionEndDate = maxDateValue(
           plannedProductionEndDate,
           machineUnavailableRemainingProductionEnd(row, unavailableDelay.window, planningCalendar),

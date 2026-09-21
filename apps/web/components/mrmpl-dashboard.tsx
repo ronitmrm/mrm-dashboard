@@ -267,6 +267,11 @@ import {
 } from "@/lib/planning-master-contract"
 
 type DashboardPayload = Record<string, unknown>
+type SubmitAction = (
+  path: string,
+  body: Record<string, unknown>,
+  options?: { throwOnError?: boolean }
+) => Promise<void>
 
 type ActionStatus = { tone: "default" | "destructive"; message: string } | null
 
@@ -2590,7 +2595,7 @@ function DashboardContent({
   canDeleteMasters: boolean
   canManageStoreMasters: boolean
   payload: DashboardPayload
-  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
+  submitAction: SubmitAction
   correctionCandidates: DashboardPayload[]
   openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void
   openMasterReadiness: () => void
@@ -3197,7 +3202,7 @@ function ProductionControlPanel({
   submitAction,
 }: {
   productionControl: DashboardPayload
-  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
+  submitAction: SubmitAction
 }) {
   return (
     <PlannerDecisionConsole
@@ -3212,7 +3217,7 @@ function PlannerDecisionConsole({
   submitAction,
 }: {
   productionControl: DashboardPayload
-  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
+  submitAction: SubmitAction
 }) {
   const [activeView, setActiveView] = useState<PlannerDecisionView>("new")
   const [activeAction, setActiveAction] =
@@ -3257,6 +3262,12 @@ function PlannerDecisionConsole({
             submitAction={submitAction}
           />
         ),
+        rawMaterialRejection: (
+          <RawMaterialRejectionPlannerForm
+            productionControl={productionControl}
+            submitAction={submitAction}
+          />
+        ),
         routeChange: (
           <RouteChangePlannerForm
             productionControl={productionControl}
@@ -3290,6 +3301,225 @@ function PlannerDecisionConsole({
         history: <ActionLogTable rows={history} />,
       }}
     />
+  )
+}
+
+function RawMaterialRejectionPlannerForm({
+  productionControl,
+  submitAction,
+}: {
+  productionControl: DashboardPayload
+  submitAction: SubmitAction
+}) {
+  const workOrders = asArray(productionControl.workOrders)
+  const productionSessions = asArray(productionControl.productionCardRows)
+  const eligibleWorkOrders = useMemo(
+    () =>
+      workOrders.filter((row) => {
+        const usableKg = row.rmUsableKg === undefined
+          ? Number(row.rmInwardKg) || 0
+          : Number(row.rmUsableKg) || 0
+        return jobCardNumber(row) !== "-" && usableKg > 0
+      }),
+    [workOrders]
+  )
+  const [jcNo, setJcNo] = useState("")
+  const [rejectedKg, setRejectedKg] = useState("")
+  const [planningAction, setPlanningAction] = useState("")
+  const [reason, setReason] = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const selectedWorkOrder = eligibleWorkOrders.find(
+    (row) => jobCardNumber(row).toLowerCase() === jcNo.toLowerCase()
+  )
+  const receivedKg = Number(selectedWorkOrder?.rmInwardKg) || 0
+  const previouslyRejectedKg = Number(selectedWorkOrder?.rmRejectedKg) || 0
+  const usableKg = selectedWorkOrder?.rmUsableKg === undefined
+    ? receivedKg
+    : Number(selectedWorkOrder.rmUsableKg) || 0
+  const orderKg = Number(selectedWorkOrder?.orderKg) || 0
+  const orderPcs = Number(selectedWorkOrder?.orderPcs) || 0
+  const enteredRejectedKg = Number(rejectedKg) || 0
+  const remainingKg = Math.max(usableKg - enteredRejectedKg, 0)
+  const validQuantity = enteredRejectedKg > 0 && enteredRejectedKg <= usableKg
+  const isFullRejection = validQuantity && remainingKg <= 0.00000001
+  const effectivePlanningAction = isFullRejection
+    ? "wait_for_replacement"
+    : planningAction
+  const supportedPieces = orderKg > 0
+    ? Math.min(orderPcs, Math.floor(orderPcs * remainingKg / orderKg))
+    : 0
+  const openSession = productionSessions.find((session) => {
+    const sessionJc = str(
+      session.jobCardNumber || session.jobCard || session.jcNo
+    )
+    const isOpen = str(session.status).toLowerCase() === "open" ||
+      (Boolean(session.startTime) && !session.endTime)
+    return isOpen && sessionJc.toLowerCase() === jcNo.toLowerCase()
+  })
+  const canSave = Boolean(
+    selectedWorkOrder &&
+    validQuantity &&
+    effectivePlanningAction &&
+    reason.trim() &&
+    !openSession
+  )
+
+  function resetDecision() {
+    setRejectedKg("")
+    setPlanningAction("")
+    setReason("")
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!canSave || isSubmitting) return
+    setIsSubmitting(true)
+    try {
+      await submitAction(
+        "raw-material-rejection",
+        {
+          jcNo,
+          rejectedKg: enteredRejectedKg,
+          planningAction: effectivePlanningAction,
+          productionFloorCode: productionFloorFromLocation(),
+          reason,
+        },
+        { throwOnError: true }
+      )
+      resetDecision()
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  return (
+    <form
+      aria-busy={isSubmitting}
+      className="grid gap-4 rounded-xl border bg-background p-4"
+      onSubmit={submit}
+    >
+      <div>
+        <div className="text-sm font-medium">Raw Material Rejection</div>
+        <div className="text-xs text-muted-foreground">
+          Record kilograms dispatched back. The original receipt and completed
+          production history remain unchanged.
+        </div>
+      </div>
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <Field label="Job Card / Part">
+          <SearchableSelect
+            className="h-9 rounded-md border bg-background px-3 text-sm"
+            value={jcNo}
+            required
+            onChange={(event) => {
+              setJcNo(event.target.value)
+              resetDecision()
+            }}
+          >
+            <option value="">Select Job Card</option>
+            {eligibleWorkOrders.map((row) => {
+              const rowUsableKg = row.rmUsableKg === undefined
+                ? Number(row.rmInwardKg) || 0
+                : Number(row.rmUsableKg) || 0
+              return (
+                <option key={jobCardNumber(row)} value={jobCardNumber(row)}>
+                  {itemCode(row)} / {jobCardNumber(row)} / {formatNumber(rowUsableKg)} kg usable
+                </option>
+              )
+            })}
+          </SearchableSelect>
+        </Field>
+        <Field label="Rejected RM (kg)">
+          <Input
+            min="0.001"
+            max={usableKg || undefined}
+            step="0.001"
+            type="number"
+            value={rejectedKg}
+            required
+            onChange={(event) => {
+              setRejectedKg(event.target.value)
+              setPlanningAction("")
+            }}
+          />
+        </Field>
+        <Field label="Reason">
+          <Input
+            value={reason}
+            placeholder="Chemistry / crack / supplier rejection"
+            required
+            onChange={(event) => setReason(event.target.value)}
+          />
+        </Field>
+      </div>
+
+      {selectedWorkOrder ? (
+        <div className="grid gap-3 rounded-lg border bg-muted/15 p-3" aria-live="polite">
+          <div className="flex flex-wrap gap-2">
+            <StatusBadge value={`${formatNumber(receivedKg)} kg received`} />
+            <StatusBadge value={`${formatNumber(previouslyRejectedKg)} kg previously rejected`} />
+            <StatusBadge value={`${formatNumber(usableKg)} kg usable`} />
+          </div>
+          {openSession ? (
+            <div className="rounded-md border bg-background p-3 text-sm">
+              <div className="font-medium">Close the open Production Session first.</div>
+              <div className="text-muted-foreground">
+                Save its actual output, then return here. The server will not
+                remove a running setup from the plan.
+              </div>
+            </div>
+          ) : null}
+          {validQuantity ? (
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="rounded-md border bg-background p-3">
+                <div className="text-xs text-muted-foreground">After rejection</div>
+                <div className="mt-1 font-semibold">{formatNumber(remainingKg)} kg usable</div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  Material-supported order quantity: {formatNumber(supportedPieces)} pcs
+                </div>
+              </div>
+              <div className="rounded-md border bg-background p-3">
+                {isFullRejection ? (
+                  <>
+                    <div className="font-medium">Full RM rejected</div>
+                    <div className="mt-1 text-sm text-muted-foreground">
+                      Remove Setup 1 and all downstream setups. Planning resumes
+                      after replacement RM restores the ordered kilograms.
+                    </div>
+                  </>
+                ) : (
+                  <Field label="Planner decision for remaining accepted RM">
+                    <SearchableSelect
+                      className="h-9 rounded-md border bg-background px-3 text-sm"
+                      value={planningAction}
+                      required
+                      onChange={(event) => setPlanningAction(event.target.value)}
+                    >
+                      <option value="">Choose Planning Decision</option>
+                      <option value="continue_accepted_quantity">
+                        Continue Accepted Quantity
+                      </option>
+                      <option value="wait_for_replacement">
+                        Remove Plan And Wait For Replacement
+                      </option>
+                    </SearchableSelect>
+                  </Field>
+                )}
+              </div>
+            </div>
+          ) : rejectedKg ? (
+            <div className="text-sm text-muted-foreground">
+              Enter a rejected quantity greater than zero and not above the
+              current {formatNumber(usableKg)} kg usable balance.
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      <Button className="w-fit" type="submit" disabled={!canSave || isSubmitting}>
+        {isSubmitting ? "Saving..." : "Save RM Rejection And Recalculate"}
+      </Button>
+    </form>
   )
 }
 
@@ -14098,6 +14328,9 @@ function MachinePlannedPartsPanel({
                   <div className="flex flex-wrap justify-end gap-1.5">
                     <StatusBadge value={row.runningStatus} />
                     <StatusBadge value={row.rmStatus} />
+                    {row.rmReplanRequired ? (
+                      <StatusBadge value="Replacement RM replan" />
+                    ) : null}
                   </div>
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2 @6xl/main:grid-cols-4">
@@ -14122,6 +14355,12 @@ function MachinePlannedPartsPanel({
                     label="Setup Planned Date"
                     value={row.setupPlannedDate || row.plannedDate}
                   />
+                  {row.rmReplanRequired ? (
+                    <TileField
+                      label="RM Replan"
+                      value={`Setup 1 remaining quantity from ${displayValue(row.rmReplanDate)}; prior actuals retained`}
+                    />
+                  ) : null}
                   <TileField
                     label="Setup Completion Date"
                     value={row.setupCompletionDate || row.completionDate}

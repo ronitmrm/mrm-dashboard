@@ -65,6 +65,11 @@ export const productionFloorTaskDefinitions = {
     legacyCapability: "planning.refresh.execute",
     tab: "productionControlTab",
   },
+  raw_material_rejection: {
+    label: "Reject raw material",
+    legacyCapability: "planning.raw_material_rejection.write",
+    tab: "productionControlTab",
+  },
   planner_workflow_resolution: {
     label: "Resolve production workflow exceptions",
     legacyCapability: "operations.shop_floor.write",
@@ -153,6 +158,7 @@ const directMutationTasks = {
   "mark-complete": "job_card_completion",
   "plan-override": "plan_override",
   "planner-priority": "planner_priority",
+  "raw-material-rejection": "raw_material_rejection",
   reschedule: "planner_recalculation",
   "route-change": "route_change",
   "route-selection": "route_selection",

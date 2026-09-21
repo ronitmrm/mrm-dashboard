@@ -76,6 +76,31 @@ Each RM inward entry is append-only for normal receiving; later inward entries a
 to the Job Card total instead of replacing the previous receipt. An exact import
 retry reuses its receipt identity so the tally is not duplicated.
 
+## Raw Material Rejection
+
+A Raw Material Rejection is a Planner action against one Job Card. It records the
+kilograms dispatched back and subtracts them from cumulative received Raw
+Material without deleting or rewriting the receipt. It is separate from a
+Production Rejection, which records rejected pieces against a Production
+Session.
+
+- If all usable Raw Material is rejected before production starts, every setup
+  leaves the plan and the physical machine becomes available.
+- If all usable Raw Material is rejected after Setup 1 has started, its open
+  Production Session must first be closed. Historical setup and production
+  events remain auditable, but every setup leaves the active plan until
+  replacement Raw Material restores availability.
+- A partial rejection requires the Planner to choose either **Continue Accepted
+  Quantity** or **Wait For Replacement**. Continue Accepted Quantity limits the
+  Job Card plan to the pieces supported by net usable kilograms. Wait For
+  Replacement removes all active setup plans until net usable kilograms again
+  cover the ordered Raw Material.
+
+Net usable Raw Material equals cumulative receipt kilograms minus active Raw
+Material Rejection kilograms. Later replacement receipts add to this balance.
+When the balance is restored, Setup 1 and downstream setup forecasts rebuild
+cumulatively from preserved production history and the normal WIP rules.
+
 ## Delivery Target And Rating
 
 The Product Master stores the default working days after full RM receipt. A Job

@@ -36,6 +36,15 @@ describe("production floor task capabilities", () => {
       capability:
         "operations.floors.cnc.planner_actions.planner_priority.write",
     })
+    expect(
+      productionFloorTaskForMutation("raw-material-rejection", {
+        productionFloorCode: "cnc",
+      })
+    ).toMatchObject({
+      capability:
+        "operations.floors.cnc.planner_actions.raw_material_rejection.write",
+      legacyCapability: "planning.raw_material_rejection.write",
+    })
   })
 
   it("denies the same action on a different floor", () => {
