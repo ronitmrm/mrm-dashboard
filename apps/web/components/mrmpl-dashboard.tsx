@@ -3265,6 +3265,12 @@ function PlannerDecisionConsole({
             submitAction={submitAction}
           />
         ),
+        parallelMachine: (
+          <ParallelMachinePlannerForm
+            productionControl={productionControl}
+            submitAction={submitAction}
+          />
+        ),
         rawMaterialRejection: (
           <RawMaterialRejectionPlannerForm
             productionControl={productionControl}
@@ -3926,6 +3932,341 @@ function MachineConstraintPlannerForm({
               setReviewReady(false)
               setQueueReviewConfirmed(false)
             }}
+          >
+            Recheck Inputs
+          </Button>
+        ) : null}
+      </div>
+    </form>
+  )
+}
+function ParallelMachinePlannerForm({
+  productionControl,
+  submitAction,
+}: {
+  productionControl: DashboardPayload
+  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
+}) {
+  const plannedRows = asArray(productionControl.machinePlanDetailRows)
+  const machineRows = asArray(productionControl.machinePlanningRows)
+  const eligibleRows = useMemo(
+    () => plannedRows.filter((row) => !shopFloorItemIsFinished(row)),
+    [plannedRows]
+  )
+  const [selectedItem, setSelectedItem] = useState("")
+  const [target, setTarget] = useState("")
+  const [setupNo, setSetupNo] = useState("")
+  const [toMachine, setToMachine] = useState("")
+  const [reason, setReason] = useState("")
+  const [reviewReady, setReviewReady] = useState(false)
+  const [queueReviewConfirmed, setQueueReviewConfirmed] = useState(false)
+  const [queueAfterByRow, setQueueAfterByRow] = useState<
+    Record<string, string>
+  >({})
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const itemOptions = useMemo(
+    () =>
+      uniqueValues(
+        eligibleRows
+          .map((row) => itemCode(row))
+          .filter((value) => value !== "-")
+      ),
+    [eligibleRows]
+  )
+  const jobCardOptions = useMemo(
+    () =>
+      uniqueValues(
+        eligibleRows
+          .filter(
+            (row) => machineKey(itemCode(row)) === machineKey(selectedItem)
+          )
+          .map((row) => jobCardNumber(row))
+          .filter((value) => value !== "-")
+      ),
+    [eligibleRows, selectedItem]
+  )
+  const setupOptions = useMemo(
+    () =>
+      uniqueValues(
+        eligibleRows
+          .filter((row) => partMachineSwitchTargetMatches(row, target))
+          .map((row) => displayValue(row.setupNo))
+          .filter((value) => value !== "-")
+      ),
+    [eligibleRows, target]
+  )
+  const selectedRows = useMemo(
+    () =>
+      eligibleRows
+        .filter((row) => partMachineSwitchTargetMatches(row, target))
+        .filter(
+          (row) => machineKey(displayValue(row.setupNo)) === machineKey(setupNo)
+        )
+        .sort(machinePlanDisplaySort),
+    [eligibleRows, setupNo, target]
+  )
+  const assignedMachines = useMemo(
+    () =>
+      uniqueValues(
+        selectedRows
+          .map((row) => machineValue(row, "machine"))
+          .filter((value) => value !== "-")
+      ),
+    [selectedRows]
+  )
+  const targetMachineOptions = useMemo(() => {
+    const assigned = new Set(assignedMachines.map(machineKey))
+    const occupied = new Set(
+      plannedRows
+        .filter(
+          (row) => !shopFloorItemIsFinished(row) && machineIssueRowIsLocked(row)
+        )
+        .map((row) => machineKey(machineValue(row, "machine")))
+    )
+    const unavailable = new Set(
+      openMachineIssues(asArray(productionControl.machineConstraintRows)).map(
+        (row) => machineKey(displayValue(row.machineNo || row.machine))
+      )
+    )
+    return compatibleDestinationMachineOptions({
+      affectedRows: selectedRows,
+      machineRows,
+      sourceMachine: "",
+    }).filter((machine) => {
+      const key = machineKey(machine)
+      return !assigned.has(key) && !occupied.has(key) && !unavailable.has(key)
+    })
+  }, [
+    assignedMachines,
+    machineRows,
+    plannedRows,
+    productionControl.machineConstraintRows,
+    selectedRows,
+  ])
+  const queueReviewGroups = useMemo(
+    () =>
+      machineConstraintQueueReview({
+        plannedRows,
+        machineRows,
+        affectedRows: selectedRows.slice(0, 1),
+        machineNo: assignedMachines[0] ?? "",
+        rescheduleAction: "shift_required",
+        explicitDestinationMachines: toMachine ? [toMachine] : [],
+        includeSameMachineLater: false,
+        includeDownstream: false,
+      }),
+    [assignedMachines, machineRows, plannedRows, selectedRows, toMachine]
+  )
+  const proposedQueuePlacements = useMemo(
+    () =>
+      machineConstraintQueuePlacements(
+        queueReviewGroups,
+        selectedRows.slice(0, 1),
+        queueAfterByRow
+      ),
+    [queueAfterByRow, queueReviewGroups, selectedRows]
+  )
+  const canReview = Boolean(
+    selectedItem &&
+      target &&
+      setupNo &&
+      selectedRows.length &&
+      toMachine &&
+      targetMachineOptions.some(
+        (machine) => machineKey(machine) === machineKey(toMachine)
+      )
+  )
+  const canSave =
+    canReview &&
+    reviewReady &&
+    queueReviewConfirmed &&
+    Boolean(reason.trim())
+
+  function resetReview() {
+    setReviewReady(false)
+    setQueueReviewConfirmed(false)
+    setQueueAfterByRow({})
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!reviewReady) {
+      setReviewReady(true)
+      return
+    }
+    if (!canSave || isSubmitting) return
+    setIsSubmitting(true)
+    try {
+      await submitAction("plan-override", {
+        assignmentMode: "add_parallel_machine",
+        target,
+        setupNo,
+        toMachine,
+        queuePlacements: proposedQueuePlacements,
+        reason,
+      })
+      setSelectedItem("")
+      setTarget("")
+      setSetupNo("")
+      setToMachine("")
+      setReason("")
+      resetReview()
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  return (
+    <form
+      className="grid gap-3 rounded-xl border bg-background p-3"
+      onSubmit={submit}
+    >
+      <div>
+        <div className="text-sm font-medium">Add Parallel Machine Details</div>
+        <div className="text-xs text-muted-foreground">
+          Keep the current machines running and add one idle compatible machine.
+          Planning will redistribute the setup quantity and recalculate later dates.
+        </div>
+      </div>
+      <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
+        <Field label="Item Code">
+          <SearchableSelect
+            className="h-9 rounded-md border bg-background px-3 text-sm"
+            value={selectedItem}
+            required
+            onChange={(event) => {
+              setSelectedItem(event.target.value)
+              setTarget("")
+              setSetupNo("")
+              setToMachine("")
+              resetReview()
+            }}
+          >
+            <option value="">Select Item</option>
+            {itemOptions.map((option) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </SearchableSelect>
+        </Field>
+        <Field label="Job Card">
+          <SearchableSelect
+            className="h-9 rounded-md border bg-background px-3 text-sm"
+            value={target}
+            required
+            onChange={(event) => {
+              setTarget(event.target.value)
+              setSetupNo("")
+              setToMachine("")
+              resetReview()
+            }}
+          >
+            <option value="">Select Job Card</option>
+            {jobCardOptions.map((option) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </SearchableSelect>
+        </Field>
+        <Field label="Setup No.">
+          <SearchableSelect
+            className="h-9 rounded-md border bg-background px-3 text-sm"
+            value={setupNo}
+            required
+            onChange={(event) => {
+              setSetupNo(event.target.value)
+              setToMachine("")
+              resetReview()
+            }}
+          >
+            <option value="">Select Setup</option>
+            {setupOptions.map((option) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </SearchableSelect>
+        </Field>
+        <Field label="Idle Machine To Add">
+          <SearchableSelect
+            className="h-9 rounded-md border bg-background px-3 text-sm"
+            value={toMachine}
+            required
+            onChange={(event) => {
+              setToMachine(event.target.value)
+              resetReview()
+            }}
+          >
+            <option value="">Select Idle Compatible Machine</option>
+            {targetMachineOptions.map((option) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </SearchableSelect>
+        </Field>
+        <Field label="Reason">
+          <Input
+            value={reason}
+            placeholder="Planner approved use of idle capacity"
+            required
+            onChange={(event) => setReason(event.target.value)}
+          />
+        </Field>
+      </div>
+      {target && setupNo && !targetMachineOptions.length ? (
+        <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+          No idle compatible machine is currently available for this setup.
+        </div>
+      ) : null}
+      {reviewReady ? (
+        <div className="grid gap-3 rounded-md border bg-muted/15 p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusBadge value={`Current machines: ${assignedMachines.join(", ")}`} />
+            <StatusBadge value={`Add: ${toMachine}`} tone="information" />
+            <StatusBadge value={`${displayValue(selectedRows[0]?.totalOrderPcs || selectedRows[0]?.orderPcs, true)} pcs total`} />
+          </div>
+          <div className="rounded-md border bg-background p-3 text-sm">
+            Current machine sessions remain open. The new machine enters the normal
+            RM at Machine, Setting, Quality Approval, and Machine Start workflow.
+          </div>
+          <MachineConstraintQueueReviewPanel
+            groups={queueReviewGroups}
+            movableRows={selectedRows.slice(0, 1)}
+            queueAfterByRow={queueAfterByRow}
+            onQueueAfterChange={(rowKey, value) =>
+              setQueueAfterByRow((current) => {
+                const next = { ...current }
+                if (value) next[rowKey] = value
+                else delete next[rowKey]
+                return next
+              })
+            }
+          />
+          <label className="flex items-start gap-2 rounded-md border bg-background p-2 text-sm">
+            <input
+              className="mt-1"
+              type="checkbox"
+              checked={queueReviewConfirmed}
+              onChange={(event) =>
+                setQueueReviewConfirmed(event.target.checked)
+              }
+            />
+            <span>
+              Queue reviewed; add this machine and recalculate the shared setup quantity.
+            </span>
+          </label>
+        </div>
+      ) : null}
+      <div className="flex flex-wrap gap-2">
+        <Button
+          className="w-fit"
+          type="submit"
+          disabled={!canReview || isSubmitting || (reviewReady && !canSave)}
+        >
+          <Plus className="size-4" />
+          {reviewReady ? "Add Machine And Recalculate" : "Review Parallel Plan"}
+        </Button>
+        {reviewReady ? (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={isSubmitting}
+            onClick={resetReview}
           >
             Recheck Inputs
           </Button>

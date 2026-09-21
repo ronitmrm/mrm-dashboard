@@ -10,6 +10,7 @@ import {
   FilePenLine,
   ListPlus,
   PackageX,
+  PlusCircle,
   Route,
   Wrench,
 } from "lucide-react"
@@ -27,6 +28,7 @@ export type PlannerDecisionAction =
   | "priority"
   | "machine-unavailable"
   | "machine-switch"
+  | "parallel-machine"
   | "raw-material-rejection"
   | "route-change"
 
@@ -37,6 +39,7 @@ type PlannerDecisionPanels = {
   history: ReactNode
   machineUnavailable: ReactNode
   machineSwitch: ReactNode
+  parallelMachine: ReactNode
   pending: ReactNode
   priority: ReactNode
   rawMaterialRejection: ReactNode
@@ -77,6 +80,13 @@ const actionChoices = [
     icon: ArrowRightLeft,
   },
   {
+    key: "parallel-machine",
+    title: "Add Parallel Machine",
+    description: "Use an idle compatible machine for a setup already in the plan.",
+    detail: "Override the automatic split limit without stopping current machines.",
+    icon: PlusCircle,
+  },
+  {
     key: "raw-material-rejection",
     title: "Reject Raw Material",
     description: "Dispatch rejected Raw Material back and recalculate this Job Card.",
@@ -114,6 +124,7 @@ export function PlannerDecisionWorkspace({
         priority: panels.priority,
         "machine-unavailable": panels.machineUnavailable,
         "machine-switch": panels.machineSwitch,
+        "parallel-machine": panels.parallelMachine,
         "raw-material-rejection": panels.rawMaterialRejection,
         "route-change": panels.routeChange,
       }[activeAction]
