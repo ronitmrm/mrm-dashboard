@@ -158,3 +158,60 @@ test("keeps every downstream stage off machines until its preceding actual WIP i
     vi.useRealTimers()
   }
 }, 15_000)
+
+test("releases both downstream machines only after pooled actual WIP covers their combined buffer", () => {
+  vi.useFakeTimers()
+  vi.setSystemTime(new Date("2026-09-20T06:00:00Z"))
+
+  const createdAt = "2026-09-20T05:00:00Z"
+  const jcNo = "TWO-MACHINE-WIP"
+  const partCode = "TWO-MACHINE-PART"
+  const entry = (entryType: string, payload: Record<string, unknown>) => ({ entryType, payload, createdAt })
+  const input: Parameters<typeof buildLegacyDashboardSnapshot>[0] = {
+    workbookName: "PostgreSQL",
+    productionEntries: [],
+    dataEntries: [
+      entry("work_order", { jcNo, partCode, optionNumber: "1", orderPcs: 6_000, rmInwardDate: "2026-09-20", rmInwardKg: 1 }),
+      entry("route", { partNo: partCode, optionNumber: "1", setupNo: "1", machineType: "CNC", machineFamily: "UPSTREAM" }),
+      entry("cycle", { partNo: partCode, optionNumber: "1", setupNo: "1", cycleTime: 288 }),
+      entry("route", { partNo: partCode, optionNumber: "1", setupNo: "2", machineType: "CNC", machineFamily: "DOWNSTREAM" }),
+      entry("cycle", { partNo: partCode, optionNumber: "1", setupNo: "2", cycleTime: 288 }),
+      entry("machine_master", { machineNo: "CNC-UPSTREAM", machineType: "CNC", machineFamily: "UPSTREAM", status: "Active" }),
+      entry("machine_master", { machineNo: "CNC-DOWNSTREAM-01", machineType: "CNC", machineFamily: "DOWNSTREAM", status: "Active" }),
+      entry("machine_master", { machineNo: "CNC-DOWNSTREAM-02", machineType: "CNC", machineFamily: "DOWNSTREAM", status: "Active" }),
+    ],
+  }
+  const downstreamMachines = (actualQty: number) => {
+    const control = buildLegacyDashboardSnapshot({
+      ...input,
+      productionEntries: [{
+        jobCard: jcNo,
+        partCode,
+        setupNo: "1",
+        machine: "CNC-UPSTREAM",
+        machineType: "CNC",
+        operatorId: "OP-1",
+        prodDate: "2026-09-20",
+        outputQty: actualQty,
+        actualQty,
+        rejectQty: 0,
+        targetQty: 6_000,
+      }],
+    }).productionControl!
+    if (!("machinePlanDetailRows" in control)) throw new Error("Missing plan")
+    return control.machinePlanDetailRows
+      .filter((row) => row.jcNo === jcNo && String(row.setupNo) === "2")
+      .map((row) => String(row.machine))
+      .sort()
+  }
+
+  try {
+    expect(downstreamMachines(399)).toEqual([])
+    expect(downstreamMachines(400)).toEqual([
+      "CNC-DOWNSTREAM-01",
+      "CNC-DOWNSTREAM-02",
+    ])
+  } finally {
+    vi.useRealTimers()
+  }
+}, 15_000)
