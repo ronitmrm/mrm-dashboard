@@ -2,7 +2,7 @@ import { createStoreRepository } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
- SectionCard,
+  SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -15,7 +15,7 @@ import {
   NativeSelectOption,
 } from "@workspace/ui/components/native-select"
 import {
- OperationalTable,
+  OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -80,19 +80,19 @@ export default async function NewItemRequestsPage() {
           {
             label: "Requests",
             value: data.requests.length,
-            tone: "information"
+            tone: "information",
           },
           {
             label: "Pending",
             value: data.requests.filter((row) => row.status === "Pending")
               .length,
-            tone: "warning"
-          }
+            tone: "warning",
+          },
         ]}
       />
 
       {canSubmitRequests ? (
- <SectionCard width="standard">
+        <SectionCard width="standard">
           <CardHeader>
             <CardTitle>Request a New Item</CardTitle>
             <CardDescription>
@@ -111,28 +111,28 @@ export default async function NewItemRequestsPage() {
                     { label: "Consumable", value: "CONSUMABLE" },
                   ]}
                 />
-                <SelectField
+                <EditableSelectField
                   label="Category"
-                  name="asset_category_id"
+                  name="asset_category"
                   options={data.masters.categories.map((row) => ({
                     label: row.name,
-                    value: row.id,
+                    value: row.name,
                   }))}
                 />
-                <SelectField
+                <EditableSelectField
                   label="Subcategory"
-                  name="asset_subcategory_id"
+                  name="asset_subcategory"
                   options={data.masters.subcategories.map((row) => ({
-                    label: `${row.categoryName} — ${row.name}`,
-                    value: row.id,
+                    label: row.categoryName,
+                    value: row.name,
                   }))}
                 />
-                <SelectField
+                <EditableSelectField
                   label="Asset Name"
-                  name="asset_name_id"
+                  name="asset_name"
                   options={data.masters.assetNames.map((row) => ({
-                    label: `${row.categoryName} — ${row.subcategoryName} — ${row.name}`,
-                    value: row.id,
+                    label: `${row.categoryName} — ${row.subcategoryName}`,
+                    value: row.name,
                   }))}
                 />
                 <TextField
@@ -145,27 +145,22 @@ export default async function NewItemRequestsPage() {
               </FieldGroup>
               <Button
                 className="mt-5"
-                disabled={
-                  !data.masters.categories.length ||
-                  !data.masters.subcategories.length ||
-                  !data.masters.assetNames.length ||
-                  requestPolicy.submitDisabled
-                }
+                disabled={requestPolicy.submitDisabled}
                 type="submit"
               >
                 Send New Item Request
               </Button>
             </form>
           </CardContent>
- </SectionCard>
+        </SectionCard>
       ) : null}
 
- <SectionCard>
+      <SectionCard>
         <CardHeader>
           <CardTitle>New Item Request Register</CardTitle>
         </CardHeader>
         <CardContent className="min-w-0">
- <OperationalTable>
+          <OperationalTable>
             <TableHeader>
               <TableRow>
                 <TableHead>Request</TableHead>
@@ -253,9 +248,9 @@ export default async function NewItemRequestsPage() {
                 </TableRow>
               ) : null}
             </TableBody>
- </OperationalTable>
+          </OperationalTable>
         </CardContent>
- </SectionCard>
+      </SectionCard>
     </div>
   )
 }
@@ -294,6 +289,41 @@ function SelectField({
           </NativeSelectOption>
         ))}
       </NativeSelect>
+    </Field>
+  )
+}
+
+function EditableSelectField({
+  label,
+  name,
+  options,
+}: {
+  label: string
+  name: string
+  options: { label: string; value: string }[]
+}) {
+  const id = `new-item-${name}`
+  const listId = `${id}-options`
+  return (
+    <Field>
+      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+      <Input
+        autoComplete="off"
+        id={id}
+        list={listId}
+        name={name}
+        placeholder="Type or select"
+        required
+      />
+      <datalist id={listId}>
+        {options.map((option) => (
+          <option
+            key={`${option.label}-${option.value}`}
+            label={option.label}
+            value={option.value}
+          />
+        ))}
+      </datalist>
     </Field>
   )
 }

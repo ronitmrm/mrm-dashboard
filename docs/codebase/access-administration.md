@@ -42,11 +42,12 @@ Master selection, direct pages, actions, exports and attachments use leaf grants
 Production master pages fetch `/api/masters/state`, with selected records and
 minimal form references only. Shared operational dashboard guards remain intact;
 operational workflows retain their authorized reference data. Commercial and
-Store forms serialize only the selected master's records/reference labels. HR
-controls check individual actions instead of a shared write boolean. Lifecycle
-operations authorize stored subtype/unit and replacement records before changing
-references. Machine and holiday writes reject cross-unit collisions against
-their existing globally unique identities.
+Store master-backed forms serialize only selected records/reference labels;
+New Item Requests may instead retain typed classification text without creating
+master records. HR controls check individual actions instead of a shared write
+boolean. Lifecycle operations authorize stored subtype/unit and replacement
+records before changing references. Machine and holiday writes reject cross-unit
+collisions against their existing globally unique identities.
 
 Migration `0118_independent_master_capabilities.sql` registers 286 action keys
 and copies each role's existing master rights through an explicit old-to-new

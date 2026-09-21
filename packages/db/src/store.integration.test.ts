@@ -205,6 +205,32 @@ async function createPurchaseOrder(
 }
 
 describe("Store requests", () => {
+  test("keeps new classification text on an uncoded item request", async () => {
+    const request = await store.createCodeRequest({
+      assetCategory: `New Category ${suffix}`,
+      assetName: `New Asset ${suffix}`,
+      assetSubcategory: `New Subcategory ${suffix}`,
+      assetType: "NON_CONSUMABLE",
+      department: "Test",
+      identificationName: `New Identification ${suffix}`,
+      organizationId,
+      requestedBy: "store.integration@example.com",
+    })
+    const saved = await pool.query<{
+      requested_asset_name: string
+      requested_category_id: string | null
+    }>(
+      `SELECT requested_asset_name, requested_category_id
+       FROM store.code_requests WHERE id = $1`,
+      [request.id]
+    )
+
+    expect(saved.rows[0]).toEqual({
+      requested_asset_name: `New Asset ${suffix}`,
+      requested_category_id: null,
+    })
+  })
+
   test("creates, edits and receives an item without Identification", async () => {
     const input = {
       ...(await createClassification("Optional Identification")),
