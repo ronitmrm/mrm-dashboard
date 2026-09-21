@@ -124,6 +124,80 @@ export function createDashboardReadModelRepository(options: RepositoryPoolOption
       return result.rows[0].id
     },
 
+    async rawMaterialInwardTemplateRows(
+      organizationId: string,
+      productionFloorCode: ProductionFloorCode
+    ) {
+      const result = await pool.query<{
+        jcNo: string
+        partCode: string
+        rmPoNo: string | null
+      }>(
+        `
+          WITH receipt_totals AS (
+            SELECT lower(receipt.job_card_number) AS job_card_key,
+              sum(receipt.quantity_kg) AS received_kg
+            FROM manufacturing.raw_material_receipts receipt
+            WHERE receipt.organization_id = $1
+            GROUP BY lower(receipt.job_card_number)
+          ), rejection_totals AS (
+            SELECT rejection.work_order_id,
+              sum(rejection.rejected_kg) AS rejected_kg
+            FROM manufacturing.raw_material_rejection_events rejection
+            WHERE rejection.organization_id = $1
+            GROUP BY rejection.work_order_id
+          )
+          SELECT work_order.job_card_number AS "jcNo",
+            item.uid AS "partCode",
+            COALESCE(
+              NULLIF(btrim(work_order.source_payload->>'rmPoNo'), ''),
+              NULLIF(btrim(work_order.source_payload->>'RM PO NO.'), ''),
+              NULLIF(btrim(work_order.source_payload->>'RM PO NO'), '')
+            ) AS "rmPoNo"
+          FROM manufacturing.work_orders work_order
+          JOIN catalog.items item ON item.id = work_order.item_id
+          LEFT JOIN receipt_totals receipt
+            ON receipt.job_card_key = lower(work_order.job_card_number)
+          LEFT JOIN rejection_totals rejection
+            ON rejection.work_order_id = work_order.id
+          CROSS JOIN LATERAL (
+            SELECT COALESCE(
+              NULLIF(btrim(work_order.source_payload->>'orderKg'), ''),
+              NULLIF(btrim(work_order.source_payload->>'ORD. KG.'), ''),
+              NULLIF(btrim(work_order.source_payload->>'ORD. KG'), ''),
+              '0'
+            ) AS ordered_kg_text
+          ) source
+          CROSS JOIN LATERAL (
+            SELECT CASE
+              WHEN source.ordered_kg_text ~ '^[0-9]+([.][0-9]+)?$'
+                THEN source.ordered_kg_text::numeric
+              ELSE 0
+            END AS ordered_kg
+          ) requested
+          WHERE work_order.organization_id = $1
+            AND lower(btrim(work_order.status)) <> 'cancelled'
+            AND derived.dashboard_production_floor_code(
+              work_order.source_payload
+            ) = $2
+            AND (
+              COALESCE(receipt.received_kg, 0) = 0
+              OR (
+                COALESCE(rejection.rejected_kg, 0) > 0
+                AND (
+                  requested.ordered_kg <= 0
+                  OR COALESCE(receipt.received_kg, 0)
+                    - rejection.rejected_kg < requested.ordered_kg
+                )
+              )
+            )
+          ORDER BY work_order.created_at, work_order.job_card_number
+        `,
+        [organizationId, productionFloorCode]
+      )
+      return result.rows
+    },
+
     async latest(
       organizationId: string,
       filters: JsonRecord = {},

@@ -23,6 +23,12 @@ entry operations, while exports remain read-authorized table operations.
 Purchase Orders use separate Data Entry and Entry Table views under the same
 locked Operational Entry selection.
 
+The Raw-Material Inward Data Entry download is a current pending-entry list,
+not a historical receipt export. It reads current Work Orders and receipt
+ledgers directly: cancelled Job Cards and Job Cards that already have an
+effective inward are omitted. A Job Card remains available when it has no
+receipt or when recorded rejection still requires replacement material.
+
 **Company-wide Master**: A master whose records apply to the whole MRMPL
 software and are not owned by one Production Unit. In Data Entry and Master
 Tables, its Production Unit is shown automatically as **Full Software / Not
