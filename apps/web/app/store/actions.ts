@@ -31,6 +31,7 @@ import {
   resolveStoreRequestDepartment,
   storeRequestFormPolicy,
 } from "@/lib/store-request-policy"
+import { storePurchaseOrderIssuanceId } from "@/lib/store-purchase-order-input"
 import { createGoogleCloudArtifactProvider } from "@/lib/google-cloud-artifact-provider"
 import { buildStorePurchaseOrderPdf } from "@/lib/store/purchase-order-pdf"
 import type { PendingUploadIntent } from "@/lib/artifact-upload-contract"
@@ -802,9 +803,9 @@ export async function requestMissingStoreCodeAction(formData: FormData) {
       )
       return repository.createCodeRequest({
         actorUserId,
-        assetCategoryId: requiredText(formData, "asset_category_id"),
-        assetNameId: requiredText(formData, "asset_name_id"),
-        assetSubcategoryId: requiredText(formData, "asset_subcategory_id"),
+        assetCategory: requiredText(formData, "asset_category"),
+        assetName: requiredText(formData, "asset_name"),
+        assetSubcategory: requiredText(formData, "asset_subcategory"),
         assetType: assetType(formData),
         department: resolveStoreRequestDepartment(
           policy,
@@ -1074,7 +1075,7 @@ export async function createStorePurchaseOrdersAction(formData: FormData) {
       try {
         return await repository.createPurchaseOrdersFromSelection({
           actorUserId,
-          issuanceId: requiredText(formData, "issuance_id"),
+          issuanceId: storePurchaseOrderIssuanceId(formData.get("issuance_id")),
           items: itemTypeIds.map((itemTypeId) => ({
             itemTypeId,
             quantity: positiveNumber(formData, `quantity_${itemTypeId}`),

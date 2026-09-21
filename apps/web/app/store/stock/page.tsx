@@ -157,17 +157,25 @@ export default async function StoreStockPage({
             </div>
           </div>
         </CardHeader>
-        <CardContent className="grid gap-4 min-w-0">
+        <CardContent className="grid min-w-0 gap-4">
           {mode === "request" ? (
             <form action="/store/requests/new" id={actionFormId} method="get" />
           ) : mode === "order" ? (
             <form action={createStorePurchaseOrdersAction} id={actionFormId}>
-              <input name="issuance_id" type="hidden" value={randomUUID()} />
-              <input name="order_date" type="hidden" value={istDateValue()} />
               <input
+                defaultValue={randomUUID()}
+                name="issuance_id"
+                type="hidden"
+              />
+              <input
+                defaultValue={istDateValue()}
+                name="order_date"
+                type="hidden"
+              />
+              <input
+                defaultValue={requestNumber ? `For ${requestNumber}` : ""}
                 name="remark"
                 type="hidden"
-                value={requestNumber ? `For ${requestNumber}` : ""}
               />
             </form>
           ) : null}

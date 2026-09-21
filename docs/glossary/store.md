@@ -143,8 +143,12 @@ a Store Request. Store allocates and saves each line independently; its live
 available stock changes immediately after an issue is saved.
 
 **New Item Request**: Demand for an item that cannot be found in Current Stock
-and therefore has no Asset Code. It is reviewed separately from Store Requests
-and cannot be allocated until it resolves to a Store Item Type.
+and therefore has no Asset Code. The requester may choose Category, Subcategory,
+and Asset Name suggestions from the current Store Classification Master or type
+new requested values without creating master records. An exact existing master
+path remains linked to the request; a new or mixed path stays as request text for
+Store to review. It is reviewed separately from Store Requests and cannot be
+allocated until it resolves to a Store Item Type.
 
 **Request Allocation Queue**: The filterable Store worklist of Coded Item
 Request Lines. It shows the Department, requesting individual, item, requested

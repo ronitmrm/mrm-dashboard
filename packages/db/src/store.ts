@@ -227,6 +227,91 @@ async function assetClassificationPath(
   return result.rows[0]
 }
 
+async function requestedAssetClassificationPath(
+  client: PoolClient,
+  input: {
+    assetCategory?: string | null
+    assetCategoryId?: string | null
+    assetName?: string | null
+    assetNameId?: string | null
+    assetSubcategory?: string | null
+    assetSubcategoryId?: string | null
+    organizationId: string
+  }
+) {
+  const assetCategoryId = input.assetCategoryId?.trim() || null
+  const assetSubcategoryId = input.assetSubcategoryId?.trim() || null
+  const assetNameId = input.assetNameId?.trim() || null
+  const suppliedIds = [assetCategoryId, assetSubcategoryId, assetNameId].filter(
+    Boolean
+  ).length
+
+  if (suppliedIds) {
+    if (!assetCategoryId || !assetSubcategoryId || !assetNameId) {
+      throw new Error(
+        "Select a complete Store Category, Subcategory, and Asset Name combination."
+      )
+    }
+    const classification = await assetClassificationPath(client, {
+      assetCategoryId,
+      assetNameId,
+      assetSubcategoryId,
+      organizationId: input.organizationId,
+    })
+    return {
+      ...classification,
+      asset_category_id: assetCategoryId,
+      asset_name_id: assetNameId,
+      asset_subcategory_id: assetSubcategoryId,
+    }
+  }
+
+  const assetCategory = requiredText(input.assetCategory, "Category")
+  const assetSubcategory = requiredText(input.assetSubcategory, "Subcategory")
+  const assetName = requiredText(input.assetName, "Asset name")
+  const existing = await client.query<{
+    asset_category: string
+    asset_category_id: string
+    asset_name: string
+    asset_name_id: string
+    asset_subcategory: string
+    asset_subcategory_id: string
+  }>(
+    `
+      SELECT category.id AS asset_category_id,
+        category.name AS asset_category,
+        subcategory.id AS asset_subcategory_id,
+        subcategory.name AS asset_subcategory,
+        asset_name.id AS asset_name_id,
+        asset_name.name AS asset_name
+      FROM store.asset_categories category
+      JOIN store.asset_subcategories subcategory
+        ON subcategory.category_id = category.id
+      JOIN store.asset_names asset_name
+        ON asset_name.subcategory_id = subcategory.id
+      WHERE category.organization_id = $1
+        AND subcategory.organization_id = $1
+        AND asset_name.organization_id = $1
+        AND lower(category.name) = lower($2)
+        AND lower(subcategory.name) = lower($3)
+        AND lower(asset_name.name) = lower($4)
+        AND category.active AND subcategory.active AND asset_name.active
+      LIMIT 1
+    `,
+    [input.organizationId, assetCategory, assetSubcategory, assetName]
+  )
+  return (
+    existing.rows[0] ?? {
+      asset_category: assetCategory,
+      asset_category_id: null,
+      asset_name: assetName,
+      asset_name_id: null,
+      asset_subcategory: assetSubcategory,
+      asset_subcategory_id: null,
+    }
+  )
+}
+
 async function machineIdForReference(
   client: PoolClient,
   organizationId: string,
@@ -3097,9 +3182,12 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
 
     async createCodeRequest(input: {
       actorUserId?: string | null
-      assetCategoryId: string
-      assetNameId: string
-      assetSubcategoryId: string
+      assetCategory?: string | null
+      assetCategoryId?: string | null
+      assetName?: string | null
+      assetNameId?: string | null
+      assetSubcategory?: string | null
+      assetSubcategoryId?: string | null
       assetType: StoreAssetType
       department: string
       identificationName: string
@@ -3108,7 +3196,10 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       requestedBy: string
     }) {
       return withTransaction(pool, async (client) => {
-        const classification = await assetClassificationPath(client, input)
+        const classification = await requestedAssetClassificationPath(
+          client,
+          input
+        )
         const assetType = storeAssetType(input.assetType)
         const requestNumber = await nextDocumentNumber(client, {
           counterKey: "CODE_REQUEST",
@@ -3136,9 +3227,9 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             classification.asset_category,
             classification.asset_subcategory,
             classification.asset_name,
-            input.assetCategoryId,
-            input.assetSubcategoryId,
-            input.assetNameId,
+            classification.asset_category_id,
+            classification.asset_subcategory_id,
+            classification.asset_name_id,
             requiredText(input.identificationName, "Identification name"),
             requiredText(input.requestedBy, "Requested by"),
             requiredText(input.department, "Department"),
