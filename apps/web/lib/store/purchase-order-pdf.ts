@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises"
+import path from "node:path"
 import PDFDocument from "pdfkit"
 
 import { drawLogo, type PdfContext } from "../branding/pdfkit-layout"
@@ -5,6 +7,7 @@ import { registerPdfKitBrandFonts } from "../branding/pdfkit-fonts"
 
 export type StorePurchaseOrderDocument = {
   lines: Array<{
+    assetName: string
     itemName: string
     orderedQuantity: string
     typeCode: string
@@ -36,14 +39,17 @@ const COMPANY_NAME = "Mayank Raw Mint Pvt. Ltd."
 const COMPANY_ADDRESS =
   "Plot no. 10 to 15, B/h Murlidhar Tractor, Hapa Industrial Area, Jamnagar, Gujarat, 361120, India"
 const COMPANY_GSTIN = "24AAECM2045G1ZV"
+const SIGNATURE_WIDTH = 160
+const SIGNATURE_HEIGHT = 90
+const SIGNATURE_TOP_GAP = 6
 
 const columns = [
   { align: "center", label: "Sr. No.", width: 55 },
   { align: "center", label: "Delivery", width: 90 },
   { align: "left", label: "Item Description", width: 179 },
   { align: "center", label: "QTY", width: 72 },
-  { align: "right", label: "Unit Price", width: 72 },
-  { align: "right", label: "TOTAL", width: CONTENT_WIDTH - 468 },
+  { align: "center", label: "Unit Price", width: 72 },
+  { align: "center", label: "TOTAL", width: CONTENT_WIDTH - 468 },
 ] as const
 
 const terms = [
@@ -188,19 +194,41 @@ function collectPdfBytes(doc: PDFKit.PDFDocument) {
   })
 }
 
+let loadedSignatureStamp: Promise<Buffer> | undefined
+
+function loadSignatureStamp() {
+  return (loadedSignatureStamp ??= readFile(
+    path.join(
+      process.cwd(),
+      "lib/branding/assets/authorized-signature-stamp.png"
+    )
+  ))
+}
+
 function drawBrandHeader(ctx: PdfContext) {
   const { doc } = ctx
-  drawLogo(ctx, 56, 33, 54)
+  const logoWidth = 54
+  const gap = 15
+  doc.font("Outfit-800").fontSize(31)
+  const titleWidth = doc.widthOfString("MAYANK RAW MINT")
+  doc.font("Outfit-400").fontSize(17)
+  const taglineWidth = doc.widthOfString(
+    "Precision Brass Fittings & Metal Components"
+  )
+  const textWidth = Math.max(titleWidth, taglineWidth)
+  const brandX = (PAGE_WIDTH - logoWidth - gap - textWidth) / 2
+  const textX = brandX + logoWidth + gap
+  drawLogo(ctx, brandX, 33, logoWidth)
   doc
     .font("Outfit-800")
     .fontSize(31)
     .fillColor(GREEN)
-    .text("MAYANK RAW MINT", 125, 29, { lineBreak: false })
+    .text("MAYANK RAW MINT", textX, 29, { lineBreak: false })
   doc
     .font("Outfit-400")
     .fontSize(17)
     .fillColor(GREEN)
-    .text("Precision Brass Fittings & Metal Components", 127, 68, {
+    .text("Precision Brass Fittings & Metal Components", textX, 68, {
       lineBreak: false,
     })
   doc.rect(0, 121, PAGE_WIDTH, 64).fill(GREEN)
@@ -334,8 +362,10 @@ function drawTableHeader(doc: PDFKit.PDFDocument, y: number) {
   return y + height
 }
 
-function descriptionForLine(line: StorePurchaseOrderDocument["lines"][number]) {
-  return `${cleanText(line.typeCode)} - ${cleanText(line.itemName)}`
+export function purchaseOrderItemDescription(
+  line: StorePurchaseOrderDocument["lines"][number]
+) {
+  return `${cleanText(line.typeCode)} - ${cleanText(line.assetName)}`
 }
 
 function tableRowHeight(
@@ -343,10 +373,13 @@ function tableRowHeight(
   line: StorePurchaseOrderDocument["lines"][number]
 ) {
   doc.font("Outfit-400").fontSize(9.7)
-  const descriptionHeight = doc.heightOfString(descriptionForLine(line), {
-    lineGap: 2,
-    width: columns[2].width - 12,
-  })
+  const descriptionHeight = doc.heightOfString(
+    purchaseOrderItemDescription(line),
+    {
+      lineGap: 2,
+      width: columns[2].width - 12,
+    }
+  )
   return Math.max(36, Math.min(96, descriptionHeight + 14))
 }
 
@@ -360,7 +393,7 @@ function drawTableRow(
   const values = [
     String(index + 1),
     "MRMPL",
-    descriptionForLine(line),
+    purchaseOrderItemDescription(line),
     formatNumber(number(line.orderedQuantity), 3),
     formatNumber(number(line.unitPrice)),
     formatNumber(lineAmount(line.orderedQuantity, line.unitPrice)),
@@ -422,9 +455,9 @@ function drawTotals(
       text: formatNumber(totalQuantity(document), 3),
       width: columns[3].width,
     },
-    { align: "right" as const, text: "", width: columns[4].width },
+    { align: "center" as const, text: "", width: columns[4].width },
     {
-      align: "right" as const,
+      align: "center" as const,
       text: formatNumber(total),
       width: columns[5].width,
     },
@@ -464,6 +497,7 @@ function drawTotals(
     .fontSize(9.5)
     .fillColor(BLACK)
     .text(purchaseOrderAmountInWords(total), MARGIN + labelWidth + 7, y + 9, {
+      align: "center",
       height: amountHeight - 14,
       lineGap: 2,
       width: CONTENT_WIDTH - labelWidth - 14,
@@ -501,12 +535,21 @@ function finalSectionHeight(
   doc: PDFKit.PDFDocument,
   document: StorePurchaseOrderDocument
 ) {
-  return 27 + 41 + 31 + 20 + termsBoxHeight(doc, document) + 80
+  return (
+    27 +
+    41 +
+    31 +
+    20 +
+    termsBoxHeight(doc, document) +
+    SIGNATURE_TOP_GAP +
+    SIGNATURE_HEIGHT
+  )
 }
 
 function drawTermsAndSignature(
   doc: PDFKit.PDFDocument,
   document: StorePurchaseOrderDocument,
+  signatureStamp: Buffer,
   y: number
 ) {
   const headingY = y + 31
@@ -541,26 +584,11 @@ function drawTermsAndSignature(
     termY += Math.max(14, height + 3)
   })
 
-  const signatureY = boxY + boxHeight + 13
-  const signatureX = PAGE_WIDTH - MARGIN - 190
-  doc
-    .font("Outfit-600")
-    .fontSize(11)
-    .fillColor(GREEN)
-    .text(COMPANY_NAME, signatureX, signatureY, {
-      align: "right",
-      lineBreak: false,
-      width: 190,
-    })
-  doc
-    .font("Outfit-600")
-    .fontSize(10.5)
-    .fillColor(GREEN)
-    .text("Authorized Signatory", signatureX, signatureY + 45, {
-      align: "right",
-      lineBreak: false,
-      width: 190,
-    })
+  const signatureY = boxY + boxHeight + SIGNATURE_TOP_GAP
+  const signatureX = PAGE_WIDTH - MARGIN - SIGNATURE_WIDTH
+  doc.image(signatureStamp, signatureX, signatureY, {
+    fit: [SIGNATURE_WIDTH, SIGNATURE_HEIGHT],
+  })
 }
 
 function drawFooter(doc: PDFKit.PDFDocument) {
@@ -613,7 +641,10 @@ export async function buildStorePurchaseOrderPdf(
     size: [PAGE_WIDTH, PAGE_HEIGHT],
   })
   const output = collectPdfBytes(doc)
-  const fonts = await registerPdfKitBrandFonts(doc)
+  const [fonts, signatureStamp] = await Promise.all([
+    registerPdfKitBrandFonts(doc),
+    loadSignatureStamp(),
+  ])
   const ctx = { doc, fonts }
 
   doc.addPage({ margin: 0, size: [PAGE_WIDTH, PAGE_HEIGHT] })
@@ -638,7 +669,7 @@ export async function buildStorePurchaseOrderPdf(
   })
 
   y = drawTotals(doc, document, y)
-  drawTermsAndSignature(doc, document, y)
+  drawTermsAndSignature(doc, document, signatureStamp, y)
 
   const range = doc.bufferedPageRange()
   for (let index = range.start; index < range.start + range.count; index++) {
