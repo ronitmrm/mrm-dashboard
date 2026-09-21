@@ -181,6 +181,14 @@ const interSetupTransferBufferDays = 1;
 const planningSetupBufferDays = 1;
 const planningDispatchTargetDays = 25;
 const minimumParallelMachineWorkDays = 15;
+const plantDateFormatter = new Intl.DateTimeFormat("en-CA", {
+  calendar: "gregory",
+  day: "2-digit",
+  month: "2-digit",
+  numberingSystem: "latn",
+  timeZone: "Asia/Kolkata",
+  year: "numeric",
+});
 const defaultPlanningCalendar: PlanningCalendar = { holidayDates: new Set<string>() };
 const downtimeReasonFields: Array<[string, string[]]> = [
   ["QC Approval", ["QC APPROVAL DOWNTIME (MIN)", "QC APPROVAL", "QCDown"]],
@@ -3395,7 +3403,7 @@ function applyPlannedDateTaskReadiness(rows: Array<Record<string, unknown>>): Ar
 }
 
 function setupPlannedDateIsDue(plannedDate: string) {
-  return !plannedDate || plannedDate <= localIsoDate(new Date());
+  return !plannedDate || plannedDate <= plantIsoDate(new Date());
 }
 
 function uniqueTextValues(values: string[]) {
@@ -4125,7 +4133,7 @@ function staleUnstartedForecastStartDate(row: Record<string, unknown>, planningC
   if (rowText(row, "runningStatus").toLowerCase() === "complete") return "";
   if (setupLifecycleStageRank(rowText(row, "shopFloorStage")) >= setupLifecycleStageRank("setting")) return "";
 
-  const today = addDays(localIsoDate(new Date()), 0, planningCalendar);
+  const today = addDays(plantIsoDate(new Date()), 0, planningCalendar);
   const materialReadyDate = meta.readyDate || parseDate(rowText(row, "setupPlannedDate", "plannedStartDate", "plannedDate"));
   return materialReadyDate && today && materialReadyDate < today ? today : "";
 }
@@ -4135,7 +4143,7 @@ function unenteredProductionForecastStartDate(row: Record<string, unknown>, plan
   if (actualProductionStartDate(meta)) return "";
   if (rowText(row, "runningStatus").toLowerCase() === "complete") return "";
 
-  const today = addDays(localIsoDate(new Date()), 0, planningCalendar);
+  const today = addDays(plantIsoDate(new Date()), 0, planningCalendar);
   if (setupLifecycleStageRank(rowText(row, "shopFloorStage")) >= setupLifecycleStageRank("setting")) return today;
   return staleUnstartedForecastStartDate(row, planningCalendar);
 }
@@ -4144,7 +4152,7 @@ function liveRunningMinimumEndDate(row: Record<string, unknown>, planningCalenda
   if (rowText(row, "priorityStoppedByJcNo")) return "";
   if (rowText(row, "runningStatus").toLowerCase() !== "running") return "";
   if (rowText(row, "shopFloorStage").toLowerCase() === "item_complete") return "";
-  return addDays(localIsoDate(new Date()), 0, planningCalendar);
+  return addDays(plantIsoDate(new Date()), 0, planningCalendar);
 }
 
 function machineQueueSortDate(row: Record<string, unknown>) {
@@ -4506,7 +4514,7 @@ function planningHolidayViewRows(rows: Record<string, unknown>[]) {
 }
 
 function activeMachineUnavailableWindows(machineConstraints: ActionRow[]): MachineUnavailableWindow[] {
-  const today = localIsoDate(new Date());
+  const today = plantIsoDate(new Date());
   return machineConstraints
     .filter((row) => isActivePlannerDecision(rowText(row, "status", "STATUS")) || Boolean(rowText(row, "availableOn")))
     .map((row) => {
@@ -4875,7 +4883,7 @@ function planOverrideInterruptionForSetup(
   const match = interruptions.find((interruption) => interruption.jcNo === jcKey && plannerSetupKey(interruption.setupNo) === setupKey && lockedMachineKeys.has(interruption.machine));
   if (!match) return undefined;
   const lockedMachine = lockedMachineList.find((machine) => canonicalKey(machine) === match.machine) ?? match.machine;
-  const fromDate = parseDate(rowText(override, "createdAt")) || localIsoDate(new Date());
+  const fromDate = parseDate(rowText(override, "createdAt")) || plantIsoDate(new Date());
   return {
     ...match,
     machine: lockedMachine,
@@ -4897,7 +4905,7 @@ function planOverrideQueuePlacementForSetup(
   target: { jcNo: string; partCode: string; setupNo: string },
 ): MachineUnavailableQueuePlacement | undefined {
   if (!isActivePlannerDecision(rowText(override, "status", "STATUS"))) return undefined;
-  const today = localIsoDate(new Date());
+  const today = plantIsoDate(new Date());
   return machineUnavailableQueuePlacementForSetup([{
     machine: canonicalKey(rowText(override, "fromMachine", "machine", "machineNo")),
     fromDate: today,
@@ -5693,7 +5701,7 @@ function getOrCreate<K, V>(map: Map<K, V>, key: K, create: () => V) {
 }
 
 function parseDate(value: unknown) {
-  if (value instanceof Date && !Number.isNaN(value.getTime())) return localIsoDate(value);
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return plantIsoDate(value);
   if (typeof value === "number" && Number.isFinite(value)) return excelSerialIsoDate(value);
   const raw = cleanText(value);
   if (!raw) return "";
@@ -5734,7 +5742,7 @@ function parseDate(value: unknown) {
     }
   }
   const parsed = new Date(raw);
-  if (!Number.isNaN(parsed.getTime())) return localIsoDate(parsed);
+  if (!Number.isNaN(parsed.getTime())) return plantIsoDate(parsed);
   return "";
 }
 
@@ -5745,8 +5753,10 @@ function excelSerialIsoDate(value: number) {
   return date.toISOString().slice(0, 10);
 }
 
-function localIsoDate(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+function plantIsoDate(date: Date) {
+  const parts: Record<string, string> = {};
+  for (const part of plantDateFormatter.formatToParts(date)) parts[part.type] = part.value;
+  return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
 function monthKey(value: string) {
