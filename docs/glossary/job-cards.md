@@ -42,6 +42,16 @@ not label running work as awaiting raw material.
 
 These are Job Card Analytics, not OEE. OEE requires separate availability, performance and quality definitions.
 
+## Cycle-Based Planning Capacity
+
+Before a setup has enough production history to project from observed daily
+output, its planned production duration uses the remaining pieces multiplied by
+Cycle Time plus Loading / Unloading Time. CNC-01 has 22.5 productive machine
+hours per working day: three shifts of 7 hours 30 minutes each. Other Production
+Floors retain 8 productive machine hours per working day. Planned duration
+rounds up to a whole working day; Fridays and Planning Calendar holidays are
+excluded.
+
 ## Setup Time
 
 - Machinist setup time: Pre Setting start to Setting complete.

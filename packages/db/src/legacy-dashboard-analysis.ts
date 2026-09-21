@@ -2,6 +2,7 @@ import { requiredToolingCodes } from "./tooling-availability";
 import { qualityParameterCode } from "./quality-parameter-code";
 import { buildDashboardSnapshot, type AttendanceRecord, type DashboardFilters, type ProductionEntry, type TrainingRecord } from "./dashboard-domain";
 import { isActivePlannerDecision, isPlanningWorkday, machineFamilyMatches, machineMasterFamily, priorityLabel, priorityScore, sourcePlannerDecisions } from "./planning-rules";
+import type { ProductionFloorCode } from "./production-floors";
 
 type DataEntry = {
   _id?: unknown;
@@ -16,6 +17,7 @@ type ActionRow = Record<string, unknown> & { createdAt?: string };
 
 export type LegacyDashboardInput = {
   includeToolFixtureNumbers?: boolean;
+  productionFloorCode?: ProductionFloorCode;
   workbookName: string;
   productionEntries: ProductionEntry[];
   attendanceRecords?: AttendanceRecord[];
@@ -71,6 +73,7 @@ type ReadinessSetupGap = {
 };
 type PlanningCalendar = {
   holidayDates: Set<string>;
+  productiveHoursPerDay: number;
 };
 type WipProductionStream = {
   machine: string;
@@ -175,7 +178,8 @@ const monthNames: Record<string, number> = {
 
 const monthShort = ["Jan", "Feb", "Mar", "Apr", "May", "June", "July", "Aug", "Sept", "Oct", "Nov", "Dec"];
 const monthShortLegacy = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const planningHoursPerDay = 8;
+const defaultProductiveHoursPerDay = 8;
+const cncProductiveHoursPerDay = 22.5;
 const wipAvailabilityBufferDays = 1;
 const interSetupTransferBufferDays = 1;
 const planningSetupBufferDays = 1;
@@ -189,7 +193,10 @@ const plantDateFormatter = new Intl.DateTimeFormat("en-CA", {
   timeZone: "Asia/Kolkata",
   year: "numeric",
 });
-const defaultPlanningCalendar: PlanningCalendar = { holidayDates: new Set<string>() };
+const defaultPlanningCalendar: PlanningCalendar = {
+  holidayDates: new Set<string>(),
+  productiveHoursPerDay: defaultProductiveHoursPerDay,
+};
 const downtimeReasonFields: Array<[string, string[]]> = [
   ["QC Approval", ["QC APPROVAL DOWNTIME (MIN)", "QC APPROVAL", "QCDown"]],
   ["Machine Setting", ["MACHINE SETTING DOWNTIME (MIN)", "MACHINE SETTING", "SettingDown"]],
@@ -336,6 +343,10 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
 
   const snapshot = buildProductionAnalysis({
     includeToolFixtureNumbers: input.includeToolFixtureNumbers ?? true,
+    productiveHoursPerDay:
+      input.productionFloorCode === "cnc"
+        ? cncProductiveHoursPerDay
+        : defaultProductiveHoursPerDay,
     setupNameMasterRows,
     productionRows,
     employees,
@@ -419,6 +430,7 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
 
 function buildProductionAnalysis({
   includeToolFixtureNumbers,
+  productiveHoursPerDay,
   setupNameMasterRows,
   productionRows,
   employees,
@@ -467,6 +479,7 @@ function buildProductionAnalysis({
   updatedAt,
 }: {
   includeToolFixtureNumbers: boolean;
+  productiveHoursPerDay: number;
   productionRows: ProductionRow[];
   employees: Map<string, string>;
   setupNameMasterRows: Record<string, unknown>[];
@@ -791,6 +804,7 @@ function buildProductionAnalysis({
     allMonths.set(key, label);
   }
   const productionControl = buildProductionControl({
+    productiveHoursPerDay,
     setupNameMasterRows,
     productionRows,
     routeRows,
@@ -980,6 +994,7 @@ function buildProductionAnalysis({
 }
 
 function buildProductionControl({
+  productiveHoursPerDay,
   setupNameMasterRows,
   productionRows,
   routeRows,
@@ -1019,6 +1034,7 @@ function buildProductionControl({
   previousMachinePlanDetailRows,
   previousProductionDashboardRows,
 }: {
+  productiveHoursPerDay: number;
   productionRows: ProductionRow[];
   setupNameMasterRows: Record<string, unknown>[];
   routeRows: Record<string, unknown>[];
@@ -1060,7 +1076,10 @@ function buildProductionControl({
 }) {
   const routeGroups = groupRouteRows(routeRows);
   const dedupedRouteRows = [...routeGroups.values()].flat();
-  const planningCalendar = planningCalendarFromRows(planningHolidayRows);
+  const planningCalendar = planningCalendarFromRows(
+    planningHolidayRows,
+    productiveHoursPerDay,
+  );
   const routeOptionsByPart = routeOptionSummariesByPart(dedupedRouteRows);
   const cycleKeys = new Set(latestMasterRows(cycleRows).keys());
   const toolingKeys = new Set(latestMasterRows(toolingRows).keys());
@@ -1602,7 +1621,7 @@ function projectedRouteDispatchDate({
         startDate: parseDate(rowValue(plan, "plannedProductionStartDate")) || rowText(plan, "plannedProductionStartDate"),
         endDate: parseDate(rowValue(plan, "plannedProductionEndDate")) || rowText(plan, "plannedProductionEndDate"),
         quantity: safeNumber(rowValue(plan, "orderPcs")),
-        dailyQty: cycleDailyQty(cycle),
+        dailyQty: cycleDailyQty(cycle, planningCalendar),
       })).filter((stream) => stream.startDate && stream.endDate && stream.quantity > 0 && stream.dailyQty > 0);
       if (!streams.length) return physicalPlanEndDate;
       previousStreams = streams;
@@ -1647,7 +1666,7 @@ function projectedRouteDispatchDate({
       startDate: projectedStartDate,
       endDate: projectedEndDate,
       quantity: machineOrderPcs,
-      dailyQty: cycleDailyQty(cycle),
+      dailyQty: cycleDailyQty(cycle, planningCalendar),
     }));
     previousCycle = cycle;
   }
@@ -3044,6 +3063,7 @@ function machinePlanDetails(
           nextCycle: cycle,
           nextMachineCount: assignedMachines.length,
           actuals: upstreamActual ? [upstreamActual] : [],
+          planningCalendar,
         });
         operationReadyCanPullForward = actualWipReady;
         if (!actualWipReady) {
@@ -3122,7 +3142,7 @@ function machinePlanDetails(
             startDate: parseDate(plannedProductionStartDate) || plannedProductionStartDate,
             endDate: parseDate(plannedProductionEndDate) || plannedProductionEndDate,
             quantity: machineOrderPcs,
-            dailyQty: cycleDailyQty(cycle),
+            dailyQty: cycleDailyQty(cycle, planningCalendar),
           });
         }
         if (productionActual && productionActual.rows) routeProductionActuals.push(productionActual);
@@ -3235,7 +3255,7 @@ function machinePlanDetails(
         machineUnavailableQueuePlacementTarget: Boolean(queuePlacement && queuePlacement.targetMachine === canonicalKey(machine)),
         machineAssignment: splitRole === "produced_on_unavailable_machine" ? "Breakdown produced quantity locked on stopped machine" : splitRole === "remaining_moved_to_alternate_machine" ? "Breakdown remaining quantity replanned by system rules" : splitRole === "remaining_delayed_on_same_machine" ? "Breakdown remaining quantity delayed on same machine" : machine === routeMachine ? "Route family fallback" : assignedMachines.length > 1 ? "Parallel 25-day plan" : "Assigned physical machine",
         parallelMachineCount: assignedMachines.length,
-        planningAssumption: `${planningHoursPerDay} hrs/day; Friday is plant shutdown; manual planning holidays are skipped; parallel setup WIP is pooled after each machine stream produces it; forecast WIP does not reserve a downstream physical machine; an unstarted downstream setup is assigned only after recorded WIP satisfies its pooled buffer; next setup waits for cumulative downstream WIP availability through the full run plus ${wipAvailabilityBufferDays} buffer day; stopped-machine WIP starts downstream only when it can feed ${minimumParallelMachineWorkDays} days or complete the order; downstream setup end includes ${interSetupTransferBufferDays} handoff buffer day after previous setup end; RM-at-machine, started shop-floor, or production-actual machines stay locked during recalculation; the same setup keeps its previously planned physical machine unless a material load/date gain justifies moving it; downstream setups are assigned independently; parallel machines require at least ${minimumParallelMachineWorkDays} production days each`,
+        planningAssumption: `${planningCalendar.productiveHoursPerDay} hrs/day; Friday is plant shutdown; manual planning holidays are skipped; parallel setup WIP is pooled after each machine stream produces it; forecast WIP does not reserve a downstream physical machine; an unstarted downstream setup is assigned only after recorded WIP satisfies its pooled buffer; next setup waits for cumulative downstream WIP availability through the full run plus ${wipAvailabilityBufferDays} buffer day; stopped-machine WIP starts downstream only when it can feed ${minimumParallelMachineWorkDays} days or complete the order; downstream setup end includes ${interSetupTransferBufferDays} handoff buffer day after previous setup end; RM-at-machine, started shop-floor, or production-actual machines stay locked during recalculation; the same setup keeps its previously planned physical machine unless a material load/date gain justifies moving it; downstream setups are assigned independently; parallel machines require at least ${minimumParallelMachineWorkDays} production days each`,
         };
         Object.defineProperty(detail, "__planningMeta", {
           enumerable: false,
@@ -3726,7 +3746,7 @@ function wipProductionStreamsFromRows(rows: Array<Record<string, unknown>>, plan
         startDate,
         endDate,
         quantity: meta.orderPcs ?? safeNumber(rowValue(row, "orderPcs")),
-        dailyQty: cycleDailyQty(meta.cycle),
+        dailyQty: cycleDailyQty(meta.cycle, planningCalendar),
       };
     })
     .filter((stream) => stream.startDate && stream.endDate && stream.endDate >= stream.startDate && stream.quantity > 0 && stream.dailyQty > 0);
@@ -4490,11 +4510,15 @@ function isPlanningDate(dateValue: string, planningCalendar: PlanningCalendar) {
   return !Number.isNaN(date.getTime()) && isPlanningWorkday(date);
 }
 
-function planningCalendarFromRows(rows: Record<string, unknown>[]): PlanningCalendar {
+function planningCalendarFromRows(
+  rows: Record<string, unknown>[],
+  productiveHoursPerDay: number,
+): PlanningCalendar {
   return {
     holidayDates: new Set(rows
       .map((row) => parseDate(rowValue(row, "date", "holidayDate", "fromDate", "startDate")))
       .filter(Boolean)),
+    productiveHoursPerDay,
   };
 }
 
@@ -4982,7 +5006,7 @@ function assignedPhysicalMachines({
     machineNextSetupDate,
     machinePlannedDays,
     machinePlannedQty,
-    plannedQtyBand: Math.max(1, Math.ceil(cycleDailyQty(cycle))),
+    plannedQtyBand: Math.max(1, Math.ceil(cycleDailyQty(cycle, planningCalendar))),
     readyDate,
     planningCalendar,
   });
@@ -5018,7 +5042,10 @@ function requiredMachineCountForTarget({
   const cycleSeconds = safeNumber(rowValue(cycle ?? {}, "cycleTime", "CYCLE TIME")) + safeNumber(rowValue(cycle ?? {}, "loadingUnloading", "LOADING AND UNLOADING"));
   if (!orderPcs || !cycleSeconds || availableMachineCount <= 1) return 1;
   const estimatedHours = (orderPcs * cycleSeconds) / 3600;
-  const productionDays = Math.max(1, Math.ceil(estimatedHours / planningHoursPerDay));
+  const productionDays = Math.max(
+    1,
+    Math.ceil(estimatedHours / planningCalendar.productiveHoursPerDay),
+  );
   const availableProductionDays = Math.max(1, planningDispatchTargetDays - planningSetupBufferDays);
   const parallelMachineLimit = Math.min(availableMachineCount, Math.max(1, Math.floor(productionDays / minimumParallelMachineWorkDays)));
   const durationCount = Math.min(parallelMachineLimit, Math.max(1, Math.ceil(productionDays / availableProductionDays)));
@@ -5086,7 +5113,10 @@ function plannedProductionEnd(
   const cycleSeconds = safeNumber(rowValue(cycle ?? {}, "cycleTime", "CYCLE TIME")) + safeNumber(rowValue(cycle ?? {}, "loadingUnloading", "LOADING AND UNLOADING"));
   if (!orderPcs || !cycleSeconds) return normalizedStartDate;
   const estimatedHours = (Math.max(orderPcs - (actual?.actualQty ?? 0), 0) * cycleSeconds) / 3600;
-  const productionDays = Math.max(1, Math.ceil(estimatedHours / planningHoursPerDay));
+  const productionDays = Math.max(
+    1,
+    Math.ceil(estimatedHours / planningCalendar.productiveHoursPerDay),
+  );
   return addDays(normalizedStartDate, productionDays - 1, planningCalendar);
 }
 
@@ -5145,8 +5175,8 @@ function plannedWipBufferReadyDate({
   });
   const supplyStreams = [...actualStreams, ...futurePlannedStreams];
   if (!supplyStreams.length || !orderPcs || !nextCycle) return "";
-  const previousDailyQty = supplyStreams.length ? sum(supplyStreams.map((stream) => stream.dailyQty)) : cycleDailyQty(previousCycle);
-  const nextDailyQty = cycleDailyQty(nextCycle) * Math.max(1, nextMachineCount);
+  const previousDailyQty = supplyStreams.length ? sum(supplyStreams.map((stream) => stream.dailyQty)) : cycleDailyQty(previousCycle, planningCalendar);
+  const nextDailyQty = cycleDailyQty(nextCycle, planningCalendar) * Math.max(1, nextMachineCount);
   if (!previousDailyQty || !nextDailyQty) return "";
 
   const actualQty = Math.min(orderPcs, sum(actualStreams.map((stream) => stream.quantity)));
@@ -5238,16 +5268,18 @@ function actualWipBufferAvailable({
   nextCycle,
   nextMachineCount = 1,
   actuals = [],
+  planningCalendar = defaultPlanningCalendar,
 }: {
   orderPcs: number;
   previousCycle: Record<string, unknown> | undefined;
   nextCycle: Record<string, unknown> | undefined;
   nextMachineCount?: number;
   actuals?: Array<Pick<PlanningProductionActual, "latestDate" | "outputQty" | "actualQty" | "dates">>;
+  planningCalendar?: PlanningCalendar;
 }) {
   if (!orderPcs || !nextCycle || !actuals.length) return false;
-  const previousDailyQty = cycleDailyQty(previousCycle);
-  const nextDailyQty = cycleDailyQty(nextCycle) * Math.max(1, nextMachineCount);
+  const previousDailyQty = cycleDailyQty(previousCycle, planningCalendar);
+  const nextDailyQty = cycleDailyQty(nextCycle, planningCalendar) * Math.max(1, nextMachineCount);
   if (!previousDailyQty || !nextDailyQty) return false;
   const actualDailyQty = sum(actuals.map((actual) => {
     const dateCount = actual.dates.size || 1;
@@ -5260,9 +5292,14 @@ function actualWipBufferAvailable({
   return actualQty >= requiredBufferQty;
 }
 
-function cycleDailyQty(cycle: Record<string, unknown> | undefined) {
+function cycleDailyQty(
+  cycle: Record<string, unknown> | undefined,
+  planningCalendar: PlanningCalendar = defaultPlanningCalendar,
+) {
   const cycleSeconds = safeNumber(rowValue(cycle ?? {}, "cycleTime", "CYCLE TIME")) + safeNumber(rowValue(cycle ?? {}, "loadingUnloading", "LOADING AND UNLOADING"));
-  return cycleSeconds ? (planningHoursPerDay * 3600) / cycleSeconds : 0;
+  return cycleSeconds
+    ? (planningCalendar.productiveHoursPerDay * 3600) / cycleSeconds
+    : 0;
 }
 
 function maxDateValue(...values: string[]) {
