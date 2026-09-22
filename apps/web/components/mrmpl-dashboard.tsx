@@ -178,6 +178,11 @@ import {
   type FirstPieceInspectionDraft,
 } from "@/lib/first-piece-inspection-draft"
 import {
+  firstPieceReportView,
+  qualityDowntimeRestartTasks,
+  type FirstPieceReportView,
+} from "@/lib/quality-control-workspace"
+import {
   compatibleDestinationMachineOptions,
   machineConstraintAffectedRows,
   machineConstraintQueueReview,
@@ -7460,7 +7465,7 @@ const roleTaskCopy: Record<RoleTaskKind, { title: string; empty: string }> = {
   },
   quality: {
     title: "Quality Control Tasks",
-    empty: "First-piece tasks are available only in First Piece Inspection.",
+    empty: "No first-piece inspections or Quality downtime resumptions are pending.",
   },
 }
 
@@ -7880,13 +7885,27 @@ function RoleTaskPanel({
     () => shopFloorQueueRows(productionControl),
     [productionControl]
   )
+  const productionFloorCode = productionFloorFromLocation()
+  const productionSessionsPage = usePostgresOperationalPage(
+    role === "quality"
+      ? `/api/production-sessions?floor=${encodeURIComponent(productionFloorCode)}&status=open&limit=500`
+      : null,
+    30_000
+  )
   const roleRows = useMemo(
-    () =>
-      role === "quality"
-        ? []
-        : queueRows.filter((row) => roleTaskMatches(row, role)),
+    () => queueRows.filter((row) => roleTaskMatches(row, role)),
     [queueRows, role]
   )
+  const downtimeRestartTasks = useMemo(
+    () =>
+      qualityDowntimeRestartTasks(asArray(productionSessionsPage.data?.rows)),
+    [productionSessionsPage.data?.rows]
+  )
+  const pendingTaskCount = roleRows.length + downtimeRestartTasks.length
+  const taskMachines = uniqueValues([
+    ...roleRows.map((row) => row.machine),
+    ...downtimeRestartTasks.map((task) => task.machineNumber),
+  ])
   async function saveStage(
     row: DashboardPayload,
     stage: ShopFloorStageId,
@@ -7997,33 +8016,40 @@ function RoleTaskPanel({
                 <Gauge className="size-4" />
                 Hourly Quality Check
               </Button>
+              <Button asChild type="button" size="sm">
+                <Link
+                  href={`/dashboard/production-sessions?${new URLSearchParams({
+                    floor: productionFloorCode,
+                  }).toString()}`}
+                >
+                  <Activity className="size-4" />
+                  Open Production Sessions
+                </Link>
+              </Button>
             </div>
           ) : null}
-          <Button
-            type="button"
-            className="h-11 w-fit"
-            onClick={() => {
-              const params = new URLSearchParams({
-                floor: productionFloorFromLocation(),
-              })
-              window.location.assign(
-                `/dashboard/production-sessions?${params.toString()}`
-              )
-            }}
-          >
-            <Activity className="size-4" />
-            Open Production Sessions
-          </Button>
+          {role !== "quality" ? (
+            <Button
+              type="button"
+              className="h-11 w-fit"
+              onClick={() => {
+                const params = new URLSearchParams({
+                  floor: productionFloorCode,
+                })
+                window.location.assign(
+                  `/dashboard/production-sessions?${params.toString()}`
+                )
+              }}
+            >
+              <Activity className="size-4" />
+              Open Production Sessions
+            </Button>
+          ) : null}
           <TrackingSummary
             tones={["warning", "brand", "information"]}
             items={[
-              ["Pending", formatNumber(roleRows.length)],
-              [
-                "Machines",
-                formatNumber(
-                  uniqueValues(roleRows.map((row) => row.machine)).length
-                ),
-              ],
+              ["Pending", formatNumber(pendingTaskCount)],
+              ["Machines", formatNumber(taskMachines.length)],
               [
                 "Locations",
                 formatNumber(
@@ -8036,7 +8062,7 @@ function RoleTaskPanel({
               ],
             ]}
           />
-          {roleRows.length ? (
+          {pendingTaskCount ? (
             <div className="rounded-lg border min-w-0">
               <OperationalTable containerClassName="max-h-[72vh]">
                 <TableHeader className="sticky top-0 z-10 bg-background">
@@ -8049,6 +8075,54 @@ function RoleTaskPanel({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
+                  {downtimeRestartTasks.map((task) => (
+                    <TableRow key={`quality-downtime-${task.eventId}`}>
+                      <TableCell className="align-middle">
+                        <div className="font-semibold">
+                          {task.machineNumber || "-"}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {task.sessionReference || "Production session"}
+                        </div>
+                      </TableCell>
+                      <TableCell className="align-middle text-sm">
+                        Production Session
+                      </TableCell>
+                      <TableCell className="align-middle">
+                        <div className="font-medium">
+                          {task.partCode || "-"}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          Job {task.jobCardNumber || "-"} · Setup{" "}
+                          {task.setupNumber || "-"}
+                        </div>
+                      </TableCell>
+                      <TableCell className="align-middle">
+                        <StatusBadge value="Resume Production" tone="warning" />
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          {task.reasonName}
+                          {task.startedAt
+                            ? ` · ${formatIstDateTime(task.startedAt)}`
+                            : ""}
+                        </div>
+                      </TableCell>
+                      <TableCell className="align-middle">
+                        <Button asChild type="button" size="sm">
+                          <Link
+                            href={`/dashboard/production-sessions?${new URLSearchParams(
+                              {
+                                floor: productionFloorCode,
+                                session: task.sessionId,
+                              }
+                            ).toString()}`}
+                          >
+                            <Activity className="size-4" />
+                            Resume Production
+                          </Link>
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
                   {roleRows.map((row) => (
                     <TableRow
                       key={`${row.machine}-${shopFloorPlanKey(row.next)}`}
@@ -8078,7 +8152,7 @@ function RoleTaskPanel({
                             }
                           >
                             <CheckCircle2 className="size-4" />
-                            Start Quality Approval
+                            Open First Piece Report
                           </Button>
                         ) : (
                           <ShopFloorRowAction
@@ -8157,6 +8231,10 @@ function FirstPieceInspectionPanel({
   const { qualityOptions } = useProductionEmployeeDirectory()
   const masters = combinedQualityInspectionMasterRows(productionControl)
   const reportRows = asArray(productionControl.firstPieceInspectionReportRows)
+  const reportViews = useMemo(
+    () => reportRows.map(firstPieceReportView),
+    [reportRows]
+  )
   const [activeView, setActiveView] = useState<"tasks" | "reports">("tasks")
   const [expandedTaskKey, setExpandedTaskKey] = useState<string | null>(null)
   const defaultExpandedTaskKey = tasks[0] ? shopFloorPlanKey(tasks[0]) : ""
@@ -8249,7 +8327,7 @@ function FirstPieceInspectionPanel({
         >
           <FileText className="size-4" />
           Saved Reports
-          <Badge variant="secondary">{reportRows.length}</Badge>
+          <Badge variant="secondary">{reportViews.length}</Badge>
         </Button>
       </div>
 
@@ -8374,14 +8452,163 @@ function FirstPieceInspectionPanel({
           id="first-piece-saved-reports"
           role="tabpanel"
         >
-          <DataRowsCard
-            title="Saved First Piece Inspection Reports"
-            rows={reportRows}
-            empty="No first-piece reports saved yet"
-          />
+          <SavedFirstPieceReports reports={reportViews} />
         </div>
       )}
     </section>
+  )
+}
+
+function SavedFirstPieceReports({
+  reports,
+}: {
+  reports: FirstPieceReportView[]
+}) {
+  const [expandedReportKey, setExpandedReportKey] = useState("")
+
+  return (
+    <SectionCard>
+      <CardHeader>
+        <CardTitle>Saved First Piece Inspection Reports</CardTitle>
+        <CardDescription>
+          Review The Recorded Dimensions And Five Readings For Each Inspection.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {reports.length ? (
+          <div className="rounded-md border min-w-0">
+            <OperationalTable>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-24">Report</TableHead>
+                  <TableHead>Job Card</TableHead>
+                  <TableHead>Part Number</TableHead>
+                  <TableHead>Machine</TableHead>
+                  <TableHead>Option / Setup</TableHead>
+                  <TableHead>Inspected At</TableHead>
+                  <TableHead>Inspected By</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Remark</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {reports.map((report, index) => {
+                  const reportKey = [
+                    report.jobCardNumber,
+                    report.partCode,
+                    report.machineNumber,
+                    report.optionNumber,
+                    report.setupNumber,
+                    report.inspectedAt,
+                    index,
+                  ].join("|")
+                  const expanded = expandedReportKey === reportKey
+                  return (
+                    <Fragment key={reportKey}>
+                      <TableRow>
+                        <TableCell>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-9 gap-1 px-2"
+                            aria-expanded={expanded}
+                            onClick={() =>
+                              setExpandedReportKey(expanded ? "" : reportKey)
+                            }
+                          >
+                            {expanded ? (
+                              <ChevronDown className="size-4" />
+                            ) : (
+                              <ChevronRight className="size-4" />
+                            )}
+                            View
+                          </Button>
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          {report.jobCardNumber || "-"}
+                        </TableCell>
+                        <TableCell>{report.partCode || "-"}</TableCell>
+                        <TableCell>{report.machineNumber || "-"}</TableCell>
+                        <TableCell>
+                          {report.optionNumber || "-"} /{" "}
+                          {report.setupNumber || "-"}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap">
+                          {report.inspectedAt
+                            ? formatIstDateTime(report.inspectedAt)
+                            : "-"}
+                        </TableCell>
+                        <TableCell>{report.approvedBy || "-"}</TableCell>
+                        <TableCell>
+                          <StatusBadge value={report.status} />
+                        </TableCell>
+                        <TableCell>{report.remark || "-"}</TableCell>
+                      </TableRow>
+                      {expanded ? (
+                        <TableRow>
+                          <TableCell colSpan={9} className="bg-muted/15 p-3">
+                            {report.dimensions.length ? (
+                              <div className="rounded-md border bg-background min-w-0">
+                                <OperationalTable>
+                                  <TableHeader>
+                                    <TableRow>
+                                      <TableHead>Code</TableHead>
+                                      <TableHead>Parameter</TableHead>
+                                      <TableHead>Specification</TableHead>
+                                      <TableHead>Tolerance</TableHead>
+                                      {Array.from({ length: 5 }, (_, reading) => (
+                                        <TableHead key={reading}>
+                                          Piece {reading + 1}
+                                        </TableHead>
+                                      ))}
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
+                                    {report.dimensions.map((dimension, dimensionIndex) => (
+                                      <TableRow
+                                        key={`${dimension.code}-${dimension.name}-${dimensionIndex}`}
+                                      >
+                                        <TableCell className="font-medium">
+                                          {dimension.code || "-"}
+                                        </TableCell>
+                                        <TableCell>{dimension.name || "-"}</TableCell>
+                                        <TableCell>
+                                          {dimension.specification || "-"}
+                                        </TableCell>
+                                        <TableCell>{dimension.tolerance || "-"}</TableCell>
+                                        {Array.from({ length: 5 }, (_, reading) => (
+                                          <TableCell
+                                            className="text-right tabular-nums"
+                                            key={reading}
+                                          >
+                                            {dimension.readings[reading] || "-"}
+                                          </TableCell>
+                                        ))}
+                                      </TableRow>
+                                    ))}
+                                  </TableBody>
+                                </OperationalTable>
+                              </div>
+                            ) : (
+                              <EmptyRowsMessage>
+                                This Legacy Report Has No Saved Dimension Readings.
+                              </EmptyRowsMessage>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ) : null}
+                    </Fragment>
+                  )
+                })}
+              </TableBody>
+            </OperationalTable>
+          </div>
+        ) : (
+          <EmptyRowsMessage>No First-Piece Reports Saved Yet</EmptyRowsMessage>
+        )}
+      </CardContent>
+    </SectionCard>
   )
 }
 

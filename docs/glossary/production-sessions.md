@@ -76,6 +76,13 @@ A Production Session is one uninterrupted period in which one operator runs one 
 
 Shop Floor starts and closes sessions. Quality may also close CNC sessions. Quality, Shop Floor, and Machinist may record downtime; only Quality may record rejection.
 
+Quality Control is the working queue for both pending first-piece inspections
+and open downtime entered by Quality. A Quality-entered downtime stays in that
+queue until Quality resolves it and resumes production. First-piece inspection
+tasks and their saved reports are opened from Quality Control; saved reports
+show their inspection readings and business identifiers, not internal database
+or composite keys.
+
 Close reasons are Shift Ends, Shift Change, Operator Change, Item Complete, Job / Setup Change, and Manual Stop. Shift Ends is the default because it is the normal close path.
 
 A Counter session requires its end counter before it can close. A Weight session
