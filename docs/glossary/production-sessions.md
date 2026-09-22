@@ -89,9 +89,19 @@ downtime or start production.
 
 Downtime starts with a coded reason and start time. A new downtime entry defaults its start time to the current IST time, while remaining editable for corrections. It remains open until an end time and one of two outcomes are entered: Resolved — Resume Production, or Shift Ended — Unresolved. Only one downtime interval may be open in a Production Session, and production cannot resume while it remains open.
 
-An open downtime interval blocks End Session. The user must explicitly close the downtime first; ending a session never silently supplies its end time.
+An ordinary open downtime interval blocks End Session. A downtime linked to an
+open Machine Breakdown is the exception: choosing Shift Ends closes that interval
+at the entered session end as Shift Ended — Unresolved, while leaving the Machine
+Breakdown open. Other close reasons still require the downtime to be resolved
+first.
 
 When a problem is unresolved at shift end, its current downtime interval closes at the scheduled shift end with Shift Ended — Unresolved, then the Production Session closes with Shift Ends. The problem appears as Carried Downtime for the next shift. Non-working hours are not counted. If the problem continues, the next shift starts a new downtime interval at that shift's start; resolving that interval clears the carry-forward. If the problem is fixed before the next shift, its actual resolution time clears the carry-forward without creating another production downtime interval.
+
+An open Machine Breakdown blocks a new Production Session on that machine. When
+the next operator waits until repair is complete, the breakdown continues without
+a Production Session and therefore creates no additional session downtime. Its
+completion time resolves the carried problem; the next operator then starts a
+normal Production Session.
 
 For example, Conventional downtime from 16:00 until the 20:00 shift end records 240 minutes. If still unresolved when the next General shift starts at 08:30 and repaired at 11:00, the next interval records 150 minutes; 20:00–08:30 is excluded.
 

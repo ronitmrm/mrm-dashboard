@@ -813,6 +813,26 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         if (open.rows[0]) {
           throw new Error("This machine already has an open production session.")
         }
+        const openBreakdown = await client.query<{ id: string }>(
+          `
+            SELECT task.id
+            FROM maintenance.tasks task
+            JOIN maintenance.machine_schedules schedule
+              ON schedule.id = task.machine_schedule_id
+             AND schedule.organization_id = task.organization_id
+            WHERE task.organization_id = $1
+              AND schedule.machine_id = $2
+              AND lower(task.task_type) = 'breakdown'
+              AND task.status = 'In Progress'
+            LIMIT 1
+          `,
+          [input.organizationId, machineId]
+        )
+        if (openBreakdown.rows[0]) {
+          throw new Error(
+            "Complete the open machine breakdown before starting production."
+          )
+        }
 
         const dailySequenceResult = await client.query<{ value: string }>(
           `
@@ -1516,6 +1536,58 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         }
         if (endedAt < current.started_at) {
           throw new Error("Session end cannot be before session start.")
+        }
+        if (current.has_open_downtime && endReason === "shift_end") {
+          const breakdownDowntime = await client.query<{
+            id: string
+            started_at: Date
+          }>(
+            `
+              SELECT downtime.id, downtime.started_at
+              FROM manufacturing.production_session_downtime_events downtime
+              JOIN maintenance.tasks task
+                ON task.organization_id = downtime.organization_id
+               AND task.task_key = downtime.source_payload->>'maintenanceTaskKey'
+               AND lower(task.task_type) = 'breakdown'
+               AND task.status = 'In Progress'
+              WHERE downtime.production_session_id = $1
+                AND downtime.ended_at IS NULL
+                AND downtime.reversed_at IS NULL
+              LIMIT 1
+              FOR UPDATE OF downtime
+            `,
+            [input.sessionId]
+          )
+          const linked = breakdownDowntime.rows[0]
+          if (linked) {
+            if (endedAt <= linked.started_at) {
+              throw new Error("Session end must be after breakdown downtime start.")
+            }
+            const durationMinutes = Math.max(
+              Math.ceil(
+                (endedAt.getTime() - linked.started_at.getTime()) / 60_000
+              ),
+              1
+            )
+            await client.query(
+              `
+                UPDATE manufacturing.production_session_downtime_events
+                SET ended_at = $1, duration_minutes = $2,
+                  end_outcome = 'shift_end_unresolved',
+                  ended_by_user_id = $3, updated_at = now(),
+                  source_payload = source_payload || $4::jsonb
+                WHERE id = $5
+              `,
+              [
+                endedAt.toISOString(),
+                durationMinutes,
+                input.actorUserId ?? null,
+                { closedWithShiftSession: true },
+                linked.id,
+              ]
+            )
+            current.has_open_downtime = false
+          }
         }
         assertProductionSessionCanClose({
           hasOpenDowntime: current.has_open_downtime,
@@ -2547,6 +2619,9 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             )::integer AS "runtimeMinutes",
             COALESCE(downtime.minutes, 0) AS "downtimeMinutes",
             COALESCE(downtime.has_open, false) AS "hasOpenDowntime",
+            COALESCE(
+              downtime.has_open_breakdown, false
+            ) AS "hasOpenBreakdownDowntime",
             COALESCE(downtime.rows, '[]'::jsonb) AS "downtimeEvents",
             COALESCE(rejection.rows, '[]'::jsonb) AS "rejectionEvents"
           FROM manufacturing.production_sessions session
@@ -2577,6 +2652,12 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
                 )::integer
               )), 0) AS minutes,
               COALESCE(bool_or(event.ended_at IS NULL), false) AS has_open,
+              COALESCE(bool_or(
+                event.ended_at IS NULL
+                AND NULLIF(
+                  event.source_payload->>'maintenanceTaskKey', ''
+                ) IS NOT NULL
+              ), false) AS has_open_breakdown,
               jsonb_agg(jsonb_build_object(
                 'id', event.id,
                 'reasonCode', event.reason_code,
@@ -2586,6 +2667,9 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
                 'durationMinutes', event.duration_minutes,
                 'endOutcome', event.end_outcome,
                 'carryResolvedAt', event.carry_forward_resolved_at,
+                'breakdownLinked', NULLIF(
+                  event.source_payload->>'maintenanceTaskKey', ''
+                ) IS NOT NULL,
                 'enteredRole', event.entered_role,
                 'isOpen', event.ended_at IS NULL
               ) ORDER BY event.started_at) AS rows

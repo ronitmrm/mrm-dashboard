@@ -49,10 +49,34 @@ type CompleteTaskInput = {
   taskType: string
 }
 
+export type MachineBreakdownRow = {
+  changedItems: string[]
+  completedAt: string | null
+  completedBy: string | null
+  downtimeEventId: string | null
+  id: string
+  machineNumber: string
+  productionFloorCode: string
+  reasonCode: string | null
+  reasonName: string | null
+  startedAt: string | null
+  status: string
+  taskKey: string
+  workDone: string | null
+}
+
 function requiredText(value: unknown, label: string) {
   const result = String(value ?? "").trim()
   if (!result) throw new Error(`${label} is required.`)
   return result
+}
+
+function requiredTimestamp(value: unknown, label: string) {
+  const timestamp = new Date(requiredText(value, label))
+  if (Number.isNaN(timestamp.getTime())) {
+    throw new Error(`${label} is invalid.`)
+  }
+  return timestamp
 }
 
 async function generatedMaintenanceChecklistCode(
@@ -122,6 +146,75 @@ async function machineIdFor(
   )
   if (!result.rows[0]) throw new Error("Machine was not found.")
   return result.rows[0].id
+}
+
+async function ensureBreakdownSchedule(
+  client: PoolClient,
+  input: {
+    actorUserId?: string | null
+    machineNumber: string
+    organizationId: string
+    productionFloorCode?: string
+    startedAt: string
+  }
+) {
+  const machineId = await machineIdFor(
+    client,
+    input.organizationId,
+    input.machineNumber,
+    normalizeProductionFloorCode(input.productionFloorCode)
+  )
+  const definition = await client.query<{ id: string }>(
+    `
+      INSERT INTO maintenance.definitions (
+        organization_id, code, name, frequency_unit, frequency_value,
+        active, checklist_code, frequency_basis, created_by_user_id,
+        updated_by_user_id, source_system, source_table, source_id,
+        source_payload
+      )
+      VALUES ($1, 'BREAKDOWN', 'Breakdown maintenance', 'event', 1,
+        true, 'BREAKDOWN', 'Event', $2, $2, 'mrm-dashboard',
+        'maintenance_master', $3, $4)
+      ON CONFLICT (organization_id, lower(code))
+      DO UPDATE SET updated_at = now()
+      RETURNING id
+    `,
+    [
+      input.organizationId,
+      input.actorUserId ?? null,
+      randomUUID(),
+      { generated: true },
+    ]
+  )
+  const scheduleKey = `${input.machineNumber}|BREAKDOWN`
+  const schedule = await client.query<{ id: string }>(
+    `
+      INSERT INTO maintenance.machine_schedules (
+        organization_id, definition_id, machine_id, next_due_on,
+        active, schedule_key, created_by_user_id, updated_by_user_id,
+        source_system, source_table, source_id, source_payload
+      )
+      VALUES ($1, $2, $3, COALESCE(migration.try_date($4), current_date),
+        false, $5, $6, $6, 'mrm-dashboard', 'maintenance_schedule', $7, $8)
+      ON CONFLICT (definition_id, machine_id)
+      DO UPDATE SET schedule_key = EXCLUDED.schedule_key,
+        updated_by_user_id = EXCLUDED.updated_by_user_id,
+        updated_at = now(),
+        row_version = maintenance.machine_schedules.row_version + 1
+      RETURNING id
+    `,
+    [
+      input.organizationId,
+      definition.rows[0]!.id,
+      machineId,
+      input.startedAt,
+      scheduleKey,
+      input.actorUserId ?? null,
+      randomUUID(),
+      { generated: true },
+    ]
+  )
+  return { machineId, scheduleId: schedule.rows[0]!.id, scheduleKey }
 }
 
 function resultColumns(value: TaskResultInput["value"]) {
@@ -421,6 +514,58 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
       return result.rows
     },
 
+    async listBreakdowns(input: {
+      organizationId: string
+      status?: "Completed" | "In Progress"
+    }): Promise<MachineBreakdownRow[]> {
+      const result = await pool.query<MachineBreakdownRow>(
+        `
+          SELECT task.id, task.task_key AS "taskKey", task.status,
+            task.started_at::text AS "startedAt",
+            task.completed_at::text AS "completedAt",
+            machine.machine_number AS "machineNumber",
+            floor.code AS "productionFloorCode",
+            task.source_payload->>'downtimeReasonCode' AS "reasonCode",
+            task.source_payload->>'breakdownReason' AS "reasonName",
+            COALESCE(
+              task.source_payload->'changedItems', '[]'::jsonb
+            ) AS "changedItems",
+            task.source_payload->>'workDone' AS "workDone",
+            COALESCE(
+              NULLIF(task.legacy_completer, ''), technician.name,
+              task.source_payload->>'completedBy'
+            ) AS "completedBy",
+            downtime.id AS "downtimeEventId"
+          FROM maintenance.tasks task
+          JOIN maintenance.machine_schedules schedule
+            ON schedule.id = task.machine_schedule_id
+           AND schedule.organization_id = task.organization_id
+          JOIN catalog.machines machine
+            ON machine.id = schedule.machine_id
+           AND machine.organization_id = task.organization_id
+          JOIN manufacturing.production_floors floor
+            ON floor.id = machine.production_floor_id
+          LEFT JOIN identity.users technician
+            ON technician.id = task.completed_by_user_id
+          LEFT JOIN LATERAL (
+            SELECT event.id
+            FROM manufacturing.production_session_downtime_events event
+            WHERE event.organization_id = task.organization_id
+              AND event.source_payload->>'maintenanceTaskKey' = task.task_key
+              AND event.reversed_at IS NULL
+            ORDER BY event.started_at
+            LIMIT 1
+          ) downtime ON true
+          WHERE task.organization_id = $1
+            AND lower(task.task_type) = 'breakdown'
+            AND ($2::text IS NULL OR task.status = $2)
+          ORDER BY task.started_at DESC, task.id DESC
+        `,
+        [input.organizationId, input.status ?? null]
+      )
+      return result.rows
+    },
+
     async listMachineMaintenancePlan(organizationId: string, month: string) {
       if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new Error("Select a valid month.")
       const result = await pool.query<{
@@ -703,6 +848,361 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
       return transaction(pool, (client) =>
         completeMaintenanceTask(client, input)
       )
+    },
+
+    async startBreakdown(input: {
+      actorUserId?: string | null
+      machineNumber: string
+      organizationId: string
+      payload: Record<string, unknown>
+      productionFloorCode?: string
+      reasonCode: string
+      reasonName: string
+      startedAt: string
+      taskKey: string
+    }) {
+      return transaction(pool, async (client) => {
+        const startedAt = requiredTimestamp(input.startedAt, "Breakdown start")
+        const taskKey = requiredText(input.taskKey, "Breakdown task key")
+        await client.query(
+          "SELECT pg_advisory_xact_lock(hashtext('maintenance.breakdown'), hashtext(lower($1)))",
+          [`${input.organizationId}|${input.machineNumber}`]
+        )
+        const existing = await client.query<{
+          downtime_event_id: string | null
+          id: string
+          production_session_id: string | null
+          status: string
+        }>(
+          `
+            SELECT task.id, task.status, downtime.id AS downtime_event_id,
+              downtime.production_session_id
+            FROM maintenance.tasks task
+            LEFT JOIN LATERAL (
+              SELECT event.id, event.production_session_id
+              FROM manufacturing.production_session_downtime_events event
+              WHERE event.organization_id = task.organization_id
+                AND event.source_payload->>'maintenanceTaskKey' = task.task_key
+                AND event.reversed_at IS NULL
+              ORDER BY event.started_at
+              LIMIT 1
+            ) downtime ON true
+            WHERE task.organization_id = $1 AND lower(task.task_key) = lower($2)
+            FOR UPDATE OF task
+          `,
+          [input.organizationId, taskKey]
+        )
+        if (existing.rows[0]) {
+          return {
+            downtimeEventId: existing.rows[0].downtime_event_id,
+            downtimeStarted: Boolean(existing.rows[0].downtime_event_id),
+            id: existing.rows[0].id,
+            productionSessionId: existing.rows[0].production_session_id,
+            status: existing.rows[0].status,
+            taskKey,
+          }
+        }
+
+        const schedule = await ensureBreakdownSchedule(client, {
+          actorUserId: input.actorUserId,
+          machineNumber: input.machineNumber,
+          organizationId: input.organizationId,
+          productionFloorCode: input.productionFloorCode,
+          startedAt: startedAt.toISOString(),
+        })
+        await client.query(
+          "SELECT pg_advisory_xact_lock(hashtext('production.session'), hashtext($1))",
+          [schedule.machineId]
+        )
+        const open = await client.query<{ id: string }>(
+          `
+            SELECT task.id
+            FROM maintenance.tasks task
+            WHERE task.organization_id = $1
+              AND task.machine_schedule_id = $2
+              AND lower(task.task_type) = 'breakdown'
+              AND task.status = 'In Progress'
+            LIMIT 1
+            FOR UPDATE
+          `,
+          [input.organizationId, schedule.scheduleId]
+        )
+        if (open.rows[0]) {
+          throw new Error("This machine already has an open breakdown.")
+        }
+        const sourcePayload = {
+          ...input.payload,
+          breakdownReason: requiredText(input.reasonName, "Breakdown reason"),
+          changedItems: [],
+          downtimeReasonCode: requiredText(
+            input.reasonCode,
+            "Downtime reason code"
+          ),
+          machineNo: input.machineNumber,
+          maintenanceCode: "BREAKDOWN",
+          maintenanceTitle: "Breakdown maintenance",
+          maintenanceType: "Breakdown",
+          productionFloorCode: normalizeProductionFloorCode(
+            input.productionFloorCode
+          ),
+          startedAt: startedAt.toISOString(),
+          status: "In Progress",
+          taskId: taskKey,
+        }
+        const task = await client.query<{ id: string }>(
+          `
+            INSERT INTO maintenance.tasks (
+              organization_id, machine_schedule_id, due_on, status,
+              started_at, created_by_user_id, updated_by_user_id,
+              task_key, task_type, source_system, source_table, source_id,
+              source_payload
+            )
+            VALUES ($1, $2, COALESCE(migration.try_date($3), current_date),
+              'In Progress', $3, $4, $4, $5, 'Breakdown',
+              'mrm-dashboard', 'maintenance_task', $6, $7)
+            RETURNING id
+          `,
+          [
+            input.organizationId,
+            schedule.scheduleId,
+            startedAt.toISOString(),
+            input.actorUserId ?? null,
+            taskKey,
+            randomUUID(),
+            sourcePayload,
+          ]
+        )
+        const session = await client.query<{ id: string; started_at: Date }>(
+          `
+            SELECT id, started_at
+            FROM manufacturing.production_sessions
+            WHERE organization_id = $1 AND machine_id = $2
+              AND status = 'open' AND reversed_at IS NULL
+            FOR UPDATE
+          `,
+          [input.organizationId, schedule.machineId]
+        )
+        let downtimeEventId: string | null = null
+        if (session.rows[0]) {
+          if (startedAt < session.rows[0].started_at) {
+            throw new Error(
+              "Breakdown start cannot be before the production session start."
+            )
+          }
+          const openDowntime = await client.query<{ id: string }>(
+            `
+              SELECT id
+              FROM manufacturing.production_session_downtime_events
+              WHERE production_session_id = $1
+                AND ended_at IS NULL AND reversed_at IS NULL
+              LIMIT 1
+              FOR UPDATE
+            `,
+            [session.rows[0].id]
+          )
+          if (openDowntime.rows[0]) {
+            throw new Error(
+              "Close the current production downtime before starting a breakdown."
+            )
+          }
+          const downtime = await client.query<{ id: string }>(
+            `
+              INSERT INTO manufacturing.production_session_downtime_events (
+                organization_id, production_session_id, reason_code,
+                reason_name, started_at, entered_role, entered_by_user_id,
+                source_payload
+              )
+              VALUES ($1, $2, $3, $4, $5, 'machinist', $6, $7)
+              RETURNING id
+            `,
+            [
+              input.organizationId,
+              session.rows[0].id,
+              sourcePayload.downtimeReasonCode,
+              sourcePayload.breakdownReason,
+              startedAt.toISOString(),
+              input.actorUserId ?? null,
+              {
+                maintenanceTaskId: task.rows[0]!.id,
+                maintenanceTaskKey: taskKey,
+                source: "breakdown-maintenance",
+              },
+            ]
+          )
+          downtimeEventId = downtime.rows[0]!.id
+        }
+        await queueDashboardRefresh(client, input.organizationId)
+        return {
+          downtimeEventId,
+          downtimeStarted: Boolean(downtimeEventId),
+          id: task.rows[0]!.id,
+          productionSessionId: session.rows[0]?.id ?? null,
+          status: "In Progress",
+          taskKey,
+        }
+      })
+    },
+
+    async completeBreakdown(input: {
+      actorUserId?: string | null
+      changedItems: readonly string[]
+      completedAt: string
+      completedBy: string
+      organizationId: string
+      payload: Record<string, unknown>
+      taskKey: string
+      workDone: string
+    }) {
+      return transaction(pool, async (client) => {
+        const completedAt = requiredTimestamp(
+          input.completedAt,
+          "Breakdown completion"
+        )
+        const taskKey = requiredText(input.taskKey, "Breakdown task key")
+        const task = await client.query<{
+          machine_number: string
+          production_floor_code: string
+          source_payload: Record<string, unknown>
+          started_at: Date
+          status: string
+        }>(
+          `
+            SELECT task.status, task.started_at, task.source_payload,
+              machine.machine_number,
+              floor.code AS production_floor_code
+            FROM maintenance.tasks task
+            JOIN maintenance.machine_schedules schedule
+              ON schedule.id = task.machine_schedule_id
+             AND schedule.organization_id = task.organization_id
+            JOIN catalog.machines machine ON machine.id = schedule.machine_id
+            JOIN manufacturing.production_floors floor
+              ON floor.id = machine.production_floor_id
+            WHERE task.organization_id = $1
+              AND lower(task.task_key) = lower($2)
+              AND lower(task.task_type) = 'breakdown'
+            FOR UPDATE OF task
+          `,
+          [input.organizationId, taskKey]
+        )
+        const current = task.rows[0]
+        if (!current) throw new Error("Open breakdown was not found.")
+        if (current.status === "Completed") {
+          return { status: current.status, taskKey }
+        }
+        if (current.status !== "In Progress") {
+          throw new Error("Only an in-progress breakdown can be completed.")
+        }
+        if (completedAt <= current.started_at) {
+          throw new Error("Breakdown completion must be after its start.")
+        }
+        const changedItems = input.changedItems
+          .map((item) => item.trim())
+          .filter(Boolean)
+        const completedBy = requiredText(input.completedBy, "Completed by")
+        const workDone = requiredText(input.workDone, "Work done")
+        const downtime = await client.query<{
+          carry_forward_resolved_at: Date | null
+          end_outcome: string | null
+          ended_at: Date | null
+          id: string
+          started_at: Date
+        }>(
+          `
+            SELECT event.id, event.started_at, event.ended_at,
+              event.end_outcome, event.carry_forward_resolved_at
+            FROM manufacturing.production_session_downtime_events event
+            WHERE event.organization_id = $1
+              AND event.source_payload->>'maintenanceTaskKey' = $2
+              AND event.reversed_at IS NULL
+            ORDER BY event.started_at DESC
+            LIMIT 1
+            FOR UPDATE
+          `,
+          [input.organizationId, taskKey]
+        )
+        const linkedDowntime = downtime.rows[0]
+        if (linkedDowntime && !linkedDowntime.ended_at) {
+          if (completedAt <= linkedDowntime.started_at) {
+            throw new Error("Breakdown completion must be after downtime start.")
+          }
+          const durationMinutes = Math.max(
+            Math.ceil(
+              (completedAt.getTime() - linkedDowntime.started_at.getTime()) /
+                60_000
+            ),
+            1
+          )
+          await client.query(
+            `
+              UPDATE manufacturing.production_session_downtime_events
+              SET ended_at = $1, duration_minutes = $2,
+                end_outcome = 'resolved', ended_by_user_id = $3,
+                updated_at = now(),
+                source_payload = source_payload || $4::jsonb
+              WHERE id = $5
+            `,
+            [
+              completedAt.toISOString(),
+              durationMinutes,
+              input.actorUserId ?? null,
+              { resolvedBy: "breakdown-maintenance" },
+              linkedDowntime.id,
+            ]
+          )
+        } else if (
+          linkedDowntime?.end_outcome === "shift_end_unresolved" &&
+          !linkedDowntime.carry_forward_resolved_at
+        ) {
+          await client.query(
+            `
+              UPDATE manufacturing.production_session_downtime_events
+              SET carry_forward_resolved_at = $1,
+                carry_forward_resolved_by_user_id = $2,
+                updated_at = now(),
+                source_payload = source_payload || $3::jsonb
+              WHERE id = $4
+            `,
+            [
+              completedAt.toISOString(),
+              input.actorUserId ?? null,
+              { carryResolvedBy: "breakdown-maintenance" },
+              linkedDowntime.id,
+            ]
+          )
+        }
+        const payload = {
+          ...current.source_payload,
+          ...input.payload,
+          changedItems,
+          actualMinutes: Math.max(
+            Math.ceil(
+              (completedAt.getTime() - current.started_at.getTime()) / 60_000
+            ),
+            1
+          ),
+          completedAt: completedAt.toISOString(),
+          completedBy,
+          result: "Completed",
+          status: "Completed",
+          workDone,
+        }
+        const result = await completeMaintenanceTask(client, {
+          actorUserId: input.actorUserId,
+          completedAt: completedAt.toISOString(),
+          completedBy,
+          dueOn: current.started_at.toISOString(),
+          machineNumber: current.machine_number,
+          organizationId: input.organizationId,
+          payload,
+          productionFloorCode: current.production_floor_code,
+          results: [],
+          scheduleKey: `${current.machine_number}|BREAKDOWN`,
+          taskKey,
+          taskType: "Breakdown",
+        })
+        await queueDashboardRefresh(client, input.organizationId)
+        return { ...result, status: "Completed", taskKey }
+      })
     },
 
     async completeBreakdownTask(input: {

@@ -1,6 +1,7 @@
 type Row = Record<string, unknown>
 
 export type CarriedDowntimeRow = {
+  breakdownLinked: boolean
   carryResolvedAt: string
   endedAt: string
   eventId: string
@@ -39,6 +40,7 @@ export function carriedDowntimeRows(sessions: readonly Row[]) {
     if (!key) continue
     for (const event of rows(session.downtimeEvents)) {
       const candidate: Candidate = {
+        breakdownLinked: event.breakdownLinked === true,
         carryResolvedAt: text(event.carryResolvedAt),
         endedAt: text(event.endedAt),
         endOutcome: text(event.endOutcome),

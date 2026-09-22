@@ -384,6 +384,20 @@ export async function executePostgresOperationalEntry(
           organizationId,
         })
       }
+      if (plan.operation === "breakdown-start") {
+        return await repository.startBreakdown({
+          ...plan.input,
+          actorUserId: actor.actorUserId,
+          organizationId,
+        })
+      }
+      if (plan.operation === "breakdown-complete") {
+        return await repository.completeBreakdown({
+          ...plan.input,
+          actorUserId: actor.actorUserId,
+          organizationId,
+        })
+      }
       return await repository.completeTask({
         ...plan.input,
         actorUserId: actor.actorUserId,

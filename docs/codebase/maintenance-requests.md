@@ -49,3 +49,17 @@ records. Facility requests remain in their existing request work lists.
 - Only Pending Approval requests accept a manager decision.
 - Trade transitions are Approved → In Progress → Completed.
 - Only Completed requests may be Closed.
+
+## Machine breakdown lifecycle
+
+Physical-machine breakdowns use `maintenance.tasks` with task type Breakdown.
+Starting one creates an In Progress task and opens a linked Production Session
+downtime when that machine has a running session. The downtime link is retained
+in the event source payload by maintenance task key. A second open breakdown on
+the same machine is rejected, and Production Session start is blocked while the
+breakdown remains open.
+
+Completion updates the same task, records the actual completion time, technician,
+work performed, and `changedItems[]`, and resolves either the linked open downtime
+or its Shift Ended — Unresolved carry-forward. Completed breakdowns continue to
+feed the Machine Maintenance Register through the existing task query.

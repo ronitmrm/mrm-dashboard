@@ -124,7 +124,13 @@ import {
   universalProductionDashboardRows,
   type ProductionFloorCode,
 } from "@/lib/dashboard-view-model"
-import { formatIstDateTime, formatIstTime, istDateValue } from "@/lib/date-time"
+import {
+  formatIstDateTime,
+  formatIstTime,
+  istDateTimeInputToIso,
+  istDateTimeInputValue,
+  istDateValue,
+} from "@/lib/date-time"
 import {
   checklistWorkspaceEntryTypes,
   columnsForProductionMaster,
@@ -11224,7 +11230,7 @@ function MachineMasterPanel({
                     <TableHead>Date</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead>Maintenance</TableHead>
-                    <TableHead>Changed Parts</TableHead>
+                    <TableHead>Items Changed</TableHead>
                     <TableHead>Done By</TableHead>
                     <TableHead>Result</TableHead>
                     <TableHead></TableHead>
@@ -11240,7 +11246,11 @@ function MachineMasterPanel({
                           key === selectedReportKey ? "bg-muted/50" : ""
                         }
                       >
-                        <TableCell>{displayValue(row.completedDate)}</TableCell>
+                        <TableCell>
+                          {formatIstDateTime(
+                            str(row.completedAt || row.completedDate)
+                          )}
+                        </TableCell>
                         <TableCell>
                           <StatusBadge
                             value={row.maintenanceType || "Planned"}
@@ -11255,7 +11265,12 @@ function MachineMasterPanel({
                           </div>
                         </TableCell>
                         <TableCell className="max-w-64 truncate">
-                          {displayValue(row.partsChanged)}
+                          {(Array.isArray(row.changedItems)
+                            ? row.changedItems
+                                .map(str)
+                                .filter(Boolean)
+                                .join(", ")
+                            : "") || displayValue(row.partsChanged)}
                         </TableCell>
                         <TableCell>{displayValue(row.completedBy)}</TableCell>
                         <TableCell>
@@ -11300,6 +11315,8 @@ function MaintenancePanel({
 }) {
   const [requestRows, setRequestRows] = useState<MaintenanceRequestRow[]>([])
   const [requestReloadKey, setRequestReloadKey] = useState(0)
+  const [selectedBreakdownTaskKey, setSelectedBreakdownTaskKey] = useState("")
+  const [changedItems, setChangedItems] = useState([""])
   const machineRows = useMemo(
     () =>
       maintenanceMachineRows(asArray(productionControl.machinePlanningRows)),
@@ -11346,6 +11363,26 @@ function MaintenancePanel({
   const breakdownRows = completionRows.filter(
     (row) => str(row.maintenanceType).toLowerCase() === "breakdown"
   )
+  const openBreakdownRows = breakdownRows.filter(
+    (row) => str(row.status).toLowerCase() === "in progress"
+  )
+  const selectedBreakdown = openBreakdownRows.find(
+    (row) => str(row.taskId) === selectedBreakdownTaskKey
+  )
+  const downtimeReasons = useMemo(() => {
+    const byCode = new Map<string, { code: string; name: string }>()
+    for (const row of asArray(productionControl.rejectionReasonMasterRows)) {
+      if (str(row.status || "Active").toLowerCase() === "inactive") continue
+      const code = str(row.code)
+      const name = str(
+        row.rejectionReason || row.downtimeReason || row.reason || row.name
+      )
+      if (code && name) byCode.set(code.toLowerCase(), { code, name })
+    }
+    return [...byCode.values()].sort((left, right) =>
+      left.code.localeCompare(right.code, undefined, { numeric: true })
+    )
+  }, [productionControl.rejectionReasonMasterRows])
 
   useEffect(() => {
     let active = true
@@ -11440,7 +11477,7 @@ function MaintenancePanel({
     })
   }
 
-  async function saveBreakdownMaintenance(event: FormEvent<HTMLFormElement>) {
+  async function startBreakdownMaintenance(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const form = event.currentTarget
     const formData = new FormData(form)
@@ -11448,9 +11485,16 @@ function MaintenancePanel({
     const machine = machineRows.find(
       (row) => machineKey(row.machineNo) === machineKey(machineNo)
     )
-    const completedDate = str(formData.get("completedDate")) || todayIsoDate()
+    const startedAt = istDateTimeInputToIso(str(formData.get("startedAt")))
+    if (!startedAt) throw new Error("Select a valid breakdown start time.")
+    const downtimeReasonCode = str(formData.get("downtimeReasonCode"))
+    const downtimeReason = downtimeReasons.find(
+      (reason) => reason.code === downtimeReasonCode
+    )
+    if (!downtimeReason) throw new Error("Select a downtime reason.")
     const payload = {
-      taskId: breakdownMaintenanceTaskId(machineNo, completedDate),
+      breakdownAction: "start",
+      taskId: breakdownMaintenanceTaskId(machineNo, startedAt),
       maintenanceType: "Breakdown",
       machineNo,
       machineType:
@@ -11461,6 +11505,7 @@ function MaintenancePanel({
         displayValue(machine?.machineName) !== "-"
           ? displayValue(machine?.machineName)
           : "",
+      productionFloorCode: str(machine?.productionFloorCode),
       location:
         displayValue(machine?.location) !== "-"
           ? displayValue(machine?.location)
@@ -11468,16 +11513,10 @@ function MaintenancePanel({
       maintenanceCode: str(formData.get("maintenanceCode")) || "BREAKDOWN",
       maintenanceTitle:
         str(formData.get("maintenanceTitle")) || "Breakdown maintenance",
-      completedDate,
-      completedAt: new Date().toISOString(),
-      completedBy: str(formData.get("completedBy")),
-      actualMinutes:
-        optionalNumber(formData.get("actualMinutes")) ??
-        str(formData.get("actualMinutes")),
-      result: str(formData.get("result")) || "Completed",
-      breakdownReason: str(formData.get("breakdownReason")),
-      workDone: str(formData.get("workDone")),
-      partsChanged: str(formData.get("partsChanged")),
+      startedAt,
+      status: "In Progress",
+      downtimeReasonCode,
+      breakdownReason: downtimeReason.name,
       remark: str(formData.get("remark")),
     }
     await submitAction("data-entry", {
@@ -11486,6 +11525,35 @@ function MaintenancePanel({
       payload,
     })
     form.reset()
+  }
+
+  async function completeBreakdownMaintenance(
+    event: FormEvent<HTMLFormElement>
+  ) {
+    event.preventDefault()
+    const form = event.currentTarget
+    const formData = new FormData(form)
+    const taskId = str(formData.get("taskId"))
+    const completedAt = istDateTimeInputToIso(str(formData.get("completedAt")))
+    if (!completedAt) throw new Error("Select a valid completion time.")
+    const payload = {
+      breakdownAction: "complete",
+      changedItems: changedItems.map(str).filter(Boolean),
+      completedAt,
+      completedBy: str(formData.get("completedBy")),
+      maintenanceType: "Breakdown",
+      result: "Completed",
+      taskId,
+      workDone: str(formData.get("workDone")),
+      remark: str(formData.get("remark")),
+    }
+    await submitAction("data-entry", {
+      entryType: "maintenance_task",
+      key: dataEntryKey("maintenance_task", payload),
+      payload,
+    })
+    setSelectedBreakdownTaskKey("")
+    setChangedItems([""])
   }
 
   return (
@@ -11497,7 +11565,7 @@ function MaintenancePanel({
           ["Saved schedules", formatNumber(scheduleRows.length)],
           ["Due now", formatNumber(dueNowRows.length)],
           ["Request work", formatNumber(requestRows.length)],
-          ["Breakdowns", formatNumber(breakdownRows.length)],
+          ["Open breakdowns", formatNumber(openBreakdownRows.length)],
         ]}
       />
       <SectionCard
@@ -11655,12 +11723,70 @@ function MaintenancePanel({
           )}
         </CardContent>
       </SectionCard>
-      <SectionCard width="wide">
+      <SectionCard>
         <CardHeader>
-          <CardTitle>Breakdown Maintenance Entry</CardTitle>
+          <CardTitle>Open Breakdowns</CardTitle>
+          <CardDescription>
+            Breakdown maintenance remains open across shift closure until the
+            machine is repaired.
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <form className="grid gap-3" onSubmit={saveBreakdownMaintenance}>
+          {openBreakdownRows.length ? (
+            <OperationalTable>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Machine</TableHead>
+                  <TableHead>Started</TableHead>
+                  <TableHead>Reason</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {openBreakdownRows.map((row) => (
+                  <TableRow key={str(row.taskId)}>
+                    <TableCell className="font-medium">
+                      {displayValue(row.machineNo)}
+                    </TableCell>
+                    <TableCell>
+                      {formatIstDateTime(str(row.startedAt))}
+                    </TableCell>
+                    <TableCell>{displayValue(row.breakdownReason)}</TableCell>
+                    <TableCell>
+                      <StatusBadge value="In Progress" />
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        onClick={() => {
+                          setSelectedBreakdownTaskKey(str(row.taskId))
+                          setChangedItems([""])
+                        }}
+                        size="sm"
+                        type="button"
+                      >
+                        Complete
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </OperationalTable>
+          ) : (
+            <EmptyRowsMessage>No open machine breakdowns.</EmptyRowsMessage>
+          )}
+        </CardContent>
+      </SectionCard>
+      <SectionCard width="wide">
+        <CardHeader>
+          <CardTitle>Start Breakdown</CardTitle>
+          <CardDescription>
+            Starts downtime automatically when the selected machine has a
+            running production session.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form className="grid gap-3" onSubmit={startBreakdownMaintenance}>
             <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
               <Field label="Machine No.">
                 <SearchableSelect
@@ -11679,48 +11805,27 @@ function MaintenancePanel({
                   ))}
                 </SearchableSelect>
               </Field>
-              <Field label="Date">
+              <Field label="Breakdown Started At">
                 <Input
-                  name="completedDate"
-                  type="date"
-                  defaultValue={todayIsoDate()}
+                  name="startedAt"
+                  type="datetime-local"
+                  defaultValue={istDateTimeInputValue()}
                   required
                 />
               </Field>
-              <Field label="Completed By">
-                <Input name="completedBy" required />
-              </Field>
-              <Field label="Actual Minutes">
-                <Input name="actualMinutes" type="number" min="0" />
-              </Field>
-              <Field label="Maintenance Code">
-                <Input name="maintenanceCode" defaultValue="BREAKDOWN" />
-              </Field>
-              <Field label="Maintenance Title">
-                <Input
-                  name="maintenanceTitle"
-                  defaultValue="Breakdown maintenance"
-                />
-              </Field>
-              <Field label="Result">
+              <Field label="Defect / Downtime Reason">
                 <SearchableSelect
                   className="h-9 rounded-md border bg-background px-3 text-sm"
-                  name="result"
-                  defaultValue="Completed"
+                  name="downtimeReasonCode"
+                  required
                 >
-                  <option value="Completed">Completed</option>
-                  <option value="Needs follow up">Needs Follow Up</option>
-                  <option value="Skipped">Skipped</option>
+                  <option value="">Select reason</option>
+                  {downtimeReasons.map((reason) => (
+                    <option key={reason.code} value={reason.code}>
+                      {reason.code} · {reason.name}
+                    </option>
+                  ))}
                 </SearchableSelect>
-              </Field>
-              <Field label="Breakdown Reason">
-                <Input name="breakdownReason" required />
-              </Field>
-              <Field label="Parts Changed">
-                <Input name="partsChanged" />
-              </Field>
-              <Field label="Work Done">
-                <Input name="workDone" />
               </Field>
               <Field label="Remark">
                 <Input name="remark" />
@@ -11732,11 +11837,115 @@ function MaintenancePanel({
               disabled={!machineRows.length}
             >
               <Wrench className="size-4" />
-              Save Breakdown
+              Start Breakdown
             </Button>
           </form>
         </CardContent>
       </SectionCard>
+      {selectedBreakdown ? (
+        <SectionCard width="wide">
+          <CardHeader>
+            <CardTitle>
+              Complete Breakdown · {displayValue(selectedBreakdown.machineNo)}
+            </CardTitle>
+            <CardDescription>
+              Started {formatIstDateTime(str(selectedBreakdown.startedAt))} ·{" "}
+              {displayValue(selectedBreakdown.breakdownReason)}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form
+              className="grid gap-4"
+              onSubmit={completeBreakdownMaintenance}
+            >
+              <input
+                name="taskId"
+                type="hidden"
+                value={str(selectedBreakdown.taskId)}
+              />
+              <div className="grid gap-3 md:grid-cols-2">
+                <Field label="Completed At">
+                  <Input
+                    defaultValue={istDateTimeInputValue()}
+                    name="completedAt"
+                    required
+                    type="datetime-local"
+                  />
+                </Field>
+                <Field label="Completed By">
+                  <Input name="completedBy" required />
+                </Field>
+              </div>
+              <Field label="Work Done">
+                <Input name="workDone" required />
+              </Field>
+              <div className="grid gap-2">
+                <Label>Items Changed</Label>
+                {changedItems.map((item, index) => (
+                  <div className="flex gap-2" key={index}>
+                    <Input
+                      aria-label={`Changed item ${index + 1}`}
+                      onChange={(event) =>
+                        setChangedItems((current) =>
+                          current.map((value, itemIndex) =>
+                            itemIndex === index ? event.target.value : value
+                          )
+                        )
+                      }
+                      placeholder="Part or component"
+                      value={item}
+                    />
+                    {changedItems.length > 1 ? (
+                      <Button
+                        aria-label={`Remove changed item ${index + 1}`}
+                        onClick={() =>
+                          setChangedItems((current) =>
+                            current.filter((_, itemIndex) => itemIndex !== index)
+                          )
+                        }
+                        size="icon"
+                        type="button"
+                        variant="outline"
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
+                    ) : null}
+                  </div>
+                ))}
+                <Button
+                  className="w-fit"
+                  onClick={() =>
+                    setChangedItems((current) => [...current, ""])
+                  }
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  <Plus className="size-4" /> Add Item
+                </Button>
+              </div>
+              <Field label="Remark">
+                <Input name="remark" />
+              </Field>
+              <div className="flex flex-wrap gap-2">
+                <Button type="submit">
+                  <CheckCircle2 className="size-4" /> Complete Breakdown
+                </Button>
+                <Button
+                  onClick={() => {
+                    setSelectedBreakdownTaskKey("")
+                    setChangedItems([""])
+                  }}
+                  type="button"
+                  variant="outline"
+                >
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </SectionCard>
+      ) : null}
     </section>
   )
 }
@@ -11764,7 +11973,14 @@ function MaintenanceReportDetail({ row }: { row: DashboardPayload }) {
         <TileField label="Completed By" value={row.completedBy} />
         <TileField label="Actual Minutes" value={row.actualMinutes} numeric />
         <TileField label="Result" value={row.result} />
-        <TileField label="Parts Changed" value={row.partsChanged} />
+        <TileField
+          label="Items Changed"
+          value={
+            (Array.isArray(row.changedItems)
+              ? row.changedItems.map(str).filter(Boolean).join(", ")
+              : "") || row.partsChanged
+          }
+        />
         <TileField label="Breakdown Reason" value={row.breakdownReason} />
         <TileField label="Work Done" value={row.workDone} />
         <TileField label="Next Due" value={row.nextDueDate} />
@@ -17673,7 +17889,11 @@ function maintenanceHistoryRowsForMachine(
 ) {
   const key = machineKey(machineNo)
   return rows
-    .filter((row) => machineKey(row.machineNo || row.machine) === key)
+    .filter(
+      (row) =>
+        machineKey(row.machineNo || row.machine) === key &&
+        str(row.status).toLowerCase() !== "in progress"
+    )
     .sort(
       (a, b) =>
         dateSortValue(isoDateValue(b.completedDate || b.completedAt)) -
