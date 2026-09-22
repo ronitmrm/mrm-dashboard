@@ -591,11 +591,12 @@ function relationalValue(input: {
   return input.textValue
 }
 
-function readingValue(input: {
+export function qualityReadingValue(input: {
   booleanValue: boolean | null
   numericValue: string | null
   textValue: string | null
 }) {
+  if (input.booleanValue !== null) return input.booleanValue ? "OK" : "Not OK"
   const value = relationalValue(input)
   return value === null ? "" : String(value)
 }
@@ -771,6 +772,75 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
         })
       )
 
+      const history = await pool.query<{
+        checkId: string
+        checkedAt: Date
+        checkedBy: string | null
+        id: string
+        jcNo: string
+        jobCard: string
+        machine: string | null
+        machineType: string | null
+        ngCount: number
+        okCount: number
+        optionNumber: string
+        partCode: string
+        setupName: string
+        setupNo: string
+        sourcePayload: unknown
+        status: string
+      }>(
+        `
+          SELECT check_row.id::text AS "id", check_row.check_key AS "checkId",
+            check_row.checked_at AS "checkedAt", check_row.status,
+            COALESCE(checker.email, check_row.legacy_checker) AS "checkedBy",
+            work_order.job_card_number AS "jobCard",
+            work_order.job_card_number AS "jcNo", item.uid AS "partCode",
+            machine.machine_number AS "machine", machine_type.name AS "machineType",
+            COALESCE(route.legacy_option_number, route.route_code)
+              AS "optionNumber",
+            COALESCE(setup.legacy_setup_code, setup.setup_number::text)
+              AS "setupNo",
+            COALESCE(setup.operation_name, setup.operation_code) AS "setupName",
+            check_row.source_payload AS "sourcePayload",
+            (SELECT count(*)::integer
+              FROM quality.hourly_check_readings reading
+              WHERE reading.hourly_check_id = check_row.id
+                AND lower(reading.result) = 'ok') AS "okCount",
+            (SELECT count(*)::integer
+              FROM quality.hourly_check_readings reading
+              WHERE reading.hourly_check_id = check_row.id
+                AND lower(reading.result) IN ('not ok', 'ng')) AS "ngCount"
+          FROM quality.hourly_checks check_row
+          JOIN manufacturing.work_orders work_order
+            ON work_order.id = check_row.work_order_id
+          JOIN catalog.items item ON item.id = work_order.item_id
+          JOIN manufacturing.operation_setups setup
+            ON setup.id = check_row.operation_setup_id
+          JOIN manufacturing.route_options route ON route.id = setup.route_option_id
+          JOIN manufacturing.production_floors floor
+            ON floor.id = route.production_floor_id
+          LEFT JOIN catalog.machines machine ON machine.id = check_row.machine_id
+          LEFT JOIN catalog.machine_types machine_type
+            ON machine_type.id = machine.machine_type_id
+          LEFT JOIN identity.users checker ON checker.id = check_row.checker_user_id
+          WHERE check_row.organization_id = $1 AND floor.code = $2
+            AND check_row.reversed_at IS NULL
+          ORDER BY check_row.checked_at DESC, check_row.id DESC
+          LIMIT 1000
+        `,
+        [input.organizationId, productionFloorCode]
+      )
+      const historyRows = history.rows.map(({ sourcePayload, ...row }) => {
+        const payload = payloadRecord(sourcePayload)
+        return {
+          ...payload,
+          ...row,
+          prodDate:
+            payload.prodDate ?? row.checkedAt.toISOString().slice(0, 10),
+        }
+      })
+
       let existingCheck: Record<string, unknown> | null = null
       if (input.checkKey) {
         const checks = await pool.query<{
@@ -792,7 +862,7 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
           `
             SELECT check_row.id::text AS "id", check_row.check_key AS "checkId",
               check_row.checked_at AS "checkedAt", check_row.status,
-              COALESCE(check_row.legacy_checker, checker.email) AS "checkedBy",
+              COALESCE(checker.email, check_row.legacy_checker) AS "checkedBy",
               work_order.job_card_number AS "jobCard",
               work_order.job_card_number AS "jcNo", item.uid AS "partCode",
               machine.machine_number AS "machine", machine_type.name AS "machineType",
@@ -870,7 +940,7 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
               return {
                 ...parameterDetails(reading.parameterSnapshot),
                 ...(sourceReading ?? {}),
-                actualReading: readingValue(reading),
+                actualReading: qualityReadingValue(reading),
                 code: reading.code,
                 parameterName: reading.parameterName,
                 result: reading.result,
@@ -884,6 +954,7 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
 
       return {
         existingCheck,
+        historyRows,
         qualityParameterMasterRows,
         runningRows: runningRows.rows,
       }
@@ -1605,15 +1676,23 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
           input.machineNumber,
           normalizeProductionFloorCode(input.productionFloorCode)
         )
-        const existing = await client.query<{ id: string }>(
+        const existing = await client.query<{ id: string; status: string }>(
           `
-            SELECT id FROM quality.hourly_checks
+            SELECT id, status FROM quality.hourly_checks
             WHERE organization_id = $1 AND lower(check_key) = lower($2)
               AND operation_setup_id = $3
               AND reversed_at IS NULL FOR UPDATE
           `,
           [input.organizationId, checkKey, context.operation_setup_id]
         )
+        if (
+          existing.rows[0] &&
+          !["draft", "in progress", "pending"].includes(
+            existing.rows[0].status.trim().toLowerCase()
+          )
+        ) {
+          throw new Error("Completed hourly quality checks cannot be edited.")
+        }
         const result = existing.rows[0]
           ? await client.query<{ id: string }>(
               `

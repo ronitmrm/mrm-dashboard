@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   duplicateQualityParameterCombination,
+  qualityInspectionReadingResult,
   mergeQualityInspectionParameterRows,
 } from "./quality-parameter-set"
 
@@ -49,5 +50,17 @@ describe("quality inspection parameter sets", () => {
     ).toEqual([
       expect.objectContaining({ code: "P1", parameterName: "Total Length" }),
     ])
+  })
+
+  it("classifies numeric readings by tolerance even when a saved snapshot says text", () => {
+    const parameter = {
+      inputType: "text",
+      specification: "30.00",
+      toleranceMinus: "0.25",
+      tolerancePlus: "0.25",
+    }
+
+    expect(qualityInspectionReadingResult(parameter, "29.97")).toBe("OK")
+    expect(qualityInspectionReadingResult(parameter, "29.70")).toBe("Not OK")
   })
 })

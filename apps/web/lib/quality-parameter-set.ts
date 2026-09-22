@@ -18,6 +18,38 @@ export function normalizeQualityParameterInputType(value: unknown) {
   return inputType === "text" ? "text" : "number"
 }
 
+export function qualityInspectionParameterInputType(
+  row: QualityInspectionParameterRow
+) {
+  const inputType = normalizeQualityParameterInputType(row.inputType)
+  return inputType === "number" && hasNonNumericQualityTolerance(row)
+    ? "text"
+    : inputType
+}
+
+export function qualityInspectionReadingResult(
+  parameter: QualityInspectionParameterRow,
+  value: unknown
+) {
+  const reading = String(value ?? "").trim()
+  if (!reading) return ""
+  if (qualityInspectionParameterInputType(parameter) === "pass_fail") {
+    const normalized = reading.toLowerCase()
+    return normalized === "ok" || normalized === "pass" ? "OK" : "Not OK"
+  }
+
+  const numericReading = Number(reading)
+  const specification = Number(String(parameter.specification ?? "").trim())
+  if (!Number.isFinite(numericReading) || !Number.isFinite(specification)) {
+    return "Recorded"
+  }
+  const plus = Number(String(parameter.tolerancePlus ?? 0).trim())
+  const minus = Number(String(parameter.toleranceMinus ?? 0).trim())
+  const lower = specification - (Number.isFinite(minus) ? minus : 0)
+  const upper = specification + (Number.isFinite(plus) ? plus : 0)
+  return numericReading >= lower && numericReading <= upper ? "OK" : "Not OK"
+}
+
 function normalized(value: unknown) {
   return String(value ?? "").trim().toLocaleLowerCase("en-IN")
 }
