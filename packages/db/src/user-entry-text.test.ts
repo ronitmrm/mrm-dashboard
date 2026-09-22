@@ -11,3 +11,13 @@ test("preserves the raw-material rejection planning action enum", () => {
     planningAction: "wait_for_replacement",
   })
 })
+
+test("preserves the parallel-machine assignment mode enum", () => {
+  expect(
+    normalizeUserEnteredPayload({
+      assignmentMode: "add_parallel_machine",
+    })
+  ).toEqual({
+    assignmentMode: "add_parallel_machine",
+  })
+})

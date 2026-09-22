@@ -109,6 +109,40 @@ describe("plannerActionHistoryRows", () => {
     ])
   })
 
+  test("identifies an additive parallel-machine decision", () => {
+    expect(
+      plannerActionHistoryRows([
+        {
+          actionType: "Machine Switch",
+          assignmentMode: "add_parallel_machine",
+          createdAt: "2026-09-22T12:09:37.735Z",
+          jobCardNumber: "P2132",
+          queuePlacements: [
+            {
+              targetPartCode: "R131",
+              targetSourceMachineNumber: "CNC-40",
+            },
+          ],
+          reason: "Use Of The Capacity",
+          setupNumber: 1,
+          toMachineNumber: "CNC-39",
+        },
+      ])
+    ).toEqual([
+      {
+        Action: "Add Parallel Machine",
+        Date: "2026-09-22T12:09:37.735Z",
+        "Job Card": "P2132",
+        "Part Code": "R131",
+        Setups: "1",
+        "Machine / Route": "CNC-40 + CNC-39",
+        Decision: "Parallel machine added",
+        Reason: "Use Of The Capacity",
+        Notes: "—",
+      },
+    ])
+  })
+
   test("shows the selected route and remaining-setup decisions", () => {
     expect(
       plannerActionHistoryRows([
