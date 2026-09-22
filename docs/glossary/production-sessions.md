@@ -74,7 +74,29 @@ Shop Floor starts and closes sessions. Quality may also close CNC sessions. Qual
 
 Close reasons are Shift Ends, Shift Change, Operator Change, Item Complete, Job / Setup Change, and Manual Stop. Shift Ends is the default because it is the normal close path.
 
+A Counter session requires its end counter before it can close. A Weight session
+may close after its work ends even when weighing is not yet practical. It then
+has Weight Pending output: the machine and operator are released for the next
+session, while produced, good and efficiency values remain provisional until an
+authorized user records the weight.
+
 An open session changes its displayed operational status to Closing Required as soon as its scheduled shift end passes. Closing Required sessions remain technically open, stay visible in the Session Register, can be isolated with the Status filter, and expose an immediate Close action so missed entries can be corrected using the normal close workflow. The system does not invent output or silently close them.
+
+## Closed-session corrections
+
+A closed Production Session may be corrected without reopening it. Authorized
+users may correct its end time and method-specific output, add a missed bounded
+downtime interval, or add a missed rejection entry. Every closed-session
+correction requires a reason and records the actor, correction time, before and
+after evidence. The original Session Reference and production context remain
+unchanged.
+
+Correcting end time or adding downtime recalculates productive runtime and target.
+Correcting Weight or Counter output recalculates total and good pieces. Adding a
+rejection recalculates good pieces. Efficiency always follows the corrected total
+pieces and target. A correction may not move the end before recorded downtime,
+overlap the next session on the same machine, make rejection exceed produced
+pieces, or break a counter already carried into a later session.
 
 ## Downtime lifecycle
 
@@ -144,8 +166,10 @@ Cycle Time Master revisions apply to the selected unit, item, route and setup.
 Open production sessions adopt the revised cycle time, and planning refreshes
 remaining-duration and completion estimates from the current master. The open
 session's target is calculated using the revised cycle time for its runtime.
-Closed sessions and recorded output/targets remain unchanged. New sessions read
-the current master on the server, even if the start form was opened earlier.
+Closed sessions keep their saved cycle standard and are never rewritten by a
+Cycle Time Master revision. Their output and target change only through an
+explicit audited closed-session correction. New sessions read the current master
+on the server, even if the start form was opened earlier.
 After accepted good production exists, planning subtracts that immutable output
 from the setup quantity and forecasts only the balance at the revised cycle time,
 effective no earlier than the revision date and the next working date after the
@@ -160,8 +184,9 @@ Rejected pieces are included in total produced pieces. Good pieces equal total p
 
 Session target quantity is the whole-piece capacity for productive runtime:
 `floor((elapsed session time - downtime) / cycle time)`. Open-session targets
-use the current runtime and cycle standard; the target saved when a session is
-closed remains immutable with its production entry.
+use the current runtime and cycle standard. A closed session keeps its saved
+cycle standard; its target changes only when an audited end-time or downtime
+correction changes the recorded productive runtime.
 
 Session efficiency compares total produced pieces, including rejected pieces,
 with that target: `total produced / target quantity × 100`. It may exceed 100%

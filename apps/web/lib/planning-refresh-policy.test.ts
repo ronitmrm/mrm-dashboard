@@ -12,6 +12,9 @@ describe("planning refresh policy", () => {
     expect(shouldQueuePlanningRefresh("data-entry", { entryType: "software_raw" })).toBe(true);
     expect(shouldQueuePlanningRefresh("data-entry", { entryType: "production_session_start" })).toBe(true);
     expect(shouldQueuePlanningRefresh("data-entry", { entryType: "production_session_close" })).toBe(true);
+    expect(shouldQueuePlanningRefresh("data-entry", { entryType: "production_session_correct" })).toBe(true);
+    expect(shouldQueuePlanningRefresh("data-entry", { entryType: "production_session_downtime" })).toBe(true);
+    expect(shouldQueuePlanningRefresh("data-entry", { entryType: "production_session_rejection" })).toBe(true);
     expect(shouldQueuePlanningRefresh("data-entry", { entryType: "shop_floor_status", payload: { stage: "operator_started" } })).toBe(true);
     expect(shouldQueuePlanningRefresh("data-entry", { entryType: "shop_floor_status", payload: { stage: "item_complete" } })).toBe(true);
     expect(shouldQueuePlanningRefresh("data-entry", { entryType: "rm_inward" })).toBe(true);
