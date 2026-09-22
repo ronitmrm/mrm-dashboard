@@ -297,15 +297,8 @@ export const dashboardNavigation: readonly DashboardNavigationItem[] = [
     href: dashboardTabHref("qualityControlTasksTab"),
     icon: ShieldCheck,
     id: "qualityControlTasksTab",
-    subtitle: "Setup Approvals",
+    subtitle: "Inspections And Downtime",
     title: "Quality Control",
-  },
-  {
-    href: dashboardTabHref("firstPieceInspectionTab"),
-    icon: Gauge,
-    id: "firstPieceInspectionTab",
-    subtitle: "Quality Readings",
-    title: "First Piece Inspection",
   },
   {
     href: dashboardTabHref("maintenanceTab"),
