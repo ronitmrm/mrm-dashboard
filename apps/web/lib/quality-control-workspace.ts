@@ -1,3 +1,5 @@
+import { qualityInspectionReadingResult } from "./quality-parameter-set"
+
 export type QualityWorkspaceRecord = Record<string, unknown>
 
 export type QualityDowntimeRestartTask = {
@@ -14,15 +16,20 @@ export type QualityDowntimeRestartTask = {
 
 export type FirstPieceReportDimension = {
   code: string
+  inputType: string
   name: string
   readings: string[]
+  result: string
   specification: string
   tolerance: string
+  toleranceMinus: string
+  tolerancePlus: string
 }
 
 export type FirstPieceReportView = {
   approvedBy: string
   dimensions: FirstPieceReportDimension[]
+  id: string
   inspectedAt: string
   jobCardNumber: string
   machineNumber: string
@@ -107,8 +114,60 @@ function tolerance(dimension: QualityWorkspaceRecord) {
 export function firstPieceReportView(
   row: QualityWorkspaceRecord
 ): FirstPieceReportView {
+  const dimensions = records(row.dimensions).map((dimension) => {
+    const readings = Array.isArray(dimension.readings)
+      ? dimension.readings.map(text)
+      : []
+    const inputType = first(dimension, "inputType")
+    const specification = first(dimension, "specification", "nominalValue")
+    const toleranceMinus = first(dimension, "toleranceMinus", "lowerTolerance")
+    const tolerancePlus = first(dimension, "tolerancePlus", "upperTolerance")
+    const results = readings.map((reading) =>
+      qualityInspectionReadingResult(
+        {
+          inputType,
+          specification,
+          toleranceMinus,
+          tolerancePlus,
+        },
+        reading
+      )
+    )
+    const result = results.some((readingResult) => readingResult === "Not OK")
+      ? "Not OK"
+      : results.length > 0 &&
+          results.every((readingResult) => readingResult === "OK")
+        ? "OK"
+        : results.some(Boolean)
+          ? "Recorded"
+          : "Pending"
+
+    return {
+      code: first(dimension, "parameterCode", "code", "uid"),
+      inputType,
+      name: first(dimension, "parameterName", "description", "name"),
+      readings,
+      result,
+      specification,
+      tolerance: tolerance(dimension),
+      toleranceMinus,
+      tolerancePlus,
+    }
+  })
+  const jobCardNumber = first(row, "jcNo", "jobCardNumber", "jobCard")
+  const machineNumber = first(row, "machine", "machineNumber", "machineNo")
+  const optionNumber = first(row, "optionNumber", "optionNo")
+  const partCode = first(row, "partCode", "partNo", "itemCode")
+  const setupNumber = first(row, "setupNo", "setupNumber", "operationSetupCode")
+
   return {
     approvedBy: first(row, "approvedBy", "inspectedBy", "legacyInspector"),
+    dimensions,
+    id:
+      first(row, "reportId", "key", "id", "_id") ||
+      [jobCardNumber, partCode, optionNumber, setupNumber, machineNumber, "fpi"]
+        .map((value) => value.toLowerCase())
+        .join("|"),
     inspectedAt: first(
       row,
       "taskCompletedAt",
@@ -116,21 +175,12 @@ export function firstPieceReportView(
       "inspectedAt",
       "createdAt"
     ),
-    jobCardNumber: first(row, "jcNo", "jobCardNumber", "jobCard"),
-    machineNumber: first(row, "machine", "machineNumber", "machineNo"),
-    optionNumber: first(row, "optionNumber", "optionNo"),
-    partCode: first(row, "partCode", "partNo", "itemCode"),
+    jobCardNumber,
+    machineNumber,
+    optionNumber,
+    partCode,
     remark: first(row, "remark", "notes"),
-    setupNumber: first(row, "setupNo", "setupNumber", "operationSetupCode"),
+    setupNumber,
     status: first(row, "status", "result") || "Approved",
-    dimensions: records(row.dimensions).map((dimension) => ({
-      code: first(dimension, "parameterCode", "code", "uid"),
-      name: first(dimension, "parameterName", "description", "name"),
-      readings: Array.isArray(dimension.readings)
-        ? dimension.readings.map(text)
-        : [],
-      specification: first(dimension, "specification", "nominalValue"),
-      tolerance: tolerance(dimension),
-    })),
   }
 }
