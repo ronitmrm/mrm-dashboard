@@ -382,6 +382,15 @@ describe("workforce, quality, and maintenance workflows", () => {
         ],
       })
     )
+    expect(hourlyPage.historyRows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          checkId: `HOURLY-${suffix}`,
+          hourSlot: "10:00-11:00",
+          status: "OK",
+        }),
+      ])
+    )
 
     const setupPage = await quality.readSetupChecklistPage({
       organizationId,
@@ -562,7 +571,9 @@ describe("workforce, quality, and maintenance workflows", () => {
       tolerancePlus: "0", toleranceMinus: "0", inputType: "text", sequence: 2, actualReading: "M10",
     }] })
     await quality.recordFirstPieceInspection(firstPiece)
-    await quality.recordHourlyCheck(hourly)
+    await expect(quality.recordHourlyCheck(hourly)).rejects.toThrow(
+      "Completed hourly quality checks cannot be edited"
+    )
     const reports = await pool.query(`SELECT id, source_payload FROM quality.first_piece_inspections WHERE id = ANY($1::uuid[])`, [[oldFpir.id, newFpir.id]])
     expect(reports.rows.find((row) => row.id === oldFpir.id)?.source_payload.dimensions[0]).toMatchObject({
       parameterName: "ECN length", specification: "25", inputType: "number", remark: "Original", readings: [25],

@@ -210,8 +210,9 @@ import { machineIssueNeedsReview, openMachineIssues, plannerPendingMachineIssueR
 import {
   duplicateQualityParameterCombination,
   hasNonNumericQualityTolerance,
-  normalizeQualityParameterInputType,
   mergeQualityInspectionParameterRows,
+  qualityInspectionParameterInputType as qualityParameterInputType,
+  qualityInspectionReadingResult as qualityReadingResult,
 } from "@/lib/quality-parameter-set"
 import {
   productionDispatchApproverOptions,
@@ -1171,10 +1172,11 @@ function HourlyQualityCheckShell({
     `/api/hourly-quality?floor=${encodeURIComponent(productionFloorCode)}`
   )
   const hourlyQualityPageData = hourlyQualityPage.data
+  const [view, setView] = useState<"entry" | "register">("entry")
   const [prodDate, setProdDate] = useState(() => istDateValue())
-  const [shift, setShift] = useState("Day")
   const [hourSlot, setHourSlot] = useState(() => currentHourSlot())
   const [selectedKey, setSelectedKey] = useState("")
+  const [reviewCheckKey, setReviewCheckKey] = useState("")
   const [readings, setReadings] = useState<Record<string, string>>({})
   const [remarks, setRemarks] = useState<Record<string, string>>({})
   const [isSaving, setIsSaving] = useState(false)
@@ -1194,6 +1196,10 @@ function HourlyQualityCheckShell({
   const runningRows = useMemo(
     () => asArray(hourlyQualityPageRecord.runningRows),
     [hourlyQualityPageRecord.runningRows]
+  )
+  const historyRows = useMemo(
+    () => asArray(hourlyQualityPageRecord.historyRows),
+    [hourlyQualityPageRecord.historyRows]
   )
   const selectedRow = useMemo(
     () => runningRows.find((row) => shopFloorPlanKey(row) === selectedKey),
@@ -1215,9 +1221,15 @@ function HourlyQualityCheckShell({
         : [],
     [qualityParameterRows, selectedRow]
   )
-  const selectedCheckKey = selectedRow
-    ? hourlyQualityCheckId(selectedRow, prodDate, shift, hourSlot)
-    : ""
+  // Retain the legacy key segment so existing saved checks remain discoverable.
+  const shift = "Day"
+  const selectedCheckKey =
+    view === "entry"
+      ? reviewCheckKey ||
+        (selectedRow
+          ? hourlyQualityCheckId(selectedRow, prodDate, shift, hourSlot)
+          : "")
+      : ""
   const existingCheckPage = usePostgresOperationalPage(
     selectedCheckKey
       ? `/api/hourly-quality?checkKey=${encodeURIComponent(selectedCheckKey)}&floor=${encodeURIComponent(productionFloorCode)}`
@@ -1233,6 +1245,8 @@ function HourlyQualityCheckShell({
   const parameters = existingCheck
     ? asArray(existingCheck.readings)
     : existingCheck === null ? currentParameters : []
+  const formRow = existingCheck || selectedRow
+  const completedCheck = Boolean(existingCheck)
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -1289,6 +1303,7 @@ function HourlyQualityCheckShell({
 
   const canSave = Boolean(
     selectedRow &&
+    !completedCheck &&
     performerId &&
     parameters.length &&
     parameters.every((parameter) => {
@@ -1297,6 +1312,23 @@ function HourlyQualityCheckShell({
     })
   )
 
+  function startNewCheck() {
+    setView("entry")
+    setReviewCheckKey("")
+    setSelectedKey("")
+    setProdDate(istDateValue())
+    setHourSlot(currentHourSlot())
+    setStatus(null)
+  }
+
+  function reviewHourlyCheck(row: DashboardPayload) {
+    const checkKey = str(row.checkId)
+    if (!checkKey) return
+    setReviewCheckKey(checkKey)
+    setView("entry")
+    setStatus(null)
+  }
+
   return (
     <section className="grid w-full gap-4 text-foreground">
       <div className="mx-auto grid w-full max-w-7xl gap-4">
@@ -1304,72 +1336,125 @@ function HourlyQualityCheckShell({
           <div>
             <h1 className="text-2xl font-semibold">Hourly Quality Check</h1>
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => {
-              window.location.assign(
-                dashboardReturnHref("qualityControlTasksTab")
-              )
-            }}
-          >
-            <LayoutDashboard className="size-4" />
-            Quality Control
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant={view === "entry" ? "default" : "outline"}
+              onClick={startNewCheck}
+            >
+              <CheckCircle2 className="size-4" />
+              New Check
+            </Button>
+            <Button
+              type="button"
+              variant={view === "register" ? "default" : "outline"}
+              onClick={() => setView("register")}
+            >
+              <ListChecks className="size-4" />
+              Check Register
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                window.location.assign(
+                  dashboardReturnHref("qualityControlTasksTab")
+                )
+              }}
+            >
+              <LayoutDashboard className="size-4" />
+              Quality Control
+            </Button>
+          </div>
         </div>
-        {isSaving ? (
-          <ProcessingNotice message="Saving hourly quality check..." />
-        ) : null}
-        <fieldset aria-busy={isSaving} className="contents" disabled={isSaving}>
+        {view === "register" ? (
+          <HourlyQualityCheckRegister
+            rows={historyRows}
+            onReview={reviewHourlyCheck}
+          />
+        ) : (
+          <>
+            {isSaving ? (
+              <ProcessingNotice message="Saving hourly quality check..." />
+            ) : null}
+            <fieldset aria-busy={isSaving} className="contents" disabled={isSaving}>
           <SectionCard>
-            <CardContent className="grid gap-3 pt-4 md:grid-cols-5">
-              <LabeledInput
-                label="Date"
-                value={prodDate}
-                onChange={setProdDate}
-                type="date"
-              />
-              <LabeledSelect
-                label="Shift"
-                value={shift}
-                onChange={setShift}
-                options={["Day", "Night"]}
-              />
-              <LabeledSelect
-                label="Machine No."
-                value={selectedKey}
-                onChange={setSelectedKey}
-                options={runningRows.map((row) => ({
-                  value: shopFloorPlanKey(row),
-                  label: `${displayValue(row.machine)} - ${itemCode(row)} / setup ${displayValue(row.setupNo)}`,
-                }))}
-                placeholder="Select Machine"
-              />
-              <LabeledSelect
-                label="Hour Slot"
-                value={hourSlot}
-                onChange={setHourSlot}
-                options={hourSlotOptions()}
-              />
+            <CardContent className="grid gap-3 pt-4 md:grid-cols-4">
+              {reviewCheckKey ? (
+                <LabeledInput
+                  label="Date"
+                  value={str(existingCheck?.prodDate)}
+                  onChange={() => {}}
+                  readOnly
+                />
+              ) : (
+                <LabeledInput
+                  label="Date"
+                  value={prodDate}
+                  onChange={setProdDate}
+                  type="date"
+                />
+              )}
+              {reviewCheckKey ? (
+                <LabeledInput
+                  label="Machine No."
+                  value={str(existingCheck?.machine)}
+                  onChange={() => {}}
+                  readOnly
+                />
+              ) : (
+                <LabeledSelect
+                  label="Machine No."
+                  value={selectedKey}
+                  onChange={setSelectedKey}
+                  options={runningRows.map((row) => ({
+                    value: shopFloorPlanKey(row),
+                    label: `${displayValue(row.machine)} - ${itemCode(row)} / setup ${displayValue(row.setupNo)}`,
+                  }))}
+                  placeholder="Select Machine"
+                />
+              )}
+              {reviewCheckKey ? (
+                <LabeledInput
+                  label="Hour Slot"
+                  value={str(existingCheck?.hourSlot)}
+                  onChange={() => {}}
+                  readOnly
+                />
+              ) : (
+                <LabeledSelect
+                  label="Hour Slot"
+                  value={hourSlot}
+                  onChange={setHourSlot}
+                  options={hourSlotOptions()}
+                />
+              )}
               <label className="grid gap-1 text-xs font-medium text-muted-foreground">
                 Checked By
-                <Input value={performerDisplay || "Loading user..."} readOnly />
+                <Input
+                  value={
+                    str(existingCheck?.checkedBy) ||
+                    performerDisplay ||
+                    "Loading user..."
+                  }
+                  readOnly
+                />
               </label>
             </CardContent>
           </SectionCard>
-          {selectedRow ? (
+          {formRow ? (
             <SectionCard>
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">
-                  {displayValue(selectedRow.machine)} Running Details
+                  {displayValue(formRow.machine)} Check Details
                 </CardTitle>
               </CardHeader>
               <CardContent className="grid gap-2 text-sm md:grid-cols-5">
-                <TileField label="Item Code" value={itemCode(selectedRow)} />
-                <TileField label="Jc No." value={jobCardNumber(selectedRow)} />
-                <TileField label="Option" value={selectedRow.optionNumber} />
-                <TileField label="Setup No." value={selectedRow.setupNo} />
-                <TileField label="Setup Name" value={selectedRow.setupName} />
+                <TileField label="Item Code" value={itemCode(formRow)} />
+                <TileField label="Jc No." value={jobCardNumber(formRow)} />
+                <TileField label="Option" value={formRow.optionNumber} />
+                <TileField label="Setup No." value={formRow.setupNo} />
+                <TileField label="Setup Name" value={formRow.setupName} />
               </CardContent>
             </SectionCard>
           ) : null}
@@ -1378,16 +1463,14 @@ function HourlyQualityCheckShell({
               <CardTitle>Inspection Readings</CardTitle>
               <CardDescription>
                 {existingCheck
-                  ? "Existing Hourly Card Loaded For Editing."
-                  : "Readings Are Saved Against The Selected Date, Shift, Hour, Machine, Item, And Setup."}
+                  ? "Completed Hourly Check Loaded For Review. Saved Readings Are Locked."
+                  : "Readings Are Saved Against The Selected Date, Hour, Machine, Item, And Setup."}
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4">
-              {selectedRow &&
-              existingCheck === undefined &&
-              selectedCheckKey ? (
+              {existingCheck === undefined && selectedCheckKey ? (
                 <Skeleton className="h-24 w-full" />
-              ) : selectedRow && parameters.length ? (
+              ) : formRow && parameters.length ? (
                 <div className="rounded-lg border min-w-0">
                   <OperationalTable>
                     <TableHeader>
@@ -1444,6 +1527,7 @@ function HourlyQualityCheckShell({
                               "pass_fail" ? (
                                 <SearchableSelect
                                   className={`h-9 w-full rounded-md border bg-background px-3 text-sm ${readingClass}`}
+                                  disabled={completedCheck}
                                   value={readings[code] ?? ""}
                                   onChange={(event) =>
                                     setReadings((current) => ({
@@ -1459,6 +1543,7 @@ function HourlyQualityCheckShell({
                               ) : (
                                 <Input
                                   className={readingClass}
+                                  disabled={completedCheck}
                                   value={readings[code] ?? ""}
                                   onChange={(event) =>
                                     setReadings((current) => ({
@@ -1477,10 +1562,20 @@ function HourlyQualityCheckShell({
                               )}
                             </TableCell>
                             <TableCell>
-                              <StatusBadge value={result || "Pending"} />
+                              <StatusBadge
+                                tone={
+                                  resultTone === "good"
+                                    ? "positive"
+                                    : resultTone === "bad"
+                                      ? "danger"
+                                      : "neutral"
+                                }
+                                value={result || "Pending"}
+                              />
                             </TableCell>
                             <TableCell>
                               <Input
+                                disabled={completedCheck}
                                 value={remarks[code] ?? ""}
                                 onChange={(event) =>
                                   setRemarks((current) => ({
@@ -1496,7 +1591,7 @@ function HourlyQualityCheckShell({
                     </TableBody>
                   </OperationalTable>
                 </div>
-              ) : selectedRow ? (
+              ) : formRow ? (
                 <EmptyRowsMessage>
                   No Active Quality Parameter Master Rows Match This Item,
                   Option, And Setup.
@@ -1521,14 +1616,109 @@ function HourlyQualityCheckShell({
                   onClick={saveHourlyCheck}
                 >
                   <CheckCircle2 className="size-4" />
-                  {isSaving ? "Saving" : "Save Hourly Check"}
+                  {completedCheck
+                    ? "Completed"
+                    : isSaving
+                      ? "Saving"
+                      : "Save Hourly Check"}
                 </Button>
               </div>
             </CardContent>
           </SectionCard>
-        </fieldset>
+            </fieldset>
+          </>
+        )}
       </div>
     </section>
+  )
+}
+
+function HourlyQualityCheckRegister({
+  rows,
+  onReview,
+}: {
+  rows: DashboardPayload[]
+  onReview: (row: DashboardPayload) => void
+}) {
+  return (
+    <SectionCard>
+      <CardHeader>
+        <CardTitle>Hourly Check Register</CardTitle>
+        <CardDescription>
+          Completed Hourly Checks Are Locked And Available For Review.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {rows.length ? (
+          <div className="rounded-lg border min-w-0">
+            <OperationalTable
+              containerClassName="max-h-[65vh]"
+              filterStorageKey="hourly-quality-check-register"
+            >
+              <TableHeader className="sticky top-0 z-10 bg-background">
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Hour Slot</TableHead>
+                  <TableHead>Machine</TableHead>
+                  <TableHead>Job Card</TableHead>
+                  <TableHead>Part Number</TableHead>
+                  <TableHead>Checked By</TableHead>
+                  <TableHead>Result</TableHead>
+                  <TableHead>Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.map((row) => {
+                  const result =
+                    Number(row.ngCount) > 0 ||
+                    qualityResultTone(row.status) === "bad"
+                      ? "Not OK"
+                      : "OK"
+                  return (
+                    <TableRow key={str(row.checkId || row.id)}>
+                      <TableCell className="whitespace-nowrap">
+                        {displayValue(row.prodDate)}
+                      </TableCell>
+                      <TableCell>{displayValue(row.hourSlot)}</TableCell>
+                      <TableCell className="font-medium">
+                        {displayValue(row.machine)}
+                      </TableCell>
+                      <TableCell>{jobCardNumber(row)}</TableCell>
+                      <TableCell>
+                        {itemCode(row)}
+                        <div className="text-xs text-muted-foreground">
+                          Setup {displayValue(row.setupNo)}
+                        </div>
+                      </TableCell>
+                      <TableCell>{displayValue(row.checkedBy)}</TableCell>
+                      <TableCell>
+                        <StatusBadge
+                          tone={result === "OK" ? "positive" : "danger"}
+                          value={result}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          className="h-9"
+                          type="button"
+                          variant="outline"
+                          onClick={() => onReview(row)}
+                        >
+                          <Eye className="size-4" />
+                          Review
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </OperationalTable>
+          </div>
+        ) : (
+          <EmptyRowsMessage>No Hourly Checks Have Been Saved Yet.</EmptyRowsMessage>
+        )}
+      </CardContent>
+    </SectionCard>
   )
 }
 
@@ -16688,11 +16878,13 @@ function LabeledInput({
   value,
   onChange,
   type = "text",
+  readOnly = false,
 }: {
   label: string
   value: string
   onChange: (value: string) => void
   type?: string
+  readOnly?: boolean
 }) {
   return (
     <label className="grid gap-1 text-xs font-medium text-muted-foreground">
@@ -16700,6 +16892,7 @@ function LabeledInput({
       <Input
         value={value}
         type={type}
+        readOnly={readOnly}
         onChange={(event) => onChange(event.target.value)}
       />
     </label>
@@ -16824,11 +17017,6 @@ function qualityParameterName(row: DashboardPayload) {
   )
 }
 
-function qualityParameterInputType(row: DashboardPayload) {
-  const inputType = normalizeQualityParameterInputType(row.inputType)
-  return inputType === "number" && hasNonNumericQualityTolerance(row) ? "text" : inputType
-}
-
 function qualityParameterTolerance(row: DashboardPayload) {
   const plus = str(row.tolerancePlus || row["TOLERANCE +"] || row["TOL +"])
   const minus = str(row.toleranceMinus || row["TOLERANCE -"] || row["TOL -"])
@@ -16865,32 +17053,9 @@ function qualityParameterMatchesSetup(
   )
 }
 
-function qualityReadingResult(parameter: DashboardPayload, value: unknown) {
-  const reading = str(value)
-  if (!reading) return ""
-  if (qualityParameterInputType(parameter) === "pass_fail")
-    return qualityPassFailResult(reading)
-  if (qualityParameterInputType(parameter) !== "number") return "Recorded"
-  const numericReading = Number(reading)
-  const specification = Number(str(parameter.specification))
-  if (!Number.isFinite(numericReading) || !Number.isFinite(specification))
-    return "Recorded"
-  const plus = Number(str(parameter.tolerancePlus || 0))
-  const minus = Number(str(parameter.toleranceMinus || 0))
-  const lower = specification - (Number.isFinite(minus) ? minus : 0)
-  const upper = specification + (Number.isFinite(plus) ? plus : 0)
-  return numericReading >= lower && numericReading <= upper ? "OK" : "Not OK"
-}
-
 function normalizeQualityReadingInput(value: unknown) {
   const reading = str(value)
   return reading.toLowerCase() === "ng" ? "Not OK" : reading
-}
-
-function qualityPassFailResult(value: unknown) {
-  const reading = str(value).toLowerCase()
-  if (!reading) return ""
-  return reading === "ok" || reading === "pass" ? "OK" : "Not OK"
 }
 
 function qualityResultTone(result: unknown) {

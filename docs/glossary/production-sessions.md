@@ -24,6 +24,10 @@ and hourly checks use the current active master. Saved inspections retain a
 snapshot of every parameter's definition and their recorded readings/results;
 master edits never rewrite that evidence. Reopening a saved hourly check uses
 its saved definitions, including parameters subsequently removed from the master.
+Saving an hourly check completes it with an overall OK or Not OK result. A
+completed hourly check is review-only: its readings and remarks cannot be edited
+or replaced. The Hourly Check Register lists this same saved evidence for later
+review; it is not a separate copy of the inspection.
 
 Setup Checklist masters belong to one production unit. Codes and revisions are
 unique within that unit; tasks may only select and complete that unit's templates.
