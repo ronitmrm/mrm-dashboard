@@ -4438,6 +4438,8 @@ function shouldHoldMachineQueuePosition(ahead: Record<string, unknown>, candidat
   if (priorityQueueState(ahead) !== "idle") return true;
   if (machineUnavailableKeepsRowBefore(candidate, ahead)) return true;
   if (machineUnavailablePlacesRowBefore(candidate, ahead)) return false;
+  // A reviewed placement ahead is also a barrier when filling an earlier gap.
+  if (machineUnavailablePlacesRowBefore(ahead, candidate)) return true;
   return canPriorityPreempt(candidate, ahead);
 }
 

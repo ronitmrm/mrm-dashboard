@@ -190,6 +190,41 @@ test("planner can add an idle parallel machine without stopping current machines
     .toBe(29_001)
 })
 
+test("planner-added first-position parallel work is ready today ahead of older unstarted work", () => {
+  vi.useFakeTimers()
+  vi.setSystemTime(new Date("2026-09-22T12:30:00Z"))
+  const createdAt = "2026-09-22T12:09:00Z"
+  const entry = (entryType: string, payload: Record<string, unknown>) => ({ entryType, payload, createdAt })
+  const dataEntries = [
+    ...[
+      { jcNo: "P2132", partCode: "R131", orderPcs: 6750, rmInwardDate: "2026-09-21", cycleTime: 87 },
+      { jcNo: "P2275", partCode: "M2123B", orderPcs: 1100, rmInwardDate: "2026-09-01", cycleTime: 87 },
+    ].flatMap(({ cycleTime, ...job }) => [
+      entry("work_order", { ...job, optionNumber: "1", rmInwardKg: 1 }),
+      entry("route", { partNo: job.partCode, optionNumber: "1", setupNo: "1", machineType: "CNC", machineFamily: "T42" }),
+      entry("cycle", { partNo: job.partCode, optionNumber: "1", setupNo: "1", cycleTime }),
+    ]),
+    ...["CNC-39", "CNC-40"].map(machineNo => entry("machine_master", { machineNo, machineType: "CNC", machineFamily: "T42", status: "Active" })),
+    entry("shop_floor_status", { jcNo: "P2132", partCode: "R131", optionNumber: "1", setupNo: "1", machine: "CNC-40", stage: "operator_started", completedAt: "2026-09-21T13:24:00Z" }),
+  ]
+  const rows = buildLegacyDashboardSnapshot({
+    productionFloorCode: "cnc", workbookName: "PostgreSQL", productionEntries: [], dataEntries,
+    previousMachinePlanDetailRows: [
+      { jcNo: "P2132", partCode: "R131", optionNumber: "1", setupNo: "1", machine: "CNC-40", routeMachine: "T42" },
+      { jcNo: "P2275", partCode: "M2123B", optionNumber: "1", setupNo: "1", machine: "CNC-39", routeMachine: "T42" },
+    ],
+    planOverrides: [{
+      target: "P2132", setupNo: "1", toMachine: "CNC-39", assignmentMode: "add_parallel_machine", createdAt,
+      queuePlacements: [{ targetJobCardNumber: "P2132", targetPartCode: "R131", targetSetupNumber: 1, targetSourceMachineNumber: "CNC-40", targetMachineNumber: "CNC-39" }],
+    }],
+  }).productionControl.machinePlanDetailRows
+  const added = rows.find(row => row.jcNo === "P2132" && row.machine === "CNC-39")
+  expect(added).toMatchObject({ plannedProductionStartDate: "22-Sept-26", shopFloorTaskReady: true })
+  expect(rows.find(row => row.jcNo === "P2132" && row.machine === "CNC-40"))
+    .toMatchObject({ runningStatus: "Running", shopFloorStage: "operator_started" })
+  expect(rows.find(row => row.jcNo === "P2275")?.plannedProductionStartDate).toBe("27-Sept-26")
+})
+
 test("revised cycle time forecasts only the remaining quantity after recorded production", () => {
   vi.useFakeTimers()
   vi.setSystemTime(new Date("2026-09-07T05:00:00.000Z"))

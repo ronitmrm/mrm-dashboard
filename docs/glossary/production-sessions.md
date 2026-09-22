@@ -213,6 +213,10 @@ This decision is additive: current machines keep their work, no running session
 is stopped, and planning recalculates the shared remaining allocation and
 downstream probable dates across the combined machines. The added machine must
 have no active setup, and its queue position must be reviewed before saving.
+The saved queue position remains binding during recalculation and idle-gap
+filling. Unstarted jobs with earlier material dates cannot pass a setup placed
+ahead of them by the Planner. Position 1 makes a ready setup available today,
+subject to active-machine, WIP, tooling, and machine-unavailability constraints.
 Shop Floor still completes the normal setup, quality approval, and machine-start
 workflow on that machine before production begins.
 
