@@ -63,3 +63,43 @@ export function maintenanceMasterRowsForMachineAssignment(pages: unknown[]) {
 
   return [...byCode.values()]
 }
+
+export function maintenanceDowntimeReasonRows(pages: unknown[]) {
+  const byCode = new Map<string, DashboardRecord>()
+  const pageRecords = pages.map(record)
+  const candidates = [
+    ...pageRecords.flatMap((page) =>
+      rows(record(page.productionControl).rejectionReasonMasterRows)
+    ),
+    ...pageRecords.flatMap((page) => {
+      const entry = record(page.dataEntry)
+      return [
+        ...rows(entry.rejectionReasonMasterRows),
+        ...rows(entry.rows),
+        ...rows(entry.templates),
+      ]
+    }),
+  ].filter(
+    (row) =>
+      row.entryType === "rejection_reason_master" ||
+      (typeof row.rejectionReason === "string" && row.rejectionReason.trim()) ||
+      (typeof row.downtimeReason === "string" && row.downtimeReason.trim())
+  )
+
+  for (const row of candidates) {
+    if (String(row.status ?? "Active").trim().toLowerCase() === "inactive") {
+      continue
+    }
+    const code = String(row.code ?? "").trim().toLowerCase()
+    const name = String(
+      row.rejectionReason ?? row.downtimeReason ?? row.reason ?? row.name ?? ""
+    ).trim()
+    if (code && name) byCode.set(code, row)
+  }
+
+  return [...byCode.values()].sort((left, right) =>
+    String(left.code).localeCompare(String(right.code), undefined, {
+      numeric: true,
+    })
+  )
+}

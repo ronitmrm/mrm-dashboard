@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   maintenanceChecklistRowsForSchedule,
+  maintenanceDowntimeReasonRows,
   maintenanceMasterRowsForMachineAssignment,
 } from "./maintenance-schedule-options"
 
@@ -61,5 +62,19 @@ describe("maintenance schedule checklist options", () => {
         },
       ])
     ).toContainEqual(current)
+  })
+
+  it("includes company-wide downtime reasons from a floor dashboard", () => {
+    const reason = {
+      code: "DC007",
+      rejectionReason: "Hex bent",
+      status: "Active",
+    }
+
+    expect(
+      maintenanceDowntimeReasonRows([
+        { productionControl: { rejectionReasonMasterRows: [reason] } },
+      ])
+    ).toEqual([reason])
   })
 })
