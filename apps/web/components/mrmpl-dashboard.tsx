@@ -11558,14 +11558,26 @@ function MaintenancePanel({
 
   return (
     <section className="grid gap-4">
-      <TrackingSummary
-        tones={["brand", "positive", "warning", "information", "danger"]}
+      <MetricSummary
+        scope="Machine maintenance and Mechanical request records across every production unit."
         items={[
-          ["Machines", formatNumber(machineRows.length)],
-          ["Saved schedules", formatNumber(scheduleRows.length)],
-          ["Due now", formatNumber(dueNowRows.length)],
-          ["Request work", formatNumber(requestRows.length)],
-          ["Open breakdowns", formatNumber(openBreakdownRows.length)],
+          { label: "Machines", tone: "brand", value: machineRows.length },
+          {
+            label: "Saved schedules",
+            tone: "positive",
+            value: scheduleRows.length,
+          },
+          { label: "Due now", tone: "warning", value: dueNowRows.length },
+          {
+            label: "Request work",
+            tone: "information",
+            value: requestRows.length,
+          },
+          {
+            label: "Open breakdowns",
+            tone: "danger",
+            value: openBreakdownRows.length,
+          },
         ]}
       />
       <SectionCard
