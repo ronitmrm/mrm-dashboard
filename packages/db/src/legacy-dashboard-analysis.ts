@@ -3467,7 +3467,12 @@ function machinePlanDetails(
       operationReadyCanPullForward = actualWipBufferAvailable(bufferArgs);
     }
   }
-  const finalizedDetails = finalizeMachineAndSetupSchedule(details, planningCalendar, machineRows);
+  const finalizedDetails = finalizeMachineAndSetupSchedule(
+    details,
+    planningCalendar,
+    machineRows,
+    machineUnavailableWindows,
+  );
   applyToolingTaskReadiness(finalizedDetails, toolingAvailability);
   applyMachineActiveTaskReadiness(finalizedDetails);
   return applyPlannedDateTaskReadiness(finalizedDetails).sort((a, b) =>
@@ -3613,7 +3618,12 @@ function taskBlockersWithoutPlannedDate(value: string) {
   return uniqueTextValues([value]).filter((blocker) => !blocker.toLowerCase().startsWith("planned date not due until"));
 }
 
-function finalizeMachineAndSetupSchedule(details: Array<Record<string, unknown>>, planningCalendar: PlanningCalendar, machineRows: Array<Record<string, unknown>>) {
+function finalizeMachineAndSetupSchedule(
+  details: Array<Record<string, unknown>>,
+  planningCalendar: PlanningCalendar,
+  machineRows: Array<Record<string, unknown>>,
+  machineUnavailableWindows: MachineUnavailableWindow[],
+) {
   let previousSignature = "";
   let lastBalancedMachine = "";
   // Gap balancing moves at most one setup stream per pass. Rotate the next pass
@@ -3623,7 +3633,7 @@ function finalizeMachineAndSetupSchedule(details: Array<Record<string, unknown>>
   for (let iteration = 0; iteration < maximumGapBalancePasses; iteration += 1) {
     refreshSetupDependencyReadyDates(details, planningCalendar);
     rescheduleMachineQueues(details, planningCalendar);
-    if (revertInvalidFamilyIdleGapMoves(details)) {
+    if (revertInvalidFamilyIdleGapMoves(details, machineUnavailableWindows)) {
       previousSignature = "";
       continue;
     }
@@ -3639,7 +3649,7 @@ function finalizeMachineAndSetupSchedule(details: Array<Record<string, unknown>>
   }
   refreshSetupDependencyReadyDates(details, planningCalendar);
   rescheduleMachineQueues(details, planningCalendar);
-  revertInvalidFamilyIdleGapMoves(details);
+  revertInvalidFamilyIdleGapMoves(details, machineUnavailableWindows);
   refreshSetupDependencyReadyDates(details, planningCalendar);
   rescheduleMachineQueues(details, planningCalendar);
   return details;
@@ -3810,14 +3820,24 @@ function isMovablePlannedRow(row: Record<string, unknown>) {
   return rowText(row, "runningStatus").toLowerCase() === "planned";
 }
 
-function revertInvalidFamilyIdleGapMoves(details: Array<Record<string, unknown>>) {
+function revertInvalidFamilyIdleGapMoves(
+  details: Array<Record<string, unknown>>,
+  machineUnavailableWindows: MachineUnavailableWindow[],
+) {
   let reverted = false;
   for (const row of details) {
     if (rowText(row, "machineAssignment") !== "Family idle gap balance") continue;
     const targetEnd = parseDate(rowText(row, "familyIdleGapTargetEnd"));
+    const finalStart = parseDate(rowText(row, "plannedProductionStartDate", "setupPlannedDate", "plannedDate"));
     const finalEnd = parseDate(rowText(row, "plannedProductionEndDate", "setupPlannedDate", "plannedDate"));
-    if (!targetEnd || !finalEnd || finalEnd <= targetEnd) continue;
     const targetMachine = rowText(row, "machine");
+    if (!targetEnd || !finalStart || !finalEnd) continue;
+    const overlapsUnavailableWindow = Boolean(firstOverlappingMachineUnavailableWindow(
+      machineUnavailableWindowsFor(machineUnavailableWindows, targetMachine),
+      finalStart,
+      finalEnd,
+    ));
+    if (finalEnd <= targetEnd && !overlapsUnavailableWindow) continue;
     const fromMachine = rowText(row, "familyIdleGapFromMachine");
     if (!fromMachine) continue;
     row.machine = fromMachine;
