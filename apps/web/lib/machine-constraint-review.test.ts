@@ -1,6 +1,44 @@
 import { describe, expect, it } from "vitest";
 
-import { machineConstraintQueueReview } from "./machine-constraint-review";
+import {
+  machineConstraintAffectedRows,
+  machineConstraintQueueReview,
+} from "./machine-constraint-review";
+
+describe("machineConstraintAffectedRows", () => {
+  it("selects the full machine plan when the planner chooses Shift All", () => {
+    const affected = machineConstraintAffectedRows(
+      [
+        {
+          jcNo: "P1412",
+          machine: "CNC-11",
+          plannedProductionStartDate: "22-Sept-26",
+          plannedProductionEndDate: "22-Sept-26",
+        },
+        {
+          jcNo: "P1469",
+          machine: "CNC-11",
+          plannedProductionStartDate: "26-Sept-26",
+          plannedProductionEndDate: "28-Sept-26",
+        },
+        {
+          jcNo: "P9999",
+          machine: "CNC-12",
+          plannedProductionStartDate: "21-Sept-26",
+          plannedProductionEndDate: "21-Sept-26",
+        },
+      ],
+      {
+        machineNo: "CNC-11",
+        rescheduleAction: "shift_all",
+        unavailableFrom: "2026-09-21",
+        unavailableTo: "",
+      }
+    );
+
+    expect(affected.map((row) => row.jcNo)).toEqual(["P1412", "P1469"]);
+  });
+});
 
 describe("machineConstraintQueueReview", () => {
   it("shows destination and downstream queues before saving a machine breakdown", () => {

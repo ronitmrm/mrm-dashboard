@@ -13,6 +13,40 @@ export type MachineConstraintQueueReviewGroup = {
   emptyMessage?: string;
 };
 
+export function machineConstraintAffectedRows(
+  rows: MachineConstraintReviewRow[],
+  issue: {
+    machineNo: string;
+    rescheduleAction: string;
+    unavailableFrom: string;
+    unavailableTo: string;
+  }
+) {
+  const targetMachine = machineKey(issue.machineNo);
+  if (!targetMachine) return [];
+
+  const machineRows = rows.filter(
+    (row) => machineKey(machineValue(row)) === targetMachine
+  );
+  if (machineKey(issue.rescheduleAction) === "shift_all") {
+    return machineRows.sort(machinePlanSort);
+  }
+
+  const windowStart = dateSortValue(issue.unavailableFrom);
+  const rawWindowEnd = dateSortValue(
+    issue.unavailableTo || issue.unavailableFrom
+  );
+  const hasWindow = windowStart !== Number.MAX_SAFE_INTEGER;
+  const windowEnd =
+    rawWindowEnd === Number.MAX_SAFE_INTEGER ? windowStart : rawWindowEnd;
+  const start = Math.min(windowStart, windowEnd);
+  const end = Math.max(windowStart, windowEnd);
+
+  return machineRows
+    .filter((row) => !hasWindow || machineConstraintRowOverlaps(row, start, end))
+    .sort(machinePlanSort);
+}
+
 export function machineConstraintQueueReview({
   plannedRows,
   machineRows,
@@ -222,6 +256,27 @@ function machinePlanSort(left: MachineConstraintReviewRow, right: MachineConstra
 
 function rowStartSortValue(row: MachineConstraintReviewRow) {
   return dateSortValue(rowText(row, "plannedProductionStartDate", "setupPlannedDate", "plannedDate"));
+}
+
+function machineConstraintRowOverlaps(
+  row: MachineConstraintReviewRow,
+  windowStart: number,
+  windowEnd: number
+) {
+  const rowStart = rowStartSortValue(row);
+  if (rowStart === Number.MAX_SAFE_INTEGER) return true;
+  const rawRowEnd = dateSortValue(
+    rowText(
+      row,
+      "plannedProductionEndDate",
+      "plannedProductionStartDate",
+      "setupPlannedDate",
+      "plannedDate"
+    )
+  );
+  const rowEnd =
+    rawRowEnd === Number.MAX_SAFE_INTEGER ? rowStart : rawRowEnd;
+  return rowStart <= windowEnd && rowEnd >= windowStart;
 }
 
 function dateSortValue(value: unknown) {

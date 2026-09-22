@@ -179,6 +179,7 @@ import {
 } from "@/lib/first-piece-inspection-draft"
 import {
   compatibleDestinationMachineOptions,
+  machineConstraintAffectedRows,
   machineConstraintQueueReview,
   type MachineConstraintQueueReviewGroup,
 } from "@/lib/machine-constraint-review"
@@ -3582,12 +3583,13 @@ function MachineConstraintPlannerForm({
   >({})
   const affectedRows = useMemo(
     () =>
-      machineIssueAffectedRows(plannedRows, {
+      machineConstraintAffectedRows(plannedRows, {
         machineNo,
+        rescheduleAction,
         unavailableFrom,
         unavailableTo,
       }),
-    [machineNo, plannedRows, unavailableFrom, unavailableTo]
+    [machineNo, plannedRows, rescheduleAction, unavailableFrom, unavailableTo]
   )
   const queueReviewGroups = useMemo(
     () =>
@@ -3645,10 +3647,13 @@ function MachineConstraintPlannerForm({
     ]
   )
   const canReview = Boolean(machineNo.trim() && unavailableFrom)
+  const shiftAllHasNoPlannedRows =
+    machineKey(rescheduleAction) === "shift_all" && !affectedRows.length
   const canSave =
     canReview &&
     Boolean(reason.trim()) &&
     reviewReady &&
+    !shiftAllHasNoPlannedRows &&
     !machineConstraintConflicts.length &&
     (!queueReviewRequired || queueReviewConfirmed)
 
@@ -3825,6 +3830,20 @@ function MachineConstraintPlannerForm({
               {formatNumber(runningRows.length)} Running Session Checks
             </span>
           </div>
+          {shiftAllHasNoPlannedRows ? (
+            <div
+              className="grid gap-1 rounded-md border border-destructive/30 bg-destructive/5 p-3"
+              role="alert"
+            >
+              <div className="text-sm font-medium text-destructive">
+                No Planned Setups To Shift
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Select A Machine With Planned Setup Rows, Or Choose Shift Required
+                To Save Only The Machine-Unavailable Window.
+              </div>
+            </div>
+          ) : null}
           {runningRows.length ? (
             <PlannerSessionSettlementNotice
               mode={
@@ -15941,46 +15960,6 @@ function machineConstraintQueueDropLabel(
     ? `Place moved setup after ${itemCode(row)} / ${jobCardNumber(row)} / setup ${displayValue(row.setupNo)}`
     : "Place moved setup at the end of this queue"
 }
-function machineIssueAffectedRows(
-  rows: DashboardPayload[],
-  issue: { machineNo: string; unavailableFrom: string; unavailableTo: string }
-) {
-  const targetMachine = machineKey(issue.machineNo)
-  if (!targetMachine) return []
-  const windowStart = dateSortValue(issue.unavailableFrom)
-  const rawWindowEnd = dateSortValue(
-    issue.unavailableTo || issue.unavailableFrom
-  )
-  const hasWindow = windowStart !== Number.MAX_SAFE_INTEGER
-  const windowEnd =
-    rawWindowEnd === Number.MAX_SAFE_INTEGER ? windowStart : rawWindowEnd
-  const start = Math.min(windowStart, windowEnd)
-  const end = Math.max(windowStart, windowEnd)
-  return rows
-    .filter((row) => machineKey(machineValue(row, "machine")) === targetMachine)
-    .filter((row) => !hasWindow || machineIssueRowOverlaps(row, start, end))
-    .sort(machinePlanDisplaySort)
-}
-
-function machineIssueRowOverlaps(
-  row: DashboardPayload,
-  windowStart: number,
-  windowEnd: number
-) {
-  const rowStart = dateSortValue(
-    row.plannedProductionStartDate || row.setupPlannedDate || row.plannedDate
-  )
-  if (rowStart === Number.MAX_SAFE_INTEGER) return true
-  const rawRowEnd = dateSortValue(
-    row.plannedProductionEndDate ||
-      row.plannedProductionStartDate ||
-      row.setupPlannedDate ||
-      row.plannedDate
-  )
-  const rowEnd = rawRowEnd === Number.MAX_SAFE_INTEGER ? rowStart : rawRowEnd
-  return rowStart <= windowEnd && rowEnd >= windowStart
-}
-
 function machineIssueRowIsLocked(row: DashboardPayload) {
   const stage = str(row.shopFloorStage)
   const runningStatus = str(row.runningStatus).toLowerCase()
