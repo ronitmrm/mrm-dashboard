@@ -1303,6 +1303,79 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
       })
     },
 
+    async startBulkProductionSessionDowntime(input: {
+      actorUserId?: string | null
+      enteredRole: string
+      expectedSessionIds: string[]
+      organizationId: string
+      productionFloorCode: ProductionFloorCode
+      reasonCode: string
+      reasonName: string
+      startedAt: string
+    }) {
+      const now = new Date()
+      const shift = productionShiftAt(input.productionFloorCode, now)
+      const startedAt = requiredTimestamp(input.startedAt, "Breakdown start")
+      const enteredRole = productionEntryRole(input.enteredRole)
+      const reasonCode = requiredText(input.reasonCode, "Downtime code")
+      const reasonName = requiredText(input.reasonName, "Downtime reason")
+      if (startedAt > now) throw new Error("Breakdown cannot start in the future.")
+      if (!shift) throw new Error("No running sessions in the current production shift.")
+
+      return transaction(pool, async (client) => {
+        // Lock sessions before checking downtime, just like the single-session action.
+        const sessions = await client.query<{ id: string; started_at: Date }>(
+          `SELECT session.id, session.started_at
+           FROM manufacturing.production_sessions session
+           JOIN catalog.machines machine ON machine.id = session.machine_id
+           JOIN manufacturing.production_floors floor ON floor.id = machine.production_floor_id
+           WHERE session.organization_id = $1 AND floor.code = $2
+             AND session.production_date = $3::date AND session.shift = $4
+             AND session.status = 'open' AND session.reversed_at IS NULL
+             AND session.started_at <= $5
+           ORDER BY session.id FOR UPDATE OF session`,
+          [input.organizationId, input.productionFloorCode, shift.productionDate, shift.shift, now]
+        )
+        const openDowntime = await client.query<{ production_session_id: string }>(
+          `SELECT production_session_id FROM manufacturing.production_session_downtime_events
+           WHERE production_session_id = ANY($1::uuid[])
+             AND ended_at IS NULL AND reversed_at IS NULL`,
+          [sessions.rows.map((session) => session.id)]
+        )
+        const unavailable = new Set(openDowntime.rows.map((event) => event.production_session_id))
+        const targets = sessions.rows.filter((session) => !unavailable.has(session.id))
+        const expected = new Set(input.expectedSessionIds)
+        if (!targets.length || targets.length !== expected.size || targets.some((session) => !expected.has(session.id))) {
+          throw new Error("Running sessions changed or none are available. Refresh the bulk breakdown preview before saving.")
+        }
+        if (targets.some((session) => startedAt < session.started_at)) {
+          throw new Error("Breakdown start must be on or after every affected session's start.")
+        }
+        const overlap = await client.query(
+          `SELECT id FROM manufacturing.production_session_downtime_events
+           WHERE production_session_id = ANY($1::uuid[]) AND reversed_at IS NULL
+             AND COALESCE(ended_at, 'infinity'::timestamptz) > $2 LIMIT 1`,
+          [targets.map((session) => session.id), startedAt]
+        )
+        if (overlap.rows.length) throw new Error("Breakdown start overlaps existing downtime. Choose a later start time.")
+        const batchId = randomUUID()
+        const created = await client.query<{ id: string }>(
+          `INSERT INTO manufacturing.production_session_downtime_events (
+             organization_id, production_session_id, reason_code, reason_name,
+             started_at, entered_role, entered_by_user_id, source_payload
+           ) SELECT $1, session_id, $3, $4, $5, $6, $7, $8
+             FROM unnest($2::uuid[]) AS session_id
+           RETURNING id`,
+          [input.organizationId, targets.map((session) => session.id), reasonCode, reasonName,
+            startedAt.toISOString(), enteredRole, input.actorUserId ?? null,
+            { bulkBreakdownId: batchId, productionFloorCode: input.productionFloorCode,
+              reasonCode, reasonName, enteredRole, startedAt: startedAt.toISOString() }]
+        )
+        await queueDashboardRefresh(client, input.organizationId)
+        return { batchId, rowsUpdated: created.rows.length }
+      })
+    },
+
     async endProductionSessionDowntime(input: {
       actorUserId?: string | null
       endOutcome: string

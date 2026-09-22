@@ -2,7 +2,7 @@ import { createStoreRepository } from "./store"
 import { randomUUID } from "node:crypto"
 
 import { Pool } from "pg"
-import { afterAll, beforeAll, describe, expect, test } from "vitest"
+import { afterAll, beforeAll, describe, expect, test, vi } from "vitest"
 
 import { createDashboardPlanningRepository } from "./dashboard-planning"
 import { createMaintenanceRepository } from "./maintenance"
@@ -183,6 +183,53 @@ afterAll(async () => {
 })
 
 describe("production and shop-floor workflows", () => {
+  test("bulk breakdown updates every reviewed running session together and rejects a stale preview", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] })
+    vi.setSystemTime(new Date("2026-09-22T10:00:00+05:30"))
+    const sessionIds: string[] = []
+    try {
+      for (const machineNumber of [`BULK-A-${suffix}`, `BULK-B-${suffix}`]) {
+        await planning.upsertMachine({ machineNumber, organizationId })
+        const inserted = await pool.query<{ id: string }>(
+          `INSERT INTO manufacturing.production_sessions (
+             organization_id, work_order_id, route_option_id, operation_setup_id,
+             machine_id, operator_employee_id, production_date, shift, measurement_method,
+             started_at, piece_weight_grams, session_reference, daily_sequence,
+             machine_number_snapshot, job_card_number_snapshot, part_code_snapshot,
+             option_number_snapshot, setup_number_snapshot, operator_code_snapshot, operator_name_snapshot
+           ) SELECT $1, work_order.id, route.id, setup.id, machine.id, employee.id,
+             '2026-09-22', 'General', 'weight', '2026-09-22T08:30:00+05:30', 1,
+             $2 || '-20260922-01', 1, $2, $3, $4, '1', '1', $5, 'Bulk test operator'
+           FROM manufacturing.work_orders work_order
+           JOIN manufacturing.route_options route ON route.item_id = work_order.item_id AND route.route_code = '1'
+           JOIN manufacturing.operation_setups setup ON setup.route_option_id = route.id AND setup.setup_number = 1
+           JOIN catalog.machines machine ON machine.organization_id = $1 AND machine.machine_number = $2
+           JOIN workforce.employees employee ON employee.organization_id = $1 AND employee.employee_code = $5
+           WHERE work_order.organization_id = $1 AND work_order.job_card_number = $3 RETURNING id`,
+          [organizationId, machineNumber, firstJobCard, itemUid, firstOperator]
+        )
+        sessionIds.push(inserted.rows[0]!.id)
+      }
+      const input = { organizationId, productionFloorCode: "conventional" as const,
+        expectedSessionIds: sessionIds, enteredRole: "shop_floor", reasonCode: "POWER",
+        reasonName: "Power failure", startedAt: "2026-09-22T09:45:00+05:30" }
+      await expect(repository.startBulkProductionSessionDowntime({ ...input, expectedSessionIds: sessionIds.slice(0, 1) }))
+        .rejects.toThrow("Refresh the bulk breakdown preview")
+      const before = await repository.readProductionSessions({ organizationId, productionFloorCode: "conventional", status: "open" })
+      expect(before.rows.filter((row) => sessionIds.includes(String(row.id))).every((row) => !row.hasOpenDowntime)).toBe(true)
+      await expect(repository.startBulkProductionSessionDowntime(input)).resolves.toMatchObject({ rowsUpdated: 2 })
+      const after = await repository.readProductionSessions({ organizationId, productionFloorCode: "conventional", status: "open" })
+      expect(after.rows.filter((row) => sessionIds.includes(String(row.id)))).toEqual(expect.arrayContaining(
+        sessionIds.map((id) => expect.objectContaining({ id, status: "open", hasOpenDowntime: true,
+          downtimeEvents: [expect.objectContaining({ reasonCode: "POWER", reasonName: "Power failure", isOpen: true })] }))
+      ))
+      await expect(repository.startBulkProductionSessionDowntime(input)).rejects.toThrow("Refresh the bulk breakdown preview")
+    } finally {
+      vi.useRealTimers()
+      await pool.query("UPDATE manufacturing.production_sessions SET reversed_at = now() WHERE id = ANY($1::uuid[])", [sessionIds])
+    }
+  })
+
   test("calculates Casting from Blank Piece Weight divided by One-Piece Weight", async () => {
     const workspace = await repository.readJobCardWorkspace({
       jobCardNumber: firstJobCard,

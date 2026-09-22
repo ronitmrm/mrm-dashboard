@@ -111,6 +111,16 @@ pieces, or break a counter already carried into a later session.
 
 ## Downtime lifecycle
 
+**Bulk Breakdown** starts the same coded downtime on every currently running
+Production Session in the selected Production Floor, after reviewing the affected
+machines. Register filters do not narrow this action. Sessions already in downtime,
+closed sessions, and previous-shift sessions awaiting closure are excluded.
+The start defaults to now in IST and cannot precede an affected session's start.
+The reviewed session set is checked again at save; if it changed, nothing is saved
+until the user refreshes the preview. The batch is atomic and records a separate
+audited downtime event per session. It does not close sessions, move setups, or
+create Maintenance repair tasks. Each downtime follows the normal closure workflow.
+
 Planner machine issues remain open until the planner marks the machine available.
 An open issue whose To date has passed moves from Active Machine Issues to Pending
 Review (India calendar date); a blank To uses the From date. The planner can mark
