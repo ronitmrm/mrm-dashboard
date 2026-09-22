@@ -1364,7 +1364,40 @@ async function post(request: NextRequest, context: RouteContext) {
           await withPlanningRefresh(request, path, body, {
             ...result,
             rowsUpdated: 1,
-            savedText: "Production session closed.",
+            savedText: result.outputPending
+              ? "Production session closed. Weight is pending."
+              : "Production session closed.",
+          })
+        )
+      }
+      if (entryType === "production_session_correct") {
+        const result = await withProductionRepository(
+          request,
+          "operations.production.write",
+          ({ actorUserId, organizationId, repository }) =>
+            repository.correctProductionSession({
+              actorUserId,
+              correctionReason: text(payload.correctionReason),
+              crateCount: optionalNumeric(
+                payload.crateCount ?? payload.cratesUsed
+              ),
+              crateWeightKg: optionalNumeric(payload.crateWeightKg),
+              endCount: optionalNumeric(payload.endCount),
+              endedAt: text(payload.endedAt),
+              endReason: text(payload.endReason),
+              enteredRole: text(payload.enteredRole) || undefined,
+              grossWeightKg: optionalNumeric(
+                payload.grossWeightKg ?? payload.grossWeight
+              ),
+              organizationId,
+              sessionId: text(payload.sessionId),
+            })
+        )
+        return json(
+          await withPlanningRefresh(request, path, body, {
+            ...result,
+            rowsUpdated: 1,
+            savedText: "Closed production session corrected.",
           })
         )
       }
@@ -1375,6 +1408,7 @@ async function post(request: NextRequest, context: RouteContext) {
           ({ actorUserId, organizationId, repository }) =>
             repository.recordProductionSessionDowntime({
               actorUserId,
+              correctionReason: text(payload.correctionReason) || undefined,
               endedAt: text(payload.endedAt),
               enteredRole: text(payload.enteredRole),
               organizationId,
@@ -1454,6 +1488,7 @@ async function post(request: NextRequest, context: RouteContext) {
           ({ actorUserId, organizationId, repository }) =>
             repository.recordProductionSessionRejection({
               actorUserId,
+              correctionReason: text(payload.correctionReason) || undefined,
               enteredRole: "quality",
               organizationId,
               quantity: firstNumeric(payload.quantity, payload.rejectQty),

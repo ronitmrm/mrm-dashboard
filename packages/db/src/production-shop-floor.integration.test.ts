@@ -818,7 +818,7 @@ describe("production and shop-floor workflows", () => {
     expect(closedTarget.rows[0]?.target).toBe(50)
   })
 
-  test("starts a session with an active operator from the central HR Employee Master", async () => {
+  test("allows delayed weight and missed events to correct a closed session", async () => {
     const department = await pool.query<{ id: string }>(
       `
         INSERT INTO recruitment.departments (
@@ -892,15 +892,76 @@ describe("production and shop-floor workflows", () => {
 
     expect(session.id).toBeTruthy()
     expect(projected.rows[0]).toEqual({ active: true, employee_code: hrOperator })
-    await repository.closeProductionSession({
+    const pending = await repository.closeProductionSession({
+      endedAt: "2026-08-15T09:30:00+05:30",
+      endReason: "item_complete",
+      organizationId,
+      sessionId: session.id,
+    })
+    expect(pending).toMatchObject({ outputPending: true, totalPieces: 0 })
+
+    await repository.recordProductionSessionDowntime({
+      correctionReason: "Operator recorded the stoppage after the shift.",
+      endedAt: "2026-08-15T08:55:00+05:30",
+      enteredRole: "shop_floor",
+      organizationId,
+      reasonCode: "TOOL_CHANGE",
+      reasonName: "Tool change",
+      sessionId: session.id,
+      startedAt: "2026-08-15T08:45:00+05:30",
+    })
+    await repository.recordProductionSessionRejection({
+      correctionReason: "QC count was available after session closure.",
+      enteredRole: "quality",
+      organizationId,
+      quantity: 3,
+      reasonCode: "DIMENSION",
+      reasonName: "Dimension out",
+      remarkCode: "SCRAP",
+      remarkName: "Scrap",
+      sessionId: session.id,
+      typeCode: "IN_PROCESS",
+      typeName: "In process",
+    })
+    const corrected = await repository.correctProductionSession({
+      correctionReason: "Final weighing completed after the next session started.",
       crateCount: 0,
       crateWeightKg: 0,
       endedAt: "2026-08-15T09:30:00+05:30",
       endReason: "item_complete",
+      enteredRole: "shop_floor",
       grossWeightKg: 1,
       organizationId,
       sessionId: session.id,
     })
+    expect(corrected).toMatchObject({
+      goodPieces: 61,
+      rejectedPieces: 3,
+      runtimeMinutes: 50,
+      targetPieces: 50,
+      totalPieces: 64,
+    })
+
+    const register = await repository.readProductionSessions({
+      organizationId,
+      productionFloorCode: "conventional",
+      sessionId: session.id,
+    })
+    expect(register.rows[0]).toMatchObject({
+      downtimeMinutes: 10,
+      goodPieces: 61,
+      outputPending: false,
+      rejectedPieces: 3,
+      targetPieces: 50,
+      totalPieces: 64,
+    })
+    const events = await repository.readProductionSessionEvents({
+      organizationId,
+      productionFloorCode: "conventional",
+      sessionId: session.id,
+    })
+    expect(events.rows.filter((row) => row.eventType === "session_correction"))
+      .toHaveLength(3)
   })
 
   test("retains the source machine until an explicit planner switch and releases it on completion", async () => {

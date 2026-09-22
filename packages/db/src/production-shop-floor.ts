@@ -125,6 +125,26 @@ function positiveWholeNumber(value: number, label: string) {
   return value
 }
 
+function productionSessionTiming(input: {
+  cycleTimeSeconds: number
+  downtimeMinutes: number
+  endedAt: Date
+  startedAt: Date
+}) {
+  const elapsedMinutes = Math.max(
+    Math.round((input.endedAt.getTime() - input.startedAt.getTime()) / 60_000),
+    0
+  )
+  const runtimeMinutes = Math.max(elapsedMinutes - input.downtimeMinutes, 0)
+  return {
+    elapsedMinutes,
+    runtimeMinutes,
+    targetPieces: input.cycleTimeSeconds > 0
+      ? Math.floor((runtimeMinutes * 60) / input.cycleTimeSeconds)
+      : 0,
+  }
+}
+
 function productionMeasurementMethod(value: string) {
   if (value !== "weight" && value !== "counter") {
     throw new Error("Production measurement method must be weight or counter.")
@@ -1056,6 +1076,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
 
     async recordProductionSessionDowntime(input: {
       actorUserId?: string | null
+      correctionReason?: string
       endedAt: string
       enteredRole: string
       organizationId: string
@@ -1075,20 +1096,31 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           throw new Error("Downtime end must be after downtime start.")
         }
         const session = await client.query<{
+          cycle_time_seconds: string
           ended_at: Date | null
           production_entry_id: string
+          snapshot: Record<string, unknown>
+          source_payload: Record<string, unknown>
           started_at: Date
+          status: "open" | "closed"
         }>(
           `
-            SELECT started_at, ended_at, production_entry_id
-            FROM manufacturing.production_sessions
-            WHERE id = $1 AND organization_id = $2 AND reversed_at IS NULL
-            FOR UPDATE
+            SELECT session.started_at, session.ended_at,
+              session.production_entry_id, session.cycle_time_seconds,
+              session.source_payload, session.status,
+              to_jsonb(session) AS snapshot
+            FROM manufacturing.production_sessions session
+            WHERE session.id = $1 AND session.organization_id = $2
+              AND session.reversed_at IS NULL
+            FOR UPDATE OF session
           `,
           [input.sessionId, input.organizationId]
         )
         const current = session.rows[0]
         if (!current) throw new Error("Production session was not found.")
+        const correctionReason = current.status === "closed"
+          ? requiredText(input.correctionReason ?? "", "Correction reason")
+          : undefined
         if (
           startedAt < current.started_at ||
           (current.ended_at && endedAt > current.ended_at)
@@ -1109,7 +1141,12 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         if (overlap.rows[0]) {
           throw new Error("Downtime entries cannot overlap.")
         }
-        const sourcePayload = { ...input, durationMinutes, enteredRole }
+        const sourcePayload = {
+          ...input,
+          correctionReason,
+          durationMinutes,
+          enteredRole,
+        }
         const created = await client.query<{ id: string }>(
           `
             INSERT INTO manufacturing.production_session_downtime_events (
@@ -1141,17 +1178,33 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           `,
           [input.sessionId]
         )
+        const timing = current.ended_at
+          ? productionSessionTiming({
+              cycleTimeSeconds: Number(current.cycle_time_seconds),
+              downtimeMinutes: Number(totalDowntime.rows[0]!.minutes),
+              endedAt: current.ended_at,
+              startedAt: current.started_at,
+            })
+          : null
         const downtimePayload = {
+          correctionReason,
           downtimeCode: input.reasonCode,
           downtimeMinutes: Number(totalDowntime.rows[0]!.minutes),
           downtimeReason: input.reasonName,
+          ...(timing ? {
+            runtimeMinutes: timing.runtimeMinutes,
+            targetQty: timing.targetPieces,
+          } : {}),
         }
-        await client.query(
+        const updatedSession = await client.query<{
+          snapshot: Record<string, unknown>
+        }>(
           `
             UPDATE manufacturing.production_sessions
             SET source_payload = source_payload || $1::jsonb,
               updated_at = now(), row_version = row_version + 1
             WHERE id = $2
+            RETURNING to_jsonb(production_sessions) AS snapshot
           `,
           [downtimePayload, input.sessionId]
         )
@@ -1163,6 +1216,33 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           `,
           [downtimePayload, current.production_entry_id]
         )
+        if (correctionReason) {
+          await client.query(
+            `
+              INSERT INTO audit.events (
+                organization_id, event_type, target_schema, target_table,
+                target_id, actor_user_id, reason, before_state, after_state,
+                metadata, source_system, source_table, source_id
+              )
+              VALUES ($1, 'production.session.downtime_added', 'manufacturing',
+                'production_sessions', $2, $3, $4, $5, $6,
+                jsonb_build_object('correctionType', 'downtime',
+                  'enteredRole', $7::text, 'downtimeEventId', $8::uuid),
+                'mrm-dashboard', 'production_session_correction', $9)
+            `,
+            [
+              input.organizationId,
+              input.sessionId,
+              input.actorUserId ?? null,
+              correctionReason,
+              current.snapshot,
+              updatedSession.rows[0]!.snapshot,
+              enteredRole,
+              created.rows[0]!.id,
+              randomUUID(),
+            ]
+          )
+        }
         await queueDashboardRefresh(client, input.organizationId)
         return { durationMinutes, id: created.rows[0]!.id }
       })
@@ -1335,6 +1415,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
 
     async recordProductionSessionRejection(input: {
       actorUserId?: string | null
+      correctionReason?: string
       enteredRole: string
       organizationId: string
       quantity: number
@@ -1353,20 +1434,31 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         }
         const quantity = positiveWholeNumber(input.quantity, "Rejected pieces")
         const session = await client.query<{
+          output_pending: boolean
           production_entry_id: string | null
+          snapshot: Record<string, unknown>
           status: "open" | "closed"
           total_pieces: string
         }>(
           `
-            SELECT status, total_pieces, production_entry_id
-            FROM manufacturing.production_sessions
-            WHERE id = $1 AND organization_id = $2 AND reversed_at IS NULL
-            FOR UPDATE
+            SELECT session.status, session.total_pieces,
+              session.production_entry_id,
+              session.status = 'closed'
+                AND session.measurement_method = 'weight'
+                AND session.gross_weight_kg IS NULL AS output_pending,
+              to_jsonb(session) AS snapshot
+            FROM manufacturing.production_sessions session
+            WHERE session.id = $1 AND session.organization_id = $2
+              AND session.reversed_at IS NULL
+            FOR UPDATE OF session
           `,
           [input.sessionId, input.organizationId]
         )
         const current = session.rows[0]
         if (!current) throw new Error("Production session was not found.")
+        const correctionReason = current.status === "closed"
+          ? requiredText(input.correctionReason ?? "", "Correction reason")
+          : undefined
         const existing = await client.query<{ quantity: string }>(
           `
             SELECT COALESCE(sum(quantity), 0)::text AS quantity
@@ -1377,10 +1469,19 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         )
         const rejectedPieces = Number(existing.rows[0]!.quantity) + quantity
         const totalPieces = Number(current.total_pieces)
-        if (current.status === "closed" && rejectedPieces > totalPieces) {
+        if (
+          current.status === "closed" &&
+          !current.output_pending &&
+          rejectedPieces > totalPieces
+        ) {
           throw new Error("Rejected pieces cannot exceed total produced pieces.")
         }
-        const sourcePayload = { ...input, enteredRole, quantity }
+        const sourcePayload = {
+          ...input,
+          correctionReason,
+          enteredRole,
+          quantity,
+        }
         const created = await client.query<{ id: string }>(
           `
             INSERT INTO manufacturing.production_session_rejection_events (
@@ -1407,19 +1508,28 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             sourcePayload,
           ]
         )
-        await client.query(
+        const updatedSession = await client.query<{
+          snapshot: Record<string, unknown>
+        }>(
           `
             UPDATE manufacturing.production_sessions
             SET quantity_rejected = $1,
-              quantity_good = CASE WHEN status = 'closed'
-                THEN total_pieces - $1 ELSE quantity_good END,
-              source_payload = source_payload || $2::jsonb,
+              quantity_good = CASE
+                WHEN status = 'closed' AND NOT $2::boolean
+                  THEN total_pieces - $1
+                WHEN status = 'closed' THEN 0
+                ELSE quantity_good
+              END,
+              source_payload = source_payload || $3::jsonb,
               updated_at = now(), row_version = row_version + 1
-            WHERE id = $3
+            WHERE id = $4
+            RETURNING to_jsonb(production_sessions) AS snapshot
           `,
           [
             rejectedPieces,
+            current.output_pending,
             {
+              correctionReason,
               rejectQty: rejectedPieces,
               rejectionReason: input.reasonName,
               rejectionReasonCode: input.reasonCode,
@@ -1441,10 +1551,15 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             `,
             [
               rejectedPieces,
-              current.status === "closed" ? totalPieces - rejectedPieces : 0,
+              current.status === "closed" && !current.output_pending
+                ? totalPieces - rejectedPieces
+                : 0,
               {
+                correctionReason,
                 outputQty: current.status === "closed"
-                  ? totalPieces - rejectedPieces
+                  ? current.output_pending
+                    ? 0
+                    : totalPieces - rejectedPieces
                   : 0,
                 rejectQty: rejectedPieces,
                 rejectionReason: input.reasonName,
@@ -1455,6 +1570,33 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
                 rejectionTypeCode: input.typeCode,
               },
               current.production_entry_id,
+            ]
+          )
+        }
+        if (correctionReason) {
+          await client.query(
+            `
+              INSERT INTO audit.events (
+                organization_id, event_type, target_schema, target_table,
+                target_id, actor_user_id, reason, before_state, after_state,
+                metadata, source_system, source_table, source_id
+              )
+              VALUES ($1, 'production.session.rejection_added', 'manufacturing',
+                'production_sessions', $2, $3, $4, $5, $6,
+                jsonb_build_object('correctionType', 'rejection',
+                  'enteredRole', $7::text, 'rejectionEventId', $8::uuid),
+                'mrm-dashboard', 'production_session_correction', $9)
+            `,
+            [
+              input.organizationId,
+              input.sessionId,
+              input.actorUserId ?? null,
+              correctionReason,
+              current.snapshot,
+              updatedSession.rows[0]!.snapshot,
+              enteredRole,
+              created.rows[0]!.id,
+              randomUUID(),
             ]
           )
         }
@@ -1486,6 +1628,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         }
         const session = await client.query<{
           has_open_downtime: boolean
+          cycle_time_seconds: string
           machine_id: string
           measurement_method: ProductionMeasurementMethod
           operation_setup_id: string
@@ -1507,6 +1650,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
               session.operation_setup_id,
               machine_id, operator_employee_id, production_date, shift,
               measurement_method, started_at, start_count,
+              cycle_time_seconds,
               piece_weight_grams, production_entry_id, session.source_payload,
               session.status, floor.code AS production_floor_code,
               EXISTS (
@@ -1631,12 +1775,28 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           [input.sessionId]
         )
         const downtimeMinutes = Number(downtime.rows[0]!.minutes)
-        const elapsedMinutes = Math.max(
-          Math.round((endedAt.getTime() - current.started_at.getTime()) / 60_000),
-          0
-        )
-        const runtimeMinutes = Math.max(elapsedMinutes - downtimeMinutes, 0)
-        const cycleTimeSeconds = Number(current.source_payload.cycleTime ?? 0)
+        const cycleTimeSeconds = Number(current.cycle_time_seconds)
+        const timing = productionSessionTiming({
+          cycleTimeSeconds,
+          downtimeMinutes,
+          endedAt,
+          startedAt: current.started_at,
+        })
+        const hasAnyWeightOutput = input.grossWeightKg !== undefined ||
+          input.crateCount !== undefined
+        const hasCompleteWeightOutput = input.grossWeightKg !== undefined &&
+          input.crateCount !== undefined
+        if (
+          current.measurement_method === "weight" &&
+          hasAnyWeightOutput &&
+          !hasCompleteWeightOutput
+        ) {
+          throw new Error(
+            "Enter both gross produced weight and crates, or leave both blank to complete weight later."
+          )
+        }
+        const outputPending = current.measurement_method === "weight" &&
+          !hasCompleteWeightOutput
         const output = current.measurement_method === "counter"
           ? calculateProductionSessionOutput({
               endCount: nonNegativeWholeNumber(input.endCount, "End count"),
@@ -1644,7 +1804,14 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
               rejectedPieces,
               startCount: Number(current.start_count),
             })
-          : calculateProductionSessionOutput({
+          : outputPending
+            ? {
+                goodPieces: 0,
+                netWeightKg: null,
+                rejectedPieces,
+                totalPieces: 0,
+              }
+            : calculateProductionSessionOutput({
               crateCount: nonNegativeWholeNumber(input.crateCount, "Crates used"),
               crateWeightKg: input.crateWeightKg ?? 0,
               grossWeightKg: input.grossWeightKg ?? -1,
@@ -1659,15 +1826,14 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           downtimeMinutes,
           endTime: endedAt.toISOString(),
           measurementMethod: current.measurement_method,
+          outputPending,
           outputQty: output.goodPieces,
           rejectQty: output.rejectedPieces,
           rejectionReason: rejection.rows[0]!.reason_name,
           rejectionRemark: rejection.rows[0]!.remark_name,
           rejectionType: rejection.rows[0]!.type_name,
-          runtimeMinutes,
-          targetQty: cycleTimeSeconds > 0
-            ? Math.floor((runtimeMinutes * 60) / cycleTimeSeconds)
-            : 0,
+          runtimeMinutes: timing.runtimeMinutes,
+          targetQty: timing.targetPieces,
           totalPieces: output.totalPieces,
         }
         await client.query(
@@ -1777,7 +1943,265 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         return {
           goodPieces: output.goodPieces,
           id: input.sessionId,
+          outputPending,
           rejectedPieces: output.rejectedPieces,
+          totalPieces: output.totalPieces,
+        }
+      })
+    },
+
+    async correctProductionSession(input: {
+      actorUserId?: string | null
+      correctionReason: string
+      crateCount?: number
+      crateWeightKg?: number
+      endCount?: number
+      endedAt: string
+      endReason: string
+      enteredRole?: string
+      grossWeightKg?: number
+      organizationId: string
+      sessionId: string
+    }) {
+      return transaction(pool, async (client) => {
+        const correctionReason = requiredText(
+          input.correctionReason,
+          "Correction reason"
+        )
+        const endedAt = requiredTimestamp(input.endedAt, "Session end")
+        const endReason = productionSessionEndReason(input.endReason)
+        const enteredRole = input.enteredRole
+          ? productionEntryRole(input.enteredRole)
+          : "shop_floor"
+        if (enteredRole === "machinist") {
+          throw new Error("Machinist cannot correct a closed production session.")
+        }
+        const session = await client.query<{
+          crate_weight_kg: string | null
+          cycle_time_seconds: string
+          end_count: string | null
+          machine_id: string
+          measurement_method: ProductionMeasurementMethod
+          piece_weight_grams: string
+          production_entry_id: string
+          production_floor_code: ProductionFloorCode
+          snapshot: Record<string, unknown>
+          source_payload: Record<string, unknown>
+          start_count: string | null
+          started_at: Date
+          status: "open" | "closed"
+        }>(
+          `
+            SELECT session.machine_id, session.measurement_method,
+              session.started_at, session.start_count, session.end_count,
+              session.piece_weight_grams, session.crate_weight_kg,
+              session.cycle_time_seconds, session.production_entry_id,
+              session.source_payload, session.status,
+              floor.code AS production_floor_code,
+              to_jsonb(session) AS snapshot
+            FROM manufacturing.production_sessions session
+            JOIN catalog.machines machine ON machine.id = session.machine_id
+            JOIN manufacturing.production_floors floor
+              ON floor.id = machine.production_floor_id
+            WHERE session.id = $1 AND session.organization_id = $2
+              AND session.reversed_at IS NULL
+            FOR UPDATE OF session
+          `,
+          [input.sessionId, input.organizationId]
+        )
+        const current = session.rows[0]
+        if (!current) throw new Error("Production session was not found.")
+        if (current.status !== "closed") {
+          throw new Error("Only a closed production session can be corrected.")
+        }
+        if (enteredRole === "quality" && current.production_floor_code !== "cnc") {
+          throw new Error("Quality can correct production sessions only in CNC.")
+        }
+        if (endedAt < current.started_at) {
+          throw new Error("Session end cannot be before session start.")
+        }
+        const nextSession = await client.query<{ started_at: Date }>(
+          `
+            SELECT started_at
+            FROM manufacturing.production_sessions
+            WHERE machine_id = $1 AND reversed_at IS NULL
+              AND started_at > $2
+            ORDER BY started_at, created_at, id
+            LIMIT 1
+            FOR SHARE
+          `,
+          [current.machine_id, current.started_at.toISOString()]
+        )
+        if (nextSession.rows[0] && endedAt > nextSession.rows[0].started_at) {
+          throw new Error("Session end cannot overlap the next machine session.")
+        }
+        const laterDowntime = await client.query<{ id: string }>(
+          `
+            SELECT id
+            FROM manufacturing.production_session_downtime_events
+            WHERE production_session_id = $1 AND reversed_at IS NULL
+              AND ended_at > $2
+            LIMIT 1
+          `,
+          [input.sessionId, endedAt.toISOString()]
+        )
+        if (laterDowntime.rows[0]) {
+          throw new Error("Session end cannot be before its downtime entries.")
+        }
+        const aggregates = await client.query<{
+          downtime_minutes: string
+          rejected_pieces: string
+        }>(
+          `
+            SELECT
+              COALESCE((
+                SELECT sum(duration_minutes)
+                FROM manufacturing.production_session_downtime_events
+                WHERE production_session_id = $1 AND reversed_at IS NULL
+              ), 0)::text AS downtime_minutes,
+              COALESCE((
+                SELECT sum(quantity)
+                FROM manufacturing.production_session_rejection_events
+                WHERE production_session_id = $1 AND reversed_at IS NULL
+              ), 0)::text AS rejected_pieces
+          `,
+          [input.sessionId]
+        )
+        const downtimeMinutes = Number(aggregates.rows[0]!.downtime_minutes)
+        const rejectedPieces = Number(aggregates.rows[0]!.rejected_pieces)
+        if (current.measurement_method === "counter") {
+          const endCount = nonNegativeWholeNumber(input.endCount, "End count")
+          const carried = await client.query<{ id: string }>(
+            `
+              SELECT id
+              FROM manufacturing.production_sessions
+              WHERE carried_from_session_id = $1 AND reversed_at IS NULL
+              LIMIT 1
+            `,
+            [input.sessionId]
+          )
+          if (
+            carried.rows[0] &&
+            endCount !== Number(current.end_count)
+          ) {
+            throw new Error(
+              "End count cannot change after it has been carried into a later session."
+            )
+          }
+        }
+        const output = current.measurement_method === "counter"
+          ? calculateProductionSessionOutput({
+              endCount: nonNegativeWholeNumber(input.endCount, "End count"),
+              measurementMethod: "counter",
+              rejectedPieces,
+              startCount: Number(current.start_count),
+            })
+          : calculateProductionSessionOutput({
+              crateCount: nonNegativeWholeNumber(input.crateCount, "Crates used"),
+              crateWeightKg: input.crateWeightKg ??
+                Number(current.crate_weight_kg ?? 0),
+              grossWeightKg: input.grossWeightKg ?? -1,
+              measurementMethod: "weight",
+              pieceWeightGrams: Number(current.piece_weight_grams),
+              rejectedPieces,
+            })
+        const timing = productionSessionTiming({
+          cycleTimeSeconds: Number(current.cycle_time_seconds),
+          downtimeMinutes,
+          endedAt,
+          startedAt: current.started_at,
+        })
+        const sourcePayload = {
+          ...current.source_payload,
+          ...input,
+          actualQty: output.goodPieces,
+          correctionReason,
+          correctedAt: new Date().toISOString(),
+          downtimeMinutes,
+          endTime: endedAt.toISOString(),
+          measurementMethod: current.measurement_method,
+          outputPending: false,
+          outputQty: output.goodPieces,
+          rejectQty: output.rejectedPieces,
+          runtimeMinutes: timing.runtimeMinutes,
+          targetQty: timing.targetPieces,
+          totalPieces: output.totalPieces,
+        }
+        await client.query(
+          `
+            UPDATE manufacturing.production_entries
+            SET quantity_good = $1, quantity_rejected = $2,
+              completed_at = $3, source_payload = $4
+            WHERE id = $5
+          `,
+          [
+            output.goodPieces,
+            output.rejectedPieces,
+            endedAt.toISOString(),
+            sourcePayload,
+            current.production_entry_id,
+          ]
+        )
+        const updated = await client.query<{ snapshot: Record<string, unknown> }>(
+          `
+            UPDATE manufacturing.production_sessions
+            SET ended_at = $1, end_reason = $2,
+              end_count = $3, gross_weight_kg = $4, crate_count = $5,
+              crate_weight_kg = $6, net_weight_kg = $7,
+              total_pieces = $8, quantity_good = $9,
+              quantity_rejected = $10, source_payload = $11,
+              updated_at = now(), row_version = row_version + 1
+            WHERE id = $12
+            RETURNING to_jsonb(production_sessions) AS snapshot
+          `,
+          [
+            endedAt.toISOString(),
+            endReason,
+            current.measurement_method === "counter" ? input.endCount : null,
+            current.measurement_method === "weight" ? input.grossWeightKg : null,
+            current.measurement_method === "weight" ? input.crateCount : null,
+            current.measurement_method === "weight"
+              ? input.crateWeightKg ?? Number(current.crate_weight_kg ?? 0)
+              : null,
+            output.netWeightKg,
+            output.totalPieces,
+            output.goodPieces,
+            output.rejectedPieces,
+            sourcePayload,
+            input.sessionId,
+          ]
+        )
+        await client.query(
+          `
+            INSERT INTO audit.events (
+              organization_id, event_type, target_schema, target_table,
+              target_id, actor_user_id, reason, before_state, after_state,
+              metadata, source_system, source_table, source_id
+            )
+            VALUES ($1, 'production.session.corrected', 'manufacturing',
+              'production_sessions', $2, $3, $4, $5, $6,
+              jsonb_build_object('correctionType', 'end_details',
+                'enteredRole', $7::text),
+              'mrm-dashboard', 'production_session_correction', $8)
+          `,
+          [
+            input.organizationId,
+            input.sessionId,
+            input.actorUserId ?? null,
+            correctionReason,
+            current.snapshot,
+            updated.rows[0]!.snapshot,
+            enteredRole,
+            randomUUID(),
+          ]
+        )
+        await queueDashboardRefresh(client, input.organizationId)
+        return {
+          goodPieces: output.goodPieces,
+          id: input.sessionId,
+          rejectedPieces: output.rejectedPieces,
+          runtimeMinutes: timing.runtimeMinutes,
+          targetPieces: timing.targetPieces,
           totalPieces: output.totalPieces,
         }
       })
@@ -2570,6 +2994,9 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             session.production_date AS "productionDate",
             session.shift,
             session.measurement_method AS "measurementMethod",
+            session.status = 'closed'
+              AND session.measurement_method = 'weight'
+              AND session.gross_weight_kg IS NULL AS "outputPending",
             session.started_at AS "startedAt",
             session.ended_at AS "endedAt",
             session.end_reason AS "endReason",
@@ -2758,28 +3185,65 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
       const offset = Math.max(Math.trunc(input.offset ?? 0), 0)
       const result = await pool.query<Record<string, unknown>>(
         `
-          SELECT production_session_id AS "sessionId",
-            session_reference AS "sessionReference",
-            production_date AS "productionDate", shift,
-            machine_number AS "machineNumber",
-            job_card_number AS "jobCardNumber",
-            part_code AS "partCode",
-            option_number AS "optionNumber",
-            setup_number AS "setupNumber",
-            operator_code AS "operatorCode",
-            operator_name AS "operatorName",
-            event_type AS "eventType", event_time AS "eventTime",
-            started_at AS "startedAt", ended_at AS "endedAt",
-            duration_minutes AS "durationMinutes",
-            reason_code AS "reasonCode", reason_name AS "reasonName",
-            quantity, entered_by_name AS "enteredByName",
-            entered_role AS "enteredRole", recorded_at AS "recordedAt"
-          FROM reporting.production_event_log
+          WITH events AS (
+            SELECT organization_id, production_floor_code,
+              production_session_id AS "sessionId",
+              session_reference AS "sessionReference",
+              production_date AS "productionDate", shift,
+              machine_number AS "machineNumber",
+              job_card_number AS "jobCardNumber",
+              part_code AS "partCode",
+              option_number AS "optionNumber",
+              setup_number AS "setupNumber",
+              operator_code AS "operatorCode",
+              operator_name AS "operatorName",
+              event_type AS "eventType", event_time AS "eventTime",
+              started_at AS "startedAt", ended_at AS "endedAt",
+              duration_minutes AS "durationMinutes",
+              reason_code AS "reasonCode", reason_name AS "reasonName",
+              quantity, entered_by_name AS "enteredByName",
+              entered_role AS "enteredRole", recorded_at AS "recordedAt"
+            FROM reporting.production_event_log
+
+            UNION ALL
+
+            SELECT session.organization_id, floor.code,
+              session.id, session.session_reference, session.production_date,
+              session.shift, session.machine_number_snapshot,
+              session.job_card_number_snapshot, session.part_code_snapshot,
+              session.option_number_snapshot, session.setup_number_snapshot,
+              session.operator_code_snapshot, session.operator_name_snapshot,
+              'session_correction', correction.occurred_at,
+              correction.occurred_at, NULL::timestamptz, NULL::integer,
+              correction.metadata->>'correctionType', correction.reason,
+              NULL::integer, actor.name,
+              COALESCE(correction.metadata->>'enteredRole', 'correction'),
+              correction.occurred_at
+            FROM audit.events correction
+            JOIN manufacturing.production_sessions session
+              ON session.id = correction.target_id
+            JOIN catalog.machines machine ON machine.id = session.machine_id
+            JOIN manufacturing.production_floors floor
+              ON floor.id = machine.production_floor_id
+            LEFT JOIN identity.users actor ON actor.id = correction.actor_user_id
+            WHERE correction.target_schema = 'manufacturing'
+              AND correction.target_table = 'production_sessions'
+              AND correction.event_type LIKE 'production.session.%'
+              AND correction.source_table = 'production_session_correction'
+              AND session.reversed_at IS NULL
+          )
+          SELECT "sessionId", "sessionReference", "productionDate", shift,
+            "machineNumber", "jobCardNumber", "partCode", "optionNumber",
+            "setupNumber", "operatorCode", "operatorName", "eventType",
+            "eventTime", "startedAt", "endedAt", "durationMinutes",
+            "reasonCode", "reasonName", quantity, "enteredByName",
+            "enteredRole", "recordedAt"
+          FROM events
           WHERE organization_id = $1 AND production_floor_code = $2
-            AND ($3::uuid IS NULL OR production_session_id = $3::uuid)
-            AND ($4::date IS NULL OR production_date >= $4::date)
-            AND ($5::date IS NULL OR production_date <= $5::date)
-          ORDER BY event_time DESC, recorded_at DESC
+            AND ($3::uuid IS NULL OR "sessionId" = $3::uuid)
+            AND ($4::date IS NULL OR "productionDate" >= $4::date)
+            AND ($5::date IS NULL OR "productionDate" <= $5::date)
+          ORDER BY "eventTime" DESC, "recordedAt" DESC
           LIMIT $6 OFFSET $7
         `,
         [

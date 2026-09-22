@@ -18,6 +18,9 @@ const autoRefreshDataEntryTypes = new Set([
   "work_order",
   "rm_inward",
   "production_session_close",
+  "production_session_correct",
+  "production_session_downtime",
+  "production_session_rejection",
   "production_session_start",
   "software_raw",
 ]);
