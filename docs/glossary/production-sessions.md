@@ -178,7 +178,7 @@ rate. The revised balance forecast also recalculates forecast WIP availability
 and unlocked downstream setup dates; completed setups and actual WIP remain
 unchanged.
 
-Conventional-01, Conventional-02, and Forging use Weight. CNC selects Machine Counter or Weight per session. Weight entry records net produced material weight excluding crate tare, together with the number of crates used; the system derives gross weight and produced pieces. Counter continuity applies only when the immediately preceding closed session has the same machine, Job Card, Part Code, option, setup, and Machine Counter method.
+Conventional-01, Conventional-02, and Forging use Weight. CNC selects Machine Counter or Weight per session. Weight entry records gross weighed kilograms including crates, the number of crates, and the selected per-crate tare of 1.1 kg or 0.9 kg; the system derives net produced weight and pieces. Counter continuity applies only when the immediately preceding closed session has the same machine, Job Card, Part Code, option, setup, and Machine Counter method.
 
 Rejected pieces are included in total produced pieces. Good pieces equal total produced minus rejected pieces.
 

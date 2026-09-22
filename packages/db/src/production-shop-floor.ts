@@ -1783,16 +1783,16 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           startedAt: current.started_at,
         })
         const hasAnyWeightOutput = input.grossWeightKg !== undefined ||
-          input.crateCount !== undefined
+          input.crateCount !== undefined || input.crateWeightKg !== undefined
         const hasCompleteWeightOutput = input.grossWeightKg !== undefined &&
-          input.crateCount !== undefined
+          input.crateCount !== undefined && input.crateWeightKg !== undefined
         if (
           current.measurement_method === "weight" &&
           hasAnyWeightOutput &&
           !hasCompleteWeightOutput
         ) {
           throw new Error(
-            "Enter both gross produced weight and crates, or leave both blank to complete weight later."
+            "Enter gross weight, crates, and crate weight, or leave all three blank to complete weight later."
           )
         }
         const outputPending = current.measurement_method === "weight" &&
@@ -1813,7 +1813,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
               }
             : calculateProductionSessionOutput({
               crateCount: nonNegativeWholeNumber(input.crateCount, "Crates used"),
-              crateWeightKg: input.crateWeightKg ?? 0,
+              crateWeightKg: input.crateWeightKg ?? -1,
               grossWeightKg: input.grossWeightKg ?? -1,
               measurementMethod: "weight",
               pieceWeightGrams: Number(current.piece_weight_grams),
@@ -2099,7 +2099,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           : calculateProductionSessionOutput({
               crateCount: nonNegativeWholeNumber(input.crateCount, "Crates used"),
               crateWeightKg: input.crateWeightKg ??
-                Number(current.crate_weight_kg ?? 0),
+                Number(current.crate_weight_kg ?? -1),
               grossWeightKg: input.grossWeightKg ?? -1,
               measurementMethod: "weight",
               pieceWeightGrams: Number(current.piece_weight_grams),

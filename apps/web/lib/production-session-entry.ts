@@ -11,10 +11,4 @@ export function productionPieceWeightGrams(row: Record<string, unknown>) {
   return stageWeight !== undefined && stageWeight > 0 ? stageWeight : 0;
 }
 
-export function productionGrossWeightKg(input: {
-  crateCount: number
-  crateWeightKg: number
-  producedWeightKg: number
-}) {
-  return input.producedWeightKg + input.crateCount * input.crateWeightKg
-}
+export const productionCrateWeightOptions = [1.1, 0.9] as const
