@@ -67,11 +67,20 @@ describe("quality control workspace", () => {
             toleranceMinus: "0.25",
             readings: [29.97, 30, 30.02, 29.99, 30.01],
           },
+          {
+            parameterCode: "P2",
+            parameterName: "Head Diameter",
+            specification: "30.00",
+            tolerancePlus: "0.25",
+            toleranceMinus: "0.25",
+            readings: [30, 30.01, 30.3, 30.02, 30],
+          },
         ],
       })
     ).toEqual({
       approvedBy: "QC-12",
       inspectedAt: "2026-09-21T13:19:00.000Z",
+      id: "p2132|r131|1|1|cnc-40|fpi",
       jobCardNumber: "P2132",
       machineNumber: "CNC-40",
       optionNumber: "1",
@@ -82,10 +91,25 @@ describe("quality control workspace", () => {
       dimensions: [
         {
           code: "P1",
+          inputType: "",
           name: "Rod Diameter",
           readings: ["29.97", "30", "30.02", "29.99", "30.01"],
+          result: "OK",
           specification: "30.00",
           tolerance: "+0.25 / -0.25",
+          toleranceMinus: "0.25",
+          tolerancePlus: "0.25",
+        },
+        {
+          code: "P2",
+          inputType: "",
+          name: "Head Diameter",
+          readings: ["30", "30.01", "30.3", "30.02", "30"],
+          result: "Not OK",
+          specification: "30.00",
+          tolerance: "+0.25 / -0.25",
+          toleranceMinus: "0.25",
+          tolerancePlus: "0.25",
         },
       ],
     })
