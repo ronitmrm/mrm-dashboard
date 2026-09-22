@@ -24,7 +24,9 @@ import { DataDownloadButton } from "@/components/data-download-button"
 import { StandardDrawerContent } from "@/components/ui/golden-patterns"
 import { dashboardPayloadFromState, dashboardPayloadForProductionFloor } from "@/lib/dashboard-view-model"
 import {
+  formatIstDate,
   formatIstDateTime,
+  formatIstTime,
   istDateTimeInputParts,
   istDateTimeInputToIso,
   istDateTimeInputValue,
@@ -205,7 +207,7 @@ export function ProductionSessionsWorkspace({ initialFloor }: { initialFloor: Pr
     setDetail(row)
     setDetailEvents([])
     try {
-      const body = await api(`/api/production-sessions?view=events&sessionId=${encodeURIComponent(text(row.id))}&limit=500`)
+      const body = await api(`/api/production-sessions?view=events&floor=${encodeURIComponent(floor)}&sessionId=${encodeURIComponent(text(row.id))}&limit=500`)
       setDetailEvents(rows(body.rows))
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Session events could not be loaded.")
@@ -449,5 +451,33 @@ function MasterSelect({ value, options, onChange, placeholder }: { value: string
 function DetailSheet({ session, events, floor, now, onOpenChange }: { session: Row | null; events: Row[]; floor: ProductionFloorCode; now: Date; onOpenChange: (open: boolean) => void }) {
   if (!session) return null
   const status = sessionOperationalStatus(session, floor, now)
-  return <Sheet open onOpenChange={onOpenChange}><SheetContent side="right" className="h-full !w-full gap-0 overflow-hidden sm:!max-w-4xl xl:!max-w-5xl"><SheetHeader className="shrink-0 border-b"><SheetTitle>{text(session.sessionReference) || "Production session"}</SheetTitle><SheetDescription>{machine(session)} · {job(session)} · {part(session)} · Setup {setup(session)}</SheetDescription></SheetHeader><div className="flex min-h-0 flex-1 flex-col gap-4 p-6"><div className="grid shrink-0 grid-cols-2 gap-3 rounded-lg bg-muted/50 p-4 sm:grid-cols-4">{[["Status",titleCase(status)],["Operator",`${text(session.operatorCode)} ${text(session.operatorName)}`],["Started",formatDateTime(session.startedAt)],["Ended",text(session.endedAt) ? formatDateTime(session.endedAt) : status === "closing_required" ? "Closing required" : "Running"],["Total",number(session.totalPieces)],["Rejected",number(session.rejectedPieces)],["Good",number(session.goodPieces)],["Downtime",`${number(session.downtimeMinutes)} min`]].map(([label,value]) => <div className="min-w-0" key={String(label)}><div className="text-xs text-muted-foreground">{label}</div><div className="truncate font-medium">{value}</div></div>)}</div><div className="flex min-h-0 flex-1 flex-col"><h3 className="mb-2 shrink-0 font-medium">Session timeline</h3><SessionTimeline rows={events} /></div></div></SheetContent></Sheet>
+  const endedAt = text(session.endedAt)
+  const measurementMethod = text(session.measurementMethod).toLowerCase()
+  const summary: Array<[string, string | number]> = [
+    ["Status", titleCase(status)],
+    ["Employee ID", text(session.operatorCode) || "-"],
+    ["Operator name", text(session.operatorName) || "-"],
+    ["Start date", formatIstDate(text(session.startedAt))],
+    ["Start time", formatIstTime(text(session.startedAt))],
+    ["End date", endedAt ? formatIstDate(endedAt) : "-"],
+    ["End time", endedAt ? formatIstTime(endedAt) : status === "closing_required" ? "Closing required" : "Running"],
+    ["Measurement", measurementMethod === "counter" ? "Machine counter" : "Weight"],
+    ["Target quantity", number(session.targetPieces)],
+    ["Productive runtime", `${number(session.runtimeMinutes)} min`],
+    ["Cycle time", `${number(session.cycleTimeSeconds)} sec`],
+    ["Downtime", `${number(session.downtimeMinutes)} min`],
+    ["Total produced", number(session.totalPieces)],
+    ["Rejected", number(session.rejectedPieces)],
+    ["Good", number(session.goodPieces)],
+    ...(measurementMethod === "counter"
+      ? [
+          ["Start count", session.startCount === null ? "-" : number(session.startCount)],
+          ["End count", session.endCount === null ? "-" : number(session.endCount)],
+        ] as Array<[string, string | number]>
+      : [
+          ["Weight produced", session.netWeightKg === null ? "-" : `${number(session.netWeightKg)} kg`],
+          ["Crates", session.crateCount === null ? "-" : number(session.crateCount)],
+        ] as Array<[string, string | number]>),
+  ]
+  return <Sheet open onOpenChange={onOpenChange}><SheetContent side="right" className="h-full !w-full gap-0 overflow-hidden sm:!max-w-4xl xl:!max-w-5xl"><SheetHeader className="shrink-0 border-b"><SheetTitle>{text(session.sessionReference) || "Production session"}</SheetTitle><SheetDescription>{machine(session)} · {job(session)} · {part(session)} · Setup {setup(session)}</SheetDescription></SheetHeader><div className="flex min-h-0 flex-1 flex-col gap-4 p-6"><div className="grid shrink-0 grid-cols-2 gap-3 rounded-lg bg-muted/50 p-4 sm:grid-cols-3 lg:grid-cols-4">{summary.map(([label,value]) => <div className="min-w-0" key={label}><div className="text-xs text-muted-foreground">{label}</div><div className="font-medium tabular-nums">{value}</div></div>)}</div><div className="flex min-h-0 flex-1 flex-col"><h3 className="mb-2 shrink-0 font-medium">Session timeline</h3><SessionTimeline rows={events} /></div></div></SheetContent></Sheet>
 }

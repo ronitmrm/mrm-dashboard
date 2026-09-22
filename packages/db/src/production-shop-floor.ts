@@ -2513,6 +2513,18 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             session.total_pieces AS "totalPieces",
             session.quantity_good AS "goodPieces",
             session.quantity_rejected AS "rejectedPieces",
+            CASE
+              WHEN production_entry.source_payload ? 'targetQty'
+                THEN (production_entry.source_payload->>'targetQty')::bigint
+              WHEN session.cycle_time_seconds > 0 THEN floor(
+                GREATEST(
+                  floor(extract(epoch FROM (COALESCE(session.ended_at, now()) - session.started_at)) / 60)
+                    - COALESCE(downtime.minutes, 0),
+                  0
+                ) * 60 / session.cycle_time_seconds
+              )::bigint
+              ELSE 0
+            END AS "targetPieces",
             session.job_card_number_snapshot AS "jobCardNumber",
             session.part_code_snapshot AS "partCode",
             session.option_number_snapshot AS "optionNumber",
@@ -2554,6 +2566,8 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             ON starter.id = session.started_by_user_id
           LEFT JOIN identity.users closer
             ON closer.id = session.closed_by_user_id
+          LEFT JOIN manufacturing.production_entries production_entry
+            ON production_entry.id = session.production_entry_id
           LEFT JOIN LATERAL (
             SELECT COALESCE(sum(COALESCE(
                 event.duration_minutes,
@@ -2627,6 +2641,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         "totalPieces",
         "goodPieces",
         "rejectedPieces",
+        "targetPieces",
         "downtimeMinutes",
         "elapsedMinutes",
         "runtimeMinutes",

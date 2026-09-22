@@ -708,6 +708,7 @@ describe("production and shop-floor workflows", () => {
       sessionReference: `${cncMachine}-20260815-01`.toUpperCase(),
       shift: "A",
       status: "closed",
+      targetPieces: 470,
     })
     expect(sessions.rows.find((row) => row.id === second.id)).toMatchObject({
       downtimeMinutes: 5,
