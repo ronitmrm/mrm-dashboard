@@ -33,6 +33,22 @@ The lifecycle is Pending Approval, Approved, In Progress, Completed, Closed, Ret
 
 ## Mechanical Work List
 
-The unified Mechanical table containing existing scheduled machine-maintenance rows and approved Mechanical Request rows. Work Type distinguishes Scheduled from Request. Scheduled generation, due calculation, checklists, completion, and breakdown behavior remain unchanged.
+The unified Mechanical table containing existing scheduled machine-maintenance rows and approved Mechanical Request rows. Work Type distinguishes Scheduled from Request. Scheduled generation, due calculation, checklists, and completion remain unchanged. Breakdown work follows the Machine Breakdown lifecycle below.
 
 _Avoid_: separate Scheduled and Request tables, converting scheduled rows into requests.
+
+## Machine Breakdown
+
+One machine-linked maintenance task that starts In Progress and completes only
+after the machine is repaired. Starting a breakdown automatically opens downtime
+on that machine's current Production Session when one exists. The same breakdown
+remains open when the shift session closes unresolved; completing it resolves the
+carried problem and makes the machine eligible for a new Production Session.
+
+A completed breakdown records its actual start and completion times, technician,
+work done, optional remarks, and zero or more separately entered Changed Items.
+One breakdown may contain multiple Changed Items; they are not flattened into a
+single free-text part field.
+
+_Avoid_: completed-only breakdown entry, ending the Production Session when the
+breakdown starts, starting production while a machine breakdown remains open.

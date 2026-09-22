@@ -5,6 +5,7 @@ import { Pool } from "pg"
 import { afterAll, beforeAll, describe, expect, test } from "vitest"
 
 import { createDashboardPlanningRepository } from "./dashboard-planning"
+import { createMaintenanceRepository } from "./maintenance"
 import { migrateDatabase } from "./migrate"
 import { createProductionShopFloorRepository } from "./production-shop-floor"
 import { createQualityRepository } from "./quality"
@@ -17,6 +18,7 @@ const connectionString =
 const pool = new Pool({ connectionString })
 const planning = createDashboardPlanningRepository({ connectionString })
 const repository = createProductionShopFloorRepository({ connectionString })
+const maintenance = createMaintenanceRepository({ connectionString })
 const quality = createQualityRepository({ connectionString })
 const suffix = randomUUID().slice(0, 8)
 const itemUid = `FLOOR-${suffix}`
@@ -173,6 +175,7 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
+  await maintenance.close()
   await planning.close()
   await repository.close()
   await quality.close()
@@ -725,28 +728,25 @@ describe("production and shop-floor workflows", () => {
       expect.arrayContaining(["session_started", "downtime"])
     )
 
-    const carriedDowntime = await repository.startProductionSessionDowntime({
-      enteredRole: "machinist",
+    const breakdown = await maintenance.startBreakdown({
+      machineNumber: cncMachine,
       organizationId,
+      payload: { reportedFrom: "Mechanical workspace" },
+      productionFloorCode: "cnc",
       reasonCode: "DC-04",
       reasonName: "Bearing failure",
-      sessionId: second.id,
       startedAt: "2026-08-15T14:30:00+05:30",
+      taskKey: `BREAKDOWN-LIFECYCLE-${suffix}`,
     })
-    await expect(
-      repository.closeProductionSession({
-        endCount: 10_900,
-        endedAt: "2026-08-15T15:00:00+05:30",
-        endReason: "shift_end",
-        organizationId,
-        sessionId: second.id,
-      })
-    ).rejects.toThrow(
-      "Close the open downtime before ending the production session."
-    )
-    await repository.endProductionSessionDowntime({
-      endOutcome: "shift_end_unresolved",
+    expect(breakdown).toMatchObject({
+      downtimeStarted: true,
+      productionSessionId: second.id,
+      status: "In Progress",
+    })
+    await repository.closeProductionSession({
+      endCount: 10_900,
       endedAt: "2026-08-15T15:00:00+05:30",
+      endReason: "shift_end",
       organizationId,
       sessionId: second.id,
     })
@@ -759,18 +759,56 @@ describe("production and shop-floor workflows", () => {
       expect.arrayContaining([
         expect.objectContaining({
           endOutcome: "shift_end_unresolved",
-          id: carriedDowntime.id,
+          id: breakdown.downtimeEventId,
         }),
       ])
     )
 
-    await repository.closeProductionSession({
-      endCount: 10_900,
-      endedAt: "2026-08-15T15:00:00+05:30",
-      endReason: "item_complete",
+    await expect(repository.startProductionSession({
+      jobCardNumber: cncJobCard,
+      machineNumber: cncMachine,
+      measurementMethod: "counter",
+      operationSetupCode: "1",
+      operatorCode: secondOperator,
       organizationId,
+      pieceWeightGrams: 489,
+      productionFloorCode: "cnc",
+      startedAt: "2026-08-15T15:30:00+05:30",
+    })).rejects.toThrow("Complete the open machine breakdown")
+    await maintenance.completeBreakdown({
+      changedItems: ["Main bearing", "Drive belt"],
+      completedAt: "2026-08-15T16:00:00+05:30",
+      completedBy: "TECH-2",
+      organizationId,
+      payload: { result: "Completed" },
+      taskKey: breakdown.taskKey,
+      workDone: "Replaced bearing and belt",
+    })
+    const savedBreakdown = (await maintenance.listBreakdowns({
+      organizationId,
+    })).find((row) => row.taskKey === breakdown.taskKey)
+    expect(savedBreakdown).toMatchObject({
+      changedItems: ["Main bearing", "Drive belt"],
+      completedBy: "TECH-2",
+      machineNumber: cncMachine,
+      reasonCode: "DC-04",
+      reasonName: "Bearing failure",
+      status: "Completed",
+      workDone: "Replaced bearing and belt",
+    })
+    const resolvedBreakdownSession = await repository.readProductionSessions({
+      organizationId,
+      productionFloorCode: "cnc",
       sessionId: second.id,
     })
+    expect(resolvedBreakdownSession.rows[0]?.downtimeEvents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          carryResolvedAt: expect.stringContaining("2026-08-15T10:30:00"),
+          id: breakdown.downtimeEventId,
+        }),
+      ])
+    )
     const closedTarget = await pool.query<{ target: number }>(
       `SELECT (entry.source_payload->>'targetQty')::int AS target
        FROM manufacturing.production_sessions session

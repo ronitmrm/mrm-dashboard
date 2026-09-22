@@ -211,6 +211,40 @@ function maintenanceTaskPlan(payload: Payload) {
     taskKey: text(payload.taskId),
   }
   if (text(payload.maintenanceType).toLowerCase() === "breakdown") {
+    const breakdownAction = text(payload.breakdownAction).toLowerCase()
+    if (breakdownAction === "start") {
+      return {
+        capability: "maintenance.tasks.write",
+        family: "maintenance",
+        operation: "breakdown-start",
+        input: {
+          machineNumber: common.machineNumber,
+          payload,
+          productionFloorCode: common.productionFloorCode,
+          reasonCode: text(payload.downtimeReasonCode),
+          reasonName: text(payload.breakdownReason),
+          startedAt: text(payload.startedAt),
+          taskKey: common.taskKey,
+        },
+      } as const
+    }
+    if (breakdownAction === "complete") {
+      return {
+        capability: "maintenance.tasks.write",
+        family: "maintenance",
+        operation: "breakdown-complete",
+        input: {
+          changedItems: entryValues(payload.changedItems)
+            .map(text)
+            .filter(Boolean),
+          completedAt: common.completedAt,
+          completedBy: common.completedBy ?? "",
+          payload,
+          taskKey: common.taskKey,
+          workDone: text(payload.workDone),
+        },
+      } as const
+    }
     return {
       capability: "maintenance.tasks.write",
       family: "maintenance",
