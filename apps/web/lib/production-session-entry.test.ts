@@ -1,26 +1,22 @@
 import { calculateProductionSessionOutput } from "@workspace/db/production-session-domain"
 import { describe, expect, test } from "vitest"
 
-import { productionGrossWeightKg } from "./production-session-entry"
+import { productionCrateWeightOptions } from "./production-session-entry"
 
 describe("production session weight entry", () => {
-  test("adds crate tare to entered produced weight before calculating pieces", () => {
-    const grossWeightKg = productionGrossWeightKg({
-      crateCount: 1,
-      crateWeightKg: 2,
-      producedWeightKg: 2,
-    })
+  test("uses the selected supported crate tare when calculating pieces", () => {
+    expect(productionCrateWeightOptions).toEqual([1.1, 0.9])
 
-    expect(calculateProductionSessionOutput({
+    const output = calculateProductionSessionOutput({
       crateCount: 1,
-      crateWeightKg: 2,
-      grossWeightKg,
+      crateWeightKg: productionCrateWeightOptions[0],
+      grossWeightKg: 2,
       measurementMethod: "weight",
       pieceWeightGrams: 8,
       rejectedPieces: 0,
-    })).toMatchObject({
-      netWeightKg: 2,
-      totalPieces: 250,
     })
+
+    expect(output.netWeightKg).toBeCloseTo(0.9)
+    expect(output.totalPieces).toBe(112)
   })
 })
