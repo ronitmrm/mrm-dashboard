@@ -247,6 +247,21 @@ export function calculateProductionSessionOutput(
   }
 }
 
+export function productionSessionEfficiency(input: {
+  targetPieces: number
+  totalPieces: number
+}) {
+  if (
+    !Number.isFinite(input.targetPieces) ||
+    input.targetPieces <= 0 ||
+    !Number.isFinite(input.totalPieces) ||
+    input.totalPieces < 0
+  ) {
+    return null
+  }
+  return input.totalPieces / input.targetPieces
+}
+
 export function suggestedCounterStart(
   current: ProductionContext,
   previous: PreviousProductionSession | null | undefined

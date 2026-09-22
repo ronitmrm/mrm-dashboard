@@ -5,6 +5,7 @@ import {
   calculateProductionSessionOutput,
   formatProductionSessionReference,
   productionDowntimeEndOutcome,
+  productionSessionEfficiency,
   productionSessionOperationalStatus,
   productionShiftAt,
   suggestedCounterStart,
@@ -57,6 +58,15 @@ describe("production session operational status", () => {
 })
 
 describe("production session output", () => {
+  test("calculates efficiency from total produced pieces and target quantity", () => {
+    expect(
+      productionSessionEfficiency({ targetPieces: 100, totalPieces: 85 })
+    ).toBe(0.85)
+    expect(
+      productionSessionEfficiency({ targetPieces: 0, totalPieces: 0 })
+    ).toBeNull()
+  })
+
   test("calculates good pieces from weight after crate tare and QC rejection", () => {
     expect(
       calculateProductionSessionOutput({

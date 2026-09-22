@@ -163,6 +163,10 @@ Session target quantity is the whole-piece capacity for productive runtime:
 use the current runtime and cycle standard; the target saved when a session is
 closed remains immutable with its production entry.
 
+Session efficiency compares total produced pieces, including rejected pieces,
+with that target: `total produced / target quantity × 100`. It may exceed 100%
+and is unavailable when the target quantity is zero.
+
 Planner Actions never accept a second produced-quantity figure. When a planner decision stops or moves a running setup, its Production Session must first be closed through the normal Weight or Machine Counter workflow at the actual interruption time. The planner decision then reads the resulting canonical good output and uses it as interruption evidence; the same output therefore appears immediately in the Production Entry and Job Card.
 
 Saving an approved machine move, priority stop, or machine-constraint move also releases each stopped setup's active machine ownership in the same transaction. Its workflow returns to Planned without marking the setup complete, the planner history retains the stop evidence, and the destination machine can immediately accept the approved setup.

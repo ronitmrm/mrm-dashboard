@@ -1,6 +1,7 @@
 "use client"
 
 import {
+  productionSessionEfficiency,
   productionSessionOperationalStatus,
   productionShiftAt,
   type ProductionSessionOperationalStatus,
@@ -57,6 +58,7 @@ type Row = Record<string, unknown>
 
 const text = (value: unknown) => String(value ?? "").trim()
 const number = (value: unknown) => Number.isFinite(Number(value)) ? Number(value) : 0
+const percent = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 1 })
 const rows = (value: unknown): Row[] => Array.isArray(value) ? value.filter((item): item is Row => Boolean(item) && typeof item === "object" && !Array.isArray(item)) : []
 const first = (row: Row, keys: string[]) => keys.map((key) => text(row[key])).find(Boolean) ?? ""
 const machine = (row: Row) => first(row, ["machineNumber", "machineNo", "machine", "machineCode"])
@@ -453,6 +455,10 @@ function DetailSheet({ session, events, floor, now, onOpenChange }: { session: R
   const status = sessionOperationalStatus(session, floor, now)
   const endedAt = text(session.endedAt)
   const measurementMethod = text(session.measurementMethod).toLowerCase()
+  const efficiency = productionSessionEfficiency({
+    targetPieces: number(session.targetPieces),
+    totalPieces: number(session.totalPieces),
+  })
   const summary: Array<[string, string | number]> = [
     ["Status", titleCase(status)],
     ["Employee ID", text(session.operatorCode) || "-"],
@@ -467,6 +473,7 @@ function DetailSheet({ session, events, floor, now, onOpenChange }: { session: R
     ["Cycle time", `${number(session.cycleTimeSeconds)} sec`],
     ["Downtime", `${number(session.downtimeMinutes)} min`],
     ["Total produced", number(session.totalPieces)],
+    ["Efficiency", efficiency === null ? "-" : `${percent.format(efficiency * 100)}%`],
     ["Rejected", number(session.rejectedPieces)],
     ["Good", number(session.goodPieces)],
     ...(measurementMethod === "counter"
