@@ -39,6 +39,41 @@ export function shopFloorRowIsExplicitlyStopped(row: Record<string, unknown>) {
   )
 }
 
+function rowText(row: Record<string, unknown>, keys: string[]) {
+  return keys
+    .map((key) => String(row[key] ?? "").trim().toLowerCase())
+    .find(Boolean) ?? ""
+}
+
+export function openProductionSessionForShopFloorItem(
+  sessions: Array<Record<string, unknown>>,
+  item: Record<string, unknown>
+) {
+  const itemIdentity = {
+    machine: rowText(item, ["machineNumber", "machineNo", "machine"]),
+    job: rowText(item, ["jobCardNumber", "jobCard", "jcNo"]),
+    part: rowText(item, ["partCode", "partNo", "itemCode"]),
+    option: rowText(item, ["optionNumber", "optionNo"]),
+    setup: rowText(item, ["setupNumber", "setupNo"]),
+  }
+
+  return sessions.find((session) =>
+    rowText(session, ["status"]) === "open" &&
+    rowText(session, ["machineNumber", "machineNo", "machine"]) === itemIdentity.machine &&
+    rowText(session, ["jobCardNumber", "jobCard", "jcNo"]) === itemIdentity.job &&
+    rowText(session, ["partCode", "partNo", "itemCode"]) === itemIdentity.part &&
+    rowText(session, ["optionNumber", "optionNo"]) === itemIdentity.option &&
+    rowText(session, ["setupNumber", "setupNo"]) === itemIdentity.setup
+  )
+}
+
+export function productionSessionDetailHref(floor: string, sessionId: string) {
+  return `/dashboard/production-sessions?${new URLSearchParams({
+    floor,
+    session: sessionId,
+  }).toString()}`
+}
+
 export function setupChecklistItemAppliesToPhase(
   section: unknown,
   phase: "end" | "start"

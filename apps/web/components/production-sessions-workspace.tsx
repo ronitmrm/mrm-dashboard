@@ -119,7 +119,13 @@ async function api(path: string, init?: RequestInit) {
   return body
 }
 
-export function ProductionSessionsWorkspace({ initialFloor }: { initialFloor: ProductionFloorCode }) {
+export function ProductionSessionsWorkspace({
+  initialFloor,
+  initialSessionId,
+}: {
+  initialFloor: ProductionFloorCode
+  initialSessionId?: string
+}) {
   const floor = initialFloor
   const unit = productionFloors.find((item) => item.code === floor)!
   const [view, setView] = useState<View>("start")
@@ -157,15 +163,28 @@ export function ProductionSessionsWorkspace({ initialFloor }: { initialFloor: Pr
         api(`/api/production-sessions?view=events&floor=${encodeURIComponent(floor)}&limit=1000`),
         api("/api/employee-master"),
       ])
-      setSessions(rows(sessionBody.rows))
+      const loadedSessions = rows(sessionBody.rows)
+      setSessions(loadedSessions)
       setEventRows(rows(eventsBody.rows))
       setEmployees(productionShopFloorOptions(rows(employeeBody.rows), floor))
+      const requestedSession = initialSessionId
+        ? loadedSessions.find((session) => text(session.id) === initialSessionId)
+        : undefined
+      if (requestedSession) {
+        setView("register")
+        setDetail(requestedSession)
+        setDetailEvents([])
+        const detailBody = await api(
+          `/api/production-sessions?view=events&floor=${encodeURIComponent(floor)}&sessionId=${encodeURIComponent(text(requestedSession.id))}&limit=500`
+        )
+        setDetailEvents(rows(detailBody.rows))
+      }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Production sessions could not be loaded.")
     } finally {
       setLoading(false)
     }
-  }, [floor])
+  }, [floor, initialSessionId])
 
   useEffect(() => {
     queueMicrotask(() => void load())

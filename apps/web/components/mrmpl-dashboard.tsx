@@ -188,6 +188,7 @@ import {
 } from "@/lib/job-card-action-planning"
 import {
   maintenanceChecklistRowsForSchedule,
+  maintenanceDowntimeReasonRows,
   maintenanceMasterRowsForMachineAssignment,
 } from "@/lib/maintenance-schedule-options"
 import { unifiedMechanicalWorkRows } from "@/lib/maintenance-work-list"
@@ -221,6 +222,8 @@ import {
 } from "@/lib/shared-employee-master"
 import {
   nextShopFloorStageId,
+  openProductionSessionForShopFloorItem,
+  productionSessionDetailHref,
   setupChecklistItemAppliesToPhase,
   shopFloorNoPendingActionLabel,
   shopFloorRowIsExplicitlyStopped,
@@ -7302,6 +7305,15 @@ function ShopFloorStatusPanel({
 }) {
   const { machinistOptions, qualityOptions, shopFloorOptions, workerOptions } =
     useProductionEmployeeDirectory()
+  const productionFloorCode = productionFloorFromLocation()
+  const productionSessionsPage = usePostgresOperationalPage(
+    `/api/production-sessions?floor=${encodeURIComponent(productionFloorCode)}&status=open&limit=500`,
+    30_000
+  )
+  const openProductionSessions = useMemo(
+    () => asArray(asRecord(productionSessionsPage.data).rows),
+    [productionSessionsPage.data]
+  )
   const [machineFilter, setMachineFilter] = useState("")
   const [locationFilter, setLocationFilter] = useState("")
   const [currentFilter, setCurrentFilter] = useState("")
@@ -7349,13 +7361,13 @@ function ShopFloorStatusPanel({
             current,
             productionCardRows
           )
-          const actionCurrent =
-            current &&
-            (shopFloorItemIsProductionCurrent(current) ||
-              shopFloorItemHasActiveProductionCard(current, productionCardRows))
-              ? current
-              : undefined
-          const actionNext = actionCurrent ? next : (current ?? next)
+          const openSession = current
+            ? openProductionSessionForShopFloorItem(
+                openProductionSessions,
+                current
+              )
+            : undefined
+          const actionNext = current ? undefined : next
           const status = shopFloorRowStatus(current, next, productionCardRows)
           return {
             machineRow,
@@ -7363,8 +7375,8 @@ function ShopFloorStatusPanel({
             location: machineMasterLocationValue(machineRow),
             current,
             next,
-            actionCurrent,
             actionNext,
+            openSession,
             status,
           }
         })
@@ -7382,6 +7394,7 @@ function ShopFloorStatusPanel({
       locationFilter,
       machineFilter,
       nextFilter,
+      openProductionSessions,
       plannedByMachine,
       productionCardRows,
       statusFilter,
@@ -7579,22 +7592,39 @@ function ShopFloorStatusPanel({
                       className="align-middle"
                       data-filter-value={row.status}
                     >
-                      <ShopFloorRowAction
-                        current={row.actionCurrent}
-                        next={row.actionNext}
-                        machinistOptions={machinistOptions}
-                        onSaveStage={saveStage}
-                        onSaveSetupChecklistSession={saveSetupChecklistSession}
-                        qualityOptions={qualityOptions}
-                        setupChecklistMasters={asArray(
-                          productionControl.setupChecklistMasterRows
-                        )}
-                        setupChecklistSessions={asArray(
-                          productionControl.setupChecklistSessionRows
-                        )}
-                        shopFloorOptions={shopFloorOptions}
-                        workerOptions={workerOptions}
-                      />
+                      {row.current ? (
+                        row.openSession ? (
+                          <Button asChild size="sm" variant="outline">
+                            <Link
+                              href={productionSessionDetailHref(
+                                productionFloorCode,
+                                str(row.openSession.id)
+                              )}
+                            >
+                              <Activity className="size-4" />
+                              {displayValue(row.openSession.sessionReference)}
+                            </Link>
+                          </Button>
+                        ) : (
+                          <StatusBadge value="No open session" />
+                        )
+                      ) : (
+                        <ShopFloorRowAction
+                          next={row.actionNext}
+                          machinistOptions={machinistOptions}
+                          onSaveStage={saveStage}
+                          onSaveSetupChecklistSession={saveSetupChecklistSession}
+                          qualityOptions={qualityOptions}
+                          setupChecklistMasters={asArray(
+                            productionControl.setupChecklistMasterRows
+                          )}
+                          setupChecklistSessions={asArray(
+                            productionControl.setupChecklistSessionRows
+                          )}
+                          shopFloorOptions={shopFloorOptions}
+                          workerOptions={workerOptions}
+                        />
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -8198,7 +8228,6 @@ function ShopFloorItemSummary({
 }
 
 function ShopFloorRowAction({
-  current,
   next,
   onSaveStage,
   onSaveFirstPieceReport,
@@ -8212,7 +8241,6 @@ function ShopFloorRowAction({
   workerOptions = [],
   openDataEntry,
 }: {
-  current?: DashboardPayload
   next?: DashboardPayload
   onSaveStage: (
     row: DashboardPayload,
@@ -8246,7 +8274,7 @@ function ShopFloorRowAction({
     Record<string, string[]>
   >({})
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const row = next ?? current
+  const row = next
   const stage = str(row?.shopFloorStage) as ShopFloorStageId
   const stageIndex = shopFloorStageIndex(stage)
   const nextStage = next ? nextShopFloorStage(next) : undefined
@@ -8474,41 +8502,6 @@ function ShopFloorRowAction({
     } finally {
       setIsSubmitting(false)
     }
-  }
-
-  async function submitCurrentStageComplete() {
-    if (!current || isSubmitting) return
-    setIsSubmitting(true)
-    try {
-      await onSaveStage(current, "item_complete")
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
-
-  if (current) {
-    return (
-      <div className="grid gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <StatusBadge value="Running" />
-          <span className="text-sm text-muted-foreground">
-            Worker: {displayValue(current.shopFloorWorker)}
-          </span>
-        </div>
-
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="w-fit"
-          disabled={isSubmitting}
-          onClick={() => void submitCurrentStageComplete()}
-        >
-          <CheckCircle2 className="size-4" />
-          Item Finished
-        </Button>
-      </div>
-    )
   }
 
   if (!next) {
@@ -10530,6 +10523,7 @@ const centralMachineMasterRowKeys = [
   "maintenanceMasterRows",
   "maintenanceChecklistMasterRows",
   "productionRunRows",
+  "rejectionReasonMasterRows",
 ] as const
 
 function combinedMachineMasterProductionControl(pages: DashboardPayload[]) {
@@ -10539,6 +10533,8 @@ function combinedMachineMasterProductionControl(pages: DashboardPayload[]) {
       key,
       key === "maintenanceMasterRows"
         ? maintenanceMasterRowsForMachineAssignment(pages)
+        : key === "rejectionReasonMasterRows"
+          ? maintenanceDowntimeReasonRows(pages)
         : controls.flatMap((control) => asArray(control[key])),
     ])
   )

@@ -232,3 +232,5 @@ When a machine problem delays work on the same machine, the Production Session r
 Production Sessions belongs inside each Production Unit. Start Session offers a dropdown containing only currently running machines in that unit and fetches the selected machine's current planner assignment for verification before Shop Floor enters the operator, start time, measurement method, and applicable machine start count. It does not expose a daily all-machine board or queued machines.
 
 The Production Session Register shows one row per session for the selected Production Unit. The Production Event Log presents that unit's lifecycle actions and child events chronologically for analysis without creating a second source of truth.
+
+Shop Floor Status links each currently running item to its matching open Production Session and opens that session's detail directly. It does not duplicate session completion with a separate Item Finished action or repeat the worker name in the action cell.

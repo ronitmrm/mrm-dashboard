@@ -9,7 +9,10 @@ import { productionModuleIsEnabled } from "@/lib/production-module"
 export default async function Page({
   searchParams,
 }: {
-  searchParams: Promise<{ floor?: string | string[] }>
+  searchParams: Promise<{
+    floor?: string | string[]
+    session?: string | string[]
+  }>
 }) {
   if (!productionModuleIsEnabled()) redirect("/commercial")
   const query = await searchParams
@@ -21,5 +24,14 @@ export default async function Page({
     "/dashboard/production-sessions"
   )
 
-  return <ProductionSessionsWorkspace initialFloor={floor} />
+  const initialSessionId = Array.isArray(query.session)
+    ? query.session[0]
+    : query.session
+
+  return (
+    <ProductionSessionsWorkspace
+      initialFloor={floor}
+      initialSessionId={initialSessionId}
+    />
+  )
 }

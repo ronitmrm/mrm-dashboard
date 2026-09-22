@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   nextShopFloorStageId,
+  openProductionSessionForShopFloorItem,
+  productionSessionDetailHref,
   setupChecklistItemAppliesToPhase,
   shopFloorNoPendingActionLabel,
   shopFloorRowIsExplicitlyStopped,
@@ -32,4 +34,28 @@ describe("shop-floor workflow action labels", () => {
     expect(setupChecklistItemAppliesToPhase("Setting", "start")).toBe(false);
     expect(setupChecklistItemAppliesToPhase("Setting", "end")).toBe(true);
   });
+
+  it("links a running item to its exact open production session", () => {
+    const item = {
+      machine: "CNC-12",
+      jcNo: "P1462",
+      partCode: "M448",
+      optionNumber: "1",
+      setupNo: "1",
+    }
+    const session = {
+      id: "session-12",
+      status: "open",
+      machineNumber: "CNC-12",
+      jobCardNumber: "P1462",
+      partCode: "M448",
+      optionNumber: "1",
+      setupNumber: "1",
+    }
+
+    expect(openProductionSessionForShopFloorItem([session], item)).toBe(session)
+    expect(productionSessionDetailHref("cnc", "session-12")).toBe(
+      "/dashboard/production-sessions?floor=cnc&session=session-12"
+    )
+  })
 });
