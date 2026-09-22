@@ -189,3 +189,89 @@ test("planner can add an idle parallel machine without stopping current machines
   expect(replanned.reduce((total, row) => total + Number(row.pendingGoodQty), 0))
     .toBe(29_001)
 })
+
+test("revised cycle time forecasts only the remaining quantity after recorded production", () => {
+  vi.useFakeTimers()
+  vi.setSystemTime(new Date("2026-09-07T05:00:00.000Z"))
+
+  const entry = (entryType: string, payload: Record<string, unknown>, createdAt = "2026-09-07T05:00:00.000Z") => ({
+    entryType,
+    payload,
+    createdAt,
+  })
+  const dataEntries = [
+    entry("work_order", {
+      jcNo: "CYCLE-REVISION-CHECK",
+      partCode: "CYCLE-REVISION-PART",
+      optionNumber: "1",
+      orderPcs: 10_000,
+      rmInwardDate: "2026-09-01",
+      rmInwardKg: 1,
+    }, "2026-09-01T05:00:00.000Z"),
+    ...[
+      { setupNo: "1", machineFamily: "REVISION-UPSTREAM", cycleTime: 20 },
+      { setupNo: "2", machineFamily: "REVISION-DOWNSTREAM", cycleTime: 40 },
+    ].flatMap(({ setupNo, machineFamily, cycleTime }) => [
+      entry("route", {
+        partNo: "CYCLE-REVISION-PART",
+        optionNumber: "1",
+        setupNo,
+        machineType: "CNC",
+        machineFamily,
+      }, "2026-09-01T05:00:00.000Z"),
+      entry("cycle", {
+        partNo: "CYCLE-REVISION-PART",
+        optionNumber: "1",
+        setupNo,
+        cycleTime,
+        ...(setupNo === "1" ? { cycleRevisionEffectiveAt: "2026-09-07T05:00:00.000Z" } : {}),
+      }, "2026-09-01T05:00:00.000Z"),
+      entry("tooling", {
+        partNo: "CYCLE-REVISION-PART",
+        optionNumber: "1",
+        setupNo,
+      }, "2026-09-01T05:00:00.000Z"),
+      entry("machine_master", {
+        machineNo: `REVISION-${setupNo}`,
+        machineType: "CNC",
+        machineFamily,
+        status: "Active",
+      }, "2026-09-01T05:00:00.000Z"),
+    ]),
+  ]
+  const productionEntries = ["2026-09-01", "2026-09-02", "2026-09-03", "2026-09-05", "2026-09-06"].map((prodDate) => ({
+    jobCard: "CYCLE-REVISION-CHECK",
+    partCode: "CYCLE-REVISION-PART",
+    setupNo: "1",
+    machine: "REVISION-1",
+    machineType: "CNC",
+    operatorId: "OP",
+    prodDate,
+    outputQty: 1_000,
+    actualQty: 1_000,
+    rejectQty: 0,
+    targetQty: 10_000,
+  }))
+
+  const plan = buildLegacyDashboardSnapshot({
+    productionFloorCode: "cnc",
+    workbookName: "PostgreSQL",
+    productionEntries,
+    dataEntries,
+  }).productionControl.machinePlanDetailRows.filter(
+    (row) => row.jcNo === "CYCLE-REVISION-CHECK"
+  )
+
+  expect(plan).toEqual(expect.arrayContaining([
+    expect.objectContaining({
+      setupNo: "1",
+      rawActualQty: 5_000,
+      pendingGoodQty: 5_000,
+      plannedProductionEndDate: "8-Sept-26",
+    }),
+    expect.objectContaining({
+      setupNo: "2",
+      plannedProductionStartDate: "8-Sept-26",
+    }),
+  ]))
+})

@@ -5308,23 +5308,41 @@ function plannedProductionEnd(
 ) {
   const normalizedStartDate = addDays(parseDate(startDate) || startDate, 0, planningCalendar);
   if (!normalizedStartDate) return "";
+  const revisionEffectiveDate = cycleRevisionEffectiveDate(cycle, planningCalendar);
   if (actual?.latestDate && actual.dates.size) {
     if (actual.actualQty >= orderPcs) return maxDateValue(normalizedStartDate, actual.latestDate);
-    const dailyOutput = Math.max(actual.actualQty, 0) / actual.dates.size;
-    if (dailyOutput > 0) {
-      const remainingQty = Math.max(orderPcs - actual.actualQty, 0);
-      const remainingDays = Math.max(1, Math.ceil(remainingQty / dailyOutput));
-      return maxDateValue(normalizedStartDate, addDays(parseDate(actual.latestDate) || actual.latestDate, remainingDays, planningCalendar));
+    if (!revisionEffectiveDate) {
+      const dailyOutput = Math.max(actual.actualQty, 0) / actual.dates.size;
+      if (dailyOutput > 0) {
+        const remainingQty = Math.max(orderPcs - actual.actualQty, 0);
+        const remainingDays = Math.max(1, Math.ceil(remainingQty / dailyOutput));
+        return maxDateValue(normalizedStartDate, addDays(parseDate(actual.latestDate) || actual.latestDate, remainingDays, planningCalendar));
+      }
     }
   }
+  const remainingStartDate = maxDateValue(
+    normalizedStartDate,
+    revisionEffectiveDate,
+    actual?.latestDate && actual.actualQty > 0
+      ? addDays(parseDate(actual.latestDate) || actual.latestDate, 1, planningCalendar)
+      : "",
+  );
   const cycleSeconds = safeNumber(rowValue(cycle ?? {}, "cycleTime", "CYCLE TIME")) + safeNumber(rowValue(cycle ?? {}, "loadingUnloading", "LOADING AND UNLOADING"));
-  if (!orderPcs || !cycleSeconds) return normalizedStartDate;
+  if (!orderPcs || !cycleSeconds) return remainingStartDate;
   const estimatedHours = (Math.max(orderPcs - (actual?.actualQty ?? 0), 0) * cycleSeconds) / 3600;
   const productionDays = Math.max(
     1,
     Math.ceil(estimatedHours / planningCalendar.productiveHoursPerDay),
   );
-  return addDays(normalizedStartDate, productionDays - 1, planningCalendar);
+  return addDays(remainingStartDate, productionDays - 1, planningCalendar);
+}
+
+function cycleRevisionEffectiveDate(
+  cycle: Record<string, unknown> | undefined,
+  planningCalendar: PlanningCalendar,
+) {
+  const effectiveAt = rowText(cycle ?? {}, "cycleRevisionEffectiveAt");
+  return effectiveAt ? addDays(parseDate(effectiveAt) || effectiveAt, 0, planningCalendar) : "";
 }
 
 function plannedWipBufferReadyDate({
@@ -5344,10 +5362,14 @@ function plannedWipBufferReadyDate({
   actuals?: PlanningProductionActual[];
   planningCalendar?: PlanningCalendar;
 }) {
+  const revisionEffectiveDate = cycleRevisionEffectiveDate(previousCycle, planningCalendar);
   const streams = productionStreams
     .map((stream) => ({
       machine: stream.machine,
-      startDate: parseDate(stream.startDate) || stream.startDate,
+      startDate: maxDateValue(
+        parseDate(stream.startDate) || stream.startDate,
+        revisionEffectiveDate,
+      ),
       endDate: parseDate(stream.endDate) || stream.endDate,
       quantity: Math.max(stream.quantity, 0),
       dailyQty: Math.max(stream.dailyQty, 0),
@@ -5371,18 +5393,27 @@ function plannedWipBufferReadyDate({
     const actual = actualByMachine.get(canonicalKey(stream.machine));
     if (!actual) return [stream];
     const remainingQuantity = Math.max(stream.quantity - actual.quantity, 0);
-    const remainingStartDate = addDays(actual.endDate, 1, planningCalendar);
+    const remainingStartDate = maxDateValue(
+      addDays(actual.endDate, 1, planningCalendar),
+      revisionEffectiveDate,
+    );
     if (!remainingQuantity || !remainingStartDate || remainingStartDate > stream.endDate) return [];
     return [{
       ...stream,
       startDate: remainingStartDate,
       quantity: remainingQuantity,
-      dailyQty: actual?.dailyQty || stream.dailyQty,
+      dailyQty: revisionEffectiveDate ? stream.dailyQty : actual.dailyQty || stream.dailyQty,
     }];
   });
   const supplyStreams = [...actualStreams, ...futurePlannedStreams];
   if (!supplyStreams.length || !orderPcs || !nextCycle) return "";
-  const previousDailyQty = supplyStreams.length ? sum(supplyStreams.map((stream) => stream.dailyQty)) : cycleDailyQty(previousCycle, planningCalendar);
+  const futureMachines = new Set(futurePlannedStreams.map((stream) => canonicalKey(stream.machine)));
+  const previousDailyQty = revisionEffectiveDate
+    ? sum(futurePlannedStreams.map((stream) => stream.dailyQty))
+      + sum(actualStreams
+        .filter((stream) => !futureMachines.has(canonicalKey(stream.machine)))
+        .map((stream) => stream.dailyQty))
+    : sum(supplyStreams.map((stream) => stream.dailyQty));
   const nextDailyQty = cycleDailyQty(nextCycle, planningCalendar) * Math.max(1, nextMachineCount);
   if (!previousDailyQty || !nextDailyQty) return "";
 
@@ -5492,7 +5523,9 @@ function actualWipBufferAvailable({
     const dateCount = actual.dates.size || 1;
     return Math.max(actual.actualQty, 0) / dateCount;
   }));
-  const effectivePreviousDailyQty = actualDailyQty || previousDailyQty;
+  const effectivePreviousDailyQty = cycleRevisionEffectiveDate(previousCycle, planningCalendar)
+    ? previousDailyQty
+    : actualDailyQty || previousDailyQty;
   const bufferDays = effectivePreviousDailyQty < nextDailyQty ? 3 : 2;
   const requiredBufferQty = Math.min(orderPcs, nextDailyQty * bufferDays);
   const actualQty = Math.min(orderPcs, sum(actuals.map((actual) => Math.max(actual.actualQty, 0))));

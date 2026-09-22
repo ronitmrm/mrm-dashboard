@@ -1526,8 +1526,12 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
                   setup_time_minutes = $3, updated_by_user_id = $4,
                   source_payload = CASE
                     WHEN jsonb_typeof(source_payload->'payload') = 'object'
-                    THEN source_payload || jsonb_build_object('payload', (source_payload->'payload') || $5::jsonb)
+                    THEN source_payload || jsonb_build_object(
+                      'payload', (source_payload->'payload') || $5::jsonb
+                        || jsonb_build_object('cycleRevisionEffectiveAt', now())
+                    )
                     ELSE COALESCE(source_payload, '{}'::jsonb) || $5::jsonb
+                      || jsonb_build_object('cycleRevisionEffectiveAt', now())
                   END, updated_at = now(),
                   row_version = row_version + 1
                 WHERE id = $6 RETURNING id
