@@ -86,6 +86,7 @@ import {
   OperationalTable,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -9041,14 +9042,7 @@ function FirstPieceInspectionReport({
 }: {
   report: FirstPieceReportView
 }) {
-  const overallResult = report.dimensions.some(
-    (dimension) => dimension.result === "Not OK"
-  )
-    ? "Not OK"
-    : report.dimensions.length > 0 &&
-        report.dimensions.every((dimension) => dimension.result === "OK")
-      ? "OK"
-      : "Recorded"
+  const overallResult = report.result
 
   return (
     <div className="grid min-w-0 gap-4">
@@ -9100,8 +9094,8 @@ function FirstPieceInspectionReport({
         <CardHeader>
           <CardTitle>Dimension Results</CardTitle>
           <CardDescription>
-            Green rows are within tolerance. A row turns red when any reading is
-            outside tolerance.
+            Each piece is evaluated against its saved tolerance. An
+            out-of-tolerance reading and its full row turn red.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -9116,10 +9110,10 @@ function FirstPieceInspectionReport({
                   <TableHead>Parameter</TableHead>
                   <TableHead>Specification</TableHead>
                   <TableHead>Tolerance</TableHead>
-                  <TableHead>Result</TableHead>
                   {Array.from({ length: 5 }, (_, reading) => (
                     <TableHead key={reading}>Piece {reading + 1}</TableHead>
                   ))}
+                  <TableHead>Result</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -9141,6 +9135,27 @@ function FirstPieceInspectionReport({
                       <TableCell>{dimension.name || "-"}</TableCell>
                       <TableCell>{dimension.specification || "-"}</TableCell>
                       <TableCell>{dimension.tolerance || "-"}</TableCell>
+                      {Array.from({ length: 5 }, (_, reading) => {
+                        const value = dimension.readings[reading] || "-"
+                        const result = dimension.readingResults[reading]
+                        return (
+                          <TableCell
+                            className="text-right tabular-nums"
+                            key={reading}
+                          >
+                            {result === "Not OK" ? (
+                              <StatusBadge
+                                aria-label={`Piece ${reading + 1}: ${value}, out of tolerance`}
+                                className="ml-auto"
+                                tone="danger"
+                                value={value}
+                              />
+                            ) : (
+                              value
+                            )}
+                          </TableCell>
+                        )
+                      })}
                       <TableCell>
                         <StatusBadge
                           tone={
@@ -9148,23 +9163,34 @@ function FirstPieceInspectionReport({
                               ? "danger"
                               : dimension.result === "OK"
                                 ? "positive"
-                                : "neutral"
+                                : "warning"
                           }
                           value={dimension.result}
                         />
                       </TableCell>
-                      {Array.from({ length: 5 }, (_, reading) => (
-                        <TableCell
-                          className="text-right tabular-nums"
-                          key={reading}
-                        >
-                          {dimension.readings[reading] || "-"}
-                        </TableCell>
-                      ))}
                     </TableRow>
                   )
                 })}
               </TableBody>
+              <TableFooter>
+                <TableRow>
+                  <TableCell className="text-right" colSpan={9}>
+                    Overall Result
+                  </TableCell>
+                  <TableCell>
+                    <StatusBadge
+                      tone={
+                        overallResult === "Not OK"
+                          ? "danger"
+                          : overallResult === "OK"
+                            ? "positive"
+                            : "warning"
+                      }
+                      value={overallResult}
+                    />
+                  </TableCell>
+                </TableRow>
+              </TableFooter>
             </OperationalTable>
           ) : (
             <EmptyRowsMessage>

@@ -94,6 +94,7 @@ describe("quality control workspace", () => {
           inputType: "",
           name: "Rod Diameter",
           readings: ["29.97", "30", "30.02", "29.99", "30.01"],
+          readingResults: ["OK", "OK", "OK", "OK", "OK"],
           result: "OK",
           specification: "30.00",
           tolerance: "+0.25 / -0.25",
@@ -105,6 +106,7 @@ describe("quality control workspace", () => {
           inputType: "",
           name: "Head Diameter",
           readings: ["30", "30.01", "30.3", "30.02", "30"],
+          readingResults: ["OK", "OK", "Not OK", "OK", "OK"],
           result: "Not OK",
           specification: "30.00",
           tolerance: "+0.25 / -0.25",
@@ -112,6 +114,7 @@ describe("quality control workspace", () => {
           tolerancePlus: "0.25",
         },
       ],
+      result: "Not OK",
     })
   })
 })
