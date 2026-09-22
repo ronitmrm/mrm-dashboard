@@ -19,6 +19,7 @@ export type FirstPieceReportDimension = {
   inputType: string
   name: string
   readings: string[]
+  readingResults: string[]
   result: string
   specification: string
   tolerance: string
@@ -36,6 +37,7 @@ export type FirstPieceReportView = {
   optionNumber: string
   partCode: string
   remark: string
+  result: string
   setupNumber: string
   status: string
 }
@@ -135,18 +137,16 @@ export function firstPieceReportView(
     )
     const result = results.some((readingResult) => readingResult === "Not OK")
       ? "Not OK"
-      : results.length > 0 &&
-          results.every((readingResult) => readingResult === "OK")
-        ? "OK"
-        : results.some(Boolean)
-          ? "Recorded"
-          : "Pending"
+      : readings.length < 5 || readings.slice(0, 5).some((reading) => !reading)
+        ? "Pending"
+        : "OK"
 
     return {
       code: first(dimension, "parameterCode", "code", "uid"),
       inputType,
       name: first(dimension, "parameterName", "description", "name"),
       readings,
+      readingResults: results,
       result,
       specification,
       tolerance: tolerance(dimension),
@@ -159,6 +159,12 @@ export function firstPieceReportView(
   const optionNumber = first(row, "optionNumber", "optionNo")
   const partCode = first(row, "partCode", "partNo", "itemCode")
   const setupNumber = first(row, "setupNo", "setupNumber", "operationSetupCode")
+  const result = dimensions.some((dimension) => dimension.result === "Not OK")
+    ? "Not OK"
+    : dimensions.length === 0 ||
+        dimensions.some((dimension) => dimension.result === "Pending")
+      ? "Pending"
+      : "OK"
 
   return {
     approvedBy: first(row, "approvedBy", "inspectedBy", "legacyInspector"),
@@ -180,6 +186,7 @@ export function firstPieceReportView(
     optionNumber,
     partCode,
     remark: first(row, "remark", "notes"),
+    result,
     setupNumber,
     status: first(row, "status", "result") || "Approved",
   }
