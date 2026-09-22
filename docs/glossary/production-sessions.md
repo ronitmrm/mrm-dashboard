@@ -238,6 +238,8 @@ The interruption evidence also stores the immutable Production Session reference
 
 When a machine problem delays work on the same machine, the Production Session remains open and an open Production Downtime Event is required before the delay decision can be saved. If the work moves to another machine, the source session must be closed first. Stopping running work on a destination machine follows the same close-first rule. Queued work that has not started needs neither output settlement nor session closure.
 
+An active machine-unavailable window is a hard scheduling constraint. Automatic assignment and family idle-gap balancing must not place planned work on that machine when its production dates overlap the window. Shift All moves the machine's complete current planned queue, and subsequent recalculations may use the machine again only for work starting after the unavailable window.
+
 ## Operational and analytical views
 
 Production Sessions belongs inside each Production Unit. Start Session offers a dropdown containing only currently running machines in that unit and fetches the selected machine's current planner assignment for verification before Shop Floor enters the operator, start time, measurement method, and applicable machine start count. It does not expose a daily all-machine board or queued machines.

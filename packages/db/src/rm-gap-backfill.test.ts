@@ -247,3 +247,54 @@ test("releases both downstream machines only after pooled actual WIP covers thei
     vi.useRealTimers()
   }
 }, 15_000)
+
+test("does not backfill an idle machine during its Shift All unavailable window", () => {
+  vi.useFakeTimers()
+  vi.setSystemTime(new Date("2026-09-22T06:00:00Z"))
+
+  const createdAt = "2026-09-22T05:00:00Z"
+  const entry = (entryType: string, payload: Record<string, unknown>) => ({ entryType, payload, createdAt })
+  const job = (jcNo: string, partCode: string, orderPcs: number, rmInwardDate: string, cycleTime: number) => [
+    entry("work_order", { jcNo, partCode, optionNumber: "1", orderPcs, rmInwardDate, rmInwardKg: 1 }),
+    entry("route", { partNo: partCode, optionNumber: "1", setupNo: "1", machineType: "CNC", machineFamily: "T25" }),
+    entry("cycle", { partNo: partCode, optionNumber: "1", setupNo: "1", cycleTime }),
+  ]
+
+  try {
+    const control = buildLegacyDashboardSnapshot({
+      productionFloorCode: "cnc",
+      workbookName: "PostgreSQL",
+      productionEntries: [],
+      dataEntries: [
+        ...job("BLOCKER", "BLOCKER-PART", 100, "2026-09-22", 8_100),
+        ...job("BACKFILL", "BACKFILL-PART", 20, "2026-09-22", 8_100),
+        ...job("AFTER-OUTAGE", "AFTER-OUTAGE-PART", 10, "2026-10-24", 8_100),
+        entry("machine_master", { machineNo: "CNC-11", machineType: "CNC", machineFamily: "T25", status: "Active" }),
+        entry("machine_master", { machineNo: "CNC-12", machineType: "CNC", machineFamily: "T25", status: "Active" }),
+      ],
+      machineConstraints: [{
+        machineNo: "CNC-11",
+        unavailableFrom: "2026-09-22",
+        unavailableTo: "2026-10-22",
+        rescheduleAction: "shift_all",
+        status: "Active",
+        createdAt,
+      }],
+      previousMachinePlanDetailRows: [
+        { jcNo: "BLOCKER", partCode: "BLOCKER-PART", optionNumber: "1", setupNo: "1", routeMachine: "T25", machine: "CNC-12" },
+        { jcNo: "BACKFILL", partCode: "BACKFILL-PART", optionNumber: "1", setupNo: "1", routeMachine: "T25", machine: "CNC-12" },
+        { jcNo: "AFTER-OUTAGE", partCode: "AFTER-OUTAGE-PART", optionNumber: "1", setupNo: "1", routeMachine: "T25", machine: "CNC-11" },
+      ],
+    }).productionControl
+    if (!("machinePlanDetailRows" in control)) throw new Error("Missing plan")
+
+    expect(control.machinePlanDetailRows.filter((row) => row.machine === "CNC-11")).toEqual([
+      expect.objectContaining({
+        jcNo: "AFTER-OUTAGE",
+        plannedProductionStartDate: "24-Oct-26",
+      }),
+    ])
+  } finally {
+    vi.useRealTimers()
+  }
+})
