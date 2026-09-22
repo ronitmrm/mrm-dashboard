@@ -133,6 +133,8 @@ function machineSwitchHistoryRow(
 ): PlannerActionHistoryRow {
   const interruptions = records(row.interruptedSetups)
   const placements = records(row.queuePlacements)
+  const isParallelMachine =
+    text(row.assignmentMode).toLowerCase() === "add_parallel_machine"
   const jobCards = uniqueText([
     row.jobCardNumber,
     row.jcNo,
@@ -155,17 +157,28 @@ function machineSwitchHistoryRow(
     ...placements.map((entry) => entry.targetSetupNumber),
     ...placements.map((entry) => entry.targetSetupNo),
   ])
-  const sourceMachine =
-    text(row.fromMachineNumber) || text(row.fromMachine) || emptyValue
+  const sourceMachines = uniqueText([
+    row.fromMachineNumber,
+    row.fromMachine,
+    ...placements.map((entry) => entry.targetSourceMachineNumber),
+    ...placements.map((entry) => entry.targetSourceMachine),
+  ])
+  const sourceMachine = sourceMachines.join(", ") || emptyValue
   const targetMachine =
     text(row.toMachineNumber) || text(row.toMachine) || emptyValue
-  return historyRow(row, "Move Setup", {
-    "Job Card": jobCards.join(", ") || emptyValue,
-    "Part Code": partCodes.join(", ") || emptyValue,
-    Setups: setups.join(", ") || emptyValue,
-    "Machine / Route": `${sourceMachine} → ${targetMachine}`,
-    Decision: "Setup moved",
-  })
+  return historyRow(
+    row,
+    isParallelMachine ? "Add Parallel Machine" : "Move Setup",
+    {
+      "Job Card": jobCards.join(", ") || emptyValue,
+      "Part Code": partCodes.join(", ") || emptyValue,
+      Setups: setups.join(", ") || emptyValue,
+      "Machine / Route": isParallelMachine
+        ? `${sourceMachine} + ${targetMachine}`
+        : `${sourceMachine} → ${targetMachine}`,
+      Decision: isParallelMachine ? "Parallel machine added" : "Setup moved",
+    }
+  )
 }
 
 function routeChangeHistoryRow(

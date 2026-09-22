@@ -3,6 +3,7 @@ const preservedFieldNames = new Set([
   "actiontype",
   "actualreading",
   "approvalmode",
+  "assignmentmode",
   "cardrole",
   "currency",
   "department",
