@@ -12,6 +12,8 @@ import {
 } from "@workspace/db/production-floors"
 import { Badge, StatusBadge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
+import { Dialog, DialogFooter } from "@workspace/ui/components/dialog"
+import { Field as FormField, FieldGroup, FieldLabel } from "@workspace/ui/components/field"
 import { SectionCard, CardContent, CardHeader, CardTitle } from "@workspace/ui/components/card"
 import { Input } from "@workspace/ui/components/input"
 import { NativeSelect, NativeSelectOption } from "@workspace/ui/components/native-select"
@@ -22,7 +24,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 
 import { useDashboardDelivery } from "@/hooks/use-dashboard-delivery"
 import { DataDownloadButton } from "@/components/data-download-button"
-import { StandardDrawerContent } from "@/components/ui/golden-patterns"
+import { PageHeader, StandardDialogContent, StandardDrawerContent, StandardState } from "@/components/ui/golden-patterns"
 import { dashboardPayloadFromState, dashboardPayloadForProductionFloor } from "@/lib/dashboard-view-model"
 import {
   formatIstDate,
@@ -143,6 +145,7 @@ export function ProductionSessionsWorkspace({
   const [detail, setDetail] = useState<Row | null>(null)
   const [detailEvents, setDetailEvents] = useState<Row[]>([])
   const [saving, setSaving] = useState(false)
+  const [bulkOpen, setBulkOpen] = useState(false)
   const [message, setMessage] = useState("")
   const { state } = useDashboardDelivery({ floor })
   const dashboard = dashboardPayloadFromState(state.data)
@@ -272,14 +275,12 @@ export function ProductionSessionsWorkspace({
 
   return (
     <div className="grid gap-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <h1 className="text-xl font-semibold">Production Sessions</h1>
-          <div className="flex flex-wrap items-center gap-2">
+        <PageHeader title="Production Sessions" actions={<>
+            <Button variant="outline" disabled={loading || saving} onClick={() => setBulkOpen(true)}><TriangleAlert data-icon="inline-start" />Bulk Breakdown</Button>
             {closingRequiredSessions.length ? <Button className="h-8 px-3" variant="destructive" onClick={() => { setStatusFilter("closing_required"); setView("register") }}><TriangleAlert />Closing Required · {closingRequiredSessions.length}</Button> : null}
             <Badge variant="secondary" className="h-8 px-3">{unit.shortLabel}</Badge>
             <Badge variant="outline" className="h-8 px-3">{shift ? `${shift.shift} · ${shift.productionDate}` : "Outside production shift"}</Badge>
-          </div>
-        </div>
+        </>} />
 
  <SectionCard>
           <CardHeader className="gap-3">
@@ -302,10 +303,119 @@ export function ProductionSessionsWorkspace({
           </CardContent>
  </SectionCard>
       {!loading && view === "start" ? <CarriedDowntimeTable rows={carriedDowntime} sessions={sessions} options={machineOptions} onSelect={setSelectedMachine} onAction={openAction} /> : null}
+      {bulkOpen ? <BulkBreakdownDialog floor={floor} control={control} onClose={() => setBulkOpen(false)} onSaved={(savedText) => { setBulkOpen(false); setMessage(savedText); void load() }} /> : null}
       <ActionSheet key={`${action}-${text(target?.id) || machine(target ?? {})}`} action={action} target={target} floor={floor} shift={shift} employees={employees} control={control} saving={saving} message={message} onOpenChange={(open) => { if (!open) setAction(null) }} onSave={(type, payload) => void save(type, payload)} />
       <DetailSheet session={detail} events={detailEvents} floor={floor} now={now} onOpenChange={(open) => { if (!open) setDetail(null) }} onAction={(next, row) => { setDetail(null); openAction(next, row) }} />
     </div>
   )
+}
+
+function BulkBreakdownDialog({ floor, control, onClose, onSaved }: {
+  floor: ProductionFloorCode
+  control: Row
+  onClose: () => void
+  onSaved: (message: string) => void
+}) {
+  const [preview, setPreview] = useState<Row[]>([])
+  const [excluded, setExcluded] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState("")
+  const [reason, setReason] = useState("")
+  const [role, setRole] = useState("shop_floor")
+  const [startAt, setStartAt] = useState(() => istDateTimeInputValue(new Date()))
+  const reasonOptions = masterOptions(control.rejectionReasonMasterRows, ["rejectionReason", "reason", "name", "downtimeReason", "description"])
+  const selectedReason = reasonOptions.find((item) => item.code === reason)
+  const unit = productionFloors.find((item) => item.code === floor)!
+
+  const refreshPreview = useCallback(async () => {
+    setLoading(true)
+    setError("")
+    try {
+      const openSessions: Row[] = []
+      let page: Row[]
+      do {
+        const body = await api(`/api/production-sessions?floor=${floor}&status=open&limit=500&offset=${openSessions.length}`)
+        page = rows(body.rows)
+        openSessions.push(...page)
+      } while (page.length === 500)
+      const now = new Date()
+      const running = openSessions.filter((row) => row.status === "open"
+        && sessionOperationalStatus(row, floor, now) === "open"
+        && new Date(text(row.startedAt)) <= now && !row.hasOpenDowntime)
+      setPreview(running)
+      setExcluded(openSessions.length - running.length)
+    } catch (cause) {
+      setPreview([])
+      setError(cause instanceof Error ? cause.message : "Could not load running sessions.")
+    } finally {
+      setLoading(false)
+    }
+  }, [floor])
+
+  useEffect(() => { queueMicrotask(() => void refreshPreview()) }, [refreshPreview])
+
+  async function submit() {
+    if (!selectedReason || saving || loading || !preview.length) return
+    setSaving(true)
+    setError("")
+    try {
+      const result = await api("/api/data-entry", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ entryType: "production_session_bulk_downtime_start", payload: {
+          productionFloorCode: floor,
+          expectedSessionIds: preview.map((row) => text(row.id)),
+          enteredRole: role, reasonCode: reason, reasonName: selectedReason.label,
+          startedAt: istDateTimeInputToIso(startAt),
+        } }),
+      })
+      onSaved(text(result.savedText))
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Bulk breakdown could not be saved.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return <Dialog open onOpenChange={(open) => { if (!open && !saving) onClose() }}>
+    <StandardDialogContent title="Bulk Breakdown" className="max-h-[90dvh] overflow-y-auto sm:max-w-3xl"
+      description={`${unit.shortLabel} · Applies to all running sessions, regardless of register filters. Sessions stay open; machine assignments remain unchanged.`}>
+      <FieldGroup>
+        <FormField><FieldLabel htmlFor="bulk-breakdown-role">Entered by</FieldLabel>
+          <NativeSelect id="bulk-breakdown-role" value={role} disabled={saving} onChange={(event) => setRole(event.target.value)}>
+            <NativeSelectOption value="shop_floor">Shop Floor</NativeSelectOption>
+            <NativeSelectOption value="machinist">Machinist</NativeSelectOption>
+            <NativeSelectOption value="quality">QC</NativeSelectOption>
+          </NativeSelect>
+        </FormField>
+        <FormField><FieldLabel htmlFor="bulk-breakdown-reason">Breakdown / downtime reason</FieldLabel>
+          <NativeSelect id="bulk-breakdown-reason" value={reason} disabled={saving} onChange={(event) => setReason(event.target.value)}>
+            <NativeSelectOption value="">Select reason</NativeSelectOption>
+            {reasonOptions.map((item) => <NativeSelectOption key={item.code} value={item.code}>{item.code} · {item.label}</NativeSelectOption>)}
+          </NativeSelect>
+        </FormField>
+        <FormField><FieldLabel htmlFor="bulk-breakdown-start">Breakdown starts (IST)</FieldLabel>
+          <Input id="bulk-breakdown-start" type="datetime-local" value={startAt} disabled={saving} onChange={(event) => setStartAt(event.target.value)} />
+        </FormField>
+      </FieldGroup>
+      <p className="text-sm text-muted-foreground">Already in downtime and previous-shift sessions awaiting closure are excluded ({excluded}). Close each downtime through its normal session workflow. No Maintenance repair jobs are created.</p>
+      {loading ? <StandardState variant="loading" title="Loading running sessions" description="Checking all sessions on this floor." />
+        : preview.length ? <><p className="text-sm font-medium">Affected sessions: {preview.length}</p>
+          <ScrollableTable headers={["Machine", "Job Card", "Part", "Operator"]}>{preview.map((row) => <TableRow key={text(row.id)}>
+            <TableCell>{machine(row)}</TableCell><TableCell>{job(row)}</TableCell><TableCell>{part(row)}</TableCell><TableCell>{text(row.operatorName)}</TableCell>
+          </TableRow>)}</ScrollableTable></>
+        : <StandardState title="No running sessions available" description="Start a session first, or resolve existing downtime. Previous-shift sessions must be closed separately." />}
+      {error ? <StandardState variant="error" title="Bulk breakdown not saved" description={error} /> : null}
+      <DialogFooter>
+        <Button variant="outline" disabled={loading || saving} onClick={() => void refreshPreview()}>Refresh preview</Button>
+        <Button variant="outline" disabled={saving} onClick={onClose}>Cancel</Button>
+        <Button disabled={loading || saving || !preview.length || !selectedReason || !istDateTimeInputToIso(startAt)} onClick={() => void submit()}>
+          {saving ? "Saving…" : `Apply to ${preview.length} running sessions`}
+        </Button>
+      </DialogFooter>
+    </StandardDialogContent>
+  </Dialog>
 }
 
 function CarriedDowntimeTable({ rows: carriedRows, sessions, options, onSelect, onAction }: {

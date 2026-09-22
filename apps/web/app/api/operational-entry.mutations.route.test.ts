@@ -9,6 +9,7 @@ const dependencies = vi.hoisted(() => ({
   upsertRawMaterialReceipt: vi.fn(),
   upsertRawMaterialReceipts: vi.fn(),
   upsertCycleStandard: vi.fn(),
+  startBulkProductionSessionDowntime: vi.fn(),
   executePostgresOperationalEntry: vi.fn(),
   isPostgresOperationalEntryType: vi.fn(),
   requestRefresh: vi.fn(),
@@ -29,6 +30,7 @@ vi.mock("@workspace/db", async (importOriginal) => ({
     organizationIdForCode: dependencies.organizationIdForCode,
     upsertRawMaterialReceipt: dependencies.upsertRawMaterialReceipt,
     upsertRawMaterialReceipts: dependencies.upsertRawMaterialReceipts,
+    startBulkProductionSessionDowntime: dependencies.startBulkProductionSessionDowntime,
   }),
   createDashboardPlanningRepository: () => ({
     close: dependencies.close,
@@ -122,6 +124,28 @@ describe("production entry mutation API authorization", () => {
   })
 
   afterEach(() => vi.restoreAllMocks())
+
+  it("requires the selected floor's recording permission for bulk breakdown", async () => {
+    const body = { entryType: "production_session_bulk_downtime_start", payload: {
+      productionFloorCode: "cnc", expectedSessionIds: ["abcdefab-abcd-4abc-8abc-abcdefabcdef", "bcdefabc-bcde-4bcd-8bcd-bcdefabcdefa"],
+      enteredRole: "shop_floor", reasonCode: "POWER", reasonName: "Power Failure",
+      startedAt: "2026-09-22T04:15:00Z",
+    } }
+    dependencies.listAllGrantedCapabilities.mockResolvedValue([
+      "operations.production.write", "operations.floors.forging.production_sessions.production_recording.write",
+    ])
+    expect((await post("data-entry", body)).status).toBe(403)
+    expect(dependencies.startBulkProductionSessionDowntime).not.toHaveBeenCalled()
+    dependencies.listAllGrantedCapabilities.mockResolvedValue([
+      "operations.production.write", "operations.floors.cnc.production_sessions.production_recording.write",
+    ])
+    dependencies.startBulkProductionSessionDowntime.mockResolvedValue({ rowsUpdated: 2 })
+    const response = await post("data-entry", body)
+    expect(response.status).toBe(200)
+    expect(dependencies.startBulkProductionSessionDowntime).toHaveBeenCalledWith({
+      ...body.payload, actorUserId: "entry-writer", organizationId: "organization-1",
+    })
+  })
 
   it("passes the edited cycle record identity and queues recalculation", async () => {
     dependencies.listAllGrantedCapabilities.mockResolvedValue(["masters.cnc.cycle.save"])

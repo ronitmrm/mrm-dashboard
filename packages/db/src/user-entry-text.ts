@@ -11,6 +11,7 @@ const preservedFieldNames = new Set([
   "endreason",
   "enteredrole",
   "entrytype",
+  "expectedsessionids",
   "expression",
   "filebase64",
   "floor",

@@ -1420,6 +1420,28 @@ async function post(request: NextRequest, context: RouteContext) {
         )
         return json({ ...result, rowsUpdated: 1, savedText: "Downtime saved." })
       }
+      if (entryType === "production_session_bulk_downtime_start") {
+        const floor = parseProductionFloorCode(payload.productionFloorCode)
+        if (!floor) throw new RouteError(400, "Select a production floor.")
+        const result = await withProductionRepository(
+          request,
+          "operations.production.write",
+          ({ actorUserId, organizationId, repository }) =>
+            repository.startBulkProductionSessionDowntime({
+              actorUserId,
+              organizationId,
+              productionFloorCode: floor,
+              expectedSessionIds: Array.isArray(payload.expectedSessionIds)
+                ? payload.expectedSessionIds.filter((id): id is string => typeof id === "string")
+                : [],
+              enteredRole: text(payload.enteredRole),
+              reasonCode: text(payload.reasonCode),
+              reasonName: text(payload.reasonName),
+              startedAt: text(payload.startedAt),
+            })
+        )
+        return json({ ...result, savedText: `Bulk breakdown started on ${result.rowsUpdated} running sessions.` })
+      }
       if (entryType === "production_session_downtime_start") {
         const result = await withProductionRepository(
           request,
