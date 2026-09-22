@@ -327,7 +327,7 @@ test("manual Cycle Time saves update the selected route setup without an edit re
     productionFloorCode: "cnc", rejectDuplicates: true, routeCode: "1", setupNumber: 1,
   })).resolves.toEqual({ id: "cycle" })
   expect(query).toHaveBeenCalledWith(
-    expect.stringContaining("UPDATE manufacturing.operation_cycle_standards"),
+    expect.stringMatching(/UPDATE manufacturing\.operation_cycle_standards[\s\S]*cycleRevisionEffectiveAt/),
     expect.arrayContaining([80, "cycle"])
   )
   expect(query).toHaveBeenCalledWith(

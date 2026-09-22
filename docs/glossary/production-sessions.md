@@ -136,6 +136,13 @@ remaining-duration and completion estimates from the current master. The open
 session's target is calculated using the revised cycle time for its runtime.
 Closed sessions and recorded output/targets remain unchanged. New sessions read
 the current master on the server, even if the start form was opened earlier.
+After accepted good production exists, planning subtracts that immutable output
+from the setup quantity and forecasts only the balance at the revised cycle time,
+effective no earlier than the revision date and the next working date after the
+latest recorded production. It does not extrapolate the historical daily output
+rate. The revised balance forecast also recalculates forecast WIP availability
+and unlocked downstream setup dates; completed setups and actual WIP remain
+unchanged.
 
 Conventional-01, Conventional-02, and Forging use Weight. CNC selects Machine Counter or Weight per session. Counter continuity applies only when the immediately preceding closed session has the same machine, Job Card, Part Code, option, setup, and Machine Counter method.
 
