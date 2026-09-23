@@ -5,6 +5,7 @@ import { Pool } from "pg"
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest"
 
 import { createDashboardPlanningRepository } from "./dashboard-planning"
+import { readCanonicalDashboardSource } from "./dashboard-read-model"
 import { createMaintenanceRepository } from "./maintenance"
 import { migrateDatabase } from "./migrate"
 import { createProductionShopFloorRepository } from "./production-shop-floor"
@@ -780,6 +781,11 @@ describe("production and shop-floor workflows", () => {
       status: "closed",
       targetPieces: 470,
     })
+    await expect(repository.correctProductionSession({
+      organizationId, sessionId: first.id, correctionReason: "Wrong close reason",
+      endReason: "item_complete", endCount: 10_850,
+      endedAt: "2026-08-15T14:00:00+05:30",
+    })).rejects.toThrow("later activity")
     expect(sessions.rows.find((row) => row.id === second.id)).toMatchObject({
       downtimeMinutes: 5,
       startCount: 10_850,
@@ -937,6 +943,7 @@ describe("production and shop-floor workflows", () => {
     })
 
     const session = await repository.startProductionSession({
+      cycleTimeSeconds: 60,
       jobCardNumber: firstJobCard,
       machineNumber: firstMachine,
       measurementMethod: "weight",
@@ -961,7 +968,7 @@ describe("production and shop-floor workflows", () => {
     expect(projected.rows[0]).toEqual({ active: true, employee_code: hrOperator })
     const pending = await repository.closeProductionSession({
       endedAt: "2026-08-15T09:30:00+05:30",
-      endReason: "item_complete",
+      endReason: "shift_end",
       organizationId,
       sessionId: session.id,
     })
@@ -1008,6 +1015,38 @@ describe("production and shop-floor workflows", () => {
       targetPieces: 50,
       totalPieces: 64,
     })
+
+    const completion = await pool.query(
+      `SELECT state.stage, state.active, state.completed_at,
+        entry.source_payload->>'partCode' AS part,
+        entry.source_payload->>'optionNumber' AS option,
+        entry.source_payload->>'setupNo' AS setup
+       FROM manufacturing.production_sessions session
+       JOIN manufacturing.production_entries entry ON entry.id = session.production_entry_id
+       JOIN manufacturing.shop_floor_setup_state state
+         ON state.work_order_id = session.work_order_id
+         AND state.operation_setup_id = session.operation_setup_id
+         AND state.machine_id = session.machine_id
+       WHERE session.id = $1`, [session.id]
+    )
+    expect(completion.rows[0]).toMatchObject({
+      active: false, stage: "item_complete", part: itemUid, option: "1", setup: "1",
+      completed_at: new Date("2026-08-15T09:30:00+05:30"),
+    })
+    // Older sessions omitted these payload fields; read their immutable snapshots.
+    await pool.query(
+      `UPDATE manufacturing.production_entries
+       SET source_payload = source_payload - 'partCode' - 'setupNo' - 'optionNumber'
+       WHERE id = (SELECT production_entry_id FROM manufacturing.production_sessions WHERE id = $1)`,
+      [session.id]
+    )
+    const source = await readCanonicalDashboardSource(pool, organizationId)
+    expect(source.productionEntries.find(row => row.sessionId === session.id))
+      .toMatchObject({ partCode: itemUid, setupNo: "1", optionNumber: "1", actualQty: 61 })
+    expect(source.allDataEntries).toEqual(expect.arrayContaining([
+      expect.objectContaining({ entryType: "shop_floor_status", payload:
+        expect.objectContaining({ sessionId: session.id, stage: "item_complete" }) }),
+    ]))
 
     const register = await repository.readProductionSessions({
       organizationId,

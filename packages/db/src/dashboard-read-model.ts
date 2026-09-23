@@ -473,7 +473,17 @@ export async function readCanonicalDashboardSource(
           LIMIT budget.row_limit
         ) source
       ), physical_rows AS (
-        SELECT source.source_id, source.source_payload, source.changed_at,
+        SELECT source.source_id,
+          source.source_payload || CASE WHEN session.id IS NULL THEN '{}'::jsonb
+            ELSE jsonb_build_object(
+              'jobCard', session.job_card_number_snapshot,
+              'jcNo', session.job_card_number_snapshot,
+              'partCode', session.part_code_snapshot,
+              'optionNumber', session.option_number_snapshot,
+              'setupNo', session.setup_number_snapshot,
+              'machine', session.machine_number_snapshot
+            ) END AS source_payload,
+          source.changed_at,
           source.source_kind, source.source_group, source.entry_type,
           budget.floor_code AS production_floor_code, counts.available
         FROM jsonb_to_recordset($3::jsonb)
@@ -495,6 +505,11 @@ export async function readCanonicalDashboardSource(
           ORDER BY changed_at DESC, source_id DESC
           LIMIT budget.row_limit
         ) source
+        -- Session production entries use their session UUID as source_id.
+        LEFT JOIN manufacturing.production_sessions session
+          ON source.source_group = 'productionEntries'
+          AND session.organization_id = $1 AND session.id::text = source.source_id
+          AND session.production_entry_id IS NOT NULL AND session.reversed_at IS NULL
       ), correction_rows AS (
         SELECT source.source_id, source.source_payload, source.changed_at,
           source.source_kind, source.source_group, source.entry_type,
