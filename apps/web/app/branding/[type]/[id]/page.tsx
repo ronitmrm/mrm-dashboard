@@ -36,6 +36,7 @@ import { BrandingIssueControls } from "@/components/branding/issue-controls"
 import { brandingType, withBranding } from "@/lib/branding/server"
 import { brandingCapability } from "@/lib/auth/branding-capabilities"
 import { listGrantedCapabilities } from "@/lib/auth/require-capability"
+import { isoDocumentCapabilities } from "@/lib/auth/iso-document-capabilities"
 
 export const maxDuration = 60
 
@@ -49,25 +50,31 @@ export default async function BrandingDocumentPage({
   const { type: rawType, id } = await params
   const type = brandingType(rawType)
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound()
-  const { document, canWrite } = await withBranding(
+  const { document, canWrite, controlAccess } = await withBranding(
     type,
     "read",
-    async ({ repository, organizationId, userId }) => ({
-      document: await repository.get(organizationId, type, id),
-      canWrite:
-        (
-          await listGrantedCapabilities(userId, [
-            brandingCapability(type, "write"),
-          ])
-        ).length > 0,
-    })
+    async ({ repository, organizationId, userId }) => {
+      const granted = new Set(
+        await listGrantedCapabilities(userId, [
+          brandingCapability(type, "write"),
+          ...Object.values(isoDocumentCapabilities),
+        ])
+      )
+      return {
+        document: await repository.get(organizationId, type, id),
+        canWrite: granted.has(brandingCapability(type, "write")),
+        controlAccess: {
+          canManage: granted.has(isoDocumentCapabilities.manage),
+          canApprove: granted.has(isoDocumentCapabilities.approve),
+          canRelease: granted.has(isoDocumentCapabilities.release),
+        },
+      }
+    }
   )
   if (!document?.revisions.length) notFound()
   const availableRevisions = document.revisions.filter(
     (revision) =>
-      (type !== "notice" && type !== "work-instruction") ||
-      !document.number ||
-      revision.state === "issued"
+      type !== "notice" || !document.number || revision.state === "issued"
   )
   const selectedId = (await searchParams).revision
   const selected = selectedId
@@ -77,8 +84,15 @@ export default async function BrandingDocumentPage({
   const draft = availableRevisions.find(
     (revision) => revision.state === "draft"
   )
-  const reference = `${document.number ?? (type === "controlled-document" ? selected.content.inputs["Document number"] : "Number assigned on first issue")}${type === "notice" || type === "work-instruction" ? "" : ` · ${revisionLabel(selected.revision)}`}`
-  const fileName = `${document.number ?? "Draft"}${type === "notice" || type === "work-instruction" ? "" : `-${revisionLabel(selected.revision)}`}.pdf`
+  const draftControl = draft
+    ? {
+        id: draft.id,
+        version: draft.version,
+        workflowState: draft.workflowState,
+      }
+    : undefined
+  const reference = `${document.number ?? (type === "controlled-document" ? selected.content.inputs["Document number"] || "Number assigned on final release" : "Number assigned on final release")}${type === "notice" ? "" : ` · ${revisionLabel(selected.revision)}`}`
+  const fileName = `${document.number ?? "Draft"}${type === "notice" ? "" : `-${revisionLabel(selected.revision)}`}.pdf`
   const pdfHref =
     selected.state === "issued"
       ? `/branding/${type}/${id}/revisions/${selected.id}/pdf`
@@ -116,14 +130,12 @@ export default async function BrandingDocumentPage({
                 </AttachmentViewerLink>
               </Button>
             ) : null}
-            {canWrite &&
-            !draft &&
-            type !== "notice" &&
-            type !== "work-instruction" ? (
+            {canWrite && !draft && type !== "notice" ? (
               <BrandingIssueControls
                 type={type}
                 documentId={id}
-                draft={draft}
+                draft={draftControl}
+                {...controlAccess}
               />
             ) : null}
           </>
@@ -135,21 +147,25 @@ export default async function BrandingDocumentPage({
         className="min-w-0"
       >
         <TabsList>
-          {selected.state === "draft" && canWrite ? (
+          {selected.state === "draft" &&
+          selected.workflowState === "draft" &&
+          canWrite &&
+          controlAccess.canManage ? (
             <TabsTrigger value="edit">Data Entry</TabsTrigger>
           ) : null}
           <TabsTrigger value="content">Saved Content</TabsTrigger>
-          {(type !== "notice" && type !== "work-instruction") ||
+          {type !== "notice" ||
           document.revisions.filter((revision) => revision.state === "issued")
             .length > 1 ? (
             <TabsTrigger value="history">
-              {type === "notice" || type === "work-instruction"
-                ? "Earlier PDFs"
-                : "Revision History"}
+              {type === "notice" ? "Earlier PDFs" : "Revision History"}
             </TabsTrigger>
           ) : null}
         </TabsList>
-        {selected.state === "draft" && canWrite ? (
+        {selected.state === "draft" &&
+        selected.workflowState === "draft" &&
+        canWrite &&
+        controlAccess.canManage ? (
           <TabsContent value="edit">
             <p className="mb-4 text-sm text-muted-foreground">
               Save changes before previewing or releasing. Release freezes the
@@ -184,7 +200,8 @@ export default async function BrandingDocumentPage({
               <BrandingIssueControls
                 type={type}
                 documentId={id}
-                draft={draft}
+                draft={draftControl}
+                {...controlAccess}
               />
             </ActionToolbar>
           ) : null}
@@ -284,7 +301,7 @@ export default async function BrandingDocumentPage({
             containerClassName="max-h-[60vh] rounded-lg border"
             toolbarStart={
               <span className="text-sm font-medium">
-                {type === "notice" || type === "work-instruction"
+                {type === "notice"
                   ? "Retained PDFs from earlier issues"
                   : "Revision history"}
               </span>
@@ -293,9 +310,7 @@ export default async function BrandingDocumentPage({
             <TableHeader>
               <TableRow>
                 {[
-                  ...(type === "notice" || type === "work-instruction"
-                    ? []
-                    : ["Revision"]),
+                  ...(type === "notice" ? [] : ["Revision"]),
                   "Name",
                   "Status",
                   "Author",
@@ -310,13 +325,11 @@ export default async function BrandingDocumentPage({
             <TableBody>
               {document.revisions
                 .filter(
-                  (revision) =>
-                    (type !== "notice" && type !== "work-instruction") ||
-                    revision.state === "issued"
+                  (revision) => type !== "notice" || revision.state === "issued"
                 )
                 .map((revision) => (
                   <TableRow key={revision.id}>
-                    {type !== "notice" && type !== "work-instruction" ? (
+                    {type !== "notice" ? (
                       <TableCell>{revisionLabel(revision.revision)}</TableCell>
                     ) : null}
                     <TableCell>
@@ -339,7 +352,11 @@ export default async function BrandingDocumentPage({
                                 ? "Superseded"
                                 : "Released"
                               : "Issued"
-                            : "Draft"
+                            : revision.workflowState === "pending-approval"
+                              ? "Pending Approval"
+                              : revision.workflowState === "approved"
+                                ? "Approved"
+                                : "Draft"
                         }
                         tone={
                           revision.state === "issued" ? "positive" : "neutral"

@@ -19,6 +19,7 @@ import {
 import { brandingType, withBranding } from "@/lib/branding/server"
 import { brandingCapability } from "@/lib/auth/branding-capabilities"
 import { listGrantedCapabilities } from "@/lib/auth/require-capability"
+import { isoDocumentCapabilities } from "@/lib/auth/iso-document-capabilities"
 
 export default async function BrandingRegisterPage({
   params,
@@ -42,8 +43,9 @@ export default async function BrandingRegisterPage({
         (
           await listGrantedCapabilities(userId, [
             brandingCapability(type, "write"),
+            isoDocumentCapabilities.manage,
           ])
-        ).length > 0,
+        ).length === 2,
     })
   )
   return (
@@ -54,7 +56,7 @@ export default async function BrandingRegisterPage({
         description={
           type === "controlled-document"
             ? "Upload prepared PDFs, release documents and retain every revision."
-            : type === "notice" || type === "work-instruction"
+            : type === "notice"
               ? `Create and issue branded ${brandingTypeLabels[type].toLowerCase()}.`
               : "Create branded documents and retain every issued revision."
         }
@@ -79,7 +81,7 @@ export default async function BrandingRegisterPage({
             tone: "warning",
             description: "Awaiting first issue",
           },
-          ...(type === "notice" || type === "work-instruction"
+          ...(type === "notice"
             ? []
             : [
                 {

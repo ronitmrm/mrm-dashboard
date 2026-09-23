@@ -478,7 +478,7 @@ describe("Branding issue contract", () => {
       brandingNumber("policy", 1),
       brandingNumber("work-instruction", 1),
     ]).toEqual(["MRM-SOP-0001", "MRM-NTC-0001", "MRM-POL-0001", "MRM-WI-0001"])
-    expect(revisionLabel(1)).toBe("R01")
+    expect(revisionLabel(1)).toBe("01")
     const notice = await generateBrandingPdf({
       content: parsed,
       number: brandingNumber("notice", 1),

@@ -4,6 +4,8 @@ import { unstable_rethrow } from "next/navigation"
 import { brandingType, withBranding } from "@/lib/branding/server"
 import { parseBrandingContent } from "@workspace/db/branding-domain"
 import { generateBrandingPdf } from "@/lib/branding/pdf"
+import { requireCapability } from "@/lib/auth/require-capability"
+import { isoDocumentCapabilities } from "@/lib/auth/iso-document-capabilities"
 function message(error: unknown) {
   unstable_rethrow(error)
   return error instanceof Error && !("code" in error)
@@ -12,6 +14,10 @@ function message(error: unknown) {
 }
 export async function saveControlledDocument(form: FormData) {
   try {
+    await requireCapability(
+      isoDocumentCapabilities.manage,
+      "/branding/controlled-document"
+    )
     const id = await withBranding(
       "controlled-document",
       "write",
@@ -64,6 +70,7 @@ export async function saveBrandingDraft(input: {
 }) {
   const type = brandingType(input.type)
   try {
+    await requireCapability(isoDocumentCapabilities.manage, `/branding/${type}`)
     const id = await withBranding(type, "write", ({ repository, ...context }) =>
       repository.save({
         ...context,
@@ -86,6 +93,10 @@ export async function reviseBrandingDocument(input: {
 }) {
   const type = brandingType(input.type)
   try {
+    await requireCapability(
+      isoDocumentCapabilities.manage,
+      `/branding/${type}/${input.documentId}`
+    )
     await withBranding(type, "write", ({ repository, ...context }) =>
       repository.revise({ ...context, type, documentId: input.documentId })
     )
@@ -103,6 +114,10 @@ export async function issueBrandingDocument(input: {
 }) {
   const type = brandingType(input.type)
   try {
+    await requireCapability(
+      isoDocumentCapabilities.release,
+      `/branding/${type}/${input.documentId}`
+    )
     await withBranding(type, "write", ({ repository, ...context }) =>
       repository.issue(
         {

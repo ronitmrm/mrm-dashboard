@@ -10,12 +10,13 @@ date accompany each upload. The supplied document number is unique within the
 organization and remains unchanged after first release. Authors must ensure the
 PDF's printed number, revision and date agree with the saved metadata.
 
-An initial draft releases as R00. Create Revision retains the document identity,
-increments R01/R02/etc., and requires a replacement PDF and a change reason.
-Only one editable draft exists at a time. Release freezes metadata and exact PDF
-bytes; released revisions cannot be overwritten or deleted. A draft never
-replaces the current release. Release takes effect immediately; the effective
-date is recorded metadata, not scheduled publication. No approval step is added.
+An initial draft releases as 00. Create Revision retains the document identity,
+increments 01/02/etc., and requires a replacement PDF and a change reason.
+Only one editable draft exists at a time. Final release freezes metadata and
+exact PDF bytes; released revisions cannot be overwritten or deleted. A draft
+never replaces the current release. Release takes effect immediately. Document
+control requires QA HOD submission, responsible Department Manager approval and
+QA HOD final release; see `iso-documents.md`.
 
 ISO Document → Controlled Document Register lists the latest released revision
 of every controlled document. Authoring and all revision history remain under
@@ -79,8 +80,8 @@ published version. Document Templates remains the authoring and retained-history
   The Sales & Marketing Procedure reference (2026-09-15) governs the cream cover
   with green frame, green headings, black body and compact header/footer. Existing
   issued PDFs remain frozen. Existing draft plain text remains editable.
-- Work Instructions use MRM-WI-0001 numbering and the same single-issue lifecycle
-  as notices. They contain multiple ordered heading/body sections, no cover or
+- Work Instructions preserve existing MRM-WI numbers and use the same controlled
+  revision lifecycle as SOPs. They contain multiple ordered heading/body sections, no cover or
   index, and must fit one A4 page including all selected languages. The editor starts
   with one shared title and one heading/body pair per selected language. Add Heading
   appends another pair; the last pair cannot be removed. The text wall-poster style
@@ -109,15 +110,17 @@ published version. Document Templates remains the authoring and retained-history
   Good/Bad; symbol artwork and colours cannot be edited. Visual rows replace step
   numbers with symbols. Row count sets dimensions before fonts fit the text boxes.
 
-- Each type has an independent, organization-wide sequence: MRM-SOP-0001,
-  MRM-NTC-0001, MRM-POL-0001. Numbers are assigned on first issue, never reused,
-  never reset by year. SOP and policy revisions retain the number and use R00,
-  R01, etc. Notices are issued once, without revision labels or a revision flow;
-  corrections require a new notice with a new number. Existing retained PDFs
-  remain available and are never rewritten.
+- Existing type-specific sequences such as MRM-SOP-0001, MRM-NTC-0001 and
+  MRM-POL-0001 are preserved. New controlled documents use MRM-QA-###. Numbers
+  are assigned on final release, never reused and never reset by year. SOP,
+  Policy and Work Instruction revisions retain the number and use 00, 01, etc.
+  Notices remain issued once; corrections require a new notice. Existing retained PDFs
+  remain available and are never rewritten. New controlled numbers use the
+  organization-wide `MRM-QA-###` sequence; existing type-specific numbers are
+  preserved.
 - A document has at most one editable draft. Issuing freezes its original inputs,
   language content, author, issue date, template version, and exact PDF bytes.
-  No approval stage exists. For SOPs and policies, creating the next revision copies the previous issue;
+  Approval and release follow the ISO Document lifecycle. For SOPs and policies, creating the next revision copies the previous issue;
   its change reason is required. The latest issued revision remains current until
   its replacement is issued. Issued revisions cannot be updated or deleted.
 - Register cards count distinct documents across all pages for the selected type:

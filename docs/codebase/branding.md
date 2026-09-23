@@ -58,7 +58,7 @@ validated model. Details metadata and attribution values use the caption role
 with Outfit-first script fallback. Attribution fields remain author-entered text,
 not an approval workflow.
 
-New issues record `mrm-notice-v13`, `mrm-wi-v11` or `mrm-book-v9`. Existing drafts
+New releases record `mrm-notice-v13`, `mrm-wi-v11` or `mrm-book-v9`. Existing drafts
 use the new renderer when previewed or issued; previously issued PDFs retain their
 stored bytes and template marker. No schema migration or historical regeneration
 is needed.
@@ -74,19 +74,22 @@ canonical and the parser derives the legacy `body` summary. `brandingOutline`
 supplies the same heading order and numbering to editor, saved view and PDF.
 
 Every authoring boundary checks the appropriate per-type read capability; writes
-also require write capability. Standalone SOP, Work Instruction, Policy and
-Controlled Document registers permit signed-in readers without authoring grants.
-They expose only the latest issued revision; historical PDFs require authoring
-read access. Organization scoping and private response headers apply throughout.
+also require both the type write capability and `iso.documents.manage`.
+Standalone SOP, Work Instruction, Policy and Controlled Document registers expose
+only documents whose control policy is `all-signed-in`. Restricted content uses
+the document dossier and its authorization check. Organization scoping and
+private response headers apply throughout.
 Download/register modules read stored bytes and do not directly import generation.
 
 `packages/db/src/branding.ts` serializes issue under document/revision row locks.
-Optimistic versions reject stale drafts. Organization/type counters allocate a
-number on first issue inside the same transaction as rendering and storing bytes.
-Render or size rejection rolls back both allocation and issue; repeated issue
-returns the existing issued revision. Database triggers protect issued revisions.
-Notice and Work Instruction remain single-issue types; create a new document to
-replace them. SOP/Policy revisions retain the current published PDF until issue.
+Optimistic versions reject stale drafts. ISO workflow state is separate from the
+stored PDF state: draft, pending approval, approved, then released. Final release
+requires `iso.documents.release`, allocates the organization-wide MRM-QA number,
+sets the effective/revision date to release day, renders or retains the PDF and
+stores the audit event in one transaction. A failure rolls back number allocation
+and release. Database triggers protect released revisions. Notice remains
+single-issue; SOP, Policy, Work Instruction and uploaded controlled documents use
+the revision lifecycle and retain the current released PDF until replacement.
 
 ## Controlled PDF uploads
 
@@ -94,5 +97,5 @@ Migration 0155 adds bounded draft `uploaded_pdf` bytes. `saveControlledDocument`
 uses pdf-lib to validate an unencrypted, nonempty PDF up to 5 MB. Release retains
 those exact bytes in `pdf`, clears the draft upload and never invokes generation.
 The marker remains `uploaded-pdf-v1`; new revisions start without an upload.
-Author-supplied document numbers lock after release and are checked
-case-insensitively under an advisory lock.
+The uploaded file is reviewed during approval. New permanent document numbers are
+system-assigned only during final release; retained legacy numbers are immutable.

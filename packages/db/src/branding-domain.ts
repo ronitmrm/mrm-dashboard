@@ -182,7 +182,7 @@ export function isBrandingType(value: unknown): value is BrandingType {
   return brandingTypes.some((type) => type === value)
 }
 export function revisionLabel(revision: number) {
-  return `R${String(revision).padStart(2, "0")}`
+  return String(revision).padStart(2, "0")
 }
 export function brandingNumber(type: BrandingType, sequence: number) {
   return `MRM-${brandingPrefixes[type]}-${String(sequence).padStart(4, "0")}`
@@ -351,7 +351,6 @@ export function parseBrandingContent(
       "Document number",
       100
     )
-    if (!number) throw new Error("Document number is required.")
     return {
       title,
       department,

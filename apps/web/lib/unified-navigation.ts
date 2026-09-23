@@ -1,5 +1,6 @@
 import {
   Boxes,
+  BookOpenCheck,
   BriefcaseBusiness,
   Calculator,
   CalendarDays,
@@ -106,7 +107,16 @@ export const publishedRegisterNavigation = [
 ] as const
 
 export const isoDocumentNavigation = [
-  { href: "/iso-document/rejections", icon: ShieldCheck, label: "Rejection Register" },
+  {
+    href: "/iso-document/documents",
+    icon: BookOpenCheck,
+    label: "Master Document List",
+  },
+  {
+    href: "/iso-document/rejections",
+    icon: ShieldCheck,
+    label: "Rejection Register",
+  },
   {
     href: measuringInstrumentRegister.href,
     icon: Gauge,
