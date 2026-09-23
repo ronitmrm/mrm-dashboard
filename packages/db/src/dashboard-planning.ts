@@ -424,8 +424,8 @@ async function releasePlannerInterruptedSetups(
   input: {
     actorUserId?: string | null
     decisionId: string
-    decisionSource: "planOverrides" | "plannerPriorities" | "machineConstraints"
-    interruptions: SettledInterruptedSetup[]
+    decisionSource: "planOverrides" | "plannerPriorities" | "machineConstraints" | "rawMaterialRejections"
+    interruptions: InterruptedSetupInput[]
     organizationId: string
     reason: string
   }
@@ -2181,6 +2181,28 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
             sourcePayload,
           ]
         )
+        if (planningAction === "wait_for_replacement" && !(orderedKg > 0 && usableKgAfter >= orderedKg)) {
+          const assignments = await client.query<{ machine_number: string; setup_number: number }>(
+            `SELECT machine.machine_number, setup.setup_number
+             FROM manufacturing.shop_floor_setup_state state
+             JOIN catalog.machines machine ON machine.id = state.machine_id
+             JOIN manufacturing.operation_setups setup ON setup.id = state.operation_setup_id
+             WHERE state.work_order_id = $1 AND state.active`,
+            [workOrder.id]
+          )
+          await releasePlannerInterruptedSetups(client, {
+            actorUserId: input.actorUserId,
+            decisionId: created.rows[0]!.id,
+            decisionSource: "rawMaterialRejections",
+            interruptions: assignments.rows.map((assignment) => ({
+              jobCardNumber,
+              machineNumber: assignment.machine_number,
+              setupNumber: assignment.setup_number,
+            })),
+            organizationId: input.organizationId,
+            reason,
+          })
+        }
         await queueDashboardRefresh(client, input.organizationId)
         return {
           id: created.rows[0]!.id,

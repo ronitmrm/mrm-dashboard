@@ -260,6 +260,12 @@ describe("dashboard planning writes", () => {
   })
 
   test("records raw-material rejection against the usable Job Card balance", async () => {
+    const itemUid = `RM-REJECT-ITEM-${suffix}`
+    await pool.query(`INSERT INTO catalog.items (
+      organization_id, uid, uid_kind, lifecycle_status, description,
+      item_type, source_system, source_table, source_id)
+      VALUES ($1, $2, 'INTERNAL', 'M', $2, 'List', 'test', 'items', $3)`,
+      [organizationId, itemUid, randomUUID()])
     const jobCardNumber = `JC-RM-REJECT-${suffix}`
     const rmPoNumber = `RM-REJECT-${suffix}`
     await repository.upsertWorkOrder({
@@ -313,6 +319,32 @@ describe("dashboard planning writes", () => {
       reason: "Invalid second dispatch",
       rejectedKg: 51,
     })).rejects.toThrow("cannot exceed the usable Raw Material balance")
+
+    const machineNumber = `RM-HOLD-${suffix}`
+    await repository.upsertMachine({ machineNumber, organizationId, productionFloorCode: "cnc" })
+    await repository.upsertRouteOption({ itemUid, organizationId, productionFloorCode: "cnc",
+      routeCode: "RM-HOLD", setups: [{ operationCode: "TURN", sequence: 1, setupNumber: 1 }] })
+    await pool.query(`INSERT INTO manufacturing.shop_floor_setup_state (
+      organization_id, work_order_id, route_option_id, operation_setup_id,
+      machine_id, stage, active, source_system, source_table, source_id)
+      SELECT $1, work_order.id, route.id, setup.id, machine.id,
+        'operator_started', true, 'test', 'shop_floor_status', $4
+      FROM manufacturing.work_orders work_order
+      JOIN manufacturing.route_options route ON route.item_id = work_order.item_id AND route.route_code = 'RM-HOLD'
+      JOIN manufacturing.operation_setups setup ON setup.route_option_id = route.id
+      JOIN catalog.machines machine ON machine.organization_id = work_order.organization_id AND machine.machine_number = $3
+      WHERE work_order.organization_id = $1 AND work_order.job_card_number = $2`,
+      [organizationId, jobCardNumber, machineNumber, randomUUID()])
+    const held = await repository.recordRawMaterialRejection({ jobCardNumber, organizationId,
+      planningAction: "wait_for_replacement", productionFloorCode: "cnc", reason: "Wait for sound material", rejectedKg: 10 })
+    const state = await pool.query(`SELECT state.active, state.stage, state.completed_at,
+      event.source_payload->>'plannerDecisionId' AS decision_id
+      FROM manufacturing.shop_floor_setup_state state
+      JOIN catalog.machines machine ON machine.id = state.machine_id
+      LEFT JOIN manufacturing.shop_floor_stage_events event ON event.setup_state_id = state.id
+      WHERE machine.machine_number = $1`, [machineNumber])
+    expect(state.rows).toEqual([expect.objectContaining({ active: false, stage: "planned",
+      completed_at: null, decision_id: held.id })])
   })
 
   test("reviews a machine issue in its unit and preserves the original decision", async () => {

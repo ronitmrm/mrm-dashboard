@@ -128,6 +128,10 @@ Session.
   when it exceeds the kilogram-derived estimate. Wait For Replacement removes
   all active setup plans until net usable kilograms again cover the ordered Raw
   Material.
+- When a rejection puts the Job Card on **Wait For Replacement**, its closed
+  setups release their machine assignments in the same transaction. They return
+  to Planned without being marked Item Complete; production history is retained.
+  Shop Floor can then start the next eligible Job Card on the released machine.
 - When the remaining usable balance rounds to `0 kg` at the displayed `0.1 kg`
   precision, **Continue Accepted Quantity** is not available. The rejection is
   treated as full for planning and **Wait For Replacement** is enforced.
