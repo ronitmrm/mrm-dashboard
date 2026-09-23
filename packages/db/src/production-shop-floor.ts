@@ -671,6 +671,87 @@ async function plannerSwitchExists(
   return Boolean(result.rows[0])
 }
 
+async function lockProductionSessionMachine(
+  client: PoolClient,
+  input: { organizationId: string; sessionId: string }
+) {
+  await client.query(
+    `SELECT pg_advisory_xact_lock(hashtext('production.session'), hashtext(machine_id::text))
+     FROM manufacturing.production_sessions
+     WHERE id = $1 AND organization_id = $2 AND reversed_at IS NULL`,
+    [input.sessionId, input.organizationId]
+  )
+}
+
+async function completeProductionSessionSetup(
+  client: PoolClient,
+  input: {
+    actorUserId?: string | null
+    correctionReason?: string
+    endedAt: Date
+    organizationId: string
+    sessionId: string
+    sourcePayload: Record<string, unknown>
+  }
+) {
+  const result = await client.query<{
+    id: string
+    machine_id: string
+    context: Record<string, unknown>
+    stage: string
+    superseded: boolean
+  }>(
+    `SELECT state.id, state.machine_id, state.stage,
+       jsonb_build_object('jcNo', session.job_card_number_snapshot,
+         'partCode', session.part_code_snapshot, 'optionNumber', session.option_number_snapshot,
+         'setupNo', session.setup_number_snapshot, 'machine', session.machine_number_snapshot) AS context,
+       (state.updated_at > session.created_at OR EXISTS (
+         SELECT 1 FROM manufacturing.production_sessions later
+         WHERE later.machine_id = session.machine_id AND later.reversed_at IS NULL
+           AND (later.started_at, later.created_at, later.id)
+             > (session.started_at, session.created_at, session.id)
+       )) AS superseded
+     FROM manufacturing.production_sessions session
+     JOIN manufacturing.shop_floor_setup_state state
+       ON state.work_order_id = session.work_order_id
+       AND state.route_option_id = session.route_option_id
+       AND state.operation_setup_id = session.operation_setup_id
+       AND state.machine_id = session.machine_id AND state.active
+     WHERE session.id = $1 AND session.organization_id = $2
+     FOR UPDATE OF state`,
+    [input.sessionId, input.organizationId]
+  )
+  const state = result.rows[0]
+  if (!state) return
+  if (input.correctionReason && state.superseded) {
+    throw new Error("This setup has later activity. Complete its latest production session instead.")
+  }
+  const completionPayload = {
+    ...input.sourcePayload, ...state.context,
+    stage: "item_complete", completedAt: input.endedAt.toISOString(),
+  }
+  await client.query(
+    `UPDATE manufacturing.shop_floor_setup_state
+     SET stage = 'item_complete', active = false, completed_at = $1,
+       updated_by_user_id = $2, source_payload = $3, updated_at = now(),
+       row_version = row_version + 1
+     WHERE id = $4`,
+    [input.endedAt.toISOString(), input.actorUserId ?? null, completionPayload, state.id]
+  )
+  await client.query(
+    `INSERT INTO manufacturing.shop_floor_stage_events (
+       organization_id, setup_state_id, from_stage, to_stage, machine_id,
+       occurred_at, actor_user_id, reason, source_system, source_table,
+       source_id, source_payload
+     ) VALUES ($1, $2, $3, 'item_complete', $4, $5, $6, $7,
+       'mrm-dashboard', 'production_session', $8, $9)`,
+    [input.organizationId, state.id, state.stage, state.machine_id,
+      input.endedAt.toISOString(), input.actorUserId ?? null,
+      input.correctionReason ?? "Production session closed as item complete",
+      randomUUID(), completionPayload]
+  )
+}
+
 export function createProductionShopFloorRepository(options: RepositoryPoolOptions) {
   const { close, pool } = repositoryPool(options)
 
@@ -954,9 +1035,13 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           carriedFromSessionId,
           cycleTime: cycleTimeSeconds,
           dailySequence,
-          jobCard: input.jobCardNumber,
-          jcNo: input.jobCardNumber,
-          machine: input.machineNumber,
+          jobCard: sessionSnapshot.job_card_number,
+          jcNo: sessionSnapshot.job_card_number,
+          partCode: sessionSnapshot.part_code,
+          optionNumber: sessionSnapshot.option_number,
+          setupNo: sessionSnapshot.setup_number,
+          machine: sessionSnapshot.machine_number,
+          productionFloorCode: floorCode,
           measurementMethod,
           operatorId: input.operatorCode,
           outputQty: 0,
@@ -1699,6 +1784,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         if (closedByRole === "machinist") {
           throw new Error("Machinist cannot close a production session.")
         }
+        await lockProductionSessionMachine(client, input)
         const session = await client.query<{
           has_open_downtime: boolean
           cycle_time_seconds: string
@@ -1956,61 +2042,9 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           ]
         )
         if (endReason === "item_complete") {
-          const setupState = await client.query<{ id: string; stage: string }>(
-            `
-              SELECT id, stage
-              FROM manufacturing.shop_floor_setup_state
-              WHERE work_order_id = $1 AND route_option_id = $2
-                AND operation_setup_id = $3 AND machine_id = $4 AND active
-              FOR UPDATE
-            `,
-            [
-              current.work_order_id,
-              current.route_option_id,
-              current.operation_setup_id,
-              current.machine_id,
-            ]
-          )
-          if (setupState.rows[0]) {
-            await client.query(
-              `
-                UPDATE manufacturing.shop_floor_setup_state
-                SET stage = 'item_complete', active = false,
-                  completed_at = $1, updated_by_user_id = $2,
-                  source_payload = $3, updated_at = now(),
-                  row_version = row_version + 1
-                WHERE id = $4
-              `,
-              [
-                endedAt.toISOString(),
-                input.actorUserId ?? null,
-                sourcePayload,
-                setupState.rows[0].id,
-              ]
-            )
-            await client.query(
-              `
-                INSERT INTO manufacturing.shop_floor_stage_events (
-                  organization_id, setup_state_id, from_stage, to_stage,
-                  machine_id, occurred_at, actor_user_id, reason,
-                  source_system, source_table, source_id, source_payload
-                )
-                VALUES ($1, $2, $3, 'item_complete', $4, $5, $6,
-                  'Production session closed as item complete',
-                  'mrm-dashboard', 'production_session', $7, $8)
-              `,
-              [
-                input.organizationId,
-                setupState.rows[0].id,
-                setupState.rows[0].stage,
-                current.machine_id,
-                endedAt.toISOString(),
-                input.actorUserId ?? null,
-                randomUUID(),
-                sourcePayload,
-              ]
-            )
-          }
+          await completeProductionSessionSetup(client, {
+            ...input, endedAt, sourcePayload,
+          })
         }
         await queueDashboardRefresh(client, input.organizationId)
         return {
@@ -2049,6 +2083,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         if (enteredRole === "machinist") {
           throw new Error("Machinist cannot correct a closed production session.")
         }
+        await lockProductionSessionMachine(client, input)
         const session = await client.query<{
           crate_weight_kg: string | null
           cycle_time_seconds: string
@@ -2268,6 +2303,11 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             randomUUID(),
           ]
         )
+        if (endReason === "item_complete") {
+          await completeProductionSessionSetup(client, {
+            ...input, correctionReason, endedAt, sourcePayload,
+          })
+        }
         await queueDashboardRefresh(client, input.organizationId)
         return {
           goodPieces: output.goodPieces,

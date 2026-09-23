@@ -108,6 +108,16 @@ correction requires a reason and records the actor, correction time, before and
 after evidence. The original Session Reference and production context remain
 unchanged.
 
+Correcting the close reason to **Item Complete** also completes the matching
+active setup and releases its machine atomically. A correction cannot release
+that setup if a later session has started on the machine; finish the latest
+session instead. Correcting a historical session never releases a different
+setup now occupying the machine.
+
+Session output carries its saved Job Card, part, route and setup identity into
+planning. Good pieces count toward both Job Card totals and that setup's WIP,
+including sessions entered retrospectively.
+
 Correcting end time or adding downtime recalculates productive runtime and target.
 Correcting Weight or Counter output recalculates total and good pieces. Adding a
 rejection recalculates good pieces. Efficiency always follows the corrected total
