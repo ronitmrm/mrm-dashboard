@@ -53,3 +53,11 @@ export function hasProductionFloorAccess(
     granted.has(key)
   )
 }
+
+export function readableDashboardFloor(
+  requestedFloor: ProductionFloorCode,
+  floorTabs: Partial<Record<ProductionFloorCode, readonly DashboardTabId[]>> | undefined
+) {
+  if (floorTabs?.[requestedFloor]?.length) return requestedFloor
+  return productionFloors.find(({ code }) => floorTabs?.[code]?.length)?.code ?? requestedFloor
+}

@@ -29,7 +29,10 @@ import {
   type DashboardTabId,
 } from "@/lib/unified-navigation"
 import { productionCapabilityForTab } from "@/lib/auth/production-capabilities"
-import { isProductionFloorTab } from "@/lib/auth/production-floor-capabilities"
+import {
+  isProductionFloorTab,
+  readableDashboardFloor,
+} from "@/lib/auth/production-floor-capabilities"
 import { requireProductionPage } from "@/lib/auth/require-production-page"
 import {
   masterCapability,
@@ -254,14 +257,19 @@ export default async function Page({
         })()
       : null
   const legacyMasterEntry = legacyMasterEntryForDashboardTab(requestedTab)
-  const requestedFloor = normalizeProductionFloorCode(
-    value(query.floor) ?? defaultProductionFloorCode
-  )
   const requestedDashboardTab = legacyMasterEntry
     ? "dataEntryTab"
     : dashboardNavigation.some((item) => item.id === requestedTab)
       ? (requestedTab as DashboardTabId)
       : "productionControlTab"
+  const requestedFloor = readableDashboardFloor(
+    normalizeProductionFloorCode(value(query.floor) ?? defaultProductionFloorCode),
+    ["machineMasterTab", "maintenanceTab", "productionDashboardTab"].includes(
+      requestedDashboardTab
+    )
+      ? navigationAccess.productionFloorTabIds
+      : undefined
+  )
   const requestedFloorTabs =
     navigationAccess.productionFloorTabIds?.[requestedFloor]
   const allowedDashboardTabs = isProductionFloorTab(requestedDashboardTab)
@@ -290,7 +298,9 @@ export default async function Page({
       stateUrl={
         isMasterPage
           ? `/api/masters/state?${new URLSearchParams({ entry: masterEntry ?? "", floor: requestedFloorForMaster, storeMaster: selectedStoreMaster })}`
-          : undefined
+          : initialDashboardTab === "maintenanceTab"
+            ? `/api/dashboard-state?${new URLSearchParams({ floor: requestedFloor, scope: "maintenance" })}`
+            : undefined
       }
     >
       <OperationalEntryAccessProvider

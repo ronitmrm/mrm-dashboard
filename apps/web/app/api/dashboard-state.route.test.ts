@@ -135,7 +135,7 @@ describe("dashboard-state route", () => {
       version: 7,
     })
     const request = new NextRequest(
-      "http://localhost/api/dashboard-state?floor=cnc&knownVersion=7&month=2026-07"
+      "http://localhost/api/dashboard-state?floor=cnc&knownVersion=7&month=2026-07&scope=maintenance"
     )
 
     const response = await GET(request, {
@@ -164,7 +164,8 @@ describe("dashboard-state route", () => {
         startDate: undefined,
       },
       "cnc",
-      7
+      7,
+      "maintenance"
     )
     expect(
       (telemetryLog.mock.calls as Array<[unknown, ...unknown[]]>)
