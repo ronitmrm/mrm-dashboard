@@ -277,16 +277,10 @@ export function permissionAccessRows(
           actions: [
             {
               label: definition.label,
-              permissionKeys: [
-                scopedPermissionKey,
-                definition.legacyCapability,
-              ].sort(),
+              permissionKeys: [scopedPermissionKey],
             },
           ],
-          fullPermissionKeys: [
-            scopedPermissionKey,
-            definition.legacyCapability,
-          ].sort(),
+          fullPermissionKeys: [scopedPermissionKey],
           href: null,
           id: `task:production.${floor.code}.${taskId}`,
           kind: "task" as const,
@@ -402,6 +396,13 @@ export function permissionKeysForSelections(
 
 export function normalizePermissionKeys(permissionKeys: readonly string[]) {
   const normalized = new Set(permissionKeys)
+  for (const floor of productionFloors) {
+    for (const taskId of productionFloorTaskIds) {
+      if (normalized.has(productionFloorTaskCapabilities[floor.code][taskId])) {
+        normalized.add(productionFloorTaskDefinitions[taskId].legacyCapability)
+      }
+    }
+  }
   const productionKeys = [
     ...Object.values(productionPageCapabilities),
     ...Object.values(productionFloorPageCapabilities).flatMap(Object.values),
