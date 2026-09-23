@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 import {
   hasProductionFloorAccess,
   productionFloorPageCapabilities,
+  readableDashboardFloor,
 } from "./production-floor-capabilities"
 
 describe("production floor page capabilities", () => {
@@ -28,5 +29,12 @@ describe("production floor page capabilities", () => {
 
     expect(hasProductionFloorAccess(granted, "conventional")).toBe(true)
     expect(hasProductionFloorAccess(granted, "cnc")).toBe(false)
+  })
+
+  it("opens a company-wide dashboard on the Planner's readable floor", () => {
+    const floorTabs = { cnc: ["productionControlTab"] } as const
+
+    expect(readableDashboardFloor("conventional", floorTabs)).toBe("cnc")
+    expect(readableDashboardFloor("cnc", floorTabs)).toBe("cnc")
   })
 })

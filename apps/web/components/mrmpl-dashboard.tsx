@@ -3443,28 +3443,28 @@ function UniversalMaintenanceWorkspace({
 }) {
   const [reloadKey, setReloadKey] = useState(0)
   const conventional = usePostgresOperationalPage(
-    "/api/dashboard?floor=conventional",
+    "/api/dashboard?floor=conventional&scope=maintenance",
     0,
     undefined,
     0,
     reloadKey
   )
   const conventional02 = usePostgresOperationalPage(
-    "/api/dashboard?floor=conventional-02",
+    "/api/dashboard?floor=conventional-02&scope=maintenance",
     0,
     undefined,
     0,
     reloadKey
   )
   const cnc = usePostgresOperationalPage(
-    "/api/dashboard?floor=cnc",
+    "/api/dashboard?floor=cnc&scope=maintenance",
     0,
     undefined,
     0,
     reloadKey
   )
   const forging = usePostgresOperationalPage(
-    "/api/dashboard?floor=forging",
+    "/api/dashboard?floor=forging&scope=maintenance",
     0,
     undefined,
     0,

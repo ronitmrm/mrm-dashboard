@@ -32,6 +32,7 @@ Departments. Trade reads exclude Pending Approval, Returned, Rejected, and Close
 ## UI
 
 Maintenance navigation contains Manager Approval, All Requests, Electrical, Plumbing, and Mechanical. Electrical and Plumbing are server-rendered request work lists. Mechanical retains the existing company-wide scheduled workspace and merges approved Mechanical requests through the unified work-list projection.
+Mechanical reads only maintenance and machine context from the dashboard read model across all floors. `maintenance.workspace.read` opens it without granting production dashboard data for those floors.
 
 ## Invariants
 

@@ -139,6 +139,47 @@ describe("authenticated dashboard state reader", () => {
     expect(mocks.state).not.toHaveBeenCalled()
   })
 
+  it("serves only maintenance data to a role without production-floor access", async () => {
+    mocks.listAllGrantedCapabilities.mockResolvedValue(["maintenance.workspace.read"])
+    mocks.state.mockResolvedValue({
+      coverage: null,
+      dashboard: {
+        productionFloorCode: "conventional",
+        readModelVersion: 7,
+        productionControl: {
+          machinePlanningRows: [{ machineNo: "M-1", workOrder: "private" }],
+          maintenanceScheduleRows: [{ machineNo: "M-1", maintenanceCode: "MT-1" }],
+          productionRunRows: [{ machineNo: "M-1", prodDate: "2026-09-23", workOrder: "private" }],
+          workOrders: [{ workOrder: "private" }],
+        },
+        workOrders: [{ workOrder: "private" }],
+      },
+      notModified: false,
+      status: { isRefreshing: false, status: "idle" },
+      version: 7,
+    })
+
+    const request = new NextRequest("http://localhost/api/dashboard-state")
+    const result = await readPostgresDashboardState(
+      request, {}, "conventional", undefined, "maintenance"
+    )
+
+    expect(result.dashboard).toMatchObject({
+      productionControl: {
+        maintenanceScheduleRows: [
+          { machineNo: "M-1", maintenanceCode: "MT-1" },
+        ],
+      },
+    })
+    expect(JSON.stringify(result)).not.toContain("private")
+    expect(mocks.state).toHaveBeenCalledOnce()
+
+    mocks.listAllGrantedCapabilities.mockResolvedValue(["operations.dashboard.read"])
+    await expect(
+      readPostgresDashboardState(request, {}, "conventional", undefined, "maintenance")
+    ).rejects.toMatchObject({ status: 403 })
+  })
+
   it("requires dedicated correction authority before reversing operations evidence", async () => {
     mocks.listAllGrantedCapabilities.mockResolvedValue([
       "operations.dashboard.read",

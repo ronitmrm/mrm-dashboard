@@ -825,7 +825,8 @@ async function get(request: NextRequest, context: RouteContext) {
             operatorId: search.get("operatorId") || undefined,
             startDate: search.get("startDate") || undefined,
           },
-          search.get("floor")
+          search.get("floor"),
+          search.get("scope") === "maintenance" ? "maintenance" : undefined
         )
       )
     }
@@ -846,7 +847,8 @@ async function get(request: NextRequest, context: RouteContext) {
           (() => {
             const value = Number(search.get("knownVersion"))
             return Number.isSafeInteger(value) && value > 0 ? value : undefined
-          })()
+          })(),
+          search.get("scope") === "maintenance" ? "maintenance" : undefined
         )
       )
     }

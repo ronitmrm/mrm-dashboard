@@ -20,6 +20,56 @@ export class DashboardReadError extends Error {
   }
 }
 
+function maintenanceDashboard(payload: Record<string, unknown>) {
+  const control = payload.productionControl
+  const rows =
+    control && typeof control === "object" && !Array.isArray(control)
+      ? (control as Record<string, unknown>)
+      : {}
+  const machinePlanningRows = Array.isArray(rows.machinePlanningRows)
+    ? rows.machinePlanningRows.map((value) => {
+        const row = value && typeof value === "object" && !Array.isArray(value)
+          ? (value as Record<string, unknown>)
+          : {}
+        return Object.fromEntries(
+          [
+            "machineNo", "machine", "machineFamily", "machineType",
+            "machineName", "location", "productionFloorCode", "status",
+          ].map((key) => [key, row[key]])
+        )
+      })
+    : []
+  const productionRunRows = Array.isArray(rows.productionRunRows)
+    ? rows.productionRunRows.map((value) => {
+        const row = value && typeof value === "object" && !Array.isArray(value)
+          ? (value as Record<string, unknown>)
+          : {}
+        return {
+          machine: row.machine,
+          machineNo: row.machineNo,
+          prodDate: row.prodDate,
+          productionDate: row.productionDate,
+          date: row.date,
+        }
+      })
+    : []
+
+  return {
+    productionFloorCode: payload.productionFloorCode,
+    readModelVersion: payload.readModelVersion,
+    snapshotCacheUpdatedAt: payload.snapshotCacheUpdatedAt,
+    productionControl: {
+      machinePlanningRows,
+      productionRunRows,
+      maintenanceScheduleRows: rows.maintenanceScheduleRows ?? [],
+      maintenanceTaskRows: rows.maintenanceTaskRows ?? [],
+      maintenanceMasterRows: rows.maintenanceMasterRows ?? [],
+      maintenanceChecklistMasterRows: rows.maintenanceChecklistMasterRows ?? [],
+      rejectionReasonMasterRows: rows.rejectionReasonMasterRows ?? [],
+    },
+  }
+}
+
 export async function withDashboardReadRepository<T>(
   request: NextRequest,
   operation: (context: {
@@ -89,7 +139,8 @@ export async function withDashboardReadRepository<T>(
 export async function readPostgresDashboard(
   request: NextRequest,
   filters: Record<string, string | undefined>,
-  requestedProductionFloor?: string | null
+  requestedProductionFloor?: string | null,
+  scope?: "maintenance"
 ) {
   return withDashboardReadRepository(
     request,
@@ -99,11 +150,11 @@ export async function readPostgresDashboard(
         filters,
         normalizeProductionFloorCode(requestedProductionFloor)
       )
-      if (payload) return payload
+      if (payload) return scope === "maintenance" ? maintenanceDashboard(payload) : payload
       await repository.requestRefresh(organizationId)
       return { cacheStatus: "missing", filters }
     },
-    "operations.dashboard.read",
+    scope === "maintenance" ? "maintenance.workspace.read" : "operations.dashboard.read",
     requestedProductionFloor
   )
 }
@@ -112,7 +163,8 @@ export async function readPostgresDashboardState(
   request: NextRequest,
   filters: Record<string, string | undefined>,
   requestedProductionFloor?: string | null,
-  knownVersion?: number
+  knownVersion?: number,
+  scope?: "maintenance"
 ) {
   return withDashboardReadRepository(
     request,
@@ -143,7 +195,10 @@ export async function readPostgresDashboardState(
         return {
           ...envelope,
           coverage: state.coverage,
-          dashboard: state.dashboard,
+          dashboard:
+            scope === "maintenance"
+              ? maintenanceDashboard(state.dashboard)
+              : state.dashboard,
           notModified: false,
         }
       }
@@ -160,7 +215,7 @@ export async function readPostgresDashboardState(
         status: { ...state.status, isRefreshing: true },
       }
     },
-    "operations.dashboard.read",
+    scope === "maintenance" ? "maintenance.workspace.read" : "operations.dashboard.read",
     requestedProductionFloor
   )
 }
