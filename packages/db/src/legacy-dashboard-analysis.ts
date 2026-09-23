@@ -3304,7 +3304,9 @@ function machinePlanDetails(
         const plannedProductionStartDate = rmReplanRequired
           ? maxDateValue(plannedCompletionDate, setupCompletionDate)
           : actualStartDate || maxDateValue(plannedCompletionDate, setupCompletionDate);
-        const plannedProductionEndDate = plannedProductionEnd(plannedProductionStartDate, machineOrderPcs, cycle, productionActual, planningCalendar);
+        const plannedProductionEndDate = itemComplete && actualCompletionDate
+          ? actualCompletionDate
+          : plannedProductionEnd(plannedProductionStartDate, machineOrderPcs, cycle, productionActual, planningCalendar);
         if (plannedProductionEndDate) routeProductionEndDates.push(parseDate(plannedProductionEndDate) || plannedProductionEndDate);
         if (plannedProductionStartDate && plannedProductionEndDate) {
           routeProductionStreams.push({
@@ -3316,12 +3318,14 @@ function machinePlanDetails(
           });
         }
         if (productionActual && productionActual.rows) routeProductionActuals.push(productionActual);
-        if (machineKeyValue) {
+        const remainingMachineQty = itemComplete ? 0 : Math.max(machineOrderPcs - (productionActual?.actualQty ?? 0), 0);
+        if (machineKeyValue && remainingMachineQty > 0) {
           machineLoad.set(machineKeyValue, (machineLoad.get(machineKeyValue) ?? 0) + 1);
-          machinePlannedDays.set(machineKeyValue, (machinePlannedDays.get(machineKeyValue) ?? 0) + plannedProductionDays(plannedProductionStartDate, plannedProductionEndDate, planningCalendar));
-          machinePlannedQty.set(machineKeyValue, (machinePlannedQty.get(machineKeyValue) ?? 0) + machineOrderPcs);
+          machinePlannedDays.set(machineKeyValue, (machinePlannedDays.get(machineKeyValue) ?? 0) + plannedProductionDays(maxDateValue(plannedProductionStartDate, plantIsoDate(new Date())), plannedProductionEndDate, planningCalendar));
+          machinePlannedQty.set(machineKeyValue, (machinePlannedQty.get(machineKeyValue) ?? 0) + remainingMachineQty);
         }
-        if (machineKeyValue && plannedProductionEndDate) machineNextSetupDate.set(machineKeyValue, nextMachineAvailableDate(plannedProductionEndDate, planningCalendar));
+        const machineReleaseDate = itemComplete ? actualCompletionDate || plannedProductionEndDate : plannedProductionEndDate;
+        if (machineKeyValue && machineReleaseDate) machineNextSetupDate.set(machineKeyValue, maxDateValue(machineNextSetupDate.get(machineKeyValue) ?? "", nextMachineAvailableDate(machineReleaseDate, planningCalendar)));
         const taskReadiness = shopFloorTaskReadiness(operationReadyCanPullForward, plannedStartDate);
         const machineUnavailableQueueBeforeSetups = machineUnavailableQueueBeforeSetupsForMachine(assignmentQueuePlacement, machine);
         const runningStatus = splitRole === "produced_on_unavailable_machine"
@@ -3445,6 +3449,7 @@ function machinePlanDetails(
             totalOrderPcs: setupOrderPcs,
             cycle,
             productionActual,
+            assignmentLocked: Boolean(effectivePlanOverride || assignmentQueuePlacement || setupInterruption || appliedParallelOverrides.length || machineHasDelayUnavailableWindow(machine, machineUnavailableWindows)),
             machineUnavailableWindows: machineUnavailableWindowsFor(machineUnavailableWindows, machine),
           },
         });
@@ -3636,7 +3641,7 @@ function finalizeMachineAndSetupSchedule(
       previousSignature = "";
       continue;
     }
-    const balancedMachine = balanceMachineFamilyIdleGaps(details, planningCalendar, machineRows, lastBalancedMachine);
+    const balancedMachine = balanceMachineFamilyIdleGaps(details, planningCalendar, machineRows, lastBalancedMachine, machineUnavailableWindows);
     if (balancedMachine) {
       lastBalancedMachine = balancedMachine;
       previousSignature = "";
@@ -3654,8 +3659,12 @@ function finalizeMachineAndSetupSchedule(
   return details;
 }
 
-function balanceMachineFamilyIdleGaps(details: Array<Record<string, unknown>>, planningCalendar: PlanningCalendar, masterRows: Array<Record<string, unknown>>, afterMachine: string) {
+function balanceMachineFamilyIdleGaps(details: Array<Record<string, unknown>>, planningCalendar: PlanningCalendar, masterRows: Array<Record<string, unknown>>, afterMachine: string, machineUnavailableWindows: MachineUnavailableWindow[]) {
   const byMachine = new Map<string, Array<Record<string, unknown>>>();
+  for (const master of masterRows) {
+    const machine = rowText(master, "machine", "machineNo", "MACHINE NO", "M/C NO", "MACHINE NO.");
+    if (machine) byMachine.set(machine, []);
+  }
   for (const row of details) {
     const machine = rowText(row, "machine");
     if (!machine) continue;
@@ -3669,7 +3678,21 @@ function balanceMachineFamilyIdleGaps(details: Array<Record<string, unknown>>, p
   const machines = afterIndex < 0
     ? sortedMachines
     : [...sortedMachines.slice(afterIndex + 1), ...sortedMachines.slice(0, afterIndex + 1)];
+  const tailMoves: Array<{ row: Record<string, unknown>; machine: string; start: string; end: string }> = [];
+  const movableRows = details.filter(row => isMovablePlannedRow(row) && !row.toolingSequenceMachine && !row.toolingPlanBlocked);
   for (const [machine, machineRows] of machines) {
+    const candidateRows = movableRows.filter(row => canonicalKey(rowText(row, "machine")) !== canonicalKey(machine)
+      && !familyIdleGapRejectedForMachine(row, machine)
+      && activePhysicalMachineRows(rowText(row, "routeMachine", "machine"), rowText(row, "machineType"), masterRows)
+        .some(candidate => canonicalKey(candidate.machine) === canonicalKey(machine)));
+    if (!candidateRows.length) continue;
+    const targetWindows = machineUnavailableWindowsFor(machineUnavailableWindows, machine);
+    const canUseGap = (row: Record<string, unknown>, start: string) => {
+      if (!targetWindows.length) return true;
+      const duration = plannedProductionDays(parseDate(rowText(row, "plannedProductionStartDate")), parseDate(rowText(row, "plannedProductionEndDate")), planningCalendar);
+      const end = maxDateValue(addDays(start, Math.max(0, duration - 1), planningCalendar), planningMeta(row).minimumProductionEndDate ?? "");
+      return !firstOverlappingMachineUnavailableWindow(targetWindows, start, end);
+    };
     const sorted = machineRows
       .filter((row) => parseDate(rowText(row, "setupPlannedDate", "plannedDate")))
       .sort((a, b) => machineQueueSortDate(a).localeCompare(machineQueueSortDate(b)) || rowText(a, "jcNo").localeCompare(rowText(b, "jcNo"), undefined, { numeric: true }));
@@ -3684,23 +3707,17 @@ function balanceMachineFamilyIdleGaps(details: Array<Record<string, unknown>>, p
         gapEnd: leadingGapEnd,
         excludedKeys: new Set([scheduleRowKey(first)]),
         planningCalendar,
-      });
+      }, candidateRows.filter(row => canUseGap(row, maxDateValue(queueReadyDate(row), addDays(plantIsoDate(new Date()), 0, planningCalendar)))));
       if (leadingCandidate) {
-        const fromMachine = rowText(leadingCandidate, "machine");
-        const gapStart = queueReadyDate(leadingCandidate);
-        leadingCandidate.machine = machine;
-        leadingCandidate.machineAssignment = "Family idle gap balance";
-        leadingCandidate.familyIdleGapFromMachine = fromMachine;
-        leadingCandidate.familyIdleGapTargetStart = gapStart;
-        leadingCandidate.familyIdleGapTargetEnd = leadingGapEnd;
-        leadingCandidate.familyIdleGapReason = `Moved from ${fromMachine} to fill ${machine} idle gap from ${dateLabel(gapStart)} to ${dateLabel(leadingGapEnd)}`;
+        const gapStart = maxDateValue(queueReadyDate(leadingCandidate), addDays(plantIsoDate(new Date()), 0, planningCalendar));
+        moveToFamilyIdleGap(leadingCandidate, machine, gapStart, leadingGapEnd, machineUnavailableWindows);
         return machine;
       }
     }
     for (let index = 0; index < sorted.length - 1; index += 1) {
       const current = sorted[index]!;
       const next = sorted[index + 1]!;
-      const gapStart = nextMachineAvailableDate(parseDate(rowText(current, "plannedProductionEndDate", "setupPlannedDate", "plannedDate")) || "", planningCalendar);
+      const gapStart = maxDateValue(addDays(plantIsoDate(new Date()), 0, planningCalendar), nextMachineAvailableDate(parseDate(rowText(current, "plannedProductionEndDate", "setupPlannedDate", "plannedDate")) || "", planningCalendar));
       const nextStart = parseDate(rowText(next, "setupPlannedDate", "plannedDate"));
       const gapEnd = nextStart ? addDays(nextStart, -1, planningCalendar) : "";
       if (!gapStart || !gapEnd || gapEnd < gapStart) continue;
@@ -3715,27 +3732,71 @@ function balanceMachineFamilyIdleGaps(details: Array<Record<string, unknown>>, p
         gapDays,
         excludedKeys: new Set([scheduleRowKey(current), scheduleRowKey(next)]),
         planningCalendar,
-      });
+      }, candidateRows.filter(row => canUseGap(row, gapStart)));
       if (!candidate) continue;
 
-      const fromMachine = rowText(candidate, "machine");
-      candidate.machine = machine;
-      candidate.machineAssignment = "Family idle gap balance";
-      candidate.familyIdleGapFromMachine = fromMachine;
-      candidate.familyIdleGapTargetStart = gapStart;
-      candidate.familyIdleGapTargetEnd = gapEnd;
-      candidate.familyIdleGapReason = `Moved from ${fromMachine} to fill ${machine} idle gap from ${dateLabel(gapStart)} to ${dateLabel(gapEnd)}`;
+      moveToFamilyIdleGap(candidate, machine, gapStart, gapEnd, machineUnavailableWindows);
       return machine;
     }
+    // The last reservation (or an empty queue) has no next row to delimit a gap.
+    // Bound each proposed move by its old start, then let the normal scheduler
+    // validate WIP, shared tools and unavailable windows before retaining it.
+    const tailStart = maxDateValue(
+      addDays(plantIsoDate(new Date()), 0, planningCalendar),
+      ...sorted.map(row => nextMachineAvailableDate(parseDate(rowText(row, "plannedProductionEndDate")), planningCalendar)),
+    );
+    const tailCandidate = candidateRows
+      .filter(row => {
+        const gapStart = maxDateValue(tailStart, queueReadyDate(row));
+        const gapEnd = addDays(parseDate(rowText(row, "plannedProductionStartDate")), -1, planningCalendar);
+        return gapEnd >= gapStart && isFamilyIdleGapCandidate(row, {
+          targetMachine: machine, machineRows: masterRows, targetMachineType: "",
+          gapStart, gapDays: plannedProductionDays(gapStart, gapEnd, planningCalendar),
+          excludedKeys: new Set(), planningCalendar,
+        }) && canUseGap(row, gapStart) && !setupAlreadyOnMachine(details, row, machine)
+          && !machineUnavailablePlacementRejectsGapCandidate(details, row, machine);
+      })
+      .sort((a, b) => safeNumber(b.plannerPriorityScore) - safeNumber(a.plannerPriorityScore)
+        || queueReadyDate(a).localeCompare(queueReadyDate(b))
+        || rowText(a, "jcNo").localeCompare(rowText(b, "jcNo"), undefined, { numeric: true }))[0];
+    if (tailCandidate) {
+      tailMoves.push({ row: tailCandidate, machine,
+        start: maxDateValue(tailStart, queueReadyDate(tailCandidate)),
+        end: addDays(parseDate(rowText(tailCandidate, "plannedProductionStartDate")), -1, planningCalendar),
+      });
+    }
+  }
+  const earliestTailMove = tailMoves.sort((a, b) =>
+    safeNumber(b.row.plannerPriorityScore) - safeNumber(a.row.plannerPriorityScore)
+    || a.start.localeCompare(b.start)
+    || queueReadyDate(a.row).localeCompare(queueReadyDate(b.row))
+    || rowText(a.row, "jcNo").localeCompare(rowText(b.row, "jcNo"), undefined, { numeric: true }))[0];
+  if (earliestTailMove) {
+    const { row, machine, start, end } = earliestTailMove;
+    moveToFamilyIdleGap(row, machine, start, end, machineUnavailableWindows);
+    return machine;
   }
   return "";
+}
+
+function moveToFamilyIdleGap(row: Record<string, unknown>, machine: string, start: string, end: string, windows: MachineUnavailableWindow[]) {
+  const fromMachine = rowText(row, "machine");
+  row.familyIdleGapOriginalEnd = parseDate(rowText(row, "plannedProductionEndDate"));
+  row.machine = machine;
+  planningMeta(row).machineUnavailableWindows = machineUnavailableWindowsFor(windows, machine);
+  row.machineAssignment = "Family idle gap balance";
+  row.familyIdleGapFromMachine = fromMachine;
+  row.familyIdleGapTargetStart = start;
+  row.familyIdleGapTargetEnd = end;
+  row.familyIdleGapReason = `Moved from ${fromMachine} to fill ${machine} idle gap from ${dateLabel(start)} to ${dateLabel(end)}`;
 }
 
 function familyIdleGapCandidate(
   details: Array<Record<string, unknown>>,
   gap: { targetMachine: string; machineRows: Array<Record<string, unknown>>; targetMachineType: string; gapStart: string; gapDays: number; excludedKeys: Set<string>; planningCalendar: PlanningCalendar },
+  candidates: Array<Record<string, unknown>>,
 ) {
-  return details
+  return candidates
     .filter((row) => isFamilyIdleGapCandidate(row, gap))
     .filter((row) => !setupAlreadyOnMachine(details, row, gap.targetMachine))
     .filter((row) => !machineUnavailablePlacementRejectsGapCandidate(details, row, gap.targetMachine))
@@ -3750,9 +3811,10 @@ function familyIdleGapCandidate(
 function leadingFamilyIdleGapCandidate(
   details: Array<Record<string, unknown>>,
   gap: { targetMachine: string; machineRows: Array<Record<string, unknown>>; targetMachineType: string; gapEnd: string; excludedKeys: Set<string>; planningCalendar: PlanningCalendar },
+  candidates: Array<Record<string, unknown>>,
 ) {
   if (!gap.gapEnd) return undefined;
-  return details
+  return candidates
     .filter((row) => isLeadingFamilyIdleGapCandidate(row, gap))
     .filter((row) => !setupAlreadyOnMachine(details, row, gap.targetMachine))
     .filter((row) => !machineUnavailablePlacementRejectsGapCandidate(details, row, gap.targetMachine))
@@ -3773,14 +3835,14 @@ function machineUnavailablePlacementRejectsGapCandidate(details: Array<Record<st
 function isLeadingFamilyIdleGapCandidate(row: Record<string, unknown>, gap: { targetMachine: string; machineRows: Array<Record<string, unknown>>; targetMachineType: string; gapEnd: string; excludedKeys: Set<string>; planningCalendar: PlanningCalendar }) {
   if (gap.excludedKeys.has(scheduleRowKey(row))) return false;
   if (familyIdleGapRejectedForMachine(row, gap.targetMachine)) return false;
-  if (row.toolingSequenceMachine || requiredToolingCodesFromPlan(row).length) return false;
+  if (row.toolingSequenceMachine || row.toolingPlanBlocked) return false;
   if (!isMovablePlannedRow(row)) return false;
   const currentMachine = rowText(row, "machine");
   if (!currentMachine || currentMachine === gap.targetMachine) return false;
   if (!activePhysicalMachineRows(rowText(row, "routeMachine", "machine"), rowText(row, "machineType"), gap.machineRows).some((machine) => canonicalKey(machine.machine) === canonicalKey(gap.targetMachine))) return false;
   if (!machineTypeCompatible(rowText(row, "machineType"), gap.targetMachineType)) return false;
   const currentStart = parseDate(rowText(row, "setupPlannedDate", "plannedDate"));
-  const readyDate = queueReadyDate(row);
+  const readyDate = maxDateValue(queueReadyDate(row), addDays(plantIsoDate(new Date()), 0, gap.planningCalendar));
   if (!currentStart || !readyDate || currentStart <= readyDate || readyDate > gap.gapEnd) return false;
   const durationDays = plannedProductionDays(
     parseDate(rowText(row, "setupPlannedDate", "plannedDate")),
@@ -3794,7 +3856,7 @@ function isLeadingFamilyIdleGapCandidate(row: Record<string, unknown>, gap: { ta
 function isFamilyIdleGapCandidate(row: Record<string, unknown>, gap: { targetMachine: string; machineRows: Array<Record<string, unknown>>; targetMachineType: string; gapStart: string; gapDays: number; excludedKeys: Set<string>; planningCalendar: PlanningCalendar }) {
   if (gap.excludedKeys.has(scheduleRowKey(row))) return false;
   if (familyIdleGapRejectedForMachine(row, gap.targetMachine)) return false;
-  if (row.toolingSequenceMachine || requiredToolingCodesFromPlan(row).length) return false;
+  if (row.toolingSequenceMachine || row.toolingPlanBlocked) return false;
   if (!isMovablePlannedRow(row)) return false;
   const currentMachine = rowText(row, "machine");
   if (!currentMachine || currentMachine === gap.targetMachine) return false;
@@ -3802,7 +3864,7 @@ function isFamilyIdleGapCandidate(row: Record<string, unknown>, gap: { targetMac
   if (!machineTypeCompatible(rowText(row, "machineType"), gap.targetMachineType)) return false;
   const currentStart = parseDate(rowText(row, "setupPlannedDate", "plannedDate"));
   if (!currentStart || currentStart <= gap.gapStart) return false;
-  const readyDate = queueReadyDate(row);
+  const readyDate = maxDateValue(queueReadyDate(row), addDays(plantIsoDate(new Date()), 0, gap.planningCalendar));
   if (!readyDate || readyDate > gap.gapStart) return false;
   const durationDays = plannedProductionDays(
     parseDate(rowText(row, "setupPlannedDate", "plannedDate")),
@@ -3813,6 +3875,7 @@ function isFamilyIdleGapCandidate(row: Record<string, unknown>, gap: { targetMac
 }
 
 function isMovablePlannedRow(row: Record<string, unknown>) {
+  if (planningMeta(row).assignmentLocked || priorityQueueBeforeSetups(row).length || priorityInterruptedSetups(row).length) return false;
   if (rowText(row, "machineAssignment") === "Family idle gap balance") return false;
   if (priorityQueueState(row) !== "idle") return false;
   if (actualProductionStartDate(planningMeta(row))) return false;
@@ -3836,10 +3899,12 @@ function revertInvalidFamilyIdleGapMoves(
       finalStart,
       finalEnd,
     ));
-    if (finalEnd <= targetEnd && !overlapsUnavailableWindow) continue;
+    const originalEnd = parseDate(rowText(row, "familyIdleGapOriginalEnd"));
+    if (finalEnd <= targetEnd && (!originalEnd || finalEnd < originalEnd) && !overlapsUnavailableWindow) continue;
     const fromMachine = rowText(row, "familyIdleGapFromMachine");
     if (!fromMachine) continue;
     row.machine = fromMachine;
+    planningMeta(row).machineUnavailableWindows = machineUnavailableWindowsFor(machineUnavailableWindows, fromMachine);
     row.machineAssignment = "Assigned physical machine";
     const rejectedMachines = new Set(rowText(row, "familyIdleGapRejectedMachines").split(",").map((value) => canonicalKey(value)).filter(Boolean));
     rejectedMachines.add(canonicalKey(targetMachine));
@@ -3847,6 +3912,7 @@ function revertInvalidFamilyIdleGapMoves(
     row.familyIdleGapFromMachine = "";
     row.familyIdleGapTargetStart = "";
     row.familyIdleGapTargetEnd = "";
+    row.familyIdleGapOriginalEnd = "";
     row.familyIdleGapReason = "";
     reverted = true;
   }
@@ -4053,6 +4119,9 @@ function rescheduleMachineQueues(details: Array<Record<string, unknown>>, planni
           plannedProductionEndDate,
           machineUnavailableRemainingProductionEnd(row, unavailableDelay.window, planningCalendar),
         );
+      }
+      if (shopFloorRowIsComplete(row)) {
+        plannedProductionEndDate = parseDate(rowText(row, "actualCompletionDate", "shopFloorUpdatedAt")) || plannedProductionEndDate;
       }
       if (unavailableDelay.window) {
         row.machineUnavailableReason = machineUnavailableMessage(unavailableDelay.window);
@@ -4471,6 +4540,7 @@ function planningMeta(row: Record<string, unknown>) {
     baseReadyDate?: string;
     minimumProductionEndDate?: string;
     canPullForward?: boolean;
+    assignmentLocked?: boolean;
     orderPcs?: number;
     totalOrderPcs?: number;
     cycle?: Record<string, unknown>;

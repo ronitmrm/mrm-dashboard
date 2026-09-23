@@ -2,6 +2,48 @@ import { expect, test, vi } from "vitest"
 
 import { buildLegacyDashboardSnapshot } from "./legacy-dashboard-analysis"
 
+test("moves WIP-ready work with tooling onto a released machine after the full queue is known", () => {
+  vi.useFakeTimers()
+  vi.setSystemTime(new Date("2026-09-23T06:00:00Z"))
+  const entry = (entryType: string, payload: Record<string, unknown>) => ({ entryType, payload, createdAt: "2026-09-22T22:00:00Z" })
+  const input: Parameters<typeof buildLegacyDashboardSnapshot>[0] = {
+    workbookName: "PostgreSQL",
+    productionEntries: [{ jobCard: "P1497", partCode: "M909B", setupNo: "1", machine: "CNC-14", machineType: "CNC", operatorId: "OP1", prodDate: "2026-09-22", outputQty: 705, actualQty: 705, rejectQty: 0, targetQty: 705 }],
+    dataEntries: [
+      entry("work_order", { jcNo: "P1497", partCode: "M909B", optionNumber: "1", orderPcs: 705, rmInwardDate: "2026-09-01", rmInwardKg: 1 }),
+      entry("work_order", { jcNo: "P1264", partCode: "M1789", optionNumber: "1", orderPcs: 10_000, rmInwardDate: "2026-09-23", rmInwardKg: 1 }),
+      entry("work_order", { jcNo: "P0885", partCode: "OTHER", optionNumber: "1", orderPcs: 1, rmInwardDate: "2026-09-23", rmInwardKg: 1 }),
+      ...[{ partNo: "M909B", setupNo: "1" }, { partNo: "M909B", setupNo: "2" }, { partNo: "M1789", setupNo: "1" }, { partNo: "OTHER", setupNo: "1" }].flatMap(setup => [
+        entry("route", { ...setup, optionNumber: "1", machineType: "CNC", machineFamily: "JT" }),
+        entry("cycle", { ...setup, optionNumber: "1", cycleTime: 82 }),
+        entry("tooling", { ...setup, optionNumber: "1", fixture: setup.partNo === "M909B" && setup.setupNo === "2" ? "NC252" : "" }),
+      ]),
+      entry("tooling_availability", { assetCode: "NC252", totalQuantity: 1, allocatedQuantity: 1, occupiedQuantity: 0 }),
+      entry("shop_floor_status", { jcNo: "P1497", partCode: "M909B", optionNumber: "1", setupNo: "1", machine: "CNC-14", stage: "item_complete", completedAt: "2026-09-22T22:00:00Z" }),
+      entry("shop_floor_status", { jcNo: "P1264", partCode: "M1789", optionNumber: "1", setupNo: "1", machine: "CNC-20", stage: "operator_started", completedAt: "2026-09-23T04:00:00Z" }),
+      entry("shop_floor_status", { jcNo: "P0885", partCode: "OTHER", optionNumber: "1", setupNo: "1", machine: "CNC-3", stage: "operator_started", completedAt: "2026-09-23T04:00:00Z" }),
+      ...["CNC-3", "CNC-14", "CNC-20"].map(machineNo => entry("machine_master", { machineNo, machineType: "CNC", machineFamily: "JT", status: "Active" })),
+    ],
+    previousMachinePlanDetailRows: [{ jcNo: "P1497", partCode: "M909B", optionNumber: "1", setupNo: "2", routeMachine: "JT", machine: "CNC-20" }],
+  }
+  const plan = () => {
+    const control = buildLegacyDashboardSnapshot(input).productionControl!
+    if (!("machinePlanDetailRows" in control)) throw new Error("Missing plan")
+    return control.machinePlanDetailRows
+  }
+  try {
+    const rows = plan()
+    const expected = { machine: "CNC-14", physicalWipQty: 705, plannedProductionStartDate: "23-Sept-26", shopFloorTaskReady: true }
+    expect(rows.find(row => row.jcNo === "P1497" && row.setupNo === "2")).toMatchObject(expected)
+    expect(rows.find(row => row.jcNo === "P1264")).toMatchObject({ machine: "CNC-20", shopFloorStage: "operator_started" })
+    input.previousMachinePlanDetailRows = rows
+    expect(plan().find(row => row.jcNo === "P1497" && row.setupNo === "2")).toMatchObject(expected)
+    // A reviewed machine assignment remains binding even when another is earlier.
+    input.planOverrides = [{ jobCardNumber: "P1497", setupNumber: 2, toMachineNumber: "CNC-20", status: "Active", createdAt: "2026-09-23T05:00:00Z" }]
+    expect(plan().find(row => row.jcNo === "P1497" && row.setupNo === "2")?.machine).toBe("CNC-20")
+  } finally { vi.useRealTimers() }
+})
+
 test("uses the India plant date for overdue planning when the server is still on the prior UTC date", () => {
   vi.useFakeTimers()
   vi.stubEnv("TZ", "UTC")

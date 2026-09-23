@@ -150,10 +150,14 @@ T25 and T26 are different families). Machine numbers and names never determine
 family. Machines without a family cannot receive automatic allocations or be
 offered as compatible switch destinations or proposal capacity.
 
-Operational replanning after Raw Material receipt checks leading and internal
-idle gaps across every active physical machine in the compatible family. Ready,
+Operational replanning after Raw Material receipt checks leading, internal and
+trailing idle time, including empty machines, across every active physical machine
+in the compatible family after calculating the full queues. Completed setups
+remain history and do not count as remaining machine load. Ready,
 unstarted setup streams may fill a gap only when they fit before the machine's
-next reserved work. WIP availability, tooling capacity, physical machine locks,
+next reserved work and finish earlier than their existing plan. Required tooling
+does not prevent reassignment when its shared capacity is available for the run.
+WIP availability, tooling capacity, physical machine locks,
 planner decisions and minimum parallel-run rules remain binding.
 
 Within one physical machine's queue, unstarted setups follow effective material
