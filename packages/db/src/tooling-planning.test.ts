@@ -28,7 +28,8 @@ test("department tooling capacity sequences shared resources and refreshes after
     const rows = plans()
     const first = rows.find(row => row.jcNo === "A" && row.setupNo === "1")!
     const second = rows.find(row => row.jcNo === "B" && row.setupNo === "1")!
-    expect(second.machine).toBe("CNC-02")
+    expect(second.machine).toBe("CNC-01")
+    expect(second.machineAssignment).toBe("Same-part machine continuity")
     expect(second.toolingPlanStatus).toContain("Waiting for tooling release")
     expect(second.toolingAvailability).toContain("5 usable total / 4 in Store / 1 allocated / 1 occupied / 0 free")
     const day = (value: unknown) => new Date(String(value)).getTime()
@@ -37,6 +38,7 @@ test("department tooling capacity sequences shared resources and refreshes after
     expect(waiting.every(row => row.shopFloorTaskReady === false)).toBe(true)
     allocation.allocatedQuantity = 2
     allocation.storeQuantity = 3
+    expect(plans().find(row => row.jcNo === "B")?.machine).toBe("CNC-02")
     expect(plans().every(row => !String(row.toolingPlanStatus).includes("Waiting for tooling release"))).toBe(true)
     state.stage = "planned"
     allocation.allocatedQuantity = 1

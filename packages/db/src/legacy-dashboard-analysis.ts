@@ -3176,18 +3176,9 @@ function machinePlanDetails(
         }).filter((machine) => canonicalKey(machine) !== canonicalKey(setupInterruption.machine));
         if (remainingMachines.length) assignedMachines = [setupInterruption.machine, ...remainingMachines];
       }
-      let toolingSequenceMachine = "";
       if (requiredTools.length && !override && !setupInterruption && !productionActualMachines.size && !lockedShopFloorMachines.size) {
-        const previousDetails = details.filter(detail => rowText(detail, "jcNo") === rowText(row, "jcNo") && rowText(detail, "setupNo") === (setupStepKey(previousSetupNo, optionNumber) || previousSetupNo));
-        const sharedSingleTool = requiredTools.some(code => allocatedTooling.get(canonicalKey(code)) === 1 && previousDetails.some(detail => (detail.requiredToolingCodes as string[]).includes(code)));
-        const previousMachine = previousDetails.find(detail => activePhysicalMachineRows(routeMachine, machineType, machineRows).some(candidate => canonicalKey(candidate.machine) === canonicalKey(detail.machine)))?.machine;
-        if (sharedSingleTool && typeof previousMachine === "string") {
-          assignedMachines = [previousMachine];
-          toolingSequenceMachine = previousMachine;
-        } else {
-          const capacity = Math.max(1, Math.min(...requiredTools.map(code => allocatedTooling.get(canonicalKey(code)) ?? 0)));
-          assignedMachines = assignedMachines.slice(0, capacity);
-        }
+        const capacity = Math.max(1, Math.min(...requiredTools.map(code => allocatedTooling.get(canonicalKey(code)) ?? 0)));
+        assignedMachines = assignedMachines.slice(0, capacity);
       }
       if (!assignedMachines.length) {
         routePlanningBlocked = true;
@@ -3358,7 +3349,6 @@ function machinePlanDetails(
         customerOrderPcs,
         requiredToolingCodes: requiredTools,
         toolingAllocatedQuantities: Object.fromEntries(requiredTools.map(code => [code, allocatedTooling.get(canonicalKey(code)) ?? 0])),
-        toolingSequenceMachine,
         toolingOccupiedQuantities: Object.fromEntries(requiredTools.map(code => [code, safeNumber(toolingAvailability.find(stock => canonicalKey(stock.assetCode) === canonicalKey(code))?.occupiedQuantity)])),
         customerOrderRemainingQty: Math.max(customerOrderPcs - safeNumber(row.finalSetupGoodPieces), 0),
         physicalWipQty,
@@ -3437,7 +3427,7 @@ function machinePlanDetails(
         plannerParallelMachineTargets: appliedParallelOverrides.map((parallelOverride) => rowText(parallelOverride, "toMachine", "TO MACHINE", "PLAN ON MACHINE", "TARGET MACHINE")),
         machineAssignment: splitRole === "produced_on_unavailable_machine" ? "Breakdown produced quantity locked on stopped machine" : splitRole === "remaining_moved_to_alternate_machine" ? "Breakdown remaining quantity replanned by system rules" : splitRole === "remaining_delayed_on_same_machine" ? "Breakdown remaining quantity delayed on same machine" : parallelAssignmentOverride ? "Planner-added parallel machine" : appliedParallelOverrides.length ? "Planner-retained parallel machine" : machine === routeMachine ? "Route family fallback" : assignedMachines.length > 1 ? "Parallel 25-day plan" : "Assigned physical machine",
         parallelMachineCount: assignedMachines.length,
-        planningAssumption: `${planningCalendar.productiveHoursPerDay} hrs/day; Friday is plant shutdown; manual planning holidays are skipped; parallel setup WIP is pooled after each machine stream produces it; forecast WIP does not reserve a downstream physical machine; an unstarted downstream setup is assigned only after recorded WIP satisfies its pooled buffer; next setup waits for cumulative downstream WIP availability through the full run plus ${wipAvailabilityBufferDays} buffer day; stopped-machine WIP starts downstream only when it can feed ${minimumParallelMachineWorkDays} days or complete the order; downstream setup end includes ${interSetupTransferBufferDays} handoff buffer day after previous setup end; RM-at-machine, started shop-floor, or production-actual machines stay locked during recalculation; the same setup keeps its previously planned physical machine unless a material load/date gain justifies moving it; downstream setups are assigned independently; automatic parallel machines require at least ${minimumParallelMachineWorkDays} production days each; a planner-added idle machine overrides only that minimum-run split rule`,
+        planningAssumption: `${planningCalendar.productiveHoursPerDay} hrs/day; Friday is plant shutdown; manual planning holidays are skipped; parallel setup WIP is pooled after each machine stream produces it; forecast WIP does not reserve a downstream physical machine; an unstarted downstream setup is assigned only after recorded WIP satisfies its pooled buffer; next setup waits for cumulative downstream WIP availability through the full run plus ${wipAvailabilityBufferDays} buffer day; stopped-machine WIP starts downstream only when it can feed ${minimumParallelMachineWorkDays} days or complete the order; downstream setup end includes ${interSetupTransferBufferDays} handoff buffer day after previous setup end; RM-at-machine, started shop-floor, or production-actual machines stay locked during recalculation; the same setup keeps its previously planned physical machine unless a material load/date gain justifies moving it; compatible sequential setups and matching Job Cards prefer the preceding machine when separate capacity does not finish earlier; automatic parallel machines require at least ${minimumParallelMachineWorkDays} production days each; a planner-added idle machine overrides only that minimum-run split rule`,
         };
         Object.defineProperty(detail, "__planningMeta", {
           enumerable: false,
@@ -3449,6 +3439,7 @@ function machinePlanDetails(
             totalOrderPcs: setupOrderPcs,
             cycle,
             productionActual,
+            previousSetupNo: setupStepKey(previousSetupNo, optionNumber) || previousSetupNo,
             assignmentLocked: Boolean(effectivePlanOverride || assignmentQueuePlacement || setupInterruption || appliedParallelOverrides.length || machineHasDelayUnavailableWindow(machine, machineUnavailableWindows)),
             machineUnavailableWindows: machineUnavailableWindowsFor(machineUnavailableWindows, machine),
           },
@@ -3527,7 +3518,7 @@ function applyToolingTaskReadiness(rows: Array<Record<string, unknown>>, availab
     }).join("; ");
     row.toolingPlanStatus = blocked ? (shortages.length ? `Awaiting Store allocation: ${shortages.join(", ")}` : unavailable.length ? `Waiting for active tooling release: ${unavailable.join(", ")}` : "Previous setup awaiting tooling allocation")
       : unavailable.length && !shopFloorRowIsComplete(row) ? `Waiting for tooling release: ${unavailable.join(", ")}`
-      : row.toolingSequenceMachine ? `Sequential on ${row.toolingSequenceMachine}` : "Ready";
+      : "Ready";
     if (blocked) {
       blockedSetups.add(job);
       for (const field of ["plannedDate", "setupPlannedDate", "plannedStartDate", "plannedCompletionDate", "plannedProductionStartDate", "plannedProductionEndDate"]) row[field] = "";
@@ -3628,6 +3619,85 @@ function finalizeMachineAndSetupSchedule(
   machineRows: Array<Record<string, unknown>>,
   machineUnavailableWindows: MachineUnavailableWindow[],
 ) {
+  let scheduled = settleMachineAndSetupSchedule(details, planningCalendar, machineRows, machineUnavailableWindows);
+  // Compare complete schedules: a machine preference must not bypass WIP,
+  // tooling, reviewed placements, or a useful earlier parallel finish.
+  const candidates = scheduled.map((_, index) => index).sort((a, b) =>
+    safeNumber(scheduled[b]?.plannerPriorityScore) - safeNumber(scheduled[a]?.plannerPriorityScore)
+    || numericSort(rowText(scheduled[a]!, "setupNo"), rowText(scheduled[b]!, "setupNo")));
+  for (const index of candidates) {
+    const row = scheduled[index]!;
+    if (!isAutomaticUnstartedPlan(row) || safeNumber(row.parallelMachineCount) !== 1 || row.toolingPlanBlocked) continue;
+    const compatible = activePhysicalMachineRows(rowText(row, "routeMachine"), rowText(row, "machineType"), machineRows);
+    const predecessors = scheduled.map((previous, previousIndex) => ({ previous, previousIndex }))
+      .filter(({ previous }) => {
+        if (previous === row || safeNumber(previous.parallelMachineCount) !== 1 || previous.toolingPlanBlocked) return false;
+        if (canonicalKey(previous.partCode) !== canonicalKey(row.partCode) || rowText(previous, "optionNumber") !== rowText(row, "optionNumber")) return false;
+        if (!compatible.some(machine => canonicalKey(machine.machine) === canonicalKey(previous.machine))) return false;
+        if (rowText(previous, "jcNo") === rowText(row, "jcNo")) {
+          return rowText(previous, "setupNo") === planningMeta(row).previousSetupNo;
+        }
+        return rowText(previous, "setupNo") === rowText(row, "setupNo")
+          && (priorityQueueState(previous) !== "idle" || shopFloorRowIsComplete(previous));
+      })
+      .sort((a, b) => Number(rowText(b.previous, "jcNo") === rowText(row, "jcNo")) - Number(rowText(a.previous, "jcNo") === rowText(row, "jcNo"))
+        || parseDate(rowText(b.previous, "plannedProductionEndDate")).localeCompare(parseDate(rowText(a.previous, "plannedProductionEndDate"))));
+    for (const { previous, previousIndex } of predecessors) {
+      const previousEnd = parseDate(rowText(previous, "plannedProductionEndDate"));
+      const currentEnd = parseDate(rowText(row, "plannedProductionEndDate"));
+      if (!previousEnd || !currentEnd) continue;
+      // A later actual setup has already replaced the settings on this machine.
+      if (scheduled.some(other => other !== previous && canonicalKey(other.machine) === canonicalKey(previous.machine)
+        && (priorityQueueState(other) !== "idle" || shopFloorRowIsComplete(other))
+        && parseDate(rowText(other, "plannedProductionEndDate")) > previousEnd)) continue;
+      const trial = scheduled.map(plan => Object.defineProperty({ ...plan }, "__planningMeta", {
+        enumerable: false, value: { ...planningMeta(plan) },
+      }));
+      const proposed = trial[index]!;
+      const anchor = trial[previousIndex]!;
+      proposed.machine = previous.machine;
+      proposed.machineAssignment = "Same-part machine continuity";
+      proposed.machineContinuityFromMachine = row.machine;
+      proposed.machineContinuityReason = `Follow ${rowText(previous, "jcNo")} setup ${rowText(previous, "setupNo")} on ${rowText(previous, "machine")} to retain compatible settings`;
+      // A prior idle-gap proposal must not force this new placement back.
+      for (const field of ["familyIdleGapFromMachine", "familyIdleGapTargetStart", "familyIdleGapTargetEnd", "familyIdleGapOriginalEnd", "familyIdleGapReason"]) proposed[field] = "";
+      planningMeta(proposed).continuityAfter = scheduleRowKey(anchor);
+      planningMeta(proposed).continuityProtected = true;
+      planningMeta(anchor).continuityProtected = true;
+      planningMeta(proposed).machineUnavailableWindows = machineUnavailableWindowsFor(machineUnavailableWindows, rowText(proposed, "machine"));
+      settleMachineAndSetupSchedule(trial, planningCalendar, machineRows, machineUnavailableWindows);
+      const proposedStart = parseDate(rowText(proposed, "plannedProductionStartDate"));
+      const proposedEnd = parseDate(rowText(proposed, "plannedProductionEndDate"));
+      const anchorEnd = parseDate(rowText(anchor, "plannedProductionEndDate"));
+      if (!proposedStart || !proposedEnd || proposed.toolingPlanBlocked || proposedEnd > currentEnd
+        || proposedStart <= anchorEnd
+        || firstOverlappingMachineUnavailableWindow(planningMeta(proposed).machineUnavailableWindows ?? [], proposedStart, proposedEnd)) continue;
+      // Staying on the machine only retains settings if unrelated work does
+      // not run between the preceding setup and this one.
+      if (trial.some(other => other !== anchor && other !== proposed && other.machine === proposed.machine
+        && (canonicalKey(other.partCode) !== canonicalKey(proposed.partCode) || other.optionNumber !== proposed.optionNumber)
+        && parseDate(rowText(other, "plannedProductionEndDate")) > anchorEnd
+        && parseDate(rowText(other, "plannedProductionStartDate")) < proposedStart)) continue;
+      const delaysProtectedWork = scheduled.some((original, position) => {
+        const protectedWork = planningMeta(original).assignmentLocked || planningMeta(original).continuityProtected || priorityQueueState(original) !== "idle"
+          || safeNumber(original.plannerPriorityScore) > safeNumber(row.plannerPriorityScore);
+        return protectedWork && (trial[position]!.machine !== original.machine
+          || parseDate(rowText(trial[position]!, "plannedProductionEndDate")) > parseDate(rowText(original, "plannedProductionEndDate")));
+      });
+      if (delaysProtectedWork) continue;
+      scheduled = trial;
+      break;
+    }
+  }
+  return scheduled;
+}
+
+function settleMachineAndSetupSchedule(
+  details: Array<Record<string, unknown>>,
+  planningCalendar: PlanningCalendar,
+  machineRows: Array<Record<string, unknown>>,
+  machineUnavailableWindows: MachineUnavailableWindow[],
+) {
   let previousSignature = "";
   let lastBalancedMachine = "";
   // Gap balancing moves at most one setup stream per pass. Rotate the next pass
@@ -3679,7 +3749,7 @@ function balanceMachineFamilyIdleGaps(details: Array<Record<string, unknown>>, p
     ? sortedMachines
     : [...sortedMachines.slice(afterIndex + 1), ...sortedMachines.slice(0, afterIndex + 1)];
   const tailMoves: Array<{ row: Record<string, unknown>; machine: string; start: string; end: string }> = [];
-  const movableRows = details.filter(row => isMovablePlannedRow(row) && !row.toolingSequenceMachine && !row.toolingPlanBlocked);
+  const movableRows = details.filter(row => isMovablePlannedRow(row) && !row.toolingPlanBlocked);
   for (const [machine, machineRows] of machines) {
     const candidateRows = movableRows.filter(row => canonicalKey(rowText(row, "machine")) !== canonicalKey(machine)
       && !familyIdleGapRejectedForMachine(row, machine)
@@ -3835,7 +3905,7 @@ function machineUnavailablePlacementRejectsGapCandidate(details: Array<Record<st
 function isLeadingFamilyIdleGapCandidate(row: Record<string, unknown>, gap: { targetMachine: string; machineRows: Array<Record<string, unknown>>; targetMachineType: string; gapEnd: string; excludedKeys: Set<string>; planningCalendar: PlanningCalendar }) {
   if (gap.excludedKeys.has(scheduleRowKey(row))) return false;
   if (familyIdleGapRejectedForMachine(row, gap.targetMachine)) return false;
-  if (row.toolingSequenceMachine || row.toolingPlanBlocked) return false;
+  if (row.toolingPlanBlocked) return false;
   if (!isMovablePlannedRow(row)) return false;
   const currentMachine = rowText(row, "machine");
   if (!currentMachine || currentMachine === gap.targetMachine) return false;
@@ -3856,7 +3926,7 @@ function isLeadingFamilyIdleGapCandidate(row: Record<string, unknown>, gap: { ta
 function isFamilyIdleGapCandidate(row: Record<string, unknown>, gap: { targetMachine: string; machineRows: Array<Record<string, unknown>>; targetMachineType: string; gapStart: string; gapDays: number; excludedKeys: Set<string>; planningCalendar: PlanningCalendar }) {
   if (gap.excludedKeys.has(scheduleRowKey(row))) return false;
   if (familyIdleGapRejectedForMachine(row, gap.targetMachine)) return false;
-  if (row.toolingSequenceMachine || row.toolingPlanBlocked) return false;
+  if (row.toolingPlanBlocked) return false;
   if (!isMovablePlannedRow(row)) return false;
   const currentMachine = rowText(row, "machine");
   if (!currentMachine || currentMachine === gap.targetMachine) return false;
@@ -3875,8 +3945,13 @@ function isFamilyIdleGapCandidate(row: Record<string, unknown>, gap: { targetMac
 }
 
 function isMovablePlannedRow(row: Record<string, unknown>) {
-  if (planningMeta(row).assignmentLocked || priorityQueueBeforeSetups(row).length || priorityInterruptedSetups(row).length) return false;
+  if (planningMeta(row).continuityProtected) return false;
   if (rowText(row, "machineAssignment") === "Family idle gap balance") return false;
+  return isAutomaticUnstartedPlan(row);
+}
+
+function isAutomaticUnstartedPlan(row: Record<string, unknown>) {
+  if (planningMeta(row).assignmentLocked || priorityQueueBeforeSetups(row).length || priorityInterruptedSetups(row).length) return false;
   if (priorityQueueState(row) !== "idle") return false;
   if (actualProductionStartDate(planningMeta(row))) return false;
   return rowText(row, "runningStatus").toLowerCase() === "planned";
@@ -4053,7 +4128,7 @@ function rescheduleMachineQueues(details: Array<Record<string, unknown>>, planni
   }
 
   const queues = [...byMachine.values()].map(rows => ({
-    queue: applyMachineUnavailableQueuePlacementOrder([...rows].sort(machineQueueSort)), nextDate: "",
+    queue: applyMachineUnavailableQueuePlacementOrder([...rows].sort(machineQueueSort)), nextDate: "", previousKey: "",
   }));
   const knownHolders = new Map<string, number>();
   for (const row of details) if (toolingHeld(row)) {
@@ -4078,7 +4153,7 @@ function rescheduleMachineQueues(details: Array<Record<string, unknown>>, planni
   while (queues.some(item => item.queue.length)) {
     for (const item of queues) for (const row of item.queue) row.toolingNextAvailableDate = toolingHeld(row) ? "" : toolingReadyDate(row, slots);
     const candidates = queues.filter(item => item.queue.length).map(item => ({ item,
-      row: takeNextMachineQueueRow([...item.queue], item.nextDate),
+      row: takeNextMachineQueueRow([...item.queue], item.nextDate, item.previousKey),
     }));
     candidates.sort((a,b) => Number(toolingHeld(b.row)) - Number(toolingHeld(a.row)) ||
       maxDateValue(queueReadyDate(a.row), a.item.nextDate, toolingReadyDate(a.row, slots)).localeCompare(maxDateValue(queueReadyDate(b.row), b.item.nextDate, toolingReadyDate(b.row, slots))) || machineQueueSort(a.row,b.row));
@@ -4136,6 +4211,7 @@ function rescheduleMachineQueues(details: Array<Record<string, unknown>>, planni
       row.planVsActual = setupPlanVsActual(plannedStartDate, parseDate(rowText(row, "setupCompletionDate")) || rowText(row, "setupCompletionDate"));
       machineNextDate = maxDateValue(machineNextDate, nextMachineAvailableDate(plannedProductionEndDate || plannedStartDate, planningCalendar));
       item.nextDate = machineNextDate;
+      item.previousKey = scheduleRowKey(row);
       if (!shopFloorRowIsComplete(row) && (toolingHeld(row) || safeNumber(row.pendingGoodQty) > 0)) {
         for (const code of requiredToolingCodesFromPlan(row)) {
           const resourceSlots = slots.get(code)!;
@@ -4148,9 +4224,9 @@ function rescheduleMachineQueues(details: Array<Record<string, unknown>>, planni
 }
 
 function machineQueueSort(a: Record<string, unknown>, b: Record<string, unknown>) {
-  if ((a.toolingSequenceMachine || b.toolingSequenceMachine) && rowText(a, "jcNo") === rowText(b, "jcNo") && !shopFloorRowIsComplete(a) && !shopFloorRowIsComplete(b)) {
-    return numericSort(rowText(a, "setupNo"), rowText(b, "setupNo"));
-  }
+  const continuityHistory = Number(shopFloorRowIsComplete(b) && planningMeta(b).continuityProtected)
+    - Number(shopFloorRowIsComplete(a) && planningMeta(a).continuityProtected);
+  if (continuityHistory) return continuityHistory;
   const aActualStart = lockedProductionStartDate(a);
   const bActualStart = lockedProductionStartDate(b);
   const priorityDiff = safeNumber(rowValue(b, "plannerPriorityScore")) - safeNumber(rowValue(a, "plannerPriorityScore"));
@@ -4481,8 +4557,14 @@ function nextMachineAvailableDate(dateValue: string, planningCalendar: PlanningC
   return date ? addDays(date, 1, planningCalendar) : "";
 }
 
-function takeNextMachineQueueRow(queue: Array<Record<string, unknown>>, machineNextDate: string) {
+function takeNextMachineQueueRow(queue: Array<Record<string, unknown>>, machineNextDate: string, previousKey: string) {
+  const continuityIndex = previousKey ? queue.findIndex(row => planningMeta(row).continuityAfter === previousKey
+    && isQueueReady(row, machineNextDate)) : -1;
+  if (continuityIndex >= 0 && !hasQueueBarrierBefore(queue, continuityIndex, queue[continuityIndex]!)) {
+    return queue.splice(continuityIndex, 1)[0]!;
+  }
   const first = queue[0]!;
+  if (shopFloorRowIsComplete(first) && planningMeta(first).continuityProtected) return queue.shift()!;
   const currentSlotDate = machineNextDate || earliestQueueReadyDate(queue) || queueReadyDate(first);
   if (isQueueReady(first, currentSlotDate)) return queue.shift()!;
   if (shouldReserveMachineQueueSlot(first, queue)) return queue.shift()!;
@@ -4541,6 +4623,9 @@ function planningMeta(row: Record<string, unknown>) {
     minimumProductionEndDate?: string;
     canPullForward?: boolean;
     assignmentLocked?: boolean;
+    previousSetupNo?: string;
+    continuityAfter?: string;
+    continuityProtected?: boolean;
     orderPcs?: number;
     totalOrderPcs?: number;
     cycle?: Record<string, unknown>;
