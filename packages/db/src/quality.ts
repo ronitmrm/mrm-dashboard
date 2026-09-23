@@ -1,6 +1,7 @@
 import { assertMasterAvailable } from "./master-duplicate"
 import { assertSettingChecklistComplete } from "./setup-checklist-validation"
 import { randomUUID } from "node:crypto"
+import { queueDashboardRefreshAfterSetChange } from "./dashboard-refresh-queue"
 
 import type { PoolClient } from "pg"
 
@@ -32,6 +33,28 @@ type ParameterRow = {
   nominal_value: string | null
   sequence: number
   source_payload: Record<string, unknown> | null
+}
+
+type ParameterDefinitionInput = {
+  rejectDuplicates?: boolean
+  reviseExisting?: boolean
+  actorUserId?: string | null
+  dataType: "boolean" | "numeric" | "text"
+  inputType?: string | null
+  itemUid: string
+  lowerLimit?: number | null
+  name: string
+  nominalValue?: number | null
+  operationSetupCode: string
+  organizationId: string
+  parameterCode: string
+  payload: Record<string, unknown>
+  productionFloorCode?: string
+  routeCode: string
+  sequence?: number
+  unit?: string | null
+  upperLimit?: number | null
+  active?: boolean
 }
 
 function parameterDetails(parameter: ParameterRow) {
@@ -647,6 +670,160 @@ async function legacyRejectionReasonId(
 
 export function createQualityRepository(options: RepositoryPoolOptions) {
   const { close, pool } = repositoryPool(options)
+
+  async function writeParameterDefinition(
+    client: PoolClient,
+    input: ParameterDefinitionInput,
+    skipDuplicateCheck = false
+  ) {
+    const context = await routeAndSetupFor(
+      client,
+      input.organizationId,
+      input.itemUid,
+      input.routeCode,
+      input.operationSetupCode,
+      normalizeProductionFloorCode(input.productionFloorCode)
+    )
+    if (input.reviseExisting) {
+      const existing = await client.query(
+        `SELECT id FROM quality.parameter_definitions
+             WHERE organization_id = $1 AND operation_setup_id = $2
+               AND lower(parameter_code) = lower($3) FOR UPDATE`,
+        [input.organizationId, context.operation_setup_id, input.parameterCode]
+      )
+      if (!existing.rows.length)
+        throw new Error(
+          "The quality parameter to revise was not found. Reload the form."
+        )
+    }
+    const reference = await client.query<{ id: string; name: string }>(
+      `SELECT id, name FROM quality.parameter_names
+           WHERE organization_id = $1 AND active AND lower(btrim(name)) = lower(btrim($2))`,
+      [input.organizationId, input.name]
+    )
+    if (!reference.rows[0])
+      throw new Error(
+        "Select an active Parameter from the Universal Parameter Master."
+      )
+    const instrumentName = String(input.payload.instrumentUsed ?? "").trim()
+    const instrument = instrumentName
+      ? await client.query<{ id: string; name: string }>(
+          `SELECT id, name FROM quality.measuring_instruments
+           WHERE organization_id = $1 AND active AND lower(btrim(name)) = lower(btrim($2))`,
+          [input.organizationId, instrumentName]
+        )
+      : null
+    if (instrumentName && !instrument?.rows[0]) {
+      throw new Error(
+        "Select an active Measuring Instrument from the Universal Measuring Instrument Master."
+      )
+    }
+    if (!skipDuplicateCheck && (input.active ?? true)) {
+      const specification = String(
+        input.payload.specification ?? input.nominalValue ?? ""
+      ).trim()
+      const duplicate = await client.query<{ parameter_code: string }>(
+        `
+              SELECT parameter_code
+              FROM quality.parameter_definitions
+              WHERE organization_id = $1 AND operation_setup_id = $2
+                AND active
+                AND lower(btrim(name)) = lower(btrim($3))
+                AND lower(btrim(COALESCE(
+                  source_payload->'payload'->>'specification',
+                  source_payload->>'specification',
+                  nominal_value::text,
+                  ''
+                ))) = lower(btrim($4))
+                AND lower(parameter_code) <> lower($5)
+              LIMIT 1
+            `,
+        [
+          input.organizationId,
+          context.operation_setup_id,
+          input.name,
+          specification,
+          input.parameterCode,
+        ]
+      )
+      if (duplicate.rows[0]) {
+        throw new Error(
+          "A quality parameter with the same name and specification already exists for this setup."
+        )
+      }
+    }
+    await assertMasterAvailable(
+      client,
+      {
+        ...input,
+        rejectDuplicates:
+          !skipDuplicateCheck &&
+          input.rejectDuplicates &&
+          !input.reviseExisting,
+      },
+      "quality.parameter_definitions",
+      "operation_setup_id = $2 AND (lower(parameter_code) = lower($3) OR (lower(btrim(name)) = lower(btrim($4)) AND lower(btrim(COALESCE(source_payload ->> 'specification', nominal_value::text, ''))) = lower(btrim($5))))",
+      [
+        context.operation_setup_id,
+        input.parameterCode.trim(),
+        input.name,
+        String(input.payload.specification ?? input.nominalValue ?? ""),
+      ]
+    )
+    const result = await client.query<{ id: string }>(
+      `
+            INSERT INTO quality.parameter_definitions (
+              organization_id, item_id, route_option_id, operation_setup_id,
+              parameter_code, name, data_type, unit, lower_limit,
+              upper_limit, nominal_value, sequence, active,
+              created_by_user_id, updated_by_user_id, source_system,
+              source_table, source_id, source_payload, parameter_name_id, measuring_instrument_id
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+              $12, $13, $14, $14, 'mrm-dashboard',
+              'quality_parameter_master', $15, $16, $17, $18)
+            ON CONFLICT (item_id, route_option_id, operation_setup_id,
+              lower(parameter_code))
+            DO UPDATE SET name = EXCLUDED.name, data_type = EXCLUDED.data_type,
+              parameter_name_id = EXCLUDED.parameter_name_id,
+              measuring_instrument_id = EXCLUDED.measuring_instrument_id,
+              unit = EXCLUDED.unit, lower_limit = EXCLUDED.lower_limit,
+              upper_limit = EXCLUDED.upper_limit,
+              nominal_value = EXCLUDED.nominal_value,
+              sequence = EXCLUDED.sequence, active = EXCLUDED.active,
+              updated_by_user_id = EXCLUDED.updated_by_user_id,
+              source_payload = EXCLUDED.source_payload,
+              updated_at = now(), row_version = quality.parameter_definitions.row_version + 1
+            RETURNING id
+          `,
+      [
+        input.organizationId,
+        context.item_id,
+        context.route_option_id,
+        context.operation_setup_id,
+        requiredText(input.parameterCode, "Quality parameter code"),
+        reference.rows[0].name,
+        input.dataType,
+        input.unit ?? null,
+        input.lowerLimit ?? null,
+        input.upperLimit ?? null,
+        input.nominalValue ?? null,
+        input.sequence ?? 0,
+        input.active ?? true,
+        input.actorUserId ?? null,
+        randomUUID(),
+        {
+          ...input.payload,
+          inputType: input.inputType,
+          parameterName: reference.rows[0].name,
+          instrumentUsed: instrument?.rows[0]?.name ?? "",
+        },
+        reference.rows[0].id,
+        instrument?.rows[0]?.id ?? null,
+      ]
+    )
+    return result.rows[0]!
+  }
 
   return {
     close,
@@ -1370,155 +1547,143 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
       })
     },
 
-    async upsertParameterDefinition(input: {
-      rejectDuplicates?: boolean
-      reviseExisting?: boolean
-      actorUserId?: string | null
-      dataType: "boolean" | "numeric" | "text"
-      inputType?: string | null
-      itemUid: string
-      lowerLimit?: number | null
-      name: string
-      nominalValue?: number | null
-      operationSetupCode: string
-      organizationId: string
-      parameterCode: string
-      payload: Record<string, unknown>
-      productionFloorCode?: string
-      routeCode: string
-      sequence?: number
-      unit?: string | null
-      upperLimit?: number | null
-      active?: boolean
-    }) {
+    async upsertParameterDefinition(input: ParameterDefinitionInput) {
+      return transaction(pool, (client) =>
+        writeParameterDefinition(client, input)
+      )
+    },
+
+    async saveParameterSet(definitions: ParameterDefinitionInput[]) {
+      if (!definitions.length)
+        throw new Error("No quality parameter changes were supplied.")
+      const first = definitions[0]!
       return transaction(pool, async (client) => {
         const context = await routeAndSetupFor(
           client,
-          input.organizationId,
-          input.itemUid,
-          input.routeCode,
-          input.operationSetupCode,
-          normalizeProductionFloorCode(input.productionFloorCode)
+          first.organizationId,
+          first.itemUid,
+          first.routeCode,
+          first.operationSetupCode,
+          normalizeProductionFloorCode(first.productionFloorCode)
         )
-        if (input.reviseExisting) {
-          const existing = await client.query(
-            `SELECT id FROM quality.parameter_definitions
-             WHERE organization_id = $1 AND operation_setup_id = $2
-               AND lower(parameter_code) = lower($3) FOR UPDATE`,
-            [input.organizationId, context.operation_setup_id, input.parameterCode]
-          )
-          if (!existing.rows.length) throw new Error("The quality parameter to revise was not found. Reload the form.")
-        }
-        const reference = await client.query<{ id: string; name: string }>(
-          `SELECT id, name FROM quality.parameter_names
-           WHERE organization_id = $1 AND active AND lower(btrim(name)) = lower(btrim($2))`,
-          [input.organizationId, input.name]
+        const scope = [
+          first.organizationId,
+          first.itemUid,
+          first.routeCode,
+          first.operationSetupCode,
+          normalizeProductionFloorCode(first.productionFloorCode),
+        ].map((value) => value.trim().toLowerCase())
+        const current = await client.query<{
+          active: boolean
+          name: string
+          parameter_code: string
+          sequence: number
+          specification: string
+        }>(
+          `SELECT parameter_code, name, sequence, active,
+             COALESCE(source_payload->>'specification', nominal_value::text, '') AS specification
+           FROM quality.parameter_definitions
+           WHERE organization_id = $1 AND operation_setup_id = $2
+           FOR UPDATE`,
+          [first.organizationId, context.operation_setup_id]
         )
-        if (!reference.rows[0]) throw new Error("Select an active Parameter from the Universal Parameter Master.")
-        const instrumentName = String(input.payload.instrumentUsed ?? "").trim()
-        const instrument = instrumentName ? await client.query<{ id: string; name: string }>(
-          `SELECT id, name FROM quality.measuring_instruments
-           WHERE organization_id = $1 AND active AND lower(btrim(name)) = lower(btrim($2))`,
-          [input.organizationId, instrumentName]
-        ) : null
-        if (instrumentName && !instrument?.rows[0]) {
-          throw new Error("Select an active Measuring Instrument from the Universal Measuring Instrument Master.")
-        }
-        if (input.active ?? true) {
-          const specification = String(
-            input.payload.specification ?? input.nominalValue ?? ""
-          ).trim()
-          const duplicate = await client.query<{ parameter_code: string }>(
-            `
-              SELECT parameter_code
-              FROM quality.parameter_definitions
-              WHERE organization_id = $1 AND operation_setup_id = $2
-                AND active
-                AND lower(btrim(name)) = lower(btrim($3))
-                AND lower(btrim(COALESCE(
-                  source_payload->'payload'->>'specification',
-                  source_payload->>'specification',
-                  nominal_value::text,
-                  ''
-                ))) = lower(btrim($4))
-                AND lower(parameter_code) <> lower($5)
-              LIMIT 1
-            `,
-            [
-              input.organizationId,
-              context.operation_setup_id,
-              input.name,
-              specification,
-              input.parameterCode,
-            ]
-          )
-          if (duplicate.rows[0]) {
+        const existing = new Map(
+          current.rows.map((row) => [
+            row.parameter_code.trim().toLowerCase(),
+            row,
+          ])
+        )
+        const proposed = new Map(
+          current.rows
+            .filter((row) => row.active)
+            .map((row) => [
+              row.parameter_code.trim().toLowerCase(),
+              {
+                name: row.name,
+                sequence: row.sequence,
+                specification: row.specification,
+              },
+            ])
+        )
+        const changedCodes = new Set<string>()
+        for (const definition of definitions) {
+          const definitionScope = [
+            definition.organizationId,
+            definition.itemUid,
+            definition.routeCode,
+            definition.operationSetupCode,
+            normalizeProductionFloorCode(definition.productionFloorCode),
+          ].map((value) => value.trim().toLowerCase())
+          if (definitionScope.some((value, index) => value !== scope[index])) {
             throw new Error(
-              "A quality parameter with the same name and specification already exists for this setup."
+              "Every parameter must belong to the selected production unit, item, option, and setup."
             )
           }
-        }
-        await assertMasterAvailable(
-          client,
-          { ...input, rejectDuplicates: input.rejectDuplicates && !input.reviseExisting },
-          "quality.parameter_definitions",
-          "operation_setup_id = $2 AND (lower(parameter_code) = lower($3) OR (lower(btrim(name)) = lower(btrim($4)) AND lower(btrim(COALESCE(source_payload ->> 'specification', nominal_value::text, ''))) = lower(btrim($5))))",
-          [
-            context.operation_setup_id,
-            input.parameterCode.trim(),
-            input.name,
-            String(input.payload.specification ?? input.nominalValue ?? ""),
-          ]
-        )
-        const result = await client.query<{ id: string }>(
-          `
-            INSERT INTO quality.parameter_definitions (
-              organization_id, item_id, route_option_id, operation_setup_id,
-              parameter_code, name, data_type, unit, lower_limit,
-              upper_limit, nominal_value, sequence, active,
-              created_by_user_id, updated_by_user_id, source_system,
-              source_table, source_id, source_payload, parameter_name_id, measuring_instrument_id
+          const code = requiredText(
+            definition.parameterCode,
+            "Quality parameter code"
+          ).toLowerCase()
+          if (changedCodes.has(code))
+            throw new Error("A parameter code is repeated in this save.")
+          changedCodes.add(code)
+          if (definition.reviseExisting && !existing.has(code)) {
+            throw new Error(
+              "The quality parameter to revise was not found. Reload the form."
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
-              $12, $13, $14, $14, 'mrm-dashboard',
-              'quality_parameter_master', $15, $16, $17, $18)
-            ON CONFLICT (item_id, route_option_id, operation_setup_id,
-              lower(parameter_code))
-            DO UPDATE SET name = EXCLUDED.name, data_type = EXCLUDED.data_type,
-              parameter_name_id = EXCLUDED.parameter_name_id,
-              measuring_instrument_id = EXCLUDED.measuring_instrument_id,
-              unit = EXCLUDED.unit, lower_limit = EXCLUDED.lower_limit,
-              upper_limit = EXCLUDED.upper_limit,
-              nominal_value = EXCLUDED.nominal_value,
-              sequence = EXCLUDED.sequence, active = EXCLUDED.active,
-              updated_by_user_id = EXCLUDED.updated_by_user_id,
-              source_payload = EXCLUDED.source_payload,
-              updated_at = now(), row_version = quality.parameter_definitions.row_version + 1
-            RETURNING id
-          `,
-          [
-            input.organizationId,
-            context.item_id,
-            context.route_option_id,
-            context.operation_setup_id,
-            requiredText(input.parameterCode, "Quality parameter code"),
-            reference.rows[0].name,
-            input.dataType,
-            input.unit ?? null,
-            input.lowerLimit ?? null,
-            input.upperLimit ?? null,
-            input.nominalValue ?? null,
-            input.sequence ?? 0,
-            input.active ?? true,
-            input.actorUserId ?? null,
-            randomUUID(),
-            { ...input.payload, inputType: input.inputType,
-              parameterName: reference.rows[0].name, instrumentUsed: instrument?.rows[0]?.name ?? "" },
-            reference.rows[0].id,
-            instrument?.rows[0]?.id ?? null,
-          ]
+          }
+          if (!definition.reviseExisting && existing.get(code)?.active) {
+            throw new Error(
+              "A quality parameter with this code already exists. Reload the form."
+            )
+          }
+          if (definition.active === false) {
+            if (!existing.has(code))
+              throw new Error(
+                "The quality parameter to remove was not found. Reload the form."
+              )
+            proposed.delete(code)
+          } else {
+            proposed.set(code, {
+              name: definition.name,
+              sequence: definition.sequence ?? 0,
+              specification: String(
+                definition.payload.specification ??
+                  definition.nominalValue ??
+                  ""
+              ),
+            })
+          }
+        }
+        if (!proposed.size) throw new Error("Add at least one parameter row.")
+        const sequences = new Set<number>()
+        const combinations = new Set<string>()
+        for (const row of proposed.values()) {
+          if (
+            !Number.isInteger(row.sequence) ||
+            row.sequence < 1 ||
+            sequences.has(row.sequence)
+          ) {
+            throw new Error(
+              "Step numbers must be unique for this item, option, and setup."
+            )
+          }
+          sequences.add(row.sequence)
+          const combination = `${row.name.trim().toLowerCase()}|${row.specification.trim().toLowerCase()}`
+          if (combinations.has(combination)) {
+            throw new Error(
+              "The same parameter and specification cannot be repeated for one item, option, and setup."
+            )
+          }
+          combinations.add(combination)
+        }
+        for (const definition of definitions) {
+          await writeParameterDefinition(client, definition, true)
+        }
+        const refresh = await queueDashboardRefreshAfterSetChange(
+          client,
+          first.organizationId
         )
-        return result.rows[0]!
+        return { rowsUpdated: definitions.length, ...refresh }
       })
     },
 

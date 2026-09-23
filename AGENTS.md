@@ -5,8 +5,9 @@
 - Save the handoff docs in this directory under `./.handoff/`. Create it if not present and add it to .gitignore as well.
 - While running powershell commands, run this for execution policy bypass: `Set-ExecutionPolicy Bypass -Scope Process -Force`.
 - Be extremely concise when responding to me. Sacrifice grammar for the sake of concision.
-- reach for the `neon`, `upstash` and `gh` cli's when needed.
-- For Neon work, always use the installed Neon Postgres plugin instead of the Neon CLI.
+- reach for the `vercel`, `upstash` and `gh` cli's when needed.
+- For Neon work, always use the installed Neon Postgres plugin instead of the Neon CLI. Same for `railway`.
+- Periodically inspect the amount of branches in neon postgres - we've a hard limit of up to 10 branches at a point. delete stale branch/es, especially the ones that existed for specific tests in the past. NEVER delete/prune the `staging` branch on neon.
 - When starting local server/s, opt for the managed config by default, unless specified otherwise by the user.
 - Managed application configuration remains the default for development. The Docker test allowance does not authorize installing virtualization platforms, changing Windows optional features, or changing firmware virtualization settings.
 - Never commit `AGENTS.override.md`, and always commit `AGENTS.md`. Do not add `AGENTS.override.md` to `.gitignore` either.

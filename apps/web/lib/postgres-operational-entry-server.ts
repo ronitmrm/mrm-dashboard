@@ -411,3 +411,42 @@ export async function executePostgresOperationalEntry(
     }
   )
 }
+
+export async function savePostgresQualityParameterSet(
+  request: NextRequest,
+  changes: Array<{ payload: Record<string, unknown>; reviseParameter: boolean }>
+) {
+  const plans = changes.map(({ payload, reviseParameter }) => {
+    const plan = operationalEntryPlan("quality_parameter_master", payload)
+    if (plan?.operation !== "parameter") {
+      throw new OperationalEntryError(400, "Invalid quality parameter change.")
+    }
+    return { ...plan.input, reviseExisting: reviseParameter }
+  })
+  const actor = await authorizedActor(
+    request,
+    productionMasterCapability(
+      "quality_parameter_master",
+      "save",
+      plans[0]?.productionFloorCode
+    ) ?? "quality.parameters.manage"
+  )
+  return withPostgresRepository(
+    createQualityRepository(actor),
+    async (repository) => {
+      const organizationId = await repository.organizationIdForCode("MRMPL")
+      return repository.saveParameterSet(
+        plans.map((plan) => ({
+          ...plan,
+          actorUserId: actor.actorUserId,
+          organizationId,
+        }))
+      )
+    },
+    {
+      operation: "quality.parameter_set.write",
+      requestId: telemetryRequestId(request),
+      subsystem: "quality",
+    }
+  )
+}

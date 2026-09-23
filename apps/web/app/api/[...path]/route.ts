@@ -73,6 +73,7 @@ import {
   readPostgresEmployeeMaster,
   readPostgresHourlyQualityPage,
   readPostgresSetupChecklistPage,
+  savePostgresQualityParameterSet,
 } from "@/lib/postgres-operational-entry-server"
 import { telemetryRequestId } from "../../../lib/request-telemetry"
 import {
@@ -898,6 +899,26 @@ async function post(request: NextRequest, context: RouteContext) {
 
     if (path === "dashboard-refresh") {
       return json(await requestPostgresDashboardRefresh(request))
+    }
+
+    if (path === "quality-parameter-set") {
+      const rawChanges = body.changes
+      if (!Array.isArray(rawChanges) || !rawChanges.length || rawChanges.length > 500) {
+        throw new RouteError(400, "Supply 1 to 500 quality parameter changes.")
+      }
+      const changes = rawChanges.map((value) => {
+        const change = plainRecord(value)
+        return {
+          payload: productionFloorPayload(plainRecord(change.payload), body.productionFloorCode),
+          reviseParameter: change.reviseParameter === true,
+        }
+      })
+      const result = await savePostgresQualityParameterSet(request, changes)
+      return json({
+        ...result,
+        savedText: "Quality inspection parameter set saved.",
+        planningRefresh: { mode: "queued", ok: true },
+      })
     }
 
     if (path === "attendance" || path === "training") {
@@ -2086,6 +2107,7 @@ const knownDashboardApiPaths = new Set([
   "planner-priority",
   "raw-material-rejection",
   "production-sessions",
+  "quality-parameter-set",
   "reschedule",
   "reverse-entry",
   "route-change",
