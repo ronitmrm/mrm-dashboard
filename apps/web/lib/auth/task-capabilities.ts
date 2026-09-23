@@ -208,6 +208,10 @@ export const taskCapabilityLabels = {
 } satisfies Record<TaskCapability, string>
 
 const additionalTaskCapabilityLabels: Readonly<Record<string, string>> = {
+  "iso.documents.manage": "Manage Documents",
+  "iso.documents.approve": "Approve / Reject Documents",
+  "iso.documents.release": "Final Release",
+  "iso.documents.monitor": "Confirm Reviews / Records",
   "store.asset_lifecycle.write": "Update Status",
   "store.asset_maintenance.write":
     "Add Timetable / Complete & Calculate Next Due",

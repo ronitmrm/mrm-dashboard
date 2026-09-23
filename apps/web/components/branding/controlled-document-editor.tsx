@@ -62,15 +62,19 @@ export function ControlledDocumentEditor({
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="cd-number">Document number</Label>
+            <Label htmlFor="cd-number">Permanent document number</Label>
             <Input
               id="cd-number"
               name="number"
-              required
               maxLength={100}
-              readOnly={numberLocked}
+              readOnly
+              placeholder="Assigned on final release"
               defaultValue={initial?.inputs["Document number"]}
             />
+            <p className="text-sm text-muted-foreground">
+              New documents receive their permanent MRM-QA number only at final
+              release. Existing retained numbers cannot be changed.
+            </p>
           </div>
           <div className="grid gap-2">
             <Label htmlFor="cd-department">Department</Label>

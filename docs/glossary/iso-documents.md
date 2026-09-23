@@ -1,8 +1,80 @@
 # ISO Document
 
-ISO Document groups registers, including the Controlled Document Register
-(latest released uploaded PDFs; lifecycle in `branding.md`) and Rejection
-Register (individual rejection events; lifecycle in `rejections.md`).
+ISO Document is the authoritative control area for MRMPL documents across MRM
+and the other operational software. MRM owns document creation, approval,
+release, revision history, master indexing and audit history. Another system may
+hold generated operational records, but it never becomes the document master.
+
+## Master Document List
+
+One row represents one controlled document or format, including every individual
+SOP. Generated transactions and completed records do not create more document
+rows. The current row represents the latest released revision; opening it shows
+the document dossier, retained revisions, workflow transactions, monitoring
+configuration and links to records in MRM, another approved system or a physical
+location. Inactive documents remain in the list as `Not In Use`.
+
+The official Master Document List contains released documents. Unreleased first
+drafts appear in Pending Documents. A revision in progress does not replace or
+hide the current release. All signed-in users may view index metadata; document
+content may have a narrower access policy.
+
+The index records document number, name, type, department, responsible role,
+record location, current revision, last revision date, document review cycle,
+data or record frequency, data retention and use status. The table supports
+Excel-style per-column filters, natural sorting, browser-persisted filters and an
+Excel export. SOP and other type registers are filtered views of this master;
+they are not aggregate document rows.
+
+## Lifecycle and ownership
+
+- Quality Assurance HOD creates and revises documents, manages control metadata,
+  submits drafts and performs final release.
+- The responsible Department Manager approves or rejects documents for their
+  own department. Rejection returns the revision to Draft with remarks.
+- Final release is a separate Quality Assurance action. It takes effect
+  immediately and its date is the revision date.
+- Revision states are `Draft`, `Pending Approval`, `Approved`, `Released` and
+  `Superseded`. A released revision is immutable.
+- Initial release is revision `00`; later revisions are `01`, `02`, and so on.
+  The letter `R` is never displayed.
+- New permanent document numbers are organization-wide, sequential and
+  immutable: `MRM-QA-###`. Existing numbers are preserved. Related variants may
+  use `MRM-QA-###-##`. Numbers are assigned only by final release and are never
+  reused or manually changed.
+- Every later revision requires a change reason. All released and superseded
+  revisions remain available permanently.
+- The audit trail is append-only and records each create, edit, submit,
+  approve, reject, release, revision, status, ownership, department and record
+  location change with actor, timestamp, remarks and before/after state. Normal
+  viewing is not audited.
+
+Documents may use MRM structured templates or a controlled file upload,
+depending on type. Primary types are SOP/Procedure, Policy/Manual, Work
+Instruction, Form/Format, Plan, Register/List, Checklist, Technical Document,
+External Document and Other Controlled Document.
+
+## Reviews, records and monitoring
+
+Document Review Cycle and Data/Record Frequency are separate controls. A
+document may require review only, while formats such as FPIR and RIR generate a
+record per transaction/event and SPC may generate records on a scheduled
+interval. Frequency modes are Event-based, Scheduled interval, As required and
+Not applicable.
+
+MRM records on-demand monitoring confirmations without copying operational data.
+MRM modules may provide automatic evidence; other software or physical records
+use a responsible user's manual confirmation. Monitoring states are Due,
+Completed, Overdue and Not Applicable. The system does not send reminders,
+alerts or escalations. Generated data retention is configurable; released
+document revisions are retained permanently.
+
+The first rollout uses a small set of QA-approved sample documents. Importing or
+migrating the legacy workbook is a separate, later decision and is not part of
+this rollout.
+
+ISO Document also groups operational registers, including the Rejection Register
+(individual rejection events; lifecycle in `rejections.md`).
 The document number appears on the right inside
 the page header, labelled "Document No.", never in sidebar labels. The initial
 Measuring Instrument Register number

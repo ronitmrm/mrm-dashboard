@@ -38,9 +38,7 @@ export function BrandingDocumentTable({
             "Name",
             "Department",
             ...(type === "controlled-document" ? [] : ["Languages"]),
-            ...(type === "notice" || type === "work-instruction"
-              ? []
-              : ["Revision"]),
+            ...(type === "notice" ? [] : ["Revision"]),
             "Status",
             "Effective date",
             "Author",
@@ -54,7 +52,7 @@ export function BrandingDocumentTable({
         {rows.length ? (
           rows.map((row) => (
             <TableRow key={row.id}>
-              <TableCell>{row.number ?? "Assigned on issue"}</TableCell>
+              <TableCell>{row.number ?? "Assigned on final release"}</TableCell>
               <TableCell>
                 <Link
                   className="font-medium text-primary hover:underline"
@@ -74,7 +72,7 @@ export function BrandingDocumentTable({
                     .join(", ")}
                 </TableCell>
               ) : null}
-              {type !== "notice" && type !== "work-instruction" ? (
+              {type !== "notice" ? (
                 <TableCell>{revisionLabel(row.revision)}</TableCell>
               ) : null}
               <TableCell>
@@ -82,10 +80,7 @@ export function BrandingDocumentTable({
                   tone={row.state === "issued" ? "positive" : "neutral"}
                   value={row.state === "issued" ? "Issued" : "Draft"}
                 />
-                {type !== "notice" &&
-                type !== "work-instruction" &&
-                row.state === "issued" &&
-                row.hasDraft ? (
+                {type !== "notice" && row.state === "issued" && row.hasDraft ? (
                   <span className="ml-2 text-xs text-muted-foreground">
                     Revision draft
                   </span>
@@ -104,11 +99,7 @@ export function BrandingDocumentTable({
           <TableRow>
             <TableCell
               colSpan={
-                type === "notice" ||
-                type === "work-instruction" ||
-                type === "controlled-document"
-                  ? 8
-                  : 9
+                type === "notice" || type === "controlled-document" ? 8 : 9
               }
             >
               <StandardState

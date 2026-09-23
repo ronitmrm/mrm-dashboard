@@ -250,6 +250,10 @@ export {
   type BrandingDocument,
   type BrandingRevision,
   type BrandingRegisterRow,
+  type DocumentAuditEvent,
+  type DocumentControlFields,
+  type MasterDocumentRow,
+  type MonitoringConfirmation,
 } from "./branding"
 export { createOrderAcceptanceRepository } from "./order-acceptance"
 export { createRejectionRepository } from "./rejections"

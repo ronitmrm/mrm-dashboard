@@ -34,7 +34,7 @@ export default async function PublishedRegisterPage({
     ({ repository, organizationId }) =>
       repository.listPublished(organizationId, register.type)
   )
-  const hasRevision = register.type !== "work-instruction"
+  const hasRevision = true
   return (
     <div className="grid min-w-0 gap-5">
       <PageHeader

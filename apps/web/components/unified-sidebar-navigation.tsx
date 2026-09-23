@@ -243,13 +243,21 @@ export function UnifiedSidebarNavigation({
   )
   const filteredIsoDocumentNavigation = filterNavigationItems(
     isoDocumentNavigation.filter((item) =>
-      item.href === "/iso-document/rejections" ? navigationAccess.qualityControlHrefs?.includes(item.href) : item.href.startsWith("/iso-document/machine-maintenance")
-        ? navigationAccess.maintenanceHrefs?.includes("/?tab=maintenanceTab")
-        : !item.href.startsWith("/iso-document") ||
-          visibleStoreNavigation.some((storeItem) => storeItem.href === "/store/stock")
+      item.href === "/iso-document/documents"
+        ? true
+        : item.href === "/iso-document/rejections"
+          ? navigationAccess.qualityControlHrefs?.includes(item.href)
+          : item.href.startsWith("/iso-document/machine-maintenance")
+            ? navigationAccess.maintenanceHrefs?.includes(
+                "/?tab=maintenanceTab"
+              )
+            : !item.href.startsWith("/iso-document") ||
+              visibleStoreNavigation.some(
+                (storeItem) => storeItem.href === "/store/stock"
+              )
     ),
     normalizedMenuSearch,
-    "iso document published documents registers"
+    "iso document master list published documents registers"
   )
   const filteredStoreNavigation = filterNavigationItems(
     visibleStoreNavigation,
