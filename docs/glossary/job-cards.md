@@ -4,6 +4,14 @@
 
 The Job Cards tab is a compact one-row-per-Job-Card register. It is for finding a Job Card, not displaying its complete history.
 
+Planned Finish Date shows the planner's saved initial completion forecast for
+the Job Card's RM receipt. Current Estimated Finish shows the latest forecast
+across the selected route's setups, including remaining downstream work. It
+updates when planning recalculates production progress and machine constraints;
+the saved initial date does not move with that forecast. Both use the same dates
+as Production Dashboard, matched by Job Card and part within the selected floor.
+An unavailable forecast displays `-`, not a guessed finish date.
+
 Use the table's per-column filters, including Job Card. The register does not have a separate search strip. Setup Completion and Dispatch Approval remain visible together; selecting a machine for Setup Completion fills its current Job Card and setup from planning.
 
 Setup Completion can be recorded only by a user with Shop Floor permission, and its Completed By list contains only active Shop Floor employees from the selected Production Unit. Dispatch Approval lists only undispatched Job Cards for which every planned setup/operation is Item Complete. Its Approved By list contains active planners and Shop Floor employees from the selected Production Unit.
@@ -26,7 +34,9 @@ records.
 
 In Masters, Casting is the unitless material ratio calculated as Product Master
 Blank Piece Weight divided by One-Piece Weight. For example, `5.022 / 0.90`
-displays as `5.58`. A missing or zero One-Piece Weight leaves Casting unavailable.
+displays as `5.58`. Casting is displayed to exactly two decimal places without
+rounding the underlying calculation. A missing or zero One-Piece Weight leaves
+Casting unavailable.
 
 Current Stage recognizes running work from an open Production Session or the current
 machine plan, including imported opening production. Missing receipt history must
