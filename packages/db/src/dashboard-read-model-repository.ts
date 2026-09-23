@@ -107,7 +107,6 @@ function activeCorrectionCandidates(source: CorrectionCandidateSource) {
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
 }
 
-
 export function createDashboardReadModelRepository(options: RepositoryPoolOptions) {
   const { close, pool } = repositoryPool(options)
 
@@ -339,8 +338,9 @@ export function createDashboardReadModelRepository(options: RepositoryPoolOption
               completed_at, last_error
             FROM derived.refresh_jobs
             WHERE organization_id = requested.organization_id
-              AND queue_key = 'dashboard'
-            ORDER BY updated_at DESC, created_at DESC
+              AND (queue_key = 'dashboard' OR queue_key LIKE 'dashboard:quality-parameter-set:%')
+            ORDER BY (status IN ('pending', 'running')) DESC,
+              updated_at DESC, created_at DESC
             LIMIT 1
           ) job ON true
         `,
@@ -416,8 +416,10 @@ export function createDashboardReadModelRepository(options: RepositoryPoolOption
           SELECT status, attempts, created_at AS requested_at, started_at,
             completed_at, last_error
           FROM derived.refresh_jobs
-          WHERE organization_id = $1 AND queue_key = 'dashboard'
-          ORDER BY updated_at DESC, created_at DESC
+          WHERE organization_id = $1
+            AND (queue_key = 'dashboard' OR queue_key LIKE 'dashboard:quality-parameter-set:%')
+          ORDER BY (status IN ('pending', 'running')) DESC,
+            updated_at DESC, created_at DESC
           LIMIT 1
         `,
         [organizationId]
