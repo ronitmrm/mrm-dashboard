@@ -13915,21 +13915,37 @@ function QualityParameterMasterForm({
             )
         )
         .map((row) => normalizeUserEnteredPayload(row))
-      for (const payload of [...activePayloads, ...inactivePayloads]) {
+      const loadedSignatures = new Map(
+        selectedRows.map((row) => [
+          qualityParameterMasterKey(row),
+          qualityParameterRowsSignature([
+            normalizeUserEnteredPayload(
+              qualityParameterPayload(
+                qualityParameterDraftFromRow(row),
+                setupFields,
+                "Active"
+              )
+            ),
+          ]),
+        ])
+      )
+      const changes = [
+        ...activePayloads.filter(
+          (payload) =>
+            loadedSignatures.get(qualityParameterMasterKey(payload)) !==
+            qualityParameterRowsSignature([payload])
+        ),
+        ...inactivePayloads,
+      ].map((payload) => ({
+        payload,
+        reviseParameter: loadedSignatures.has(
+          qualityParameterMasterKey(payload)
+        ),
+      }))
+      if (changes.length) {
         await submitAction(
-          "data-entry",
-          {
-            entryType: spec.entryType,
-            key: dataEntryKey(spec.entryType, payload),
-            returnTab: "qualityParameterMasterTab",
-            reviseParameter:
-              drafts.some(
-                (draft) =>
-                  draft.persisted &&
-                  qualityParameterAutoCode(draft) === payload.code
-              ) || removedRows.some((row) => row.code === payload.code),
-            payload,
-          },
+          "quality-parameter-set",
+          { changes, returnTab: "qualityParameterMasterTab" },
           { throwOnError: true }
         )
       }
@@ -13944,7 +13960,9 @@ function QualityParameterMasterForm({
       setRemovedRows([])
       setStatus({
         tone: "default",
-        message: "Quality inspection parameter set saved.",
+        message: changes.length
+          ? "Quality inspection parameter set saved."
+          : "No parameter changes to save.",
       })
     } catch (err) {
       setStatus({

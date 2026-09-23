@@ -29,6 +29,7 @@ const mutationCapabilitiesByPath: Record<string, readonly string[]> = {
   "master-delete": ["operations.corrections.write"],
   "plan-override": ["planning.override.write"],
   "planner-priority": ["planning.priority.write"],
+  "quality-parameter-set": ["quality.parameters.manage"],
   "raw-material-rejection": ["planning.raw_material_rejection.write"],
   reschedule: ["planning.override.write"],
   "reverse-entry": ["operations.corrections.write"],

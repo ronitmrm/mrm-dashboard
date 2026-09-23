@@ -286,6 +286,14 @@ export function createDurableRefreshWorker({
               await client.query("COMMIT")
               return { status: "idle" as const }
             }
+            const organizationLock = await client.query<{ acquired: boolean }>(
+              "SELECT pg_try_advisory_xact_lock(hashtext('dashboard.refresh'), hashtext($1)) AS acquired",
+              [job.organization_id]
+            )
+            if (!organizationLock.rows[0]?.acquired) {
+              await client.query("ROLLBACK")
+              return { status: "idle" as const }
+            }
 
             const attempt = job.attempts + 1
             const attemptRow = await client.query<{ id: string }>(
