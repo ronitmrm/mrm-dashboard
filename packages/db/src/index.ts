@@ -191,7 +191,7 @@ export {
   type RecruitmentInterviewRoundName,
 } from "./recruitment-interview-workflow"
 export { createQualityRepository } from "./quality"
-export { createProductionShopFloorRepository } from "./production-shop-floor"
+export { createProductionShopFloorRepository, ShopFloorConflictError } from "./production-shop-floor"
 export {
   defaultProductionFloorCode,
   normalizeProductionFloorCode,

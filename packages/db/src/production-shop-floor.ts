@@ -36,6 +36,9 @@ import {
 } from "./job-card-workspace"
 import { calculateCasting } from "./pricing-calculation"
 
+export class ShopFloorConflictError extends Error {
+  readonly status = 409
+}
 
 type RawMaterialReceiptInput = {
   actorUserId?: string | null
@@ -3678,18 +3681,25 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           )
         }
         if (active) {
-          const occupied = await client.query<{ id: string }>(
+          const occupied = await client.query<{
+            id: string
+            job_card_number: string
+            setup_number: number
+          }>(
             `
-              SELECT id FROM manufacturing.shop_floor_setup_state
-              WHERE machine_id = $1 AND active
-                AND id IS DISTINCT FROM $2::uuid
-              FOR UPDATE
+              SELECT state.id, work_order.job_card_number, setup.setup_number
+              FROM manufacturing.shop_floor_setup_state state
+              JOIN manufacturing.work_orders work_order ON work_order.id = state.work_order_id
+              JOIN manufacturing.operation_setups setup ON setup.id = state.operation_setup_id
+              WHERE state.machine_id = $1 AND state.active
+                AND state.id IS DISTINCT FROM $2::uuid
+              FOR UPDATE OF state
             `,
             [machineId, current.rows[0]?.id ?? null]
           )
           if (occupied.rows[0]) {
-            throw new Error(
-              "The target machine is owned by another active setup."
+            throw new ShopFloorConflictError(
+              `${input.machineNumber} is still assigned to Job Card ${occupied.rows[0].job_card_number}, Setup ${occupied.rows[0].setup_number}. Complete the previous item or ask the Planner to release the machine. Shift Ends does not complete a setup.`
             )
           }
         }

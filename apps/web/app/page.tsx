@@ -62,10 +62,15 @@ export default async function Page({
 
   const { MrmplDashboard } = await import("@/components/mrmpl-dashboard")
   const query = await searchParams
-  const session = await requireAuthenticatedSession("/")
-  const navigationAccess = await getUnifiedNavigationAccess(session.user.id)
   const value = (input: string | string[] | undefined) =>
     Array.isArray(input) ? input[0] : input
+  const returnPath = `/?${new URLSearchParams(
+    Object.entries(query).flatMap(([key, input]) =>
+      input === undefined ? [] : [[key, value(input) ?? ""]]
+    )
+  )}`
+  const session = await requireAuthenticatedSession(returnPath)
+  const navigationAccess = await getUnifiedNavigationAccess(session.user.id)
   const requestedTab = value(query.tab)
   const requestedFloorForMaster = normalizeProductionFloorCode(
     value(query.floor)
@@ -264,12 +269,18 @@ export default async function Page({
       : "productionControlTab"
   const requestedFloor = readableDashboardFloor(
     normalizeProductionFloorCode(value(query.floor) ?? defaultProductionFloorCode),
+    !value(query.floor) ||
     ["machineMasterTab", "maintenanceTab", "productionDashboardTab"].includes(
       requestedDashboardTab
     )
       ? navigationAccess.productionFloorTabIds
       : undefined
   )
+  if (!value(query.floor) && isProductionFloorTab(requestedDashboardTab)) {
+    const params = new URLSearchParams(returnPath.slice(2))
+    params.set("floor", requestedFloor)
+    redirect(`/?${params}`)
+  }
   const requestedFloorTabs =
     navigationAccess.productionFloorTabIds?.[requestedFloor]
   const allowedDashboardTabs = isProductionFloorTab(requestedDashboardTab)
@@ -285,7 +296,7 @@ export default async function Page({
     requestedFloor
   )
   if (pageCapability && !isMasterPage && !isOperationalPage) {
-    await requireProductionPage(pageCapability, "/")
+    await requireProductionPage(pageCapability, returnPath)
   }
   const requestedEntryFromQuery = Array.isArray(query.entry)
     ? query.entry[0]

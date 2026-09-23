@@ -1,4 +1,4 @@
-import { DuplicateMasterError } from "@workspace/db"
+import { DuplicateMasterError, ShopFloorConflictError } from "@workspace/db"
 import {
   createDashboardPlanningRepository,
   createMasterDataLifecycleRepository,
@@ -111,6 +111,7 @@ function dashboardRouteError(err: unknown) {
     err instanceof DuplicateMasterError
       ? 409
       : err instanceof RouteError ||
+          err instanceof ShopFloorConflictError ||
           err instanceof OperationalEntryAccessError ||
           err instanceof ProductionUnitAccessError ||
           err instanceof OperationalEntryError ||
