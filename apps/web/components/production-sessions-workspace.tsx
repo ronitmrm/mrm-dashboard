@@ -24,6 +24,10 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 
 import { useDashboardDelivery } from "@/hooks/use-dashboard-delivery"
 import { DataDownloadButton } from "@/components/data-download-button"
+import {
+  ProductionSessionDetailActions,
+  type ProductionSessionDetailAction,
+} from "@/components/production-session-detail-actions"
 import { PageHeader, StandardDialogContent, StandardDrawerContent, StandardState } from "@/components/ui/golden-patterns"
 import { dashboardPayloadFromState, dashboardPayloadForProductionFloor } from "@/lib/dashboard-view-model"
 import {
@@ -54,14 +58,8 @@ type View = "start" | "register" | "events"
 type SessionStatusFilter = "all" | ProductionSessionOperationalStatus
 type Action =
   | "start"
-  | "end"
-  | "downtime"
-  | "downtimeEnd"
   | "carryResolve"
-  | "correctClose"
-  | "rejection"
-  | "lateDowntime"
-  | "lateRejection"
+  | ProductionSessionDetailAction
 type Row = Record<string, unknown>
 
 const text = (value: unknown) => String(value ?? "").trim()
@@ -634,7 +632,6 @@ function MasterSelect({ value, options, onChange, placeholder }: { value: string
 function DetailSheet({ session, events, floor, now, onOpenChange, onAction }: { session: Row | null; events: Row[]; floor: ProductionFloorCode; now: Date; onOpenChange: (open: boolean) => void; onAction: (action: Action, row: Row) => void }) {
   if (!session) return null
   const status = sessionOperationalStatus(session, floor, now)
-  const closed = text(session.status).toLowerCase() === "closed"
   const pending = outputPending(session)
   const endedAt = text(session.endedAt)
   const measurementMethod = text(session.measurementMethod).toLowerCase()
@@ -674,5 +671,5 @@ function DetailSheet({ session, events, floor, now, onOpenChange, onAction }: { 
     onOpenChange(false)
     onAction(action, session)
   }
-  return <Sheet open onOpenChange={onOpenChange}><SheetContent side="right" className="h-full !w-full gap-0 overflow-hidden sm:!max-w-4xl xl:!max-w-5xl"><SheetHeader className="shrink-0 border-b"><SheetTitle>{text(session.sessionReference) || "Production session"}</SheetTitle><SheetDescription>{machine(session)} · {job(session)} · {part(session)} · Setup {setup(session)}</SheetDescription></SheetHeader><div className="flex min-h-0 flex-1 flex-col gap-4 p-6">{closed ? <div className="flex flex-wrap gap-2"><Button onClick={() => chooseAction("correctClose")}><Pencil />{pending ? "Complete weight" : "Correct end details"}</Button><Button variant="outline" onClick={() => chooseAction("lateDowntime")}><Clock3 />Add missed downtime</Button><Button variant="outline" onClick={() => chooseAction("lateRejection")}><TriangleAlert />Add missed rejection</Button></div> : null}<div className="grid shrink-0 grid-cols-2 gap-3 rounded-lg bg-muted/50 p-4 sm:grid-cols-3 lg:grid-cols-4">{summary.map(([label,value]) => <div className="min-w-0" key={label}><div className="text-xs text-muted-foreground">{label}</div><div className="font-medium tabular-nums">{value}</div></div>)}</div><div className="flex min-h-0 flex-1 flex-col"><h3 className="mb-2 shrink-0 font-medium">Session timeline</h3><SessionTimeline rows={events} /></div></div></SheetContent></Sheet>
+  return <Sheet open onOpenChange={onOpenChange}><SheetContent side="right" className="h-full !w-full gap-0 overflow-hidden sm:!max-w-4xl xl:!max-w-5xl"><SheetHeader className="shrink-0 border-b"><SheetTitle>{text(session.sessionReference) || "Production session"}</SheetTitle><SheetDescription>{machine(session)} · {job(session)} · {part(session)} · Setup {setup(session)}</SheetDescription></SheetHeader><div className="flex min-h-0 flex-1 flex-col gap-4 p-6"><ProductionSessionDetailActions session={session} onAction={chooseAction} /><div className="grid shrink-0 grid-cols-2 gap-3 rounded-lg bg-muted/50 p-4 sm:grid-cols-3 lg:grid-cols-4">{summary.map(([label,value]) => <div className="min-w-0" key={label}><div className="text-xs text-muted-foreground">{label}</div><div className="font-medium tabular-nums">{value}</div></div>)}</div><div className="flex min-h-0 flex-1 flex-col"><h3 className="mb-2 shrink-0 font-medium">Session timeline</h3><SessionTimeline rows={events} /></div></div></SheetContent></Sheet>
 }

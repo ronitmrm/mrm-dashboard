@@ -85,6 +85,12 @@ or composite keys.
 
 Close reasons are Shift Ends, Shift Change, Operator Change, Item Complete, Job / Setup Change, and Manual Stop. Shift Ends is the default because it is the normal close path.
 
+Choosing **Item Complete** closes the Production Session and marks that machine's
+active setup Item Complete in the same transaction, which releases the machine.
+Shop Floor does not perform a second Item Finished or Setup Completion action.
+The other close reasons end only the current session so the setup can continue in
+a later session.
+
 A Counter session requires its end counter before it can close. A Weight session
 may close after its work ends even when weighing is not yet practical. It then
 has Weight Pending output: the machine and operator are released for the next
