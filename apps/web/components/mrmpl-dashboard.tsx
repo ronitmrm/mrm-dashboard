@@ -7817,7 +7817,9 @@ function MachineDetailPanel({
       <section className="grid gap-4">
         <DataRowsCard
           title="Machine Unavailable / Breakdown"
-          rows={asArray(productionControl.machineConstraintRows)}
+          rows={plannerPendingMachineIssueRows(
+            asArray(productionControl.machineConstraintRows)
+          )}
           empty="No machine issues saved yet"
         />
       </section>
