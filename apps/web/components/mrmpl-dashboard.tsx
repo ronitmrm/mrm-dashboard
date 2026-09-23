@@ -3697,7 +3697,13 @@ function ProductionDashboardPanel({ payload }: { payload: DashboardPayload }) {
                           {displayValue(row.rmReceivedDate)}
                         </TableCell>
                         <TableCell>
-                          {displayValue(row.plannedDispatchDateAtRmReceipt)}
+                          {text(row.plannedDispatchDateAtRmReceipt) ? (
+                            displayValue(row.plannedDispatchDateAtRmReceipt)
+                          ) : (
+                            <span className="text-muted-foreground">
+                              Not recorded
+                            </span>
+                          )}
                         </TableCell>
                         <TableCell>
                           {displayValue(row.currentProbableDispatchDate)}

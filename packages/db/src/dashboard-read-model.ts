@@ -48,7 +48,14 @@ type GroupedSourceRow = SelectedSourceRow & {
 type PreviousPlanningRow = {
   previous_row: JsonRecord
   production_floor_code: ProductionFloorCode
-  row_kind: "machine_plan" | "production_dashboard"
+}
+
+type FinishBaselineRow = {
+  id: string
+  job_card_number: string
+  part_code: string
+  planned_finish_on: string | null
+  work_order_source_payload: JsonRecord | null
 }
 
 export type CanonicalDashboardSource = {
@@ -124,13 +131,6 @@ const machinePlanContinuityFields = [
   "partCode",
   "routeMachine",
   "setupNo",
-] as const
-
-const productionDashboardContinuityFields = [
-  "jcNo",
-  "partCode",
-  "rmReceivedDate",
-  "plannedDispatchDateAtRmReceipt",
 ] as const
 
 const dataEntrySourceBudgets: Record<string, number> = {
@@ -380,6 +380,29 @@ function jsonRecord(value: unknown): JsonRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as JsonRecord)
     : {}
+}
+
+function finishBaselineKey(value: JsonRecord) {
+  return [value.jcNo, value.partCode]
+    .map((part) => String(part ?? "").trim().toLowerCase())
+    .join("|")
+}
+
+function dashboardDateIso(value: unknown) {
+  const text = String(value ?? "").trim()
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text
+  const match = text.match(/^(\d{1,2})-([A-Za-z]+)-(\d{2})$/)
+  if (!match) return ""
+  const month = new Map([
+    ["jan", 1], ["january", 1], ["feb", 2], ["february", 2],
+    ["mar", 3], ["march", 3], ["apr", 4], ["april", 4], ["may", 5],
+    ["jun", 6], ["june", 6], ["jul", 7], ["july", 7], ["aug", 8],
+    ["august", 8], ["sep", 9], ["sept", 9], ["september", 9],
+    ["oct", 10], ["october", 10], ["nov", 11], ["november", 11],
+    ["dec", 12], ["december", 12],
+  ]).get(match[2]!.toLowerCase())
+  if (!month) return ""
+  return `20${match[3]!}-${String(month).padStart(2, "0")}-${String(Number(match[1]!)).padStart(2, "0")}`
 }
 
 function mapSelectedSourceRows(rows: SelectedSourceRow[]) {
@@ -662,7 +685,7 @@ export async function buildCanonicalDashboardReadModel(
         CROSS JOIN jsonb_array_elements_text($2::jsonb)
           WITH ORDINALITY floor(code, ordinality)
       )
-      SELECT floor_payloads.production_floor_code, previous.row_kind,
+      SELECT floor_payloads.production_floor_code,
         (
           SELECT COALESCE(
             jsonb_object_agg(field.key, field.value),
@@ -674,16 +697,11 @@ export async function buildCanonicalDashboardReadModel(
               ELSE '{}'::jsonb
             END
           ) field
-          WHERE field.key = ANY(
-            CASE previous.row_kind
-              WHEN 'machine_plan' THEN $3::text[]
-              ELSE $5::text[]
-            END
-          )
+          WHERE field.key = ANY($3::text[])
         ) AS previous_row
       FROM floor_payloads
       CROSS JOIN LATERAL (
-        SELECT 'machine_plan'::text AS row_kind, plan.row, plan.ordinality
+        SELECT plan.row, plan.ordinality
         FROM jsonb_array_elements(
           CASE
             WHEN jsonb_typeof(
@@ -695,57 +713,55 @@ export async function buildCanonicalDashboardReadModel(
             ELSE '[]'::jsonb
           END
         ) WITH ORDINALITY plan(row, ordinality)
-        UNION ALL
-        SELECT 'production_dashboard'::text AS row_kind,
-          dashboard.row, dashboard.ordinality
-        FROM jsonb_array_elements(
-          CASE
-            WHEN jsonb_typeof(
-              floor_payloads.floor_payload #>
-                '{productionControl,productionDashboardRows}'
-            ) = 'array'
-            THEN floor_payloads.floor_payload #>
-              '{productionControl,productionDashboardRows}'
-            ELSE '[]'::jsonb
-          END
-        ) WITH ORDINALITY dashboard(row, ordinality)
       ) previous
-      ORDER BY floor_payloads.floor_order, previous.row_kind,
-        previous.ordinality
+      ORDER BY floor_payloads.floor_order, previous.ordinality
     `,
     [
       context.organizationId,
       JSON.stringify(productionFloors.map((floor) => floor.code)),
       machinePlanContinuityFields,
       defaultProductionFloorCode,
-      productionDashboardContinuityFields,
     ]
   )
+  const finishBaselineResult = await client.query<FinishBaselineRow>(
+    `
+      SELECT baseline.id::text AS id,
+        work_order.job_card_number,
+        item.uid AS part_code,
+        baseline.planned_finish_on::text AS planned_finish_on,
+        work_order.source_payload AS work_order_source_payload
+      FROM manufacturing.job_card_finish_baselines baseline
+      JOIN manufacturing.work_orders work_order
+        ON work_order.id = baseline.work_order_id
+      JOIN catalog.items item ON item.id = work_order.item_id
+      WHERE baseline.organization_id = $1
+      ORDER BY work_order.job_card_number
+    `,
+    [context.organizationId]
+  )
+  const finishBaselineRows = finishBaselineResult.rows.map((row) => ({
+    baselineId: row.id,
+    jcNo: row.job_card_number,
+    partCode: row.part_code,
+    plannedDispatchDateAtRmReceipt: row.planned_finish_on ?? "",
+    productionFloorCode: productionFloorCodeForRecord({
+      sourcePayload: row.work_order_source_payload,
+    }),
+  }))
   const previousMachinePlanRowsByFloor = new Map<
     ProductionFloorCode,
     JsonRecord[]
   >()
-  const previousProductionDashboardRowsByFloor = new Map<
-    ProductionFloorCode,
-    JsonRecord[]
-  >()
   for (const previousRow of previousModel.rows) {
-    const target = previousRow.row_kind === "machine_plan"
-      ? previousMachinePlanRowsByFloor
-      : previousProductionDashboardRowsByFloor
     const rows =
-      target.get(previousRow.production_floor_code) ??
+      previousMachinePlanRowsByFloor.get(previousRow.production_floor_code) ??
       []
     rows.push(jsonRecord(previousRow.previous_row))
-    target.set(previousRow.production_floor_code, rows)
+    previousMachinePlanRowsByFloor.set(previousRow.production_floor_code, rows)
   }
 
   function previousMachinePlanRows(floorCode: ProductionFloorCode) {
     return previousMachinePlanRowsByFloor.get(floorCode) ?? []
-  }
-
-  function previousProductionDashboardRows(floorCode: ProductionFloorCode) {
-    return previousProductionDashboardRowsByFloor.get(floorCode) ?? []
   }
 
   const toolingAllocations = await readToolingAllocations(client, context.organizationId)
@@ -804,8 +820,7 @@ export async function buildCanonicalDashboardReadModel(
         floorCode
       ),
       previousMachinePlanDetailRows: previousMachinePlanRows(floorCode),
-      previousProductionDashboardRows:
-        previousProductionDashboardRows(floorCode),
+      productionFinishBaselineRows: floorRows(finishBaselineRows, floorCode),
       productionEntries: floorRows(
         corrected(source.productionEntries, "productionEntries"),
         floorCode
@@ -863,6 +878,67 @@ export async function buildCanonicalDashboardReadModel(
   const productionFloorSnapshots = Object.fromEntries(
     productionFloors.map((floor) => [floor.code, buildFloorPayload(floor.code)])
   )
+  const pendingBaselines = new Map(
+    finishBaselineRows
+      .filter((row) => !row.plannedDispatchDateAtRmReceipt)
+      .map((row) => [
+        `${row.productionFloorCode}|${finishBaselineKey(row)}`,
+        row,
+      ])
+  )
+  const baselineCandidates: Array<{
+    baselineId: string
+    plannedFinishOn: string
+    row: JsonRecord
+  }> = []
+  for (const floor of productionFloors) {
+    const snapshot = jsonRecord(productionFloorSnapshots[floor.code])
+    const productionControl = jsonRecord(snapshot.productionControl)
+    const dashboardRows = Array.isArray(productionControl.productionDashboardRows)
+      ? productionControl.productionDashboardRows.map(jsonRecord)
+      : []
+    for (const row of dashboardRows) {
+      const baseline = pendingBaselines.get(
+        `${floor.code}|${finishBaselineKey(row)}`
+      )
+      if (!baseline) continue
+      const plannedFinishOn = dashboardDateIso(
+        row.currentProbableDispatchDate
+      )
+      if (!plannedFinishOn) continue
+      baselineCandidates.push({
+        baselineId: baseline.baselineId,
+        plannedFinishOn,
+        row,
+      })
+    }
+  }
+  if (baselineCandidates.length) {
+    const finalized = await client.query<{ id: string }>(
+      `
+        UPDATE manufacturing.job_card_finish_baselines baseline
+        SET planned_finish_on = candidate.planned_finish_on,
+          captured_at = now()
+        FROM unnest($2::uuid[], $3::date[])
+          AS candidate(id, planned_finish_on)
+        WHERE baseline.organization_id = $1
+          AND baseline.id = candidate.id
+          AND baseline.planned_finish_on IS NULL
+        RETURNING baseline.id::text AS id
+      `,
+      [
+        context.organizationId,
+        baselineCandidates.map((candidate) => candidate.baselineId),
+        baselineCandidates.map((candidate) => candidate.plannedFinishOn),
+      ]
+    )
+    const finalizedIds = new Set(finalized.rows.map((row) => row.id))
+    for (const candidate of baselineCandidates) {
+      if (!finalizedIds.has(candidate.baselineId)) continue
+      candidate.row.plannedDispatchDateAtRmReceipt =
+        candidate.row.currentProbableDispatchDate
+    }
+  }
   const defaultSnapshot = productionFloorSnapshots[
     defaultProductionFloorCode
   ] as JsonRecord

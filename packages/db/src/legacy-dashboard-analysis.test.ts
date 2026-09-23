@@ -167,6 +167,64 @@ describe("legacy dashboard route selections", () => {
     })
   })
 
+  test("uses only a durable RM receipt baseline for the planned finish date", () => {
+    const createdAt = "2026-09-20T05:00:00.000Z"
+    const entry = (entryType: string, payload: Record<string, unknown>) => ({
+      entryType,
+      payload,
+      createdAt,
+    })
+    const input = {
+      workbookName: "PostgreSQL",
+      productionEntries: [],
+      dataEntries: [
+        entry("work_order", {
+          jcNo: "JC-RM-BASELINE",
+          partCode: "PART-RM-BASELINE",
+          optionNumber: "1",
+          orderPcs: 100,
+          rmInwardDate: "2026-09-20",
+          rmInwardKg: 1,
+        }),
+        entry("route", {
+          partNo: "PART-RM-BASELINE",
+          optionNumber: "1",
+          setupNo: "1",
+          machineType: "CNC",
+          machineFamily: "BASELINE-FAMILY",
+        }),
+        entry("cycle", {
+          partNo: "PART-RM-BASELINE",
+          optionNumber: "1",
+          setupNo: "1",
+          cycleTime: 288,
+        }),
+        entry("machine_master", {
+          machineNo: "CNC-BASELINE",
+          machineType: "CNC",
+          machineFamily: "BASELINE-FAMILY",
+          status: "Active",
+        }),
+      ],
+    }
+
+    const withoutBaseline = buildLegacyDashboardSnapshot(input)
+      .productionControl.productionDashboardRows[0]!
+    expect(withoutBaseline.currentProbableDispatchDate).not.toBe("")
+    expect(withoutBaseline.plannedDispatchDateAtRmReceipt).toBe("")
+
+    const withBaseline = buildLegacyDashboardSnapshot({
+      ...input,
+      productionFinishBaselineRows: [{
+        jcNo: "JC-RM-BASELINE",
+        partCode: "PART-RM-BASELINE",
+        plannedDispatchDateAtRmReceipt: "30-Sept-26",
+      }],
+    } as Parameters<typeof buildLegacyDashboardSnapshot>[0])
+      .productionControl.productionDashboardRows[0]!
+    expect(withBaseline.plannedDispatchDateAtRmReceipt).toBe("30-Sept-26")
+  })
+
   test("creates one readiness row per setup missing cycle time", () => {
     const createdAt = "2026-09-20T10:00:00.000Z"
     const entry = (entryType: string, payload: Record<string, unknown>) => ({

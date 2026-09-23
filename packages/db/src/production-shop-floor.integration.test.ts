@@ -403,6 +403,26 @@ describe("production and shop-floor workflows", () => {
       { quantity_kg: "125.50000000", received_on: "2026-07-20" },
       { quantity_kg: "126.00000000", received_on: "2026-07-22" },
     ])
+
+    const baseline = await pool.query<{
+      planned_finish_on: string | null
+      raw_material_receipt_id: string
+      rm_received_on: string
+    }>(
+      `SELECT raw_material_receipt_id::text, rm_received_on::text,
+        planned_finish_on::text
+       FROM manufacturing.job_card_finish_baselines baseline
+       JOIN manufacturing.work_orders work_order
+         ON work_order.id = baseline.work_order_id
+       WHERE baseline.organization_id = $1
+         AND work_order.job_card_number = $2`,
+      [organizationId, firstJobCard]
+    )
+    expect(baseline.rows).toEqual([{
+      planned_finish_on: null,
+      raw_material_receipt_id: receipt.id,
+      rm_received_on: "2026-07-20",
+    }])
   })
 
   test("records append-only production", async () => {

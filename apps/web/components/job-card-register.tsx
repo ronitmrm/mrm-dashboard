@@ -85,7 +85,7 @@ export function JobCardRegister({
         <div className="rounded-md border min-w-0">
  <OperationalTable containerClassName="max-h-[70vh]" excelFilters>
             <TableHeader className="sticky top-0 z-10 bg-background"><TableRow>
-              <TableHead data-filterable="true">Job Card</TableHead><TableHead>Part</TableHead><TableHead>Description</TableHead><TableHead>FG PO</TableHead><TableHead className="text-right">Order Qty</TableHead><TableHead>Stage</TableHead><TableHead title="Saved initial completion forecast at RM receipt">Planned Finish Date</TableHead><TableHead title="Latest completion forecast across all route setups; updates after planning recalculates">Current Estimated Finish</TableHead><TableHead>Production Progress</TableHead><TableHead>Route</TableHead><TableHead />
+              <TableHead data-filterable="true">Job Card</TableHead><TableHead>Part</TableHead><TableHead>Description</TableHead><TableHead>FG PO</TableHead><TableHead className="text-right">Order Qty</TableHead><TableHead>Stage</TableHead><TableHead title="Immutable first valid forecast linked to the first RM receipt; legacy unavailable values are not guessed">Planned Finish Date</TableHead><TableHead title="Latest completion forecast across all route setups; updates after planning recalculates">Current Estimated Finish</TableHead><TableHead>Production Progress</TableHead><TableHead>Route</TableHead><TableHead />
             </TableRow></TableHeader>
             <TableBody>{rows.length ? rows.map((row) => {
               const jobCard = first(row, ["jcNo", "JobCardNo", "jobCard"])
@@ -93,6 +93,7 @@ export function JobCardRegister({
               const progress = jobCardProgress(row)
               const finishedPieces = numeric(row.finalSetupGoodPieces)
               const finishDates = finishDatesByJobCard.get(jobCardKey(row))
+              const plannedFinish = text(finishDates?.plannedDispatchDateAtRmReceipt)
               return <TableRow key={jobCard}>
                 <TableCell><Link className="font-semibold text-primary hover:underline" href={href}>{jobCard}</Link></TableCell>
                 <TableCell>{first(row, ["partCode", "itemCode", "PART CODE"])}</TableCell>
@@ -100,7 +101,7 @@ export function JobCardRegister({
                 <TableCell>{first(row, ["fgPoNo", "FG PO NO."])}</TableCell>
                 <TableCell className="text-right tabular-nums">{first(row, ["orderPcs", "orderedQty", "ORD. PCS."])}</TableCell>
                 <TableCell>{jobCardStage(row)}</TableCell>
-                <TableCell>{text(finishDates?.plannedDispatchDateAtRmReceipt) || "-"}</TableCell>
+                <TableCell>{plannedFinish || <span className="text-muted-foreground">Not recorded</span>}</TableCell>
                 <TableCell>{text(finishDates?.currentProbableDispatchDate) || "-"}</TableCell>
  <TableCell className="min-w-40"><div className="mb-1 flex justify-between gap-2 text-xs"><span>{progress.toFixed(1)}%</span><span>{new Intl.NumberFormat("en-IN").format(finishedPieces)} finished</span></div><div className="h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-[var(--color-positive-bg)]" style={{ width: `${progress}%` }} /></div></TableCell>
                 <TableCell>{first(row, ["optionNumber", "selectedOption", "routeStatus"])}</TableCell>

@@ -347,7 +347,7 @@ describe("canonical PostgreSQL dashboard read model", () => {
     }
   })
 
-  it("transfers only planning continuity fields from prior models", async () => {
+  it("transfers only machine planning continuity fields from prior models", async () => {
     const continuityFields = [
       "jcNo",
       "machine",
@@ -365,12 +365,6 @@ describe("canonical PostgreSQL dashboard read model", () => {
       routeMachine: `R-${floorCode}`,
       setupNo: 3,
     })
-    const dashboardContinuityFields = [
-      "jcNo",
-      "partCode",
-      "rmReceivedDate",
-      "plannedDispatchDateAtRmReceipt",
-    ]
     const dashboardContinuityRow = (floorCode: string) => ({
       currentProbableDispatchDate: "not-transferred",
       forbidden: `not-transferred-${floorCode}`,
@@ -445,33 +439,19 @@ describe("canonical PostgreSQL dashboard read model", () => {
       const priorRead = priorReads[0]!
       expect(priorRead.sql.trimStart()).not.toMatch(/^SELECT\s+payload/i)
       expect(priorRead.parameters).toContainEqual(continuityFields)
-      expect(priorRead.parameters).toContainEqual(dashboardContinuityFields)
       expect(priorRead.responseBytes).toBeLessThan(4096)
       expect(priorRead.rows).toEqual(
-        ["conventional", "conventional-02", "cnc", "forging"].flatMap((floorCode) => [
-          {
-            previous_row: {
-              jcNo: `JC-${floorCode}`,
-              machine: `M-${floorCode}`,
-              optionNumber: 2,
-              partCode: `P-${floorCode}`,
-              routeMachine: `R-${floorCode}`,
-              setupNo: 3,
-            },
-            production_floor_code: floorCode,
-            row_kind: "machine_plan",
+        ["conventional", "conventional-02", "cnc", "forging"].map((floorCode) => ({
+          previous_row: {
+            jcNo: `JC-${floorCode}`,
+            machine: `M-${floorCode}`,
+            optionNumber: 2,
+            partCode: `P-${floorCode}`,
+            routeMachine: `R-${floorCode}`,
+            setupNo: 3,
           },
-          {
-            previous_row: {
-              jcNo: `JC-${floorCode}`,
-              partCode: `P-${floorCode}`,
-              plannedDispatchDateAtRmReceipt: "30-June-26",
-              rmReceivedDate: "24-June-26",
-            },
-            production_floor_code: floorCode,
-            row_kind: "production_dashboard",
-          },
-        ])
+          production_floor_code: floorCode,
+        }))
       )
     } finally {
       client.release()
