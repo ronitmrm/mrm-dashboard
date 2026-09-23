@@ -158,7 +158,6 @@ function serverExpandedSectionsSnapshot() {
 
 export function UnifiedSidebarNavigation({
   activeDashboardTab,
-  activeMasterEntryType,
   activeProductionFloor = defaultProductionFloorCode,
   navigationAccess,
   onDashboardTabSelect,
@@ -298,20 +297,18 @@ export function UnifiedSidebarNavigation({
         "universal production corrections reverse wrong entries data entry master tables machine master checklists maintenance quality masters"
       )
     : []
-  const visibleMasterDataNavigation = [
-    {
-      destination: "/masters",
-      icon: Database,
-      id: "masterSelection" as const,
-      title: "Data Entry" as const,
-    },
-    ...masterDataNavigationLinks(navigationAccess, {
-      entryType: activeMasterEntryType,
-      pathname,
-      productionFloorCode: activeProductionFloor,
-      searchParams,
-    }).map((item) => ({ ...item, icon: TableProperties })),
-  ]
+  const masterDataLinks = masterDataNavigationLinks(navigationAccess)
+  const visibleMasterDataNavigation = masterDataLinks.length
+    ? [
+        {
+          destination: "/masters",
+          icon: Database,
+          id: "masterSelection" as const,
+          title: "Data Entry" as const,
+        },
+        ...masterDataLinks.map((item) => ({ ...item, icon: TableProperties })),
+      ]
+    : []
   const filteredMasterDataNavigation = visibleMasterDataNavigation.filter(
     (item) =>
       !normalizedMenuSearch ||

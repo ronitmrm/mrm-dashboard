@@ -46,49 +46,6 @@ export function masterPayloadForScope(
   return companyWidePayload
 }
 
-function canReadRecruitmentMasters(access: UnifiedNavigationAccess) {
-  return access.hrHrefs.some((href) =>
-    [
-      "/hr?panel=mastersPanel",
-      "/hr?panel=postMasterPanel",
-      "/hr?panel=approvedPostPanel",
-      "/hr?panel=combinedRolesPanel",
-      "/hr?panel=candidatesPanel",
-      "/hr?panel=employeeMasterPanel",
-    ].includes(href)
-  )
-}
-
-export function masterDataFallbackLinks(
-  access: UnifiedNavigationAccess
-): MasterDataFallbackLink[] {
-  if (access.operations) return []
-
-  const baseDestination = canReadRecruitmentMasters(access)
-    ? access.hrHrefs.includes("/hr?panel=mastersPanel")
-      ? "/hr?panel=mastersPanel"
-      : access.hrHrefs.includes("/hr?panel=postMasterPanel")
-        ? "/hr?panel=postMasterPanel"
-        : "/hr?panel=employeeMasterPanel&kind=employee-assignment"
-    : access.commercialHrefs.includes("/commercial/masters")
-      ? "/commercial/masters"
-      : access.commercialHrefs.includes("/commercial/customers")
-        ? "/commercial/customers"
-        : access.commercialHrefs.includes("/commercial/website-products")
-          ? "/commercial/website-products"
-          : ""
-  if (!baseDestination) return []
-
-  const links: MasterDataFallbackLink[] = [
-    {
-      destination: "/masters?view=masterTables",
-      id: "masterTablesTab",
-      title: "View Records",
-    },
-  ]
-  return links
-}
-
 export function masterDataDashboardHref(
   view: "dataEntry" | "masterTables",
   productionFloorCode: ProductionFloorCode,
@@ -109,29 +66,11 @@ export function masterDataDashboardHref(
 }
 
 export function masterDataNavigationLinks(
-  access: UnifiedNavigationAccess,
-  _context: {
-    entryType?: string
-    pathname: string
-    productionFloorCode: ProductionFloorCode
-    searchParams: Pick<URLSearchParams, "get">
-  }
+  access: UnifiedNavigationAccess
 ): MasterDataFallbackLink[] {
-  void _context
-  if (access.masterReadKeys?.length) return [{ destination: "/masters?view=masterTables", id: "masterTablesTab", title: "View Records" }]
-  if (!access.operations) return masterDataFallbackLinks(access)
-
-  const links: MasterDataFallbackLink[] = [
-    {
-      destination: "/masters?view=masterTables",
-      id: "masterTablesTab",
-      title: "View Records",
-    },
-  ]
-  return links.filter(
-    (item) =>
-      !access.productionTabIds || access.productionTabIds.includes(item.id)
-  )
+  return access.masterReadKeys?.length
+    ? [{ destination: "/masters?view=masterTables", id: "masterTablesTab", title: "View Records" }]
+    : []
 }
 
 export function externalMasterDataOptions(
