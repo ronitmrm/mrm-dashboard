@@ -114,6 +114,61 @@ export function createAccessAdministrationRepository(
   return {
     close,
 
+    async updateStaffLoginId({
+      actorUserId,
+      email,
+      userId,
+    }: {
+      actorUserId: string
+      email: string
+      userId: string
+    }) {
+      const client = await pool.connect()
+      try {
+        await client.query("BEGIN")
+        const user = await client.query<{ email: string }>(
+          `SELECT users.email
+           FROM identity.users AS users
+           JOIN identity.employee_links ON employee_links.user_id = users.id
+           WHERE users.id = $1 AND users.role IS DISTINCT FROM 'admin'
+           FOR UPDATE OF users`,
+          [userId]
+        )
+        const previousEmail = user.rows[0]?.email
+        if (!previousEmail)
+          throw new Error("The selected staff account no longer exists")
+        if (previousEmail !== email) {
+          await client.query(
+            `UPDATE identity.users
+             SET email = $1, email_verified = false, updated_at = now()
+             WHERE id = $2`,
+            [email, userId]
+          )
+          await client.query("DELETE FROM identity.sessions WHERE user_id = $1", [
+            userId,
+          ])
+          await appendAccessAuditChanges(client, [
+            {
+              actorUserId,
+              eventType: "access.user.login_id_changed",
+              metadata: { previousEmail, email },
+              targetId: userId,
+              targetTable: "users",
+            },
+          ])
+        }
+        await client.query("COMMIT")
+      } catch (error) {
+        await client.query("ROLLBACK")
+        if (error instanceof Error && "code" in error && error.code === "23505") {
+          throw new Error("This email / login ID already belongs to another account")
+        }
+        throw error
+      } finally {
+        client.release()
+      }
+    },
+
     async replaceDirectRoles({
       actorUserId,
       roleKeys,

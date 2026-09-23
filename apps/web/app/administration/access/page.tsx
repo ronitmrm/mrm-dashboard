@@ -252,6 +252,7 @@ export default async function AccessAdministrationPage({
                 canAssignRoles={grantedTasks.has(
                   administrationTaskCapabilities.assignStaffRole
                 )}
+                canEditLoginId={canProvisionStaff}
                 users={snapshot.users.map((user) => ({
                   departments: user.employee?.departments ?? [],
                   designations: user.employee?.designations ?? [],

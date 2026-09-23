@@ -19,6 +19,14 @@ type ProvisionStaffInput = {
   password: string
 }
 
+type UpdateStaffLoginIdInput = {
+  actorUserId: string
+  email: string
+  userId: string
+}
+
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
 const roleKeyPattern = /^[a-z][a-z0-9-]*$/
 
 export function normalizeApplicationRoleKey(value: string) {
@@ -144,6 +152,22 @@ export function createAccessAdministrationService({
       }
 
       return created.user
+    },
+
+    async updateStaffLoginId({ actorUserId, email, userId }: UpdateStaffLoginIdInput) {
+      await requireActorCapability(
+        actorUserId,
+        administrationTaskCapabilities.provisionStaff
+      )
+      const normalizedEmail = email.trim().toLowerCase()
+      if (normalizedEmail.length > 254 || !emailPattern.test(normalizedEmail)) {
+        throw new Error("Enter a valid email / login ID")
+      }
+      return access.updateStaffLoginId({
+        actorUserId,
+        email: normalizedEmail,
+        userId,
+      })
     },
 
     async linkEmployee(input: LinkEmployeeInput) {

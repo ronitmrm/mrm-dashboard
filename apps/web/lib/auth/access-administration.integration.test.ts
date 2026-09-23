@@ -296,6 +296,44 @@ describe("access administration", () => {
         user: { id: staff.id },
       })
 
+      await expect(
+        access.updateStaffLoginId({
+          actorUserId: administrator.user.id,
+          userId: staff.id,
+          email: administrator.user.email,
+        })
+      ).rejects.toThrow("already belongs to another account")
+      await access.updateStaffLoginId({
+        actorUserId: administrator.user.id,
+        userId: staff.id,
+        email: " Planner.Corrected@MRMPL.TEST ",
+      })
+      const updated = (await access.getSnapshot({
+        actorUserId: administrator.user.id,
+      })).users.find((user) => user.id === staff.id)
+      expect(updated).toMatchObject({
+        email: "planner.corrected@mrmpl.test",
+        employee: { employeeCode },
+      })
+      const activeSessions = await pool.query<{ count: string }>(
+        "SELECT count(*) FROM identity.sessions WHERE user_id = $1",
+        [staff.id]
+      )
+      expect(activeSessions.rows[0]?.count).toBe("0")
+      await expect(
+        system.auth.api.signInEmail({
+          body: { email: staff.email, password: "planner-test-password" },
+        })
+      ).rejects.toThrow()
+      await expect(
+        system.auth.api.signInEmail({
+          body: {
+            email: "planner.corrected@mrmpl.test",
+            password: "planner-test-password",
+          },
+        })
+      ).resolves.toMatchObject({ user: { id: staff.id } })
+
       const audit = await pool.query<{
         actor_user_id: string
         event_type: string
@@ -322,6 +360,11 @@ describe("access administration", () => {
           {
             actor_user_id: administrator.user.id,
             event_type: "access.employee.linked",
+            target_id: staff.id,
+          },
+          {
+            actor_user_id: administrator.user.id,
+            event_type: "access.user.login_id_changed",
             target_id: staff.id,
           },
         ])

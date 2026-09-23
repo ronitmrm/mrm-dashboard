@@ -64,6 +64,8 @@ function staffActionError(error: unknown): StaffActionState {
     "Password must contain at least 6 characters",
     "Select existing non-system application roles",
     "The selected staff account no longer exists",
+    "Enter a valid email / login ID",
+    "This email / login ID already belongs to another account",
     "The selected active employee does not exist",
     "The selected employee already has a login account",
     "The selected user or active employee does not exist",
@@ -132,6 +134,29 @@ export async function assignStaffRolesAction(
         return {
           success: "Direct roles updated for this staff account only.",
         }
+      } catch (error) {
+        return staffActionError(error)
+      }
+    }
+  )
+  if (!result.error) revalidatePath(accessPath)
+  return result
+}
+
+export async function updateStaffLoginIdAction(
+  _previousState: StaffActionState,
+  formData: FormData
+): Promise<StaffActionState> {
+  const result = await withAccessService(
+    administrationTaskCapabilities.provisionStaff,
+    async (access, actorUserId) => {
+      try {
+        await access.updateStaffLoginId({
+          actorUserId,
+          email: requiredText(formData, "email"),
+          userId: requiredText(formData, "userId"),
+        })
+        return { success: "Login ID saved." }
       } catch (error) {
         return staffActionError(error)
       }
