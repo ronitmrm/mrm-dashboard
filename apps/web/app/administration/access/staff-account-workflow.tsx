@@ -32,6 +32,7 @@ import {
 import {
   assignStaffRolesAction,
   provisionStaffAction,
+  updateStaffLoginIdAction,
   type StaffActionState,
 } from "./actions"
 
@@ -312,6 +313,38 @@ function StaffRoleForm({
   )
 }
 
+function StaffLoginIdForm({ user }: { user: StaffAccount }) {
+  const [state, action, pending] = useActionState(updateStaffLoginIdAction, {})
+  return (
+    <form action={action}>
+      <input type="hidden" name="userId" value={user.id} />
+      <FieldGroup className="gap-3 border-b pb-4">
+        <Field>
+          <FieldLabel htmlFor="staff-login-id">Email / Login ID</FieldLabel>
+          <Input
+            key={user.email}
+            id="staff-login-id"
+            name="email"
+            type="email"
+            autoComplete="off"
+            defaultValue={user.email}
+            required
+            disabled={pending}
+          />
+          <FieldDescription>
+            The password and roles stay the same. The staff member will sign in
+            again with the new ID.
+          </FieldDescription>
+        </Field>
+        <StaffFeedback state={state} />
+        <Button className="w-fit" type="submit" disabled={pending}>
+          {pending ? "Saving…" : "Save Login ID"}
+        </Button>
+      </FieldGroup>
+    </form>
+  )
+}
+
 export function StaffAccountWorkflow(props: StaffWorkflowProps) {
   const [search, setSearch] = useState(() => {
     const selected = props.users.find((user) => user.id === props.selectedUserId)
@@ -324,14 +357,14 @@ export function StaffAccountWorkflow(props: StaffWorkflowProps) {
       {props.canProvision ? (
         <CreateStaffAccountForm employees={props.employees} />
       ) : null}
-      {props.canAssignRoles ? (
+      {props.canAssignRoles || props.canProvision ? (
         <SectionCard
           size="sm"
           id="staff-role-assignment"
           className="scroll-mt-20"
         >
           <CardHeader className="border-b">
-            <CardTitle>2. Assign or Edit Roles</CardTitle>
+            <CardTitle>2. Edit Staff Account</CardTitle>
             <CardAction>
               <Button type="button" variant="ghost" onClick={() => setSearch(emptySearch)}>
                 Clear selection
@@ -353,10 +386,13 @@ export function StaffAccountWorkflow(props: StaffWorkflowProps) {
                 }}
               />
             ) : null}
+            {user?.employeeCode && props.canProvision ? (
+              <StaffLoginIdForm key={user.id} user={user} />
+            ) : null}
             {user && props.canAssignRoles ? (
               <StaffRoleForm key={user.id} user={user} roles={props.roles} />
             ) : null}
-            {!props.canAssignRoles ? (
+            {user && !props.canAssignRoles ? (
               <FieldDescription>
                 Your account does not have Assign Staff Role access.
               </FieldDescription>

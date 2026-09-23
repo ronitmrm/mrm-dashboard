@@ -30,9 +30,11 @@ type StaffAccessUser = {
 
 export function StaffAccessRegister({
   canAssignRoles,
+  canEditLoginId,
   users,
 }: {
   canAssignRoles: boolean
+  canEditLoginId: boolean
   users: StaffAccessUser[]
 }) {
   if (!users.length) {
@@ -148,13 +150,13 @@ export function StaffAccessRegister({
               </div>
             </TableCell>
             <TableCell className="align-top text-right whitespace-normal">
-              {canAssignRoles ? (
+              {canAssignRoles || (canEditLoginId && user.employeeCode) ? (
                 <Button asChild size="sm" variant="outline">
                   <Link
                     href={`/administration/access?section=staff&staff=${encodeURIComponent(user.id)}#staff-role-assignment`}
                   >
                     <Pencil data-icon="inline-start" />
-                    Edit Roles
+                    {canEditLoginId && user.employeeCode ? "Edit Account" : "Edit Roles"}
                     <span className="sr-only"> for {user.name}</span>
                   </Link>
                 </Button>

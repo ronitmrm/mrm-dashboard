@@ -11,6 +11,11 @@ also applies through the automatic employee link. The protected System
 Administrator identity is the sole account that stays separate from Employee
 Master.
 
+**Staff Login ID**: The email address used to sign in to a Staff Account. A
+staff provisioner may correct it after creation. The account's permanent user
+identity, employee link, password, and access stay the same; existing sessions
+end and the old email stops working as a login.
+
 **Application Role**: A reusable access profile assigned directly to a Staff
 Account or inherited from an Approved Post. Its access can be changed after the
 role is created; changing the role definition changes access for every account

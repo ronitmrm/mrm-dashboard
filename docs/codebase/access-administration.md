@@ -174,6 +174,12 @@ migration before releasing the application that enforces the new keys.
    forged into this operation. An empty selection removes all direct roles from
    the selected account.
 
+Existing linked staff accounts expose an Email / Login ID correction to users
+with Provision Staff access. The correction requires a unique valid email,
+retains the account ID, employee link, password and roles, revokes its sessions,
+and records an access audit event. System Administrator and unlinked identities
+cannot use this correction.
+
 Provision and Assign Staff Role remain independent task capabilities, checked in
 both server actions and service methods. The legacy Link Staff Account capability
 is retained only for controlled repair of pre-existing unlinked identities; it is
