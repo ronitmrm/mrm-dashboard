@@ -87,6 +87,7 @@ const expectedCanonicalTables = [
   "maintenance.tasks",
   "manufacturing.dispatch_approval_events",
   "manufacturing.downtime_reasons",
+  "manufacturing.job_card_finish_baselines",
   "manufacturing.machine_constraint_event_details",
   "manufacturing.machine_constraint_events",
   "manufacturing.operation_cycle_standards",

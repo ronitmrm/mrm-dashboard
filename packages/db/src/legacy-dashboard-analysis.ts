@@ -32,7 +32,7 @@ export type LegacyDashboardInput = {
   setupCompletions?: ActionRow[];
   rawMaterialRejections?: ActionRow[];
   previousMachinePlanDetailRows?: Array<Record<string, unknown>>;
-  previousProductionDashboardRows?: Array<Record<string, unknown>>;
+  productionFinishBaselineRows?: Array<Record<string, unknown>>;
   filters?: DashboardFilters;
   updatedAt?: string;
 };
@@ -395,7 +395,7 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
     setupCompletions: mergeSourceActionRows(sourcePlannerDecisions.setupCompletions, input.setupCompletions ?? [], setupCompletionDecisionKey),
     rawMaterialRejections: input.rawMaterialRejections ?? [],
     previousMachinePlanDetailRows: input.previousMachinePlanDetailRows ?? [],
-    previousProductionDashboardRows: input.previousProductionDashboardRows ?? [],
+    productionFinishBaselineRows: input.productionFinishBaselineRows ?? [],
     filters: input.filters ?? {},
     workbookName: input.workbookName,
     updatedAt: input.updatedAt ?? "",
@@ -476,7 +476,7 @@ function buildProductionAnalysis({
   setupCompletions,
   rawMaterialRejections,
   previousMachinePlanDetailRows,
-  previousProductionDashboardRows,
+  productionFinishBaselineRows,
   filters,
   workbookName,
   updatedAt,
@@ -526,7 +526,7 @@ function buildProductionAnalysis({
   setupCompletions: ActionRow[];
   rawMaterialRejections: ActionRow[];
   previousMachinePlanDetailRows: Array<Record<string, unknown>>;
-  previousProductionDashboardRows: Array<Record<string, unknown>>;
+  productionFinishBaselineRows: Array<Record<string, unknown>>;
   filters: DashboardFilters;
   workbookName: string;
   updatedAt: string;
@@ -847,7 +847,7 @@ function buildProductionAnalysis({
     setupCompletions,
     rawMaterialRejections,
     previousMachinePlanDetailRows,
-    previousProductionDashboardRows,
+    productionFinishBaselineRows,
   });
   const routingStatus = buildRoutingStatus(routeRows, productionRows);
   const toolFixtureNumbers = includeToolFixtureNumbers ? buildToolFixtureNumbers(toolingRows) : undefined;
@@ -1038,7 +1038,7 @@ function buildProductionControl({
   setupCompletions,
   rawMaterialRejections,
   previousMachinePlanDetailRows,
-  previousProductionDashboardRows,
+  productionFinishBaselineRows,
 }: {
   productiveHoursPerDay: number;
   productionRows: ProductionRow[];
@@ -1079,7 +1079,7 @@ function buildProductionControl({
   setupCompletions: ActionRow[];
   rawMaterialRejections: ActionRow[];
   previousMachinePlanDetailRows: Array<Record<string, unknown>>;
-  previousProductionDashboardRows: Array<Record<string, unknown>>;
+  productionFinishBaselineRows: Array<Record<string, unknown>>;
 }) {
   const routeGroups = groupRouteRows(routeRows);
   const dedupedRouteRows = [...routeGroups.values()].flat();
@@ -1379,7 +1379,7 @@ function buildProductionControl({
     machinePlanDetailRows,
     machineRows,
     planningCalendar,
-    previousRows: previousProductionDashboardRows,
+    baselineRows: productionFinishBaselineRows,
     routeGroups,
     workOrderRows: prioritizedWorkOrderRows,
   });
@@ -1546,30 +1546,30 @@ function buildProductionControl({
 }
 
 function buildProductionDashboardRows({
+  baselineRows,
   cycleRows,
   dispatchApprovals,
   dispatchRows,
   machinePlanDetailRows,
   machineRows,
   planningCalendar,
-  previousRows,
   routeGroups,
   workOrderRows,
 }: {
+  baselineRows: Record<string, unknown>[];
   cycleRows: Record<string, unknown>[];
   dispatchApprovals: ActionRow[];
   dispatchRows: Record<string, unknown>[];
   machinePlanDetailRows: Record<string, unknown>[];
   machineRows: Record<string, unknown>[];
   planningCalendar: PlanningCalendar;
-  previousRows: Record<string, unknown>[];
   routeGroups: Map<string, Record<string, unknown>[]>;
   workOrderRows: Record<string, unknown>[];
 }) {
   const cycleByKey = latestMasterRows(cycleRows);
   const plansByWorkOrder = groupByRecord(machinePlanDetailRows, productionDashboardRowKey);
-  const previousByWorkOrder = new Map(
-    previousRows.map((row) => [productionDashboardRowKey(row), row]),
+  const baselineByWorkOrder = new Map(
+    baselineRows.map((row) => [productionDashboardRowKey(row), row]),
   );
   const dispatchedByJobCard = new Map<string, string>();
   for (const row of [...dispatchRows, ...dispatchApprovals]) {
@@ -1598,10 +1598,9 @@ function buildProductionDashboardRows({
       workOrder,
     });
     const rmReceivedDate = parseDate(rowValue(workOrder, "rmInwardDate"));
-    const previous = previousByWorkOrder.get(key);
-    const previousRmReceivedDate = previous ? parseDate(rowValue(previous, "rmReceivedDate")) : "";
-    const previousInitialDate = previous && previousRmReceivedDate === rmReceivedDate
-      ? rowText(previous, "plannedDispatchDateAtRmReceipt")
+    const baseline = baselineByWorkOrder.get(key);
+    const initialDate = baseline
+      ? dateLabel(rowValue(baseline, "plannedDispatchDateAtRmReceipt"))
       : "";
     const dispatchedDate = dispatchedByJobCard.get(canonicalKey(rowText(workOrder, "jcNo"))) ?? "";
     const orderPcs = safeNumber(rowValue(workOrder, "orderPcs"));
@@ -1614,7 +1613,7 @@ function buildProductionDashboardRows({
       orderedQty: orderPcs > 0 ? orderPcs : orderKg,
       unit: orderPcs > 0 ? "PCS" : orderKg > 0 ? "KG" : "-",
       rmReceivedDate: dateLabel(rmReceivedDate),
-      plannedDispatchDateAtRmReceipt: previousInitialDate || dateLabel(currentProbableDate),
+      plannedDispatchDateAtRmReceipt: initialDate,
       currentProbableDispatchDate: dateLabel(currentProbableDate),
       status: dispatchedByJobCard.has(canonicalKey(rowText(workOrder, "jcNo"))) ? "Dispatched" : "Pending",
       dispatchedDate: dateLabel(dispatchedDate),

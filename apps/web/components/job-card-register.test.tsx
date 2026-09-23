@@ -26,3 +26,16 @@ test("shows the saved finish and changing current forecast for the matching Job 
   expect(refreshed).not.toContain("28-Sept-26")
   expect(refreshed).not.toContain("Nov-26")
 })
+
+test("does not invent an RM-receipt finish for a legacy Job Card", () => {
+  const markup = renderToStaticMarkup(
+    <JobCardRegister actionNeededCount={0} floor="cnc" onOpenMasterReadiness={() => {}}
+      rows={[{ jcNo: "P0556", partCode: "R272" }]}
+      finishDateRows={[
+        { jcNo: "P0556", partCode: "R272", plannedDispatchDateAtRmReceipt: "", currentProbableDispatchDate: "29-Sept-26" },
+      ]} />
+  )
+
+  expect(markup).toContain("Not recorded")
+  expect(markup).toContain("29-Sept-26")
+})

@@ -4,13 +4,20 @@
 
 The Job Cards tab is a compact one-row-per-Job-Card register. It is for finding a Job Card, not displaying its complete history.
 
-Planned Finish Date shows the planner's saved initial completion forecast for
-the Job Card's RM receipt. Current Estimated Finish shows the latest forecast
-across the selected route's setups, including remaining downstream work. It
-updates when planning recalculates production progress and machine constraints;
-the saved initial date does not move with that forecast. Both use the same dates
-as Production Dashboard, matched by Job Card and part within the selected floor.
-An unavailable forecast displays `-`, not a guessed finish date.
+Planned Finish Date shows the immutable first valid completion forecast created
+from a Job Card's first Raw Material receipt event. The receipt creates a durable
+baseline request; the first planning refresh that can calculate a finish date
+finalizes it exactly once. Dashboard refreshes, temporary missing source data,
+later receipts, production progress, and machine constraints never replace it.
+Legacy Job Cards without a durable receipt-linked baseline display
+`Not recorded`; a current forecast must never be substituted or backfilled as
+historical evidence.
+
+Current Estimated Finish shows the latest forecast across the selected route's
+setups, including remaining downstream work. It updates when planning
+recalculates production progress and machine constraints. Both values are
+matched by Job Card and part within the selected floor. An unavailable current
+forecast displays `-`.
 
 Use the table's per-column filters, including Job Card. The register does not have a separate search strip. Setup Completion and Dispatch Approval remain visible together; selecting a machine for Setup Completion fills its current Job Card and setup from planning.
 
