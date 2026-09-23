@@ -159,6 +159,10 @@ next reserved work and finish earlier than their existing plan. Required tooling
 does not prevent reassignment when its shared capacity is available for the run.
 WIP availability, tooling capacity, physical machine locks,
 planner decisions and minimum parallel-run rules remain binding.
+Compatible consecutive setups and matching work across Job Cards also follow
+the [machine continuity preference](job-cards.md#machine-continuity-between-setups).
+This can keep work on its preceding machine and rebalance other unstarted work
+when a separate machine provides no earlier completion.
 
 Within one physical machine's queue, unstarted setups follow effective material
 availability: Raw Material for the first setup and pooled WIP availability for

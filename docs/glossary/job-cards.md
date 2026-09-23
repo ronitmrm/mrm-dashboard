@@ -71,6 +71,29 @@ excluded.
 
 ## Setup Time
 
+### Machine continuity between setups
+
+Consecutive setups of the same Job Card and selected route prefer the same
+compatible physical machine when using a separate machine provides no useful
+overlap. This preference includes reuse of collets, inserts and settings; it
+does not depend on sharing a Tooling Master code.
+The same preference applies to repeating the same part, route option and setup
+across Job Cards after an existing running or completed setup. Job quantities,
+WIP and production records remain separate.
+
+Useful overlap means a feasible separate-machine start before the preceding
+setup finishes that improves completion by at least one working day, the
+planner's date resolution. Existing material, pooled actual-WIP, tooling and
+machine-availability gates still apply. Forecast-only downstream work does not
+reserve a physical machine before its actual-WIP gate is satisfied.
+
+Where feasible, the next setup follows its predecessor immediately. Other
+unstarted automatic assignments may rebalance to compatible machines. Actual
+shop-floor work, explicit planner placements and higher-priority commitments
+remain protected. Continuity must not postpone the setup's existing forecast
+finish; it is a preference, not permission to delay delivery. Setup and quality
+approval remain required, and unrecorded changeover savings are not invented.
+
 - Machinist setup time: Pre Setting start to Setting complete.
 - QC wait: Setting complete to QC approval.
 - Machine-start wait: QC approval to the first Production Session start.
