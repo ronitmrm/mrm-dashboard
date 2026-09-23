@@ -1,6 +1,6 @@
 const numericText = (value: unknown) => String(value ?? "").trim()
 
-export function formatOnePieceWeight(value: unknown) {
+export function formatMasterDecimal(value: unknown) {
   const input = numericText(value)
   if (!input) return "-"
   const parsed = Number(input)

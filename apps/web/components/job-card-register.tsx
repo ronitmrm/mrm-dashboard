@@ -14,6 +14,10 @@ type Row = Record<string, unknown>
 const text = (value: unknown) => String(value ?? "").trim()
 const first = (row: Row, keys: string[]) => keys.map((key) => text(row[key])).find(Boolean) ?? "-"
 const numeric = (value: unknown) => Number.isFinite(Number(value)) ? Number(value) : 0
+const jobCardKey = (row: Row) => [
+  first(row, ["jcNo", "JobCardNo", "jobCard"]),
+  first(row, ["partCode", "itemCode", "PART CODE"]),
+].map((value) => value.toUpperCase()).join("|")
 
 function jobCardProgress(row: Row) {
   const ordered = numeric(row.orderPcs ?? row.orderedQty ?? row["ORD. PCS."])
@@ -34,15 +38,18 @@ function jobCardStage(row: Row) {
 
 export function JobCardRegister({
   actionNeededCount,
+  finishDateRows,
   floor,
   onOpenMasterReadiness,
   rows,
 }: {
   actionNeededCount: number
+  finishDateRows: Row[]
   floor: ProductionFloorCode
   onOpenMasterReadiness: () => void
   rows: Row[]
 }) {
+  const finishDatesByJobCard = new Map(finishDateRows.map((row) => [jobCardKey(row), row]))
   return (
  <SectionCard>
       <CardHeader className="gap-3">
@@ -78,13 +85,14 @@ export function JobCardRegister({
         <div className="rounded-md border min-w-0">
  <OperationalTable containerClassName="max-h-[70vh]" excelFilters>
             <TableHeader className="sticky top-0 z-10 bg-background"><TableRow>
-              <TableHead data-filterable="true">Job Card</TableHead><TableHead>Part</TableHead><TableHead>Description</TableHead><TableHead>FG PO</TableHead><TableHead className="text-right">Order Qty</TableHead><TableHead>Stage</TableHead><TableHead>Production Progress</TableHead><TableHead>Route</TableHead><TableHead />
+              <TableHead data-filterable="true">Job Card</TableHead><TableHead>Part</TableHead><TableHead>Description</TableHead><TableHead>FG PO</TableHead><TableHead className="text-right">Order Qty</TableHead><TableHead>Stage</TableHead><TableHead title="Saved initial completion forecast at RM receipt">Planned Finish Date</TableHead><TableHead title="Latest completion forecast across all route setups; updates after planning recalculates">Current Estimated Finish</TableHead><TableHead>Production Progress</TableHead><TableHead>Route</TableHead><TableHead />
             </TableRow></TableHeader>
             <TableBody>{rows.length ? rows.map((row) => {
               const jobCard = first(row, ["jcNo", "JobCardNo", "jobCard"])
               const href = jobCardWorkspaceHref(jobCard, floor)
               const progress = jobCardProgress(row)
               const finishedPieces = numeric(row.finalSetupGoodPieces)
+              const finishDates = finishDatesByJobCard.get(jobCardKey(row))
               return <TableRow key={jobCard}>
                 <TableCell><Link className="font-semibold text-primary hover:underline" href={href}>{jobCard}</Link></TableCell>
                 <TableCell>{first(row, ["partCode", "itemCode", "PART CODE"])}</TableCell>
@@ -92,11 +100,13 @@ export function JobCardRegister({
                 <TableCell>{first(row, ["fgPoNo", "FG PO NO."])}</TableCell>
                 <TableCell className="text-right tabular-nums">{first(row, ["orderPcs", "orderedQty", "ORD. PCS."])}</TableCell>
                 <TableCell>{jobCardStage(row)}</TableCell>
+                <TableCell>{text(finishDates?.plannedDispatchDateAtRmReceipt) || "-"}</TableCell>
+                <TableCell>{text(finishDates?.currentProbableDispatchDate) || "-"}</TableCell>
  <TableCell className="min-w-40"><div className="mb-1 flex justify-between gap-2 text-xs"><span>{progress.toFixed(1)}%</span><span>{new Intl.NumberFormat("en-IN").format(finishedPieces)} finished</span></div><div className="h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-[var(--color-positive-bg)]" style={{ width: `${progress}%` }} /></div></TableCell>
                 <TableCell>{first(row, ["optionNumber", "selectedOption", "routeStatus"])}</TableCell>
                 <TableCell><Button asChild size="sm" variant="outline"><Link href={href}>Open <ExternalLink /></Link></Button></TableCell>
               </TableRow>
-            }) : <TableRow><TableCell colSpan={9} className="py-10 text-center text-muted-foreground">No Job Cards match this search.</TableCell></TableRow>}</TableBody>
+            }) : <TableRow><TableCell colSpan={11} className="py-10 text-center text-muted-foreground">No Job Cards match this search.</TableCell></TableRow>}</TableBody>
  </OperationalTable>
         </div>
       </CardContent>
