@@ -1123,7 +1123,10 @@ describe("production and shop-floor workflows", () => {
         payload: { doneBy: "OP-2", partCode: itemUid },
         stage: "raw_material_at_machine",
       })
-    ).rejects.toThrow(/active setup/i)
+    ).rejects.toMatchObject({
+      status: 409,
+      message: expect.stringContaining(`Job Card ${firstJobCard}, Setup 1`),
+    })
 
     await repository.recordSetupCompletion({
       completedBy: "OP-1",

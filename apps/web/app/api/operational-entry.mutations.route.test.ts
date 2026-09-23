@@ -10,6 +10,7 @@ const dependencies = vi.hoisted(() => ({
   upsertRawMaterialReceipts: vi.fn(),
   upsertCycleStandard: vi.fn(),
   startBulkProductionSessionDowntime: vi.fn(),
+  recordShopFloorStage: vi.fn(),
   executePostgresOperationalEntry: vi.fn(),
   isPostgresOperationalEntryType: vi.fn(),
   requestRefresh: vi.fn(),
@@ -17,6 +18,7 @@ const dependencies = vi.hoisted(() => ({
 
 vi.mock("@workspace/db", async (importOriginal) => ({
   DuplicateMasterError: (await importOriginal<typeof import("@workspace/db")>()).DuplicateMasterError,
+  ShopFloorConflictError: (await importOriginal<typeof import("@workspace/db")>()).ShopFloorConflictError,
   createAuthorizationRepository: () => ({
     listAllGrantedCapabilities: dependencies.listAllGrantedCapabilities,
   }),
@@ -31,6 +33,7 @@ vi.mock("@workspace/db", async (importOriginal) => ({
     upsertRawMaterialReceipt: dependencies.upsertRawMaterialReceipt,
     upsertRawMaterialReceipts: dependencies.upsertRawMaterialReceipts,
     startBulkProductionSessionDowntime: dependencies.startBulkProductionSessionDowntime,
+    recordShopFloorStage: dependencies.recordShopFloorStage,
   }),
   createDashboardPlanningRepository: () => ({
     close: dependencies.close,
@@ -85,6 +88,7 @@ vi.mock("@/lib/postgres-operational-entry-server", () => ({
 }))
 
 import { POST } from "./[...path]/route"
+import { ShopFloorConflictError } from "@workspace/db"
 
 function post(
   path: "data-entry" | "data-import",
@@ -124,6 +128,22 @@ describe("production entry mutation API authorization", () => {
   })
 
   afterEach(() => vi.restoreAllMocks())
+
+  it("shows the machine ownership conflict after RM-at-machine authorization succeeds", async () => {
+    dependencies.listAllGrantedCapabilities.mockResolvedValue([
+      "operations.shop_floor.write",
+      "operations.floors.cnc.shop_floor_tasks.shop_floor_material.write",
+    ])
+    const message = "CNC-9 is still assigned to Job Card P1444, Setup 1. Complete the previous item or ask the Planner to release the machine."
+    dependencies.recordShopFloorStage.mockRejectedValue(new ShopFloorConflictError(message))
+
+    const response = await post("data-entry", {
+      entryType: "shop_floor_status", productionFloorCode: "cnc",
+      payload: { jcNo: "P2046", machine: "CNC-9", setupNo: "1", stage: "raw_material_at_machine" },
+    })
+    expect(response.status).toBe(409)
+    expect(await response.json()).toEqual({ error: message })
+  })
 
   it("requires the selected floor's recording permission for bulk breakdown", async () => {
     const body = { entryType: "production_session_bulk_downtime_start", payload: {
