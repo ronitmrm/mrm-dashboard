@@ -19,7 +19,7 @@ test("shows the saved finish and changing current forecast for the matching Job 
   const initial = render("28-Sept-26")
   expect(initial).toContain("Planned Finish Date")
   expect(initial).toContain("Current Estimated Finish")
-  expect(initial).toContain("PO Date")
+  expect(initial).toContain("FG PO Date")
   expect(initial).toContain("2026-09-12")
   expect(initial).toContain("25-Sept-26")
   expect(initial).toContain("28-Sept-26")
