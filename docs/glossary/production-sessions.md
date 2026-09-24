@@ -90,6 +90,9 @@ active setup Item Complete in the same transaction, which releases the machine.
 Shop Floor does not perform a second Item Finished or Setup Completion action.
 The other close reasons end only the current session so the setup can continue in
 a later session.
+When a setup runs on parallel machines, each machine keeps its own Shop Floor
+setup state. Starting or finishing work on one machine does not move or finish
+the other machine's setup state.
 
 A Counter session requires its end counter before it can close. A Weight session
 may close after its work ends even when weighing is not yet practical. It then
