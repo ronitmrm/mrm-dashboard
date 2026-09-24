@@ -9,6 +9,7 @@ import { JobCardRegister } from "./job-card-register"
 test("shows the saved finish and changing current forecast for the matching Job Card and part", () => {
   const render = (currentProbableDispatchDate: string) => renderToStaticMarkup(
     <JobCardRegister actionNeededCount={0} floor="cnc" onOpenMasterReadiness={() => {}}
+      routeRows={[]} productionRows={[]}
       rows={[{ jcNo: "P2132", partCode: "R131" }]}
       finishDateRows={[
         { jcNo: "P2132", partCode: "R131", plannedDispatchDateAtRmReceipt: "25-Sept-26", currentProbableDispatchDate },
@@ -30,6 +31,7 @@ test("shows the saved finish and changing current forecast for the matching Job 
 test("does not invent an RM-receipt finish for a legacy Job Card", () => {
   const markup = renderToStaticMarkup(
     <JobCardRegister actionNeededCount={0} floor="cnc" onOpenMasterReadiness={() => {}}
+      routeRows={[]} productionRows={[]}
       rows={[{ jcNo: "P0556", partCode: "R272" }]}
       finishDateRows={[
         { jcNo: "P0556", partCode: "R272", plannedDispatchDateAtRmReceipt: "", currentProbableDispatchDate: "29-Sept-26" },
@@ -41,16 +43,28 @@ test("does not invent an RM-receipt finish for a legacy Job Card", () => {
   expect(markup).toContain("Progress unavailable")
 })
 
-test("shows overall setup progress even before the final setup produces finished pieces", () => {
-  const markup = renderToStaticMarkup(
+test("shows setup-weighted progress from existing snapshots without new cached progress fields", () => {
+  const render = (secondSetupGood: number) => renderToStaticMarkup(
     <JobCardRegister actionNeededCount={0} floor="cnc" onOpenMasterReadiness={() => {}}
-      rows={[{ jcNo: "JC-1", orderPcs: 500, finalSetupGoodPieces: 0,
-        productionProgressPercent: 50, productionSetupCount: 2, completedProductionSetupCount: 1 }]}
+      rows={[{ jcNo: "JC-1", partCode: "PART-1", optionNumber: "1", orderPcs: 500 }]}
+      routeRows={[
+        { partNo: "PART-1", optionNumber: "1", setupNo: "1.1", displaySetupNo: "1" },
+        { partNo: "PART-1", optionNumber: "1", setupNo: "1.2", displaySetupNo: "2" },
+        { partNo: "PART-1", optionNumber: "2", setupNo: "3" },
+      ]}
+      productionRows={[
+        { jobCard: "JC-1", partCode: "PART-1", setupNo: "1", actualQty: 300 },
+        { jobCard: "JC-1", partCode: "PART-1", setupNo: "1", actualQty: 300 },
+        { jobCard: "JC-1", partCode: "PART-1", setupNo: "2", actualQty: secondSetupGood },
+        { jobCard: "OTHER", partCode: "PART-1", setupNo: "2", actualQty: 500 },
+      ]}
       finishDateRows={[]} />
   )
+  const markup = render(0)
   expect(markup).toContain("50.0%")
   expect(markup).toContain("1/2 setups complete")
   expect(markup).toContain('role="progressbar"')
   expect(markup).toContain('aria-valuenow="50"')
   expect(markup).toContain('width:50%')
+  expect(render(250)).toContain('aria-valuenow="75"')
 })

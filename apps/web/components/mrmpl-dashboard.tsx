@@ -7783,6 +7783,8 @@ function JobCardsPanel({
     <section className="grid gap-4">
       <JobCardRegister
         rows={jobCardRows}
+        routeRows={asArray(productionControl.routeMasterRows)}
+        productionRows={asArray(productionControl.productionOutputRows)}
         finishDateRows={asArray(productionControl.productionDashboardRows)}
         floor={productionFloorCode}
         actionNeededCount={asArray(productionControl.allWorkOrderGaps).length}

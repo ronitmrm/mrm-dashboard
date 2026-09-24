@@ -6,6 +6,7 @@ import { SectionCard, CardContent, CardHeader, CardTitle } from "@workspace/ui/c
 import { OperationalTable, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@workspace/ui/components/table"
 import { ExternalLink } from "lucide-react"
 import Link from "next/link"
+import { useMemo } from "react"
 
 import { jobCardWorkspaceHref } from "@/lib/unified-navigation"
 import { MetricSummary } from "@/components/ui/golden-patterns"
@@ -18,6 +19,7 @@ const jobCardKey = (row: Row) => [
   first(row, ["jcNo", "JobCardNo", "jobCard"]),
   first(row, ["partCode", "itemCode", "PART CODE"]),
 ].map((value) => value.toUpperCase()).join("|")
+const key = (...values: unknown[]) => values.map((value) => text(value).replace(/\s+/g, "").toUpperCase()).join("|")
 
 function jobCardProgress(row: Row) {
   return row.productionProgressPercent == null
@@ -41,14 +43,53 @@ export function JobCardRegister({
   finishDateRows,
   floor,
   onOpenMasterReadiness,
+  productionRows,
+  routeRows,
   rows,
 }: {
   actionNeededCount: number
   finishDateRows: Row[]
   floor: ProductionFloorCode
   onOpenMasterReadiness: () => void
+  productionRows: Row[]
+  routeRows: Row[]
   rows: Row[]
 }) {
+  // Derive this display metric from established snapshot data, so web and worker
+  // releases do not have to introduce new cached fields at the same instant.
+  const progressRows = useMemo(() => {
+    const goodBySetup = new Map<string, number>()
+    for (const row of productionRows) {
+      const setupKey = key(row.jobCard, row.partCode, row.setupNo)
+      const good = numeric(row.actualQty) || Math.max(numeric(row.outputQty) - numeric(row.rejectQty), 0)
+      goodBySetup.set(setupKey, (goodBySetup.get(setupKey) ?? 0) + good)
+    }
+    return rows.map((row) => {
+      const part = first(row, ["partCode", "itemCode", "PART CODE"])
+      const jobCard = first(row, ["jcNo", "JobCardNo", "jobCard"])
+      const option = first(row, ["optionNumber", "selectedOption"])
+      const ordered = numeric(row.orderPcs ?? row.orderedQty ?? row["ORD. PCS."])
+      const setups = new Map<string, number>()
+      for (const route of routeRows) {
+        if (key(route.partNo ?? route.partCode, route.optionNumber) !== key(part, option)) continue
+        const rawSetup = text(route.setupNo)
+        const prefixed = rawSetup.match(/^(\d+)\.(\d+)$/)
+        const setup = text(route.displaySetupNo) || (prefixed?.[1] === option ? prefixed[2] : rawSetup)
+        if (!setup) continue
+        const good = goodBySetup.get(key(jobCard, part, setup))
+          ?? goodBySetup.get(key(jobCard, part, rawSetup)) ?? 0
+        setups.set(setup, ordered > 0 ? Math.min(Math.max(good / ordered, 0), 1) : 0)
+      }
+      const progress = [...setups.values()]
+      return {
+        ...row,
+        productionProgressPercent: progress.length && ordered > 0
+          ? progress.reduce((sum, value) => sum + value, 0) / progress.length * 100 : null,
+        productionSetupCount: progress.length,
+        completedProductionSetupCount: progress.filter((value) => value >= 1).length,
+      }
+    })
+  }, [rows, routeRows, productionRows])
   const finishDatesByJobCard = new Map(finishDateRows.map((row) => [jobCardKey(row), row]))
   return (
  <SectionCard>
@@ -68,13 +109,13 @@ export function JobCardRegister({
             { label: "Job Cards", value: rows.length, tone: "information" },
             {
               label: "Awaiting RM",
-              value: rows.filter((row) => jobCardStage(row) === "Awaiting RM")
+              value: progressRows.filter((row) => jobCardStage(row) === "Awaiting RM")
                 .length,
               tone: "warning"
             },
             {
               label: "Production Complete",
-              value: rows.filter(
+              value: progressRows.filter(
                 (row) => jobCardStage(row) === "Production complete"
               ).length,
               description: "Completed, not yet in dispatch stage",
@@ -87,7 +128,7 @@ export function JobCardRegister({
             <TableHeader className="sticky top-0 z-10 bg-background"><TableRow>
               <TableHead data-filterable="true">Job Card</TableHead><TableHead>Part</TableHead><TableHead>Description</TableHead><TableHead>FG PO</TableHead><TableHead className="text-right">Order Qty</TableHead><TableHead>Stage</TableHead><TableHead title="Immutable first valid forecast linked to the first RM receipt; legacy unavailable values are not guessed">Planned Finish Date</TableHead><TableHead title="Latest completion forecast across all route setups; updates after planning recalculates">Current Estimated Finish</TableHead><TableHead>Production Progress</TableHead><TableHead>Route</TableHead><TableHead />
             </TableRow></TableHeader>
-            <TableBody>{rows.length ? rows.map((row) => {
+            <TableBody>{progressRows.length ? progressRows.map((row) => {
               const jobCard = first(row, ["jcNo", "JobCardNo", "jobCard"])
               const href = jobCardWorkspaceHref(jobCard, floor)
               const progress = jobCardProgress(row)
