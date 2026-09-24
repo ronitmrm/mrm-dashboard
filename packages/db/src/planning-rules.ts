@@ -13,6 +13,16 @@ export function machineTypeForFamily(
   return types.size === 1 ? [...types.values()][0]! : ""
 }
 
+export function formatPlanningFinish(date: unknown, workingHours: unknown) {
+  const label = String(date ?? "").trim()
+  if (!label) return "-"
+  if (typeof workingHours !== "number" || !Number.isFinite(workingHours)) return label
+  const minutes = Math.round(Math.max(0, workingHours) * 60)
+  const hours = Math.floor(minutes / 60)
+  const remainder = minutes % 60
+  return `${label} · ${hours}h${remainder ? ` ${remainder}m` : ""} into working day`
+}
+
 export type SourcePlannerDecision = Record<string, unknown> & {
   createdAt: string;
   source: "source-workbook";

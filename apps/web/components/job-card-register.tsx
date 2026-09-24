@@ -2,6 +2,7 @@
 
 import type { ProductionFloorCode } from "@workspace/db/production-floors"
 import { buildJobCardProgress } from "@workspace/db/job-card-progress"
+import { formatPlanningFinish } from "@workspace/db/planning-rules"
 import { Button } from "@workspace/ui/components/button"
 import { SectionCard, CardContent, CardHeader, CardTitle } from "@workspace/ui/components/card"
 import { OperationalTable, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@workspace/ui/components/table"
@@ -145,7 +146,7 @@ export function JobCardRegister({
                 <TableCell className="text-right tabular-nums">{first(row, ["orderPcs", "orderedQty", "ORD. PCS."])}</TableCell>
                 <TableCell>{jobCardStage(row)}</TableCell>
                 <TableCell>{plannedFinish || <span className="text-muted-foreground">Not recorded</span>}</TableCell>
-                <TableCell>{text(finishDates?.currentProbableDispatchDate) || "-"}</TableCell>
+                <TableCell>{formatPlanningFinish(finishDates?.currentProbableDispatchDate, finishDates?.currentProbableDispatchWorkingHours)}</TableCell>
                 <TableCell className="min-w-48">
                   {progress === null ? <span className="text-xs text-muted-foreground">Progress unavailable</span> : (
                     <div className="space-y-1.5 py-1" title="Each route setup contributes an equal share of overall progress">
