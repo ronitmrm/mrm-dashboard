@@ -239,6 +239,7 @@ describe("production and shop-floor workflows", () => {
     })
 
     expect(workspace.jobCard.casting).toBe("5.58")
+    expect(workspace.analytics.material.requiredKg).toBeCloseTo(0.5022)
     const setupId = workspace.setups[0]!.id
     await pool.query(`INSERT INTO quality.first_piece_inspections (
       organization_id, work_order_id, operation_setup_id, inspected_at, status,
