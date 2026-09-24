@@ -169,7 +169,7 @@ describe("independent master permissions", () => {
     ).toEqual([])
   })
   it("keeps setup checklist grants separate for each unit", () => {
-    expect(scopedMasters).toHaveLength(76)
+    expect(scopedMasters).toHaveLength(80)
     expect(
       scopedMasters
         .filter(({ master }) => master === "setup_checklist_master")
@@ -181,6 +181,9 @@ describe("independent master permissions", () => {
     expect(new Set(masterPermissionOptions.map(({ key }) => key)).size).toBe(
       masterPermissionOptions.length
     )
+    expect(supportedMasterActions(scopedMasters.find(
+      ({ master, unit }) => master === "production_break_schedule" && unit === "cnc"
+    )!)).toEqual(["read", "save"])
   })
 
   it("preserves separate customer create/update actions and omits unsupported material-rate lifecycle actions", () => {

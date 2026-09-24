@@ -77,6 +77,16 @@ by every production unit. Shop Floor uses the resulting planner assignment.
 
 A Production Session is one uninterrupted period in which one operator runs one machine for one Job Card, option, and setup. Operator, shift, item, job, option, or setup changes end the current session. Downtime belongs to the session and does not end it.
 
+Scheduled production breaks are maintained per production unit in a break-time
+master as daily IST start and end times. CNC-01 initially has 02:00–02:15,
+10:30–10:45 and 16:30–16:45. A session retains the schedule in force when it
+starts; later master edits affect new sessions, not existing sessions. Only the
+portion overlapping a session is excluded from its
+productive runtime and target quantity. A session outside a break loses no time;
+06:00–13:00 loses 15 minutes for a 10:30–10:45 break. Breaks are planned
+non-production time, not downtime events or machine faults. Where a recorded
+downtime interval overlaps a break, that minute is excluded only once.
+
 Shop Floor starts and closes sessions. Quality may also close CNC sessions. Quality, Shop Floor, and Machinist may record downtime; only Quality may record rejection.
 
 Quality Control is the working queue for both pending first-piece inspections

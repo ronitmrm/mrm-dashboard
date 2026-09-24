@@ -6,6 +6,12 @@ import type { PoolClient } from "pg"
 
 import { queueDashboardRefresh } from "./dashboard-refresh-queue"
 import {
+  productionBreakMinutes,
+  validateProductionBreaks,
+  type ProductionBreak,
+  type TimeInterval,
+} from "./production-breaks"
+import {
   repositoryPool,
   withTransaction as transaction,
   type RepositoryPoolOptions,
@@ -130,7 +136,9 @@ function positiveWholeNumber(value: number, label: string) {
 }
 
 function productionSessionTiming(input: {
+  breaks: ProductionBreak[]
   cycleTimeSeconds: number
+  downtime: TimeInterval[]
   downtimeMinutes: number
   endedAt: Date
   startedAt: Date
@@ -139,14 +147,70 @@ function productionSessionTiming(input: {
     Math.round((input.endedAt.getTime() - input.startedAt.getTime()) / 60_000),
     0
   )
-  const runtimeMinutes = Math.max(elapsedMinutes - input.downtimeMinutes, 0)
+  const { breakMinutes, additionalBreakMinutes } = productionBreakMinutes(input)
+  const runtimeMinutes = Math.max(
+    elapsedMinutes - input.downtimeMinutes - additionalBreakMinutes, 0
+  )
   return {
+    additionalBreakMinutes,
+    breakMinutes,
     elapsedMinutes,
     runtimeMinutes,
     targetPieces: input.cycleTimeSeconds > 0
       ? Math.floor((runtimeMinutes * 60) / input.cycleTimeSeconds)
       : 0,
   }
+}
+
+function savedBreaks(payload: Record<string, unknown>) {
+  if (!Array.isArray(payload.breakSchedule)) return null
+  return validateProductionBreaks(payload.breakSchedule.map((value) => {
+    const row = objectRecord(value)
+    return { startTime: String(row.startTime ?? ""), endTime: String(row.endTime ?? "") }
+  }))
+}
+
+function downtimeIntervals(events: unknown, now: Date): TimeInterval[] {
+  if (!Array.isArray(events)) return []
+  return events.flatMap((event) => {
+    const value = objectRecord(event)
+    const startedAt = new Date(String(value.startedAt))
+    const endedAt = value.endedAt ? new Date(String(value.endedAt)) : now
+    return Number.isNaN(startedAt.getTime()) || Number.isNaN(endedAt.getTime())
+      ? [] : [{ startedAt, endedAt }]
+  })
+}
+
+async function readProductionBreaks(
+  client: PoolClient,
+  organizationId: string,
+  floorCode: ProductionFloorCode
+) {
+  const result = await client.query<{ breaks: ProductionBreak[] }>(
+    `SELECT schedule.breaks FROM manufacturing.production_break_schedules schedule
+     JOIN manufacturing.production_floors floor
+       ON floor.id = schedule.production_floor_id
+     WHERE schedule.organization_id = $1 AND floor.code = $2`,
+    [organizationId, floorCode]
+  )
+  return validateProductionBreaks(result.rows[0]?.breaks ?? [])
+}
+
+async function readSessionDowntime(
+  client: PoolClient,
+  sessionId: string
+) {
+  const result = await client.query<{ started_at: Date; ended_at: Date | null }>(
+    `SELECT started_at, ended_at
+     FROM manufacturing.production_session_downtime_events
+     WHERE production_session_id = $1 AND reversed_at IS NULL`,
+    [sessionId]
+  )
+  return result.rows.filter((row): row is { started_at: Date; ended_at: Date } =>
+    row.ended_at !== null).map((row) => ({
+    startedAt: row.started_at,
+    endedAt: row.ended_at,
+  }))
 }
 
 function productionMeasurementMethod(value: string) {
@@ -892,6 +956,89 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
       return result.rows[0].id
     },
 
+    async readProductionBreakSchedule(input: {
+      organizationId: string
+      productionFloorCode: string
+    }) {
+      const floorCode = normalizeProductionFloorCode(input.productionFloorCode)
+      const client = await pool.connect()
+      try {
+        return {
+          breaks: await readProductionBreaks(client, input.organizationId, floorCode),
+          productionFloorCode: floorCode,
+        }
+      } finally {
+        client.release()
+      }
+    },
+
+    async saveProductionBreakSchedule(input: {
+      actorUserId?: string | null
+      breaks: ProductionBreak[]
+      organizationId: string
+      productionFloorCode: string
+    }) {
+      const breaks = validateProductionBreaks(input.breaks)
+      const floorCode = normalizeProductionFloorCode(input.productionFloorCode)
+      return transaction(pool, async (client) => {
+        const floor = await client.query<{ id: string }>(
+          `SELECT id FROM manufacturing.production_floors
+           WHERE organization_id = $1 AND code = $2`,
+          [input.organizationId, floorCode]
+        )
+        if (!floor.rows[0]) throw new Error("Production unit was not found.")
+        await client.query(
+          "SELECT pg_advisory_xact_lock(hashtext('production.breaks'), hashtext($1))",
+          [`${input.organizationId}:${floorCode}`]
+        )
+        const previous = await client.query<{
+          breaks: ProductionBreak[]
+          id: string
+          snapshot: Record<string, unknown>
+        }>(
+          `SELECT id, breaks, to_jsonb(schedule) AS snapshot
+           FROM manufacturing.production_break_schedules schedule
+           WHERE organization_id = $1 AND production_floor_id = $2
+           FOR UPDATE`,
+          [input.organizationId, floor.rows[0].id]
+        )
+        const existing = previous.rows[0]
+        if (existing && JSON.stringify(validateProductionBreaks(existing.breaks)) ===
+          JSON.stringify(breaks)) {
+          return { breaks, productionFloorCode: floorCode }
+        }
+        const saved = await client.query<{
+          id: string
+          snapshot: Record<string, unknown>
+        }>(
+          existing
+            ? `UPDATE manufacturing.production_break_schedules schedule
+               SET breaks = $1, updated_at = now(), updated_by_user_id = $2
+               WHERE id = $3 RETURNING id, to_jsonb(schedule) AS snapshot`
+            : `INSERT INTO manufacturing.production_break_schedules schedule (
+                 breaks, updated_by_user_id, organization_id, production_floor_id
+               ) VALUES ($1, $2, $3, $4)
+               RETURNING id, to_jsonb(schedule) AS snapshot`,
+          existing
+            ? [breaks, input.actorUserId ?? null, existing.id]
+            : [breaks, input.actorUserId ?? null, input.organizationId, floor.rows[0].id]
+        )
+        await client.query(
+          `INSERT INTO audit.events (
+             organization_id, event_type, target_schema, target_table,
+             target_id, actor_user_id, reason, before_state, after_state,
+             source_system, source_table, source_id
+           ) VALUES ($1, 'production_break_schedule.updated', 'manufacturing',
+             'production_break_schedules', $2, $3, $4, $5, $6,
+             'mrm-dashboard', 'production_break_schedule', $7)`,
+          [input.organizationId, saved.rows[0]!.id, input.actorUserId ?? null,
+            "Production break schedule changed", existing?.snapshot ?? null,
+            saved.rows[0]!.snapshot, randomUUID()]
+        )
+        return { breaks, productionFloorCode: floorCode }
+      })
+    },
+
     async upsertRawMaterialReceipt(input: RawMaterialReceiptInput) {
       return (await upsertRawMaterialReceipts([input]))[0]!
     },
@@ -1126,6 +1273,9 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         const cycleTimeSeconds = Number.isFinite(requestedCycleTime)
           ? Math.max(requestedCycleTime, 0)
           : 0
+        const breakSchedule = await readProductionBreaks(
+          client, input.organizationId, floorCode
+        )
 
         const previous = await client.query<{
           end_count: string | null
@@ -1162,6 +1312,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           : null
         const sourcePayload = {
           ...input.sourcePayload,
+          breakSchedule,
           carriedFromSessionId,
           cycleTime: cycleTimeSeconds,
           dailySequence,
@@ -1395,7 +1546,9 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         )
         const timing = current.ended_at
           ? productionSessionTiming({
+              breaks: savedBreaks(current.source_payload) ?? [],
               cycleTimeSeconds: Number(current.cycle_time_seconds),
+              downtime: await readSessionDowntime(client, input.sessionId),
               downtimeMinutes: Number(totalDowntime.rows[0]!.minutes),
               endedAt: current.ended_at,
               startedAt: current.started_at,
@@ -1407,6 +1560,8 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           downtimeMinutes: Number(totalDowntime.rows[0]!.minutes),
           downtimeReason: input.reasonName,
           ...(timing ? {
+            additionalBreakMinutes: timing.additionalBreakMinutes,
+            breakMinutes: timing.breakMinutes,
             runtimeMinutes: timing.runtimeMinutes,
             targetQty: timing.targetPieces,
           } : {}),
@@ -2065,8 +2220,13 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         )
         const downtimeMinutes = Number(downtime.rows[0]!.minutes)
         const cycleTimeSeconds = Number(current.cycle_time_seconds)
+        const breaks = savedBreaks(current.source_payload) ?? await readProductionBreaks(
+          client, input.organizationId, current.production_floor_code
+        )
         const timing = productionSessionTiming({
+          breaks,
           cycleTimeSeconds,
+          downtime: await readSessionDowntime(client, input.sessionId),
           downtimeMinutes,
           endedAt,
           startedAt: current.started_at,
@@ -2112,6 +2272,9 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           ...current.source_payload,
           ...input,
           actualQty: output.goodPieces,
+          additionalBreakMinutes: timing.additionalBreakMinutes,
+          breakMinutes: timing.breakMinutes,
+          breakSchedule: breaks,
           downtimeMinutes,
           endTime: endedAt.toISOString(),
           measurementMethod: current.measurement_method,
@@ -2344,7 +2507,9 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
               rejectedPieces,
             })
         const timing = productionSessionTiming({
+          breaks: savedBreaks(current.source_payload) ?? [],
           cycleTimeSeconds: Number(current.cycle_time_seconds),
+          downtime: await readSessionDowntime(client, input.sessionId),
           downtimeMinutes,
           endedAt,
           startedAt: current.started_at,
@@ -2353,6 +2518,8 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           ...current.source_payload,
           ...input,
           actualQty: output.goodPieces,
+          additionalBreakMinutes: timing.additionalBreakMinutes,
+          breakMinutes: timing.breakMinutes,
           correctionReason,
           correctedAt: new Date().toISOString(),
           downtimeMinutes,
@@ -2630,10 +2797,22 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           [selectedRoute?.id ?? null]
         ),
         pool.query<Record<string, unknown>>(
-          `SELECT * FROM reporting.production_session_summary
-           WHERE organization_id = $1 AND production_floor_code = $2
-             AND lower(job_card_number) = lower($3)
-           ORDER BY started_at DESC`,
+          `SELECT summary.*, session.source_payload AS "sessionPayload",
+             COALESCE(downtime.intervals, '[]'::jsonb) AS "downtimeIntervals"
+           FROM reporting.production_session_summary summary
+           JOIN manufacturing.production_sessions session ON session.id = summary.id
+           LEFT JOIN LATERAL (
+             SELECT jsonb_agg(jsonb_build_object(
+               'startedAt', event.started_at, 'endedAt', event.ended_at
+             )) AS intervals
+             FROM manufacturing.production_session_downtime_events event
+             WHERE event.production_session_id = summary.id
+               AND event.reversed_at IS NULL
+               AND summary.status = 'open'
+           ) downtime ON true
+           WHERE summary.organization_id = $1 AND summary.production_floor_code = $2
+             AND lower(summary.job_card_number) = lower($3)
+           ORDER BY summary.started_at DESC`,
           [input.organizationId, floorCode, jobCardNumber]
         ),
         pool.query<Record<string, unknown>>(
@@ -3111,7 +3290,34 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             : null,
         })
       })
-      const sessionRows = sessionsResult.rows.map((row) => ({
+      const openSessionsNeedCurrentBreaks = sessionsResult.rows.some((row) =>
+        row.status === "open" && savedBreaks(objectRecord(row.sessionPayload)) === null
+      )
+      let currentBreaks: ProductionBreak[] = []
+      if (openSessionsNeedCurrentBreaks) {
+        const client = await pool.connect()
+        try {
+          currentBreaks = await readProductionBreaks(client, input.organizationId, floorCode)
+        } finally {
+          client.release()
+        }
+      }
+      const now = new Date()
+      const sessions = sessionsResult.rows.map((row) => {
+        const { sessionPayload, downtimeIntervals: events, ...session } = row
+        if (row.status !== "open") return session
+        const startedAt = new Date(String(row.started_at))
+        const timing = productionSessionTiming({
+          breaks: savedBreaks(objectRecord(sessionPayload)) ?? currentBreaks,
+          cycleTimeSeconds: Number(row.cycle_time_seconds),
+          downtime: downtimeIntervals(events, now),
+          downtimeMinutes: Number(row.downtime_minutes),
+          endedAt: now,
+          startedAt,
+        })
+        return { ...session, runtime_minutes: timing.runtimeMinutes }
+      })
+      const sessionRows = sessions.map((row) => ({
         ...row,
         downtimeMinutes: Number(row.downtime_minutes ?? 0),
         endedAt: row.ended_at ? String(row.ended_at) : null,
@@ -3259,7 +3465,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           ...route,
           selected: route.id === selectedRoute?.id,
         })),
-        sessions: sessionsResult.rows,
+        sessions,
         setups: setupsResult.rows,
         setupTimings,
       }
@@ -3305,6 +3511,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             session.total_pieces AS "totalPieces",
             session.quantity_good AS "goodPieces",
             session.quantity_rejected AS "rejectedPieces",
+            session.source_payload AS "sessionPayload",
             CASE
               WHEN production_entry.source_payload ? 'targetQty'
                 THEN (production_entry.source_payload->>'targetQty')::bigint
@@ -3450,14 +3657,50 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         "elapsedMinutes",
         "runtimeMinutes",
       ] as const
+      const needsCurrentBreaks = result.rows.some((row) =>
+        row.status === "open" && savedBreaks(objectRecord(row.sessionPayload)) === null
+      )
+      let currentBreaks: ProductionBreak[] = []
+      if (needsCurrentBreaks) {
+        const client = await pool.connect()
+        try {
+          currentBreaks = await readProductionBreaks(
+            client, input.organizationId, floorCode
+          )
+        } finally {
+          client.release()
+        }
+      }
+      const now = new Date()
       return {
         limit,
         offset,
         productionFloorCode: floorCode,
         rows: result.rows.map((row) => {
-          const mapped = { ...row }
+          const { sessionPayload, ...mapped } = row
           for (const key of numericKeys) {
             mapped[key] = row[key] === null ? null : Number(row[key] ?? 0)
+          }
+          const payload = objectRecord(sessionPayload)
+          if (row.status === "closed") {
+            mapped.breakMinutes = Number(payload.breakMinutes ?? 0)
+            if (payload.runtimeMinutes !== undefined) {
+              mapped.runtimeMinutes = Number(payload.runtimeMinutes)
+            }
+          } else {
+            const startedAt = new Date(String(row.startedAt))
+            const timing = productionSessionTiming({
+              breaks: savedBreaks(payload) ?? currentBreaks,
+              cycleTimeSeconds: Number(row.cycleTimeSeconds),
+              downtime: downtimeIntervals(row.downtimeEvents, now),
+              downtimeMinutes: Number(row.downtimeMinutes),
+              endedAt: now,
+              startedAt,
+            })
+            mapped.breakMinutes = timing.breakMinutes
+            mapped.elapsedMinutes = timing.elapsedMinutes
+            mapped.runtimeMinutes = timing.runtimeMinutes
+            mapped.targetPieces = timing.targetPieces
           }
           return mapped
         }),

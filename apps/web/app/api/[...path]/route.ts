@@ -7,10 +7,12 @@ import {
 } from "@workspace/db"
 import { parseProductionFloorCode, ProductionUnitAccessError } from "@workspace/db/production-floors"
 import { validConfirmedPrioritySetupNumbers } from "@workspace/db/planning-rules"
+import { validateProductionBreaks } from "@workspace/db/production-breaks"
 import { NextResponse, type NextRequest } from "next/server"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { productionMasterCapability } from "../../../lib/auth/production-master-access"
+import { masterCapability } from "../../../lib/auth/master-capabilities"
 import { isProductionOperationalEntry, operationalEntryWriteScope, OperationalEntryAccessError } from "../../../lib/auth/operational-entry-access"
 import { operationalEntryCapability } from "../../../lib/auth/operational-entry-capabilities"
 import { masterRecordCapability } from "../../../lib/auth/master-record-access"
@@ -815,6 +817,19 @@ async function get(request: NextRequest, context: RouteContext) {
       )
     }
 
+    if (path === "production-break-schedule") {
+      const floor = parseProductionFloorCode(search.get("floor"))
+      if (!floor) throw new RouteError(400, "A valid production unit is required.")
+      return json(await withProductionRepository(
+        request,
+        masterCapability("production_break_schedule", "read", floor),
+        ({ organizationId, repository }) => repository.readProductionBreakSchedule({
+          organizationId,
+          productionFloorCode: floor,
+        })
+      ))
+    }
+
     if (path === "dashboard") {
       return json(
         await readPostgresDashboard(
@@ -1209,6 +1224,35 @@ async function post(request: NextRequest, context: RouteContext) {
           message: "Route change saved.",
         })
       )
+    }
+
+    if (path === "production-break-schedule") {
+      const floor = parseProductionFloorCode(body.productionFloorCode)
+      if (!floor) throw new RouteError(400, "A valid production unit is required.")
+      if (!Array.isArray(body.breaks) || body.breaks.length > 24) {
+        throw new RouteError(400, "Enter up to 24 production breaks.")
+      }
+      const rawBreaks: unknown[] = body.breaks
+      let breaks: ReturnType<typeof validateProductionBreaks>
+      try {
+        breaks = validateProductionBreaks(rawBreaks.map((item) => {
+          const row = plainRecord(item)
+          return { startTime: text(row.startTime), endTime: text(row.endTime) }
+        }))
+      } catch (error) {
+        throw new RouteError(400, error instanceof Error ? error.message : "Invalid break times.")
+      }
+      return json(await withProductionRepository(
+        request,
+        masterCapability("production_break_schedule", "save", floor),
+        ({ actorUserId, organizationId, repository }) =>
+          repository.saveProductionBreakSchedule({
+            actorUserId,
+            breaks,
+            organizationId,
+            productionFloorCode: floor,
+          })
+      ))
     }
 
     if (path === "dispatch-approval") {
@@ -2107,6 +2151,7 @@ const knownDashboardApiPaths = new Set([
   "planner-priority",
   "raw-material-rejection",
   "production-sessions",
+  "production-break-schedule",
   "quality-parameter-set",
   "reschedule",
   "reverse-entry",
