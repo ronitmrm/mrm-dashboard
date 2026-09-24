@@ -79,13 +79,26 @@ These are Job Card Analytics, not OEE. OEE requires separate availability, perfo
 
 ## Cycle-Based Planning Capacity
 
-Before a setup has enough production history to project from observed daily
-output, its planned production duration uses the remaining pieces multiplied by
-Cycle Time plus Loading / Unloading Time. CNC-01 has 22.5 productive machine
-hours per working day: three shifts of 7 hours 30 minutes each. Other Production
-Floors retain 8 productive machine hours per working day. Planned duration
-rounds up to a whole working day; Fridays and Planning Calendar holidays are
-excluded.
+Setup and whole-Job-Card forecasts always use remaining good pieces multiplied
+by Cycle Time plus Loading / Unloading Time. Recorded output reduces remaining
+quantity; it never replaces cycle capacity with an average of recorded output
+per day. After a day's production is recorded, the remaining work is forecast
+from the following working date. At 1,000 pieces/day, a 500-piece shortfall adds
+half a working day; a 500-piece surplus removes half a working day.
+
+CNC-01 has 22.5 productive machine hours per working day: three shifts of
+7 hours 30 minutes each. Other Production Floors retain 8 productive hours.
+Finish estimates retain fractional working days, shown as productive hours
+into the finish date, rather than invented wall-clock shift times. Machine
+queue reservations still use whole dates. Fridays and Planning Calendar
+holidays are excluded, and availability and WIP handoff constraints still apply.
+
+Shop Floor Status shows completion of the setup's assigned quantity on that
+machine. Job Card Current Estimated Finish includes all remaining route setups,
+using the same cycle-based supply and remaining-work calculation. Forecast-only
+downstream work does not reserve a machine or bypass actual-WIP readiness, and
+the whole-job finish cannot precede an upstream setup and its handoff buffer.
+The immutable RM-receipt Planned Finish Date remains historical.
 
 ## Setup Time
 

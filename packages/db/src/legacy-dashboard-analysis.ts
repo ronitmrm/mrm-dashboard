@@ -94,6 +94,8 @@ type PlanningProductionActual = {
   dates: Set<string>;
 };
 
+type ProductionFinish = { date: string; workingHours: number | null };
+
 type MachineUnavailableInterruption = {
   jcNo: string;
   setupNo: string;
@@ -1373,6 +1375,7 @@ function buildProductionControl({
   const combinedBatches = combinedRows(prioritizedWorkOrderRows, rawByJc, routeGroups, cycleKeys, toolingKeys);
   const machinePlanDetailRows = machinePlanDetails(prioritizedWorkOrderRows, rawBySetup, rawBySetupAnyMachine, routeGroups, cycleRows, toolingRows, toolingAvailability, machineRows, machineConstraints, planOverrides, shopFloorStatusRows, previousMachineAssignmentsBySetup(previousMachinePlanDetailRows), planningCalendar);
   const productionDashboardRows = buildProductionDashboardRows({
+    rawBySetup,
     cycleRows,
     dispatchApprovals,
     dispatchRows,
@@ -1546,6 +1549,7 @@ function buildProductionControl({
 }
 
 function buildProductionDashboardRows({
+  rawBySetup,
   baselineRows,
   cycleRows,
   dispatchApprovals,
@@ -1556,6 +1560,7 @@ function buildProductionDashboardRows({
   routeGroups,
   workOrderRows,
 }: {
+  rawBySetup: Map<string, PlanningProductionActual>;
   baselineRows: Record<string, unknown>[];
   cycleRows: Record<string, unknown>[];
   dispatchApprovals: ActionRow[];
@@ -1585,10 +1590,9 @@ function buildProductionDashboardRows({
   return workOrderRows.map((workOrder) => {
     const key = productionDashboardRowKey(workOrder);
     const plans = plansByWorkOrder.get(key) ?? [];
-    const physicalPlanEndDate = maxDateValue(...plans.map((row) =>
-      parseDate(rowValue(row, "plannedProductionEndDate")) || rowText(row, "plannedProductionEndDate")
-    ));
+    const physicalPlanEndDate = latestProductionFinish(plans.map(productionFinishFromPlan));
     const currentProbableDate = projectedRouteDispatchDate({
+      rawBySetup,
       cycleByKey,
       machineRows,
       physicalPlanEndDate,
@@ -1614,7 +1618,8 @@ function buildProductionDashboardRows({
       unit: orderPcs > 0 ? "PCS" : orderKg > 0 ? "KG" : "-",
       rmReceivedDate: dateLabel(rmReceivedDate),
       plannedDispatchDateAtRmReceipt: initialDate,
-      currentProbableDispatchDate: dateLabel(currentProbableDate),
+      currentProbableDispatchDate: dateLabel(currentProbableDate.date),
+      currentProbableDispatchWorkingHours: currentProbableDate.workingHours,
       status: dispatchedByJobCard.has(canonicalKey(rowText(workOrder, "jcNo"))) ? "Dispatched" : "Pending",
       dispatchedDate: dateLabel(dispatchedDate),
     };
@@ -1626,6 +1631,7 @@ function buildProductionDashboardRows({
 }
 
 function projectedRouteDispatchDate({
+  rawBySetup,
   cycleByKey,
   machineRows,
   physicalPlanEndDate,
@@ -1634,9 +1640,10 @@ function projectedRouteDispatchDate({
   routeGroups,
   workOrder,
 }: {
+  rawBySetup: Map<string, PlanningProductionActual>;
   cycleByKey: Map<string, Record<string, unknown>>;
   machineRows: Record<string, unknown>[];
-  physicalPlanEndDate: string;
+  physicalPlanEndDate: ProductionFinish;
   planningCalendar: PlanningCalendar;
   plans: Record<string, unknown>[];
   routeGroups: Map<string, Record<string, unknown>[]>;
@@ -1663,7 +1670,8 @@ function projectedRouteDispatchDate({
   const deadlineDate = dispatchTargetDate(rmInwardDate, planningCalendar);
   let previousCycle: Record<string, unknown> | undefined;
   let previousStreams: WipProductionStream[] = [];
-  let projectedEndDate = "";
+  let projectedFinish: ProductionFinish = { date: "", workingHours: null };
+  let previousActuals: PlanningProductionActual[] = [];
 
   for (const [routeIndex, route] of routes.entries()) {
     const routeSetupNo = rowText(route, "SETUP NO.", "SETUP CODE", "setupNo");
@@ -1687,7 +1695,11 @@ function projectedRouteDispatchDate({
       if (!streams.length) return physicalPlanEndDate;
       previousStreams = streams;
       previousCycle = cycle;
-      projectedEndDate = maxDateValue(...streams.map((stream) => stream.endDate));
+      previousActuals = routePlans.flatMap(plan => {
+        const actual = rawBySetup.get(productionSetupKey({ jcNo: rowText(plan, "jcNo"), partCode, setupNo: rowText(plan, "setupNo"), machine: rowText(plan, "machine") }));
+        return actual ? [{ ...actual, machine: rowText(plan, "machine") }] : [];
+      });
+      projectedFinish = latestProductionFinish(routePlans.map(productionFinishFromPlan));
       continue;
     }
 
@@ -1719,6 +1731,7 @@ function projectedRouteDispatchDate({
       planningCalendar,
     });
     const projectedStartDate = plannedWipBufferReadyDate({
+      actuals: previousActuals,
       productionStreams: previousStreams,
       orderPcs: setupOrderPcs,
       previousCycle,
@@ -1729,19 +1742,35 @@ function projectedRouteDispatchDate({
     if (!projectedStartDate) return physicalPlanEndDate;
 
     const machineOrderPcs = assignedMachineOrderPcs(setupOrderPcs, machineCount);
-    projectedEndDate = plannedProductionEnd(projectedStartDate, machineOrderPcs, cycle, undefined, planningCalendar);
-    if (!projectedEndDate) return physicalPlanEndDate;
+    projectedFinish = latestProductionFinish([
+      plannedProductionFinish(projectedStartDate, machineOrderPcs, cycle, undefined, planningCalendar),
+      { date: practicalSetupHandoffEndDate(projectedFinish.date, planningCalendar), workingHours: projectedFinish.workingHours },
+    ]);
+    if (!projectedFinish.date) return physicalPlanEndDate;
     previousStreams = Array.from({ length: machineCount }, (_, index) => ({
       machine: `forecast-${routeIndex}-${index}`,
       startDate: projectedStartDate,
-      endDate: projectedEndDate,
+      endDate: projectedFinish.date,
       quantity: machineOrderPcs,
       dailyQty: cycleDailyQty(cycle, planningCalendar),
     }));
     previousCycle = cycle;
+    previousActuals = [];
   }
 
-  return projectedEndDate || physicalPlanEndDate;
+  return latestProductionFinish([projectedFinish, physicalPlanEndDate]);
+}
+
+function productionFinishFromPlan(row: Record<string, unknown>): ProductionFinish {
+  return {
+    date: parseDate(rowValue(row, "plannedProductionEndDate")),
+    workingHours: typeof row.plannedProductionEndWorkingHours === "number" ? row.plannedProductionEndWorkingHours : null,
+  };
+}
+
+function latestProductionFinish(finishes: ProductionFinish[]): ProductionFinish {
+  return finishes.filter(finish => finish.date).sort((a, b) => b.date.localeCompare(a.date)
+    || (b.workingHours ?? Infinity) - (a.workingHours ?? Infinity))[0] ?? { date: "", workingHours: null };
 }
 
 function productionDashboardRowKey(row: Record<string, unknown>) {
@@ -3470,6 +3499,13 @@ function machinePlanDetails(
   );
   applyToolingTaskReadiness(finalizedDetails, toolingAvailability);
   applyMachineActiveTaskReadiness(finalizedDetails);
+  for (const row of finalizedDetails) {
+    const meta = planningMeta(row);
+    const finish = plannedProductionFinish(rowText(row, "plannedProductionStartDate"), meta.orderPcs ?? 0, meta.cycle, meta.productionActual, planningCalendar);
+    const finalDate = parseDate(rowText(row, "plannedProductionEndDate"));
+    row.plannedProductionEndWorkingHours = !finalDate || shopFloorRowIsComplete(row) ? null
+      : finish.date === finalDate ? finish.workingHours : planningCalendar.productiveHoursPerDay;
+  }
   return applyPlannedDateTaskReadiness(finalizedDetails).sort((a, b) =>
     rowText(a, "machine").localeCompare(rowText(b, "machine"), undefined, { numeric: true }) ||
     rowText(a, "partCode").localeCompare(rowText(b, "partCode"), undefined, { numeric: true }) ||
@@ -5487,35 +5523,40 @@ function plannedProductionEnd(
   actual?: Pick<PlanningProductionActual, "latestDate" | "outputQty" | "actualQty" | "dates">,
   planningCalendar: PlanningCalendar = defaultPlanningCalendar,
 ) {
+  return plannedProductionFinish(startDate, orderPcs, cycle, actual, planningCalendar).date;
+}
+
+function plannedProductionFinish(
+  startDate: string,
+  orderPcs: number,
+  cycle: Record<string, unknown> | undefined,
+  actual: Pick<PlanningProductionActual, "latestDate" | "outputQty" | "actualQty" | "dates"> | undefined,
+  planningCalendar: PlanningCalendar,
+): ProductionFinish {
   const normalizedStartDate = addDays(parseDate(startDate) || startDate, 0, planningCalendar);
-  if (!normalizedStartDate) return "";
+  if (!normalizedStartDate) return { date: "", workingHours: null };
   const revisionEffectiveDate = cycleRevisionEffectiveDate(cycle, planningCalendar);
-  if (actual?.latestDate && actual.dates.size) {
-    if (actual.actualQty >= orderPcs) return maxDateValue(normalizedStartDate, actual.latestDate);
-    if (!revisionEffectiveDate) {
-      const dailyOutput = Math.max(actual.actualQty, 0) / actual.dates.size;
-      if (dailyOutput > 0) {
-        const remainingQty = Math.max(orderPcs - actual.actualQty, 0);
-        const remainingDays = Math.max(1, Math.ceil(remainingQty / dailyOutput));
-        return maxDateValue(normalizedStartDate, addDays(parseDate(actual.latestDate) || actual.latestDate, remainingDays, planningCalendar));
-      }
-    }
+  if (actual?.latestDate && actual.actualQty >= orderPcs) {
+    return { date: maxDateValue(normalizedStartDate, actual.latestDate), workingHours: null };
   }
   const remainingStartDate = maxDateValue(
     normalizedStartDate,
     revisionEffectiveDate,
-    actual?.latestDate && actual.actualQty > 0
+    actual?.latestDate && actual.dates.size
       ? addDays(parseDate(actual.latestDate) || actual.latestDate, 1, planningCalendar)
       : "",
   );
   const cycleSeconds = safeNumber(rowValue(cycle ?? {}, "cycleTime", "CYCLE TIME")) + safeNumber(rowValue(cycle ?? {}, "loadingUnloading", "LOADING AND UNLOADING"));
-  if (!orderPcs || !cycleSeconds) return remainingStartDate;
+  if (!orderPcs || !cycleSeconds) return { date: remainingStartDate, workingHours: null };
   const estimatedHours = (Math.max(orderPcs - (actual?.actualQty ?? 0), 0) * cycleSeconds) / 3600;
   const productionDays = Math.max(
     1,
     Math.ceil(estimatedHours / planningCalendar.productiveHoursPerDay),
   );
-  return addDays(remainingStartDate, productionDays - 1, planningCalendar);
+  return {
+    date: addDays(remainingStartDate, productionDays - 1, planningCalendar),
+    workingHours: round(estimatedHours - (productionDays - 1) * planningCalendar.productiveHoursPerDay, 4),
+  };
 }
 
 function cycleRevisionEffectiveDate(
@@ -5583,18 +5624,16 @@ function plannedWipBufferReadyDate({
       ...stream,
       startDate: remainingStartDate,
       quantity: remainingQuantity,
-      dailyQty: revisionEffectiveDate ? stream.dailyQty : actual.dailyQty || stream.dailyQty,
+      dailyQty: stream.dailyQty,
     }];
   });
   const supplyStreams = [...actualStreams, ...futurePlannedStreams];
   if (!supplyStreams.length || !orderPcs || !nextCycle) return "";
   const futureMachines = new Set(futurePlannedStreams.map((stream) => canonicalKey(stream.machine)));
-  const previousDailyQty = revisionEffectiveDate
-    ? sum(futurePlannedStreams.map((stream) => stream.dailyQty))
+  const previousDailyQty = sum(futurePlannedStreams.map((stream) => stream.dailyQty))
       + sum(actualStreams
         .filter((stream) => !futureMachines.has(canonicalKey(stream.machine)))
-        .map((stream) => stream.dailyQty))
-    : sum(supplyStreams.map((stream) => stream.dailyQty));
+        .map(() => cycleDailyQty(previousCycle, planningCalendar)));
   const nextDailyQty = cycleDailyQty(nextCycle, planningCalendar) * Math.max(1, nextMachineCount);
   if (!previousDailyQty || !nextDailyQty) return "";
 

@@ -3049,6 +3049,9 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
       })
       const analytics = {
         ...analyticsSummary,
+        plannedEndDate: payloadText(dashboardSummary ?? {}, "currentProbableDispatchDate") || null,
+        plannedEndWorkingHours: typeof dashboardSummary?.currentProbableDispatchWorkingHours === "number"
+          ? dashboardSummary.currentProbableDispatchWorkingHours : null,
         delivery,
         deliveryTarget,
         legacyEntryCount: legacyEntriesResult.rows.length,

@@ -284,7 +284,7 @@ import {
   jobCardWorkspaceHref,
 } from "@/lib/unified-navigation"
 import { normalizeUserEnteredPayload } from "@workspace/db/user-entry-text"
-import { machineTypeForFamily } from "@workspace/db/planning-rules"
+import { formatPlanningFinish, machineTypeForFamily } from "@workspace/db/planning-rules"
 import {
   machineFamilyOptions,
   planningMasterPayload,
@@ -3706,7 +3706,7 @@ function ProductionDashboardPanel({ payload }: { payload: DashboardPayload }) {
                           )}
                         </TableCell>
                         <TableCell>
-                          {displayValue(row.currentProbableDispatchDate)}
+                          {formatPlanningFinish(row.currentProbableDispatchDate, row.currentProbableDispatchWorkingHours)}
                         </TableCell>
                         <TableCell>
                           <StatusBadge value={row.status} />
@@ -9255,8 +9255,8 @@ function ShopFloorItemSummary({
       </div>
       <div className="text-xs text-muted-foreground">
         Setup: {displayValue(row.setupPlannedDate || row.plannedDate)} |
-        Production: {displayValue(row.plannedProductionStartDate)} -{" "}
-        {displayValue(row.plannedProductionEndDate)}
+        Production: {displayValue(row.plannedProductionStartDate)} | Estimated setup finish:{" "}
+        {formatPlanningFinish(row.plannedProductionEndDate, row.plannedProductionEndWorkingHours)}
       </div>
       <div className="text-xs text-muted-foreground">
         Rm: {displayValue(row.rmStatus)}
@@ -16330,8 +16330,8 @@ function MachinePlannedPartsPanel({
                     value={row.plannedProductionStartDate}
                   />
                   <TileField
-                    label="Planned Production End"
-                    value={row.plannedProductionEndDate}
+                    label="Estimated Setup Finish"
+                    value={formatPlanningFinish(row.plannedProductionEndDate, row.plannedProductionEndWorkingHours)}
                   />
                   <TileField
                     label="Actual Production Start"
