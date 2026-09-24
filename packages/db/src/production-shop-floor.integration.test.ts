@@ -231,7 +231,7 @@ describe("production and shop-floor workflows", () => {
     }
   })
 
-  test("calculates Casting from Blank Piece Weight divided by One-Piece Weight", async () => {
+  test("reads Job Card masters and linked quality report keys", async () => {
     const workspace = await repository.readJobCardWorkspace({
       jobCardNumber: firstJobCard,
       organizationId,
@@ -239,6 +239,24 @@ describe("production and shop-floor workflows", () => {
     })
 
     expect(workspace.jobCard.casting).toBe("5.58")
+    const setupId = workspace.setups[0]!.id
+    await pool.query(`INSERT INTO quality.first_piece_inspections (
+      organization_id, work_order_id, operation_setup_id, inspected_at, status,
+      check_key, source_system, source_table, source_id
+    ) VALUES ($1, $2, $3, now(), 'Approved', $4, 'test', 'job_card_fpir', $4)`,
+    [organizationId, workspace.jobCard.id, setupId, `fpir-${suffix}`])
+    await pool.query(`INSERT INTO quality.hourly_checks (
+      organization_id, work_order_id, operation_setup_id, checked_at, status,
+      check_key, source_system, source_table, source_id
+    ) VALUES ($1, $2, $3, now(), 'OK', $4, 'test', 'job_card_hourly', $4)`,
+    [organizationId, workspace.jobCard.id, setupId, `hourly-${suffix}`])
+    const updated = await repository.readJobCardWorkspace({
+      jobCardNumber: firstJobCard, organizationId, productionFloorCode: "conventional",
+    })
+    expect(updated.qualityRecords).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: "first_piece", reportKey: `fpir-${suffix}` }),
+      expect.objectContaining({ kind: "hourly", reportKey: `hourly-${suffix}` }),
+    ]))
   })
 
   test("keeps every received item when one RM PO covers multiple job cards", async () => {

@@ -1,6 +1,7 @@
 "use client"
 
 import type { ProductionFloorCode } from "@workspace/db/production-floors"
+import { buildJobCardProgress } from "@workspace/db/job-card-progress"
 import { Button } from "@workspace/ui/components/button"
 import { SectionCard, CardContent, CardHeader, CardTitle } from "@workspace/ui/components/card"
 import { OperationalTable, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@workspace/ui/components/table"
@@ -78,15 +79,15 @@ export function JobCardRegister({
         if (!setup) continue
         const good = goodBySetup.get(key(jobCard, part, setup))
           ?? goodBySetup.get(key(jobCard, part, rawSetup)) ?? 0
-        setups.set(setup, ordered > 0 ? Math.min(Math.max(good / ordered, 0), 1) : 0)
+        setups.set(setup, good)
       }
-      const progress = [...setups.values()]
+      const progress = buildJobCardProgress(ordered,
+        [...setups].map(([setupNumber, goodPieces]) => ({ setupNumber, goodPieces })))
       return {
         ...row,
-        productionProgressPercent: progress.length && ordered > 0
-          ? progress.reduce((sum, value) => sum + value, 0) / progress.length * 100 : null,
-        productionSetupCount: progress.length,
-        completedProductionSetupCount: progress.filter((value) => value >= 1).length,
+        productionProgressPercent: progress.completionPercent,
+        productionSetupCount: progress.setupCount,
+        completedProductionSetupCount: progress.completedSetupCount,
       }
     })
   }, [rows, routeRows, productionRows])
@@ -153,7 +154,7 @@ export function JobCardRegister({
                         <span className="text-xs text-muted-foreground">overall</span>
                       </div>
                       <div role="progressbar" aria-label={`${jobCard} overall production progress`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress} aria-valuetext={`${progress.toFixed(1)}% overall; ${completedSetups} of ${setupCount} setups complete`} className="h-2 overflow-hidden rounded-full bg-muted">
-                        <div className="h-full rounded-full bg-[var(--color-information)] data-[complete=true]:bg-[var(--color-positive)]" data-complete={progress >= 100} style={{ width: `${progress}%` }} />
+                        <div className="h-full rounded-full bg-[var(--color-info)] data-[complete=true]:bg-[var(--color-positive)]" data-complete={progress >= 100} style={{ width: `${progress}%` }} />
                       </div>
                       <div className="text-xs text-muted-foreground tabular-nums">{completedSetups}/{setupCount} setups complete</div>
                     </div>

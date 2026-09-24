@@ -68,6 +68,7 @@ describe("job card workspace", () => {
         finalSetupNumber: "2",
         firstSetupNumber: "1",
         orderedQuantity: 1_000,
+        setupNumbers: ["1", "2"],
         planRows: [
           {
             plannedProductionEndDate: "2026-08-12",
@@ -111,7 +112,8 @@ describe("job card workspace", () => {
     ).toMatchObject({
       actualGoodPieces: 200,
       actualProducedPieces: 200,
-      completionPercent: 20,
+      completionPercent: 29,
+      finishedCompletionPercent: 20,
       downtimeMinutes: 90,
       plannedEndDate: "2026-08-14",
       plannedStartDate: "2026-08-10",
@@ -143,6 +145,7 @@ describe("job card workspace", () => {
       finalSetupNumber: "3",
       firstSetupNumber: "1",
       orderedQuantity: 10_000,
+      setupNumbers: ["1", "2", "3"],
       planRows: [
         { setupNumber: "1" },
         { setupNumber: "2" },
@@ -157,7 +160,8 @@ describe("job card workspace", () => {
     })).toMatchObject({
       actualGoodPieces: 0,
       actualProducedPieces: 0,
-      completionPercent: 0,
+      completionPercent: (84.41 / 3),
+      finishedCompletionPercent: 0,
       finalSetupNumber: "3",
       operationGoodPieces: 8_441,
       operationProducedPieces: 8_441,
@@ -188,15 +192,17 @@ describe("job card workspace", () => {
     })
   })
 
-  it("caps production progress at 100 percent", () => {
+  it("caps each setup share and reports P1497-style overall progress as 91.1 percent", () => {
     expect(buildJobCardAnalytics({
       downtimeEvents: [],
-      finalSetupNumber: "1",
+      finalSetupNumber: "2",
       firstSetupNumber: "1",
-      orderedQuantity: 100,
+      orderedQuantity: 500,
+      setupNumbers: ["1", "2"],
       planRows: [],
-      sessions: [{ goodPieces: 120, setupNumber: "1", totalPieces: 120 }],
-    }).completionPercent).toBe(100)
+      sessions: [{ goodPieces: 705, setupNumber: "1", totalPieces: 706 },
+        { goodPieces: 411, setupNumber: "2", totalPieces: 411 }],
+    }).completionPercent).toBeCloseTo(91.1)
   })
 
   it("does not invent a material shortage when blank piece weight is missing", () => {

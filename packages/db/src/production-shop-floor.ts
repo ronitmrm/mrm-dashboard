@@ -2451,7 +2451,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
       const selectedRoute = routesResult.rows.find((route) => route.id === explicitRouteId)
         ?? (activeRoutes.length === 1 ? activeRoutes[0] : undefined)
 
-      const [setupsResult, sessionsResult, legacyEntriesResult, eventsResult, workflowResult, plannerMovementsResult, receiptsResult, setupTimingsResult, snapshotResult] = await Promise.all([
+      const [setupsResult, sessionsResult, legacyEntriesResult, eventsResult, workflowResult, plannerMovementsResult, receiptsResult, setupTimingsResult, snapshotResult, qualityRecordsResult] = await Promise.all([
         pool.query<Record<string, unknown>>(
           `
             SELECT setup.id, setup.setup_number::text AS "setupNumber",
@@ -2834,18 +2834,62 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           [selectedRoute?.id ?? null, jobCard.id]
         ),
         pool.query<{ payload: Record<string, unknown> }>(
-          `SELECT payload FROM derived.dashboard_read_models
-           WHERE organization_id = $1 ORDER BY version DESC LIMIT 1`,
-          [input.organizationId]
+          `WITH latest AS (
+             SELECT payload FROM derived.dashboard_read_models
+             WHERE organization_id = $1 ORDER BY version DESC LIMIT 1
+           ), control AS (
+             SELECT COALESCE(payload->'productionFloorSnapshots'->$2,
+               CASE WHEN $2 = 'conventional' THEN payload ELSE '{}'::jsonb END)
+               ->'productionControl' AS data FROM latest
+           )
+           SELECT jsonb_build_object(
+             'machinePlanDetailRows', COALESCE((
+               SELECT jsonb_agg(row) FROM jsonb_array_elements(data->'machinePlanDetailRows') row
+               WHERE lower(COALESCE(row->>'jcNo', row->>'jobCardNumber', row->>'JobCardNo', row->>'jobCard')) = lower($3)
+             ), '[]'::jsonb),
+             'productionDashboardRows', COALESCE((
+               SELECT jsonb_agg(row) FROM jsonb_array_elements(data->'productionDashboardRows') row
+               WHERE lower(COALESCE(row->>'jcNo', row->>'jobCardNumber', row->>'JobCardNo', row->>'jobCard')) = lower($3)
+             ), '[]'::jsonb),
+             'planningCalendar', data->'planningCalendar'
+           ) AS payload FROM control`,
+          [input.organizationId, floorCode, jobCardNumber]
+        ),
+        pool.query<Record<string, unknown>>(
+          `SELECT 'first_piece' AS kind, inspection.id::text AS id,
+              COALESCE(inspection.source_payload->>'reportId',
+                inspection.source_payload->'payload'->>'reportId', inspection.check_key) AS "reportKey",
+              inspection.inspected_at AS "checkedAt", inspection.status,
+              setup.setup_number::text AS "setupNumber", route.route_code AS "routeCode",
+              machine.machine_number AS "machineNumber",
+              COALESCE(inspector.name, inspection.legacy_inspector) AS "checkedBy"
+           FROM quality.first_piece_inspections inspection
+           JOIN manufacturing.operation_setups setup ON setup.id = inspection.operation_setup_id
+           JOIN manufacturing.route_options route ON route.id = setup.route_option_id
+           JOIN manufacturing.production_floors floor ON floor.id = route.production_floor_id
+           LEFT JOIN catalog.machines machine ON machine.id = inspection.machine_id
+           LEFT JOIN identity.users inspector ON inspector.id = inspection.inspector_user_id
+           WHERE inspection.organization_id = $1 AND inspection.work_order_id = $2
+             AND floor.code = $3 AND inspection.reversed_at IS NULL
+           UNION ALL
+           SELECT 'hourly', check_row.id::text, check_row.check_key,
+              check_row.checked_at, check_row.status, setup.setup_number::text,
+              route.route_code, machine.machine_number,
+              COALESCE(checker.name, check_row.legacy_checker)
+           FROM quality.hourly_checks check_row
+           JOIN manufacturing.operation_setups setup ON setup.id = check_row.operation_setup_id
+           JOIN manufacturing.route_options route ON route.id = setup.route_option_id
+           JOIN manufacturing.production_floors floor ON floor.id = route.production_floor_id
+           LEFT JOIN catalog.machines machine ON machine.id = check_row.machine_id
+           LEFT JOIN identity.users checker ON checker.id = check_row.checker_user_id
+           WHERE check_row.organization_id = $1 AND check_row.work_order_id = $2
+             AND floor.code = $3 AND check_row.reversed_at IS NULL
+           ORDER BY "checkedAt" DESC, id DESC`,
+          [input.organizationId, jobCard.id, floorCode]
         ),
       ])
 
-      const snapshot = objectRecord(snapshotResult.rows[0]?.payload)
-      const floorSnapshots = objectRecord(snapshot.productionFloorSnapshots)
-      const floorPayload = objectRecord(
-        floorSnapshots[floorCode] ?? (floorCode === "conventional" ? snapshot : {})
-      )
-      const productionControl = objectRecord(floorPayload.productionControl)
+      const productionControl = objectRecord(snapshotResult.rows[0]?.payload)
       const matchesJobCard = (row: Record<string, unknown>) =>
         payloadText(row, "jcNo", "jobCardNumber", "JobCardNo", "jobCard").toLowerCase()
           === jobCardNumber.toLowerCase()
@@ -2987,6 +3031,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           : null,
         orderedQuantity: Number(jobCard.orderedQuantity ?? 0),
         planRows: standardizedPlans,
+        setupNumbers: setupsResult.rows.map((row) => String(row.setupNumber)),
         sessions: [...sessionRows, ...legacySessionRows],
       })
       const materialYield = buildMaterialYield({
@@ -3066,6 +3111,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         events: eventLog,
         jobCard: {
           ...jobCard,
+          id: String(jobCard.id),
           casting: casting > 0 ? String(casting) : null,
           effectiveRouteSource: explicitRouteId && selectedRoute?.id === explicitRouteId
             ? "planner_selected"
@@ -3077,6 +3123,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         planRows,
         plannerMovements,
         productionFloorCode: floorCode,
+        qualityRecords: qualityRecordsResult.rows,
         rawMaterialReceipts: receiptsResult.rows,
         routes: routesResult.rows.map((route) => ({
           ...route,
