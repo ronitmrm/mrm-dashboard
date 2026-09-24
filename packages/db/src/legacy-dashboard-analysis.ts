@@ -1195,6 +1195,21 @@ function buildProductionControl({
       : undefined;
     const actual = rawByJc.get(canonicalKey(jcNo));
     const orderPcs = safeNumber(rowValue(row, "ORD. PCS.", "orderPcs"));
+    const setupProgressByNumber = new Map<string, number>();
+    for (const route of allSelectedRoutes) {
+      const routeSetupNo = rowText(route, "SETUP NO.", "SETUP CODE", "setupNo");
+      const setupNo = setupStepKey(routeSetupNo, effectiveOption) || routeSetupNo;
+      if (!setupNo) continue;
+      const setupActual = rawBySetupAnyMachine.get(productionSetupBaseKey({ jcNo, partCode, setupNo }))
+        ?? rawBySetupAnyMachine.get(productionSetupBaseKey({ jcNo, partCode, setupNo: routeSetupNo }));
+      setupProgressByNumber.set(setupNo, orderPcs > 0
+        ? Math.min(Math.max((setupActual?.actualQty ?? 0) / orderPcs, 0), 1)
+        : 0);
+    }
+    const setupProgress = [...setupProgressByNumber.values()];
+    const productionProgressPercent = setupProgress.length && orderPcs > 0
+      ? setupProgress.reduce((total, progress) => total + progress, 0) / setupProgress.length * 100
+      : null;
     const orderKg = safeNumber(rowValue(row, "ORD. KG.", "orderKg"));
     const rmReceived = isRmReceived(row, rmInward);
     const rmInwardKg = safeNumber(rowValue(rmInward ?? {}, "RM INWARD KG.", "rmInwardKg"))
@@ -1298,6 +1313,9 @@ function buildProductionControl({
       machineMasterStatus: missingMachine.length ? `Missing setup ${compactJoin(missingMachine)}` : "Ready",
       finalSetupGoodPieces: round(finalSetupActual?.actualQty ?? 0),
       finalSetupNumber,
+      productionProgressPercent,
+      productionSetupCount: setupProgress.length,
+      completedProductionSetupCount: setupProgress.filter((progress) => progress >= 1).length,
       rawOutputQty: round(actual?.outputQty ?? 0),
       rawActualQty: round(actual?.actualQty ?? 0),
       rawRejectQty: round(actual?.rejectQty ?? 0),

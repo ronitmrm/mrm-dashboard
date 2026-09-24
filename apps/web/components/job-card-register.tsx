@@ -20,17 +20,17 @@ const jobCardKey = (row: Row) => [
 ].map((value) => value.toUpperCase()).join("|")
 
 function jobCardProgress(row: Row) {
-  const ordered = numeric(row.orderPcs ?? row.orderedQty ?? row["ORD. PCS."])
-  const good = numeric(row.finalSetupGoodPieces)
-  return ordered > 0 ? Math.min(Math.max((good / ordered) * 100, 0), 100) : 0
+  return row.productionProgressPercent == null
+    ? null
+    : Math.min(Math.max(numeric(row.productionProgressPercent), 0), 100)
 }
 
 function jobCardStage(row: Row) {
   const progress = jobCardProgress(row)
   const dispatch = first(row, ["dispatchStatus", "status"])
   if (dispatch.toLowerCase().includes("dispatch")) return "Dispatch"
-  if (progress >= 100) return "Production complete"
-  if (progress > 0 || numeric(row.rawRows) > 0 || numeric(row.rawActualQty) > 0 || numeric(row.rawOutputQty) > 0) return "Production"
+  if (progress !== null && progress >= 100) return "Production complete"
+  if ((progress ?? 0) > 0 || numeric(row.rawRows) > 0 || numeric(row.rawActualQty) > 0 || numeric(row.rawOutputQty) > 0) return "Production"
   if (first(row, ["rmStatus"]).toLowerCase() !== "received") return "Awaiting RM"
   if (["routeStatus", "cycleStatus", "toolingStatus", "machineMasterStatus"].some((key) => text(row[key]).toLowerCase().includes("missing"))) return "Part readiness"
   return "Ready for setup"
@@ -91,7 +91,8 @@ export function JobCardRegister({
               const jobCard = first(row, ["jcNo", "JobCardNo", "jobCard"])
               const href = jobCardWorkspaceHref(jobCard, floor)
               const progress = jobCardProgress(row)
-              const finishedPieces = numeric(row.finalSetupGoodPieces)
+              const setupCount = numeric(row.productionSetupCount)
+              const completedSetups = numeric(row.completedProductionSetupCount)
               const finishDates = finishDatesByJobCard.get(jobCardKey(row))
               const plannedFinish = text(finishDates?.plannedDispatchDateAtRmReceipt)
               return <TableRow key={jobCard}>
@@ -103,7 +104,20 @@ export function JobCardRegister({
                 <TableCell>{jobCardStage(row)}</TableCell>
                 <TableCell>{plannedFinish || <span className="text-muted-foreground">Not recorded</span>}</TableCell>
                 <TableCell>{text(finishDates?.currentProbableDispatchDate) || "-"}</TableCell>
- <TableCell className="min-w-40"><div className="mb-1 flex justify-between gap-2 text-xs"><span>{progress.toFixed(1)}%</span><span>{new Intl.NumberFormat("en-IN").format(finishedPieces)} finished</span></div><div className="h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-[var(--color-positive-bg)]" style={{ width: `${progress}%` }} /></div></TableCell>
+                <TableCell className="min-w-48">
+                  {progress === null ? <span className="text-xs text-muted-foreground">Progress unavailable</span> : (
+                    <div className="space-y-1.5 py-1" title="Each route setup contributes an equal share of overall progress">
+                      <div className="flex items-baseline justify-between gap-3">
+                        <span className="text-sm font-semibold tabular-nums">{progress.toFixed(1)}%</span>
+                        <span className="text-xs text-muted-foreground">overall</span>
+                      </div>
+                      <div role="progressbar" aria-label={`${jobCard} overall production progress`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress} aria-valuetext={`${progress.toFixed(1)}% overall; ${completedSetups} of ${setupCount} setups complete`} className="h-2 overflow-hidden rounded-full bg-muted">
+                        <div className="h-full rounded-full bg-[var(--color-information)] data-[complete=true]:bg-[var(--color-positive)]" data-complete={progress >= 100} style={{ width: `${progress}%` }} />
+                      </div>
+                      <div className="text-xs text-muted-foreground tabular-nums">{completedSetups}/{setupCount} setups complete</div>
+                    </div>
+                  )}
+                </TableCell>
                 <TableCell>{first(row, ["optionNumber", "selectedOption", "routeStatus"])}</TableCell>
                 <TableCell><Button asChild size="sm" variant="outline"><Link href={href}>Open <ExternalLink /></Link></Button></TableCell>
               </TableRow>
