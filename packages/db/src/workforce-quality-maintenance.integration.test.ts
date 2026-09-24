@@ -571,16 +571,47 @@ describe("workforce, quality, and maintenance workflows", () => {
       tolerancePlus: "0", toleranceMinus: "0", inputType: "text", sequence: 2, actualReading: "M10",
     }] })
     await quality.recordFirstPieceInspection(firstPiece)
-    await expect(quality.recordHourlyCheck(hourly)).rejects.toThrow(
-      "Completed hourly quality checks cannot be edited"
+    await quality.recordHourlyCheck(hourly)
+    await expect(quality.recordFirstPieceInspection({
+      ...firstPiece, dimensions: [{ parameterCode: "ECN", readings: [25.1] }],
+    })).rejects.toThrow(
+      "Correction reason is required"
     )
+    await expect(quality.recordHourlyCheck({
+      ...hourly, readings: [{ parameterCode: "ECN", actualReading: 25.1 }],
+    })).rejects.toThrow(
+      "Correction reason is required"
+    )
+    await quality.recordFirstPieceInspection({
+      ...firstPiece, correctionReason: "Correct transcribed reading",
+      dimensions: [{ parameterCode: "ECN", readings: [25.1] }],
+    })
+    await quality.recordHourlyCheck({
+      ...hourly, correctionReason: "Correct transcribed reading",
+      readings: [{ parameterCode: "ECN", actualReading: 25.1 }],
+    })
     const reports = await pool.query(`SELECT id, source_payload FROM quality.first_piece_inspections WHERE id = ANY($1::uuid[])`, [[oldFpir.id, newFpir.id]])
     expect(reports.rows.find((row) => row.id === oldFpir.id)?.source_payload.dimensions[0]).toMatchObject({
-      parameterName: "ECN length", specification: "25", inputType: "number", remark: "Original", readings: [25],
+      parameterName: "ECN length", specification: "25", inputType: "number", remark: "Original", readings: [25.1],
     })
     expect(reports.rows.find((row) => row.id === newFpir.id)?.source_payload.dimensions[0]).toMatchObject({
       parameterName: "ECN thread", specification: "M10", inputType: "text", remark: "Revised", readings: ["M10"],
     })
+    const correctedHourly = await quality.readHourlyQualityPage({ organizationId, checkKey: hourly.checkKey })
+    expect(correctedHourly.existingCheck).toMatchObject({
+      readings: [{ parameterName: "ECN length", actualReading: "25.1" }],
+    })
+    const audit = await pool.query(
+      `SELECT target_table, reason FROM audit.events
+       WHERE target_id = ANY($1::uuid[]) ORDER BY target_table`,
+      [[oldFpir.id, (await pool.query<{ id: string }>(
+        `SELECT id FROM quality.hourly_checks WHERE check_key = $1`, [hourly.checkKey]
+      )).rows[0]!.id]]
+    )
+    expect(audit.rows).toEqual([
+      { target_table: "first_piece_inspections", reason: "Correct transcribed reading" },
+      { target_table: "hourly_checks", reason: "Correct transcribed reading" },
+    ])
   })
 
   test("uses the only active route for quality writes and rejects duplicate parameter specifications", async () => {

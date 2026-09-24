@@ -1,7 +1,10 @@
 import { assertMasterAvailable } from "./master-duplicate"
 import { assertSettingChecklistComplete } from "./setup-checklist-validation"
 import { randomUUID } from "node:crypto"
-import { queueDashboardRefreshAfterSetChange } from "./dashboard-refresh-queue"
+import {
+  queueDashboardRefresh,
+  queueDashboardRefreshAfterSetChange,
+} from "./dashboard-refresh-queue"
 
 import type { PoolClient } from "pg"
 
@@ -391,6 +394,7 @@ async function parameterFor(
 async function replaceFirstPieceReadings(
   client: PoolClient,
   input: {
+    correcting?: boolean
     dimensions: Array<{
       parameterCode: string
       parameterName?: string | null
@@ -402,6 +406,11 @@ async function replaceFirstPieceReadings(
   }
 ) {
   const saved = await savedParameters(client, "first_piece_readings", "inspection_id", input.inspectionId)
+  if (input.correcting && (new Set(input.dimensions.map((dimension) =>
+    dimension.parameterCode.toLowerCase())).size !== saved.size ||
+    input.dimensions.some((dimension) => !saved.has(dimension.parameterCode.toLowerCase())))) {
+    throw new Error("A correction must keep the saved inspection parameters.")
+  }
   const dimensions = []
   await client.query(
     "DELETE FROM quality.first_piece_readings WHERE inspection_id = $1",
@@ -470,9 +479,67 @@ async function replaceFirstPieceReadings(
   return dimensions
 }
 
+function correctionHistory(payload: Record<string, unknown>) {
+  return Array.isArray(payload.correctionHistory)
+    ? payload.correctionHistory
+    : []
+}
+
+function sameQualityReadings(
+  saved: Record<string, unknown>[],
+  submitted: Array<{ parameterCode: string; readings?: unknown[]; actualReading?: unknown }>
+) {
+  return saved.length === submitted.length && saved.every((row, index) => {
+    const current = submitted[index]!
+    if (String(row.parameterCode ?? row.code ?? "").toLowerCase() !==
+      current.parameterCode.toLowerCase()) return false
+    const oldValues = Array.isArray(row.readings)
+      ? row.readings
+      : [row.actualReading]
+    const newValues = current.readings ?? [current.actualReading]
+    return oldValues.length === newValues.length && oldValues.every(
+      (value, reading) => String(value ?? "") === String(newValues[reading] ?? "")
+    )
+  })
+}
+
+async function auditQualityCorrection(
+  client: PoolClient,
+  input: {
+    actorUserId?: string | null
+    after: Record<string, unknown>
+    before: Record<string, unknown>
+    organizationId: string
+    reason: string
+    targetId: string
+    targetTable: "first_piece_inspections" | "hourly_checks"
+  }
+) {
+  await client.query(
+    `INSERT INTO audit.events (
+       organization_id, event_type, target_schema, target_table, target_id,
+       actor_user_id, reason, before_state, after_state, metadata,
+       source_system, source_table, source_id
+     ) VALUES ($1, $2, 'quality', $3, $4, $5, $6, $7, $8,
+       '{}'::jsonb, 'mrm-dashboard', 'quality_inspection_correction', $9)`,
+    [
+      input.organizationId,
+      `quality.${input.targetTable}.corrected`,
+      input.targetTable,
+      input.targetId,
+      input.actorUserId ?? null,
+      input.reason,
+      input.before,
+      input.after,
+      randomUUID(),
+    ]
+  )
+}
+
 async function replaceHourlyReadings(
   client: PoolClient,
   input: {
+    correcting?: boolean
     hourlyCheckId: string
     operationSetupId: string
     organizationId: string
@@ -485,6 +552,11 @@ async function replaceHourlyReadings(
   }
 ) {
   const saved = await savedParameters(client, "hourly_check_readings", "hourly_check_id", input.hourlyCheckId)
+  if (input.correcting && (new Set(input.readings.map((reading) =>
+    reading.parameterCode.toLowerCase())).size !== saved.size ||
+    input.readings.some((reading) => !saved.has(reading.parameterCode.toLowerCase())))) {
+    throw new Error("A correction must keep the saved inspection parameters.")
+  }
   const readings = []
   await client.query(
     "DELETE FROM quality.hourly_check_readings WHERE hourly_check_id = $1",
@@ -499,6 +571,7 @@ async function replaceHourlyReadings(
       reading.parameterName
     )
     const columns = valueColumns(reading.actualReading, parameter.data_type)
+    const result = readingResult(parameter, reading.actualReading)
     await client.query(
       `
         INSERT INTO quality.hourly_check_readings (
@@ -514,12 +587,12 @@ async function replaceHourlyReadings(
         columns.numericValue,
         columns.textValue,
         columns.booleanValue,
-        reading.result || readingResult(parameter, reading.actualReading),
+        result,
         index + 1,
         parameter,
       ]
     )
-    readings.push({ ...reading, ...parameterDetails(parameter) })
+    readings.push({ ...reading, ...parameterDetails(parameter), result })
   }
   return readings
 }
@@ -1690,6 +1763,7 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
     async recordFirstPieceInspection(input: {
       actorUserId?: string | null
       approvedBy?: string | null
+      correctionReason?: string | null
       dimensions: Array<{
         parameterCode: string
         parameterName?: string | null
@@ -1715,47 +1789,77 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
           "SELECT pg_advisory_xact_lock(hashtext('quality.first-piece'), hashtext(lower($1)))",
           [inspectionKey]
         )
-        const context = await qualityContextFor(
-          client,
-          input.organizationId,
-          input.jobCardNumber,
+        const existing = await client.query<{
+          id: string
+          machine_id: string | null
+          operation_setup_id: string
+          snapshot: Record<string, unknown>
+          source_payload: Record<string, unknown>
+          notes: string | null
+          work_order_id: string
+        }>(
+          `
+            SELECT inspection.id, inspection.work_order_id,
+              inspection.operation_setup_id, inspection.machine_id,
+              inspection.source_payload, inspection.notes,
+              to_jsonb(inspection) AS snapshot
+            FROM quality.first_piece_inspections inspection
+            JOIN manufacturing.operation_setups setup
+              ON setup.id = inspection.operation_setup_id
+            JOIN manufacturing.route_options route
+              ON route.id = setup.route_option_id
+            JOIN manufacturing.production_floors floor
+              ON floor.id = route.production_floor_id
+            WHERE inspection.organization_id = $1
+              AND lower(inspection.check_key) = lower($2)
+              AND floor.code = $3 AND inspection.reversed_at IS NULL
+            FOR UPDATE OF inspection
+          `,
+          [input.organizationId, inspectionKey,
+            normalizeProductionFloorCode(input.productionFloorCode)]
+        )
+        const previous = existing.rows[0]
+        if (previous && !input.correctionReason &&
+          sameQualityReadings(payloadRows(previous.source_payload?.dimensions), input.dimensions) &&
+          String(previous.notes ?? "") === String(input.notes ?? "")) {
+          return { id: previous.id }
+        }
+        const context = previous ?? await qualityContextFor(
+          client, input.organizationId, input.jobCardNumber,
           input.operationSetupCode,
           normalizeProductionFloorCode(input.productionFloorCode)
         )
-        const machineId = await machineIdFor(
-          client,
-          input.organizationId,
-          input.machineNumber,
+        const machineId = previous ? previous.machine_id : await machineIdFor(
+          client, input.organizationId, input.machineNumber,
           normalizeProductionFloorCode(input.productionFloorCode)
         )
-        const existing = await client.query<{ id: string }>(
-          `
-            SELECT id FROM quality.first_piece_inspections
-            WHERE organization_id = $1 AND lower(check_key) = lower($2)
-              AND operation_setup_id = $3
-              AND reversed_at IS NULL FOR UPDATE
-          `,
-          [input.organizationId, inspectionKey, context.operation_setup_id]
-        )
-        const result = existing.rows[0]
+        const correctionReason = previous
+          ? requiredText(input.correctionReason, "Correction reason")
+          : null
+        const sourcePayload = previous
+          ? {
+              ...payloadRecord(previous.source_payload),
+              dimensions: input.payload.dimensions,
+              notes: input.notes ?? "",
+              remark: input.notes ?? "",
+              correctionHistory: [
+                ...correctionHistory(payloadRecord(previous.source_payload)),
+                { at: new Date().toISOString(), reason: correctionReason,
+                  actorUserId: input.actorUserId ?? null },
+              ],
+            }
+          : input.payload
+        const result = previous
           ? await client.query<{ id: string }>(
               `
                 UPDATE quality.first_piece_inspections
-                SET machine_id = $1,
-                  inspected_at = COALESCE(migration.try_timestamptz($2), now()),
-                  status = $3, inspector_user_id = $4, legacy_inspector = $5,
-                  notes = $6, source_payload = $7
-                WHERE id = $8 RETURNING id
+                SET notes = $1, source_payload = $2
+                WHERE id = $3 RETURNING id
               `,
               [
-                machineId,
-                input.inspectedAt,
-                requiredText(input.status, "Inspection status"),
-                input.actorUserId ?? null,
-                input.approvedBy ?? null,
                 input.notes ?? null,
-                input.payload,
-                existing.rows[0].id,
+                sourcePayload,
+                previous.id,
               ]
             )
           : await client.query<{ id: string }>(
@@ -1784,10 +1888,11 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
                 input.notes ?? null,
                 inspectionKey,
                 randomUUID(),
-                input.payload,
+                sourcePayload,
               ]
             )
         const dimensions = await replaceFirstPieceReadings(client, {
+          correcting: Boolean(previous),
           dimensions: input.dimensions,
           inspectionId: result.rows[0]!.id,
           operationSetupId: context.operation_setup_id,
@@ -1795,10 +1900,27 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
         })
         await client.query(
           `UPDATE quality.first_piece_inspections SET source_payload = $2 WHERE id = $1`,
-          [result.rows[0]!.id, { ...input.payload, dimensions: dimensions.map((dimension, index) => ({
-            ...payloadRows(input.payload.dimensions)[index], ...dimension,
+          [result.rows[0]!.id, { ...sourcePayload, dimensions: dimensions.map((dimension, index) => ({
+            ...payloadRows(sourcePayload.dimensions)[index], ...dimension,
           })) }]
         )
+        if (previous && correctionReason) {
+          const updated = await client.query<{ snapshot: Record<string, unknown> }>(
+            `SELECT to_jsonb(first_piece_inspections) AS snapshot
+             FROM quality.first_piece_inspections WHERE id = $1`,
+            [previous.id]
+          )
+          await auditQualityCorrection(client, {
+            actorUserId: input.actorUserId,
+            after: updated.rows[0]!.snapshot,
+            before: previous.snapshot,
+            organizationId: input.organizationId,
+            reason: correctionReason,
+            targetId: previous.id,
+            targetTable: "first_piece_inspections",
+          })
+          await queueDashboardRefresh(client, input.organizationId)
+        }
         return result.rows[0]!
       })
     },
@@ -1808,6 +1930,7 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
       checkKey: string
       checkedAt: string
       checkedBy?: string | null
+      correctionReason?: string | null
       jobCardNumber: string
       machineNumber?: string | null
       operationSetupCode: string
@@ -1828,37 +1951,75 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
           "SELECT pg_advisory_xact_lock(hashtext('quality.hourly'), hashtext(lower($1)))",
           [checkKey]
         )
-        const context = await qualityContextFor(
-          client,
-          input.organizationId,
-          input.jobCardNumber,
+        const existing = await client.query<{
+          id: string
+          machine_id: string | null
+          operation_setup_id: string
+          snapshot: Record<string, unknown>
+          source_payload: Record<string, unknown>
+          status: string
+          work_order_id: string
+        }>(
+          `
+            SELECT check_row.id, check_row.status, check_row.work_order_id,
+              check_row.operation_setup_id, check_row.machine_id,
+              check_row.source_payload, to_jsonb(check_row) AS snapshot
+            FROM quality.hourly_checks check_row
+            JOIN manufacturing.operation_setups setup
+              ON setup.id = check_row.operation_setup_id
+            JOIN manufacturing.route_options route
+              ON route.id = setup.route_option_id
+            JOIN manufacturing.production_floors floor
+              ON floor.id = route.production_floor_id
+            WHERE check_row.organization_id = $1
+              AND lower(check_row.check_key) = lower($2)
+              AND floor.code = $3 AND check_row.reversed_at IS NULL
+            FOR UPDATE OF check_row
+          `,
+          [input.organizationId, checkKey,
+            normalizeProductionFloorCode(input.productionFloorCode)]
+        )
+        const previous = existing.rows[0]
+        if (previous && !input.correctionReason &&
+          sameQualityReadings(payloadRows(previous.source_payload?.readings), input.readings) &&
+          payloadRows(previous.source_payload?.readings).every((row, index) =>
+            String(row.remark ?? "") === String(payloadRows(input.payload.readings)[index]?.remark ?? "")
+          )) {
+          return { id: previous.id }
+        }
+        const context = previous ?? await qualityContextFor(
+          client, input.organizationId, input.jobCardNumber,
           input.operationSetupCode,
           normalizeProductionFloorCode(input.productionFloorCode)
         )
-        const machineId = await machineIdFor(
-          client,
-          input.organizationId,
-          input.machineNumber,
+        const machineId = previous ? previous.machine_id : await machineIdFor(
+          client, input.organizationId, input.machineNumber,
           normalizeProductionFloorCode(input.productionFloorCode)
         )
-        const existing = await client.query<{ id: string; status: string }>(
-          `
-            SELECT id, status FROM quality.hourly_checks
-            WHERE organization_id = $1 AND lower(check_key) = lower($2)
-              AND operation_setup_id = $3
-              AND reversed_at IS NULL FOR UPDATE
-          `,
-          [input.organizationId, checkKey, context.operation_setup_id]
+        const completed = previous && !["draft", "in progress", "pending"].includes(
+          previous.status.trim().toLowerCase()
         )
-        if (
-          existing.rows[0] &&
-          !["draft", "in progress", "pending"].includes(
-            existing.rows[0].status.trim().toLowerCase()
-          )
-        ) {
-          throw new Error("Completed hourly quality checks cannot be edited.")
-        }
-        const result = existing.rows[0]
+        const correctionReason = completed
+          ? requiredText(input.correctionReason, "Correction reason")
+          : null
+        const sourcePayload = completed
+          ? {
+              ...payloadRecord(previous.source_payload),
+              readings: input.payload.readings,
+              correctionHistory: [
+                ...correctionHistory(payloadRecord(previous.source_payload)),
+                { at: new Date().toISOString(), reason: correctionReason,
+                  actorUserId: input.actorUserId ?? null },
+              ],
+            }
+          : input.payload
+        const result = completed
+          ? await client.query<{ id: string }>(
+              `UPDATE quality.hourly_checks SET source_payload = $1
+               WHERE id = $2 RETURNING id`,
+              [sourcePayload, previous.id]
+            )
+          : previous
           ? await client.query<{ id: string }>(
               `
                 UPDATE quality.hourly_checks
@@ -1874,8 +2035,8 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
                 requiredText(input.status, "Hourly check status"),
                 input.actorUserId ?? null,
                 input.checkedBy ?? null,
-                input.payload,
-                existing.rows[0].id,
+                sourcePayload,
+                previous.id,
               ]
             )
           : await client.query<{ id: string }>(
@@ -1902,22 +2063,47 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
                 input.checkedBy ?? null,
                 checkKey,
                 randomUUID(),
-                input.payload,
+                sourcePayload,
               ]
             )
         const readings = await replaceHourlyReadings(client, {
+          correcting: Boolean(completed),
           hourlyCheckId: result.rows[0]!.id,
           operationSetupId: context.operation_setup_id,
           organizationId: input.organizationId,
           readings: input.readings,
         })
         await client.query(
-          `UPDATE quality.hourly_checks SET source_payload = $2 WHERE id = $1`,
-          [result.rows[0]!.id, { ...input.payload, readings: readings.map((reading, index) => ({
-            ...payloadRows(input.payload.readings)[index], ...reading,
-            remark: payloadRows(input.payload.readings)[index]?.remark ?? "",
-          })) }]
+          `UPDATE quality.hourly_checks SET source_payload = $2,
+             status = $3 WHERE id = $1`,
+          [result.rows[0]!.id, {
+            ...sourcePayload,
+            okCount: readings.filter((reading) => reading.result === "OK").length,
+            ngCount: readings.filter((reading) => reading.result === "Not OK").length,
+            readings: readings.map((reading, index) => ({
+              ...payloadRows(sourcePayload.readings)[index], ...reading,
+              remark: payloadRows(input.payload.readings)[index]?.remark ?? "",
+            })),
+          }, completed
+            ? readings.some((reading) => reading.result === "Not OK") ? "Not OK" : "OK"
+            : requiredText(input.status, "Hourly check status")]
         )
+        if (completed && correctionReason) {
+          const updated = await client.query<{ snapshot: Record<string, unknown> }>(
+            `SELECT to_jsonb(hourly_checks) AS snapshot
+             FROM quality.hourly_checks WHERE id = $1`,
+            [previous.id]
+          )
+          await auditQualityCorrection(client, {
+            actorUserId: input.actorUserId,
+            after: updated.rows[0]!.snapshot,
+            before: previous.snapshot,
+            organizationId: input.organizationId,
+            reason: correctionReason,
+            targetId: previous.id,
+            targetTable: "hourly_checks",
+          })
+        }
         return result.rows[0]!
       })
     },

@@ -399,6 +399,7 @@ export function operationalEntryPlan(entryType: string, payload: Payload) {
       operation: "first-piece",
       input: {
         approvedBy: optionalText(payload.approvedBy),
+        correctionReason: optionalText(payload.correctionReason),
         dimensions: dimensions.map((dimension) => ({
           parameterCode:
             text(dimension.parameterCode || dimension.code || dimension.uid) ||
@@ -444,6 +445,7 @@ export function operationalEntryPlan(entryType: string, payload: Payload) {
           payload.savedAt || payload.checkedAt || payload.prodDate
         ),
         checkedBy: optionalText(payload.checkedBy),
+        correctionReason: optionalText(payload.correctionReason),
         jobCardNumber: text(payload.jobCard || payload.jcNo),
         machineNumber: optionalText(payload.machine || payload.machineNo),
         operationSetupCode: text(payload.setupNo),
