@@ -1,3 +1,5 @@
+import { buildJobCardProgress } from "./job-card-progress"
+
 export type JobCardPlanRow = {
   plannedProductionEndDate?: string | null
   plannedProductionStartDate?: string | null
@@ -309,6 +311,7 @@ export function buildJobCardAnalytics(input: {
   firstSetupNumber: string | null
   orderedQuantity: number
   planRows: JobCardPlanRow[]
+  setupNumbers: string[]
   sessions: JobCardSessionRow[]
 }) {
   const orderedQuantity = finite(input.orderedQuantity)
@@ -383,11 +386,13 @@ export function buildJobCardAnalytics(input: {
     setupGroups.set(setupNumber, setup)
   }
 
-  const setupNumbers = new Set(
-    [
-      ...input.planRows.map((row) => row.setupNumber?.trim()),
-      ...outputRows.map((row) => row.setupNumber?.trim()),
-    ].filter((value): value is string => Boolean(value))
+  const progress = buildJobCardProgress(orderedQuantity,
+    [...new Set(input.setupNumbers)].map((setupNumber) => ({
+      setupNumber,
+      goodPieces: outputRows
+        .filter((row) => row.setupNumber?.trim() === setupNumber)
+        .reduce((total, row) => total + finite(row.goodPieces), 0),
+    })),
   )
 
   return {
@@ -395,7 +400,8 @@ export function buildJobCardAnalytics(input: {
     actualGoodPieces,
     actualProducedPieces,
     actualStartAt: firstDate(input.sessions.map((row) => row.startedAt)),
-    completionPercent: progressPercent(actualGoodPieces, orderedQuantity),
+    ...progress,
+    finishedCompletionPercent: progressPercent(actualGoodPieces, orderedQuantity),
     downtimeByReason: [...reasonGroups.values()].sort(
       (left, right) => right.minutes - left.minutes || left.code.localeCompare(right.code)
     ),
@@ -418,17 +424,5 @@ export function buildJobCardAnalytics(input: {
     rejectionPercent: percent(rejectedPieces, operationProducedPieces),
     runtimeMinutes,
     sessionCount: input.sessions.length,
-    setupPerformance: [...setupNumbers]
-      .sort((left, right) => left.localeCompare(right, undefined, { numeric: true }))
-      .map((setupNumber) => {
-        const actualGood = outputRows
-          .filter((row) => row.setupNumber?.trim() === setupNumber)
-          .reduce((total, row) => total + finite(row.goodPieces), 0)
-        return {
-          actualGoodPieces: actualGood,
-          completionPercent: percent(actualGood, orderedQuantity),
-          setupNumber,
-        }
-      }),
   }
 }

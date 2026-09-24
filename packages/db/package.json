@@ -26,6 +26,7 @@
     "vitest": "4.1.10"
   },
   "exports": {
+    "./job-card-progress": "./src/job-card-progress.ts",
     "./rejection-domain": "./src/rejection-domain.ts",
     "./branding-domain": "./src/branding-domain.ts",
     "./document-control-domain": "./src/document-control-domain.ts",

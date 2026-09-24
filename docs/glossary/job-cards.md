@@ -4,7 +4,7 @@
 
 The Job Cards tab is a compact one-row-per-Job-Card register. It is for finding a Job Card, not displaying its complete history.
 
-Production Progress in the register gives every distinct setup in the selected
+Production Progress in both the register and workspace gives every distinct setup in the selected
 route an equal share of 100%. Each setup's progress is its cumulative good
 pieces across machines divided by ordered pieces, capped between 0% and 100%.
 The Job Card percentage is the average of those setup percentages, including
@@ -45,9 +45,17 @@ Every Job Card has one dedicated workspace URL. The workspace reads, but does no
 - Production Sessions, downtime and rejection;
 - setup-progress, historical Production Card and dispatch events.
 
-The workspace separates Overview, Masters, Setup, Production, Rejection,
-Downtime, Delivery, and Complete Log so each view shows only its own metrics and
-records.
+The workspace separates Overview, Masters, Setup, Setup Production, Production,
+Inprocess Quality Control, Downtime, Delivery, and Complete Log. Setup Production
+shows cumulative good output for every selected-route setup, including setups
+with no output. Saved session output and corrections update on automatic refresh
+and when the page regains focus; unsaved session counts are not inferred.
+Inprocess Quality Control groups rejection entries, first-piece inspection
+reports and hourly checks, with links to the saved records. A rejection's type,
+reason and defect describe the same quantity; they are not separate rejections.
+Production Session references open their session details. Quality Parameters in
+Setup Masters are collapsed until opened. Material Yield retains Expected From
+Received RM and omits Remaining RM Equivalent from the workspace display.
 
 In Masters, Casting is the unitless material ratio calculated as Product Master
 Blank Piece Weight divided by One-Piece Weight. For example, `5.022 / 0.90`
@@ -63,7 +71,7 @@ not label running work as awaiting raw material.
 
 - Plan: ordered quantity and current planned production dates.
 - Actual: finished total/good pieces from the selected route's final setup, plus setup-level operation output, rejected pieces, runtime and downtime. It includes Production Sessions plus older production entries that are not already linked to a Session, preventing duplicate records.
-- Completion percent: final-setup good pieces divided by ordered quantity. Earlier setup output is WIP and is not counted as finished pieces.
+- Completion percent: the equal-weight average of capped setup completion percentages, using every selected-route setup as described above. Finished-output percent remains final-setup good pieces divided by ordered quantity and must be labelled separately. Earlier setup output remains WIP.
 - Rejection percent: rejected pieces divided by total produced pieces.
 - Downtime pattern: minutes and occurrences grouped by coded reason and setup.
 

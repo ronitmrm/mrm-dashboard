@@ -10,11 +10,11 @@ export function jobCardCurrentStage({ analytics, sessions, setupTimings, selecte
   receipts: Row[]
   planRows: Row[]
 }) {
-  return number(analytics.actualGoodPieces) >= number(analytics.orderedQuantity) && number(analytics.orderedQuantity) > 0
+  return number(analytics.completionPercent) >= 100
     ? "Production complete"
     : sessions.some((row) => text(row.status) === "open") || planRows.some((row) => text(row.runningStatus).toLowerCase() === "running")
       ? "Production running"
-      : number(analytics.actualGoodPieces) > 0
+      : number(analytics.operationGoodPieces) > 0 || number(analytics.actualGoodPieces) > 0
         ? "Production"
         : setupTimings.some((row) => row.qualityApprovedAt)
           ? "Ready for production"

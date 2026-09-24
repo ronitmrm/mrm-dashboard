@@ -3,18 +3,19 @@
 import type { ProductionFloorCode } from "@workspace/db/production-floors"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
-import { SectionCard, CardContent, CardDescription, CardHeader, CardTitle } from "@workspace/ui/components/card"
+import { SectionCard, CardContent, CardDescription, CardHeader, CardTitle, MetricCard } from "@workspace/ui/components/card"
 import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
 import { OperationalTable, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@workspace/ui/components/table"
-import { ArrowLeft, Factory, History, RefreshCw, Route, Save, Settings2, ShieldAlert, Truck } from "lucide-react"
+import { ArrowLeft, Factory, History, RefreshCw, Route, Save, Settings2, Truck } from "lucide-react"
 import Link from "next/link"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 
 import { jobCardCurrentStage } from "@/lib/job-card-current-stage"
 import { dashboardTabHref } from "@/lib/unified-navigation"
 import { formatIstDate, formatIstDateTime } from "@/lib/date-time"
 import { formatMasterDecimal, formatPiecesPerKg } from "./job-card-master-display"
+import { JobCardQualityRecords, SetupProduction } from "./job-card-workspace-sections"
 
 type Row = Record<string, unknown>
 type Workspace = {
@@ -24,6 +25,7 @@ type Workspace = {
   jobCard?: Row
   planRows?: Row[]
   plannerMovements?: Row[]
+  qualityRecords?: Row[]
   productionFloorCode?: string
   rawMaterialReceipts?: Row[]
   routes?: Row[]
@@ -31,14 +33,15 @@ type Workspace = {
   setups?: Row[]
   setupTimings?: Row[]
 }
-type TabKey = "overview" | "masters" | "setup" | "production" | "rejection" | "downtime" | "delivery" | "log"
+type TabKey = "overview" | "masters" | "setup" | "setup-production" | "production" | "rejection" | "downtime" | "delivery" | "log"
 
 const tabs: Array<{ key: TabKey; label: string }> = [
   { key: "overview", label: "Overview" },
   { key: "masters", label: "Masters" },
   { key: "setup", label: "Setup" },
+  { key: "setup-production", label: "Setup Production" },
   { key: "production", label: "Production" },
-  { key: "rejection", label: "Rejection" },
+  { key: "rejection", label: "Inprocess Quality Control" },
   { key: "downtime", label: "Downtime" },
   { key: "delivery", label: "Delivery" },
   { key: "log", label: "Complete Log" },
@@ -73,11 +76,7 @@ async function loadWorkspace(jobCardNumber: string, floor: ProductionFloorCode) 
 }
 
 function Metric({ label, value: metric, note }: { label: string; note?: string; value: string }) {
-  return <div className="rounded-lg border bg-card p-4">
-    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
-    <p className="mt-1 text-2xl font-semibold tabular-nums">{metric}</p>
-    {note ? <p className="mt-1 text-xs text-muted-foreground">{note}</p> : null}
-  </div>
+  return <MetricCard label={label} value={metric} description={note} tone="information" />
 }
 
 function Field({ label, value: fieldValue }: { label: string; value: unknown }) {
@@ -100,29 +99,6 @@ function PatternBars({ emptyText, rows, valueKey = "minutes" }: { emptyText: str
   })}</div>
 }
 
-function RejectionPatterns({ rows }: { rows: Row[] }) {
-  const dimensions = [
-    { key: "rejectionTypeName", label: "Rejection Type" },
-    { key: "rejectionReasonName", label: "Rejection Reason" },
-    { key: "defectName", label: "Defect" },
-  ] as const
-  return <dl className="grid gap-6 md:grid-cols-3">
-    {dimensions.map(({ key, label }) => {
-      const groups = new Map<string, number>()
-      for (const row of rows) {
-        const name = text(row[key]) || "Uncoded"
-        groups.set(name, (groups.get(name) ?? 0) + number(row.quantity))
-      }
-      const patterns = [...groups].map(([name, quantity]) => ({ name, quantity }))
-        .sort((left, right) => right.quantity - left.quantity)
-      return <div key={key} className="min-w-0 space-y-3">
-        <dt className="text-sm font-semibold">{label}</dt>
-        <dd><PatternBars emptyText="No rejection recorded." rows={patterns} valueKey="quantity" /></dd>
-      </div>
-    })}
-  </dl>
-}
-
 function EventTable({ emptyText, rows, rejectionColumns = false }: { emptyText: string; rows: Row[]; rejectionColumns?: boolean }) {
  return <div className="rounded-md border min-w-0"><OperationalTable containerClassName="max-h-[32rem]" excelFilters><TableHeader className="sticky top-0 z-10 bg-background"><TableRow><TableHead>Time</TableHead><TableHead>Event</TableHead><TableHead>Setup / Machine</TableHead><TableHead>Entered By</TableHead>{rejectionColumns ? <><TableHead>Rejection Type</TableHead><TableHead>Rejection Reason</TableHead><TableHead>Defect</TableHead></> : <TableHead>Detail</TableHead>}<TableHead className="text-right">Value</TableHead></TableRow></TableHeader><TableBody>{rows.length ? rows.map((row, index) => <TableRow key={`${text(row.eventTime)}-${text(row.eventType)}-${index}`}><TableCell className="whitespace-nowrap">{date(row.eventTime, true)}</TableCell><TableCell><Badge variant={text(row.eventType) === "rejection" ? "destructive" : "outline"}>{title(row.eventType)}</Badge></TableCell><TableCell>{display(row.setupNumber)} / {display(row.machineNumber)}</TableCell><TableCell>{display(row.enteredByName)}<span className="block text-xs text-muted-foreground">{title(row.enteredRole)}</span></TableCell>{rejectionColumns ? <><TableCell>{display(row.rejectionTypeName)}</TableCell><TableCell>{display(row.rejectionReasonName)}</TableCell><TableCell>{display(row.defectName)}</TableCell></> : <TableCell>{display(row.reasonName || row.detail)}</TableCell>}<TableCell className="text-right tabular-nums">{row.quantity ? `${quantity(row.quantity)} pcs` : row.durationMinutes ? `${quantity(row.durationMinutes)} min` : "-"}</TableCell></TableRow>) : <TableRow><TableCell colSpan={rejectionColumns ? 8 : 6} className="py-10 text-center text-muted-foreground">{emptyText}</TableCell></TableRow>}</TableBody></OperationalTable></div>
 }
@@ -136,7 +112,7 @@ function SetupMaster({ setup }: { setup: Row }) {
       <dl className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5"><Field label="Operation Code" value={setup.operationCode} /><Field label="Machine Type" value={setup.machineType} /><Field label="Cycle Time" value={`${quantity(setup.cycleTimeSeconds, 2)} sec`} /><Field label="Pieces / Cycle" value={quantity(setup.piecesPerCycle)} /><Field label="Setup Target" value={`${quantity(setup.setupTimeMinutes)} min`} /></dl>
       <div className="grid gap-4 xl:grid-cols-2">
  <div><h4 className="mb-2 text-sm font-semibold">Tooling</h4><div className="rounded-md border min-w-0"><OperationalTable><TableHeader><TableRow><TableHead>Code</TableHead><TableHead>Description</TableHead><TableHead className="text-right">Qty</TableHead></TableRow></TableHeader><TableBody>{tools.length ? tools.map((tool, index) => <TableRow key={`${value(tool, "toolCode")}-${index}`}><TableCell>{display(tool.toolCode)}</TableCell><TableCell>{display(tool.description)}</TableCell><TableCell className="text-right">{quantity(tool.quantity)}</TableCell></TableRow>) : <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground">No tooling master selected.</TableCell></TableRow>}</TableBody></OperationalTable></div></div>
- <div><h4 className="mb-2 text-sm font-semibold">Quality Parameters</h4><div className="rounded-md border min-w-0"><OperationalTable><TableHeader><TableRow><TableHead>Parameter</TableHead><TableHead>Limits</TableHead><TableHead>Unit</TableHead></TableRow></TableHeader><TableBody>{parameters.length ? parameters.map((parameter, index) => <TableRow key={`${value(parameter, "parameterCode")}-${index}`}><TableCell><span className="font-medium">{display(parameter.name)}</span><span className="block text-xs text-muted-foreground">{display(parameter.parameterCode)}</span></TableCell><TableCell>{display(parameter.lowerLimit)} – {display(parameter.upperLimit)}</TableCell><TableCell>{display(parameter.unit)}</TableCell></TableRow>) : <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground">No quality parameters selected.</TableCell></TableRow>}</TableBody></OperationalTable></div></div>
+ <details className="self-start"><summary className="mb-2 cursor-pointer text-sm font-semibold">Quality Parameters ({parameters.length})</summary><div className="rounded-md border min-w-0"><OperationalTable><TableHeader><TableRow><TableHead>Parameter</TableHead><TableHead>Limits</TableHead><TableHead>Unit</TableHead></TableRow></TableHeader><TableBody>{parameters.length ? parameters.map((parameter, index) => <TableRow key={`${value(parameter, "parameterCode")}-${index}`}><TableCell><span className="font-medium">{display(parameter.name)}</span><span className="block text-xs text-muted-foreground">{display(parameter.parameterCode)}</span></TableCell><TableCell>{display(parameter.lowerLimit)} – {display(parameter.upperLimit)}</TableCell><TableCell>{display(parameter.unit)}</TableCell></TableRow>) : <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground">No quality parameters selected.</TableCell></TableRow>}</TableBody></OperationalTable></div></details>
       </div>
     </div>
   </details>
@@ -151,24 +127,41 @@ export function JobCardWorkspace({ floor, jobCardNumber }: { floor: ProductionFl
   const [overrideDays, setOverrideDays] = useState("")
   const [saving, setSaving] = useState(false)
   const [saveMessage, setSaveMessage] = useState("")
+  const loadingRef = useRef(false)
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  const load = useCallback(async (silent = false) => {
+    if (loadingRef.current) return
+    loadingRef.current = true
+    if (!silent) setLoading(true)
     setError("")
     try {
       const next = await loadWorkspace(jobCardNumber, floor)
       setWorkspace(next)
-      const target = record(record(next.analytics).deliveryTarget)
-      setProductDays(text(target.productDefaultWorkingDays))
-      setOverrideDays(text(target.jobCardOverrideWorkingDays))
+      if (!silent) {
+        const target = record(record(next.analytics).deliveryTarget)
+        setProductDays(text(target.productDefaultWorkingDays))
+        setOverrideDays(text(target.jobCardOverrideWorkingDays))
+      }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Job Card could not be loaded.")
     } finally {
-      setLoading(false)
+      loadingRef.current = false
+      if (!silent) setLoading(false)
     }
   }, [floor, jobCardNumber])
 
   useEffect(() => { queueMicrotask(() => void load()) }, [load])
+  useEffect(() => {
+    const refresh = () => { if (document.visibilityState === "visible") void load(true) }
+    const timer = window.setInterval(refresh, 10_000)
+    window.addEventListener("focus", refresh)
+    document.addEventListener("visibilitychange", refresh)
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener("focus", refresh)
+      document.removeEventListener("visibilitychange", refresh)
+    }
+  }, [load])
 
   const analytics = workspace?.analytics ?? {}
   const jobCard = workspace?.jobCard ?? {}
@@ -183,7 +176,7 @@ export function JobCardWorkspace({ floor, jobCardNumber }: { floor: ProductionFl
   const delivery = record(analytics.delivery)
   const deliveryTarget = record(analytics.deliveryTarget)
   const material = record(analytics.material)
-  const completion = Math.min(Math.max(number(analytics.completionPercent), 0), 100)
+  const completion = analytics.completionPercent == null ? null : Math.min(Math.max(number(analytics.completionPercent), 0), 100)
   const finalSetupNumber = text(analytics.finalSetupNumber)
   const hasFinishedOutput = number(analytics.actualProducedPieces) > 0
   const finishedOutputNote = hasFinishedOutput
@@ -223,7 +216,7 @@ export function JobCardWorkspace({ floor, jobCardNumber }: { floor: ProductionFl
   return <main className="grid gap-4 p-4 md:p-6">
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div className="flex items-start gap-3"><Button asChild size="icon" variant="outline"><Link href={dashboardTabHref("jobCardStatusTab", floor)} aria-label="Back to Job Cards"><ArrowLeft /></Link></Button><div><p className="text-sm text-muted-foreground">Job Card · {title(floor)}</p><h1 className="text-2xl font-semibold">{jobCardNumber}</h1><p className="text-sm text-muted-foreground">{display(jobCard.partCode)} · {display(jobCard.description)}</p></div></div>
-      <div className="flex items-center gap-2"><Badge variant={completion >= 100 ? "default" : "secondary"}>{currentStage}</Badge><Button disabled={loading} variant="outline" onClick={() => void load()}><RefreshCw className={loading ? "animate-spin" : ""} /> Refresh</Button></div>
+      <div className="flex items-center gap-2"><Badge variant={(completion ?? 0) >= 100 ? "default" : "secondary"}>{currentStage}</Badge><Button disabled={loading} variant="outline" onClick={() => void load()}><RefreshCw className={loading ? "animate-spin" : ""} /> Refresh</Button></div>
     </div>
 
     {error ? <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive" role="alert">{error}</div> : null}
@@ -232,8 +225,8 @@ export function JobCardWorkspace({ floor, jobCardNumber }: { floor: ProductionFl
       <nav className="flex gap-1 overflow-x-auto rounded-lg border bg-muted/30 p-1" aria-label="Job Card sections">{tabs.map((tab) => <Button className="shrink-0" key={tab.key} size="sm" variant={activeTab === tab.key ? "default" : "ghost"} aria-pressed={activeTab === tab.key} onClick={() => setActiveTab(tab.key)}>{tab.label}</Button>)}</nav>
 
       {activeTab === "overview" ? <section className="grid gap-4">
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Metric label="Job Complete" value={`${quantity(completion, 1)}%`} note={finishedOutputNote} /><Metric label="Current Stage" value={currentStage} /><Metric label="Delivery Rating" value={display(delivery.rating)} note={display(delivery.status)} /><Metric label="Order Short" value={quantity(material.orderShortPieces)} note="finished pieces still required" /></div>
- <SectionCard><CardHeader><CardTitle>Job Card Progress</CardTitle><CardDescription>Only good output from the final setup counts as finished Job Card production.</CardDescription></CardHeader><CardContent className="grid gap-4"><div><div className="mb-1 flex justify-between gap-3 text-sm"><span>Finished production</span><strong className="text-right tabular-nums">{hasFinishedOutput ? `${quantity(analytics.actualGoodPieces)} / ${quantity(analytics.orderedQuantity)} pcs` : "No finished pieces yet"}</strong></div><div className="h-4 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-[var(--color-positive-bg)]" style={{ width: `${completion}%` }} /></div><p className="mt-1 text-xs text-muted-foreground">Earlier setup output remains work in progress until it passes Setup {finalSetupNumber || "-"}.</p></div><dl className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4"><Field label="Planned Start" value={date(analytics.plannedStartDate)} /><Field label="Actual Start" value={date(analytics.actualStartAt, true)} /><Field label="Planned End" value={date(analytics.plannedEndDate)} /><Field label="Target Delivery" value={date(delivery.targetDate)} /></dl></CardContent></SectionCard>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Metric label="Job Complete" value={completion === null ? "Unavailable" : `${quantity(completion, 1)}%`} note={`${quantity(analytics.completedSetupCount)} / ${quantity(analytics.setupCount)} setups complete`} /><Metric label="Current Stage" value={currentStage} /><Metric label="Delivery Rating" value={display(delivery.rating)} note={display(delivery.status)} /><Metric label="Order Short" value={quantity(material.orderShortPieces)} note="finished pieces still required" /></div>
+ <SectionCard><CardHeader><CardTitle>Job Card Progress</CardTitle><CardDescription>Overall completion gives each route setup an equal share. Finished pieces are counted only after the final setup.</CardDescription></CardHeader><CardContent className="grid gap-4"><div><div className="mb-1 flex justify-between gap-3 text-sm"><span>Overall production progress</span><strong className="text-right tabular-nums">{completion === null ? "Progress unavailable" : `${quantity(completion, 1)}%`}</strong></div><div role="progressbar" aria-label="Overall Job Card completion" aria-valuemin={0} aria-valuemax={100} aria-valuenow={completion ?? undefined} className="h-3 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-[var(--color-info)]" style={{ width: `${completion ?? 0}%` }} /></div><p className="mt-1 text-xs text-muted-foreground">{finishedOutputNote}. Earlier setup output remains work in progress.</p></div><dl className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4"><Field label="Planned Start" value={date(analytics.plannedStartDate)} /><Field label="Actual Start" value={date(analytics.actualStartAt, true)} /><Field label="Planned End" value={date(analytics.plannedEndDate)} /><Field label="Target Delivery" value={date(delivery.targetDate)} /></dl></CardContent></SectionCard>
  <SectionCard><CardHeader><CardTitle>Exceptions Needing Attention</CardTitle></CardHeader><CardContent className="grid gap-2 md:grid-cols-3"><Field label="Rejected Pieces" value={quantity(analytics.rejectedPieces)} /><Field label="Downtime" value={`${quantity(analytics.downtimeMinutes)} min`} /><Field label="Unexplained Material Loss" value={material.available === false ? "Set Product Master Blank Piece Weight" : `${quantity(material.unexplainedLossPieces)} pcs estimate`} /></CardContent></SectionCard>
       </section> : null}
 
@@ -248,10 +241,12 @@ export function JobCardWorkspace({ floor, jobCardNumber }: { floor: ProductionFl
  <SectionCard><CardHeader><CardTitle className="flex items-center gap-2"><Settings2 className="size-4" /> Setup-wise Time</CardTitle><CardDescription>Target comes from Cycle Master. Missing timestamps remain blank and are not counted as zero.</CardDescription></CardHeader><CardContent><div className="rounded-md border min-w-0"><OperationalTable><TableHeader><TableRow><TableHead>Setup</TableHead><TableHead>Operation</TableHead><TableHead className="text-right">Target</TableHead><TableHead className="text-right">Machinist</TableHead><TableHead className="text-right">Variance</TableHead><TableHead className="text-right">QC Wait</TableHead><TableHead className="text-right">Start Wait</TableHead></TableRow></TableHeader><TableBody>{setupTimings.length ? setupTimings.map((row) => <TableRow key={text(row.setupId)}><TableCell className="font-medium">{display(row.setupNumber)}</TableCell><TableCell>{display(row.operationName || row.operationCode)}</TableCell><TableCell className="text-right">{row.targetSetupMinutes == null ? "-" : `${quantity(row.targetSetupMinutes)} min`}</TableCell><TableCell className="text-right">{row.machinistSetupMinutes == null ? "-" : `${quantity(row.machinistSetupMinutes)} min`}</TableCell><TableCell className={`text-right ${number(row.setupVarianceMinutes) > 0 ? "text-destructive" : ""}`}>{row.setupVarianceMinutes == null ? "-" : `${number(row.setupVarianceMinutes) > 0 ? "+" : ""}${quantity(row.setupVarianceMinutes)} min`}</TableCell><TableCell className="text-right">{row.qcWaitMinutes == null ? "-" : `${quantity(row.qcWaitMinutes)} min`}</TableCell><TableCell className="text-right">{row.machineStartWaitMinutes == null ? "-" : `${quantity(row.machineStartWaitMinutes)} min`}</TableCell></TableRow>) : <TableRow><TableCell colSpan={7} className="py-10 text-center text-muted-foreground">No setup timing recorded yet.</TableCell></TableRow>}</TableBody></OperationalTable></div></CardContent></SectionCard>
       </section> : null}
 
+      {activeTab === "setup-production" ? <SetupProduction rows={list(analytics.setupPerformance)} setups={setups} orderedQuantity={analytics.orderedQuantity} /> : null}
+
       {activeTab === "production" ? <section className="grid gap-4">
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Metric label="Finished Good" value={hasFinishedOutput ? quantity(analytics.actualGoodPieces) : "-"} note={hasFinishedOutput ? `${quantity(completion, 1)}% of order` : `Waiting for Setup ${finalSetupNumber || "-"}`} /><Metric label="Final Setup Output" value={hasFinishedOutput ? quantity(analytics.actualProducedPieces) : "-"} note={hasFinishedOutput ? "includes final-setup rejection" : "No finished output yet"} /><Metric label="Runtime" value={`${quantity(analytics.runtimeMinutes)} min`} /><Metric label="Sessions" value={quantity(analytics.sessionCount)} /></div>
- <SectionCard><CardHeader><CardTitle>Material Yield & Shortfall</CardTitle><CardDescription>Estimated from total received and remaining kilograms using Product Master Blank Piece Weight.</CardDescription></CardHeader><CardContent className="grid gap-3">{material.available === false ? <div className="rounded-md border border-[var(--color-warning)]/30 bg-[var(--color-warning-bg)] p-3 text-sm">Set Blank Piece Weight in Product Master to calculate material capacity and process loss.</div> : null}<div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4"><Field label="Expected From Received RM" value={piecesEstimate(material.expectedPiecesFromMaterial)} /><Field label="Remaining RM Equivalent" value={piecesEstimate(material.remainingMaterialEquivalentPieces)} /><Field label="Rejected" value={`${quantity(material.rejectedPieces)} pcs`} /><Field label="Unexplained Process Loss" value={piecesEstimate(material.unexplainedLossPieces)} /><Field label="Order Short" value={`${quantity(material.orderShortPieces)} pcs`} /><Field label="RM Capacity Short" value={piecesEstimate(material.materialCapacityShortPieces)} /><Field label="Received RM" value={`${quantity(material.receivedKg, 3)} kg`} /><Field label="Ordered RM" value={`${quantity(material.orderedKg, 3)} kg`} /></div></CardContent></SectionCard>
- <SectionCard><CardHeader><CardTitle>Production Sessions</CardTitle><CardDescription>Setup-level machine and operator entries. Output before the final setup is WIP.</CardDescription></CardHeader><CardContent><div className="rounded-md border min-w-0"><OperationalTable excelFilters><TableHeader><TableRow><TableHead>Session</TableHead><TableHead>Machine</TableHead><TableHead>Setup</TableHead><TableHead>Operator</TableHead><TableHead>Started</TableHead><TableHead>Ended</TableHead><TableHead className="text-right">Setup Output</TableHead><TableHead className="text-right">Setup Rejected</TableHead><TableHead className="text-right">Setup Good</TableHead></TableRow></TableHeader><TableBody>{sessions.length ? sessions.map((row) => <TableRow key={text(row.id)}><TableCell><span className="font-medium">{display(row.session_reference)}</span><Badge className="ml-2" variant={text(row.status) === "open" ? "default" : "outline"}>{title(row.status)}</Badge></TableCell><TableCell>{display(row.machine_number)}</TableCell><TableCell>{display(row.setup_number)}</TableCell><TableCell>{display(row.operator_code)}</TableCell><TableCell>{date(row.started_at, true)}</TableCell><TableCell>{date(row.ended_at, true)}</TableCell><TableCell className="text-right">{quantity(row.total_pieces)}</TableCell><TableCell className="text-right">{quantity(row.quantity_rejected)}</TableCell><TableCell className="text-right">{quantity(row.quantity_good)}</TableCell></TableRow>) : <TableRow><TableCell colSpan={9} className="py-10 text-center text-muted-foreground">No production sessions recorded.</TableCell></TableRow>}</TableBody></OperationalTable></div></CardContent></SectionCard>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Metric label="Finished Good" value={hasFinishedOutput ? quantity(analytics.actualGoodPieces) : "-"} note={hasFinishedOutput ? `${quantity(analytics.finishedCompletionPercent, 1)}% finished pieces` : `Waiting for Setup ${finalSetupNumber || "-"}`} /><Metric label="Final Setup Output" value={hasFinishedOutput ? quantity(analytics.actualProducedPieces) : "-"} note={hasFinishedOutput ? "includes final-setup rejection" : "No finished output yet"} /><Metric label="Runtime" value={`${quantity(analytics.runtimeMinutes)} min`} /><Metric label="Sessions" value={quantity(analytics.sessionCount)} /></div>
+ <SectionCard><CardHeader><CardTitle>Material Yield & Shortfall</CardTitle><CardDescription>Estimated from total received and remaining kilograms using Product Master Blank Piece Weight.</CardDescription></CardHeader><CardContent className="grid gap-3">{material.available === false ? <div className="rounded-md border border-[var(--color-warning)]/30 bg-[var(--color-warning-bg)] p-3 text-sm">Set Blank Piece Weight in Product Master to calculate material capacity and process loss.</div> : null}<div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4"><Field label="Expected From Received RM" value={piecesEstimate(material.expectedPiecesFromMaterial)} /><Field label="Rejected" value={`${quantity(material.rejectedPieces)} pcs`} /><Field label="Unexplained Process Loss" value={piecesEstimate(material.unexplainedLossPieces)} /><Field label="Order Short" value={`${quantity(material.orderShortPieces)} pcs`} /><Field label="RM Capacity Short" value={piecesEstimate(material.materialCapacityShortPieces)} /><Field label="Received RM" value={`${quantity(material.receivedKg, 3)} kg`} /><Field label="Ordered RM" value={`${quantity(material.orderedKg, 3)} kg`} /></div></CardContent></SectionCard>
+ <SectionCard><CardHeader><CardTitle>Production Sessions</CardTitle><CardDescription>Setup-level machine and operator entries. Output before the final setup is WIP.</CardDescription></CardHeader><CardContent><div className="rounded-md border min-w-0"><OperationalTable excelFilters><TableHeader><TableRow><TableHead>Session</TableHead><TableHead>Machine</TableHead><TableHead>Setup</TableHead><TableHead>Operator</TableHead><TableHead>Started</TableHead><TableHead>Ended</TableHead><TableHead className="text-right">Setup Output</TableHead><TableHead className="text-right">Setup Rejected</TableHead><TableHead className="text-right">Setup Good</TableHead></TableRow></TableHeader><TableBody>{sessions.length ? sessions.map((row) => <TableRow key={text(row.id)}><TableCell><Link className="font-medium text-primary underline underline-offset-4" href={`/dashboard/production-sessions?${new URLSearchParams({ floor, session: text(row.id) })}`}>{display(row.session_reference)}</Link><Badge className="ml-2" variant={text(row.status) === "open" ? "default" : "outline"}>{title(row.status)}</Badge></TableCell><TableCell>{display(row.machine_number)}</TableCell><TableCell>{display(row.setup_number)}</TableCell><TableCell>{display(row.operator_code)}</TableCell><TableCell>{date(row.started_at, true)}</TableCell><TableCell>{date(row.ended_at, true)}</TableCell><TableCell className="text-right">{quantity(row.total_pieces)}</TableCell><TableCell className="text-right">{quantity(row.quantity_rejected)}</TableCell><TableCell className="text-right">{quantity(row.quantity_good)}</TableCell></TableRow>) : <TableRow><TableCell colSpan={9} className="py-10 text-center text-muted-foreground">No production sessions recorded.</TableCell></TableRow>}</TableBody></OperationalTable></div></CardContent></SectionCard>
  <SectionCard><CardHeader><CardTitle>Planner Movement History</CardTitle></CardHeader><CardContent><div className="rounded-md border min-w-0"><OperationalTable excelFilters><TableHeader><TableRow><TableHead>Decision Time</TableHead><TableHead>Action</TableHead><TableHead>Setup</TableHead><TableHead>Machine Movement</TableHead><TableHead>Reason</TableHead><TableHead>Session Settlement</TableHead><TableHead className="text-right">Good Output</TableHead><TableHead>Planner</TableHead></TableRow></TableHeader><TableBody>{plannerMovements.length ? plannerMovements.map((row, index) => {
           const references = Array.isArray(row.sessionReferences) ? row.sessionReferences.map(String).filter(Boolean) : []
           const fromMachine = text(row.fromMachineNumber)
@@ -262,7 +257,7 @@ export function JobCardWorkspace({ floor, jobCardNumber }: { floor: ProductionFl
  <SectionCard><CardHeader><CardTitle>Production Plan</CardTitle></CardHeader><CardContent><div className="rounded-md border min-w-0"><OperationalTable><TableHeader><TableRow><TableHead>Machine</TableHead><TableHead>Setup</TableHead><TableHead>Start</TableHead><TableHead>End</TableHead><TableHead>Status</TableHead></TableRow></TableHeader><TableBody>{planRows.length ? planRows.map((row, index) => <TableRow key={`${value(row, "machineNo", "machineNumber")}-${index}`}><TableCell>{value(row, "machineNo", "machineNumber") || "-"}</TableCell><TableCell>{value(row, "setupNo", "setupNumber") || "-"}</TableCell><TableCell>{date(value(row, "plannedProductionStartDate", "productionStartDate"))}</TableCell><TableCell>{date(value(row, "plannedProductionEndDate", "productionEndDate"))}</TableCell><TableCell>{title(value(row, "runningStatus", "status", "shopFloorStage"))}</TableCell></TableRow>) : <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">No plan rows available.</TableCell></TableRow>}</TableBody></OperationalTable></div></CardContent></SectionCard>
       </section> : null}
 
- {activeTab === "rejection" ? <section className="grid gap-4"><div className="grid gap-3 sm:grid-cols-3"><Metric label="Rejected Pieces" value={quantity(analytics.rejectedPieces)} /><Metric label="Rejection Rate" value={`${quantity(analytics.rejectionPercent, 2)}%`} /><Metric label="Rejection Entries" value={quantity(rejectionEvents.length)} /></div><SectionCard><CardHeader><CardTitle className="flex items-center gap-2"><ShieldAlert className="size-4" /> Rejection Pattern</CardTitle></CardHeader><CardContent><RejectionPatterns rows={rejectionEvents} /></CardContent></SectionCard><SectionCard><CardHeader><CardTitle>Rejection Log</CardTitle></CardHeader><CardContent><EventTable emptyText="No rejection entries recorded." rows={rejectionEvents} rejectionColumns /></CardContent></SectionCard></section> : null}
+ {activeTab === "rejection" ? <section className="grid gap-4"><div className="grid gap-3 sm:grid-cols-3"><Metric label="Rejected Pieces" value={quantity(analytics.rejectedPieces)} /><Metric label="Rejection Rate" value={`${quantity(analytics.rejectionPercent, 2)}%`} /><Metric label="Rejection Entries" value={quantity(rejectionEvents.length)} /></div><JobCardQualityRecords rows={workspace.qualityRecords ?? emptyRows} floor={floor} /><SectionCard><CardHeader><CardTitle>Rejection Log</CardTitle></CardHeader><CardContent><EventTable emptyText="No rejection entries recorded." rows={rejectionEvents} rejectionColumns /></CardContent></SectionCard></section> : null}
 
  {activeTab === "downtime" ? <section className="grid gap-4"><div className="grid gap-3 sm:grid-cols-3"><Metric label="Downtime" value={`${quantity(analytics.downtimeMinutes)} min`} /><Metric label="Entries" value={quantity(downtimeEvents.length)} /><Metric label="Largest Reason" value={display(list(analytics.downtimeByReason)[0]?.name)} /></div><div className="grid gap-4 xl:grid-cols-2"><SectionCard><CardHeader><CardTitle>By Reason</CardTitle></CardHeader><CardContent><PatternBars emptyText="No downtime recorded." rows={list(analytics.downtimeByReason)} /></CardContent></SectionCard><SectionCard><CardHeader><CardTitle>By Setup</CardTitle></CardHeader><CardContent><PatternBars emptyText="No downtime recorded." rows={list(analytics.downtimeBySetup)} /></CardContent></SectionCard></div><SectionCard><CardHeader><CardTitle>Downtime Log</CardTitle></CardHeader><CardContent><EventTable emptyText="No downtime entries recorded." rows={downtimeEvents} /></CardContent></SectionCard></section> : null}
 
