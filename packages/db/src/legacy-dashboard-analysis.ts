@@ -3670,7 +3670,7 @@ function finalizeMachineAndSetupSchedule(
       const proposedEnd = parseDate(rowText(proposed, "plannedProductionEndDate"));
       const anchorEnd = parseDate(rowText(anchor, "plannedProductionEndDate"));
       if (!proposedStart || !proposedEnd || proposed.toolingPlanBlocked || proposedEnd > currentEnd
-        || proposedStart <= anchorEnd
+        || proposedStart < anchorEnd || (proposedStart === anchorEnd && !shopFloorRowIsComplete(anchor))
         || firstOverlappingMachineUnavailableWindow(planningMeta(proposed).machineUnavailableWindows ?? [], proposedStart, proposedEnd)) continue;
       // Staying on the machine only retains settings if unrelated work does
       // not run between the preceding setup and this one.
@@ -4209,7 +4209,12 @@ function rescheduleMachineQueues(details: Array<Record<string, unknown>>, planni
       row.plannedProductionStartDate = dateLabel(plannedProductionStartDate);
       row.plannedProductionEndDate = dateLabel(plannedProductionEndDate);
       row.planVsActual = setupPlanVsActual(plannedStartDate, parseDate(rowText(row, "setupCompletionDate")) || rowText(row, "setupCompletionDate"));
-      machineNextDate = maxDateValue(machineNextDate, nextMachineAvailableDate(plannedProductionEndDate || plannedStartDate, planningCalendar));
+      // Completed work has already released the machine, including today.
+      // Forecast/running work still reserves its full planned production day.
+      const releasedDate = shopFloorRowIsComplete(row)
+        ? addDays(maxDateValue(plannedProductionEndDate || plannedStartDate, plantIsoDate(new Date())), 0, planningCalendar)
+        : nextMachineAvailableDate(plannedProductionEndDate || plannedStartDate, planningCalendar);
+      machineNextDate = maxDateValue(machineNextDate, releasedDate);
       item.nextDate = machineNextDate;
       item.previousKey = scheduleRowKey(row);
       if (!shopFloorRowIsComplete(row) && (toolingHeld(row) || safeNumber(row.pendingGoodQty) > 0)) {
