@@ -31,6 +31,7 @@ import {
   buildMaterialYield,
   buildPlannerMovementRecord,
   buildSetupTiming,
+  calculateRequiredRawMaterialKg,
   normalizeDeliveryTargets,
   normalizePlannerMovementActionType,
 } from "./job-card-workspace"
@@ -494,28 +495,20 @@ function optionalWorkingDays(value: unknown) {
     : null
 }
 
-function payloadNumber(payload: Record<string, unknown>, ...keys: string[]) {
-  for (const key of keys) {
-    const parsed = Number(payload[key])
-    if (Number.isFinite(parsed)) return parsed
-  }
-  return 0
-}
-
 function rawMaterialSummary(
   rows: Array<Record<string, unknown>>,
-  orderedKg: number
+  requiredKg: number | null
 ) {
   let receivedKg = 0
   let rawMaterialCompleteDate: string | null = null
   for (const row of rows) {
     receivedKg += Number(row.quantityKg ?? 0)
-    if (!rawMaterialCompleteDate && orderedKg > 0 && receivedKg >= orderedKg) {
+    if (!rawMaterialCompleteDate && requiredKg !== null && requiredKg > 0 && receivedKg >= requiredKg) {
       rawMaterialCompleteDate = String(row.receivedOn ?? "") || null
     }
   }
   return {
-    orderedKg,
+    requiredKg,
     rawMaterialCompleteDate,
     receivedKg,
     remainingKg: rows.reduce(
@@ -2913,7 +2906,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
       })
       const material = rawMaterialSummary(
         receiptsResult.rows,
-        payloadNumber(workOrderSource, "orderKg", "ORD. KG.", "ORD. KG")
+        calculateRequiredRawMaterialKg(Number(jobCard.orderedQuantity ?? 0), blankPieceWeightGrams)
       )
       const setupTimings = setupTimingsResult.rows.map((row) => ({
         ...row,

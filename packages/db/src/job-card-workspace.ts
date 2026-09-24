@@ -168,6 +168,11 @@ export function normalizeDeliveryTargets(input: {
   }
 }
 
+export function calculateRequiredRawMaterialKg(orderedQuantity: number, blankPieceWeightGrams: number) {
+  const blankWeight = finite(blankPieceWeightGrams)
+  return blankWeight > 0 ? Math.max(finite(orderedQuantity), 0) * blankWeight / 1000 : null
+}
+
 export function buildMaterialYield(input: {
   actualGoodPieces: number
   actualProducedPieces: number

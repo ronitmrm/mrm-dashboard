@@ -121,6 +121,16 @@ Missing timestamps remain unknown and are never treated as zero minutes.
 
 ## Material Yield
 
+Required RM (kg) is ordered pieces × Product Master Blank Piece Weight (grams)
+÷ 1,000. For example, 10,000 pieces × 15 grams requires 150 kg. The Work Order
+template's ordered kilograms represent approximate finished-goods weight, not
+raw material required. The workspace compares cumulative RM receipts against
+the calculated requirement when identifying the complete-RM date. Missing blank
+piece weight leaves the requirement and complete-RM date unavailable.
+
+Finished Good excludes final-setup rejections. Final Setup Total includes good
+and rejected output from that final setup; they match only when none is rejected.
+
 - Expected pieces from material: total received kilograms across every RM receipt,
   converted to grams and divided by Product Master Blank Piece Weight in grams.
 - Remaining material equivalent: remaining kilograms converted to grams and
