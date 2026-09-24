@@ -78,6 +78,12 @@ const unitMasterDefinitions = [
     access: "operations",
     scope: "unit",
   },
+  {
+    id: "production_break_schedule",
+    label: "Production Break Schedule",
+    access: "operations",
+    scope: "unit",
+  },
 ] as const satisfies readonly MasterDefinition[]
 
 export const sharedOperationalMasterDefinitions = [
@@ -384,6 +390,11 @@ export function masterFormHref(
   view: MasterModuleView = "dataEntry"
 ) {
   const params = new URLSearchParams()
+  if (selection.main === "production_break_schedule") {
+    params.set("floor", selection.unit)
+    params.set("masterView", view)
+    return `/masters/production-breaks?${params.toString()}`
+  }
   if (
     unitMasterDefinitions.some(({ id }) => id === selection.main) ||
     sharedOperationalMasterDefinitions.some(

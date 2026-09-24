@@ -4,6 +4,8 @@ import { redirect } from "next/navigation"
 import { ProductionSessionsWorkspace } from "@/components/production-sessions-workspace"
 import { requireProductionPage } from "@/lib/auth/require-production-page"
 import { productionCapabilityForTab } from "@/lib/auth/production-capabilities"
+import { masterCapability } from "@/lib/auth/master-capabilities"
+import { listGrantedCapabilities } from "@/lib/auth/require-capability"
 import { productionModuleIsEnabled } from "@/lib/production-module"
 
 export default async function Page({
@@ -19,10 +21,13 @@ export default async function Page({
   const floor = normalizeProductionFloorCode(
     Array.isArray(query.floor) ? query.floor[0] : query.floor
   )
-  await requireProductionPage(
+  const session = await requireProductionPage(
     productionCapabilityForTab("productionSessionsTab", floor)!,
     "/dashboard/production-sessions"
   )
+  const canViewBreakSchedule = (await listGrantedCapabilities(session.user.id, [
+    masterCapability("production_break_schedule", "read", floor),
+  ])).length > 0
 
   const initialSessionId = Array.isArray(query.session)
     ? query.session[0]
@@ -30,6 +35,7 @@ export default async function Page({
 
   return (
     <ProductionSessionsWorkspace
+      canViewBreakSchedule={canViewBreakSchedule}
       initialFloor={floor}
       initialSessionId={initialSessionId}
     />

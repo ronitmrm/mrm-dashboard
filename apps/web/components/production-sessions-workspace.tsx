@@ -20,6 +20,7 @@ import { NativeSelect, NativeSelectOption } from "@workspace/ui/components/nativ
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@workspace/ui/components/sheet"
 import { OperationalTable, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@workspace/ui/components/table"
 import { Clock3, History, Pencil, Play, Search, Square, TriangleAlert } from "lucide-react"
+import Link from "next/link"
 import { useCallback, useEffect, useMemo, useState } from "react"
 
 import { useDashboardDelivery } from "@/hooks/use-dashboard-delivery"
@@ -120,9 +121,11 @@ async function api(path: string, init?: RequestInit) {
 }
 
 export function ProductionSessionsWorkspace({
+  canViewBreakSchedule,
   initialFloor,
   initialSessionId,
 }: {
+  canViewBreakSchedule: boolean
   initialFloor: ProductionFloorCode
   initialSessionId?: string
 }) {
@@ -274,6 +277,7 @@ export function ProductionSessionsWorkspace({
   return (
     <div className="grid gap-4">
         <PageHeader title="Production Sessions" actions={<>
+            {canViewBreakSchedule ? <Button asChild variant="outline"><Link href={`/masters/production-breaks?floor=${floor}`}>Break-time master</Link></Button> : null}
             <Button variant="outline" disabled={loading || saving} onClick={() => setBulkOpen(true)}><TriangleAlert data-icon="inline-start" />Bulk Breakdown</Button>
             {closingRequiredSessions.length ? <Button className="h-8 px-3" variant="destructive" onClick={() => { setStatusFilter("closing_required"); setView("register") }}><TriangleAlert />Closing Required · {closingRequiredSessions.length}</Button> : null}
             <Badge variant="secondary" className="h-8 px-3">{unit.shortLabel}</Badge>
@@ -650,6 +654,7 @@ function DetailSheet({ session, events, floor, now, onOpenChange, onAction }: { 
     ["Measurement", measurementMethod === "counter" ? "Machine counter" : "Weight"],
     ["Target quantity", number(session.targetPieces)],
     ["Productive runtime", `${number(session.runtimeMinutes)} min`],
+    ["Scheduled break", `${number(session.breakMinutes)} min`],
     ["Cycle time", `${number(session.cycleTimeSeconds)} sec`],
     ["Downtime", `${number(session.downtimeMinutes)} min`],
     ["Total produced", pending ? "Pending" : number(session.totalPieces)],
