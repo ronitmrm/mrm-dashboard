@@ -10,7 +10,7 @@ test("shows the saved finish and changing current forecast for the matching Job 
   const render = (currentProbableDispatchDate: string) => renderToStaticMarkup(
     <JobCardRegister actionNeededCount={0} floor="cnc" onOpenMasterReadiness={() => {}}
       routeRows={[]} productionRows={[]}
-      rows={[{ jcNo: "P2132", partCode: "R131" }]}
+      rows={[{ jcNo: "P2132", partCode: "R131", poDate: "2026-09-12" }]}
       finishDateRows={[
         { jcNo: "P2132", partCode: "R131", plannedDispatchDateAtRmReceipt: "25-Sept-26", currentProbableDispatchDate },
         { jcNo: "P2132", partCode: "OTHER", plannedDispatchDateAtRmReceipt: "1-Nov-26", currentProbableDispatchDate: "2-Nov-26" },
@@ -19,6 +19,8 @@ test("shows the saved finish and changing current forecast for the matching Job 
   const initial = render("28-Sept-26")
   expect(initial).toContain("Planned Finish Date")
   expect(initial).toContain("Current Estimated Finish")
+  expect(initial).toContain("PO Date")
+  expect(initial).toContain("2026-09-12")
   expect(initial).toContain("25-Sept-26")
   expect(initial).toContain("28-Sept-26")
   const refreshed = render("30-Sept-26")
