@@ -74,9 +74,15 @@ ALTER TABLE branding.revisions
   ADD COLUMN approval_remarks text,
   ADD COLUMN released_by_user_id uuid REFERENCES identity.users(id);
 
+-- Existing issued revisions are immutable. Temporarily disable the guard only
+-- for this metadata backfill; it is re-enabled before the transaction commits.
+ALTER TABLE branding.revisions DISABLE TRIGGER branding_immutable_issue;
+
 UPDATE branding.revisions
 SET workflow_state = CASE state WHEN 'issued' THEN 'released' ELSE 'draft' END,
     released_by_user_id = CASE WHEN state = 'issued' THEN author_user_id END;
+
+ALTER TABLE branding.revisions ENABLE TRIGGER branding_immutable_issue;
 
 ALTER TABLE branding.revisions
   ALTER COLUMN workflow_state SET NOT NULL,
