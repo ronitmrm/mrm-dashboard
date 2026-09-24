@@ -1200,6 +1200,71 @@ describe("production and shop-floor workflows", () => {
     })
   })
 
+  test("keeps parallel setup states separate and restores an earlier machine after shift end", async () => {
+    const jobCardNumber = `PARALLEL-${suffix}`
+    const machines = [`PARALLEL-A-${suffix}`, `PARALLEL-B-${suffix}`]
+    await planning.upsertWorkOrder({
+      itemUid, jobCardNumber, orderedQuantity: 100,
+      organizationId, workOrderNumber: jobCardNumber,
+    })
+    await planning.selectRoute({ jobCardNumber, organizationId, routeCode: "1" })
+    for (const machineNumber of machines) {
+      await planning.upsertMachine({ machineNumber, organizationId })
+    }
+    const stage = (machineNumber: string) => repository.recordShopFloorStage({
+      jobCardNumber, machineNumber, operationSetupCode: "1", organizationId,
+      payload: { doneBy: firstOperator, partCode: itemUid }, stage: "operator_started",
+    })
+    await stage(machines[0]!)
+    await planning.recordPlanOverride({
+      assignmentMode: "add_parallel_machine", jobCardNumber, organizationId,
+      reason: "Run setup on both machines", setupNumber: 1, toMachineNumber: machines[1]!,
+    })
+    await stage(machines[1]!)
+    const states = await pool.query<{ machine_number: string; stage: string }>(
+      `SELECT machine.machine_number, state.stage
+       FROM manufacturing.shop_floor_setup_state state
+       JOIN manufacturing.work_orders work_order ON work_order.id = state.work_order_id
+       JOIN catalog.machines machine ON machine.id = state.machine_id
+       WHERE work_order.job_card_number = $1 AND state.active
+       ORDER BY machine.machine_number`, [jobCardNumber]
+    )
+    expect(states.rows).toEqual(machines.map((machine_number) => ({
+      machine_number, stage: "operator_started",
+    })))
+
+    const start = (startedAt: string) => repository.startProductionSession({
+      jobCardNumber, machineNumber: machines[0]!, measurementMethod: "weight",
+      operationSetupCode: "1", operatorCode: firstOperator,
+      organizationId, pieceWeightGrams: 15.4, startedAt,
+    })
+    const morning = await start("2026-09-24T08:30:00+05:30")
+    await repository.closeProductionSession({
+      endedAt: "2026-09-24T09:30:00+05:30", endReason: "shift_end",
+      organizationId, sessionId: morning.id,
+    })
+    // Simulate a row displaced by the old parallel-machine behavior.
+    await pool.query(
+      `UPDATE manufacturing.shop_floor_setup_state SET machine_id = NULL, active = false
+       WHERE id IN (
+         SELECT state.id FROM manufacturing.shop_floor_setup_state state
+         JOIN manufacturing.work_orders work_order ON work_order.id = state.work_order_id
+         JOIN catalog.machines machine ON machine.id = state.machine_id
+         WHERE work_order.job_card_number = $1 AND machine.machine_number = $2
+       )`, [jobCardNumber, machines[0]]
+    )
+    const afternoon = await start("2026-09-24T10:00:00+05:30")
+    expect(afternoon.id).toBeTruthy()
+    const restored = await pool.query<{ machine_number: string }>(
+      `SELECT machine.machine_number FROM manufacturing.shop_floor_setup_state state
+       JOIN manufacturing.work_orders work_order ON work_order.id = state.work_order_id
+       JOIN catalog.machines machine ON machine.id = state.machine_id
+       WHERE work_order.job_card_number = $1 AND state.active
+       ORDER BY machine.machine_number`, [jobCardNumber]
+    )
+    expect(restored.rows.map((row) => row.machine_number)).toEqual(machines)
+  })
+
   test("records dispatch and reverses production without deleting evidence", async () => {
     await repository.recordDispatchApproval({
       approvedBy: "Dispatch lead",

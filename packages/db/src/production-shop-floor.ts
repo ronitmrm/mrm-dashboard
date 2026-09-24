@@ -637,7 +637,7 @@ async function requiredActiveEmployeeIdFor(
   return result.rows[0].id
 }
 
-async function plannerSwitchExists(
+async function plannerAssignmentMode(
   client: PoolClient,
   input: {
     fromMachineId: string
@@ -646,9 +646,10 @@ async function plannerSwitchExists(
     workOrderId: string
   }
 ) {
-  const result = await client.query(
+  const result = await client.query<{ assignment_mode: string | null }>(
     `
-      SELECT 1 FROM manufacturing.plan_override_events
+      SELECT source_payload->>'assignmentMode' AS assignment_mode
+      FROM manufacturing.plan_override_events
       WHERE work_order_id = $1
         AND (operation_setup_id = $2 OR operation_setup_id IS NULL)
         AND target_machine_id = $3
@@ -664,7 +665,122 @@ async function plannerSwitchExists(
       input.fromMachineId,
     ]
   )
-  return Boolean(result.rows[0])
+  if (!result.rows[0]) return null
+  return result.rows[0].assignment_mode === "add_parallel_machine" ? "add_parallel_machine" : "move"
+}
+
+async function restoreParallelShopFloorState(
+  client: PoolClient,
+  input: {
+    actorUserId?: string | null
+    machineId: string
+    operationSetupId: string
+    organizationId: string
+    routeOptionId: string
+    workOrderId: string
+  }
+) {
+  const evidence = await client.query<{
+    event_id: string
+    source_payload: Record<string, unknown> | null
+    to_stage: string
+  }>(
+    `SELECT event.id AS event_id, event.source_payload, event.to_stage
+     FROM manufacturing.shop_floor_stage_events event
+     JOIN manufacturing.shop_floor_setup_state state ON state.id = event.setup_state_id
+     WHERE state.organization_id = $1 AND state.work_order_id = $2
+       AND state.route_option_id = $3 AND state.operation_setup_id = $4
+       AND event.machine_id = $5 AND event.reversed_at IS NULL
+     ORDER BY event.occurred_at DESC, event.id DESC LIMIT 1`,
+    [input.organizationId, input.workOrderId, input.routeOptionId,
+      input.operationSetupId, input.machineId]
+  )
+  if (evidence.rows[0]?.to_stage !== "operator_started") return
+  const eligible = await client.query<{ id: string }>(
+    `SELECT session.id
+     FROM manufacturing.production_sessions session
+     WHERE session.id = (
+       SELECT latest.id FROM manufacturing.production_sessions latest
+       WHERE latest.organization_id = $1 AND latest.work_order_id = $2
+         AND latest.route_option_id = $3 AND latest.operation_setup_id = $4
+         AND latest.machine_id = $5 AND latest.reversed_at IS NULL
+       ORDER BY latest.started_at DESC, latest.id DESC LIMIT 1
+     )
+       AND session.status = 'closed' AND session.end_reason <> 'item_complete'
+       AND NOT EXISTS (
+         SELECT 1 FROM manufacturing.shop_floor_setup_state existing
+         WHERE existing.work_order_id = session.work_order_id
+           AND existing.route_option_id = session.route_option_id
+           AND existing.operation_setup_id = session.operation_setup_id
+           AND existing.machine_id = session.machine_id
+       )
+       AND NOT EXISTS (
+         SELECT 1 FROM manufacturing.shop_floor_setup_state occupied
+         WHERE occupied.machine_id = session.machine_id AND occupied.active
+       )
+       AND EXISTS (
+         SELECT 1 FROM manufacturing.shop_floor_setup_state sibling
+         WHERE sibling.work_order_id = session.work_order_id
+           AND sibling.route_option_id = session.route_option_id
+           AND sibling.operation_setup_id = session.operation_setup_id
+           AND sibling.machine_id <> session.machine_id AND sibling.active
+       )
+       AND EXISTS (
+         SELECT 1 FROM manufacturing.plan_override_events override_event
+         WHERE override_event.work_order_id = session.work_order_id
+           AND (override_event.operation_setup_id = session.operation_setup_id
+             OR override_event.operation_setup_id IS NULL)
+           AND override_event.source_payload->>'assignmentMode' = 'add_parallel_machine'
+           AND override_event.reversed_at IS NULL
+           AND (override_event.target_machine_id = session.machine_id OR EXISTS (
+             SELECT 1 FROM manufacturing.shop_floor_setup_state sibling
+             WHERE sibling.work_order_id = session.work_order_id
+               AND sibling.route_option_id = session.route_option_id
+               AND sibling.operation_setup_id = session.operation_setup_id
+               AND sibling.machine_id = override_event.target_machine_id AND sibling.active
+           ))
+           AND NOT EXISTS (
+             SELECT 1 FROM manufacturing.plan_override_events later_move
+             WHERE later_move.work_order_id = session.work_order_id
+               AND (later_move.operation_setup_id = session.operation_setup_id
+                 OR later_move.operation_setup_id IS NULL)
+               AND later_move.source_machine_id = session.machine_id
+               AND later_move.source_payload->>'assignmentMode' = 'move'
+               AND later_move.occurred_at > override_event.occurred_at
+               AND later_move.reversed_at IS NULL
+           )
+       )
+     LIMIT 1`,
+    [input.organizationId, input.workOrderId, input.routeOptionId,
+      input.operationSetupId, input.machineId]
+  )
+  if (!eligible.rows[0]) return
+  const payload = {
+    ...evidence.rows[0].source_payload,
+    recoveredFromStageEventId: evidence.rows[0].event_id,
+  }
+  const restored = await client.query<{ id: string }>(
+    `INSERT INTO manufacturing.shop_floor_setup_state (
+       organization_id, work_order_id, route_option_id, operation_setup_id,
+       machine_id, stage, active, started_at, created_by_user_id,
+       updated_by_user_id, source_system, source_table, source_id, source_payload
+     ) VALUES ($1, $2, $3, $4, $5, 'operator_started', true, now(), $6, $6,
+       'mrm-dashboard', 'shop_floor_status_recovery', $7, $8)
+     RETURNING id`,
+    [input.organizationId, input.workOrderId, input.routeOptionId,
+      input.operationSetupId, input.machineId, input.actorUserId ?? null,
+      randomUUID(), payload]
+  )
+  await client.query(
+    `INSERT INTO manufacturing.shop_floor_stage_events (
+       organization_id, setup_state_id, from_stage, to_stage, machine_id,
+       actor_user_id, reason, source_system, source_table, source_id, source_payload
+     ) VALUES ($1, $2, NULL, 'operator_started', $3, $4,
+       'Restored parallel machine setup state from prior stage and session evidence',
+       'mrm-dashboard', 'shop_floor_status_recovery', $5, $6)`,
+    [input.organizationId, restored.rows[0]!.id, input.machineId,
+      input.actorUserId ?? null, randomUUID(), payload]
+  )
 }
 
 async function lockProductionSessionMachine(
@@ -877,7 +993,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           "SELECT pg_advisory_xact_lock(hashtext('production.session'), hashtext($1))",
           [machineId]
         )
-        const ready = await client.query<{ stage: string }>(
+        let ready = await client.query<{ stage: string }>(
           `
             SELECT stage
             FROM manufacturing.shop_floor_setup_state
@@ -894,6 +1010,24 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             machineId,
           ]
         )
+        if (!ready.rows[0]) {
+          await restoreParallelShopFloorState(client, {
+            actorUserId: input.actorUserId,
+            machineId,
+            operationSetupId: setupId,
+            organizationId: input.organizationId,
+            routeOptionId: workOrder.route_option_id,
+            workOrderId: workOrder.work_order_id,
+          })
+          ready = await client.query<{ stage: string }>(
+            `SELECT stage FROM manufacturing.shop_floor_setup_state
+             WHERE organization_id = $1 AND work_order_id = $2
+               AND route_option_id = $3 AND operation_setup_id = $4
+               AND machine_id = $5 AND active FOR UPDATE`,
+            [input.organizationId, workOrder.work_order_id,
+              workOrder.route_option_id, setupId, machineId]
+          )
+        }
         if (ready.rows[0]?.stage !== "operator_started") {
           throw new Error(
             "The machinist must finish setup and start the machine before a production session can begin."
@@ -3708,21 +3842,22 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           `,
           [workOrder.work_order_id, workOrder.route_option_id, setupId, machineId]
         )
-        if (
-          active &&
-          current.rows[0]?.machine_id &&
-          current.rows[0].machine_id !== machineId &&
-          !(await plannerSwitchExists(client, {
-            fromMachineId: current.rows[0].machine_id,
+        const existingOnMachine = current.rows.find((row) => row.machine_id === machineId)
+        const otherMachineState = current.rows.find((row) => row.machine_id && row.machine_id !== machineId)
+        const assignmentMode = active && !existingOnMachine && otherMachineState?.machine_id
+          ? await plannerAssignmentMode(client, {
+            fromMachineId: otherMachineState.machine_id,
             operationSetupId: setupId,
             targetMachineId: machineId,
             workOrderId: workOrder.work_order_id,
-          }))
-        ) {
+          }) : null
+        if (active && otherMachineState && !existingOnMachine && !assignmentMode) {
           throw new Error(
             "This setup is already locked to another machine. Use the planner machine switch before moving it."
           )
         }
+        const stateToUpdate = existingOnMachine
+          ?? (assignmentMode === "move" ? otherMachineState : undefined)
         if (active) {
           const occupied = await client.query<{
             id: string
@@ -3738,7 +3873,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
                 AND state.id IS DISTINCT FROM $2::uuid
               FOR UPDATE OF state
             `,
-            [machineId, current.rows[0]?.id ?? null]
+            [machineId, stateToUpdate?.id ?? null]
           )
           if (occupied.rows[0]) {
             throw new ShopFloorConflictError(
@@ -3753,7 +3888,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           operationSetupCode: input.operationSetupCode,
           stage,
         }
-        const state = current.rows[0]
+        const state = stateToUpdate
           ? await client.query<{ id: string }>(
               `
                 UPDATE manufacturing.shop_floor_setup_state
@@ -3770,7 +3905,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
                 active,
                 input.actorUserId ?? null,
                 sourcePayload,
-                current.rows[0].id,
+                stateToUpdate.id,
               ]
             )
           : await client.query<{ id: string }>(
@@ -3813,7 +3948,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           [
             input.organizationId,
             state.rows[0]!.id,
-            current.rows[0]?.stage ?? null,
+            stateToUpdate?.stage ?? null,
             stage,
             machineId,
             String(input.payload.completedAt ?? ""),
