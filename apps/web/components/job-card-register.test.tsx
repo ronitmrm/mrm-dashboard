@@ -38,4 +38,19 @@ test("does not invent an RM-receipt finish for a legacy Job Card", () => {
 
   expect(markup).toContain("Not recorded")
   expect(markup).toContain("29-Sept-26")
+  expect(markup).toContain("Progress unavailable")
+})
+
+test("shows overall setup progress even before the final setup produces finished pieces", () => {
+  const markup = renderToStaticMarkup(
+    <JobCardRegister actionNeededCount={0} floor="cnc" onOpenMasterReadiness={() => {}}
+      rows={[{ jcNo: "JC-1", orderPcs: 500, finalSetupGoodPieces: 0,
+        productionProgressPercent: 50, productionSetupCount: 2, completedProductionSetupCount: 1 }]}
+      finishDateRows={[]} />
+  )
+  expect(markup).toContain("50.0%")
+  expect(markup).toContain("1/2 setups complete")
+  expect(markup).toContain('role="progressbar"')
+  expect(markup).toContain('aria-valuenow="50"')
+  expect(markup).toContain('width:50%')
 })

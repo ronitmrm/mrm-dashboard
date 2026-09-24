@@ -77,17 +77,17 @@ describe("legacy dashboard route selections", () => {
     })
   })
 
-  test("counts only the selected route's final setup as finished Job Card pieces", () => {
+  test("weights route setups equally while keeping finished pieces scoped to the final setup", () => {
     const createdAt = "2026-08-16T08:00:00.000Z"
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "MRM",
       productionEntries: [{
-        actualQty: 8_441,
+        actualQty: 60_000,
         jobCard: "JC-001",
         machine: "CNC-01",
         machineType: "CNC",
         operatorId: "001",
-        outputQty: 8_441,
+        outputQty: 60_000,
         partCode: "M2B",
         prodDate: "2026-08-16",
         rejectQty: 0,
@@ -105,7 +105,7 @@ describe("legacy dashboard route selections", () => {
             "ORD. PCS.": 50_000,
           },
         },
-        ...["1", "2", "3"].map((setupNo) => ({
+        ...["1", "2"].map((setupNo) => ({
           entryType: "route",
           createdAt,
           payload: {
@@ -121,9 +121,12 @@ describe("legacy dashboard route selections", () => {
     expect(snapshot.productionControl).toMatchObject({
       jobCardStatusTiles: [{
         finalSetupGoodPieces: 0,
-        finalSetupNumber: "3",
+        finalSetupNumber: "2",
         jcNo: "JC-001",
-        rawActualQty: 8_441,
+        rawActualQty: 60_000,
+        productionProgressPercent: 50,
+        productionSetupCount: 2,
+        completedProductionSetupCount: 1,
       }],
     })
   })

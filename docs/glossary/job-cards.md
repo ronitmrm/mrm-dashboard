@@ -4,6 +4,16 @@
 
 The Job Cards tab is a compact one-row-per-Job-Card register. It is for finding a Job Card, not displaying its complete history.
 
+Production Progress in the register gives every distinct setup in the selected
+route an equal share of 100%. Each setup's progress is its cumulative good
+pieces across machines divided by ordered pieces, capped between 0% and 100%.
+The Job Card percentage is the average of those setup percentages, including
+setups with no output as 0%. For two setups, completing the first contributes
+50%; completing half of the second raises overall progress to 75%. Excess output
+on one setup cannot fill another setup's share. Without a selected route or a
+positive order quantity, progress is unavailable. Finished pieces remain the
+good output of the final setup; intermediate output is still WIP.
+
 Planned Finish Date shows the immutable first valid completion forecast created
 from a Job Card's first Raw Material receipt event. The receipt creates a durable
 baseline request; the first planning refresh that can calculate a finish date
