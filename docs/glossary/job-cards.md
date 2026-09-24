@@ -99,6 +99,11 @@ The same preference applies to repeating the same part, route option and setup
 across Job Cards after an existing running or completed setup. Job quantities,
 WIP and production records remain separate.
 
+An Item Complete setup releases its machine on its recorded completion date;
+it does not reserve another full working day. Ready matching-setup work across
+Job Cards can retain that machine's settings before a newly available next
+route step. Actual-WIP handoff buffers still apply to the next route step.
+
 Useful overlap means a feasible separate-machine start before the preceding
 setup finishes that improves completion by at least one working day, the
 planner's date resolution. Existing material, pooled actual-WIP, tooling and

@@ -49,3 +49,30 @@ test("keeps a WIP-ready second setup on another machine when overlap finishes ea
   expect(second.machine).toBe("CNC-2")
   expect(new Date(String(second.plannedProductionStartDate)).getTime()).toBeLessThan(new Date(String(first.plannedProductionEndDate)).getTime())
 })
+
+test("keeps matching work next when completing a setup releases the next route step", () => {
+  const input = inputFor(10_000)
+  vi.setSystemTime(new Date("2026-09-24T06:00:00Z"))
+  input.productionEntries[0] = { ...input.productionEntries[0]!, prodDate: "2026-09-24", outputQty: 1_064, actualQty: 1_064 }
+  for (const row of input.dataEntries) {
+    if (row.entryType === "work_order") row.payload.orderPcs = 1_064
+    if (row.entryType === "cycle") row.payload.cycleTime = row.payload.setupNo === "1" ? 70 : 55
+    if (row.entryType === "shop_floor_status") row.payload.completedAt = "2026-09-24T01:40:00Z"
+  }
+  input.previousMachinePlanDetailRows[0]!.machine = "CNC-1"
+  input.dataEntries = input.dataEntries.filter(row => row.entryType !== "machine_master" || row.payload.machineNo === "CNC-1")
+  const entry = (entryType: string, payload: Record<string, unknown>) => ({ entryType, payload, createdAt: "2026-09-20T06:00:00Z" })
+  input.dataEntries.push(
+    entry("work_order", { jcNo: "B", partCode: "M5551", optionNumber: "1", orderPcs: 1_100, rmInwardDate: "2026-09-20", rmInwardKg: 1 }),
+    entry("tooling_availability", { assetCode: "F1", totalQuantity: 1, storeQuantity: 0, allocatedQuantity: 1 }),
+    ...["1", "2"].map(setupNo => entry("tooling", { partNo: "M5551", optionNumber: "1", setupNo, fixture: "F1" })),
+  )
+  input.previousMachinePlanDetailRows.push({ jcNo: "B", partCode: "M5551", optionNumber: "1", setupNo: "1", routeMachine: "JT", machine: "CNC-1" })
+  const rows = buildLegacyDashboardSnapshot(input).productionControl.machinePlanDetailRows
+  const next = rows.filter(row => row.machine === "CNC-1" && row.runningStatus === "Planned")
+    .sort((a, b) => new Date(String(a.plannedProductionStartDate)).getTime() - new Date(String(b.plannedProductionStartDate)).getTime())[0]
+  expect(next).toMatchObject({ jcNo: "B", setupNo: "1", plannedProductionStartDate: "24-Sept-26", shopFloorTaskReady: true })
+  const repeated = buildLegacyDashboardSnapshot({ ...input, previousMachinePlanDetailRows: rows }).productionControl.machinePlanDetailRows
+  expect(repeated.find(row => row.jcNo === "B" && row.setupNo === "1"))
+    .toMatchObject({ machine: "CNC-1", plannedProductionStartDate: "24-Sept-26", shopFloorTaskReady: true })
+})
