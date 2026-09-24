@@ -1504,7 +1504,7 @@ function HourlyQualityCheckShell({
           page === "register"
             ? "Review every completed hourly quality check."
             : page === "report"
-              ? "Read-only results for the selected hourly quality check."
+              ? "Review or correct the selected hourly quality check."
               : "Record the scheduled quality readings for a running machine."
         }
         title={
@@ -1596,7 +1596,7 @@ function HourlyQualityCheckShell({
                 <CardTitle>Inspection Readings</CardTitle>
                 <CardDescription>
                   {existingCheck
-                    ? "Completed Hourly Check Loaded For Review. Saved Readings Are Locked."
+                    ? "Completed check loaded. Open its report from the register to correct saved readings."
                     : "Readings Are Saved Against The Selected Date, Hour, Machine, Item, And Setup."}
                 </CardDescription>
               </CardHeader>
@@ -1786,7 +1786,7 @@ function HourlyQualityCheckRegister({
       <CardHeader>
         <CardTitle>Hourly Check Register</CardTitle>
         <CardDescription>
-          Completed Hourly Checks Are Locked And Available For Review.
+          Review completed checks and open a report to correct its readings with a reason.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex min-h-0 flex-1 flex-col">
@@ -1890,7 +1890,64 @@ function HourlyQualityCheckReport({
     )
   }
 
+  return <CompletedHourlyQualityReport check={check} />
+}
+
+function CompletedHourlyQualityReport({ check: savedCheck }: { check: DashboardPayload }) {
+  const [localCheck, setLocalCheck] = useState<DashboardPayload | null>(null)
+  const check = localCheck ?? savedCheck
+  const [editing, setEditing] = useState(false)
+  const [values, setValues] = useState(() => asArray(savedCheck.readings).map((reading) =>
+    normalizeQualityReadingInput(reading.actualReading ?? reading.value)
+  ))
+  const [remarks, setRemarks] = useState(() => asArray(savedCheck.readings).map((reading) => str(reading.remark)))
+  const [reason, setReason] = useState("")
+  const [saving, setSaving] = useState(false)
+  const [status, setStatus] = useState<ActionStatus>(null)
+  const changed = asArray(check.readings).some((reading, index) =>
+    values[index] !== normalizeQualityReadingInput(reading.actualReading ?? reading.value) ||
+    remarks[index] !== str(reading.remark)
+  )
+  const canSave = Boolean(reason.trim() && changed && values.length > 0 && values.every((value) => value.trim()))
+
+  async function saveCorrection() {
+    if (!canSave || saving) return
+    const payload = {
+      ...check,
+      correctionReason: reason.trim(),
+      readings: asArray(check.readings).map((reading, index) => ({
+        ...reading,
+        actualReading: values[index],
+        result: qualityReadingResult(reading, values[index]),
+        remark: remarks[index],
+      })),
+    }
+    setSaving(true)
+    setStatus(null)
+    try {
+      await savePostgresDashboardEntry("hourly_quality_check", payload)
+      setLocalCheck({
+        ...payload,
+        correctionHistory: [
+          ...asArray(check.correctionHistory),
+          { at: new Date().toISOString(), reason: reason.trim() },
+        ],
+      })
+      setEditing(false)
+      setReason("")
+      setStatus({ tone: "default", message: "Hourly check correction saved." })
+    } catch (error) {
+      setStatus({
+        tone: "destructive",
+        message: error instanceof Error ? error.message : "Correction could not be saved.",
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const readings = asArray(check.readings)
+  const history = asArray(check.correctionHistory)
   const overallResult = readings.some(
     (reading) => qualityResultTone(hourlyReportReadingResult(reading)) === "bad"
   )
@@ -1907,13 +1964,23 @@ function HourlyQualityCheckReport({
                 {displayValue(check.machine)} · {itemCode(check)}
               </CardTitle>
               <CardDescription>
-                Completed checks are locked and shown exactly as recorded.
+                Saved readings can be corrected with a recorded reason.
               </CardDescription>
             </div>
             <StatusBadge
               tone={overallResult === "OK" ? "positive" : "danger"}
               value={overallResult}
             />
+            {!editing ? (
+              <Button type="button" variant="outline" onClick={() => {
+                setValues(readings.map((reading) => normalizeQualityReadingInput(reading.actualReading ?? reading.value)))
+                setRemarks(readings.map((reading) => str(reading.remark)))
+                setStatus(null)
+                setEditing(true)
+              }}>
+                <Pencil className="size-4" /> Correct check
+              </Button>
+            ) : null}
           </div>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -1927,6 +1994,27 @@ function HourlyQualityCheckReport({
           <TileField label="Checked By" value={check.checkedBy} />
         </CardContent>
       </SectionCard>
+
+      {editing ? (
+        <SectionCard>
+          <CardHeader>
+            <CardTitle>Correction details</CardTitle>
+            <CardDescription>Change the saved readings or remarks, then explain why.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            <LabeledInput label="Reason for edit" value={reason} onChange={setReason} />
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" disabled={!canSave || saving} onClick={saveCorrection}>
+                {saving ? "Saving…" : "Save correction"}
+              </Button>
+              <Button type="button" variant="outline" disabled={saving} onClick={() => setEditing(false)}>
+                Cancel
+              </Button>
+            </div>
+          </CardContent>
+        </SectionCard>
+      ) : null}
+      {status ? <AlertMessage tone={status.tone}>{status.message}</AlertMessage> : null}
 
       <SectionCard>
         <CardHeader>
@@ -1984,7 +2072,24 @@ function HourlyQualityCheckReport({
                         {displayValue(reading.instrumentUsed)}
                       </TableCell>
                       <TableCell className="text-right">
-                        {displayValue(reading.actualReading ?? reading.value)}
+                        {editing ? qualityParameterInputType(reading) === "pass_fail" ? (
+                          <SearchableSelect
+                            className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                            value={values[index] ?? ""}
+                            onChange={(event) => setValues((current) => current.map((value, row) => row === index ? event.target.value : value))}
+                          >
+                            <option value="">Select</option>
+                            <option value="OK">Ok</option>
+                            <option value="Not OK">Not Ok</option>
+                          </SearchableSelect>
+                        ) : (
+                          <Input
+                            type={qualityParameterInputType(reading) === "number" ? "number" : "text"}
+                            step="0.001"
+                            value={values[index] ?? ""}
+                            onChange={(event) => setValues((current) => current.map((value, row) => row === index ? event.target.value : value))}
+                          />
+                        ) : displayValue(reading.actualReading ?? reading.value)}
                       </TableCell>
                       <TableCell>
                         <StatusBadge
@@ -1998,7 +2103,12 @@ function HourlyQualityCheckReport({
                           value={result}
                         />
                       </TableCell>
-                      <TableCell>{displayValue(reading.remark)}</TableCell>
+                      <TableCell>{editing ? (
+                        <Input
+                          value={remarks[index] ?? ""}
+                          onChange={(event) => setRemarks((current) => current.map((value, row) => row === index ? event.target.value : value))}
+                        />
+                      ) : displayValue(reading.remark)}</TableCell>
                     </TableRow>
                   )
                 })}
@@ -2011,6 +2121,19 @@ function HourlyQualityCheckReport({
           )}
         </CardContent>
       </SectionCard>
+      {history.length ? (
+        <SectionCard>
+          <CardHeader><CardTitle>Correction history</CardTitle></CardHeader>
+          <CardContent className="grid gap-2 text-sm">
+            {history.map((entry, index) => (
+              <div className="rounded-md border p-3" key={index}>
+                {str(entry.at) ? `${formatIstDateTime(str(entry.at))} · ` : ""}
+                {displayValue(entry.reason)}
+              </div>
+            ))}
+          </CardContent>
+        </SectionCard>
+      ) : null}
     </div>
   )
 }
@@ -8862,6 +8985,7 @@ function useFirstPieceReportViews(productionFloorCode: ProductionFloorCode) {
   return {
     error: state.request === "error",
     loading: state.data === null && state.request !== "error",
+    reportRows,
     reports,
   }
 }
@@ -8925,11 +9049,12 @@ function FirstPieceInspectionReportShell({
   productionFloorCode: ProductionFloorCode
   reportId: string
 }) {
-  const { error, loading, reports } =
+  const { error, loading, reportRows, reports } =
     useFirstPieceReportViews(productionFloorCode)
   const report = reports.find(
     (candidate) => candidate.id.toLowerCase() === reportId.toLowerCase()
   )
+  const rawReport = report ? reportRows[reports.indexOf(report)] : undefined
 
   return (
     <section className="grid w-full min-w-0 gap-4 text-foreground">
@@ -8942,7 +9067,7 @@ function FirstPieceInspectionReportShell({
             </Link>
           </Button>
         }
-        description="Read-only first-piece inspection results."
+        description="Review results or correct saved readings with a reason."
         title="First-Piece Inspection Report"
       />
       {loading ? <DashboardLoadingSkeleton cards={0} /> : null}
@@ -8952,8 +9077,12 @@ function FirstPieceInspectionReportShell({
           title="The first-piece report could not be loaded"
         />
       ) : null}
-      {!loading && !error && report ? (
-        <FirstPieceInspectionReport report={report} />
+      {!loading && !error && report && rawReport ? (
+        <FirstPieceInspectionReport
+          productionFloorCode={productionFloorCode}
+          rawReport={rawReport}
+          report={report}
+        />
       ) : null}
       {!loading && !error && !report ? (
         <SectionCard>
@@ -9049,11 +9178,70 @@ function SavedFirstPieceReports({
 }
 
 function FirstPieceInspectionReport({
-  report,
+  productionFloorCode,
+  rawReport,
+  report: savedReport,
 }: {
+  productionFloorCode: ProductionFloorCode
+  rawReport: DashboardPayload
   report: FirstPieceReportView
 }) {
+  const [localReport, setLocalReport] = useState<DashboardPayload | null>(null)
+  const report = localReport ? firstPieceReportView(localReport) : savedReport
+  const [editing, setEditing] = useState(false)
+  const [readings, setReadings] = useState(() =>
+    savedReport.dimensions.map((dimension) => [...dimension.readings])
+  )
+  const [remark, setRemark] = useState(savedReport.remark)
+  const [reason, setReason] = useState("")
+  const [saving, setSaving] = useState(false)
+  const [status, setStatus] = useState<ActionStatus>(null)
+  const source = localReport ?? rawReport
+  const sourceDimensions = asArray(source.dimensions)
+  const changed = remark !== report.remark || readings.some((row, index) =>
+    row.some((value, piece) => value !== report.dimensions[index]?.readings[piece])
+  )
+  const canSave = reason.trim() && changed && readings.length > 0 &&
+    readings.every((row) => row.length >= 5 && row.slice(0, 5).every((value) => value.trim()))
+
+  async function saveCorrection() {
+    if (!canSave || saving) return
+    const payload = {
+      ...source,
+      correctionReason: reason.trim(),
+      dimensions: sourceDimensions.map((dimension, index) => ({
+        ...dimension,
+        readings: readings[index]?.map((value) => optionalNumber(value) ?? value) ?? [],
+      })),
+      notes: remark,
+      remark,
+      productionFloorCode,
+    }
+    setSaving(true)
+    setStatus(null)
+    try {
+      await savePostgresDashboardEntry("first_piece_inspection_report", payload)
+      setLocalReport({
+        ...payload,
+        correctionHistory: [
+          ...asArray(source.correctionHistory),
+          { at: new Date().toISOString(), reason: reason.trim() },
+        ],
+      })
+      setEditing(false)
+      setReason("")
+      setStatus({ tone: "default", message: "First-piece report correction saved." })
+    } catch (error) {
+      setStatus({
+        tone: "destructive",
+        message: error instanceof Error ? error.message : "Correction could not be saved.",
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
   const overallResult = report.result
+  const history = asArray(source.correctionHistory)
 
   return (
     <div className="grid min-w-0 gap-4">
@@ -9079,6 +9267,16 @@ function FirstPieceInspectionReport({
               }
               value={overallResult}
             />
+            {!editing ? (
+              <Button type="button" variant="outline" onClick={() => {
+                setReadings(report.dimensions.map((dimension) => [...dimension.readings]))
+                setRemark(report.remark)
+                setStatus(null)
+                setEditing(true)
+              }}>
+                <Pencil className="size-4" /> Correct report
+              </Button>
+            ) : null}
           </div>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -9100,6 +9298,28 @@ function FirstPieceInspectionReport({
           <TileField label="Remark" value={report.remark} />
         </CardContent>
       </SectionCard>
+
+      {editing ? (
+        <SectionCard>
+          <CardHeader>
+            <CardTitle>Correction details</CardTitle>
+            <CardDescription>Change the saved readings or remark, then explain why.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            <LabeledInput label="Report remark" value={remark} onChange={setRemark} />
+            <LabeledInput label="Reason for edit" value={reason} onChange={setReason} />
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" disabled={!canSave || saving} onClick={saveCorrection}>
+                {saving ? "Saving…" : "Save correction"}
+              </Button>
+              <Button type="button" variant="outline" disabled={saving} onClick={() => setEditing(false)}>
+                Cancel
+              </Button>
+            </div>
+          </CardContent>
+        </SectionCard>
+      ) : null}
+      {status ? <AlertMessage tone={status.tone}>{status.message}</AlertMessage> : null}
 
       <SectionCard>
         <CardHeader>
@@ -9154,7 +9374,17 @@ function FirstPieceInspectionReport({
                             className="text-right tabular-nums"
                             key={reading}
                           >
-                            {result === "Not OK" ? (
+                            {editing ? (
+                              <FirstPieceReadingControl
+                                master={sourceDimensions[dimensionIndex] ?? { inputType: dimension.inputType }}
+                                value={readings[dimensionIndex]?.[reading] ?? ""}
+                                onChange={(nextValue) => setReadings((current) =>
+                                  current.map((row, rowIndex) => rowIndex === dimensionIndex
+                                    ? row.map((entry, pieceIndex) => pieceIndex === reading ? nextValue : entry)
+                                    : row)
+                                )}
+                              />
+                            ) : result === "Not OK" ? (
                               <StatusBadge
                                 aria-label={`Piece ${reading + 1}: ${value}, out of tolerance`}
                                 className="ml-auto"
@@ -9210,6 +9440,19 @@ function FirstPieceInspectionReport({
           )}
         </CardContent>
       </SectionCard>
+      {history.length ? (
+        <SectionCard>
+          <CardHeader><CardTitle>Correction history</CardTitle></CardHeader>
+          <CardContent className="grid gap-2 text-sm">
+            {history.map((entry, index) => (
+              <div className="rounded-md border p-3" key={index}>
+                {str(entry.at) ? `${formatIstDateTime(str(entry.at))} · ` : ""}
+                {displayValue(entry.reason)}
+              </div>
+            ))}
+          </CardContent>
+        </SectionCard>
+      ) : null}
     </div>
   )
 }

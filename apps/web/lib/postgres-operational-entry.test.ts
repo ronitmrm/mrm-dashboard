@@ -3,6 +3,15 @@ import { describe, expect, test } from "vitest"
 import { operationalEntryPlan } from "./postgres-operational-entry"
 
 describe("PostgreSQL operational entry mapping", () => {
+  test("passes correction reasons for saved first-piece and hourly checks", () => {
+    expect(operationalEntryPlan("first_piece_inspection_report", {
+      reportId: "FP-1", jcNo: "JC-1", setupNo: "1", correctionReason: "Transcription error",
+    })).toMatchObject({ input: { correctionReason: "Transcription error" } })
+    expect(operationalEntryPlan("hourly_quality_check", {
+      checkId: "HR-1", jcNo: "JC-1", setupNo: "1", correctionReason: "Transcription error",
+    })).toMatchObject({ input: { correctionReason: "Transcription error" } })
+  })
+
   test("preserves letter tolerances for imported Ok / Not Ok parameters", () => {
     expect(operationalEntryPlan("quality_parameter_master", {
       partNo: "M68B", setupNo: 1, parameterName: "Thread",
