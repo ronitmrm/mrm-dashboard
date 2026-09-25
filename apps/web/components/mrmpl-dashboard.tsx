@@ -193,10 +193,7 @@ import {
   machineConstraintQueueReview,
   type MachineConstraintQueueReviewGroup,
 } from "@/lib/machine-constraint-review"
-import {
-  dispatchReadyJobCards,
-  jobCardActionAssignments,
-} from "@/lib/job-card-action-planning"
+import { dispatchReadyJobCards } from "@/lib/job-card-action-planning"
 import {
   maintenanceChecklistRowsForSchedule,
   maintenanceDowntimeReasonRows,
@@ -7658,126 +7655,6 @@ function RouteChangePlannerForm({
   )
 }
 
-function SetupCompleteActionForm({
-  plannedRows,
-  shopFloorOptions,
-  onSubmit,
-}: {
-  plannedRows: DashboardPayload[]
-  shopFloorOptions: EmployeeOption[]
-  onSubmit: (body: Record<string, unknown>) => void | Promise<void>
-}) {
-  const assignments = useMemo(
-    () => jobCardActionAssignments(plannedRows),
-    [plannedRows]
-  )
-  const [machine, setMachine] = useState("")
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const assignment = assignments.find((row) => row.machine === machine)
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!assignment || isSubmitting) return
-    const form = event.currentTarget
-    const formData = new FormData(form)
-    setIsSubmitting(true)
-    try {
-      await onSubmit({
-        completedBy: String(formData.get("completedBy") ?? "").trim(),
-        jcNo: assignment.jobCard,
-        machine: assignment.machine,
-        remark: String(formData.get("remark") ?? "").trim(),
-        setupNo: assignment.setupNo,
-      })
-      form.reset()
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
-
-  return (
-    <form
-      aria-busy={isSubmitting}
-      className="grid gap-3 rounded-xl border bg-background p-3"
-      onSubmit={(event) => void submit(event)}
-    >
-      <fieldset className="contents" disabled={isSubmitting}>
-        <div>
-          <div className="text-sm font-medium">Mark Setup Complete</div>
-          <div className="text-xs text-muted-foreground">
-            Select A Machine. Its Current Job Card And Setup Come From Planning.
-          </div>
-        </div>
-        <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
-          <Field label="Machine Number">
-            <SearchableSelect
-              className="h-9 rounded-md border bg-background px-3 text-sm"
-              required
-              value={machine}
-              onChange={(event) => setMachine(event.target.value)}
-            >
-              <option value="">Select Machine Number</option>
-              {assignments.map((row) => (
-                <option key={row.machine} value={row.machine}>
-                  {row.machine}
-                </option>
-              ))}
-            </SearchableSelect>
-          </Field>
-          <Field label="Job Card">
-            <Input
-              readOnly
-              value={assignment?.jobCard ?? ""}
-              placeholder="From planning"
-            />
-          </Field>
-          <Field label="Setup No.">
-            <Input
-              readOnly
-              value={assignment?.setupNo ?? ""}
-              placeholder="From planning"
-            />
-          </Field>
-          <Field label="Completed By">
-            <SearchableSelect
-              className="h-9 rounded-md border bg-background px-3 text-sm"
-              name="completedBy"
-              required
-            >
-              <option value="">
-                {shopFloorOptions.length
-                  ? "Select Shop Floor Employee"
-                  : "No Shop Floor Employees In This Production Unit"}
-              </option>
-              {shopFloorOptions.map((employee) => (
-                <option key={employee.code} value={employee.name}>
-                  {employee.code} - {employee.name}
-                </option>
-              ))}
-            </SearchableSelect>
-          </Field>
-          <Field label="Completion Remark">
-            <Input name="remark" placeholder="Optional" />
-          </Field>
-        </div>
-        {!assignments.length ? (
-          <p className="text-xs text-muted-foreground">
-            No current machine assignments are available in planning.
-          </p>
-        ) : null}
-        <Button
-          className="w-fit"
-          type="submit"
-          disabled={!assignment || isSubmitting}
-        >
-          <Wrench className="size-4" />
-          {isSubmitting ? "Processing..." : "Mark complete"}
-        </Button>
-      </fieldset>
-    </form>
-  )
-}
-
 function DispatchApprovalActionForm({
   approverOptions,
   jobCards,
@@ -7887,7 +7764,7 @@ function JobCardsPanel({
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
   openMasterReadiness: () => void
 }) {
-  const { dispatchApproverOptions, shopFloorOptions } =
+  const { dispatchApproverOptions } =
     useProductionEmployeeDirectory(productionFloorCode)
   const plannedRows = useMemo(
     () => asArray(productionControl.machinePlanDetailRows),
@@ -7917,12 +7794,7 @@ function JobCardsPanel({
         <CardHeader>
           <CardTitle>Job Card Actions</CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-4 @5xl/main:grid-cols-2">
-          <SetupCompleteActionForm
-            plannedRows={plannedRows}
-            shopFloorOptions={shopFloorOptions}
-            onSubmit={(body) => submitAction("mark-complete", body)}
-          />
+        <CardContent className="max-w-2xl">
           <DispatchApprovalActionForm
             approverOptions={dispatchApproverOptions}
             jobCards={readyJobCards}
