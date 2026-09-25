@@ -62,6 +62,8 @@ existing dashboard cards; do not duplicate them.
 
 `OperationalTable` owns the shared density, sticky header, scrolling boundary, Excel-style column filters, faceted options, natural sorting, clear-all control, filtered bulk selection, selected-row treatment, and empty/loading/error presentation.
 
+All table header, body, footer, and caption text is center-aligned through the shared table styling, including content nested inside cells. Keep text alignment consistent when adding table columns.
+
 Use `toolbarStart` for a register heading beside Clear All Filters, above the
 table border. Keep the border on `containerClassName` so it encloses only the
 scrolling table.
