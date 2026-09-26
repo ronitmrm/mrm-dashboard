@@ -13,7 +13,7 @@ This describes what the app currently records, from customer demand to a Job Car
 7. **Inspect and finish.** First-piece and hourly checks are saved against production. Rejections can also be recorded at Checking, Assembly or Quality Control. Each planned setup is explicitly completed. The Job Card combines output, quality, downtime, material and delivery history. **UI:** production unit → First Piece Inspection / Quality Control / Job Cards → open Job Card; Quality Control → Rejection Entry.
 8. **Ready for dispatch.** Only a Job Card whose planned setups are all Item Complete appears for Dispatch Approval. The selected approver records that approval. The app shows order and dispatch dates, but the inspected workflow ends at approval; it does not document picking, packing, shipment, invoice or carrier handover. **UI:** production unit → Job Cards → Job Card Actions → Dispatch Approval; Production Dashboard → Work Order Dispatch Overview.
 
-At MRMPL, a directly purchased item is also a Part/Product. It follows the customer demand and pricing path but bypasses the raw-material and machine-production steps above. The app supports direct-purchase costing; the inspected Store purchase flow is separate from the customer PO flow.
+At MRMPL, a directly purchased item is also a Part/Product. In this software it appears in pricing, but its purchase, receipt and dispatch are outside the production Work Order workflow. The Store purchase flow below concerns Store assets, not directly purchased customer Parts.
 
 ## Customer, design and commercial work
 
@@ -119,6 +119,15 @@ These are the factory meanings supplied in the interview. The workflows above de
 - **Employee Assignment:** An Employee's placement in a particular Approved Job Post.
 - **Controlled Document:** An organizational document created for certification or another activity carried out at MRMPL.
 
+### Store identities and purchasing
+
+- **Asset Code:** The unique code generated for an asset type in the Store department. Units of the same type share this code.
+- **Consumable / Non Consumable:** The two Store Asset Type choices. Their practical difference at MRMPL still needs confirmation.
+- **Unit ID:** The individual identity given to each unit of a Non Consumable asset, separate from its shared Asset Code.
+- **Supplier:** A source from which Store obtains its assets.
+- **Supplier Price:** A Supplier's price for a particular Store asset; the same asset may have different prices from different Suppliers.
+- **Store Purchase Order:** An order the Store department creates for assets it needs to buy from a Supplier.
+
 ### Production records and states
 
 - **RM Inward:** A record of the date and weight of Raw Material received in a Production Unit.
@@ -138,6 +147,7 @@ These are the factory meanings supplied in the interview. The workflows above de
 ### Factory meaning versus current app coverage
 
 - **Part** and **Product** are synonyms, including directly purchased items. The app's direct-purchase Product is consistent with this meaning.
+- Directly purchased customer Parts are present for pricing, but MRMPL does not process their purchase, receipt or dispatch in this software. Its production Work Orders cover Production Units only.
 - Factory **Work Orders** and **Job Cards** are separate for each department, including surface finishing and checking. The app's current Work Order entry is available only for its four named production units; no corresponding surface-finishing or checking Work Order entry was found in this pass.
 - The app calls List/Package **Item Type**. Its **Product Type** and **Production Type** fields now match your meanings above.
 - Factory **BOM** is the whole Design Dossier for every Part. The app's BOM lines mainly connect Package and Assembly components; List and directly purchased Part details sit in the wider Product design record.
@@ -145,7 +155,8 @@ These are the factory meanings supplied in the interview. The workflows above de
 - In factory practice, each ordered Part receives its **Product UID** after the Customer PO, even when several Parts share one Enquiry. The app allocates a UID during pre-quote Design of an Enquiry line, before Customer PO entry.
 - MRMPL uploads the Customer PO here to make the **PI**; the software's intended PO process ends there. The signed PI and later PO work stay outside this software. The current app also offers Mark Sent and Approve to release the order, without a signed-copy upload or signature check.
 - In factory practice, the **Planner** gives Dispatch Approval. The app also permits an eligible Shop Floor employee to approve an eligible Job Card.
+- The app calls one individually tracked Non Consumable unit a **Physical Asset**, with its own Unit ID and movement history. This is not a count of Store stock; the factory's use of the term is still unconfirmed. In the app, a **Consumable** is quantity-managed and issued without an expected return; a **Non Consumable** is individually tracked and can return to Store.
 
 ### Terms still to define
 
-Product Base Price (the app's label; factory meaning still open), Asset Code, Consumable, Non Consumable, Physical Asset, Unit ID, Supplier, Supplier Price, Store PO, Receipt, Stock, Request, Allocation, Maintenance Request, Breakdown, Approved Post, Job, Candidate, Released Revision, Monitoring Obligation. The dispatch path for directly purchased Parts also needs confirmation. The Product UID and PI gaps above remain differences between factory practice and current app behavior.
+Product Base Price (the app's label; factory meaning still open), Physical Asset and the practical difference between Consumable and Non Consumable (factory meanings still open), Receipt, Stock, Request, Allocation, Maintenance Request, Breakdown, Approved Post, Job, Candidate, Released Revision, Monitoring Obligation. The Product UID and PI gaps above remain differences between factory practice and current app behavior.
