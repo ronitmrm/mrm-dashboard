@@ -1,6 +1,6 @@
 # Factory and app workflow — review draft
 
-This describes what the app currently records, from customer demand to a Job Card ready for dispatch. It is a description of the software, **not yet a confirmed account of factory practice**. Each **UI** line names the visible route. Screens and actions depend on the signed-in person's access.
+This review draft separates what the app currently records from the factory process described in the interview. Each **UI** line names the visible route; access depends on the signed-in person. Differences and open meanings are listed at the end.
 
 ## Part lifecycle currently represented
 
@@ -11,9 +11,19 @@ This describes what the app currently records, from customer demand to a Job Car
 5. **Plan and prepare.** The selected route, setup, cycle, tooling, machine, quality and calendar masters make the Job Card plannable. The planner can change priorities, routes and machines, and review the effect on other work. Store allocation of usable tools can constrain the plan. **UI:** Master Data → Data Entry → production unit → relevant master; production unit → Part Readiness / Planning Control / Planner Actions / Machine Detail.
 6. **Run the part.** Shop Floor confirms material at the machine. Machinist setting, Quality approval and machine start follow; CNC omits Pre Setting. An operator's Production Session records output, downtime and rejection. Good output from an earlier setup is work in progress for the next route step. **UI:** production unit → Shop Floor Tasks → Machinist → Quality Control → Production Sessions → Start Session / Session Register.
 7. **Inspect and finish.** First-piece and hourly checks are saved against production. Rejections can also be recorded at Checking, Assembly or Quality Control. Each planned setup is explicitly completed. The Job Card combines output, quality, downtime, material and delivery history. **UI:** production unit → First Piece Inspection / Quality Control / Job Cards → open Job Card; Quality Control → Rejection Entry.
-8. **Ready for dispatch.** Only a Job Card whose planned setups are all Item Complete appears for Dispatch Approval. The selected approver records that approval. The app shows order and dispatch dates, but the inspected workflow ends at approval; it does not document picking, packing, shipment, invoice or carrier handover. **UI:** production unit → Job Cards → Job Card Actions → Dispatch Approval; Production Dashboard → Work Order Dispatch Overview.
+8. **Ready for dispatch.** Only a Job Card whose planned setups each have the app's Item Complete mark appears for Dispatch Approval. The selected approver records that approval. The app shows order and dispatch dates, but the inspected workflow ends at approval; it does not document picking, packing, shipment, invoice or carrier handover. **UI:** production unit → Job Cards → Job Card Actions → Dispatch Approval; Production Dashboard → Work Order Dispatch Overview.
 
-At MRMPL, a directly purchased item is also a Part/Product. In this software it appears in pricing, but its purchase, receipt and dispatch are outside the production Work Order workflow. The Store purchase flow below concerns Store assets, not directly purchased customer Parts.
+## Factory Part lifecycle described so far
+
+1. **Enquiry and Quote.** A Customer can ask about several Parts in one Enquiry. Technical Review checks each line; Design prepares its Drawing and BOM before Product and Customer pricing produce the Quote. **UI:** Operational Entry → Data Entry → Commercial Entries → Enquiries → Send To Technical Review; Costing → Technical Review → Design Tasks → Product Parameter Costing → Customer Parameter Costing → Sales → Send Full Enquiry.
+2. **Customer order and PI.** Each Part ordered from the Enquiry gets its own Product UID. Design checks the ordered Part against its BOM. The Customer PO is uploaded here to make a PI; the signed PI and later PO work stay outside this software. **UI:** Operational Entry → Data Entry → Commercial Entries → Purchase Orders → open PO → Proforma Invoice → Generate Pi. The app currently assigns Product UIDs before the PO; no separate after-PO Design recheck was found in the inspected flow.
+3. **Department Work Orders.** Purchase issues separate Work Orders to Production, surface finishing and checking, each with its own Job Card. This app records Work Orders for its production units. **UI:** Operational Entry → Data Entry → production unit → Work Order; production unit → Job Cards. No matching surface-finishing or checking Work Order entry was found.
+4. **Material and plan.** Production records each Raw Material receipt by date and weight, then plans the Part through one Route option with its Setups, Machines, Cycle Times and Tooling. **UI:** Operational Entry → Data Entry → production unit → RM Inward; production unit → Part Readiness / Planning Control / Planner Actions.
+5. **Start a Setup.** The Machinist or Programmer completes Pre Setting where used, Setting and its checklist. QC checks the first pieces and records approval; a worker is assigned and the Machine starts. **UI:** production unit → Shop Floor Tasks → Machinist → Quality Control / First Piece Inspection → Machine Start.
+6. **Produce and check.** Production Sessions record Good Output, Rejection and Downtime. Accepted pieces move as WIP to the next Setup; QC checks output hourly. **UI:** production unit → Production Sessions → Session Register; Quality Control → Hourly Quality Check / Rejection Entry; ISO Document → Rejection Register.
+7. **Finish and approve.** After every Setup in the chosen Route is complete, the Part is Finished Goods and Item Complete. The Planner checks it and gives Dispatch Approval. **UI:** production unit → Production Sessions → End → Item Complete; Job Cards → Dispatch Approval. The app's Item Complete closes one Setup session, and its approver can also be a Shop Floor employee.
+
+A directly purchased item is still a Part/Product. This software includes it in pricing, but does not process its purchase, receipt or dispatch. **UI:** Costing → Product Parameter Costing → Customer Parameter Costing; later direct-purchase steps are outside this app. The Store purchase flow below concerns Store assets, not directly purchased customer Parts.
 
 ## Customer, design and commercial work
 
@@ -70,7 +80,7 @@ At MRMPL, a directly purchased item is also a Part/Product. In this software it 
 - **Manage access and retained files.** Administrators create roles, staff login accounts and page/task grants, and can inspect or explicitly delete retained files with a reason. Staff can change their own password. **UI:** Access Administration → Access Administration → Staff Access / Application Roles; Access Administration → Artifacts; Password & Security.
 - **Use a personal dashboard.** A user sees permitted work and metrics, adds supported analytics widgets, and arranges or removes their own widgets. This does not change factory records. **UI:** Dashboard → My Dashboard / My Analytics / My Workspace → Add to My Dashboard.
 
-## Domain model — in progress
+## Domain model
 
 These are the factory meanings supplied in the interview. The workflows above describe the app's current coverage.
 
@@ -235,6 +245,6 @@ These are the factory meanings supplied in the interview. The workflows above de
 - The app's **Pricing Register** shows current prices, while earlier sent Quotes remain in quotation history.
 - The Maintenance Manager confirms the requester's suggested **Maintenance Priority** and Category.
 
-### Terms still to define
+### Open meanings
 
-The factory purposes of Order Acceptance Planning, Vendor and Store Classification remain open, as do the exact checks meant by Calibration. The Product UID and PI gaps above remain differences between factory practice and current app behavior.
+The factory purposes of Order Acceptance Planning, Vendor and Store Classification remain open, as do the exact checks meant by Calibration. Differences between factory practice and current app behavior are listed above.
