@@ -116,6 +116,8 @@ These are the factory meanings supplied in the interview. The workflows above de
 - **Customer Price:** The price offered for a Product to a particular Customer.
 - **Quote:** The quotation MRMPL creates from a Customer Enquiry.
 - **Commercial Requote:** A new Quote requested by the same Customer for a Part previously quoted to that Customer.
+- **Quote Revision:** An updated version of a Quote sent to the Customer.
+- **Price Revision:** An MRMPL-initiated change to a previously offered price, sent to the Customer without waiting for a new Quote request.
 - **Proforma Invoice (PI):** A document made from the Customer Purchase Order that confirms its prices or records agreed changes. The Customer signs it outside this software before later PO work begins.
 
 ### Factory resources and people
@@ -160,6 +162,11 @@ These are the factory meanings supplied in the interview. The workflows above de
 - **First Piece Inspection:** QC checks the first piece after the Programmer or Machinist sets each new Setup and saves the inspection report.
 - **Hourly Quality Check:** QC's hourly check that Parts being produced are correct.
 - **Setup Complete:** The state reached when a Part's work at one Setup is finished.
+- **Part Readiness:** Having the information needed to plan a Part, including its Route, Cycle Time and Tooling.
+- **Planning Control:** A sheet showing production or planning inconsistencies that need review, such as recorded output without the expected operator assignment and machine-start tasks.
+- **Planner Action:** A situation-based change to the current production plan made by a Planner.
+- **Machine Detail:** The view of one Machine's information.
+- **Shop Floor Task:** A task shown to Shop Floor personnel for their production work.
 - **Finished Goods:** The final Product after every Setup in its chosen Route option is complete.
 - **Ready for Dispatch:** A Finished Good whose chosen Route's Setups are all complete.
 - **Dispatch Approval:** The Planner's approval after checking that the Part is finished and ready to dispatch.
@@ -183,7 +190,10 @@ These are the factory meanings supplied in the interview. The workflows above de
 - The app's **Physical Asset** is the individually tracked unit described above; it is not a count of Store stock.
 - The app's **Job Post** links a recruitment opening to an **Approved Post**, and HR confirms joining before the Candidate becomes an Employee. This matches the meanings above.
 - The app's **Commercial Requote** reuses an existing Product and goes directly to Customer Parameter Costing when there is no technical change. The factory definition also specifies a repeat request from the same Customer.
+- The app's **Price Revisions** flow stages and completes revised customer prices. The inspected flow does not show a separate action to send those prices to the Customer, which is part of the factory meaning above.
+- The app's **Order Acceptance Planning** estimates dates and tests a proposed order before Purchase confirms it; approval does not create a PO or reserve capacity. You do not recognize its purpose in the factory process yet.
+- **Planning Control** currently shows exception cases in the app. You questioned whether this sheet is still needed now that Shop Floor tasks run in sequence.
 
 ### Terms still to define
 
-Quote Revision, Price Revision, Part Readiness, Planning Control, Planner Action, Order Acceptance Planning, Machine Detail and Shop Floor Task are next to review. The Product UID and PI gaps above remain differences between factory practice and current app behavior.
+The factory purpose of Order Acceptance Planning remains open. The Product UID and PI gaps above remain differences between factory practice and current app behavior.
