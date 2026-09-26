@@ -81,6 +81,8 @@ These are the factory meanings supplied in the interview. The workflows above de
 - **Customer:** A company that buys Products from MRMPL.
 - **Enquiry:** A customer's document or request asking MRMPL to quote for Parts.
 - **Enquiry Line:** One Part for which the Customer requests a quote within an Enquiry. One Enquiry can have several different Parts.
+- **Technical Review:** The feasibility check for each Enquiry Line. A Part that can be made moves on to Design work.
+- **Sales Clarification:** A request for Sales to obtain missing or corrected Enquiry Line information from the Customer so work can continue.
 - **Product UID:** MRMPL's unique code for each ordered Part/Product, assigned after the Customer Purchase Order arrives. One Enquiry Number may cover several Parts; every Part ordered from it receives its own Product UID.
 - **Customer Part Code:** The Customer's own identity code for a Part, distinct from MRMPL's Product UID.
 - **Customer Purchase Order:** A customer's order for Parts that MRMPL must make or buy and dispatch to that Customer.
@@ -96,6 +98,8 @@ These are the factory meanings supplied in the interview. The workflows above de
 - **Production Type:** Where or how the Part is obtained or produced: Direct Purchase, CNC, Conventional, M/C Assembly for an Assembly, or Assembly for a Package.
 - **BOM:** Bill of Material; the description of every Part, including Lists, Assemblies, Packages and directly purchased Parts. It covers components and manufacturing details such as weight, process and blank piece weight.
 - **Design Dossier:** Another name for a Part's BOM.
+- **Design Task:** Design's work to prepare a Part's Drawing and BOM, including its Raw Material, size, grade and blank piece weight.
+- **Product Portfolio:** The collection of MRMPL Products across all Customers, rather than a separate portfolio for each Customer.
 - **Route:** A path for making a Part in a Production Unit. One Part can have alternative Routes. Each Route option lists its Setups, their order and the Machine used at each Setup.
 - **Setup:** A production step within a Route, carried out on its specified Machine with the required Tooling.
 - **Cycle Time:** The time taken to machine the Part at one Setup.
@@ -107,8 +111,11 @@ These are the factory meanings supplied in the interview. The workflows above de
 ### Commercial documents and prices
 
 - **Product Base Price:** The Product's INR-per-piece amount for its own production processes or direct purchase, plus its components if it is a Package or Assembly, before Customer-specific pricing.
+- **Product Parameter Costing:** Costing based on the Part's own parameters, without Customer-specific choices. The Product's result is shared across Customers.
+- **Customer Parameter Costing:** Pricing the Part for one Customer using Customer-specific choices, such as profit percentage. Different Customers can have different prices for the same Product.
 - **Customer Price:** The price offered for a Product to a particular Customer.
 - **Quote:** The quotation MRMPL creates from a Customer Enquiry.
+- **Commercial Requote:** A new Quote requested by the same Customer for a Part previously quoted to that Customer.
 - **Proforma Invoice (PI):** A document made from the Customer Purchase Order that confirms its prices or records agreed changes. The Customer signs it outside this software before later PO work begins.
 
 ### Factory resources and people
@@ -175,7 +182,8 @@ These are the factory meanings supplied in the interview. The workflows above de
 - In factory practice, the **Planner** gives Dispatch Approval. The app also permits an eligible Shop Floor employee to approve an eligible Job Card.
 - The app's **Physical Asset** is the individually tracked unit described above; it is not a count of Store stock.
 - The app's **Job Post** links a recruitment opening to an **Approved Post**, and HR confirms joining before the Candidate becomes an Employee. This matches the meanings above.
+- The app's **Commercial Requote** reuses an existing Product and goes directly to Customer Parameter Costing when there is no technical change. The factory definition also specifies a repeat request from the same Customer.
 
 ### Terms still to define
 
-Technical Review, Sales Clarification, Design Task, Product Portfolio, Product Parameter Costing, Customer Parameter Costing and Commercial Requote are awaiting factory definitions. The Product UID and PI gaps above remain differences between factory practice and current app behavior.
+Quote Revision, Price Revision, Part Readiness, Planning Control, Planner Action, Order Acceptance Planning, Machine Detail and Shop Floor Task are next to review. The Product UID and PI gaps above remain differences between factory practice and current app behavior.
