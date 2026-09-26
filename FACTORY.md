@@ -119,6 +119,16 @@ These are the factory meanings supplied in the interview. The workflows above de
 - **Employee Assignment:** An Employee's placement in a particular Approved Job Post.
 - **Controlled Document:** An organizational document created for certification or another activity carried out at MRMPL.
 
+### Production records and states
+
+- **RM Inward:** A record of the date and weight of Raw Material received in a Production Unit.
+- **RM Rejection:** An entry made when Raw Material is rejected at a point in the production flow.
+- **Work in Progress (WIP):** A Part produced at the end of a Setup that must pass through further Setups before it is finished and dispatchable.
+- **Good Output:** Parts produced at a Setup that were not rejected.
+- **Rejection:** A Part rejected during a Setup for a recorded reason.
+- **Downtime:** Time when production has stopped for a reason during a production run.
+- **Production Session:** A period of production during which its output, rejection, downtime and other entries are recorded together.
+
 ### Factory meaning versus current app coverage
 
 - **Part** and **Product** are synonyms, including directly purchased items. The app's direct-purchase Product is consistent with this meaning.
@@ -131,4 +141,4 @@ These are the factory meanings supplied in the interview. The workflows above de
 
 ### Terms still to define
 
-Product Base Price (the app's label; factory meaning still open), RM Inward, RM Rejection, WIP, Good Output, Rejection, Downtime, Production Session, First Piece Inspection, Hourly Quality Check, Setup Complete, Ready for Dispatch, Dispatch Approval, Asset Code, Consumable, Non Consumable, Physical Asset, Unit ID, Supplier, Supplier Price, Store PO, Receipt, Stock, Request, Allocation, Maintenance Request, Breakdown, Approved Post, Job, Candidate, Released Revision, Monitoring Obligation. The Product UID and PI gaps above remain differences between factory practice and current app behavior.
+Product Base Price (the app's label; factory meaning still open), First Piece Inspection, Hourly Quality Check, Setup Complete, Ready for Dispatch, Dispatch Approval, Asset Code, Consumable, Non Consumable, Physical Asset, Unit ID, Supplier, Supplier Price, Store PO, Receipt, Stock, Request, Allocation, Maintenance Request, Breakdown, Approved Post, Job, Candidate, Released Revision, Monitoring Obligation. The Product UID and PI gaps above remain differences between factory practice and current app behavior.
