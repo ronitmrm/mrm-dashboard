@@ -6,6 +6,10 @@ import {
   masterCapability,
   type MasterAction,
 } from "@/lib/auth/master-capabilities"
+import {
+  qualityParameterControlKey,
+  type QualityParameterControl,
+} from "@/lib/auth/quality-parameter-controls"
 
 const MasterAccessContext = createContext<readonly string[] | null>(null)
 const MasterStateUrlContext = createContext<string | undefined>(undefined)
@@ -48,6 +52,16 @@ export function useMasterAccess() {
           : productionMasterCapability(entry, action, floor)
       return key !== null && permissions.includes(key)
     },
+    [permissions]
+  )
+}
+
+export function useQualityParameterControlAccess() {
+  const permissions = useContext(MasterAccessContext)
+  return useCallback(
+    (floor: string, control: QualityParameterControl) =>
+      permissions === null ||
+      permissions.includes(qualityParameterControlKey(floor, control)),
     [permissions]
   )
 }

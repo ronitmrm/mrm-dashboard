@@ -84,6 +84,9 @@ export function PermissionSelector({
       row.submodule.toLowerCase().includes(normalizedQuery) ||
       row.pages.some((page) => page.toLowerCase().includes(normalizedQuery)) ||
       row.label.toLowerCase().includes(normalizedQuery) ||
+      row.actions.some((action) =>
+        action.label.toLowerCase().includes(normalizedQuery)
+      ) ||
       row.fullPermissionKeys.some((key) =>
         key.toLowerCase().includes(normalizedQuery)
       )

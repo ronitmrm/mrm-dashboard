@@ -22,6 +22,11 @@ import {
 import { productionFloorPageCapabilities } from "../../../lib/auth/production-floor-capabilities"
 import { taskCapabilityLabel } from "../../../lib/auth/task-capabilities"
 import {
+  qualityParameterControlKey,
+  qualityParameterControlLabels,
+  qualityParameterControls,
+} from "../../../lib/auth/quality-parameter-controls"
+import {
   productionFloorLegacyTaskCapabilities,
   productionFloorTaskCapabilities,
   productionFloorTaskDefinitions,
@@ -187,15 +192,18 @@ export function permissionAccessRows(
         )
       )
       .map((action) => ({
-        label: {
-          read: `View ${master.label}`,
-          save: `Add or edit ${master.label}`,
-          create: `Add ${master.label}`,
-          update: `Edit ${master.label}`,
-          import: `Import ${master.label}`,
-          rename: `Rename ${master.label}`,
-          delete: `Delete ${master.label}`,
-        }[action],
+        label:
+          master.master === "quality_parameter_master" && action === "save"
+            ? "Save Parameter Set"
+            : {
+                read: `View ${master.label}`,
+                save: `Add or edit ${master.label}`,
+                create: `Add ${master.label}`,
+                update: `Edit ${master.label}`,
+                import: "Upload CSV",
+                rename: `Rename ${master.label}`,
+                delete: `Delete ${master.label}`,
+              }[action],
         permissionKeys: [
           masterPermissionKey(master.unit, master.master, action),
           ...(master.main === "store_masters" && action === "import"
@@ -203,6 +211,18 @@ export function permissionAccessRows(
             : []),
         ],
       }))
+    if (master.master === "quality_parameter_master") {
+      actions.push(
+        ...qualityParameterControls
+          .filter((control) =>
+            permissionKeys.has(qualityParameterControlKey(master.unit, control))
+          )
+          .map((control) => ({
+            label: qualityParameterControlLabels[control],
+            permissionKeys: [qualityParameterControlKey(master.unit, control)],
+          }))
+      )
+    }
     if (!actions.length) return []
     return [
       {

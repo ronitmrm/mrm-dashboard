@@ -68,8 +68,6 @@ const taskHrefs: Record<string, string> = {
   "maintenance.trade.mechanical.work": "/?tab=maintenanceTab",
   "maintenance.trade.plumbing.work": "/maintenance/plumbing",
   "hr.candidates.assign": "/hr?panel=candidatesPanel",
-  "quality.parameters.manage":
-    "/?tab=dataEntryTab&floor=cnc&entry=quality_parameter_master",
   "pricing.enquiries.items.add": "/commercial/enquiries",
   "pricing.enquiries.import_review.apply": "/commercial/enquiries",
   "pricing.proforma_invoices.approve": "/commercial/orders",
@@ -180,8 +178,14 @@ export function permissionPreview(
   const href = previewHref(row, action)
   if (!href) return null
   const tab = assetTabs[action.permissionKeys[0] ?? ""]
+  const [, masterFloor, masterName] = row.id.split(":")
   return {
     href,
+    ...(masterName === "quality_parameter_master" &&
+    href.includes("dataEntry") &&
+    masterFloor
+      ? { qualityParameterFloor: masterFloor }
+      : {}),
     ...(tab
       ? {
           tab,

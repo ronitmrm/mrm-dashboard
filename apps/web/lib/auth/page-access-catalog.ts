@@ -40,6 +40,7 @@ export const apiOnlyPermissionKeys = new Set([
 
 export const legacyPermissionKeys = new Set([
   ...nonVisualPermissionKeys,
+  "quality.parameters.manage",
   "administration.roles.manage",
   "administration.users.manage",
   "hr.employees.write",

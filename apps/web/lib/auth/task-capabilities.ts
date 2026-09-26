@@ -223,7 +223,6 @@ const additionalTaskCapabilityLabels: Readonly<Record<string, string>> = {
   "operations.corrections.write": "Reverse Production Entries",
   "operations.training.write": "Record Training",
   "planning.plan.read": "View Production Plans",
-  "quality.parameters.manage": "Manage Inspection Parameters",
   "iso.documents.manage": "Manage Documents",
   "iso.documents.approve": "Approve / Reject Documents",
   "iso.documents.release": "Final Release",

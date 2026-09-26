@@ -20,6 +20,19 @@ the protected Administrator identity are unchanged.
 
 ## Independent master capabilities
 
+Quality Inspection Parameter Master uses its scoped Save permission for the
+`Save Parameter Set` button and scoped Import for `Upload CSV`. Migration 0172
+registers separate, unit-scoped `download`, `add`, and `remove` controls for
+`Download CSV`, `Add Parameter`, and `Remove Parameter`; their initial grants
+copy the existing Read or Save grants. The former
+`quality.parameters.manage` row is hidden from the selector. The parameter-set
+API requires the scoped Save grant. Apply migration 0172 before running this
+UI on a database: until then, the new controls have no grants.
+
+The permission preview capture script selects a saved parameter set so its
+quality-master preview shows actual rows and the Remove control. Capture fails
+for a unit without saved sets instead of saving an empty form.
+
 The 71 scoped masters are defined in `lib/auth/master-capabilities.ts`: 43
 Universal entries and seven per production unit. Each row owns its supported
 actions through `masters.<scope>.<master>.<action>` keys. The separate Included

@@ -5,7 +5,10 @@ import {
   createProductionShopFloorRepository,
   isMasterDataKind,
 } from "@workspace/db"
-import { parseProductionFloorCode, ProductionUnitAccessError } from "@workspace/db/production-floors"
+import {
+  parseProductionFloorCode,
+  ProductionUnitAccessError,
+} from "@workspace/db/production-floors"
 import { validConfirmedPrioritySetupNumbers } from "@workspace/db/planning-rules"
 import { validateProductionBreaks } from "@workspace/db/production-breaks"
 import { NextResponse, type NextRequest } from "next/server"
@@ -13,7 +16,12 @@ import { NextResponse, type NextRequest } from "next/server"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { productionMasterCapability } from "../../../lib/auth/production-master-access"
 import { masterCapability } from "../../../lib/auth/master-capabilities"
-import { isProductionOperationalEntry, operationalEntryWriteScope, OperationalEntryAccessError } from "../../../lib/auth/operational-entry-access"
+import { qualityParameterControlKey } from "../../../lib/auth/quality-parameter-controls"
+import {
+  isProductionOperationalEntry,
+  operationalEntryWriteScope,
+  OperationalEntryAccessError,
+} from "../../../lib/auth/operational-entry-access"
 import { operationalEntryCapability } from "../../../lib/auth/operational-entry-capabilities"
 import { masterRecordCapability } from "../../../lib/auth/master-record-access"
 import { hasProductionFloorTaskCapability } from "../../../lib/auth/production-floor-task-capabilities"
@@ -127,7 +135,6 @@ function dashboardRouteError(err: unknown) {
   const response = dashboardErrorResponse(err, status)
   return json({ error: response.error }, response.status)
 }
-
 
 const dataEntryTemplateFields: Record<string, string[]> = {
   setup_name_master: ["setupName"],
@@ -276,9 +283,26 @@ async function dataTemplateResponse(entryType: string, request: NextRequest) {
     throw new RouteError(400, `Unknown data template entry type: ${entryType}`)
   }
   if (isProductionOperationalEntry(entryType)) {
-    const floor = parseProductionFloorCode(request.nextUrl.searchParams.get("floor"))
-    if (!floor) throw new RouteError(400, "A valid Production Unit is required.")
-    await authorizedDashboardSession(request, operationalEntryCapability(entryType, "read", floor))
+    const floor = parseProductionFloorCode(
+      request.nextUrl.searchParams.get("floor")
+    )
+    if (!floor)
+      throw new RouteError(400, "A valid Production Unit is required.")
+    await authorizedDashboardSession(
+      request,
+      operationalEntryCapability(entryType, "read", floor)
+    )
+  }
+  if (entryType === "quality_parameter_master") {
+    const floor = parseProductionFloorCode(
+      request.nextUrl.searchParams.get("floor")
+    )
+    if (!floor)
+      throw new RouteError(400, "A valid Production Unit is required.")
+    await authorizedDashboardSession(
+      request,
+      qualityParameterControlKey(floor, "download")
+    )
   }
   if (entryType === "rm_inward") {
     return rmInwardTemplateResponse(request, fields)
@@ -293,7 +317,9 @@ async function rmInwardTemplateResponse(
   request: NextRequest,
   fields: string[]
 ) {
-  const floor = parseProductionFloorCode(request.nextUrl.searchParams.get("floor"))
+  const floor = parseProductionFloorCode(
+    request.nextUrl.searchParams.get("floor")
+  )
   if (!floor) throw new RouteError(400, "A valid Production Unit is required.")
   const pendingRows = await withDashboardReadRepository(
     request,
@@ -393,6 +419,26 @@ async function preauthorizeDashboardMutation(
   path: string,
   body: Record<string, unknown>
 ) {
+  if (path === "quality-parameter-set") {
+    const changes = body.changes
+    if (!Array.isArray(changes) || !changes.length || changes.length > 500) {
+      throw new RouteError(400, "Supply 1 to 500 quality parameter changes.")
+    }
+    const floors = changes.map((change) =>
+      parseProductionFloorCode(
+        plainRecord(plainRecord(change).payload).productionFloorCode ??
+          body.productionFloorCode
+      )
+    )
+    const floor = floors[0]
+    if (!floor || floors.some((candidate) => candidate !== floor))
+      throw new RouteError(400, "A valid Production Unit is required.")
+    await authorizedDashboardSession(
+      request,
+      masterCapability("quality_parameter_master", "save", floor)
+    )
+    return
+  }
   if (path === "work-order-cancellation") {
     const scope = operationalEntryWriteScope(
       "work_order",
@@ -404,8 +450,16 @@ async function preauthorizeDashboardMutation(
     return
   }
   if (path === "master-delete") {
-    const capability = productionMasterCapability(String(body.kind || ""), "delete", body.productionFloorCode)
-    if (!capability) throw new RouteError(400, "This endpoint only deletes production masters.")
+    const capability = productionMasterCapability(
+      String(body.kind || ""),
+      "delete",
+      body.productionFloorCode
+    )
+    if (!capability)
+      throw new RouteError(
+        400,
+        "This endpoint only deletes production masters."
+      )
     await authorizedDashboardSession(request, capability)
     return
   }
@@ -413,11 +467,20 @@ async function preauthorizeDashboardMutation(
     const entry = String(body.entryType || "")
     const payload = plainRecord(body.payload)
     if (isProductionOperationalEntry(entry)) {
-      const scope = operationalEntryWriteScope(entry, path === "data-import" ? "import" : "save", body.productionFloorCode, payload)
+      const scope = operationalEntryWriteScope(
+        entry,
+        path === "data-import" ? "import" : "save",
+        body.productionFloorCode,
+        payload
+      )
       await authorizedDashboardSession(request, scope.capability)
       return
     }
-    const capability = productionMasterCapability(entry, path === "data-import" ? "import" : "save", payload.productionFloorCode ?? body.productionFloorCode)
+    const capability = productionMasterCapability(
+      entry,
+      path === "data-import" ? "import" : "save",
+      payload.productionFloorCode ?? body.productionFloorCode
+    )
     if (capability) {
       await authorizedDashboardSession(request, capability)
       return
@@ -738,7 +801,6 @@ async function savePlanningMasterEntry(
   )
 }
 
-
 async function get(request: NextRequest, context: RouteContext) {
   if (!productionModuleIsEnabled()) {
     return json({ error: "Production module is temporarily disabled" }, 404)
@@ -819,15 +881,19 @@ async function get(request: NextRequest, context: RouteContext) {
 
     if (path === "production-break-schedule") {
       const floor = parseProductionFloorCode(search.get("floor"))
-      if (!floor) throw new RouteError(400, "A valid production unit is required.")
-      return json(await withProductionRepository(
-        request,
-        masterCapability("production_break_schedule", "read", floor),
-        ({ organizationId, repository }) => repository.readProductionBreakSchedule({
-          organizationId,
-          productionFloorCode: floor,
-        })
-      ))
+      if (!floor)
+        throw new RouteError(400, "A valid production unit is required.")
+      return json(
+        await withProductionRepository(
+          request,
+          masterCapability("production_break_schedule", "read", floor),
+          ({ organizationId, repository }) =>
+            repository.readProductionBreakSchedule({
+              organizationId,
+              productionFloorCode: floor,
+            })
+        )
+      )
     }
 
     if (path === "dashboard") {
@@ -918,13 +984,20 @@ async function post(request: NextRequest, context: RouteContext) {
 
     if (path === "quality-parameter-set") {
       const rawChanges = body.changes
-      if (!Array.isArray(rawChanges) || !rawChanges.length || rawChanges.length > 500) {
+      if (
+        !Array.isArray(rawChanges) ||
+        !rawChanges.length ||
+        rawChanges.length > 500
+      ) {
         throw new RouteError(400, "Supply 1 to 500 quality parameter changes.")
       }
       const changes = rawChanges.map((value) => {
         const change = plainRecord(value)
         return {
-          payload: productionFloorPayload(plainRecord(change.payload), body.productionFloorCode),
+          payload: productionFloorPayload(
+            plainRecord(change.payload),
+            body.productionFloorCode
+          ),
           reviseParameter: change.reviseParameter === true,
         }
       })
@@ -1083,17 +1156,28 @@ async function post(request: NextRequest, context: RouteContext) {
       if (action !== "available" && action !== "extend") {
         throw new RouteError(400, "Choose Mark Available or Extend.")
       }
-      const result = await withPlanningRepository(request, "planning.constraint.write",
-        ({ actorUserId, organizationId, repository }) => repository.reviewMachineConstraint({
-          actorUserId, organizationId, action,
-          constraintId: text(body.constraintId),
-          productionFloorCode: text(body.productionFloorCode),
-          unavailableTo: optionalText(body.unavailableTo),
-        }))
-      return json(await withPlanningRefresh(request, path, body, {
-        ...result,
-        message: action === "available" ? "Machine marked available." : "Machine issue end date extended.",
-      }))
+      const result = await withPlanningRepository(
+        request,
+        "planning.constraint.write",
+        ({ actorUserId, organizationId, repository }) =>
+          repository.reviewMachineConstraint({
+            actorUserId,
+            organizationId,
+            action,
+            constraintId: text(body.constraintId),
+            productionFloorCode: text(body.productionFloorCode),
+            unavailableTo: optionalText(body.unavailableTo),
+          })
+      )
+      return json(
+        await withPlanningRefresh(request, path, body, {
+          ...result,
+          message:
+            action === "available"
+              ? "Machine marked available."
+              : "Machine issue end date extended.",
+        })
+      )
     }
 
     if (path === "raw-material-rejection") {
@@ -1228,31 +1312,42 @@ async function post(request: NextRequest, context: RouteContext) {
 
     if (path === "production-break-schedule") {
       const floor = parseProductionFloorCode(body.productionFloorCode)
-      if (!floor) throw new RouteError(400, "A valid production unit is required.")
+      if (!floor)
+        throw new RouteError(400, "A valid production unit is required.")
       if (!Array.isArray(body.breaks) || body.breaks.length > 24) {
         throw new RouteError(400, "Enter up to 24 production breaks.")
       }
       const rawBreaks: unknown[] = body.breaks
       let breaks: ReturnType<typeof validateProductionBreaks>
       try {
-        breaks = validateProductionBreaks(rawBreaks.map((item) => {
-          const row = plainRecord(item)
-          return { startTime: text(row.startTime), endTime: text(row.endTime) }
-        }))
-      } catch (error) {
-        throw new RouteError(400, error instanceof Error ? error.message : "Invalid break times.")
-      }
-      return json(await withProductionRepository(
-        request,
-        masterCapability("production_break_schedule", "save", floor),
-        ({ actorUserId, organizationId, repository }) =>
-          repository.saveProductionBreakSchedule({
-            actorUserId,
-            breaks,
-            organizationId,
-            productionFloorCode: floor,
+        breaks = validateProductionBreaks(
+          rawBreaks.map((item) => {
+            const row = plainRecord(item)
+            return {
+              startTime: text(row.startTime),
+              endTime: text(row.endTime),
+            }
           })
-      ))
+        )
+      } catch (error) {
+        throw new RouteError(
+          400,
+          error instanceof Error ? error.message : "Invalid break times."
+        )
+      }
+      return json(
+        await withProductionRepository(
+          request,
+          masterCapability("production_break_schedule", "save", floor),
+          ({ actorUserId, organizationId, repository }) =>
+            repository.saveProductionBreakSchedule({
+              actorUserId,
+              breaks,
+              organizationId,
+              productionFloorCode: floor,
+            })
+        )
+      )
     }
 
     if (path === "dispatch-approval") {
@@ -1313,8 +1408,16 @@ async function post(request: NextRequest, context: RouteContext) {
     if (path === "master-delete") {
       try {
         const kind = text(body.kind)
-        const deleteCapability = productionMasterCapability(kind, "delete", body.productionFloorCode)
-        if (!deleteCapability) throw new RouteError(400, "This endpoint only deletes production masters.")
+        const deleteCapability = productionMasterCapability(
+          kind,
+          "delete",
+          body.productionFloorCode
+        )
+        if (!deleteCapability)
+          throw new RouteError(
+            400,
+            "This endpoint only deletes production masters."
+          )
         if (!isMasterDataKind(kind)) {
           throw new RouteError(400, "This master does not support deletion.")
         }
@@ -1322,7 +1425,11 @@ async function post(request: NextRequest, context: RouteContext) {
           request,
           ({ actorUserId, organizationId, repository }) =>
             repository.deleteMaster({
-              authorize: (record) => authorizedDashboardSession(request, masterRecordCapability(record, "delete")),
+              authorize: (record) =>
+                authorizedDashboardSession(
+                  request,
+                  masterRecordCapability(record, "delete")
+                ),
               actorUserId,
               kind,
               organizationId,
@@ -1364,13 +1471,16 @@ async function post(request: NextRequest, context: RouteContext) {
           payload,
           "save",
           typeof body.id === "string" ? body.id : undefined,
-          entryType === "quality_parameter_master" && body.reviseParameter === true
+          entryType === "quality_parameter_master" &&
+            body.reviseParameter === true
         )
-        return json(await withPlanningRefresh(request, path, body, {
-          ...result,
-          rowsUpdated: 1,
-          savedText: "Saved to PostgreSQL.",
-        }))
+        return json(
+          await withPlanningRefresh(request, path, body, {
+            ...result,
+            rowsUpdated: 1,
+            savedText: "Saved to PostgreSQL.",
+          })
+        )
       }
       if (entryType === "production_session_start") {
         const result = await withProductionRepository(
@@ -1515,7 +1625,9 @@ async function post(request: NextRequest, context: RouteContext) {
               organizationId,
               productionFloorCode: floor,
               expectedSessionIds: Array.isArray(payload.expectedSessionIds)
-                ? payload.expectedSessionIds.filter((id): id is string => typeof id === "string")
+                ? payload.expectedSessionIds.filter(
+                    (id): id is string => typeof id === "string"
+                  )
                 : [],
               enteredRole: text(payload.enteredRole),
               reasonCode: text(payload.reasonCode),
@@ -1523,7 +1635,10 @@ async function post(request: NextRequest, context: RouteContext) {
               startedAt: text(payload.startedAt),
             })
         )
-        return json({ ...result, savedText: `Bulk breakdown started on ${result.rowsUpdated} running sessions.` })
+        return json({
+          ...result,
+          savedText: `Bulk breakdown started on ${result.rowsUpdated} running sessions.`,
+        })
       }
       if (entryType === "production_session_downtime_start") {
         const result = await withProductionRepository(
@@ -1641,7 +1756,12 @@ async function post(request: NextRequest, context: RouteContext) {
         )
       }
       if (entryType === "rm_inward") {
-        const scope = operationalEntryWriteScope(entryType, "save", body.productionFloorCode, payload)
+        const scope = operationalEntryWriteScope(
+          entryType,
+          "save",
+          body.productionFloorCode,
+          payload
+        )
         const result = await withProductionRepository(
           request,
           scope.capability,
@@ -1690,7 +1810,12 @@ async function post(request: NextRequest, context: RouteContext) {
         )
       }
       if (entryType === "software_raw") {
-        const scope = operationalEntryWriteScope(entryType, "save", body.productionFloorCode, payload)
+        const scope = operationalEntryWriteScope(
+          entryType,
+          "save",
+          body.productionFloorCode,
+          payload
+        )
         const result = await withProductionRepository(
           request,
           scope.capability,
@@ -1728,7 +1853,12 @@ async function post(request: NextRequest, context: RouteContext) {
       const entryType = String(body.entryType || "")
       const fileName = String(body.fileName || "")
       const fileBase64 = String(body.fileBase64 || "")
-      const scope = operationalEntryWriteScope(entryType, "import", body.productionFloorCode, {})
+      const scope = operationalEntryWriteScope(
+        entryType,
+        "import",
+        body.productionFloorCode,
+        {}
+      )
       const importBatch = parseTemplateUpload(
         entryType,
         fileName,
@@ -1812,11 +1942,25 @@ async function post(request: NextRequest, context: RouteContext) {
         const result = await withPlanningRepository(
           request,
           entryType === "work_order"
-            ? operationalEntryWriteScope(entryType, "save", body.productionFloorCode, payload).capability
-            : productionMasterCapability(entryType, "save", payload.productionFloorCode) ?? "operations.shop_floor.write",
+            ? operationalEntryWriteScope(
+                entryType,
+                "save",
+                body.productionFloorCode,
+                payload
+              ).capability
+            : (productionMasterCapability(
+                entryType,
+                "save",
+                payload.productionFloorCode
+              ) ?? "operations.shop_floor.write"),
           (planningContext) =>
-            savePlanningMasterEntry(planningContext, entryType, payload, true,
-              typeof body.id === "string" ? body.id : undefined)
+            savePlanningMasterEntry(
+              planningContext,
+              entryType,
+              payload,
+              true,
+              typeof body.id === "string" ? body.id : undefined
+            )
         )
         return json(
           await withPlanningRefresh(request, path, body, {
@@ -1854,23 +1998,29 @@ async function post(request: NextRequest, context: RouteContext) {
           throw new RouteError(importPolicy.status, importPolicy.error)
         }
         for (const payload of importedRows) {
-          const capability = productionMasterCapability(entryType, "import", payload.productionFloorCode)
+          const capability = productionMasterCapability(
+            entryType,
+            "import",
+            payload.productionFloorCode
+          )
           if (capability) await authorizedDashboardSession(request, capability)
         }
         await importAutoCodedMasterRows(entryType, importedRows, (payload) =>
           executePostgresOperationalEntry(request, entryType, payload, "import")
         )
-        return json(await withPlanningRefresh(request, path, body, {
-          inserted: importedRows.length,
-          duplicatesSkipped: importBatch.duplicateCount,
-          message: importMessage(
-            entryType,
-            importedRows.length,
-            importBatch.duplicateCount
-          ),
-          ok: true,
-          rowsUpdated: importedRows.length,
-        }))
+        return json(
+          await withPlanningRefresh(request, path, body, {
+            inserted: importedRows.length,
+            duplicatesSkipped: importBatch.duplicateCount,
+            message: importMessage(
+              entryType,
+              importedRows.length,
+              importBatch.duplicateCount
+            ),
+            ok: true,
+            rowsUpdated: importedRows.length,
+          })
+        )
       }
       if (postgresMasterEntryTypes.has(entryType)) {
         const fileName = String(body.fileName || "")
@@ -1883,7 +2033,12 @@ async function post(request: NextRequest, context: RouteContext) {
         )
         const importedRows = importBatch.rows.map((payload) => {
           if (entryType === "work_order") {
-            operationalEntryWriteScope(entryType, "import", body.productionFloorCode, payload)
+            operationalEntryWriteScope(
+              entryType,
+              "import",
+              body.productionFloorCode,
+              payload
+            )
           }
           return entryType === "machine_master"
             ? machineMasterImportPayload(payload, body.productionFloorCode)
@@ -1894,14 +2049,27 @@ async function post(request: NextRequest, context: RouteContext) {
           throw new RouteError(importPolicy.status, importPolicy.error)
         }
         for (const payload of importedRows) {
-          const capability = productionMasterCapability(entryType, "import", payload.productionFloorCode)
+          const capability = productionMasterCapability(
+            entryType,
+            "import",
+            payload.productionFloorCode
+          )
           if (capability) await authorizedDashboardSession(request, capability)
         }
         const inserted = await withPlanningRepository(
           request,
           entryType === "work_order"
-            ? operationalEntryWriteScope(entryType, "import", body.productionFloorCode, {}).capability
-            : productionMasterCapability(entryType, "import", importedRows[0]?.productionFloorCode ?? body.productionFloorCode) ?? "operations.shop_floor.write",
+            ? operationalEntryWriteScope(
+                entryType,
+                "import",
+                body.productionFloorCode,
+                {}
+              ).capability
+            : (productionMasterCapability(
+                entryType,
+                "import",
+                importedRows[0]?.productionFloorCode ?? body.productionFloorCode
+              ) ?? "operations.shop_floor.write"),
           async (planningContext) => {
             if (
               ["route", "cycle", "tooling", "work_order"].includes(entryType)
@@ -1991,7 +2159,8 @@ async function withPlanningRefresh(
       path === "data-import" ? "import" : "save",
       plainRecord(body.payload).productionFloorCode ?? body.productionFloorCode
     )
-    if (masterCapability) await requestPostgresDashboardRefresh(request, masterCapability)
+    if (masterCapability)
+      await requestPostgresDashboardRefresh(request, masterCapability)
   }
   return {
     ...payload,

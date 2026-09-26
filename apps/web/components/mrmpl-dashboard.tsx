@@ -150,6 +150,7 @@ import { masterSelectionFromContext } from "@/lib/master-module"
 import {
   useMasterAccess,
   useMasterStateUrl,
+  useQualityParameterControlAccess,
 } from "@/components/master-access-provider"
 import {
   useOperationalEntryAccess,
@@ -281,7 +282,10 @@ import {
   jobCardWorkspaceHref,
 } from "@/lib/unified-navigation"
 import { normalizeUserEnteredPayload } from "@workspace/db/user-entry-text"
-import { formatPlanningFinish, machineTypeForFamily } from "@workspace/db/planning-rules"
+import {
+  formatPlanningFinish,
+  machineTypeForFamily,
+} from "@workspace/db/planning-rules"
 import {
   machineFamilyOptions,
   planningMasterPayload,
@@ -486,20 +490,26 @@ function MasterDataTabs({
   productionFloorCode: ProductionFloorCode
 }) {
   const searchParams = useSearchParams()
+  const canUseQualityControl = useQualityParameterControlAccess()
+  const canDownload =
+    entryType !== "quality_parameter_master" ||
+    canUseQualityControl(productionFloorCode, "download")
   const selectedStoreMaster = searchParams.get("storeMaster")
   return (
     <MasterDataViewTabs
       activeView={activeView}
       csvDownloadAction={
-        entryType === "store_masters" ? (
-          <MasterDataCsvDownloadButton
-            {...storeMasterCsvTemplate(selectedStoreMaster)}
-          />
-        ) : (
-          <MasterDataCsvDownloadButton
-            href={`/api/data-template?entryType=${encodeURIComponent(entryType)}`}
-          />
-        )
+        canDownload ? (
+          entryType === "store_masters" ? (
+            <MasterDataCsvDownloadButton
+              {...storeMasterCsvTemplate(selectedStoreMaster)}
+            />
+          ) : (
+            <MasterDataCsvDownloadButton
+              href={`/api/data-template?${new URLSearchParams({ entryType, floor: productionFloorCode })}`}
+            />
+          )
+        ) : null
       }
       csvImportAction={csvImportAction}
       dataEntryHref={masterDataDashboardHref(
@@ -523,7 +533,9 @@ function MasterDataTabs({
         entryType,
         selectedStoreMaster
       )}
-      onExport={entryType === "store_masters" ? undefined : onExport}
+      onExport={
+        entryType === "store_masters" || !canDownload ? undefined : onExport
+      }
     />
   )
 }
@@ -1371,8 +1383,8 @@ function HourlyQualityCheckShell({
     page === "report"
       ? checkId
       : page === "entry" && selectedRow
-      ? hourlyQualityCheckId(selectedRow, prodDate, shift, hourSlot)
-      : ""
+        ? hourlyQualityCheckId(selectedRow, prodDate, shift, hourSlot)
+        : ""
   const existingCheckPage = usePostgresOperationalPage(
     selectedCheckKey
       ? `/api/hourly-quality?checkKey=${encodeURIComponent(selectedCheckKey)}&floor=${encodeURIComponent(productionFloorCode)}`
@@ -1783,7 +1795,8 @@ function HourlyQualityCheckRegister({
       <CardHeader>
         <CardTitle>Hourly Check Register</CardTitle>
         <CardDescription>
-          Review completed checks and open a report to correct its readings with a reason.
+          Review completed checks and open a report to correct its readings with
+          a reason.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex min-h-0 flex-1 flex-col">
@@ -1890,22 +1903,37 @@ function HourlyQualityCheckReport({
   return <CompletedHourlyQualityReport check={check} />
 }
 
-function CompletedHourlyQualityReport({ check: savedCheck }: { check: DashboardPayload }) {
+function CompletedHourlyQualityReport({
+  check: savedCheck,
+}: {
+  check: DashboardPayload
+}) {
   const [localCheck, setLocalCheck] = useState<DashboardPayload | null>(null)
   const check = localCheck ?? savedCheck
   const [editing, setEditing] = useState(false)
-  const [values, setValues] = useState(() => asArray(savedCheck.readings).map((reading) =>
-    normalizeQualityReadingInput(reading.actualReading ?? reading.value)
-  ))
-  const [remarks, setRemarks] = useState(() => asArray(savedCheck.readings).map((reading) => str(reading.remark)))
+  const [values, setValues] = useState(() =>
+    asArray(savedCheck.readings).map((reading) =>
+      normalizeQualityReadingInput(reading.actualReading ?? reading.value)
+    )
+  )
+  const [remarks, setRemarks] = useState(() =>
+    asArray(savedCheck.readings).map((reading) => str(reading.remark))
+  )
   const [reason, setReason] = useState("")
   const [saving, setSaving] = useState(false)
   const [status, setStatus] = useState<ActionStatus>(null)
-  const changed = asArray(check.readings).some((reading, index) =>
-    values[index] !== normalizeQualityReadingInput(reading.actualReading ?? reading.value) ||
-    remarks[index] !== str(reading.remark)
+  const changed = asArray(check.readings).some(
+    (reading, index) =>
+      values[index] !==
+        normalizeQualityReadingInput(reading.actualReading ?? reading.value) ||
+      remarks[index] !== str(reading.remark)
   )
-  const canSave = Boolean(reason.trim() && changed && values.length > 0 && values.every((value) => value.trim()))
+  const canSave = Boolean(
+    reason.trim() &&
+    changed &&
+    values.length > 0 &&
+    values.every((value) => value.trim())
+  )
 
   async function saveCorrection() {
     if (!canSave || saving) return
@@ -1936,7 +1964,10 @@ function CompletedHourlyQualityReport({ check: savedCheck }: { check: DashboardP
     } catch (error) {
       setStatus({
         tone: "destructive",
-        message: error instanceof Error ? error.message : "Correction could not be saved.",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Correction could not be saved.",
       })
     } finally {
       setSaving(false)
@@ -1969,12 +2000,22 @@ function CompletedHourlyQualityReport({ check: savedCheck }: { check: DashboardP
               value={overallResult}
             />
             {!editing ? (
-              <Button type="button" variant="outline" onClick={() => {
-                setValues(readings.map((reading) => normalizeQualityReadingInput(reading.actualReading ?? reading.value)))
-                setRemarks(readings.map((reading) => str(reading.remark)))
-                setStatus(null)
-                setEditing(true)
-              }}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setValues(
+                    readings.map((reading) =>
+                      normalizeQualityReadingInput(
+                        reading.actualReading ?? reading.value
+                      )
+                    )
+                  )
+                  setRemarks(readings.map((reading) => str(reading.remark)))
+                  setStatus(null)
+                  setEditing(true)
+                }}
+              >
                 <Pencil className="size-4" /> Correct check
               </Button>
             ) : null}
@@ -1996,22 +2037,39 @@ function CompletedHourlyQualityReport({ check: savedCheck }: { check: DashboardP
         <SectionCard>
           <CardHeader>
             <CardTitle>Correction details</CardTitle>
-            <CardDescription>Change the saved readings or remarks, then explain why.</CardDescription>
+            <CardDescription>
+              Change the saved readings or remarks, then explain why.
+            </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3">
-            <LabeledInput label="Reason for edit" value={reason} onChange={setReason} />
+            <LabeledInput
+              label="Reason for edit"
+              value={reason}
+              onChange={setReason}
+            />
             <div className="flex flex-wrap gap-2">
-              <Button type="button" disabled={!canSave || saving} onClick={saveCorrection}>
+              <Button
+                type="button"
+                disabled={!canSave || saving}
+                onClick={saveCorrection}
+              >
                 {saving ? "Saving…" : "Save correction"}
               </Button>
-              <Button type="button" variant="outline" disabled={saving} onClick={() => setEditing(false)}>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={saving}
+                onClick={() => setEditing(false)}
+              >
                 Cancel
               </Button>
             </div>
           </CardContent>
         </SectionCard>
       ) : null}
-      {status ? <AlertMessage tone={status.tone}>{status.message}</AlertMessage> : null}
+      {status ? (
+        <AlertMessage tone={status.tone}>{status.message}</AlertMessage>
+      ) : null}
 
       <SectionCard>
         <CardHeader>
@@ -2069,24 +2127,44 @@ function CompletedHourlyQualityReport({ check: savedCheck }: { check: DashboardP
                         {displayValue(reading.instrumentUsed)}
                       </TableCell>
                       <TableCell className="text-right">
-                        {editing ? qualityParameterInputType(reading) === "pass_fail" ? (
-                          <SearchableSelect
-                            className="h-9 w-full rounded-md border bg-background px-3 text-sm"
-                            value={values[index] ?? ""}
-                            onChange={(event) => setValues((current) => current.map((value, row) => row === index ? event.target.value : value))}
-                          >
-                            <option value="">Select</option>
-                            <option value="OK">Ok</option>
-                            <option value="Not OK">Not Ok</option>
-                          </SearchableSelect>
+                        {editing ? (
+                          qualityParameterInputType(reading) === "pass_fail" ? (
+                            <SearchableSelect
+                              className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                              value={values[index] ?? ""}
+                              onChange={(event) =>
+                                setValues((current) =>
+                                  current.map((value, row) =>
+                                    row === index ? event.target.value : value
+                                  )
+                                )
+                              }
+                            >
+                              <option value="">Select</option>
+                              <option value="OK">Ok</option>
+                              <option value="Not OK">Not Ok</option>
+                            </SearchableSelect>
+                          ) : (
+                            <Input
+                              type={
+                                qualityParameterInputType(reading) === "number"
+                                  ? "number"
+                                  : "text"
+                              }
+                              step="0.001"
+                              value={values[index] ?? ""}
+                              onChange={(event) =>
+                                setValues((current) =>
+                                  current.map((value, row) =>
+                                    row === index ? event.target.value : value
+                                  )
+                                )
+                              }
+                            />
+                          )
                         ) : (
-                          <Input
-                            type={qualityParameterInputType(reading) === "number" ? "number" : "text"}
-                            step="0.001"
-                            value={values[index] ?? ""}
-                            onChange={(event) => setValues((current) => current.map((value, row) => row === index ? event.target.value : value))}
-                          />
-                        ) : displayValue(reading.actualReading ?? reading.value)}
+                          displayValue(reading.actualReading ?? reading.value)
+                        )}
                       </TableCell>
                       <TableCell>
                         <StatusBadge
@@ -2100,12 +2178,22 @@ function CompletedHourlyQualityReport({ check: savedCheck }: { check: DashboardP
                           value={result}
                         />
                       </TableCell>
-                      <TableCell>{editing ? (
-                        <Input
-                          value={remarks[index] ?? ""}
-                          onChange={(event) => setRemarks((current) => current.map((value, row) => row === index ? event.target.value : value))}
-                        />
-                      ) : displayValue(reading.remark)}</TableCell>
+                      <TableCell>
+                        {editing ? (
+                          <Input
+                            value={remarks[index] ?? ""}
+                            onChange={(event) =>
+                              setRemarks((current) =>
+                                current.map((value, row) =>
+                                  row === index ? event.target.value : value
+                                )
+                              )
+                            }
+                          />
+                        ) : (
+                          displayValue(reading.remark)
+                        )}
+                      </TableCell>
                     </TableRow>
                   )
                 })}
@@ -2120,7 +2208,9 @@ function CompletedHourlyQualityReport({ check: savedCheck }: { check: DashboardP
       </SectionCard>
       {history.length ? (
         <SectionCard>
-          <CardHeader><CardTitle>Correction history</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle>Correction history</CardTitle>
+          </CardHeader>
           <CardContent className="grid gap-2 text-sm">
             {history.map((entry, index) => (
               <div className="rounded-md border p-3" key={index}>
@@ -3826,7 +3916,10 @@ function ProductionDashboardPanel({ payload }: { payload: DashboardPayload }) {
                           )}
                         </TableCell>
                         <TableCell>
-                          {formatPlanningFinish(row.currentProbableDispatchDate, row.currentProbableDispatchWorkingHours)}
+                          {formatPlanningFinish(
+                            row.currentProbableDispatchDate,
+                            row.currentProbableDispatchWorkingHours
+                          )}
                         </TableCell>
                         <TableCell>
                           <StatusBadge value={row.status} />
@@ -9070,11 +9163,20 @@ function FirstPieceInspectionReport({
   const [status, setStatus] = useState<ActionStatus>(null)
   const source = localReport ?? rawReport
   const sourceDimensions = asArray(source.dimensions)
-  const changed = remark !== report.remark || readings.some((row, index) =>
-    row.some((value, piece) => value !== report.dimensions[index]?.readings[piece])
-  )
-  const canSave = reason.trim() && changed && readings.length > 0 &&
-    readings.every((row) => row.length >= 5 && row.slice(0, 5).every((value) => value.trim()))
+  const changed =
+    remark !== report.remark ||
+    readings.some((row, index) =>
+      row.some(
+        (value, piece) => value !== report.dimensions[index]?.readings[piece]
+      )
+    )
+  const canSave =
+    reason.trim() &&
+    changed &&
+    readings.length > 0 &&
+    readings.every(
+      (row) => row.length >= 5 && row.slice(0, 5).every((value) => value.trim())
+    )
 
   async function saveCorrection() {
     if (!canSave || saving) return
@@ -9083,7 +9185,8 @@ function FirstPieceInspectionReport({
       correctionReason: reason.trim(),
       dimensions: sourceDimensions.map((dimension, index) => ({
         ...dimension,
-        readings: readings[index]?.map((value) => optionalNumber(value) ?? value) ?? [],
+        readings:
+          readings[index]?.map((value) => optionalNumber(value) ?? value) ?? [],
       })),
       notes: remark,
       remark,
@@ -9102,11 +9205,17 @@ function FirstPieceInspectionReport({
       })
       setEditing(false)
       setReason("")
-      setStatus({ tone: "default", message: "First-piece report correction saved." })
+      setStatus({
+        tone: "default",
+        message: "First-piece report correction saved.",
+      })
     } catch (error) {
       setStatus({
         tone: "destructive",
-        message: error instanceof Error ? error.message : "Correction could not be saved.",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Correction could not be saved.",
       })
     } finally {
       setSaving(false)
@@ -9140,12 +9249,20 @@ function FirstPieceInspectionReport({
               value={overallResult}
             />
             {!editing ? (
-              <Button type="button" variant="outline" onClick={() => {
-                setReadings(report.dimensions.map((dimension) => [...dimension.readings]))
-                setRemark(report.remark)
-                setStatus(null)
-                setEditing(true)
-              }}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setReadings(
+                    report.dimensions.map((dimension) => [
+                      ...dimension.readings,
+                    ])
+                  )
+                  setRemark(report.remark)
+                  setStatus(null)
+                  setEditing(true)
+                }}
+              >
                 <Pencil className="size-4" /> Correct report
               </Button>
             ) : null}
@@ -9175,23 +9292,44 @@ function FirstPieceInspectionReport({
         <SectionCard>
           <CardHeader>
             <CardTitle>Correction details</CardTitle>
-            <CardDescription>Change the saved readings or remark, then explain why.</CardDescription>
+            <CardDescription>
+              Change the saved readings or remark, then explain why.
+            </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3">
-            <LabeledInput label="Report remark" value={remark} onChange={setRemark} />
-            <LabeledInput label="Reason for edit" value={reason} onChange={setReason} />
+            <LabeledInput
+              label="Report remark"
+              value={remark}
+              onChange={setRemark}
+            />
+            <LabeledInput
+              label="Reason for edit"
+              value={reason}
+              onChange={setReason}
+            />
             <div className="flex flex-wrap gap-2">
-              <Button type="button" disabled={!canSave || saving} onClick={saveCorrection}>
+              <Button
+                type="button"
+                disabled={!canSave || saving}
+                onClick={saveCorrection}
+              >
                 {saving ? "Saving…" : "Save correction"}
               </Button>
-              <Button type="button" variant="outline" disabled={saving} onClick={() => setEditing(false)}>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={saving}
+                onClick={() => setEditing(false)}
+              >
                 Cancel
               </Button>
             </div>
           </CardContent>
         </SectionCard>
       ) : null}
-      {status ? <AlertMessage tone={status.tone}>{status.message}</AlertMessage> : null}
+      {status ? (
+        <AlertMessage tone={status.tone}>{status.message}</AlertMessage>
+      ) : null}
 
       <SectionCard>
         <CardHeader>
@@ -9248,13 +9386,27 @@ function FirstPieceInspectionReport({
                           >
                             {editing ? (
                               <FirstPieceReadingControl
-                                master={sourceDimensions[dimensionIndex] ?? { inputType: dimension.inputType }}
-                                value={readings[dimensionIndex]?.[reading] ?? ""}
-                                onChange={(nextValue) => setReadings((current) =>
-                                  current.map((row, rowIndex) => rowIndex === dimensionIndex
-                                    ? row.map((entry, pieceIndex) => pieceIndex === reading ? nextValue : entry)
-                                    : row)
-                                )}
+                                master={
+                                  sourceDimensions[dimensionIndex] ?? {
+                                    inputType: dimension.inputType,
+                                  }
+                                }
+                                value={
+                                  readings[dimensionIndex]?.[reading] ?? ""
+                                }
+                                onChange={(nextValue) =>
+                                  setReadings((current) =>
+                                    current.map((row, rowIndex) =>
+                                      rowIndex === dimensionIndex
+                                        ? row.map((entry, pieceIndex) =>
+                                            pieceIndex === reading
+                                              ? nextValue
+                                              : entry
+                                          )
+                                        : row
+                                    )
+                                  )
+                                }
                               />
                             ) : result === "Not OK" ? (
                               <StatusBadge
@@ -9314,7 +9466,9 @@ function FirstPieceInspectionReport({
       </SectionCard>
       {history.length ? (
         <SectionCard>
-          <CardHeader><CardTitle>Correction history</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle>Correction history</CardTitle>
+          </CardHeader>
           <CardContent className="grid gap-2 text-sm">
             {history.map((entry, index) => (
               <div className="rounded-md border p-3" key={index}>
@@ -9370,8 +9524,12 @@ function ShopFloorItemSummary({
       </div>
       <div className="text-xs text-muted-foreground">
         Setup: {displayValue(row.setupPlannedDate || row.plannedDate)} |
-        Production: {displayValue(row.plannedProductionStartDate)} | Estimated setup finish:{" "}
-        {formatPlanningFinish(row.plannedProductionEndDate, row.plannedProductionEndWorkingHours)}
+        Production: {displayValue(row.plannedProductionStartDate)} | Estimated
+        setup finish:{" "}
+        {formatPlanningFinish(
+          row.plannedProductionEndDate,
+          row.plannedProductionEndWorkingHours
+        )}
       </div>
       <div className="text-xs text-muted-foreground">
         Rm: {displayValue(row.rmStatus)}
@@ -13560,6 +13718,9 @@ function DataEntryForm({
     )
   }
   if (spec.entryType === "quality_parameter_master") {
+    if (!productionFloorCode) {
+      throw new Error("Production unit is required for inspection parameters.")
+    }
     return (
       <QualityParameterMasterForm
         spec={spec}
@@ -13568,6 +13729,7 @@ function DataEntryForm({
         dataEntry={dataEntry}
         masterRows={masterRows}
         productionControl={productionControl}
+        productionFloorCode={productionFloorCode}
       />
     )
   }
@@ -13811,6 +13973,7 @@ function QualityParameterMasterForm({
   dataEntry,
   masterRows,
   productionControl,
+  productionFloorCode,
 }: {
   spec: DataEntrySpec
   submitAction: (
@@ -13822,7 +13985,9 @@ function QualityParameterMasterForm({
   dataEntry?: DashboardPayload
   masterRows: DashboardPayload[]
   productionControl: DashboardPayload
+  productionFloorCode: ProductionFloorCode
 }) {
+  const canUseControl = useQualityParameterControlAccess()
   const masterStateUrl = useMasterStateUrl()
   const hourlyQualityPageData = usePostgresOperationalPage(
     masterStateUrl ? null : "/api/hourly-quality",
@@ -14375,16 +14540,18 @@ function QualityParameterMasterForm({
                       />
                     </TableCell>
                     <TableCell>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        className="size-8 p-0"
-                        aria-label="Remove Parameter"
-                        onClick={() => removeDraft(draft)}
-                      >
-                        <Trash2 className="size-4" />
-                      </Button>
+                      {canUseControl(productionFloorCode, "remove") ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="size-8 p-0"
+                          aria-label="Remove Parameter"
+                          onClick={() => removeDraft(draft)}
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      ) : null}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -14392,10 +14559,12 @@ function QualityParameterMasterForm({
             </OperationalTable>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <Button type="button" variant="outline" onClick={addDraft}>
-              <Plus className="size-4" />
-              Add Parameter
-            </Button>
+            {canUseControl(productionFloorCode, "add") ? (
+              <Button type="button" variant="outline" onClick={addDraft}>
+                <Plus className="size-4" />
+                Add Parameter
+              </Button>
+            ) : null}
             <div className="flex flex-wrap items-center gap-2">
               {status ? (
                 <AlertMessage tone={status.tone}>{status.message}</AlertMessage>
@@ -16464,7 +16633,10 @@ function MachinePlannedPartsPanel({
                   />
                   <TileField
                     label="Estimated Setup Finish"
-                    value={formatPlanningFinish(row.plannedProductionEndDate, row.plannedProductionEndWorkingHours)}
+                    value={formatPlanningFinish(
+                      row.plannedProductionEndDate,
+                      row.plannedProductionEndWorkingHours
+                    )}
                   />
                   <TileField
                     label="Actual Production Start"

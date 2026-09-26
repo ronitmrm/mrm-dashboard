@@ -89,7 +89,12 @@ try {
   const apiOnlyKeys = new Set<string>()
   const targets = new Map<
     string,
-    { href: string; selector?: string; tab?: string }
+    {
+      href: string
+      qualityParameterFloor?: string
+      selector?: string
+      tab?: string
+    }
   >()
   const coveredKeys = new Set<string>()
 
@@ -115,6 +120,33 @@ try {
   }
 
   const outputDir = path.join(process.cwd(), "public", "permission-previews")
+  const { rows: qualityParameterFixtures } = await client.query<{
+    floor: string
+    item: string
+    option: string
+    setup: string
+  }>(`
+    SELECT source_payload->>'productionFloorCode' AS floor,
+      source_payload->>'partNo' AS item,
+      source_payload->>'optionNumber' AS option,
+      source_payload->>'setupNo' AS setup
+    FROM quality.parameter_definitions
+    WHERE active
+      AND source_payload->>'productionFloorCode' IS NOT NULL
+      AND source_payload->>'partNo' IS NOT NULL
+      AND source_payload->>'optionNumber' IS NOT NULL
+      AND source_payload->>'setupNo' IS NOT NULL
+    GROUP BY floor, item, option, setup
+    ORDER BY
+      CASE WHEN count(*) BETWEEN 3 AND 8 THEN 0 ELSE 1 END,
+      abs(count(*) - 6), floor, item, option, setup
+  `)
+  const qualityFixtureByFloor = new Map<string, (typeof qualityParameterFixtures)[number]>()
+  for (const fixture of qualityParameterFixtures) {
+    if (!qualityFixtureByFloor.has(fixture.floor)) {
+      qualityFixtureByFloor.set(fixture.floor, fixture)
+    }
+  }
   await mkdir(outputDir, { recursive: true })
   const failures: string[] = []
   let captured = 0
@@ -133,7 +165,7 @@ try {
   for (const [src, target] of [...targets]
     .filter(([, target]) => !match || target.href.includes(match))
     .slice(0, limit)) {
-    const { href, selector, tab } = target
+    const { href, qualityParameterFloor, selector, tab } = target
     const output = path.join(outputDir, path.basename(src))
     if (!process.argv.includes("--force")) {
       try {
@@ -180,6 +212,37 @@ try {
           "wait",
           "--fn",
           `Boolean(document.querySelector('section[aria-label="${tab.toLowerCase()} section"]'))`
+        )
+      }
+      if (qualityParameterFloor) {
+        const fixture = qualityFixtureByFloor.get(qualityParameterFloor)
+        if (!fixture) {
+          throw new Error(
+            `no saved quality parameter set for ${qualityParameterFloor}`
+          )
+        }
+        for (const [placeholder, value] of [
+          ["Select Route Master Item", fixture.item],
+          ["Select Option", fixture.option],
+          ["Select Setup", fixture.setup],
+        ]) {
+          const chosen = browser(
+            "eval",
+            `(() => { const select = [...document.querySelectorAll('main select[aria-hidden="true"]')].find((element) => element.options[0]?.textContent?.trim() === ${JSON.stringify(placeholder)}); if (!select || ![...select.options].some((option) => option.value === ${JSON.stringify(value)})) return false; const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set; setter?.call(select, ${JSON.stringify(value)}); select.dispatchEvent(new Event('change', { bubbles: true })); return true; })()`
+          )
+          if (!chosen.includes("true")) {
+            throw new Error(`missing populated ${placeholder} option`)
+          }
+          browser(
+            "wait",
+            "--fn",
+            `[...document.querySelectorAll('main select[aria-hidden="true"]')].some((element) => element.options[0]?.textContent?.trim() === ${JSON.stringify(placeholder)} && element.value === ${JSON.stringify(value)})`
+          )
+        }
+        browser(
+          "wait",
+          "--fn",
+          "document.querySelectorAll('main [aria-label=\"Remove Parameter\"]').length > 1"
         )
       }
       const text = browser(
