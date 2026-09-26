@@ -132,6 +132,7 @@ These are the factory meanings supplied in the interview. The workflows above de
 - **Consumable:** A Store asset issued without an expected return. Store tracks its quantity under the shared Asset Code rather than giving each piece a Unit ID.
 - **Non Consumable:** A Store asset whose individual units receive Unit IDs and can be returned to Store.
 - **Unit ID:** The individual identity given to each unit of a Non Consumable asset, separate from its shared Asset Code.
+- **Physical Asset:** One actual Non Consumable unit in Store, with its own Unit ID. Several identical units can share one Asset Code while each remains a separate Physical Asset.
 - **Supplier:** A source from which Store obtains its assets.
 - **Supplier Price:** A Supplier's price for a particular Store asset; the same asset may have different prices from different Suppliers.
 - **Store Purchase Order:** An order the Store department creates for assets it needs to buy from a Supplier.
@@ -172,9 +173,9 @@ These are the factory meanings supplied in the interview. The workflows above de
 - In factory practice, each ordered Part receives its **Product UID** after the Customer PO, even when several Parts share one Enquiry. The app allocates a UID during pre-quote Design of an Enquiry line, before Customer PO entry.
 - MRMPL uploads the Customer PO here to make the **PI**; the software's intended PO process ends there. The signed PI and later PO work stay outside this software. The current app also offers Mark Sent and Approve to release the order, without a signed-copy upload or signature check.
 - In factory practice, the **Planner** gives Dispatch Approval. The app also permits an eligible Shop Floor employee to approve an eligible Job Card.
-- The app calls one individually tracked Non Consumable unit a **Physical Asset**, with its own Unit ID and movement history. This is not a count of Store stock; the factory's use of the term is still unconfirmed.
+- The app's **Physical Asset** is the individually tracked unit described above; it is not a count of Store stock.
 - The app's **Job Post** links a recruitment opening to an **Approved Post**, and HR confirms joining before the Candidate becomes an Employee. This matches the meanings above.
 
 ### Terms still to define
 
-Physical Asset (the app's individually tracked Non Consumable unit; factory meaning still open). The Product UID and PI gaps above remain differences between factory practice and current app behavior.
+Technical Review, Sales Clarification, Design Task, Product Portfolio, Product Parameter Costing, Customer Parameter Costing and Commercial Requote are awaiting factory definitions. The Product UID and PI gaps above remain differences between factory practice and current app behavior.
