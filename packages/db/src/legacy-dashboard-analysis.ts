@@ -3673,8 +3673,11 @@ function finalizeMachineAndSetupSchedule(
         if (rowText(previous, "jcNo") === rowText(row, "jcNo")) {
           return rowText(previous, "setupNo") === planningMeta(row).previousSetupNo;
         }
-        return rowText(previous, "setupNo") === rowText(row, "setupNo")
-          && (priorityQueueState(previous) !== "idle" || shopFloorRowIsComplete(previous));
+        if (priorityQueueState(previous) === "idle" && !shopFloorRowIsComplete(previous)) return false;
+        if (rowText(previous, "setupNo") === rowText(row, "setupNo")) return true;
+        return rowText(previous, "setupNo") === planningMeta(row).previousSetupNo
+          && requiredToolingCodesFromPlan(previous).some(code => requiredToolingCodesFromPlan(row)
+            .some(nextCode => canonicalKey(nextCode) === canonicalKey(code)));
       })
       .sort((a, b) => Number(rowText(b.previous, "jcNo") === rowText(row, "jcNo")) - Number(rowText(a.previous, "jcNo") === rowText(row, "jcNo"))
         || parseDate(rowText(b.previous, "plannedProductionEndDate")).localeCompare(parseDate(rowText(a.previous, "plannedProductionEndDate"))));

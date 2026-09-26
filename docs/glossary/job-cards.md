@@ -111,6 +111,10 @@ does not depend on sharing a Tooling Master code.
 The same preference applies to repeating the same part, route option and setup
 across Job Cards after an existing running or completed setup. Job quantities,
 WIP and production records remain separate.
+When another Job Card for the same part and route has run the preceding setup
+more recently, that work can anchor the next setup on its machine if the two
+setups share a recorded tooling asset. The normal WIP, capacity and delivery
+checks still decide whether that machine is feasible.
 
 An Item Complete setup releases its machine on its recorded completion date;
 it does not reserve another full working day. Ready matching-setup work across

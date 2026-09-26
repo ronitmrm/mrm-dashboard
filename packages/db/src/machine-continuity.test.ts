@@ -50,6 +50,34 @@ test("keeps a WIP-ready second setup on another machine when overlap finishes ea
   expect(new Date(String(second.plannedProductionStartDate)).getTime()).toBeLessThan(new Date(String(first.plannedProductionEndDate)).getTime())
 })
 
+test("continues the next setup after another Job Card's matching tool work", () => {
+  const input = inputFor(1_064)
+  vi.setSystemTime(new Date("2026-09-26T06:00:00Z"))
+  for (const row of input.dataEntries) {
+    if (row.entryType === "work_order") row.payload.orderPcs = 1_064
+    if (row.entryType === "shop_floor_status") {
+      row.payload.stage = "item_complete"
+      row.payload.completedAt = "2026-09-24T06:00:00Z"
+    }
+  }
+  input.productionEntries[0] = { ...input.productionEntries[0]!, prodDate: "2026-09-24", outputQty: 1_064, actualQty: 1_064 }
+  const entry = (entryType: string, payload: Record<string, unknown>) => ({ entryType, payload, createdAt: "2026-09-25T06:00:00Z" })
+  input.dataEntries.push(
+    entry("work_order", { jcNo: "B", partCode: "M5551", optionNumber: "1", orderPcs: 1_100, rmInwardDate: "2026-09-25", rmInwardKg: 1 }),
+    entry("shop_floor_status", { jcNo: "B", partCode: "M5551", optionNumber: "1", setupNo: "1", machine: "CNC-1", stage: "item_complete", completedAt: "2026-09-26T06:00:00Z" }),
+    ...["1", "2"].map(setupNo => entry("tooling", { partNo: "M5551", optionNumber: "1", setupNo, tooling: "NC284" })),
+    entry("tooling_availability", { assetCode: "NC284", totalQuantity: 1, storeQuantity: 0, allocatedQuantity: 1 }),
+  )
+  input.productionEntries.push({ ...input.productionEntries[0]!, jobCard: "B", prodDate: "2026-09-26", outputQty: 992, actualQty: 992 })
+  input.previousMachinePlanDetailRows.push({ jcNo: "B", partCode: "M5551", optionNumber: "1", setupNo: "1", routeMachine: "JT", machine: "CNC-1" })
+
+  const rows = buildLegacyDashboardSnapshot(input).productionControl.machinePlanDetailRows
+  expect(rows.find(row => row.jcNo === "A" && row.setupNo === "2")).toMatchObject({
+    machine: "CNC-1", machineAssignment: "Same-part machine continuity", physicalWipQty: 1_064,
+    machineContinuityReason: "Follow B setup 1 on CNC-1 to retain compatible settings",
+  })
+})
+
 test("keeps matching work next when completing a setup releases the next route step", () => {
   const input = inputFor(10_000)
   vi.setSystemTime(new Date("2026-09-24T06:00:00Z"))
