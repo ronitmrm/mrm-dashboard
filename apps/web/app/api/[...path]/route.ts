@@ -1439,6 +1439,9 @@ async function post(request: NextRequest, context: RouteContext) {
         )
       }
       if (entryType === "production_session_correct") {
+        const downtimeCorrection = payload.downtimeCorrection === undefined
+          ? undefined
+          : plainRecord(payload.downtimeCorrection)
         const result = await withProductionRepository(
           request,
           "operations.production.write",
@@ -1446,6 +1449,17 @@ async function post(request: NextRequest, context: RouteContext) {
             repository.correctProductionSession({
               actorUserId,
               correctionReason: text(payload.correctionReason),
+              downtimeCorrection: downtimeCorrection
+                ? {
+                    action: text(downtimeCorrection.action) as "edit" | "reverse",
+                    eventId: text(downtimeCorrection.eventId),
+                    expectedUpdatedAt: text(downtimeCorrection.expectedUpdatedAt),
+                    startedAt: text(downtimeCorrection.startedAt),
+                    endedAt: text(downtimeCorrection.endedAt),
+                    reasonCode: text(downtimeCorrection.reasonCode),
+                    reasonName: text(downtimeCorrection.reasonName),
+                  }
+                : undefined,
               crateCount: optionalNumeric(
                 payload.crateCount ?? payload.cratesUsed
               ),
@@ -1454,6 +1468,7 @@ async function post(request: NextRequest, context: RouteContext) {
               endedAt: text(payload.endedAt),
               endReason: text(payload.endReason),
               enteredRole: text(payload.enteredRole) || undefined,
+              expectedRowVersion: optionalNumeric(payload.expectedRowVersion),
               grossWeightKg: optionalNumeric(
                 payload.grossWeightKg ?? payload.grossWeight
               ),

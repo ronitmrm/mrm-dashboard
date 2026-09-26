@@ -1089,6 +1089,79 @@ describe("production and shop-floor workflows", () => {
       .toHaveLength(3)
   })
 
+  test("reverses mistaken downtime while moving a closed session end earlier", async () => {
+    const jobCardNumber = `FLOOR-JC-${suffix}-CORRECTION`
+    const machineNumber = `FLOOR-MC-${suffix}-CORRECTION`
+    await planning.upsertWorkOrder({
+      itemUid,
+      jobCardNumber,
+      orderedQuantity: 100,
+      organizationId,
+      sourcePayload: { jcNo: jobCardNumber, partCode: itemUid, rmPoNo: rmPoNumber },
+      workOrderNumber: `FLOOR-WO-${suffix}-CORRECTION`,
+    })
+    await planning.upsertMachine({ machineNumber, organizationId })
+    await repository.recordShopFloorStage({
+      jobCardNumber, machineNumber, operationSetupCode: "1", organizationId,
+      payload: { doneBy: "Machinist", partCode: itemUid }, stage: "operator_started",
+    })
+    const session = await repository.startProductionSession({
+      cycleTimeSeconds: 60, jobCardNumber, machineNumber,
+      measurementMethod: "weight", operationSetupCode: "1",
+      operatorCode: firstOperator, organizationId, pieceWeightGrams: 15.4,
+      productionDate: "2026-08-15", shift: "Day",
+      startedAt: "2026-08-15T08:30:00+05:30",
+    })
+    await repository.closeProductionSession({
+      crateCount: 0, crateWeightKg: 1.1, grossWeightKg: 1,
+      endedAt: "2026-08-15T09:30:00+05:30", endReason: "shift_end",
+      organizationId, sessionId: session.id,
+    })
+    const downtime = await repository.recordProductionSessionDowntime({
+      correctionReason: "Entered after the session closed.",
+      endedAt: "2026-08-15T09:20:00+05:30", enteredRole: "shop_floor",
+      organizationId, reasonCode: "VIBRATION", reasonName: "Vibration",
+      sessionId: session.id, startedAt: "2026-08-15T09:10:00+05:30",
+    })
+    const before = await repository.readProductionSessions({
+      organizationId, productionFloorCode: "conventional", sessionId: session.id,
+    })
+    const current = before.rows[0]!
+    const correction = {
+      correctionReason: "Downtime entered against the wrong session.",
+      crateCount: 0, crateWeightKg: 1.1, grossWeightKg: 1,
+      endedAt: "2026-08-15T09:00:00+05:30", endReason: "shift_end",
+      organizationId, sessionId: session.id,
+    }
+    await expect(repository.correctProductionSession(correction))
+      .rejects.toThrow("downtime entries")
+    await repository.correctProductionSession({
+      ...correction,
+      expectedRowVersion: Number(current.rowVersion),
+      downtimeCorrection: {
+        action: "reverse", eventId: downtime.id,
+        expectedUpdatedAt: String((current.downtimeEvents as Array<{ updatedAt: string }>)[0]!.updatedAt),
+      },
+    })
+    const after = await repository.readProductionSessions({
+      organizationId, productionFloorCode: "conventional", sessionId: session.id,
+    })
+    expect(after.rows[0]).toMatchObject({ downtimeMinutes: 0, downtimeEvents: [] })
+    expect(new Date(String(after.rows[0]!.endedAt)).toISOString())
+      .toBe(new Date(correction.endedAt).toISOString())
+    const audit = await pool.query<{ reason: string; before_reason: string; reversed_at: string }>(
+      `SELECT reason, before_state->>'reason_name' AS before_reason,
+         after_state->>'reversed_at' AS reversed_at
+       FROM audit.events WHERE target_id = $1
+         AND event_type = 'production.session.downtime_corrected'`,
+      [downtime.id]
+    )
+    expect(audit.rows[0]).toMatchObject({
+      reason: correction.correctionReason, before_reason: "Vibration",
+    })
+    expect(audit.rows[0]!.reversed_at).toBeTruthy()
+  })
+
   test("retains the source machine until an explicit planner switch and releases it on completion", async () => {
     await repository.recordShopFloorStage({
       jobCardNumber: firstJobCard,
