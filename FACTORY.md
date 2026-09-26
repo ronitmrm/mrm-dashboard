@@ -13,6 +13,8 @@ This describes what the app currently records, from customer demand to a Job Car
 7. **Inspect and finish.** First-piece and hourly checks are saved against production. Rejections can also be recorded at Checking, Assembly or Quality Control. Each planned setup is explicitly completed. The Job Card combines output, quality, downtime, material and delivery history. **UI:** production unit → First Piece Inspection / Quality Control / Job Cards → open Job Card; Quality Control → Rejection Entry.
 8. **Ready for dispatch.** Only a Job Card whose planned setups are all Item Complete appears for Dispatch Approval. The selected approver records that approval. The app shows order and dispatch dates, but the inspected workflow ends at approval; it does not document picking, packing, shipment, invoice or carrier handover. **UI:** production unit → Job Cards → Job Card Actions → Dispatch Approval; Production Dashboard → Work Order Dispatch Overview.
 
+At MRMPL, a directly purchased item is also a Part/Product. It follows the customer demand and pricing path but bypasses the raw-material and machine-production steps above. The app supports direct-purchase costing; the inspected Store purchase flow is separate from the customer PO flow.
+
 ## Customer, design and commercial work
 
 - **Maintain customer and commercial reference data.** Staff create, correct, import, review and, where allowed, remove Customers, terms, material rates, process defaults and currency rates. These feed later enquiries and costing; issued documents keep their saved values. **UI:** Master Data → Data Entry / View Records → Universal → Customers or Commercial Pricing Masters.
@@ -74,13 +76,13 @@ These are the factory meanings supplied in the interview. The workflows above de
 
 ### Demand and identity
 
-- **Part:** An item MRMPL needs to manufacture.
+- **Part:** An item MRMPL supplies to a Customer, whether MRMPL manufactures it or buys it directly.
 - **Product:** Another name for a Part at MRMPL.
 - **Customer:** A company that buys Products from MRMPL.
 - **Enquiry:** A customer's document or request asking MRMPL to quote for Parts.
-- **Customer Purchase Order:** A customer's order for Parts that MRMPL must manufacture and dispatch to that Customer.
-- **Work Order:** An order from Purchase to an internal production, surface-finishing or checking department to carry out work.
-- **Job Card:** A unique code assigned to a Work Order in any department so its production and rejection can be tracked.
+- **Customer Purchase Order:** A customer's order for Parts that MRMPL must make or buy and dispatch to that Customer.
+- **Work Order:** An order from Purchase to one internal production, surface-finishing or checking department to carry out work. Each department receives and enters its own Work Order.
+- **Job Card:** A unique code assigned to each department's Work Order so its production and rejection can be tracked.
 
 ### Factory resources and people
 
@@ -93,8 +95,8 @@ These are the factory meanings supplied in the interview. The workflows above de
 
 ### Factory meaning versus current app coverage
 
-- You use **Part** and **Product** as synonyms. The app also uses Product for catalogue and costing records, including direct-purchase items; whether those count as Parts needs clarification.
-- Your **Work Order** and **Job Card** cover production, surface finishing and checking departments. The Work Order entry inspected here is scoped to production units; coverage of the other departments needs clarification.
+- **Part** and **Product** are synonyms, including directly purchased items. The app's direct-purchase Product is consistent with this meaning.
+- Factory **Work Orders** and **Job Cards** are separate for each department, including surface finishing and checking. The app's current Work Order entry is available only for its four named production units; no corresponding surface-finishing or checking Work Order entry was found in this pass.
 
 ### Terms still to define
 
