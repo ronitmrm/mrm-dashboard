@@ -135,6 +135,13 @@ planning. Good pieces count toward both Job Card totals and that setup's WIP,
 including sessions entered retrospectively.
 
 Correcting end time or adding downtime recalculates productive runtime and target.
+For a closed session, an authorized correction may also edit a completed downtime
+entry's reason or interval, or reverse an entry recorded in error. The correction
+requires a remark and records the original and corrected downtime values in the
+audit log. Edited intervals must remain within the corrected session and cannot
+overlap another downtime entry. Reversals retain the original record as history
+but exclude it from downtime totals. Downtime linked to an unresolved carry or
+Maintenance breakdown is handled through its owning workflow.
 Correcting Weight or Counter output recalculates total and good pieces. Adding a
 rejection recalculates good pieces. Efficiency always follows the corrected total
 pieces and target. A correction may not move the end before recorded downtime,

@@ -2355,10 +2355,20 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
       correctionReason: string
       crateCount?: number
       crateWeightKg?: number
+      downtimeCorrection?: {
+        action: "edit" | "reverse"
+        eventId: string
+        expectedUpdatedAt: string
+        startedAt?: string
+        endedAt?: string
+        reasonCode?: string
+        reasonName?: string
+      }
       endCount?: number
       endedAt: string
       endReason: string
       enteredRole?: string
+      expectedRowVersion?: number
       grossWeightKg?: number
       organizationId: string
       sessionId: string
@@ -2381,11 +2391,13 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           crate_weight_kg: string | null
           cycle_time_seconds: string
           end_count: string | null
+          gross_weight_kg: string | null
           machine_id: string
           measurement_method: ProductionMeasurementMethod
           piece_weight_grams: string
           production_entry_id: string
           production_floor_code: ProductionFloorCode
+          row_version: string
           snapshot: Record<string, unknown>
           source_payload: Record<string, unknown>
           start_count: string | null
@@ -2395,9 +2407,9 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           `
             SELECT session.machine_id, session.measurement_method,
               session.started_at, session.start_count, session.end_count,
-              session.piece_weight_grams, session.crate_weight_kg,
+              session.piece_weight_grams, session.gross_weight_kg, session.crate_weight_kg,
               session.cycle_time_seconds, session.production_entry_id,
-              session.source_payload, session.status,
+              session.source_payload, session.status, session.row_version,
               floor.code AS production_floor_code,
               to_jsonb(session) AS snapshot
             FROM manufacturing.production_sessions session
@@ -2414,6 +2426,9 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         if (!current) throw new Error("Production session was not found.")
         if (current.status !== "closed") {
           throw new Error("Only a closed production session can be corrected.")
+        }
+        if (input.downtimeCorrection && input.expectedRowVersion !== Number(current.row_version)) {
+          throw new ShopFloorConflictError("Production session changed. Refresh it before correcting downtime.")
         }
         if (enteredRole === "quality" && current.production_floor_code !== "cnc") {
           throw new Error("Quality can correct production sessions only in CNC.")
@@ -2436,6 +2451,84 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         if (nextSession.rows[0] && endedAt > nextSession.rows[0].started_at) {
           throw new Error("Session end cannot overlap the next machine session.")
         }
+        if (input.downtimeCorrection) {
+          const change = input.downtimeCorrection
+          const event = await client.query<{
+            end_outcome: string | null
+            ended_at: Date | null
+            id: string
+            source_payload: Record<string, unknown>
+            started_at: Date
+            updated_at: Date
+            snapshot: Record<string, unknown>
+          }>(
+            `SELECT id, started_at, ended_at, end_outcome, updated_at,
+                source_payload, to_jsonb(event) AS snapshot
+             FROM manufacturing.production_session_downtime_events event
+             WHERE id = $1 AND production_session_id = $2
+               AND organization_id = $3 AND reversed_at IS NULL
+             FOR UPDATE`,
+            [change.eventId, input.sessionId, input.organizationId]
+          )
+          const previous = event.rows[0]
+          if (!previous) throw new ShopFloorConflictError("Downtime entry was not found. Refresh the session.")
+          if (previous.updated_at.getTime() !== new Date(change.expectedUpdatedAt).getTime()) {
+            throw new ShopFloorConflictError("Downtime entry changed. Refresh the session before correcting it.")
+          }
+          if (!previous.ended_at || previous.end_outcome === "shift_end_unresolved" ||
+            previous.source_payload.maintenanceTaskKey) {
+            throw new ShopFloorConflictError("This downtime is linked to an active workflow and cannot be corrected here.")
+          }
+          let updatedEvent: Record<string, unknown>
+          if (change.action === "reverse") {
+            const updated = await client.query<{ snapshot: Record<string, unknown> }>(
+              `UPDATE manufacturing.production_session_downtime_events
+               SET reversed_at = now(), reversal_reason = $1, updated_at = now()
+               WHERE id = $2 RETURNING to_jsonb(production_session_downtime_events) AS snapshot`,
+              [correctionReason, change.eventId]
+            )
+            updatedEvent = updated.rows[0]!.snapshot
+          } else if (change.action === "edit") {
+            const downtimeStart = requiredTimestamp(change.startedAt ?? "", "Downtime start")
+            const downtimeEnd = requiredTimestamp(change.endedAt ?? "", "Downtime end")
+            const reasonCode = requiredText(change.reasonCode ?? "", "Downtime code")
+            const reasonName = requiredText(change.reasonName ?? "", "Downtime reason")
+            if (downtimeStart < current.started_at || downtimeEnd > endedAt || downtimeEnd <= downtimeStart) {
+              throw new ShopFloorConflictError("Corrected downtime must fall within the production session.")
+            }
+            const overlap = await client.query(
+              `SELECT id FROM manufacturing.production_session_downtime_events
+               WHERE production_session_id = $1 AND id <> $2 AND reversed_at IS NULL
+                 AND started_at < $4 AND COALESCE(ended_at, 'infinity'::timestamptz) > $3
+               LIMIT 1`,
+              [input.sessionId, change.eventId, downtimeStart.toISOString(), downtimeEnd.toISOString()]
+            )
+            if (overlap.rows[0]) throw new ShopFloorConflictError("Corrected downtime overlaps another downtime entry.")
+            const durationMinutes = Math.max(Math.ceil((downtimeEnd.getTime() - downtimeStart.getTime()) / 60_000), 1)
+            const updated = await client.query<{ snapshot: Record<string, unknown> }>(
+              `UPDATE manufacturing.production_session_downtime_events
+               SET started_at = $1, ended_at = $2, duration_minutes = $3,
+                 reason_code = $4, reason_name = $5, updated_at = now()
+               WHERE id = $6 RETURNING to_jsonb(production_session_downtime_events) AS snapshot`,
+              [downtimeStart.toISOString(), downtimeEnd.toISOString(), durationMinutes, reasonCode, reasonName, change.eventId]
+            )
+            updatedEvent = updated.rows[0]!.snapshot
+          } else {
+            throw new ShopFloorConflictError("Choose Edit or Reverse for the downtime correction.")
+          }
+          await client.query(
+            `INSERT INTO audit.events (
+               organization_id, event_type, target_schema, target_table,
+               target_id, actor_user_id, reason, before_state, after_state,
+               metadata, source_system, source_table, source_id
+             ) VALUES ($1, 'production.session.downtime_corrected', 'manufacturing',
+               'production_session_downtime_events', $2, $3, $4, $5, $6,
+               jsonb_build_object('action', $7::text, 'sessionId', $8::text),
+               'mrm-dashboard', 'production_session_downtime_correction', $9)`,
+            [input.organizationId, change.eventId, input.actorUserId ?? null,
+              correctionReason, previous.snapshot, updatedEvent, change.action, input.sessionId, randomUUID()]
+          )
+        }
         const laterDowntime = await client.query<{ id: string }>(
           `
             SELECT id
@@ -2447,7 +2540,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           [input.sessionId, endedAt.toISOString()]
         )
         if (laterDowntime.rows[0]) {
-          throw new Error("Session end cannot be before its downtime entries.")
+          throw new ShopFloorConflictError("Session end cannot be before its downtime entries. Review the session timeline.")
         }
         const aggregates = await client.query<{
           downtime_minutes: string
@@ -2490,6 +2583,15 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             )
           }
         }
+        const hasAnyWeightOutput = input.grossWeightKg !== undefined ||
+          input.crateCount !== undefined || input.crateWeightKg !== undefined
+        const hasCompleteWeightOutput = input.grossWeightKg !== undefined &&
+          input.crateCount !== undefined && input.crateWeightKg !== undefined
+        if (current.measurement_method === "weight" && hasAnyWeightOutput && !hasCompleteWeightOutput) {
+          throw new ShopFloorConflictError("Enter gross weight, crates, and crate weight together.")
+        }
+        const outputPending = current.measurement_method === "weight" &&
+          current.gross_weight_kg === null && !hasAnyWeightOutput
         const output = current.measurement_method === "counter"
           ? calculateProductionSessionOutput({
               endCount: nonNegativeWholeNumber(input.endCount, "End count"),
@@ -2497,7 +2599,9 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
               rejectedPieces,
               startCount: Number(current.start_count),
             })
-          : calculateProductionSessionOutput({
+          : outputPending
+            ? { goodPieces: 0, netWeightKg: null, rejectedPieces, totalPieces: 0 }
+            : calculateProductionSessionOutput({
               crateCount: nonNegativeWholeNumber(input.crateCount, "Crates used"),
               crateWeightKg: input.crateWeightKg ??
                 Number(current.crate_weight_kg ?? -1),
@@ -2525,7 +2629,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           downtimeMinutes,
           endTime: endedAt.toISOString(),
           measurementMethod: current.measurement_method,
-          outputPending: false,
+          outputPending,
           outputQty: output.goodPieces,
           rejectQty: output.rejectedPieces,
           runtimeMinutes: timing.runtimeMinutes,
@@ -2566,7 +2670,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             current.measurement_method === "weight" ? input.grossWeightKg : null,
             current.measurement_method === "weight" ? input.crateCount : null,
             current.measurement_method === "weight"
-              ? input.crateWeightKg ?? Number(current.crate_weight_kg ?? 0)
+              ? outputPending ? null : input.crateWeightKg ?? Number(current.crate_weight_kg ?? 0)
               : null,
             output.netWeightKg,
             output.totalPieces,
@@ -2585,7 +2689,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             )
             VALUES ($1, 'production.session.corrected', 'manufacturing',
               'production_sessions', $2, $3, $4, $5, $6,
-              jsonb_build_object('correctionType', 'end_details',
+              jsonb_build_object('correctionType', $9::text,
                 'enteredRole', $7::text),
               'mrm-dashboard', 'production_session_correction', $8)
           `,
@@ -2598,6 +2702,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             updated.rows[0]!.snapshot,
             enteredRole,
             randomUUID(),
+            input.downtimeCorrection ? "downtime_and_end_details" : "end_details",
           ]
         )
         if (endReason === "item_complete") {
@@ -3486,7 +3591,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
       const offset = Math.max(Math.trunc(input.offset ?? 0), 0)
       const result = await pool.query<Record<string, unknown>>(
         `
-          SELECT session.id,
+          SELECT session.id, session.row_version AS "rowVersion",
             session.session_reference AS "sessionReference",
             session.daily_sequence AS "dailySequence",
             session.status,
@@ -3592,6 +3697,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
                 'startedAt', event.started_at,
                 'endedAt', event.ended_at,
                 'durationMinutes', event.duration_minutes,
+                'updatedAt', event.updated_at,
                 'endOutcome', event.end_outcome,
                 'carryResolvedAt', event.carry_forward_resolved_at,
                 'breakdownLinked', NULLIF(
@@ -3766,6 +3872,38 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
               AND correction.target_table = 'production_sessions'
               AND correction.event_type LIKE 'production.session.%'
               AND correction.source_table = 'production_session_correction'
+              AND session.reversed_at IS NULL
+
+            UNION ALL
+
+            SELECT session.organization_id, floor.code,
+              session.id, session.session_reference, session.production_date,
+              session.shift, session.machine_number_snapshot,
+              session.job_card_number_snapshot, session.part_code_snapshot,
+              session.option_number_snapshot, session.setup_number_snapshot,
+              session.operator_code_snapshot, session.operator_name_snapshot,
+              'downtime_correction', correction.occurred_at,
+              correction.occurred_at, NULL::timestamptz, NULL::integer,
+              correction.metadata->>'action',
+              concat(correction.reason, ' · Previous: ',
+                correction.before_state->>'reason_name', ' (',
+                to_char((correction.before_state->>'started_at')::timestamptz
+                  AT TIME ZONE 'Asia/Kolkata', 'DD Mon HH24:MI'), '–',
+                to_char((correction.before_state->>'ended_at')::timestamptz
+                  AT TIME ZONE 'Asia/Kolkata', 'DD Mon HH24:MI'), ' IST)'),
+              NULL::integer, actor.name, 'correction', correction.occurred_at
+            FROM audit.events correction
+            JOIN manufacturing.production_session_downtime_events downtime
+              ON downtime.id = correction.target_id
+            JOIN manufacturing.production_sessions session
+              ON session.id = downtime.production_session_id
+            JOIN catalog.machines machine ON machine.id = session.machine_id
+            JOIN manufacturing.production_floors floor
+              ON floor.id = machine.production_floor_id
+            LEFT JOIN identity.users actor ON actor.id = correction.actor_user_id
+            WHERE correction.target_schema = 'manufacturing'
+              AND correction.target_table = 'production_session_downtime_events'
+              AND correction.event_type = 'production.session.downtime_corrected'
               AND session.reversed_at IS NULL
           )
           SELECT "sessionId", "sessionReference", "productionDate", shift,

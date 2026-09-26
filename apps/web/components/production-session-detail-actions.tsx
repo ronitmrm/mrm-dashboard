@@ -33,7 +33,7 @@ export function ProductionSessionDetailActions({
           <Pencil />
           {session.outputPending === true
             ? "Complete weight"
-            : "Correct end details"}
+            : "Correct end / downtime"}
         </Button>
         <Button variant="outline" onClick={() => onAction("lateDowntime")}>
           <Clock3 />
