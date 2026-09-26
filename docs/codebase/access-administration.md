@@ -110,10 +110,21 @@ migration before releasing the application that enforces the new keys.
 
 ## Workspace tabs
 
-- Permission rows show software Page/Task names without internal URL/query
+- Permission rows show software Screen/Action names without internal URL/query
   strings. Internal routes, capability mappings and grants are unchanged.
   Preset help distinguishes page viewing from task actions and explains that
   Custom is useful for selecting a subset of multiple applicable actions.
+  Action labels name the affected record or screen. Hovering a permission name
+  for 500 ms, or focusing it, shows a desktop screenshot of its screen or
+  control. The static JPEGs live in `apps/web/public/permission-previews/`;
+  `apps/web/scripts/capture-permission-previews.ts` audits every screen-backed
+  action against a screenshot and can recapture them from an authenticated
+  local app at 1440 × 900. It trims empty space below screen content and can
+  prune stale generated images. The Store asset detail captures use local
+  synthetic asset `RBAC-DEMO-001`. Active API-only permissions remain
+  assignable and explain why no screenshot exists. Registered keys with no
+  current authorization use are omitted; editing a role preserves its existing
+  grants for those keys.
 
 - Header metrics use the full Employee Master snapshot and shared MetricSummary:
   employees with/without login and with/without at least one direct or inherited
