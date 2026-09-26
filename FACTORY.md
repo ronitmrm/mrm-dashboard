@@ -128,10 +128,17 @@ These are the factory meanings supplied in the interview. The workflows above de
 - **Machine:** Equipment in a Production Unit used either to manufacture Parts directly or to support production.
 - **Employee Assignment:** An Employee's placement in a particular Approved Job Post.
 - **Approved Post:** A position created for a role in the organization, to which an Employee can be assigned.
+- **Job Template:** The roles and responsibilities defined for a Job and assigned to a Post.
+- **Combined Approved Post:** Several roles combined into one Post when a single Employee will handle them.
 - **Job:** A position or role in the organization.
 - **Job Post:** A recruitment opening for an Approved Post.
 - **Candidate:** A person seeking to join MRMPL who enters the interview process. They become an Employee when HR confirms they have joined.
+- **Interview Assessment:** The assessment recorded for each separate interview round.
+- **Appointment:** The state after all three interview rounds are approved and the Candidate is appointed; it remains until HR confirms that the person has joined.
+- **Offer Letter:** The official letter given to a Candidate who has passed all three interview rounds.
 - **Controlled Document:** An organizational document created for certification or another activity carried out at MRMPL.
+- **Master Document List:** The list of procedures, work instructions, forms and other documents MRMPL creates or maintains.
+- **SOP:** Standard Operating Procedure.
 - **Released Revision:** A revision made official through a separate release step; making a revision does not release it automatically.
 - **Monitoring Obligation:** A due review or record-keeping check tied to a Controlled Document.
 
@@ -196,6 +203,8 @@ These are the factory meanings supplied in the interview. The workflows above de
 - In factory practice, the **Planner** gives Dispatch Approval. The app also permits an eligible Shop Floor employee to approve an eligible Job Card.
 - The app's **Physical Asset** is the individually tracked unit described above; it is not a count of Store stock.
 - The app's **Job Post** links a recruitment opening to an **Approved Post**, and HR confirms joining before the Candidate becomes an Employee. This matches the meanings above.
+- The app requires all three interview rounds to be approved before Appointment. It generates the **Offer Letter** after the Candidate accepts and HR confirms joining terms; passing the rounds alone does not issue it.
+- The app's official **Master Document List** shows released documents; unreleased first drafts appear separately as Pending Documents.
 - The app's **Commercial Requote** reuses an existing Product and goes directly to Customer Parameter Costing when there is no technical change. The factory definition also specifies a repeat request from the same Customer.
 - The app's **Price Revisions** flow stages and completes revised customer prices. The inspected flow does not show a separate action to send those prices to the Customer, which is part of the factory meaning above.
 - The app's **Order Acceptance Planning** estimates dates and tests a proposed order before Purchase confirms it; approval does not create a PO or reserve capacity. You do not recognize its purpose in the factory process yet.
@@ -204,4 +213,4 @@ These are the factory meanings supplied in the interview. The workflows above de
 
 ### Terms still to define
 
-The factory purposes of Order Acceptance Planning and Vendor remain open, as do the exact checks meant by Calibration. Job Template, Combined Approved Post, Interview Assessment, Appointment, Offer Letter, Master Document List and SOP are next to review. The Product UID and PI gaps above remain differences between factory practice and current app behavior.
+The factory purposes of Order Acceptance Planning and Vendor remain open, as do the exact checks meant by Calibration. The Product UID and PI gaps above remain differences between factory practice and current app behavior.
