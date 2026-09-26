@@ -320,12 +320,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Every table label and value stays centered, including cells with older alignment utilities. */
-[data-slot="table"] :is(th, td, caption),
-[data-slot="table"] :is(th, td) * {
-  text-align: center;
-}
-
 /* A consistent AA-visible keyboard indicator, including legacy controls. */
 :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
   outline: 2px solid var(--color-focus) !important;
