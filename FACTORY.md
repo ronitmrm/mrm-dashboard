@@ -81,7 +81,7 @@ These are the factory meanings supplied in the interview. The workflows above de
 - **Customer:** A company that buys Products from MRMPL.
 - **Enquiry:** A customer's document or request asking MRMPL to quote for Parts.
 - **Enquiry Line:** One Part for which the Customer requests a quote within an Enquiry. One Enquiry can have several different Parts.
-- **Product UID:** MRMPL's unique code for a Part/Product after receiving the Customer Purchase Order. Before the order, the Part is an Enquiry Line under an Enquiry Number; the ordered Part gets its Product UID for Design work.
+- **Product UID:** MRMPL's unique code for each ordered Part/Product, assigned after the Customer Purchase Order arrives. One Enquiry Number may cover several Parts; every Part ordered from it receives its own Product UID.
 - **Customer Part Code:** The Customer's own identity code for a Part, distinct from MRMPL's Product UID.
 - **Customer Purchase Order:** A customer's order for Parts that MRMPL must make or buy and dispatch to that Customer.
 - **Work Order:** An order from Purchase to one internal production, surface-finishing or checking department to carry out work. Each department receives and enters its own Work Order.
@@ -96,6 +96,10 @@ These are the factory meanings supplied in the interview. The workflows above de
 - **Production Type:** Where or how the Part is obtained or produced: Direct Purchase, CNC, Conventional, M/C Assembly for an Assembly, or Assembly for a Package.
 - **BOM:** Bill of Material; the description of every Part, including Lists, Assemblies, Packages and directly purchased Parts. It covers components and manufacturing details such as weight, process and blank piece weight.
 - **Design Dossier:** Another name for a Part's BOM.
+- **Route:** A path for making a Part in a Production Unit. One Part can have alternative Routes. Each Route option lists its Setups, their order and the Machine used at each Setup.
+- **Setup:** A production step within a Route, carried out on its specified Machine with the required Tooling.
+- **Cycle Time:** The time taken to machine the Part at one Setup.
+- **Tooling:** The tools required to carry out a particular Setup.
 - **Drawing:** A drawing for a Part, tool or asset.
 - **Revision:** A changed version of an official document, price, Drawing, BOM or Design Dossier.
 - **ECN:** Engineering Change Note; a record used when a Part needs a design change, such as its process, Drawing, weight, Raw Material or grade.
@@ -104,7 +108,7 @@ These are the factory meanings supplied in the interview. The workflows above de
 
 - **Customer Price:** The price offered for a Product to a particular Customer.
 - **Quote:** The quotation MRMPL creates from a Customer Enquiry.
-- **Proforma Invoice (PI):** The acknowledgement of a Customer Purchase Order showing whether MRMPL keeps its prices or changes them. MRMPL gets the Customer's signature on it before starting PO work.
+- **Proforma Invoice (PI):** A document made from the Customer Purchase Order that confirms its prices or records agreed changes. The Customer signs it outside this software before later PO work begins.
 
 ### Factory resources and people
 
@@ -121,9 +125,10 @@ These are the factory meanings supplied in the interview. The workflows above de
 - Factory **Work Orders** and **Job Cards** are separate for each department, including surface finishing and checking. The app's current Work Order entry is available only for its four named production units; no corresponding surface-finishing or checking Work Order entry was found in this pass.
 - The app calls List/Package **Item Type**. Its **Product Type** and **Production Type** fields now match your meanings above.
 - Factory **BOM** is the whole Design Dossier for every Part. The app's BOM lines mainly connect Package and Assembly components; List and directly purchased Part details sit in the wider Product design record.
-- In factory practice, **Product UID** follows the Customer PO. The app allocates one during pre-quote Design of an Enquiry line, before Customer PO entry.
-- In factory practice, the Customer signs the **PI** before PO work starts. The app has Generate, Mark Sent and Approve actions, but the inspected PI workflow has no signed-customer-copy upload or signature check before approval.
+- In factory practice, Design completes and confirms the **BOM** before the Quote. After a Customer PO arrives, Design checks the ordered Part against that BOM and handles any changes made while ordering. The app also completes Design before the Quote.
+- In factory practice, each ordered Part receives its **Product UID** after the Customer PO, even when several Parts share one Enquiry. The app allocates a UID during pre-quote Design of an Enquiry line, before Customer PO entry.
+- MRMPL uploads the Customer PO here to make the **PI**; the software's intended PO process ends there. The signed PI and later PO work stay outside this software. The current app also offers Mark Sent and Approve to release the order, without a signed-copy upload or signature check.
 
 ### Terms still to define
 
-Product Base Price (the app's label; factory meaning still open), Route, Setup, Cycle, Tooling, RM Inward, RM Rejection, WIP, Good Output, Rejection, Downtime, Production Session, First Piece Inspection, Hourly Quality Check, Setup Complete, Ready for Dispatch, Dispatch Approval, Asset Code, Consumable, Non Consumable, Physical Asset, Unit ID, Supplier, Supplier Price, Store PO, Receipt, Stock, Request, Allocation, Maintenance Request, Breakdown, Approved Post, Job, Candidate, Released Revision, Monitoring Obligation. The Product UID and PI gaps above also need follow-up.
+Product Base Price (the app's label; factory meaning still open), RM Inward, RM Rejection, WIP, Good Output, Rejection, Downtime, Production Session, First Piece Inspection, Hourly Quality Check, Setup Complete, Ready for Dispatch, Dispatch Approval, Asset Code, Consumable, Non Consumable, Physical Asset, Unit ID, Supplier, Supplier Price, Store PO, Receipt, Stock, Request, Allocation, Maintenance Request, Breakdown, Approved Post, Job, Candidate, Released Revision, Monitoring Obligation. The Product UID and PI gaps above remain differences between factory practice and current app behavior.
