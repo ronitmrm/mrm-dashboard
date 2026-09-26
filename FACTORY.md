@@ -118,6 +118,10 @@ These are the factory meanings supplied in the interview. The workflows above de
 - **Commercial Requote:** A new Quote requested by the same Customer for a Part previously quoted to that Customer.
 - **Quote Revision:** An updated version of a Quote sent to the Customer.
 - **Price Revision:** An MRMPL-initiated change to a previously offered price, sent to the Customer without waiting for a new Quote request.
+- **Product Bulk Revision:** A bulk change to Product parameters used in pricing.
+- **Customer Bulk Revision:** A bulk change to Customer-specific parameters used in pricing.
+- **Pricing Register:** The combined view of prices MRMPL has given to all its Customers.
+- **Website Product Data:** The information maintained for each Part shown in MRMPL's website Product Portfolio.
 - **Proforma Invoice (PI):** A document made from the Customer Purchase Order that confirms its prices or records agreed changes. The Customer signs it outside this software before later PO work begins.
 
 ### Factory resources and people
@@ -133,6 +137,7 @@ These are the factory meanings supplied in the interview. The workflows above de
 - **Job:** A position or role in the organization.
 - **Job Post:** A recruitment opening for an Approved Post.
 - **Candidate:** A person seeking to join MRMPL who enters the interview process. They become an Employee when HR confirms they have joined.
+- **Employee Master:** The master view of Posts and their Employee assignments, including who has joined or resigned.
 - **Interview Assessment:** The assessment recorded for each separate interview round.
 - **Appointment:** The state after all three interview rounds are approved and the Candidate is appointed; it remains until HR confirms that the person has joined.
 - **Offer Letter:** The official letter given to a Candidate who has passed all three interview rounds.
@@ -201,6 +206,8 @@ These are the factory meanings supplied in the interview. The workflows above de
 ### Maintenance
 
 - **Maintenance Request:** A repair or maintenance need reported by a person or department. A manager sends it to the relevant maintenance team, where it appears as a task to complete.
+- **Maintenance Category:** The type of work needed: Electrical, Plumbing or Mechanical.
+- **Maintenance Priority:** The urgency requested by the person who raises a Maintenance Request.
 - **Breakdown:** A Machine fault requiring repair before the Machine can run again. Related stopped production is recorded as Downtime in the Production Session.
 
 ### Factory meaning versus current app coverage
@@ -224,7 +231,10 @@ These are the factory meanings supplied in the interview. The workflows above de
 - The app's **Order Acceptance Planning** estimates dates and tests a proposed order before Purchase confirms it; approval does not create a PO or reserve capacity. You do not recognize its purpose in the factory process yet.
 - **Planning Control** currently shows exception cases in the app. You questioned whether this sheet is still needed now that Shop Floor tasks run in sequence.
 - The app uses **Vendor** for an external holder of an asset who does not receive a Store Purchase Order. Its factory meaning is still unknown.
+- The app's **Store Classification** is its Asset Category → Asset Subcategory → Asset Name hierarchy for creating a Store Item Type. You do not recognize this as a factory term yet.
+- The app's **Pricing Register** shows current prices, while earlier sent Quotes remain in quotation history.
+- The Maintenance Manager confirms the requester's suggested **Maintenance Priority** and Category.
 
 ### Terms still to define
 
-The factory purposes of Order Acceptance Planning and Vendor remain open, as do the exact checks meant by Calibration. The Product UID and PI gaps above remain differences between factory practice and current app behavior.
+The factory purposes of Order Acceptance Planning, Vendor and Store Classification remain open, as do the exact checks meant by Calibration. The Product UID and PI gaps above remain differences between factory practice and current app behavior.
