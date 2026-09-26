@@ -23,6 +23,18 @@ function inputFor(good: number) {
   }
 }
 
+test("plans available WIP after an upstream setup completes below its order", () => {
+  const input = inputFor(992)
+  input.dataEntries.find(row => row.entryType === "work_order")!.payload.orderPcs = 1_100
+  input.dataEntries.find(row => row.entryType === "shop_floor_status")!.payload.stage = "item_complete"
+  input.productionEntries[0]!.targetQty = 1_100
+
+  const rows = buildLegacyDashboardSnapshot(input).productionControl.machinePlanDetailRows
+  expect(rows.find(row => row.setupNo === "2")).toMatchObject({
+    physicalWipQty: 992, totalOrderPcs: 992, pendingGoodQty: 992, customerOrderPcs: 1_100,
+  })
+})
+
 test("returns a sequential compatible setup to its preceding machine without a shared tool", () => {
   const input = inputFor(10_000)
   const entry = (entryType: string, payload: Record<string, unknown>) => ({ entryType, payload, createdAt: "2026-09-19T06:00:00Z" })
