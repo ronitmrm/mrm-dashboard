@@ -117,7 +117,11 @@ These are the factory meanings supplied in the interview. The workflows above de
 - **Store Item Type:** The classification of an item kept in Store. It receives a unique number used to track the item, its documents and its movements.
 - **Machine:** Equipment in a Production Unit used either to manufacture Parts directly or to support production.
 - **Employee Assignment:** An Employee's placement in a particular Approved Job Post.
+- **Approved Post:** A position created for a role in the organization, to which an Employee can be assigned.
+- **Job:** A job or position in the organization. Its boundary with an Approved Post still needs confirmation.
+- **Candidate:** A person seeking to join MRMPL who enters the interview process and may later become an Employee.
 - **Controlled Document:** An organizational document created for certification or another activity carried out at MRMPL.
+- **Released Revision:** A revision made official through a separate release step; making a revision does not release it automatically.
 
 ### Store identities and purchasing
 
@@ -166,7 +170,9 @@ These are the factory meanings supplied in the interview. The workflows above de
 - MRMPL uploads the Customer PO here to make the **PI**; the software's intended PO process ends there. The signed PI and later PO work stay outside this software. The current app also offers Mark Sent and Approve to release the order, without a signed-copy upload or signature check.
 - In factory practice, the **Planner** gives Dispatch Approval. The app also permits an eligible Shop Floor employee to approve an eligible Job Card.
 - The app calls one individually tracked Non Consumable unit a **Physical Asset**, with its own Unit ID and movement history. This is not a count of Store stock; the factory's use of the term is still unconfirmed.
+- The app treats a **Job Post** as a recruitment opening linked to an **Approved Post**, while the factory meaning of Job given so far is a position. The app turns a hired Candidate into an Employee only when HR confirms joining.
+- The app uses **Monitoring Obligation** for a controlled document's due review or record-keeping confirmation. Its factory meaning is still unconfirmed.
 
 ### Terms still to define
 
-Product Base Price (the app's label; factory meaning still open), Physical Asset (factory meaning still open), Approved Post, Job, Candidate, Released Revision, Monitoring Obligation. The Product UID and PI gaps above remain differences between factory practice and current app behavior.
+Product Base Price, Physical Asset and Monitoring Obligation (app terms whose factory meanings remain open); the boundary between Job and Approved Post. The Product UID and PI gaps above remain differences between factory practice and current app behavior.
