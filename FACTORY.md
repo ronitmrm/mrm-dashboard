@@ -122,11 +122,16 @@ These are the factory meanings supplied in the interview. The workflows above de
 ### Store identities and purchasing
 
 - **Asset Code:** The unique code generated for an asset type in the Store department. Units of the same type share this code.
-- **Consumable / Non Consumable:** The two Store Asset Type choices. Their practical difference at MRMPL still needs confirmation.
+- **Consumable:** A Store asset issued without an expected return. Store tracks its quantity under the shared Asset Code rather than giving each piece a Unit ID.
+- **Non Consumable:** A Store asset whose individual units receive Unit IDs and can be returned to Store.
 - **Unit ID:** The individual identity given to each unit of a Non Consumable asset, separate from its shared Asset Code.
 - **Supplier:** A source from which Store obtains its assets.
 - **Supplier Price:** A Supplier's price for a particular Store asset; the same asset may have different prices from different Suppliers.
 - **Store Purchase Order:** An order the Store department creates for assets it needs to buy from a Supplier.
+- **Receipt:** The record of assets received against a Store Purchase Order. Received quantities then appear in Stock.
+- **Stock:** The Store view showing the current available quantity of each asset.
+- **Request:** A person's or department's request to Store for Consumable or Non Consumable assets.
+- **Allocation:** Store's issue of assets against a Request from a person or department.
 
 ### Production records and states
 
@@ -144,6 +149,11 @@ These are the factory meanings supplied in the interview. The workflows above de
 - **Ready for Dispatch:** A Finished Good whose chosen Route's Setups are all complete.
 - **Dispatch Approval:** The Planner's approval after checking that the Part is finished and ready to dispatch.
 
+### Maintenance
+
+- **Maintenance Request:** A repair or maintenance need reported by a person or department. A manager sends it to the relevant maintenance team, where it appears as a task to complete.
+- **Breakdown:** A Machine fault requiring repair before the Machine can run again. Related stopped production is recorded as Downtime in the Production Session.
+
 ### Factory meaning versus current app coverage
 
 - **Part** and **Product** are synonyms, including directly purchased items. The app's direct-purchase Product is consistent with this meaning.
@@ -155,8 +165,8 @@ These are the factory meanings supplied in the interview. The workflows above de
 - In factory practice, each ordered Part receives its **Product UID** after the Customer PO, even when several Parts share one Enquiry. The app allocates a UID during pre-quote Design of an Enquiry line, before Customer PO entry.
 - MRMPL uploads the Customer PO here to make the **PI**; the software's intended PO process ends there. The signed PI and later PO work stay outside this software. The current app also offers Mark Sent and Approve to release the order, without a signed-copy upload or signature check.
 - In factory practice, the **Planner** gives Dispatch Approval. The app also permits an eligible Shop Floor employee to approve an eligible Job Card.
-- The app calls one individually tracked Non Consumable unit a **Physical Asset**, with its own Unit ID and movement history. This is not a count of Store stock; the factory's use of the term is still unconfirmed. In the app, a **Consumable** is quantity-managed and issued without an expected return; a **Non Consumable** is individually tracked and can return to Store.
+- The app calls one individually tracked Non Consumable unit a **Physical Asset**, with its own Unit ID and movement history. This is not a count of Store stock; the factory's use of the term is still unconfirmed.
 
 ### Terms still to define
 
-Product Base Price (the app's label; factory meaning still open), Physical Asset and the practical difference between Consumable and Non Consumable (factory meanings still open), Receipt, Stock, Request, Allocation, Maintenance Request, Breakdown, Approved Post, Job, Candidate, Released Revision, Monitoring Obligation. The Product UID and PI gaps above remain differences between factory practice and current app behavior.
+Product Base Price (the app's label; factory meaning still open), Physical Asset (factory meaning still open), Approved Post, Job, Candidate, Released Revision, Monitoring Obligation. The Product UID and PI gaps above remain differences between factory practice and current app behavior.
