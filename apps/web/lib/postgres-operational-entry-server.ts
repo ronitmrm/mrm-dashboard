@@ -18,6 +18,7 @@ import { authorizationRequestTelemetryForCurrentScope } from "./auth/authorizati
 import { telemetryRequestId } from "./request-telemetry"
 import { productionCapabilityForTab } from "./auth/production-capabilities"
 import { productionMasterCapability } from "./auth/production-master-access"
+import { masterCapability } from "./auth/master-capabilities"
 
 const operationalEntryTypes = new Set([
   "parameter_master",
@@ -192,7 +193,14 @@ export async function executePostgresOperationalEntry(
 ) {
   const plan = operationalEntryPlan(entryType, payload)
   if (!plan) return null
-  const actor = await authorizedActor(request, productionMasterCapability(entryType, masterAction, payload.productionFloorCode) ?? plan.capability)
+  const actor = await authorizedActor(
+    request,
+    productionMasterCapability(
+      entryType,
+      masterAction,
+      payload.productionFloorCode
+    ) ?? plan.capability
+  )
 
   if (plan.family === "workforce") {
     return withPostgresRepository(
@@ -267,8 +275,11 @@ export async function executePostgresOperationalEntry(
         }
         if (plan.operation === "reference") {
           return await repository.upsertQualityReference({
-            ...plan.input, rejectDuplicates: masterAction === "save",
-            actorUserId: actor.actorUserId, organizationId, recordId,
+            ...plan.input,
+            rejectDuplicates: masterAction === "save",
+            actorUserId: actor.actorUserId,
+            organizationId,
+            recordId,
           })
         }
         if (plan.operation === "first-piece") {
@@ -425,11 +436,11 @@ export async function savePostgresQualityParameterSet(
   })
   const actor = await authorizedActor(
     request,
-    productionMasterCapability(
+    masterCapability(
       "quality_parameter_master",
       "save",
       plans[0]?.productionFloorCode
-    ) ?? "quality.parameters.manage"
+    )
   )
   return withPostgresRepository(
     createQualityRepository(actor),

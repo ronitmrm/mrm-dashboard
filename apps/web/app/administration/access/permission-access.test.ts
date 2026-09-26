@@ -49,3 +49,31 @@ it("opens dedicated production screens for their floor permissions", () => {
     "/dashboard/production-sessions?floor=cnc"
   )
 })
+
+it("names each inspection parameter control and omits its legacy task", () => {
+  const prefix = "masters.cnc.quality_parameter_master"
+  const rows = permissionAccessRows(
+    [
+      `${prefix}.read`,
+      `${prefix}.save`,
+      `${prefix}.import`,
+      `${prefix}.download`,
+      `${prefix}.add`,
+      `${prefix}.remove`,
+      "quality.parameters.manage",
+    ].map((key) => ({ key, module: "masters", name: key }))
+  )
+  const master = rows.find(
+    (row) => row.id === "master:cnc:quality_parameter_master"
+  )!
+
+  expect(master.actions.map(({ label }) => label)).toEqual([
+    "View Quality Inspection Parameter",
+    "Save Parameter Set",
+    "Upload CSV",
+    "Download CSV",
+    "Add Parameter",
+    "Remove Parameter",
+  ])
+  expect(rows.some((row) => row.id === "quality.parameters")).toBe(false)
+})
