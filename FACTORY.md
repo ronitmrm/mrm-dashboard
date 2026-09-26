@@ -128,6 +128,12 @@ These are the factory meanings supplied in the interview. The workflows above de
 - **Rejection:** A Part rejected during a Setup for a recorded reason.
 - **Downtime:** Time when production has stopped for a reason during a production run.
 - **Production Session:** A period of production during which its output, rejection, downtime and other entries are recorded together.
+- **First Piece Inspection:** QC checks the first piece after the Programmer or Machinist sets each new Setup and saves the inspection report.
+- **Hourly Quality Check:** QC's hourly check that Parts being produced are correct.
+- **Setup Complete:** The state reached when a Part's work at one Setup is finished.
+- **Finished Goods:** The final Product after every Setup in its chosen Route option is complete.
+- **Ready for Dispatch:** A Finished Good whose chosen Route's Setups are all complete.
+- **Dispatch Approval:** The Planner's approval after checking that the Part is finished and ready to dispatch.
 
 ### Factory meaning versus current app coverage
 
@@ -138,7 +144,8 @@ These are the factory meanings supplied in the interview. The workflows above de
 - In factory practice, Design completes and confirms the **BOM** before the Quote. After a Customer PO arrives, Design checks the ordered Part against that BOM and handles any changes made while ordering. The app also completes Design before the Quote.
 - In factory practice, each ordered Part receives its **Product UID** after the Customer PO, even when several Parts share one Enquiry. The app allocates a UID during pre-quote Design of an Enquiry line, before Customer PO entry.
 - MRMPL uploads the Customer PO here to make the **PI**; the software's intended PO process ends there. The signed PI and later PO work stay outside this software. The current app also offers Mark Sent and Approve to release the order, without a signed-copy upload or signature check.
+- In factory practice, the **Planner** gives Dispatch Approval. The app also permits an eligible Shop Floor employee to approve an eligible Job Card.
 
 ### Terms still to define
 
-Product Base Price (the app's label; factory meaning still open), First Piece Inspection, Hourly Quality Check, Setup Complete, Ready for Dispatch, Dispatch Approval, Asset Code, Consumable, Non Consumable, Physical Asset, Unit ID, Supplier, Supplier Price, Store PO, Receipt, Stock, Request, Allocation, Maintenance Request, Breakdown, Approved Post, Job, Candidate, Released Revision, Monitoring Obligation. The Product UID and PI gaps above remain differences between factory practice and current app behavior.
+Product Base Price (the app's label; factory meaning still open), Asset Code, Consumable, Non Consumable, Physical Asset, Unit ID, Supplier, Supplier Price, Store PO, Receipt, Stock, Request, Allocation, Maintenance Request, Breakdown, Approved Post, Job, Candidate, Released Revision, Monitoring Obligation. The dispatch path for directly purchased Parts also needs confirmation. The Product UID and PI gaps above remain differences between factory practice and current app behavior.
