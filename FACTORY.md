@@ -68,8 +68,34 @@ This describes what the app currently records, from customer demand to a Job Car
 - **Manage access and retained files.** Administrators create roles, staff login accounts and page/task grants, and can inspect or explicitly delete retained files with a reason. Staff can change their own password. **UI:** Access Administration → Access Administration → Staff Access / Application Roles; Access Administration → Artifacts; Password & Security.
 - **Use a personal dashboard.** A user sees permitted work and metrics, adds supported analytics widgets, and arranges or removes their own widgets. This does not change factory records. **UI:** Dashboard → My Dashboard / My Analytics / My Workspace → Add to My Dashboard.
 
-## Domain model — factory interview pending
+## Domain model — in progress
 
-The workflows above establish how the **app** uses these names. Their **factory meanings and boundaries** need confirmation before they become definitions. Interview topics: Customer, Enquiry, Enquiry Line, Product, Part, Product UID, Customer Part Code, Product Type, Production Type, List, Package, Assembly, BOM, Design Dossier, Drawing, Revision, ECN, Product Base Cost, Customer Price, Quote, Customer Purchase Order, Proforma Invoice, Work Order, Job Card, Route, Setup, Cycle, Tooling, Machine, Production Unit, Raw Material, RM Inward, RM Rejection, WIP, Good Output, Rejection, Downtime, Production Session, First Piece Inspection, Hourly Quality Check, Setup Complete, Ready for Dispatch, Dispatch Approval, Store Item Type, Asset Code, Consumable, Non Consumable, Physical Asset, Unit ID, Supplier, Supplier Price, Store PO, Receipt, Stock, Request, Allocation, Maintenance Request, Breakdown, Approved Post, Job, Candidate, Employee Assignment, Controlled Document, Released Revision, and Monitoring Obligation.
+These are the factory meanings supplied in the interview. The workflows above describe the app's current coverage.
 
-Definitions will be appended here as you answer the grilling rounds. Existing glossary notes are background, not a substitute for your factory definitions.
+### Demand and identity
+
+- **Part:** An item MRMPL needs to manufacture.
+- **Product:** Another name for a Part at MRMPL.
+- **Customer:** A company that buys Products from MRMPL.
+- **Enquiry:** A customer's document or request asking MRMPL to quote for Parts.
+- **Customer Purchase Order:** A customer's order for Parts that MRMPL must manufacture and dispatch to that Customer.
+- **Work Order:** An order from Purchase to an internal production, surface-finishing or checking department to carry out work.
+- **Job Card:** A unique code assigned to a Work Order in any department so its production and rejection can be tracked.
+
+### Factory resources and people
+
+- **Production Unit:** A department where Parts are produced.
+- **Raw Material:** The rods used to manufacture Parts in production departments.
+- **Store Item Type:** The classification of an item kept in Store. It receives a unique number used to track the item, its documents and its movements.
+- **Machine:** Equipment in a Production Unit used either to manufacture Parts directly or to support production.
+- **Employee Assignment:** An Employee's placement in a particular Approved Job Post.
+- **Controlled Document:** An organizational document created for certification or another activity carried out at MRMPL.
+
+### Factory meaning versus current app coverage
+
+- You use **Part** and **Product** as synonyms. The app also uses Product for catalogue and costing records, including direct-purchase items; whether those count as Parts needs clarification.
+- Your **Work Order** and **Job Card** cover production, surface finishing and checking departments. The Work Order entry inspected here is scoped to production units; coverage of the other departments needs clarification.
+
+### Terms still to define
+
+Enquiry Line, Product UID, Customer Part Code, Product Type, Production Type, List, Package, Assembly, BOM, Design Dossier, Drawing, Revision, ECN, Product Base Cost, Customer Price, Quote, Proforma Invoice, Route, Setup, Cycle, Tooling, RM Inward, RM Rejection, WIP, Good Output, Rejection, Downtime, Production Session, First Piece Inspection, Hourly Quality Check, Setup Complete, Ready for Dispatch, Dispatch Approval, Asset Code, Consumable, Non Consumable, Physical Asset, Unit ID, Supplier, Supplier Price, Store PO, Receipt, Stock, Request, Allocation, Maintenance Request, Breakdown, Approved Post, Job, Candidate, Released Revision, Monitoring Obligation.
