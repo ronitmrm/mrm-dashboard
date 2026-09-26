@@ -81,7 +81,7 @@ These are the factory meanings supplied in the interview. The workflows above de
 - **Customer:** A company that buys Products from MRMPL.
 - **Enquiry:** A customer's document or request asking MRMPL to quote for Parts.
 - **Enquiry Line:** One Part for which the Customer requests a quote within an Enquiry. One Enquiry can have several different Parts.
-- **Product UID:** MRMPL's unique identity code for an ordered Part/Product.
+- **Product UID:** MRMPL's unique code for a Part/Product after receiving the Customer Purchase Order. Before the order, the Part is an Enquiry Line under an Enquiry Number; the ordered Part gets its Product UID for Design work.
 - **Customer Part Code:** The Customer's own identity code for a Part, distinct from MRMPL's Product UID.
 - **Customer Purchase Order:** A customer's order for Parts that MRMPL must make or buy and dispatch to that Customer.
 - **Work Order:** An order from Purchase to one internal production, surface-finishing or checking department to carry out work. Each department receives and enters its own Work Order.
@@ -92,13 +92,19 @@ These are the factory meanings supplied in the interview. The workflows above de
 - **List:** An individual Part rather than an assembled Part. Several List Parts may be joined into an Assembly or Package.
 - **Assembly:** An intermediate joined set of Parts that still needs more Parts to become a complete Package.
 - **Package:** A complete assembled Part made from at least two List Parts, possibly through an intermediate Assembly.
-- **Product Type (factory use):** Whether a Part is a List, Assembly or Package.
-- **Production Type (factory use):** Whether MRMPL buys the Part directly from outside or makes it from Raw Material through production.
-- **BOM:** Bill of Material; the description for a Part covering its components and manufacturing details, such as weight, process and blank piece weight.
-- **Design Dossier (tentative):** The Design team's description of a Part's BOM details. You were unsure whether it is a part of the BOM, so its boundary remains open.
+- **Product Type:** Classification of a manufactured Part as Barstock, Forged, Moulded or Punching.
+- **Production Type:** Where or how the Part is obtained or produced: Direct Purchase, CNC, Conventional, M/C Assembly for an Assembly, or Assembly for a Package.
+- **BOM:** Bill of Material; the description of every Part, including Lists, Assemblies, Packages and directly purchased Parts. It covers components and manufacturing details such as weight, process and blank piece weight.
+- **Design Dossier:** Another name for a Part's BOM.
 - **Drawing:** A drawing for a Part, tool or asset.
 - **Revision:** A changed version of an official document, price, Drawing, BOM or Design Dossier.
 - **ECN:** Engineering Change Note; a record used when a Part needs a design change, such as its process, Drawing, weight, Raw Material or grade.
+
+### Commercial documents and prices
+
+- **Customer Price:** The price offered for a Product to a particular Customer.
+- **Quote:** The quotation MRMPL creates from a Customer Enquiry.
+- **Proforma Invoice (PI):** The acknowledgement of a Customer Purchase Order showing whether MRMPL keeps its prices or changes them. MRMPL gets the Customer's signature on it before starting PO work.
 
 ### Factory resources and people
 
@@ -113,11 +119,11 @@ These are the factory meanings supplied in the interview. The workflows above de
 
 - **Part** and **Product** are synonyms, including directly purchased items. The app's direct-purchase Product is consistent with this meaning.
 - Factory **Work Orders** and **Job Cards** are separate for each department, including surface finishing and checking. The app's current Work Order entry is available only for its four named production units; no corresponding surface-finishing or checking Work Order entry was found in this pass.
-- Factory **Product Type** means List/Assembly/Package. The app calls that choice **Item Type**; its field named **Product Type** instead offers Barstock, Forged, Moulded and Punching.
-- Factory **Production Type** separates buying from making. The app's field named **Production Type** instead offers CNC, Conventional, Direct Purchase, M/C Assembly and Assembly.
-- Factory **BOM** includes each Part's manufacturing details. The app keeps List manufacturing details in its Product design record and uses BOM lines mainly to connect Package and Assembly components.
-- You described a **Product UID** as given to an ordered Part. The app can assign a UID during Design, before a Customer Purchase Order is entered; the intended timing needs confirmation.
+- The app calls List/Package **Item Type**. Its **Product Type** and **Production Type** fields now match your meanings above.
+- Factory **BOM** is the whole Design Dossier for every Part. The app's BOM lines mainly connect Package and Assembly components; List and directly purchased Part details sit in the wider Product design record.
+- In factory practice, **Product UID** follows the Customer PO. The app allocates one during pre-quote Design of an Enquiry line, before Customer PO entry.
+- In factory practice, the Customer signs the **PI** before PO work starts. The app has Generate, Mark Sent and Approve actions, but the inspected PI workflow has no signed-customer-copy upload or signature check before approval.
 
 ### Terms still to define
 
-Product Base Cost, Customer Price, Quote, Proforma Invoice, Route, Setup, Cycle, Tooling, RM Inward, RM Rejection, WIP, Good Output, Rejection, Downtime, Production Session, First Piece Inspection, Hourly Quality Check, Setup Complete, Ready for Dispatch, Dispatch Approval, Asset Code, Consumable, Non Consumable, Physical Asset, Unit ID, Supplier, Supplier Price, Store PO, Receipt, Stock, Request, Allocation, Maintenance Request, Breakdown, Approved Post, Job, Candidate, Released Revision, Monitoring Obligation. The tentative Design Dossier and the four terminology/timing differences above also need follow-up.
+Product Base Price (the app's label; factory meaning still open), Route, Setup, Cycle, Tooling, RM Inward, RM Rejection, WIP, Good Output, Rejection, Downtime, Production Session, First Piece Inspection, Hourly Quality Check, Setup Complete, Ready for Dispatch, Dispatch Approval, Asset Code, Consumable, Non Consumable, Physical Asset, Unit ID, Supplier, Supplier Price, Store PO, Receipt, Stock, Request, Allocation, Maintenance Request, Breakdown, Approved Post, Job, Candidate, Released Revision, Monitoring Obligation. The Product UID and PI gaps above also need follow-up.
