@@ -144,11 +144,18 @@ These are the factory meanings supplied in the interview. The workflows above de
 - **Physical Asset:** One actual Non Consumable unit in Store, with its own Unit ID. Several identical units can share one Asset Code while each remains a separate Physical Asset.
 - **Supplier:** A source from which Store obtains its assets.
 - **Supplier Price:** A Supplier's price for a particular Store asset; the same asset may have different prices from different Suppliers.
+- **Supplier Quote:** The Supplier's quotation for a Store asset.
 - **Store Purchase Order:** An order the Store department creates for assets it needs to buy from a Supplier.
+- **Repair Purchase Order:** An order used when a Store asset is sent outside MRMPL for repair.
 - **Receipt:** The record of assets received against a Store Purchase Order. Received quantities then appear in Stock.
 - **Stock:** The Store view showing the current available quantity of each asset.
+- **Store Location:** The place within Store where a particular asset is kept.
 - **Request:** A person's or department's request to Store for Consumable or Non Consumable assets.
+- **New Item Request:** A request for an asset that is not listed in Stock and does not yet have an Asset Code.
 - **Allocation:** Store's issue of assets against a Request from a person or department.
+- **Asset Movement:** The recorded history of where an asset has moved.
+- **Store Return:** An issued Store asset brought back to Store.
+- **Calibration:** Planned work for applicable assets; the exact checks still need clarification.
 
 ### Production records and states
 
@@ -193,7 +200,8 @@ These are the factory meanings supplied in the interview. The workflows above de
 - The app's **Price Revisions** flow stages and completes revised customer prices. The inspected flow does not show a separate action to send those prices to the Customer, which is part of the factory meaning above.
 - The app's **Order Acceptance Planning** estimates dates and tests a proposed order before Purchase confirms it; approval does not create a PO or reserve capacity. You do not recognize its purpose in the factory process yet.
 - **Planning Control** currently shows exception cases in the app. You questioned whether this sheet is still needed now that Shop Floor tasks run in sequence.
+- The app uses **Vendor** for an external holder of an asset who does not receive a Store Purchase Order. Its factory meaning is still unknown.
 
 ### Terms still to define
 
-The factory purpose of Order Acceptance Planning remains open. The Product UID and PI gaps above remain differences between factory practice and current app behavior.
+The factory purposes of Order Acceptance Planning and Vendor remain open, as do the exact checks meant by Calibration. Job Template, Combined Approved Post, Interview Assessment, Appointment, Offer Letter, Master Document List and SOP are next to review. The Product UID and PI gaps above remain differences between factory practice and current app behavior.
