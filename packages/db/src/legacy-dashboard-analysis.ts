@@ -3227,7 +3227,7 @@ function machinePlanDetails(
         const targetMachine = canonicalKey(rowText(parallelOverride, "toMachine", "TO MACHINE", "PLAN ON MACHINE", "TARGET MACHINE"));
         return assignedMachines.some((machine) => canonicalKey(machine) === targetMachine);
       });
-      if (previousRoute && !setupHasExecution) {
+      if (previousRoute) {
         const actualWipReady = actualWipBufferAvailable({
           orderPcs: setupOrderPcs,
           previousCycle: cycleByKey.get(masterKey(previousRoute)),
@@ -3237,7 +3237,7 @@ function machinePlanDetails(
           planningCalendar,
         });
         operationReadyCanPullForward = actualWipReady;
-        if (!actualWipReady) {
+        if (!actualWipReady && !setupHasExecution) {
           routePlanningBlocked = true;
           continue;
         }

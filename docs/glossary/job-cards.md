@@ -100,6 +100,13 @@ downstream work does not reserve a machine or bypass actual-WIP readiness, and
 the whole-job finish cannot precede an upstream setup and its handoff buffer.
 The immutable RM-receipt Planned Finish Date remains historical.
 
+If an upstream setup is Item Complete below the customer order quantity, its
+recorded good output less downstream pieces already processed is the available
+input for the next setup. The remaining customer shortfall does not block that
+available input. Shop Floor readiness checks this quantity even after the next
+setup has a recorded workflow stage; that stage retains its machine assignment
+but cannot bypass a genuine WIP shortage.
+
 ## Setup Time
 
 ### Machine continuity between setups
