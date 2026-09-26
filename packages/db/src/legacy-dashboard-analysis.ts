@@ -3077,9 +3077,18 @@ function machinePlanDetails(
       const setupGoodQty = productionActualAnyMachine?.actualQty ?? 0;
       const setupProcessedQty = productionActualAnyMachine?.outputQty ?? 0;
       const physicalWipQty = Math.max((upstreamActual?.actualQty ?? 0) - setupProcessedQty, 0);
+      const upstreamPlans = previousRoute ? details.filter((plan) =>
+        rowText(plan, "jcNo") === rowText(row, "jcNo")
+        && canonicalKey(plan.partCode) === canonicalKey(partCode)
+        && rowText(plan, "optionNumber") === optionNumber
+        && canonicalKey(plan.setupNo) === canonicalKey(setupStepKey(previousSetupNo, optionNumber) || previousSetupNo)) : [];
+      const upstreamComplete = upstreamPlans.length > 0 && upstreamPlans.every(shopFloorRowIsComplete);
       // Forecast demand and actual stock are different obligations. Output already
       // processed (including rejects) must never be scheduled as input again.
-      const setupOrderPcs = Math.max(requestedGoodQty, setupGoodQty + physicalWipQty);
+      // Completed upstream work cannot supply the remaining customer shortfall.
+      const setupOrderPcs = upstreamComplete
+        ? setupGoodQty + physicalWipQty
+        : Math.max(requestedGoodQty, setupGoodQty + physicalWipQty);
       const setupRemainingQty = Math.max(setupOrderPcs - setupGoodQty, 0);
       const productionActualMachines = productionActualAnyMachine?.machines ?? new Set<string>();
       const lockedShopFloorMachines = shopFloorLockedMachinesForSetup(shopFloorStatusRows, {

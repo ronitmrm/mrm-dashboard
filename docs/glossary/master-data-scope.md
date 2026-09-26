@@ -179,6 +179,11 @@ or production execution retains its physical assignment. The unreserved downstre
 forecast still contributes every remaining route setup to the Job Card's current
 probable dispatch date; forecast visibility and physical machine reservation are
 separate planning decisions.
+If every machine on the preceding setup is marked Item Complete below the ordered
+quantity, its recorded good output is the final available supply for the next
+setup. Plan that stock without waiting for pieces the completed setup cannot
+produce. The customer-order shortfall remains outstanding separately; rejected
+or already processed pieces are not counted as available WIP.
 
 Raw Material receipt or pooled WIP availability is the earliest setup forecast
 date, not a permanently retained overdue date. On recalculation, an unstarted
