@@ -137,10 +137,16 @@ These are the factory meanings supplied in the interview. The workflows above de
 - **Appointment:** The state after all three interview rounds are approved and the Candidate is appointed; it remains until HR confirms that the person has joined.
 - **Offer Letter:** The official letter given to a Candidate who has passed all three interview rounds.
 - **Controlled Document:** An organizational document created for certification or another activity carried out at MRMPL.
+- **Document Template:** A template used to create a particular document or form.
 - **Master Document List:** The list of procedures, work instructions, forms and other documents MRMPL creates or maintains.
 - **SOP:** Standard Operating Procedure.
 - **Released Revision:** A revision made official through a separate release step; making a revision does not release it automatically.
 - **Monitoring Obligation:** A due review or record-keeping check tied to a Controlled Document.
+- **Record Frequency:** How often data in a particular form or document must be updated.
+- **Retention Period:** How long records for a particular form or document must be kept.
+- **Measuring Instrument Register:** A separate view of existing Store assets categorized as measuring instruments. It does not create duplicate asset records.
+- **Machine Maintenance Plan:** A table of planned maintenance for Machines.
+- **Machine Maintenance Register:** A record of completed Machine maintenance, both planned work and Breakdown repairs.
 
 ### Store identities and purchasing
 
@@ -176,12 +182,12 @@ These are the factory meanings supplied in the interview. The workflows above de
 - **Pre Setting:** Preparatory steps before the actual Setting of a new Setup begins.
 - **Setting:** The Machinist's or Programmer's work to prepare a Setup for production.
 - **Setup Checklist:** Checks that must be completed before the Setting task is marked complete.
-- **Quality Approval:** QC checks the Setup and its first pieces after Setting, then approves the start of production.
+- **Quality Approval:** QC's approval after checking the Setup and its first pieces following Setting; this is the same factory check as First Piece Inspection.
 - **Machine Start:** The final start step after Quality Approval: assign a worker to the Machine and begin production.
-- **First Piece Inspection:** QC checks the first piece after the Programmer or Machinist sets each new Setup and saves the inspection report.
+- **First Piece Inspection:** The QC check and saved report on the first pieces after the Programmer or Machinist sets a new Setup; its approval is Quality Approval.
 - **Hourly Quality Check:** QC's hourly check that Parts being produced are correct.
 - **Setup Complete:** The state reached when a Part's work at one Setup is finished.
-- **Item Complete:** The mark used when all required pieces for one Setup have been made and that Setup's production is finished.
+- **Item Complete:** The whole Part is complete after every Setup in its chosen Route is finished.
 - **Rejection Register:** The Job Card-linked record of rejections from all stages, including Setups and separate Quality Control entries.
 - **Part Readiness:** Having the information needed to plan a Part, including its Route, Cycle Time and Tooling.
 - **Planning Control:** A sheet showing production or planning inconsistencies that need review, such as recorded output without the expected operator assignment and machine-start tasks.
@@ -208,6 +214,7 @@ These are the factory meanings supplied in the interview. The workflows above de
 - In factory practice, each ordered Part receives its **Product UID** after the Customer PO, even when several Parts share one Enquiry. The app allocates a UID during pre-quote Design of an Enquiry line, before Customer PO entry.
 - MRMPL uploads the Customer PO here to make the **PI**; the software's intended PO process ends there. The signed PI and later PO work stay outside this software. The current app also offers Mark Sent and Approve to release the order, without a signed-copy upload or signature check.
 - In factory practice, the **Planner** gives Dispatch Approval. The app also permits an eligible Shop Floor employee to approve an eligible Job Card.
+- In factory practice, **Item Complete** means the whole Part has completed its Route. The app uses Item Complete when closing the final Production Session of an individual Setup, then records Setup completion separately before the Job Card becomes dispatchable.
 - The app's **Physical Asset** is the individually tracked unit described above; it is not a count of Store stock.
 - The app's **Job Post** links a recruitment opening to an **Approved Post**, and HR confirms joining before the Candidate becomes an Employee. This matches the meanings above.
 - The app requires all three interview rounds to be approved before Appointment. It generates the **Offer Letter** after the Candidate accepts and HR confirms joining terms; passing the rounds alone does not issue it.
