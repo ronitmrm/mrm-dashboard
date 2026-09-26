@@ -21,7 +21,25 @@ export const pageAccessCatalog: readonly PageAccessDefinition[] = [
   ...productionPageAccess,
 ] as const
 
+export const nonVisualPermissionKeys = new Set([
+  // Registered keys with no current application authorization use.
+  "administration.audit.read",
+  "administration.migration.review",
+  "planning.plan.read",
+  "pricing.costing.prepare",
+  "pricing.drawing_history.update",
+])
+
+export const apiOnlyPermissionKeys = new Set([
+  // Active server actions with no reachable in-app control to screenshot.
+  "administration.post_access.assign",
+  "operations.attendance.write",
+  "operations.corrections.write",
+  "operations.training.write",
+])
+
 export const legacyPermissionKeys = new Set([
+  ...nonVisualPermissionKeys,
   "administration.roles.manage",
   "administration.users.manage",
   "hr.employees.write",

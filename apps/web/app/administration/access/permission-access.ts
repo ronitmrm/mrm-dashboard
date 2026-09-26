@@ -11,6 +11,7 @@ import {
 } from "../../../lib/auth/operational-entry-capabilities"
 
 import {
+  apiOnlyPermissionKeys,
   legacyPermissionKeys,
   pageAccessCatalog,
 } from "../../../lib/auth/page-access-catalog"
@@ -64,6 +65,9 @@ export type PermissionAccessRow = {
 /** Page context for display and filtering; never changes the granted keys. */
 export function permissionAccessPageLabels(row: PermissionAccessRow): string[] {
   if (row.kind === "page") return [row.label]
+  if (row.fullPermissionKeys.every((key) => apiOnlyPermissionKeys.has(key))) {
+    return ["API only"]
+  }
 
   const pageMappings: readonly (readonly [string, readonly string[]])[] = [
     ["pricing.enquiries.", ["Enquiries"]],
@@ -76,7 +80,10 @@ export function permissionAccessPageLabels(row: PermissionAccessRow): string[] {
     ["pricing.customers.", ["Customers"]],
     ["pricing.masters.", ["Pricing Masters"]],
     ["pricing.website_products.", ["Website Products"]],
-    ["pricing.price_revisions.", ["Product Bulk Revision", "Customer Bulk Revision", "Price Revisions"]],
+    [
+      "pricing.price_revisions.",
+      ["Product Bulk Revision", "Customer Bulk Revision", "Price Revisions"],
+    ],
     ["hr.approved_posts.", ["Approved Posts"]],
     ["hr.combined_roles.", ["Combined Approved Posts"]],
     ["hr.candidates.save", ["Candidates"]],
@@ -90,15 +97,18 @@ export function permissionAccessPageLabels(row: PermissionAccessRow): string[] {
     ["operations.attendance.", ["Attendance"]],
     ["operations.training.", ["Training"]],
   ]
-  const labels = row.fullPermissionKeys.flatMap((key) =>
-    pageMappings.find(([prefix]) => key.startsWith(prefix))?.[1] ?? []
+  const labels = row.fullPermissionKeys.flatMap(
+    (key) => pageMappings.find(([prefix]) => key.startsWith(prefix))?.[1] ?? []
   )
   if (labels.length) return [...new Set(labels)]
 
   // Use the catalogue's page title when a submodule has one owning page.
-  const pages = pageAccessCatalog.filter((page) =>
-    page.module === row.module &&
-    (page.submodule ?? sidebarSubmoduleForPermission(page.readPermissionKey, page.label)) === row.submodule
+  const pages = pageAccessCatalog.filter(
+    (page) =>
+      page.module === row.module &&
+      (page.submodule ??
+        sidebarSubmoduleForPermission(page.readPermissionKey, page.label)) ===
+        row.submodule
   )
   return pages.length === 1 ? [pages[0]!.label] : [row.submodule]
 }
@@ -115,9 +125,13 @@ function permissionKind(key: string) {
 
 function taskLabel(permission: PermissionOption) {
   const configuredLabel = taskCapabilityLabel(permission.key)
-  if (configuredLabel) return configuredLabel
   const label = permission.name.trim()
-  return label ? `${label[0]!.toUpperCase()}${label.slice(1)}` : permission.name
+  const readable =
+    configuredLabel ??
+    (label ? `${label[0]!.toUpperCase()}${label.slice(1)}` : permission.name)
+  return apiOnlyPermissionKeys.has(permission.key)
+    ? `${readable} (API only)`
+    : readable
 }
 
 export function permissionAccessRows(
@@ -135,10 +149,10 @@ export function permissionAccessRows(
         )
         .map((action) => ({
           label: {
-            read: "View",
-            save: "Save",
-            import: "Import",
-            export: "Export",
+            read: `View ${entry.label}`,
+            save: `Save ${entry.label}`,
+            import: `Import ${entry.label}`,
+            export: `Export ${entry.label}`,
           }[action],
           permissionKeys: [
             operationalEntryPermissionKey(entry.unit, entry.entry, action),
@@ -157,7 +171,9 @@ export function permissionAccessRows(
           readPermissionKeys: [
             operationalEntryPermissionKey(entry.unit, entry.entry, "read"),
           ],
-          fullPermissionKeys: actions.flatMap((action) => action.permissionKeys),
+          fullPermissionKeys: actions.flatMap(
+            (action) => action.permissionKeys
+          ),
           supportedLevels: ["none", "view", "full", "custom"],
         },
       ]
@@ -172,17 +188,19 @@ export function permissionAccessRows(
       )
       .map((action) => ({
         label: {
-          read: "View",
-          save: "Add / Edit",
-          create: "Add",
-          update: "Edit",
-          import: "Import",
-          rename: "Rename",
-          delete: "Delete",
+          read: `View ${master.label}`,
+          save: `Add or edit ${master.label}`,
+          create: `Add ${master.label}`,
+          update: `Edit ${master.label}`,
+          import: `Import ${master.label}`,
+          rename: `Rename ${master.label}`,
+          delete: `Delete ${master.label}`,
         }[action],
         permissionKeys: [
           masterPermissionKey(master.unit, master.master, action),
-          ...(master.main === "store_masters" && action === "import" ? [masterPermissionKey(master.unit, master.master, "save")] : []),
+          ...(master.main === "store_masters" && action === "import"
+            ? [masterPermissionKey(master.unit, master.master, "save")]
+            : []),
         ],
       }))
     if (!actions.length) return []
@@ -228,10 +246,20 @@ export function permissionAccessRows(
       {
         actions: [
           ...(hasRead
-            ? [{ label: "View", permissionKeys: [page.readPermissionKey] }]
+            ? [
+                {
+                  label: `Open ${page.label}`,
+                  permissionKeys: [page.readPermissionKey],
+                },
+              ]
             : []),
           ...(hasWrite && page.writePermissionKey
-            ? [{ label: "Edit", permissionKeys: [page.writePermissionKey] }]
+            ? [
+                {
+                  label: `Change ${page.label}`,
+                  permissionKeys: [page.writePermissionKey],
+                },
+              ]
             : []),
         ],
         fullPermissionKeys,
@@ -300,10 +328,25 @@ export function permissionAccessRows(
 
   for (const permission of permissions) {
     if (
-      (masterRows.length > 0 && (
-        /^(pricing\.masters\.|hr\.masters\.|store\.masters\.)/.test(permission.key) ||
-        ["pricing.customers.create", "pricing.customers.update", "pricing.website_products.update", "pricing.customer_default_terms.update", "hr.approved_posts.create", "hr.approved_posts.update", "hr.approved_posts.delete", "hr.combined_roles.create", "hr.combined_roles.update", "hr.candidates.save", "hr.employees.assign", "hr.employees.bulk_assign", "hr.job_templates.save"].includes(permission.key)
-      )) ||
+      (masterRows.length > 0 &&
+        (/^(pricing\.masters\.|hr\.masters\.|store\.masters\.)/.test(
+          permission.key
+        ) ||
+          [
+            "pricing.customers.create",
+            "pricing.customers.update",
+            "pricing.website_products.update",
+            "pricing.customer_default_terms.update",
+            "hr.approved_posts.create",
+            "hr.approved_posts.update",
+            "hr.approved_posts.delete",
+            "hr.combined_roles.create",
+            "hr.combined_roles.update",
+            "hr.candidates.save",
+            "hr.employees.assign",
+            "hr.employees.bulk_assign",
+            "hr.job_templates.save",
+          ].includes(permission.key))) ||
       pagePermissionKeys.has(permission.key) ||
       permission.key.startsWith("masters.") ||
       permission.key.startsWith("entries.") ||
@@ -342,7 +385,7 @@ export function permissionAccessRows(
     return {
       actions: [
         ...group.read.map(({ key }) => ({
-          label: "View",
+          label: `View ${taskLabel(labelSource)}`,
           permissionKeys: [key],
         })),
         ...group.full.map((permission) => ({
