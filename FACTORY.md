@@ -173,9 +173,16 @@ These are the factory meanings supplied in the interview. The workflows above de
 - **Rejection:** A Part rejected during a Setup for a recorded reason.
 - **Downtime:** Time when production has stopped for a reason during a production run.
 - **Production Session:** A period of production during which its output, rejection, downtime and other entries are recorded together.
+- **Pre Setting:** Preparatory steps before the actual Setting of a new Setup begins.
+- **Setting:** The Machinist's or Programmer's work to prepare a Setup for production.
+- **Setup Checklist:** Checks that must be completed before the Setting task is marked complete.
+- **Quality Approval:** QC checks the Setup and its first pieces after Setting, then approves the start of production.
+- **Machine Start:** The final start step after Quality Approval: assign a worker to the Machine and begin production.
 - **First Piece Inspection:** QC checks the first piece after the Programmer or Machinist sets each new Setup and saves the inspection report.
 - **Hourly Quality Check:** QC's hourly check that Parts being produced are correct.
 - **Setup Complete:** The state reached when a Part's work at one Setup is finished.
+- **Item Complete:** The mark used when all required pieces for one Setup have been made and that Setup's production is finished.
+- **Rejection Register:** The Job Card-linked record of rejections from all stages, including Setups and separate Quality Control entries.
 - **Part Readiness:** Having the information needed to plan a Part, including its Route, Cycle Time and Tooling.
 - **Planning Control:** A sheet showing production or planning inconsistencies that need review, such as recorded output without the expected operator assignment and machine-start tasks.
 - **Planner Action:** A situation-based change to the current production plan made by a Planner.
