@@ -197,7 +197,7 @@ export default async function AccessAdministrationPage({
         ) : null}
 
         {activeSection === "create" && canCreateRole ? (
-          <SectionCard width="standard" size="sm">
+          <SectionCard size="sm">
             <CardHeader className="border-b">
               <CardTitle>Create Application Role</CardTitle>
               <CardDescription>

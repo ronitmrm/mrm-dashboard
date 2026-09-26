@@ -104,35 +104,38 @@ export type TaskCapability =
 
 export const taskCapabilityLabels = {
   [administrationTaskCapabilities.accessPage]: "Access Administration",
-  [administrationTaskCapabilities.assignPostAccess]: "Save Post Access",
-  [administrationTaskCapabilities.assignStaffRole]: "Assign Role",
+  [administrationTaskCapabilities.assignPostAccess]: "Assign Role To A Post",
+  [administrationTaskCapabilities.assignStaffRole]: "Assign Staff Role",
   [administrationTaskCapabilities.createRole]: "Create Role",
   [administrationTaskCapabilities.deleteRole]: "Delete Role",
-  [administrationTaskCapabilities.linkStaffAccount]: "Link Staff Account",
+  [administrationTaskCapabilities.linkStaffAccount]: "Link Login To Employee",
   [administrationTaskCapabilities.managePermissionOverrides]:
-    "Save Permission Overrides",
-  [administrationTaskCapabilities.provisionStaff]: "Provision Staff",
-  [administrationTaskCapabilities.updateRolePermissions]: "Save Role Access",
-  [commercialTaskCapabilities.addBomLine]: "Add Bom Line",
+    "Change Individual Permissions",
+  [administrationTaskCapabilities.provisionStaff]: "Create Staff Login",
+  [administrationTaskCapabilities.updateRolePermissions]:
+    "Change Role Permissions",
+  [commercialTaskCapabilities.addBomLine]: "Add Assembly Part",
   [commercialTaskCapabilities.addEnquiryItem]: "Add Line",
   [commercialTaskCapabilities.addPurchaseOrderLine]: "Match And Add Line",
-  [commercialTaskCapabilities.applyEngineeringChangeDecision]: "Record",
+  [commercialTaskCapabilities.applyEngineeringChangeDecision]:
+    "Record Engineering Change Decision",
   [commercialTaskCapabilities.approveEngineeringChangeDesign]:
-    "Approve Or Reject ECN Design",
+    "Approve Or Reject Change Design",
   [commercialTaskCapabilities.applyEnquiryImportReview]:
     "Apply Reviewed Decisions",
   [commercialTaskCapabilities.approveProformaInvoice]:
-    "Approve Pi And Release Order",
+    "Approve Invoice And Release Order",
   [commercialTaskCapabilities.cancelPurchaseOrder]: "Cancel Purchase Order",
   [commercialTaskCapabilities.completeBulkPriceRevision]: "Complete Revision",
   [commercialTaskCapabilities.completeEngineeringChangeCosting]:
-    "Complete Product Costing",
+    "Finish Change Costing",
   [commercialTaskCapabilities.completeEngineeringChangeDesign]:
-    "Submit Design For HOD Approval",
-  [commercialTaskCapabilities.completeFollowup]: "Complete Follow-Up",
+    "Submit Change Design For Approval",
+  [commercialTaskCapabilities.completeFollowup]: "Complete Customer Follow-Up",
   [commercialTaskCapabilities.completeSalesClarification]:
-    "Complete Clarification",
-  [commercialTaskCapabilities.createBulkPriceRevision]: "Create Revision",
+    "Resolve Sales Clarification",
+  [commercialTaskCapabilities.createBulkPriceRevision]:
+    "Start Bulk Price Revision",
   [commercialTaskCapabilities.createCustomer]: "Add Customer",
   [commercialTaskCapabilities.createEngineeringChangeNote]: "Create ECN",
   [commercialTaskCapabilities.createEnquiry]: "Log Enquiry",
@@ -141,33 +144,40 @@ export const taskCapabilityLabels = {
   [commercialTaskCapabilities.decidePurchaseOrderLinePrice]:
     "Keep Our Price / Accept Po Price",
   [commercialTaskCapabilities.deleteBulkPriceRevisionStage]:
-    "Delete Staged Change",
+    "Remove Staged Price Change",
   [commercialTaskCapabilities.deleteEnquiry]: "Delete Enquiry",
-  [commercialTaskCapabilities.deleteMaster]: "Delete Commercial / Pricing Master",
-  [commercialTaskCapabilities.generateProformaInvoice]: "Generate Pi",
+  [commercialTaskCapabilities.deleteMaster]:
+    "Delete Commercial / Pricing Master",
+  [commercialTaskCapabilities.generateProformaInvoice]:
+    "Generate Proforma Invoice",
   [commercialTaskCapabilities.handOverEnquiry]: "Hand Over To Technical Review",
   [commercialTaskCapabilities.importEnquiryLines]: "Classify Import Rows",
   [commercialTaskCapabilities.importEnquiryRegister]: "Upload Enquiry Register",
-  [commercialTaskCapabilities.importMasters]: "Upload Commercial / Pricing Masters",
+  [commercialTaskCapabilities.importMasters]:
+    "Upload Commercial / Pricing Masters",
   [commercialTaskCapabilities.importPurchaseOrder]:
     "Import And Match Worksheet",
-  [commercialTaskCapabilities.markProformaInvoiceSent]: "Mark Pi Sent",
+  [commercialTaskCapabilities.markProformaInvoiceSent]:
+    "Mark Proforma Invoice Sent",
   [commercialTaskCapabilities.prepareCosting]: "Prepare Costing",
-  [commercialTaskCapabilities.recordPricingCorrection]: "Record Correction",
-  [commercialTaskCapabilities.renameMaster]: "Rename Commercial / Pricing Master",
+  [commercialTaskCapabilities.recordPricingCorrection]:
+    "Record Commercial Correction",
+  [commercialTaskCapabilities.renameMaster]:
+    "Rename Commercial / Pricing Master",
   [commercialTaskCapabilities.requestDesignClarification]: "Send To Technical",
   [commercialTaskCapabilities.requestProductCostingClarification]:
     "Request Design Clarification",
   [commercialTaskCapabilities.reverseDesignCostingHandoff]:
-    "Return Handoff To Not Started",
-  [commercialTaskCapabilities.reverseProductEntry]: "Reverse Product Entry",
-  [commercialTaskCapabilities.saveDesign]: "Save Design Task",
-  [commercialTaskCapabilities.saveQuote]: "Prepare Quote",
+    "Undo Design Handoff",
+  [commercialTaskCapabilities.reverseProductEntry]: "Undo Product Entry",
+  [commercialTaskCapabilities.saveDesign]: "Save Design Work",
+  [commercialTaskCapabilities.saveQuote]: "Prepare Customer Quote",
   [commercialTaskCapabilities.sendQuote]: "Send Quote",
-  [commercialTaskCapabilities.sendQuoteBackToCosting]: "Return To Costing",
-  [commercialTaskCapabilities.stageBulkPriceRevision]: "Stage Selected Prices",
-  [commercialTaskCapabilities.startDesignWork]: "Open Design Form",
-  [commercialTaskCapabilities.updateCustomer]: "Save",
+  [commercialTaskCapabilities.sendQuoteBackToCosting]:
+    "Send Quote Back For Costing",
+  [commercialTaskCapabilities.stageBulkPriceRevision]: "Stage Revised Prices",
+  [commercialTaskCapabilities.startDesignWork]: "Start Design Work",
+  [commercialTaskCapabilities.updateCustomer]: "Save Customer Changes",
   [commercialTaskCapabilities.updateCustomerDefaultTerm]:
     "Save Customer Default Terms",
   [commercialTaskCapabilities.updateDrawingHistory]: "Save Drawing History",
@@ -175,7 +185,7 @@ export const taskCapabilityLabels = {
   [commercialTaskCapabilities.updateEnquiryItem]: "Update Line",
   [commercialTaskCapabilities.updateMaster]: "Save Commercial / Pricing Master",
   [commercialTaskCapabilities.updateProductCosting]:
-    "Save In Progress / Save Complete & Send To Customer Parameter Costing",
+    "Save Or Finish Product Costing",
   [commercialTaskCapabilities.updateTechnicalReview]: "Save Technical Review",
   [commercialTaskCapabilities.updateWebsiteProduct]: "Save Website Product",
   [commercialTaskCapabilities.uploadPurchaseOrderFile]: "Retain Source File",
@@ -186,9 +196,9 @@ export const taskCapabilityLabels = {
   [hrTaskCapabilities.completeCandidateAppointment]: "Save Appointment Details",
   [hrTaskCapabilities.createCombinedRole]: "Create Combined Role",
   [hrTaskCapabilities.createJob]: "Create Recruitment Opening",
-  [hrTaskCapabilities.deleteCandidateEvent]: "Delete",
+  [hrTaskCapabilities.deleteCandidateEvent]: "Delete Candidate Timeline Event",
   [hrTaskCapabilities.deleteJob]: "Delete Job",
-  [hrTaskCapabilities.deletePost]: "Delete",
+  [hrTaskCapabilities.deletePost]: "Delete Approved Post",
   [hrTaskCapabilities.deleteRecruitmentMaster]:
     "Delete HR Department / Designation / Job Template",
   [hrTaskCapabilities.logCandidateEvent]: "Add To Candidate Timeline",
@@ -202,12 +212,18 @@ export const taskCapabilityLabels = {
   [hrTaskCapabilities.scheduleInterview]: "Schedule Interview",
   [hrTaskCapabilities.updateCandidateEvent]: "Save Log Changes",
   [hrTaskCapabilities.updateCombinedRole]: "Save Combined Role",
-  [hrTaskCapabilities.updatePost]: "Save Changes",
+  [hrTaskCapabilities.updatePost]: "Save Approved Post Changes",
   [hrTaskCapabilities.withdrawCandidateApplication]:
     "Confirm Candidate Withdrawal",
 } satisfies Record<TaskCapability, string>
 
 const additionalTaskCapabilityLabels: Readonly<Record<string, string>> = {
+  "artifacts.delete": "Delete Stored Files",
+  "operations.attendance.write": "Record Attendance",
+  "operations.corrections.write": "Reverse Production Entries",
+  "operations.training.write": "Record Training",
+  "planning.plan.read": "View Production Plans",
+  "quality.parameters.manage": "Manage Inspection Parameters",
   "iso.documents.manage": "Manage Documents",
   "iso.documents.approve": "Approve / Reject Documents",
   "iso.documents.release": "Final Release",
@@ -216,7 +232,7 @@ const additionalTaskCapabilityLabels: Readonly<Record<string, string>> = {
   "store.asset_maintenance.write":
     "Add Timetable / Complete & Calculate Next Due",
   "store.asset_movement.write": "Record Movement",
-  "store.asset_repair.write": "Create Repair PO / Mark Completed",
+  "store.asset_repair.write": "Create Repair Order Or Complete Repair",
   "store.new_item_requests.resolve": "Resolve",
   "store.new_item_requests.submit": "Send New Item Request",
   "store.purchase_orders.create": "Save Supplier Purchase Orders",

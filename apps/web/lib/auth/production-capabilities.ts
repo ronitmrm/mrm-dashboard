@@ -110,7 +110,7 @@ const floorProductionPageAccess = productionFloors.flatMap((floor) =>
       keyof typeof productionFloorPageSlugs
     >
   ).map((id) => ({
-    href: `/?tab=${id}&floor=${floor.code}`,
+    href: productionFloorScreenHref(id, floor.code),
     id: `production.${floor.code}.${id}`,
     label: productionPageLabels[id],
     module: floor.label,
@@ -119,6 +119,19 @@ const floorProductionPageAccess = productionFloors.flatMap((floor) =>
     submodule: productionPageLabels[id],
   }))
 )
+
+export function productionFloorScreenHref(
+  tab: keyof typeof productionFloorPageSlugs,
+  floor: ProductionFloorCode
+) {
+  if (tab === "firstPieceInspectionTab") {
+    return `/dashboard/first-piece-inspection?floor=${floor}`
+  }
+  if (tab === "productionSessionsTab") {
+    return `/dashboard/production-sessions?floor=${floor}`
+  }
+  return `/?tab=${tab}&floor=${floor}`
+}
 
 export const productionPageAccess = [
   ...universalProductionPageAccess,
