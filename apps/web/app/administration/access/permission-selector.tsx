@@ -164,7 +164,7 @@ export function PermissionSelector({
             <TableHeader className="sticky top-0 z-10 bg-background">
               <TableRow>
                 <TableHead className="w-[15%]">Module</TableHead>
-                <TableHead className="w-[17%]">Area</TableHead>
+                <TableHead className="w-[17%]">Sub Module</TableHead>
                 <TableHead className="w-[20%]">Screen</TableHead>
                 <TableHead className="w-20">Type</TableHead>
                 <TableHead>Permission</TableHead>
