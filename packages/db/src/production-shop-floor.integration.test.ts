@@ -893,13 +893,14 @@ describe("production and shop-floor workflows", () => {
       productionFloorCode: "cnc",
       sessionId: second.id,
     })
-    expect(resolvedBreakdownSession.rows[0]?.downtimeEvents).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          carryResolvedAt: expect.stringContaining("2026-08-15T10:30:00"),
-          id: breakdown.downtimeEventId,
-        }),
-      ])
+    const resolvedEvents = resolvedBreakdownSession.rows[0]?.downtimeEvents as
+      | Array<{ id: string; carryResolvedAt: string | null }>
+      | undefined
+    const resolvedDowntime = resolvedEvents?.find(
+      (event) => event.id === breakdown.downtimeEventId
+    )
+    expect(Date.parse(resolvedDowntime?.carryResolvedAt ?? "")).toBe(
+      Date.parse("2026-08-15T16:00:00+05:30")
     )
     const closedTarget = await pool.query<{ target: number }>(
       `SELECT (entry.source_payload->>'targetQty')::int AS target
