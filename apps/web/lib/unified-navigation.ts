@@ -714,6 +714,20 @@ export const hrNavigation = [
     panelId: "jobsPanel",
     requiredCapability: "hr.jobs.read",
   },
+  {
+    href: "/hr?panel=probationRemindersPanel",
+    icon: CalendarDays,
+    label: "HR Tasks",
+    panelId: "probationRemindersPanel",
+    requiredCapability: "hr.employees.read",
+  },
+  {
+    href: "/hr?panel=employeeAssignmentHistoryPanel",
+    icon: FileClock,
+    label: "Assignment History",
+    panelId: "employeeAssignmentHistoryPanel",
+    requiredCapability: "hr.employees.read",
+  },
 
   {
     href: "/hr?panel=candidateSearchPanel",
