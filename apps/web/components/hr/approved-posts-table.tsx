@@ -133,7 +133,8 @@ export function ApprovedPostsTable({
   )
   const showActions = canWrite || canDelete || canCreateJob || employeeManagement
   const columnCount = 10 + (employeeManagement ? 1 : 0) + (showActions ? 1 : 0)
-  const rows = employeeView ? employeeHandoverRows(posts) : posts
+  const rows: (RecruitmentPostRow & { sourcePostId?: string })[] =
+    employeeView ? employeeHandoverRows(posts) : posts
   const table = useExcelTable({
     rows,
     columns: APPROVED_POST_FILTER_COLUMNS.map(({ key, label }) => ({
@@ -329,7 +330,24 @@ export function ApprovedPostsTable({
                         {showActions ? (
                           <TableCell>
                             <div className="flex justify-end gap-2">
-                              {row.id.startsWith("pending:") ? <span className="text-sm text-muted-foreground">Pending joining</span> : row.id.startsWith("outgoing:") ? <span className="text-sm text-muted-foreground">Serving notice</span> : employeeManagement ? (
+                              {row.id.startsWith("pending:") ? (
+                                employeeManagement ? (
+                                  <Button
+                                    onClick={() => {
+                                      setSelectedEmployeePost(posts.find((post) => post.id === row.sourcePostId) ?? null)
+                                      setEmployeeEditorOpen(true)
+                                    }}
+                                    size="sm"
+                                    type="button"
+                                    variant="outline"
+                                  >
+                                    <UserRoundCog data-icon="inline-start" />
+                                    Manage Joining
+                                  </Button>
+                                ) : (
+                                  <span className="text-sm text-muted-foreground">Pending joining</span>
+                                )
+                              ) : row.id.startsWith("outgoing:") ? <span className="text-sm text-muted-foreground">Serving notice</span> : employeeManagement ? (
                                 <Button
                                   onClick={() => {
                                     setSelectedEmployeePost(row)
