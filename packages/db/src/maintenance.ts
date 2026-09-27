@@ -1005,8 +1005,8 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
               task_key, task_type, source_system, source_table, source_id,
               source_payload
             )
-            VALUES ($1, $2, COALESCE(migration.try_date($3), current_date),
-              'In Progress', $3, $4, $4, $5, 'Breakdown',
+            VALUES ($1, $2, ($3::timestamptz AT TIME ZONE 'Asia/Kolkata')::date,
+              'In Progress', $3::timestamptz, $4, $4, $5, 'Breakdown',
               'mrm-dashboard', 'maintenance_task', $6, $7)
             RETURNING id
           `,
