@@ -12,6 +12,7 @@ import { Input } from "@workspace/ui/components/input"
 import {
   OperationalTable, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@workspace/ui/components/table"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@workspace/ui/components/tabs"
 
 import { updateEmployeeProbationAction } from "@/app/hr/actions"
 import { probationReminderStatus, splitProbationAssignments } from "@/lib/hr/probation-reminder"
@@ -86,72 +87,82 @@ export function ProbationEndReminders({
           { label: "Completed Log", value: completed.length, tone: "positive" },
         ]}
       />
-      <SectionCard>
-        <CardHeader>
-          <CardTitle>Open Probation Tasks ({open.length})</CardTitle>
-          <CardDescription>
-            Review dates that need attention. Completed probation records appear in the log below.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="min-w-0">
-          <OperationalTable filterStorageKey="hr-probation-end-reminders" containerClassName="max-h-[36rem] rounded-md border">
-            <TableHeader><TableRow>
-              <TableHead>Employee Code</TableHead><TableHead>Employee Name</TableHead>
-              <TableHead>Department</TableHead><TableHead>Designation</TableHead>
-              <TableHead>Joined</TableHead><TableHead>Probation Ends</TableHead>
-              <TableHead>Reminder</TableHead>
-              {canManageEmployees ? <TableHead className="text-right">Action</TableHead> : null}
-            </TableRow></TableHeader>
-            <TableBody>
-              {open.map((assignment) => {
-                const reminderStatus = probationReminderStatus(assignment, today, approachingOn)
-                return <TableRow key={assignment.id}>
-                  <TableCell className="font-mono">{assignment.employeeCode ?? "—"}</TableCell>
-                  <TableCell className="font-medium">{assignment.employeeName}</TableCell>
-                  <TableCell>{assignment.department ?? "—"}</TableCell>
-                  <TableCell>{assignment.designation ?? "—"}</TableCell>
-                  <TableCell>{assignment.joinedOn ?? "Date needed"}</TableCell>
-                  <TableCell>{assignment.probationDueOn ?? "Date needed"}</TableCell>
-                  <TableCell><StatusBadge value={reminderStatus} tone={reminderStatus === "Scheduled" ? "information" : "warning"} /></TableCell>
-                  {canManageEmployees ? <TableCell className="text-right"><ProbationDateEditor assignment={assignment} /></TableCell> : null}
-                </TableRow>
-              })}
-              {!open.length ? <TableRow><TableCell colSpan={canManageEmployees ? 8 : 7}>
-                <StandardState title="No Open Probation Tasks" description="New assignments appear here until probation is recorded complete." />
-              </TableCell></TableRow> : null}
-            </TableBody>
-          </OperationalTable>
-        </CardContent>
-      </SectionCard>
-      <SectionCard>
-        <CardHeader>
-          <CardTitle>Probation Completion Log ({completed.length})</CardTitle>
-          <CardDescription>Issued Appointment Letters and recorded completions from the former system.</CardDescription>
-        </CardHeader>
-        <CardContent className="min-w-0">
-          <OperationalTable filterStorageKey="hr-probation-completion-log" containerClassName="max-h-[36rem] rounded-md border">
-            <TableHeader><TableRow>
-              <TableHead>Employee Code</TableHead><TableHead>Employee Name</TableHead>
-              <TableHead>Department</TableHead><TableHead>Designation</TableHead>
-              <TableHead>Probation Ends</TableHead><TableHead>Recorded On</TableHead><TableHead>Completion Record</TableHead>
-            </TableRow></TableHeader>
-            <TableBody>
-              {completed.map((assignment) => <TableRow key={assignment.id}>
-                <TableCell className="font-mono">{assignment.employeeCode ?? "—"}</TableCell>
-                <TableCell className="font-medium">{assignment.employeeName}</TableCell>
-                <TableCell>{assignment.department ?? "—"}</TableCell>
-                <TableCell>{assignment.designation ?? "—"}</TableCell>
-                <TableCell>{assignment.probationDueOn ?? "—"}</TableCell>
-                <TableCell>{assignment.appointmentLetterIssuedOn ?? assignment.legacyProbationRecordedOn ?? "—"}</TableCell>
-                <TableCell><StatusBadge value={assignment.appointmentLetterIssuedOn ? "Appointment Letter" : "Legacy Completion"} tone="positive" /></TableCell>
-              </TableRow>)}
-              {!completed.length ? <TableRow><TableCell colSpan={7}>
-                <StandardState title="No Completed Probation Records" description="Completed assignments will be logged here." />
-              </TableCell></TableRow> : null}
-            </TableBody>
-          </OperationalTable>
-        </CardContent>
-      </SectionCard>
+      <Tabs className="min-w-0 gap-4" defaultValue="pending">
+        <TabsList aria-label="Probation records">
+          <TabsTrigger value="pending">Pending Tasks ({open.length})</TabsTrigger>
+          <TabsTrigger value="completed">Completion Log ({completed.length})</TabsTrigger>
+        </TabsList>
+        <TabsContent className="min-w-0" value="pending">
+          <SectionCard>
+            <CardHeader>
+              <CardTitle>Pending Probation Tasks ({open.length})</CardTitle>
+              <CardDescription>
+                Review dates that need attention. Completed records move to the Completion Log tab.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="min-w-0">
+              <OperationalTable filterStorageKey="hr-probation-end-reminders" containerClassName="max-h-[36rem] rounded-md border">
+                <TableHeader><TableRow>
+                  <TableHead>Employee Code</TableHead><TableHead>Employee Name</TableHead>
+                  <TableHead>Department</TableHead><TableHead>Designation</TableHead>
+                  <TableHead>Joined</TableHead><TableHead>Probation Ends</TableHead>
+                  <TableHead>Reminder</TableHead>
+                  {canManageEmployees ? <TableHead className="text-right">Action</TableHead> : null}
+                </TableRow></TableHeader>
+                <TableBody>
+                  {open.map((assignment) => {
+                    const reminderStatus = probationReminderStatus(assignment, today, approachingOn)
+                    return <TableRow key={assignment.id}>
+                      <TableCell className="font-mono">{assignment.employeeCode ?? "—"}</TableCell>
+                      <TableCell className="font-medium">{assignment.employeeName}</TableCell>
+                      <TableCell>{assignment.department ?? "—"}</TableCell>
+                      <TableCell>{assignment.designation ?? "—"}</TableCell>
+                      <TableCell>{assignment.joinedOn ?? "Date needed"}</TableCell>
+                      <TableCell>{assignment.probationDueOn ?? "Date needed"}</TableCell>
+                      <TableCell><StatusBadge value={reminderStatus} tone={reminderStatus === "Scheduled" ? "information" : "warning"} /></TableCell>
+                      {canManageEmployees ? <TableCell className="text-right"><ProbationDateEditor assignment={assignment} /></TableCell> : null}
+                    </TableRow>
+                  })}
+                  {!open.length ? <TableRow><TableCell colSpan={canManageEmployees ? 8 : 7}>
+                    <StandardState title="No Open Probation Tasks" description="New assignments appear here until probation is recorded complete." />
+                  </TableCell></TableRow> : null}
+                </TableBody>
+              </OperationalTable>
+            </CardContent>
+          </SectionCard>
+        </TabsContent>
+        <TabsContent className="min-w-0" value="completed">
+          <SectionCard>
+            <CardHeader>
+              <CardTitle>Probation Completion Log ({completed.length})</CardTitle>
+              <CardDescription>Issued Appointment Letters and recorded completions from the former system.</CardDescription>
+            </CardHeader>
+            <CardContent className="min-w-0">
+              <OperationalTable filterStorageKey="hr-probation-completion-log" containerClassName="max-h-[36rem] rounded-md border">
+                <TableHeader><TableRow>
+                  <TableHead>Employee Code</TableHead><TableHead>Employee Name</TableHead>
+                  <TableHead>Department</TableHead><TableHead>Designation</TableHead>
+                  <TableHead>Probation Ends</TableHead><TableHead>Recorded On</TableHead><TableHead>Completion Record</TableHead>
+                </TableRow></TableHeader>
+                <TableBody>
+                  {completed.map((assignment) => <TableRow key={assignment.id}>
+                    <TableCell className="font-mono">{assignment.employeeCode ?? "—"}</TableCell>
+                    <TableCell className="font-medium">{assignment.employeeName}</TableCell>
+                    <TableCell>{assignment.department ?? "—"}</TableCell>
+                    <TableCell>{assignment.designation ?? "—"}</TableCell>
+                    <TableCell>{assignment.probationDueOn ?? "—"}</TableCell>
+                    <TableCell>{assignment.appointmentLetterIssuedOn ?? assignment.legacyProbationRecordedOn ?? "—"}</TableCell>
+                    <TableCell><StatusBadge value={assignment.appointmentLetterIssuedOn ? "Appointment Letter" : "Legacy Completion"} tone="positive" /></TableCell>
+                  </TableRow>)}
+                  {!completed.length ? <TableRow><TableCell colSpan={7}>
+                    <StandardState title="No Completed Probation Records" description="Completed assignments will be logged here." />
+                  </TableCell></TableRow> : null}
+                </TableBody>
+              </OperationalTable>
+            </CardContent>
+          </SectionCard>
+        </TabsContent>
+      </Tabs>
     </>
   )
 }
