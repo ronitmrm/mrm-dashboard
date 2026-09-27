@@ -34,6 +34,7 @@ export async function applyReplacementAssignment(
     employeeName?: string | null
     employeeCode?: string | null
     appointedApplicationId?: string | null
+    joiningDate?: string | null
   },
   targets: readonly AssignmentTarget[]
 ) {
@@ -106,7 +107,7 @@ export async function applyReplacementAssignment(
       await client.query(
         `UPDATE recruitment.posts
          SET employee_name = $1, employee_code = $2, status = $3,
-             joining_date = current_date, last_working_date = NULL,
+             joining_date = COALESCE(migration.try_date($8), current_date), last_working_date = NULL,
              appointed_application_id = $7, updated_by_user_id = $4,
              updated_at = now(), row_version = row_version + 1
          WHERE organization_id = $5 AND id = ANY($6::uuid[])`,
@@ -118,6 +119,7 @@ export async function applyReplacementAssignment(
           input.organizationId,
           ids,
           replacement.application_id ?? null,
+          input.joiningDate ?? null,
         ]
       )
       return "replacement_joined"

@@ -163,6 +163,41 @@ export type RecruitmentPendingOfferRow = {
   hrApprovedAt: string
 }
 
+export type RecruitmentOfferOutcomeRow = {
+  applicationId: string
+  candidateId: string
+  candidateName: string
+  jobId: string
+  jobNumber: string
+  jobTitle: string
+  offerId: string | null
+  offerReference: string | null
+  offerIssuedOn: string | null
+  offerFileAvailable: boolean
+  plannedJoiningOn: string | null
+  joinedOn: string | null
+  didNotJoinOn: string | null
+  outcome: "Awaiting Response" | "Awaiting Joining" | "Joined" | "Declined" | "Did Not Join" | "Withdrawn" | "Rejected"
+}
+
+export type RecruitmentEmployeeAssignmentRow = {
+  id: string
+  postCode: string
+  employeeName: string
+  employeeCode: string | null
+  joinedOn: string | null
+  probationDueOn: string | null
+  plannedEndOn: string | null
+  endedOn: string | null
+  exitType: string | null
+  exitNote: string | null
+  pfStatus: "Pending" | "Completed" | "Not Applicable" | "Unknown"
+  pfCompletedOn: string | null
+  uniformStatus: "Pending" | "Completed" | "Not Applicable" | "Unknown"
+  uniformCompletedOn: string | null
+  appointmentLetterIssuedOn: string | null
+}
+
 export type RecruitmentInterviewRow = {
   applicationId: string
   candidateId: string
@@ -543,10 +578,34 @@ type EmployeeAssignmentInput = MutationContext & {
   employeeCode?: string | null
   employeeEvent?: string | null
   employeeName?: string | null
+  exitNote?: string | null
+  exitType?: "Resigned" | "Left Without Process" | null
   identityCorrection?: boolean
   joiningDate?: string | null
   lastWorkingDate?: string | null
   postId: string
+  probationDueOn?: string | null
+}
+
+async function setEmployeeLifecycleContext(
+  client: PoolClient,
+  input: EmployeeAssignmentInput,
+  identityCorrection = false
+) {
+  await client.query(
+    `SELECT set_config('mrm.employee_end_on', $1, true),
+      set_config('mrm.employee_exit_type', $2, true),
+      set_config('mrm.employee_exit_note', $3, true),
+      set_config('mrm.probation_due_on', $4, true),
+      set_config('mrm.identity_correction', $5, true)`,
+    [
+      input.employeeEvent === "Removed" ? optional(input.lastWorkingDate) ?? "" : "",
+      input.employeeEvent === "Removed" ? input.exitType ?? "" : "",
+      input.employeeEvent === "Removed" ? optional(input.exitNote) ?? "" : "",
+      optional(input.probationDueOn) ?? "",
+      String(identityCorrection),
+    ]
+  )
 }
 
 async function assignEmployeeInTransaction(
@@ -561,11 +620,13 @@ async function assignEmployeeInTransaction(
     employee_code: string | null
     employee_name: string | null
     id: string
+    joining_date: string | null
     last_working_date: string | null
     status: string
   }>(
     `
       SELECT id, employee_name, employee_code, combined_role_id,
+        joining_date::text,
         last_working_date::text, status,
         (status = 'Vacant' OR (status = 'Resigned'
           AND last_working_date < current_date)) AS can_replace
@@ -583,11 +644,13 @@ async function assignEmployeeInTransaction(
         employee_code: string | null
         employee_name: string | null
         id: string
+        joining_date: string | null
         last_working_date: string | null
         status: string
       }>(
         `
           SELECT post.id, post.employee_name, post.employee_code,
+            post.joining_date::text,
             post.last_working_date::text, post.status,
             (post.status = 'Vacant' OR (post.status = 'Resigned'
               AND post.last_working_date < current_date)) AS can_replace
@@ -609,6 +672,22 @@ async function assignEmployeeInTransaction(
   if (!targets.rows.length) {
     throw new Error("The combined role has no active approved posts.")
   }
+  if (
+    input.employeeEvent === "Removed" &&
+    targets.rows.some((post) => post.status === "Occupied" || post.status === "Resigned")
+  ) {
+    const endOn = required(input.lastWorkingDate, "Actual last working date")
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(endOn)) {
+      throw new Error("Enter a valid actual last working date.")
+    }
+    if (targets.rows.some((post) => post.joining_date && endOn < post.joining_date)) {
+      throw new Error("Actual last working date cannot precede joining date.")
+    }
+    if (input.exitType !== "Resigned" && input.exitType !== "Left Without Process") {
+      throw new Error("Select how the employee left.")
+    }
+  }
+  await setEmployeeLifecycleContext(client, input)
   if (allowReplacement) {
     const replacementEvent = await applyReplacementAssignment(
       client,
@@ -668,6 +747,9 @@ async function assignEmployeeInTransaction(
     ((existingAssignment.status === "Appointed" &&
       employeeEvent === "Appointed") ||
       (existingAssignment.status === "Occupied" && employeeEvent === "Joined"))
+  if (correctsExistingIdentity) {
+    await setEmployeeLifecycleContext(client, input, true)
+  }
   if (
     (employeeEvent === "Appointed" || employeeEvent === "Joined") &&
     Boolean(currentEmployeeName || currentEmployeeCode) &&
@@ -2917,6 +2999,225 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           targetTable: "combined_roles",
         })
         return { id: combinedRoleId }
+      })
+    },
+
+    async listOfferOutcomes(
+      organizationId: string
+    ): Promise<RecruitmentOfferOutcomeRow[]> {
+      const result = await pool.query<{
+        application_id: string
+        candidate_id: string
+        candidate_name: string
+        job_id: string
+        job_number: string
+        job_title: string
+        offer_id: string | null
+        offer_reference: string | null
+        offer_issued_on: string | null
+        offer_file_available: boolean
+        planned_joining_on: string | null
+        joined_on: string | null
+        did_not_join_on: string | null
+        application_status: string
+        willing_to_join: boolean | null
+      }>(
+        `SELECT application.id AS application_id, candidate.id AS candidate_id,
+           candidate.name AS candidate_name, job.id AS job_id,
+           job.job_number, job.title AS job_title,
+           offer.id AS offer_id, offer.reference_number AS offer_reference,
+           offer.issued_on::text AS offer_issued_on,
+           COALESCE(offer.file_available, false) AS offer_file_available,
+           application.joining_date::text AS planned_joining_on,
+           joined.joined_on::text, application.did_not_join_on::text,
+           application.status AS application_status, application.willing_to_join
+         FROM recruitment.applications application
+         JOIN recruitment.candidates candidate ON candidate.id = application.candidate_id
+         JOIN recruitment.job_posts job ON job.id = application.job_post_id
+         LEFT JOIN LATERAL (
+           SELECT letter.id, letter.reference_number, letter.issued_on,
+             (letter.pdf_bytes IS NOT NULL) AS file_available
+           FROM recruitment.employment_letters letter
+           WHERE letter.organization_id = application.organization_id
+             AND letter.application_id = application.id AND letter.letter_type = 'offer'
+           ORDER BY letter.created_at DESC LIMIT 1
+         ) offer ON true
+         LEFT JOIN LATERAL (
+           SELECT min(coalesce(assignment.joined_on, assignment.created_at::date)) AS joined_on
+           FROM recruitment.employee_post_assignments assignment
+           WHERE assignment.organization_id = application.organization_id
+             AND assignment.application_id = application.id
+         ) joined ON true
+         WHERE application.organization_id = $1
+           AND (offer.id IS NOT NULL OR EXISTS (
+             SELECT 1 FROM recruitment.interviews interview
+             WHERE interview.organization_id = application.organization_id
+               AND interview.application_id = application.id
+               AND interview.round_name IN ('HR Round', 'Final HR Round')
+               AND interview.status = 'Approved'
+           ))
+         ORDER BY application.updated_at DESC, application.id DESC`,
+        [organizationId]
+      )
+      return result.rows.map((row) => ({
+        applicationId: row.application_id,
+        candidateId: row.candidate_id,
+        candidateName: row.candidate_name,
+        jobId: row.job_id,
+        jobNumber: row.job_number,
+        jobTitle: row.job_title,
+        offerId: row.offer_id,
+        offerReference: row.offer_reference,
+        offerIssuedOn: row.offer_issued_on,
+        offerFileAvailable: row.offer_file_available,
+        plannedJoiningOn: row.planned_joining_on,
+        joinedOn: row.joined_on,
+        didNotJoinOn: row.did_not_join_on,
+        outcome: row.joined_on
+          ? "Joined"
+          : row.application_status === "Did Not Join"
+            ? "Did Not Join"
+            : row.willing_to_join === false
+              ? "Declined"
+              : row.application_status === "Withdrawn"
+                ? "Withdrawn"
+                : row.application_status === "Rejected"
+                  ? "Rejected"
+                  : row.willing_to_join === true
+                    ? "Awaiting Joining"
+                    : "Awaiting Response",
+      }))
+    },
+
+    async listEmployeeAssignments(
+      organizationId: string
+    ): Promise<RecruitmentEmployeeAssignmentRow[]> {
+      const result = await pool.query<{
+        id: string
+        post_code: string
+        employee_name: string
+        employee_code: string | null
+        joined_on: string | null
+        probation_due_on: string | null
+        planned_end_on: string | null
+        ended_on: string | null
+        exit_type: string | null
+        exit_note: string | null
+        pf_status: RecruitmentEmployeeAssignmentRow["pfStatus"]
+        pf_completed_on: string | null
+        uniform_status: RecruitmentEmployeeAssignmentRow["uniformStatus"]
+        uniform_completed_on: string | null
+        appointment_letter_issued_on: string | null
+      }>(
+        `SELECT assignment.id, assignment.post_code, assignment.employee_name,
+           assignment.employee_code, assignment.joined_on::text,
+           assignment.probation_due_on::text, assignment.planned_end_on::text,
+           assignment.ended_on::text, assignment.exit_type, assignment.exit_note,
+           assignment.pf_status, assignment.pf_completed_on::text,
+           assignment.uniform_status, assignment.uniform_completed_on::text,
+           letter.issued_on::text AS appointment_letter_issued_on
+         FROM recruitment.employee_post_assignments assignment
+         LEFT JOIN LATERAL (
+           SELECT issued_on FROM recruitment.employment_letters letter
+           WHERE letter.organization_id = assignment.organization_id
+             AND letter.letter_type = 'appointment'
+             AND letter.employee_code = assignment.employee_code
+             AND letter.pdf_bytes IS NOT NULL
+           ORDER BY letter.issued_on DESC LIMIT 1
+         ) letter ON true
+         WHERE assignment.organization_id = $1
+         ORDER BY assignment.created_at DESC, assignment.id DESC`,
+        [organizationId]
+      )
+      return result.rows.map((row) => ({
+        id: row.id,
+        postCode: row.post_code,
+        employeeName: row.employee_name,
+        employeeCode: row.employee_code,
+        joinedOn: row.joined_on,
+        probationDueOn: row.probation_due_on,
+        plannedEndOn: row.planned_end_on,
+        endedOn: row.ended_on,
+        exitType: row.exit_type,
+        exitNote: row.exit_note,
+        pfStatus: row.pf_status,
+        pfCompletedOn: row.pf_completed_on,
+        uniformStatus: row.uniform_status,
+        uniformCompletedOn: row.uniform_completed_on,
+        appointmentLetterIssuedOn: row.appointment_letter_issued_on,
+      }))
+    },
+
+    async updateEmployeeFollowup(
+      input: MutationContext & {
+        assignmentId: string
+        probationDueOn: string | null
+        pfStatus: RecruitmentEmployeeAssignmentRow["pfStatus"]
+        pfCompletedOn: string | null
+        uniformStatus: RecruitmentEmployeeAssignmentRow["uniformStatus"]
+        uniformCompletedOn: string | null
+      }
+    ) {
+      const statuses = new Set(["Pending", "Completed", "Not Applicable", "Unknown"])
+      if (!statuses.has(input.pfStatus) || !statuses.has(input.uniformStatus)) {
+        throw new Error("Select a valid follow-up status.")
+      }
+      for (const [label, date] of [
+        ["Probation end date", input.probationDueOn],
+        ["PF completion date", input.pfCompletedOn],
+        ["Uniform issue date", input.uniformCompletedOn],
+      ] as const) {
+        if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+          throw new Error(`Enter a valid ${label.toLowerCase()}.`)
+        }
+      }
+      if (input.pfStatus === "Completed" && !input.pfCompletedOn) {
+        throw new Error("PF completion date is required.")
+      }
+      if (input.uniformStatus === "Completed" && !input.uniformCompletedOn) {
+        throw new Error("Uniform issue date is required.")
+      }
+      return transaction(pool, async (client) => {
+        const before = await client.query<{
+          id: string
+          probation_due_on: string | null
+          pf_status: string
+          pf_completed_on: string | null
+          uniform_status: string
+          uniform_completed_on: string | null
+        }>(
+          `SELECT id, probation_due_on::text, pf_status,
+             pf_completed_on::text, uniform_status, uniform_completed_on::text
+           FROM recruitment.employee_post_assignments
+           WHERE id = $1 AND organization_id = $2 FOR UPDATE`,
+          [required(input.assignmentId, "Employee assignment"), input.organizationId]
+        )
+        if (!before.rows[0]) throw new Error("Employee assignment was not found.")
+        const after = await client.query(
+          `UPDATE recruitment.employee_post_assignments
+           SET probation_due_on = $1::date, pf_status = $2,
+             pf_completed_on = CASE WHEN $2 = 'Completed' THEN $3::date ELSE NULL END,
+             uniform_status = $4,
+             uniform_completed_on = CASE WHEN $4 = 'Completed' THEN $5::date ELSE NULL END,
+             updated_at = now()
+           WHERE id = $6 AND organization_id = $7
+           RETURNING probation_due_on::text, pf_status, pf_completed_on::text,
+             uniform_status, uniform_completed_on::text`,
+          [
+            input.probationDueOn, input.pfStatus, input.pfCompletedOn,
+            input.uniformStatus, input.uniformCompletedOn,
+            input.assignmentId, input.organizationId,
+          ]
+        )
+        await audit(client, {
+          ...input,
+          eventType: "recruitment.employee.followup_updated",
+          beforeState: before.rows[0],
+          afterState: after.rows[0],
+          targetId: input.assignmentId,
+          targetTable: "employee_post_assignments",
+        })
+        return { id: input.assignmentId }
       })
     },
 

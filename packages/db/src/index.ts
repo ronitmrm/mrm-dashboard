@@ -136,6 +136,8 @@ export { storeUnitId } from "./store-item-codes"
 export {
   authorizeRecruitmentCandidateArtifactTarget,
   createRecruitmentRepository,
+  type RecruitmentEmployeeAssignmentRow,
+  type RecruitmentOfferOutcomeRow,
   type RecruitmentCandidateRow,
   type RecruitmentCandidateApplicationHistoryRow,
   type RecruitmentCandidateEventRow,

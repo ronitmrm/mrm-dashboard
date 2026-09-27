@@ -30,6 +30,39 @@ test("pending offer responses are scoped to approved applications without a resp
   expect(sql).not.toContain("LIMIT")
 })
 
+test("offer register keeps a joined outcome after the post changes", async () => {
+  const query = vi.fn().mockResolvedValue({ rows: [{
+    application_id: "application-1", candidate_id: "candidate-1",
+    candidate_name: "Employee One", job_id: "job-1", job_number: "JOB-1",
+    job_title: "Operator", offer_id: "letter-1", offer_reference: "OL-1",
+    offer_issued_on: "2026-09-01", offer_file_available: true,
+    planned_joining_on: "2026-09-05", joined_on: "2026-09-05",
+    did_not_join_on: null, application_status: "Approved", willing_to_join: true,
+  }] })
+  const repository = createRecruitmentRepository({ pool: { query } as unknown as Pool })
+  await expect(repository.listOfferOutcomes("org-1")).resolves.toMatchObject([
+    { applicationId: "application-1", outcome: "Joined", joinedOn: "2026-09-05" },
+  ])
+  expect(query.mock.calls[0]?.[0]).toContain("recruitment.employee_post_assignments")
+  expect(query.mock.calls[0]?.[1]).toEqual(["org-1"])
+})
+
+test("removing a joined employee requires an actual end date and exit type", async () => {
+  const query = vi.fn(async (statement: string) => ({ rows: statement.includes("SELECT id, employee_name, employee_code")
+    ? [{ id: "post-1", employee_name: "Employee One", employee_code: "101",
+      status: "Occupied", combined_role_id: null, can_replace: false,
+      last_working_date: null }]
+    : [] }))
+  const client = { query, release: vi.fn() } as unknown as PoolClient
+  const repository = createRecruitmentRepository({
+    pool: { connect: vi.fn(async () => client) } as unknown as Pool,
+  })
+  await expect(repository.assignEmployee({
+    organizationId: "org-1", postId: "post-1", employeeEvent: "Removed",
+  })).rejects.toThrow("Actual last working date")
+  expect(query.mock.calls.some(([statement]) => statement.includes("UPDATE recruitment.posts"))).toBe(false)
+})
+
 describe("reviseCandidateAppointment", () => {
   function fixture() {
     const query = vi.fn(async (sql: string) => {

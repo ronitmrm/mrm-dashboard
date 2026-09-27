@@ -136,6 +136,7 @@ const expectedCanonicalTables = [
   "recruitment.combined_roles",
   "recruitment.departments",
   "recruitment.designations",
+  "recruitment.employee_post_assignments",
   "recruitment.employment_letters",
   "recruitment.interviews",
   "recruitment.job_posts",
