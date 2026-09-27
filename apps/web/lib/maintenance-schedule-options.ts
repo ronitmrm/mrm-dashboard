@@ -64,6 +64,68 @@ export function maintenanceMasterRowsForMachineAssignment(pages: unknown[]) {
   return [...byCode.values()]
 }
 
+function valueText(value: unknown) {
+  return value === null || value === undefined ? "" : String(value)
+}
+
+export type MaintenanceChecklistStep = {
+  checklistCode: string
+  checklistTitle: string
+  sequence: number
+  stepDescription: string
+  inputType: string
+  required: boolean
+  value: string
+  remark: string
+  result: string
+}
+
+export function maintenanceChecklistStepsForSchedule(
+  checklistRows: unknown,
+  checklistCode: string,
+  savedSteps: unknown = []
+): MaintenanceChecklistStep[] {
+  const savedBySequence = new Map(
+    rows(savedSteps).map((step) => [Number(step.sequence), step])
+  )
+  const bySequence = new Map<number, MaintenanceChecklistStep>()
+  for (const row of rows(checklistRows)) {
+    if (
+      valueText(row.checklistCode).trim().toLowerCase() !==
+      checklistCode.trim().toLowerCase()
+    )
+      continue
+    const sequence = Number(row.sequence)
+    if (!Number.isInteger(sequence) || sequence < 1) continue
+    if (valueText(row.status || "Active").toLowerCase() === "inactive") continue
+    const saved = savedBySequence.get(sequence)
+    const value = valueText(saved?.value)
+    const inputType = valueText(row.inputType || "checkbox").toLowerCase()
+    bySequence.set(sequence, {
+      checklistCode: valueText(row.checklistCode),
+      checklistTitle: valueText(row.checklistTitle),
+      sequence,
+      stepDescription: valueText(row.stepDescription),
+      inputType,
+      required:
+        row.required !== false &&
+        valueText(row.required ?? "Yes").toLowerCase() !== "no",
+      value,
+      remark: valueText(saved?.remark),
+      result: value
+        ? inputType === "checkbox"
+          ? value === "Yes"
+            ? "OK"
+            : "Not OK"
+          : "Recorded"
+        : "",
+    })
+  }
+  return [...bySequence.values()].sort(
+    (left, right) => left.sequence - right.sequence
+  )
+}
+
 export function maintenanceDowntimeReasonRows(pages: unknown[]) {
   const byCode = new Map<string, DashboardRecord>()
   const pageRecords = pages.map(record)
@@ -87,10 +149,16 @@ export function maintenanceDowntimeReasonRows(pages: unknown[]) {
   )
 
   for (const row of candidates) {
-    if (String(row.status ?? "Active").trim().toLowerCase() === "inactive") {
+    if (
+      String(row.status ?? "Active")
+        .trim()
+        .toLowerCase() === "inactive"
+    ) {
       continue
     }
-    const code = String(row.code ?? "").trim().toLowerCase()
+    const code = String(row.code ?? "")
+      .trim()
+      .toLowerCase()
     const name = String(
       row.rejectionReason ?? row.downtimeReason ?? row.reason ?? row.name ?? ""
     ).trim()

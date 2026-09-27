@@ -196,6 +196,8 @@ import {
 } from "@/lib/machine-constraint-review"
 import { dispatchReadyJobCards } from "@/lib/job-card-action-planning"
 import {
+  maintenanceChecklistStepsForSchedule,
+  type MaintenanceChecklistStep,
   maintenanceChecklistRowsForSchedule,
   maintenanceDowntimeReasonRows,
   maintenanceMasterRowsForMachineAssignment,
@@ -3649,7 +3651,11 @@ function UniversalMaintenanceWorkspace({
   submitAction,
 }: {
   payload: DashboardPayload
-  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
+  submitAction: (
+    path: string,
+    body: Record<string, unknown>,
+    options?: { throwOnError?: boolean }
+  ) => Promise<void>
 }) {
   const [reloadKey, setReloadKey] = useState(0)
   const conventional = usePostgresOperationalPage(
@@ -3696,7 +3702,7 @@ function UniversalMaintenanceWorkspace({
   )
 
   async function saveAndReload(path: string, body: Record<string, unknown>) {
-    await submitAction(path, body)
+    await submitAction(path, body, { throwOnError: true })
     setReloadKey((current) => current + 1)
   }
 
@@ -12717,6 +12723,20 @@ function MaintenancePanel({
   const [requestReloadKey, setRequestReloadKey] = useState(0)
   const [selectedBreakdownTaskKey, setSelectedBreakdownTaskKey] = useState("")
   const [changedItems, setChangedItems] = useState([""])
+  const [selectedSchedule, setSelectedSchedule] =
+    useState<DashboardPayload | null>(null)
+  const [checklistSteps, setChecklistSteps] = useState<
+    MaintenanceChecklistStep[]
+  >([])
+  const [completedBy, setCompletedBy] = useState("")
+  const [actualMinutes, setActualMinutes] = useState("")
+  const [partsChanged, setPartsChanged] = useState("")
+  const [workDone, setWorkDone] = useState("")
+  const [checklistStatus, setChecklistStatus] = useState<ActionStatus>(null)
+  const [isSavingChecklist, setIsSavingChecklist] = useState(false)
+  const [savedProgress, setSavedProgress] = useState<
+    Record<string, DashboardPayload>
+  >({})
   const machineRows = useMemo(
     () =>
       maintenanceMachineRows(asArray(productionControl.machinePlanningRows)),
@@ -12731,7 +12751,7 @@ function MaintenancePanel({
     productionControl.maintenanceChecklistMasterRows
   )
   const activeChecklistRows = useMemo(
-    () => activeMaintenanceChecklistRows(checklistRows),
+    () => mergeMaintenanceChecklistRows(checklistRows),
     [checklistRows]
   )
   const productionRunRows = useMemo(
@@ -12815,26 +12835,92 @@ function MaintenancePanel({
     setRequestReloadKey((current) => current + 1)
   }
 
-  async function markMaintenanceDone(row: DashboardPayload) {
-    const completedBy = window.prompt("Completed by")?.trim()
-    if (!completedBy) return
-    const actualMinutesText =
-      window
-        .prompt(
-          "Actual minutes",
-          displayValue(row.estimatedMinutes) !== "-"
-            ? displayValue(row.estimatedMinutes)
-            : ""
-        )
-        ?.trim() ?? ""
-    const partsChanged = window.prompt("Parts changed", "")?.trim() ?? ""
-    const workDone = window.prompt("Work done / remarks", "")?.trim() ?? ""
+  function taskKeyForSchedule(row: DashboardPayload) {
+    const occurrence =
+      maintenanceFrequencyBasis(row) === "running"
+        ? isoDateValue(row.lastCompletedDate || row.firstDueDate) || "initial"
+        : isoDateValue(row.nextDueDate) || todayIsoDate()
+    return maintenanceTaskId(row, occurrence)
+  }
+
+  function openMaintenanceChecklist(row: DashboardPayload) {
+    const taskKey = taskKeyForSchedule(row)
+    const draft =
+      savedProgress[taskKey] ??
+      completionRows.find(
+        (task) =>
+          str(task.taskId) === taskKey && str(task.status) === "In Progress"
+      )
+    setChecklistSteps(
+      maintenanceChecklistStepsForSchedule(
+        activeChecklistRows,
+        str(row.checklistCode),
+        draft?.checklistSteps
+      )
+    )
+    setCompletedBy(str(draft?.completedBy))
+    setActualMinutes(str(draft?.actualMinutes))
+    setPartsChanged(str(draft?.partsChanged))
+    setWorkDone(str(draft?.workDone))
+    setChecklistStatus(null)
+    setSelectedSchedule(row)
+  }
+
+  function updateChecklistStep(
+    sequence: number,
+    field: "value" | "remark",
+    value: string
+  ) {
+    setChecklistSteps((current) =>
+      current.map((step) => {
+        if (step.sequence !== sequence) return step
+        return {
+          ...step,
+          [field]: value,
+          result:
+            field === "value"
+              ? value
+                ? step.inputType === "checkbox"
+                  ? value === "Yes"
+                    ? "OK"
+                    : "Not OK"
+                  : "Recorded"
+                : ""
+              : step.result,
+        }
+      })
+    )
+  }
+
+  async function saveMaintenanceChecklist(complete: boolean) {
+    const row = selectedSchedule
+    if (!row || isSavingChecklist) return
+    if (complete && !completedBy.trim()) {
+      setChecklistStatus({
+        tone: "destructive",
+        message: "Enter the maintenance engineer.",
+      })
+      return
+    }
+    if (
+      complete &&
+      (!checklistSteps.length ||
+        checklistSteps.some((step) => step.required && !step.value.trim()))
+    ) {
+      setChecklistStatus({
+        tone: "destructive",
+        message: "Complete every required checklist point.",
+      })
+      return
+    }
     const completedDate = todayIsoDate()
+    const dueDate = isoDateValue(row.nextDueDate) || completedDate
     const frequencyDays = optionalNumber(row.frequencyDays) ?? 0
     const payload = {
-      taskId: maintenanceTaskId(row, completedDate),
+      taskId: taskKeyForSchedule(row),
       maintenanceType: "Planned",
       scheduleKey: maintenanceScheduleKey(row),
+      productionFloorCode: str(row.productionFloorCode),
       machineNo: displayValue(row.machineNo),
       machineType:
         displayValue(row.machineType) !== "-"
@@ -12851,30 +12937,49 @@ function MaintenancePanel({
         displayValue(row.checklistTitle) !== "-"
           ? displayValue(row.checklistTitle)
           : "",
-      checklistSteps: maintenanceChecklistCompletionSteps(
-        row,
-        activeChecklistRows
-      ),
-      completedDate,
+      checklistSteps,
+      dueDate,
+      completedDate: complete ? completedDate : "",
       completedAt: new Date().toISOString(),
-      completedBy,
-      actualMinutes: optionalNumber(actualMinutesText) ?? actualMinutesText,
-      result: "Completed",
+      completedBy: completedBy.trim(),
+      actualMinutes: optionalNumber(actualMinutes) ?? actualMinutes,
+      status: complete ? "Completed" : "In Progress",
+      result: complete ? "Completed" : "In Progress",
       partsChanged,
       workDone,
       nextDueDate:
-        maintenanceFrequencyBasis(row) === "running"
+        !complete || maintenanceFrequencyBasis(row) === "running"
           ? ""
           : frequencyDays > 0
             ? addIsoDays(completedDate, frequencyDays)
             : "",
-      remark: workDone || "Completed from maintenance task list.",
+      remark: workDone,
     }
-    await submitAction("data-entry", {
-      entryType: "maintenance_task",
-      key: dataEntryKey("maintenance_task", payload),
-      payload,
-    })
+    setIsSavingChecklist(true)
+    setChecklistStatus(null)
+    try {
+      await submitAction("data-entry", {
+        entryType: "maintenance_task",
+        key: dataEntryKey("maintenance_task", payload),
+        payload,
+      })
+      setSavedProgress((current) => ({ ...current, [payload.taskId]: payload }))
+      setChecklistStatus({
+        tone: "default",
+        message: complete
+          ? "Maintenance completed."
+          : "Checklist progress saved.",
+      })
+      setSelectedSchedule(null)
+    } catch (error) {
+      setChecklistStatus({
+        tone: "destructive",
+        message:
+          error instanceof Error ? error.message : "Checklist save failed.",
+      })
+    } finally {
+      setIsSavingChecklist(false)
+    }
   }
 
   async function startBreakdownMaintenance(event: FormEvent<HTMLFormElement>) {
@@ -12956,6 +13061,196 @@ function MaintenancePanel({
     setChangedItems([""])
   }
 
+  if (selectedSchedule) {
+    const answeredCount = checklistSteps.filter((step) =>
+      step.value.trim()
+    ).length
+    return (
+      <section className="grid min-w-0 gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-semibold">Maintenance Checklist</h1>
+            <p className="text-sm text-muted-foreground">
+              {displayValue(selectedSchedule.machineNo)} /{" "}
+              {displayValue(selectedSchedule.maintenanceCode)} -{" "}
+              {displayValue(selectedSchedule.maintenanceTitle)}
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setSelectedSchedule(null)}
+          >
+            <ArrowLeft className="size-4" /> Back to Tasks
+          </Button>
+        </div>
+        <SectionCard>
+          <CardHeader>
+            <CardTitle>
+              {displayValue(selectedSchedule.checklistCode)} -{" "}
+              {displayValue(selectedSchedule.checklistTitle)}
+            </CardTitle>
+            <CardDescription>
+              {answeredCount} of {checklistSteps.length} points answered. Save
+              progress to finish later.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4">
+            {checklistSteps.length ? (
+              <OperationalTable containerClassName="max-h-[65vh] rounded-lg border">
+                <TableHeader className="sticky top-0 z-10 bg-background">
+                  <TableRow>
+                    <TableHead className="min-w-14">Step</TableHead>
+                    <TableHead className="min-w-80">Check Point</TableHead>
+                    <TableHead className="min-w-36">Entry</TableHead>
+                    <TableHead className="min-w-48">Remark</TableHead>
+                    <TableHead>Required</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {checklistSteps.map((step) => (
+                    <TableRow key={step.sequence}>
+                      <TableCell>{step.sequence}</TableCell>
+                      <TableCell className="font-medium whitespace-normal">
+                        {step.stepDescription}
+                      </TableCell>
+                      <TableCell>
+                        {step.inputType === "checkbox" ? (
+                          <SearchableSelect
+                            aria-label={`Step ${step.sequence} entry`}
+                            className="h-9 min-w-32 rounded-md border bg-background px-2 text-sm"
+                            disabled={isSavingChecklist}
+                            value={step.value}
+                            onChange={(event) =>
+                              updateChecklistStep(
+                                step.sequence,
+                                "value",
+                                event.target.value
+                              )
+                            }
+                          >
+                            <option value="">Select</option>
+                            <option value="Yes">Yes</option>
+                            <option value="No">No</option>
+                          </SearchableSelect>
+                        ) : (
+                          <Input
+                            aria-label={`Step ${step.sequence} entry`}
+                            className="h-9 min-w-32"
+                            disabled={isSavingChecklist}
+                            type={
+                              step.inputType === "number" ? "number" : "text"
+                            }
+                            value={step.value}
+                            onChange={(event) =>
+                              updateChecklistStep(
+                                step.sequence,
+                                "value",
+                                event.target.value
+                              )
+                            }
+                          />
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          aria-label={`Step ${step.sequence} remark`}
+                          className="h-9 min-w-44"
+                          disabled={isSavingChecklist}
+                          value={step.remark}
+                          onChange={(event) =>
+                            updateChecklistStep(
+                              step.sequence,
+                              "remark",
+                              event.target.value
+                            )
+                          }
+                        />
+                      </TableCell>
+                      <TableCell>{step.required ? "Yes" : "No"}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </OperationalTable>
+            ) : (
+              <EmptyRowsMessage>
+                No checklist points found for this maintenance schedule.
+              </EmptyRowsMessage>
+            )}
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="grid gap-1.5">
+                <Label htmlFor="maintenance-completed-by">
+                  Maintenance engineer
+                </Label>
+                <Input
+                  id="maintenance-completed-by"
+                  disabled={isSavingChecklist}
+                  value={completedBy}
+                  onChange={(event) => setCompletedBy(event.target.value)}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="maintenance-actual-minutes">
+                  Actual minutes
+                </Label>
+                <Input
+                  id="maintenance-actual-minutes"
+                  type="number"
+                  min="0"
+                  disabled={isSavingChecklist}
+                  value={actualMinutes}
+                  onChange={(event) => setActualMinutes(event.target.value)}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="maintenance-parts-changed">Parts changed</Label>
+                <Input
+                  id="maintenance-parts-changed"
+                  disabled={isSavingChecklist}
+                  value={partsChanged}
+                  onChange={(event) => setPartsChanged(event.target.value)}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="maintenance-work-done">
+                  Work done / remarks
+                </Label>
+                <Input
+                  id="maintenance-work-done"
+                  disabled={isSavingChecklist}
+                  value={workDone}
+                  onChange={(event) => setWorkDone(event.target.value)}
+                />
+              </div>
+            </div>
+            {checklistStatus ? (
+              <AlertMessage tone={checklistStatus.tone}>
+                {checklistStatus.message}
+              </AlertMessage>
+            ) : null}
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isSavingChecklist}
+                onClick={() => void saveMaintenanceChecklist(false)}
+              >
+                Save Progress
+              </Button>
+              <Button
+                type="button"
+                disabled={isSavingChecklist || !checklistSteps.length}
+                onClick={() => void saveMaintenanceChecklist(true)}
+              >
+                <CheckCircle2 className="size-4" /> Complete Maintenance
+              </Button>
+            </div>
+          </CardContent>
+        </SectionCard>
+      </section>
+    )
+  }
+
   return (
     <section className="grid gap-4">
       <MetricSummary
@@ -12987,6 +13282,11 @@ function MaintenancePanel({
           <CardTitle>Maintenance Pending Tasks</CardTitle>
         </CardHeader>
         <CardContent>
+          {checklistStatus ? (
+            <AlertMessage tone={checklistStatus.tone}>
+              {checklistStatus.message}
+            </AlertMessage>
+          ) : null}
           {workRows.length ? (
             <div className="min-w-0 rounded-lg border">
               <OperationalTable>
@@ -13008,6 +13308,13 @@ function MaintenancePanel({
                       work.workType === "Scheduled"
                         ? (work.scheduled as DashboardPayload)
                         : null
+                    const taskState = scheduled
+                      ? savedProgress[taskKeyForSchedule(scheduled)] ??
+                        completionRows.find(
+                          (task) =>
+                            str(task.taskId) === taskKeyForSchedule(scheduled)
+                        )
+                      : null
                     return (
                       <TableRow
                         className={
@@ -13080,7 +13387,13 @@ function MaintenancePanel({
                           ) : null}
                         </TableCell>
                         <TableCell>
-                          <StatusBadge value={work.status} />
+                          <StatusBadge
+                            value={
+                              str(taskState?.status) === "In Progress"
+                                ? "In Progress"
+                                : work.status
+                            }
+                          />
                         </TableCell>
                         <TableCell>{work.assignee ?? "Unassigned"}</TableCell>
                         <TableCell>
@@ -13093,12 +13406,17 @@ function MaintenancePanel({
                                   ? "outline"
                                   : "default"
                               }
+                              disabled={str(taskState?.status) === "Completed"}
                               onClick={() =>
-                                void markMaintenanceDone(scheduled)
+                                openMaintenanceChecklist(scheduled)
                               }
                             >
-                              <CheckCircle2 className="size-4" />
-                              Mark Done
+                              <ListChecks className="size-4" />
+                              {str(taskState?.status) === "Completed"
+                                ? "Completed"
+                                : str(taskState?.status) === "In Progress"
+                                  ? "Resume Checklist"
+                                  : "Open Checklist"}
                             </Button>
                           ) : work.workType === "Request" &&
                             (work.status === "Approved" ||
@@ -19266,37 +19584,6 @@ function maintenanceChecklistStepKey(row: DashboardPayload) {
     .join("|")
 }
 
-function maintenanceChecklistCompletionSteps(
-  schedule: DashboardPayload,
-  checklistRows: DashboardPayload[]
-) {
-  const rows = maintenanceChecklistRowsForCode(
-    checklistRows,
-    schedule.checklistCode
-  )
-  return rows.map((row) => {
-    const inputType = str(row.inputType || "checkbox").toLowerCase()
-    const promptLabel = displayValue(row.stepDescription)
-    const defaultValue = inputType === "checkbox" ? "OK" : ""
-    const value = window.prompt(promptLabel, defaultValue)?.trim() ?? ""
-    return {
-      checklistCode: displayValue(row.checklistCode),
-      checklistTitle: displayValue(row.checklistTitle),
-      sequence: displayValue(row.sequence),
-      stepDescription: displayValue(row.stepDescription),
-      inputType: displayValue(row.inputType || "checkbox"),
-      required: displayValue(row.required || "Yes"),
-      value,
-      result:
-        inputType === "checkbox"
-          ? value.toLowerCase() === "ok" || value.toLowerCase() === "yes"
-            ? "OK"
-            : value
-          : "Recorded",
-    }
-  })
-}
-
 function maintenanceMachineRows(rows: DashboardPayload[]) {
   const byMachine = new Map<string, DashboardPayload>()
   for (const row of rows) {
@@ -19634,7 +19921,9 @@ function latestMaintenanceCompletion(
 ) {
   return completionRows
     .filter(
-      (row) => maintenanceScheduleKey(row) === maintenanceScheduleKey(schedule)
+      (row) =>
+        maintenanceScheduleKey(row) === maintenanceScheduleKey(schedule) &&
+        str(row.status || row.result).toLowerCase() === "completed"
     )
     .sort(
       (a, b) =>
