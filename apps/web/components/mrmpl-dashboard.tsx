@@ -13091,11 +13091,15 @@ function MaintenancePanel({
     const taskId = str(formData.get("taskId"))
     const completedAt = istDateTimeInputToIso(str(formData.get("completedAt")))
     if (!completedAt) throw new Error("Select a valid completion time.")
+    const engineer = engineerOptions.find(
+      (option) => option.code === str(formData.get("completedByEmployeeCode"))
+    )
     const payload = {
       breakdownAction: "complete",
       changedItems: changedItems.map(str).filter(Boolean),
       completedAt,
-      completedBy: str(formData.get("completedBy")),
+      completedBy: engineer?.name ?? "",
+      completedByEmployeeCode: engineer?.code ?? "",
       maintenanceType: "Breakdown",
       result: "Completed",
       taskId,
@@ -13729,7 +13733,18 @@ function MaintenancePanel({
                   />
                 </Field>
                 <Field label="Completed By">
-                  <Input name="completedBy" required />
+                  <SearchableSelect
+                    className="h-9 rounded-md border bg-background px-3 text-sm"
+                    name="completedByEmployeeCode"
+                    required
+                  >
+                    <option value="">Select maintenance engineer</option>
+                    {engineerOptions.map((option) => (
+                      <option key={option.code} value={option.code}>
+                        {option.name} ({option.code})
+                      </option>
+                    ))}
+                  </SearchableSelect>
                 </Field>
               </div>
               <Field label="Work Done">
