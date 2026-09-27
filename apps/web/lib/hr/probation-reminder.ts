@@ -16,3 +16,18 @@ export function probationReminderStatus(
   if (assignment.probationDueOn <= approachingOn) return "Approaching"
   return "Scheduled"
 }
+
+export function splitProbationAssignments<
+  T extends ReminderAssignment & { endedOn: string | null },
+>(assignments: readonly T[], today: string, approachingOn: string) {
+  const open: T[] = []
+  const completed: T[] = []
+  for (const assignment of assignments) {
+    if (probationReminderStatus(assignment, today, approachingOn) === "Completed") {
+      completed.push(assignment)
+    } else if (!assignment.endedOn || assignment.endedOn >= today) {
+      open.push(assignment)
+    }
+  }
+  return { open, completed }
+}
