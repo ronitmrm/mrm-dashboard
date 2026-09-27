@@ -37,7 +37,12 @@ import { requireProductionPage } from "@/lib/auth/require-production-page"
 import {
   masterCapability,
   masterPermissionOptions,
+  scopedMasters,
 } from "@/lib/auth/master-capabilities"
+import {
+  qualityParameterControlKey,
+  qualityParameterControls,
+} from "@/lib/auth/quality-parameter-controls"
 import { productionMasterCapability } from "@/lib/auth/production-master-access"
 import { normalizeStoreMasterKey } from "@/lib/store-master-selection"
 import { MasterAccessProvider } from "@/components/master-access-provider"
@@ -139,6 +144,13 @@ export default async function Page({
       "store.masters.read",
       "store.masters.write",
       ...masterPermissionOptions.map(({ key }) => key),
+      ...scopedMasters
+        .filter(({ master }) => master === "quality_parameter_master")
+        .flatMap(({ unit }) =>
+          qualityParameterControls.map((control) =>
+            qualityParameterControlKey(unit, control)
+          )
+        ),
       ...operationalEntryPermissionOptions.map(({ key }) => key),
     ])
   )
