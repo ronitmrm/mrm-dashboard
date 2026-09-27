@@ -53,8 +53,9 @@ on that machine's current Production Session when one exists. The same breakdown
 remains open when the shift session closes unresolved; completing it resolves the
 carried problem and makes the machine eligible for a new Production Session.
 
-A completed breakdown records its actual start and completion times, technician,
-work done, optional remarks, and zero or more separately entered Changed Items.
+A completed breakdown records its actual start and completion times, an engineer
+selected from active maintenance staff across all production units, work done,
+optional remarks, and zero or more separately entered Changed Items.
 One breakdown may contain multiple Changed Items; they are not flattened into a
 single free-text part field.
 

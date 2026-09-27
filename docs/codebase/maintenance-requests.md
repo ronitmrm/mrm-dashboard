@@ -63,7 +63,8 @@ in the event source payload by maintenance task key. A second open breakdown on
 the same machine is rejected, and Production Session start is blocked while the
 breakdown remains open.
 
-Completion updates the same task, records the actual completion time, technician,
+Completion updates the same task, records the actual completion time, the selected
+active maintenance engineer's name and employee code from the company-wide directory,
 work performed, and `changedItems[]`, and resolves either the linked open downtime
 or its Shift Ended — Unresolved carry-forward. Completed breakdowns continue to
 feed the Machine Maintenance Register through the existing task query.
