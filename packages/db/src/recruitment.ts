@@ -187,6 +187,7 @@ export type RecruitmentEmployeeAssignmentRow = {
   employeeCode: string | null
   joinedOn: string | null
   probationDueOn: string | null
+  legacyProbationCompleted: boolean
   plannedEndOn: string | null
   endedOn: string | null
   exitType: string | null
@@ -3095,6 +3096,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         employee_code: string | null
         joined_on: string | null
         probation_due_on: string | null
+        legacy_probation_completed: boolean
         planned_end_on: string | null
         ended_on: string | null
         exit_type: string | null
@@ -3103,7 +3105,8 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       }>(
         `SELECT assignment.id, assignment.post_code, assignment.employee_name,
            assignment.employee_code, assignment.joined_on::text,
-           assignment.probation_due_on::text, assignment.planned_end_on::text,
+           assignment.probation_due_on::text, assignment.legacy_probation_completed,
+           assignment.planned_end_on::text,
            assignment.ended_on::text, assignment.exit_type, assignment.exit_note,
            letter.issued_on::text AS appointment_letter_issued_on
          FROM recruitment.employee_post_assignments assignment
@@ -3126,6 +3129,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         employeeCode: row.employee_code,
         joinedOn: row.joined_on,
         probationDueOn: row.probation_due_on,
+        legacyProbationCompleted: row.legacy_probation_completed,
         plannedEndOn: row.planned_end_on,
         endedOn: row.ended_on,
         exitType: row.exit_type,

@@ -14,6 +14,7 @@ import {
 } from "@workspace/ui/components/table"
 
 import { updateEmployeeProbationAction } from "@/app/hr/actions"
+import { probationReminderStatus } from "@/lib/hr/probation-reminder"
 import { StandardDialogContent, StandardState } from "@/components/ui/golden-patterns"
 
 function ProbationDateEditor({ assignment }: { assignment: RecruitmentEmployeeAssignmentRow }) {
@@ -64,7 +65,9 @@ export function ProbationEndReminders({
     (assignment) => !assignment.endedOn || assignment.endedOn >= today
   ).sort((left, right) => {
     const priority = (assignment: RecruitmentEmployeeAssignmentRow) =>
-      assignment.appointmentLetterIssuedOn ? "9999-12-31" : assignment.probationDueOn ?? "0000-01-01"
+      assignment.appointmentLetterIssuedOn || assignment.legacyProbationCompleted
+        ? "9999-12-31"
+        : assignment.probationDueOn ?? "0000-01-01"
     return priority(left).localeCompare(priority(right))
   })
   return (
@@ -72,7 +75,7 @@ export function ProbationEndReminders({
         <CardHeader>
           <CardTitle>Probation End Reminders ({active.length})</CardTitle>
           <CardDescription>
-            Review approaching probation end dates. The reminder is completed when the Appointment Letter is issued.
+            Review approaching probation end dates. Completed reminders include issued Appointment Letters and recorded legacy completions.
           </CardDescription>
         </CardHeader>
         <CardContent className="min-w-0">
@@ -85,12 +88,7 @@ export function ProbationEndReminders({
             </TableRow></TableHeader>
             <TableBody>
               {active.map((assignment) => {
-                const reminderStatus = assignment.appointmentLetterIssuedOn
-                  ? "Completed"
-                  : !assignment.probationDueOn
-                    ? "Date Needed"
-                    : assignment.probationDueOn <= today ? "Due"
-                      : assignment.probationDueOn <= approachingOn ? "Approaching" : "Scheduled"
+                const reminderStatus = probationReminderStatus(assignment, today, approachingOn)
                 return <TableRow key={assignment.id}>
                   <TableCell className="font-mono">{assignment.employeeCode ?? "—"}</TableCell>
                   <TableCell className="font-medium">{assignment.employeeName}</TableCell>

@@ -167,6 +167,9 @@ For each joined assignment, HR sees a reminder as probation end approaches.
 The date comes from the Offer Letter probation period when available, or HR
 enters it when missing. The reminder is due on the probation end date and
 completed when the Appointment Letter is issued and its PDF retained.
+For employees carried over from the former system, HR may record that
+probation was already completed there. That explicit migration record also
+completes the reminder; a past due date alone does not.
 
 The Offer and Joining Register follows each candidate application through final
 HR approval, response, Offer Letter issuance, joining or Did Not Join. A declined
