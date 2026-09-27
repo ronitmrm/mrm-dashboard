@@ -9,15 +9,14 @@ import {
 import { Dialog, DialogTrigger } from "@workspace/ui/components/dialog"
 import { Field, FieldDescription, FieldLabel } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
-import { NativeSelect, NativeSelectOption } from "@workspace/ui/components/native-select"
 import {
   OperationalTable, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@workspace/ui/components/table"
 
-import { updateEmployeeFollowupAction } from "@/app/hr/actions"
+import { updateEmployeeProbationAction } from "@/app/hr/actions"
 import { StandardDialogContent, StandardState } from "@/components/ui/golden-patterns"
 
-function FollowupEditor({ assignment }: { assignment: RecruitmentEmployeeAssignmentRow }) {
+function ProbationDateEditor({ assignment }: { assignment: RecruitmentEmployeeAssignmentRow }) {
   return (
     <Dialog>
       <DialogTrigger asChild>
@@ -25,10 +24,10 @@ function FollowupEditor({ assignment }: { assignment: RecruitmentEmployeeAssignm
       </DialogTrigger>
       <StandardDialogContent
         className="max-h-[90vh] overflow-y-auto"
-        title={`HR Follow-up · ${assignment.employeeName}`}
+        title={`Probation End Date · ${assignment.employeeName}`}
         description={`${assignment.postCode} · Employee ID ${assignment.employeeCode ?? "not recorded"}`}
       >
-        <form action={updateEmployeeFollowupAction} className="grid gap-4">
+        <form action={updateEmployeeProbationAction} className="grid gap-4">
           <input name="panel" type="hidden" value="employeeMasterPanel" />
           <input name="assignment_id" type="hidden" value={assignment.id} />
           <Field>
@@ -41,35 +40,7 @@ function FollowupEditor({ assignment }: { assignment: RecruitmentEmployeeAssignm
             />
             <FieldDescription>Set this date if it was unavailable at joining.</FieldDescription>
           </Field>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field>
-              <FieldLabel htmlFor={`pf-status-${assignment.id}`}>PF Enrolment</FieldLabel>
-              <NativeSelect defaultValue={assignment.pfStatus} id={`pf-status-${assignment.id}`} name="pf_status">
-                <NativeSelectOption value="Pending">Pending</NativeSelectOption>
-                <NativeSelectOption value="Completed">Completed</NativeSelectOption>
-                <NativeSelectOption value="Not Applicable">Not Applicable</NativeSelectOption>
-                <NativeSelectOption value="Unknown">Unknown</NativeSelectOption>
-              </NativeSelect>
-            </Field>
-            <Field>
-              <FieldLabel htmlFor={`pf-date-${assignment.id}`}>PF Completed On</FieldLabel>
-              <Input defaultValue={assignment.pfCompletedOn ?? ""} id={`pf-date-${assignment.id}`} name="pf_completed_on" type="date" />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor={`uniform-status-${assignment.id}`}>Uniform Issue</FieldLabel>
-              <NativeSelect defaultValue={assignment.uniformStatus} id={`uniform-status-${assignment.id}`} name="uniform_status">
-                <NativeSelectOption value="Pending">Pending</NativeSelectOption>
-                <NativeSelectOption value="Completed">Completed</NativeSelectOption>
-                <NativeSelectOption value="Not Applicable">Not Applicable</NativeSelectOption>
-                <NativeSelectOption value="Unknown">Unknown</NativeSelectOption>
-              </NativeSelect>
-            </Field>
-            <Field>
-              <FieldLabel htmlFor={`uniform-date-${assignment.id}`}>Uniform Issued On</FieldLabel>
-              <Input defaultValue={assignment.uniformCompletedOn ?? ""} id={`uniform-date-${assignment.id}`} name="uniform_completed_on" type="date" />
-            </Field>
-          </div>
-          <Button className="w-fit" type="submit">Save Follow-up</Button>
+          <Button className="w-fit" type="submit">Save Date</Button>
         </form>
       </StandardDialogContent>
     </Dialog>
@@ -100,24 +71,23 @@ export function EmployeeLifecycleRegisters({
     <>
       <SectionCard>
         <CardHeader>
-          <CardTitle>HR Follow-up ({active.length})</CardTitle>
+          <CardTitle>Probation End Reminders ({active.length})</CardTitle>
           <CardDescription>
-            Review probation and issue the Appointment Letter from Employee Master.
-            Record PF enrolment and uniform issue here. PF eligibility is checked from joining.
+            Review approaching probation end dates. The reminder is completed when the Appointment Letter is issued.
           </CardDescription>
         </CardHeader>
         <CardContent className="min-w-0">
-          <OperationalTable filterStorageKey="hr-employee-followup" containerClassName="max-h-[36rem] rounded-md border">
+          <OperationalTable filterStorageKey="hr-probation-end-reminders" containerClassName="max-h-[36rem] rounded-md border">
             <TableHeader><TableRow>
               <TableHead>Employee</TableHead><TableHead>Post</TableHead>
               <TableHead>Joined</TableHead><TableHead>Probation Ends</TableHead>
-              <TableHead>Appointment Letter</TableHead><TableHead>PF</TableHead>
-              <TableHead>Uniform</TableHead>{canManageEmployees ? <TableHead className="text-right">Action</TableHead> : null}
+              <TableHead>Reminder</TableHead>
+              {canManageEmployees ? <TableHead className="text-right">Action</TableHead> : null}
             </TableRow></TableHeader>
             <TableBody>
               {active.map((assignment) => {
-                const letterStatus = assignment.appointmentLetterIssuedOn
-                  ? "Issued"
+                const reminderStatus = assignment.appointmentLetterIssuedOn
+                  ? "Completed"
                   : !assignment.probationDueOn
                     ? "Date Needed"
                     : assignment.probationDueOn <= today ? "Due"
@@ -130,14 +100,12 @@ export function EmployeeLifecycleRegisters({
                   <TableCell className="font-mono">{assignment.postCode}</TableCell>
                   <TableCell>{assignment.joinedOn ?? "Date needed"}</TableCell>
                   <TableCell>{assignment.probationDueOn ?? "Date needed"}</TableCell>
-                  <TableCell><StatusBadge value={letterStatus} tone={letterStatus === "Issued" ? "positive" : letterStatus === "Scheduled" ? "information" : "warning"} /></TableCell>
-                  <TableCell><StatusBadge value={assignment.pfStatus} tone={assignment.pfStatus === "Completed" ? "positive" : assignment.pfStatus === "Pending" ? "warning" : "neutral"} /></TableCell>
-                  <TableCell><StatusBadge value={assignment.uniformStatus} tone={assignment.uniformStatus === "Completed" ? "positive" : assignment.uniformStatus === "Pending" ? "warning" : "neutral"} /></TableCell>
-                  {canManageEmployees ? <TableCell className="text-right"><FollowupEditor assignment={assignment} /></TableCell> : null}
+                  <TableCell><StatusBadge value={reminderStatus} tone={reminderStatus === "Completed" ? "positive" : reminderStatus === "Scheduled" ? "information" : "warning"} /></TableCell>
+                  {canManageEmployees ? <TableCell className="text-right"><ProbationDateEditor assignment={assignment} /></TableCell> : null}
                 </TableRow>
               })}
-              {!active.length ? <TableRow><TableCell colSpan={canManageEmployees ? 8 : 7}>
-                <StandardState title="No Employee Follow-ups" description="Joined employees appear here when their assignment is recorded." />
+              {!active.length ? <TableRow><TableCell colSpan={canManageEmployees ? 6 : 5}>
+                <StandardState title="No Probation Reminders" description="Joined employees appear here when their assignment is recorded." />
               </TableCell></TableRow> : null}
             </TableBody>
           </OperationalTable>

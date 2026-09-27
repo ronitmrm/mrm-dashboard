@@ -191,10 +191,6 @@ export type RecruitmentEmployeeAssignmentRow = {
   endedOn: string | null
   exitType: string | null
   exitNote: string | null
-  pfStatus: "Pending" | "Completed" | "Not Applicable" | "Unknown"
-  pfCompletedOn: string | null
-  uniformStatus: "Pending" | "Completed" | "Not Applicable" | "Unknown"
-  uniformCompletedOn: string | null
   appointmentLetterIssuedOn: string | null
 }
 
@@ -3103,18 +3099,12 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         ended_on: string | null
         exit_type: string | null
         exit_note: string | null
-        pf_status: RecruitmentEmployeeAssignmentRow["pfStatus"]
-        pf_completed_on: string | null
-        uniform_status: RecruitmentEmployeeAssignmentRow["uniformStatus"]
-        uniform_completed_on: string | null
         appointment_letter_issued_on: string | null
       }>(
         `SELECT assignment.id, assignment.post_code, assignment.employee_name,
            assignment.employee_code, assignment.joined_on::text,
            assignment.probation_due_on::text, assignment.planned_end_on::text,
            assignment.ended_on::text, assignment.exit_type, assignment.exit_note,
-           assignment.pf_status, assignment.pf_completed_on::text,
-           assignment.uniform_status, assignment.uniform_completed_on::text,
            letter.issued_on::text AS appointment_letter_issued_on
          FROM recruitment.employee_post_assignments assignment
          LEFT JOIN LATERAL (
@@ -3140,54 +3130,25 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         endedOn: row.ended_on,
         exitType: row.exit_type,
         exitNote: row.exit_note,
-        pfStatus: row.pf_status,
-        pfCompletedOn: row.pf_completed_on,
-        uniformStatus: row.uniform_status,
-        uniformCompletedOn: row.uniform_completed_on,
         appointmentLetterIssuedOn: row.appointment_letter_issued_on,
       }))
     },
 
-    async updateEmployeeFollowup(
+    async updateEmployeeProbation(
       input: MutationContext & {
         assignmentId: string
         probationDueOn: string | null
-        pfStatus: RecruitmentEmployeeAssignmentRow["pfStatus"]
-        pfCompletedOn: string | null
-        uniformStatus: RecruitmentEmployeeAssignmentRow["uniformStatus"]
-        uniformCompletedOn: string | null
       }
     ) {
-      const statuses = new Set(["Pending", "Completed", "Not Applicable", "Unknown"])
-      if (!statuses.has(input.pfStatus) || !statuses.has(input.uniformStatus)) {
-        throw new Error("Select a valid follow-up status.")
-      }
-      for (const [label, date] of [
-        ["Probation end date", input.probationDueOn],
-        ["PF completion date", input.pfCompletedOn],
-        ["Uniform issue date", input.uniformCompletedOn],
-      ] as const) {
-        if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-          throw new Error(`Enter a valid ${label.toLowerCase()}.`)
-        }
-      }
-      if (input.pfStatus === "Completed" && !input.pfCompletedOn) {
-        throw new Error("PF completion date is required.")
-      }
-      if (input.uniformStatus === "Completed" && !input.uniformCompletedOn) {
-        throw new Error("Uniform issue date is required.")
+      if (input.probationDueOn && !/^\d{4}-\d{2}-\d{2}$/.test(input.probationDueOn)) {
+        throw new Error("Enter a valid probation end date.")
       }
       return transaction(pool, async (client) => {
         const before = await client.query<{
           id: string
           probation_due_on: string | null
-          pf_status: string
-          pf_completed_on: string | null
-          uniform_status: string
-          uniform_completed_on: string | null
         }>(
-          `SELECT id, probation_due_on::text, pf_status,
-             pf_completed_on::text, uniform_status, uniform_completed_on::text
+          `SELECT id, probation_due_on::text
            FROM recruitment.employee_post_assignments
            WHERE id = $1 AND organization_id = $2 FOR UPDATE`,
           [required(input.assignmentId, "Employee assignment"), input.organizationId]
@@ -3195,23 +3156,14 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         if (!before.rows[0]) throw new Error("Employee assignment was not found.")
         const after = await client.query(
           `UPDATE recruitment.employee_post_assignments
-           SET probation_due_on = $1::date, pf_status = $2,
-             pf_completed_on = CASE WHEN $2 = 'Completed' THEN $3::date ELSE NULL END,
-             uniform_status = $4,
-             uniform_completed_on = CASE WHEN $4 = 'Completed' THEN $5::date ELSE NULL END,
-             updated_at = now()
-           WHERE id = $6 AND organization_id = $7
-           RETURNING probation_due_on::text, pf_status, pf_completed_on::text,
-             uniform_status, uniform_completed_on::text`,
-          [
-            input.probationDueOn, input.pfStatus, input.pfCompletedOn,
-            input.uniformStatus, input.uniformCompletedOn,
-            input.assignmentId, input.organizationId,
-          ]
+           SET probation_due_on = $1::date, updated_at = now()
+           WHERE id = $2 AND organization_id = $3
+           RETURNING probation_due_on::text`,
+          [input.probationDueOn, input.assignmentId, input.organizationId]
         )
         await audit(client, {
           ...input,
-          eventType: "recruitment.employee.followup_updated",
+          eventType: "recruitment.employee.probation_date_updated",
           beforeState: before.rows[0],
           afterState: after.rows[0],
           targetId: input.assignmentId,

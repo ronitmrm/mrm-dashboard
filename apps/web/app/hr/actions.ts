@@ -798,30 +798,16 @@ export async function reviseCandidateAppointmentAction(formData: FormData) {
   )
 }
 
-export async function updateEmployeeFollowupAction(formData: FormData) {
+export async function updateEmployeeProbationAction(formData: FormData) {
   await mutate(
     formData,
     masterCapability("employee_assignments", "save"),
-    (repository, context) => {
-      const status = (key: string) => {
-        const selected = value(formData, key)
-        if (
-          selected === "Pending" || selected === "Completed" ||
-          selected === "Not Applicable" || selected === "Unknown"
-        ) return selected
-        throw new Error("Select a valid follow-up status.")
-      }
-      return repository.updateEmployeeFollowup({
-        ...context,
-        assignmentId: value(formData, "assignment_id"),
-        probationDueOn: value(formData, "probation_due_on") || null,
-        pfStatus: status("pf_status"),
-        pfCompletedOn: value(formData, "pf_completed_on") || null,
-        uniformStatus: status("uniform_status"),
-        uniformCompletedOn: value(formData, "uniform_completed_on") || null,
-      })
-    },
-    "HR follow-up updated."
+    (repository, context) => repository.updateEmployeeProbation({
+      ...context,
+      assignmentId: value(formData, "assignment_id"),
+      probationDueOn: value(formData, "probation_due_on") || null,
+    }),
+    "Probation end date updated."
   )
 }
 
