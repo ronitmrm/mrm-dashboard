@@ -13,12 +13,6 @@ CREATE TABLE recruitment.employee_post_assignments (
   ended_on date,
   exit_type text CHECK (exit_type IN ('Resigned', 'Left Without Process', 'Unspecified')),
   exit_note text,
-  pf_status text NOT NULL DEFAULT 'Pending'
-    CHECK (pf_status IN ('Pending', 'Completed', 'Not Applicable', 'Unknown')),
-  pf_completed_on date,
-  uniform_status text NOT NULL DEFAULT 'Pending'
-    CHECK (uniform_status IN ('Pending', 'Completed', 'Not Applicable', 'Unknown')),
-  uniform_completed_on date,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
@@ -34,16 +28,14 @@ CREATE INDEX employee_post_assignments_followup
 -- be reconstructed from the historical post audit events.
 INSERT INTO recruitment.employee_post_assignments (
   organization_id, post_id, post_code, application_id, employee_name,
-  employee_code, joined_on, planned_end_on, ended_on, exit_type,
-  pf_status, uniform_status
+  employee_code, joined_on, planned_end_on, ended_on, exit_type
 )
 SELECT post.organization_id, post.id, post.post_code,
   post.appointed_application_id,
   COALESCE(post.employee_name, post.employee_code), post.employee_code,
   post.joining_date, post.last_working_date,
   NULL,
-  CASE WHEN post.status = 'Resigned' THEN 'Resigned' ELSE NULL END,
-  'Unknown', 'Unknown'
+  CASE WHEN post.status = 'Resigned' THEN 'Resigned' ELSE NULL END
 FROM recruitment.posts post
 WHERE post.status IN ('Occupied', 'Resigned')
   AND (post.employee_name IS NOT NULL OR post.employee_code IS NOT NULL);
@@ -52,7 +44,7 @@ WHERE post.status IN ('Occupied', 'Resigned')
 INSERT INTO recruitment.employee_post_assignments (
   organization_id, post_id, post_code, application_id, employee_name,
   employee_code, joined_on, planned_end_on, ended_on, exit_type,
-  pf_status, uniform_status, created_at
+  created_at
 )
 SELECT replacement.organization_id, post.id, post.post_code,
   NULLIF(replacement.outgoing_assignment->>'appointed_application_id', '')::uuid,
@@ -63,7 +55,7 @@ SELECT replacement.organization_id, post.id, post.post_code,
   migration.try_date(replacement.outgoing_assignment->>'last_working_date'),
   COALESCE(migration.try_date(replacement.outgoing_assignment->>'last_working_date'),
     replacement.completed_at::date),
-  'Resigned', 'Unknown', 'Unknown',
+  'Resigned',
   COALESCE(replacement.completed_at, replacement.created_at)
 FROM recruitment.post_replacements replacement
 JOIN recruitment.posts post ON post.id = replacement.post_id
@@ -98,13 +90,12 @@ BEGIN
       IF old_assignment_id IS NULL THEN
         INSERT INTO recruitment.employee_post_assignments (
           organization_id, post_id, post_code, application_id,
-          employee_name, employee_code, joined_on, planned_end_on,
-          pf_status, uniform_status
+          employee_name, employee_code, joined_on, planned_end_on
         ) VALUES (
           OLD.organization_id, OLD.id, OLD.post_code, OLD.appointed_application_id,
           COALESCE(OLD.employee_name, OLD.employee_code),
           OLD.employee_code, OLD.joining_date,
-          OLD.last_working_date, 'Unknown', 'Unknown'
+          OLD.last_working_date
         ) RETURNING id INTO old_assignment_id;
       END IF;
 
