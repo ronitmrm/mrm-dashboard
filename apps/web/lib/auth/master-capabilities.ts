@@ -120,6 +120,8 @@ export function hrMasterForPanel(panel: string, kind?: string) {
     combinedRolesPanel: "combined_approved_posts",
     candidatesPanel: "candidates",
     employeeMasterPanel: "employee_assignments",
+    probationRemindersPanel: "employee_assignments",
+    employeeAssignmentHistoryPanel: "employee_assignments",
     postMasterPanel: "job_templates",
   }
   return panels[panel] ?? null

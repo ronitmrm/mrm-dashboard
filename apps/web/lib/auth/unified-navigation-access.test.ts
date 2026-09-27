@@ -45,7 +45,11 @@ it("uses the current master grants for commercial and HR destinations", async ()
   ]
   const scoped = await getUnifiedNavigationAccess("scoped-master-user")
   expect(scoped.commercialHrefs).toContain("/commercial/customers")
-  expect(scoped.hrHrefs).toEqual(["/hr?panel=employeeMasterPanel"])
+  expect(scoped.hrHrefs).toEqual([
+    "/hr?panel=employeeMasterPanel",
+    "/hr?panel=probationRemindersPanel",
+    "/hr?panel=employeeAssignmentHistoryPanel",
+  ])
 })
 
 it("opens operational navigation only for independent scoped entry reads", async () => {

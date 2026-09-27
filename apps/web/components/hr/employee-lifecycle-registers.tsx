@@ -28,7 +28,7 @@ function ProbationDateEditor({ assignment }: { assignment: RecruitmentEmployeeAs
         description={`${assignment.postCode} · Employee ID ${assignment.employeeCode ?? "not recorded"}`}
       >
         <form action={updateEmployeeProbationAction} className="grid gap-4">
-          <input name="panel" type="hidden" value="employeeMasterPanel" />
+          <input name="panel" type="hidden" value="probationRemindersPanel" />
           <input name="assignment_id" type="hidden" value={assignment.id} />
           <Field>
             <FieldLabel htmlFor={`probation-${assignment.id}`}>Probation Ends On</FieldLabel>
@@ -47,7 +47,7 @@ function ProbationDateEditor({ assignment }: { assignment: RecruitmentEmployeeAs
   )
 }
 
-export function EmployeeLifecycleRegisters({
+export function ProbationEndReminders({
   assignments,
   canManageEmployees,
 }: {
@@ -68,7 +68,6 @@ export function EmployeeLifecycleRegisters({
     return priority(left).localeCompare(priority(right))
   })
   return (
-    <>
       <SectionCard>
         <CardHeader>
           <CardTitle>Probation End Reminders ({active.length})</CardTitle>
@@ -79,7 +78,7 @@ export function EmployeeLifecycleRegisters({
         <CardContent className="min-w-0">
           <OperationalTable filterStorageKey="hr-probation-end-reminders" containerClassName="max-h-[36rem] rounded-md border">
             <TableHeader><TableRow>
-              <TableHead>Employee</TableHead><TableHead>Post</TableHead>
+              <TableHead>Employee Code</TableHead><TableHead>Employee Name</TableHead><TableHead>Post</TableHead>
               <TableHead>Joined</TableHead><TableHead>Probation Ends</TableHead>
               <TableHead>Reminder</TableHead>
               {canManageEmployees ? <TableHead className="text-right">Action</TableHead> : null}
@@ -93,10 +92,8 @@ export function EmployeeLifecycleRegisters({
                     : assignment.probationDueOn <= today ? "Due"
                       : assignment.probationDueOn <= approachingOn ? "Approaching" : "Scheduled"
                 return <TableRow key={assignment.id}>
-                  <TableCell>
-                    <span className="font-medium">{assignment.employeeName}</span>
-                    <span className="block font-mono text-xs text-muted-foreground">{assignment.employeeCode ?? "No ID"}</span>
-                  </TableCell>
+                  <TableCell className="font-mono">{assignment.employeeCode ?? "—"}</TableCell>
+                  <TableCell className="font-medium">{assignment.employeeName}</TableCell>
                   <TableCell className="font-mono">{assignment.postCode}</TableCell>
                   <TableCell>{assignment.joinedOn ?? "Date needed"}</TableCell>
                   <TableCell>{assignment.probationDueOn ?? "Date needed"}</TableCell>
@@ -104,13 +101,22 @@ export function EmployeeLifecycleRegisters({
                   {canManageEmployees ? <TableCell className="text-right"><ProbationDateEditor assignment={assignment} /></TableCell> : null}
                 </TableRow>
               })}
-              {!active.length ? <TableRow><TableCell colSpan={canManageEmployees ? 6 : 5}>
+              {!active.length ? <TableRow><TableCell colSpan={canManageEmployees ? 7 : 6}>
                 <StandardState title="No Probation Reminders" description="Joined employees appear here when their assignment is recorded." />
               </TableCell></TableRow> : null}
             </TableBody>
           </OperationalTable>
         </CardContent>
       </SectionCard>
+  )
+}
+
+export function EmployeeAssignmentHistory({
+  assignments,
+}: {
+  assignments: RecruitmentEmployeeAssignmentRow[]
+}) {
+  return (
       <SectionCard>
         <CardHeader>
           <CardTitle>Employee Assignment History</CardTitle>
@@ -119,16 +125,14 @@ export function EmployeeLifecycleRegisters({
         <CardContent className="min-w-0">
           <OperationalTable filterStorageKey="hr-employee-assignment-history" containerClassName="max-h-[36rem] rounded-md border">
             <TableHeader><TableRow>
-              <TableHead>Employee</TableHead><TableHead>Post</TableHead>
+              <TableHead>Employee Code</TableHead><TableHead>Employee Name</TableHead><TableHead>Post</TableHead>
               <TableHead>Joined</TableHead><TableHead>Planned End</TableHead>
               <TableHead>Actual End</TableHead><TableHead>Exit</TableHead>
             </TableRow></TableHeader>
             <TableBody>
               {assignments.map((assignment) => <TableRow key={assignment.id}>
-                <TableCell>
-                  <span className="font-medium">{assignment.employeeName}</span>
-                  <span className="block font-mono text-xs text-muted-foreground">{assignment.employeeCode ?? "No ID"}</span>
-                </TableCell>
+                <TableCell className="font-mono">{assignment.employeeCode ?? "—"}</TableCell>
+                <TableCell className="font-medium">{assignment.employeeName}</TableCell>
                 <TableCell className="font-mono">{assignment.postCode}</TableCell>
                 <TableCell>{assignment.joinedOn ?? "Not recorded"}</TableCell>
                 <TableCell>{assignment.plannedEndOn ?? "—"}</TableCell>
@@ -140,13 +144,12 @@ export function EmployeeLifecycleRegisters({
                     : <StatusBadge value="Current" tone="positive" />}
                 </TableCell>
               </TableRow>)}
-              {!assignments.length ? <TableRow><TableCell colSpan={6}>
+              {!assignments.length ? <TableRow><TableCell colSpan={7}>
                 <StandardState title="No Assignment History" description="Joined employees will appear here." />
               </TableCell></TableRow> : null}
             </TableBody>
           </OperationalTable>
         </CardContent>
       </SectionCard>
-    </>
   )
 }
