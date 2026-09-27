@@ -34,6 +34,7 @@ type TaskResultInput = {
 
 type CompleteTaskInput = {
   actorUserId?: string | null
+  startedAt?: string | null
   completedAt: string
   completedBy?: string | null
   dueOn: string
@@ -339,8 +340,17 @@ async function completeMaintenanceTask(
     `,
     [input.organizationId, taskKey, schedule.rows[0].id]
   )
-  if (!isComplete && existing.rows[0]?.status === "Completed") {
-    throw new Error("Completed maintenance cannot be saved as a draft.")
+  if (existing.rows[0]?.status === "Completed") {
+    if (!isComplete) {
+      throw new Error("Completed maintenance cannot be saved as a draft.")
+    }
+    return { id: existing.rows[0].id }
+  }
+  if (existing.rows[0]) {
+    await client.query(
+      "SELECT maintenance.clear_draft_task_results($1, $2)",
+      [input.organizationId, existing.rows[0].id]
+    )
   }
   const result = existing.rows[0]
     ? await client.query<{ id: string }>(
@@ -349,7 +359,7 @@ async function completeMaintenanceTask(
           SET machine_schedule_id = $1,
             due_on = COALESCE(migration.try_date($2), due_on),
             status = $9,
-            started_at = COALESCE(started_at, now()),
+            started_at = COALESCE(migration.try_timestamptz($11), started_at, now()),
             completed_at = CASE WHEN $10::boolean THEN COALESCE(migration.try_timestamptz($3), now()) ELSE NULL END,
             completed_by_user_id = CASE WHEN $10::boolean THEN $4::uuid ELSE NULL END,
             legacy_completer = CASE WHEN $10::boolean THEN $5 ELSE NULL END,
@@ -369,6 +379,7 @@ async function completeMaintenanceTask(
           existing.rows[0].id,
           isComplete ? "Completed" : "In Progress",
           isComplete,
+          input.startedAt ?? null,
         ]
       )
     : await client.query<{ id: string }>(
@@ -380,7 +391,7 @@ async function completeMaintenanceTask(
             source_system, source_table, source_id, source_payload
           )
           VALUES ($1, $2, COALESCE(migration.try_date($3), current_date),
-            $11, CASE WHEN $12::boolean THEN NULL ELSE now() END,
+            $11, COALESCE(migration.try_timestamptz($13), now()),
             CASE WHEN $12::boolean THEN COALESCE(migration.try_timestamptz($4), now()) ELSE NULL END,
             CASE WHEN $12::boolean THEN $5::uuid ELSE NULL END,
             CASE WHEN $12::boolean THEN $6 ELSE NULL END, $5, $5, $7, $8, 'mrm-dashboard',
@@ -400,14 +411,14 @@ async function completeMaintenanceTask(
           input.payload,
           isComplete ? "Completed" : "In Progress",
           isComplete,
+          input.startedAt ?? null,
         ]
       )
-  await client.query(
-    "DELETE FROM maintenance.task_results WHERE task_id = $1",
-    [result.rows[0]!.id]
-  )
   const answeredItemIds = new Set<string>()
   for (const itemResult of input.results) {
+    const answered =
+      itemResult.value !== null && String(itemResult.value).trim() !== ""
+    if (!answered && !itemResult.notes?.trim()) continue
     const item = await client.query<{ id: string }>(
       `
         SELECT id FROM maintenance.checklist_items
@@ -440,10 +451,7 @@ async function completeMaintenanceTask(
         `Maintenance checklist item ${itemResult.itemKey} was not found.`
       )
     }
-    const answered =
-      itemResult.value !== null && String(itemResult.value).trim() !== ""
     if (answered) answeredItemIds.add(item.rows[0].id)
-    if (!answered && !itemResult.notes?.trim()) continue
     const columns = resultColumns(itemResult.value)
     await client.query(
       `

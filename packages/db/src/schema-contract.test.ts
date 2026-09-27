@@ -1401,6 +1401,8 @@ test("database roles enforce least privilege across migration, web, worker, and 
     web_can_delete_customers: boolean
     web_can_delete_first_piece_readings: boolean
     web_can_delete_hourly_readings: boolean
+    web_can_delete_maintenance_task_results: boolean
+    web_can_clear_maintenance_draft: boolean
     web_can_execute_try_date: boolean
     web_can_execute_try_timestamptz: boolean
     web_can_migrate: boolean
@@ -1427,6 +1429,13 @@ test("database roles enforce least privilege across migration, web, worker, and 
         'quality.hourly_check_readings',
         'DELETE'
       ) AS web_can_delete_hourly_readings,
+      has_table_privilege('mrmpl_web', 'maintenance.task_results', 'DELETE')
+        AS web_can_delete_maintenance_task_results,
+      has_function_privilege(
+        'mrmpl_web',
+        'maintenance.clear_draft_task_results(uuid, uuid)',
+        'EXECUTE'
+      ) AS web_can_clear_maintenance_draft,
       has_table_privilege(
         'mrmpl_web',
         'recruitment.candidate_departments',
@@ -1490,6 +1499,8 @@ test("database roles enforce least privilege across migration, web, worker, and 
     web_can_delete_customers: false,
     web_can_delete_first_piece_readings: true,
     web_can_delete_hourly_readings: true,
+    web_can_delete_maintenance_task_results: false,
+    web_can_clear_maintenance_draft: true,
     web_can_execute_try_date: true,
     web_can_execute_try_timestamptz: true,
     web_can_migrate: false,

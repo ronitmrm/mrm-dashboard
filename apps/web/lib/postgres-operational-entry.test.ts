@@ -233,6 +233,7 @@ describe("PostgreSQL operational entry mapping", () => {
         scheduleKey: "A304|MC001",
         machineNo: "A304",
         completedDate: "2026-07-21",
+        startedAt: "2026-07-21T11:00:00.000Z",
         completedAt: "2026-07-21T12:00:00.000Z",
         completedBy: "TECH-1",
         nextDueDate: "2026-08-20",
@@ -251,6 +252,7 @@ describe("PostgreSQL operational entry mapping", () => {
       family: "maintenance",
       operation: "planned-task",
       input: {
+        startedAt: "2026-07-21T11:00:00.000Z",
         results: [
           {
             itemKey: "MC001|1",

@@ -41,6 +41,8 @@ _Avoid_: separate Scheduled and Request tables, converting scheduled rows into r
 
 The checklist assigned to one machine maintenance schedule is completed for each due occurrence. An engineer may save an In Progress task with partial step responses and reopen it later. Completing the task requires every active required checklist point and advances the schedule's next due date. A draft does not advance the schedule or appear as completed maintenance history.
 
+The task records a start date and time when work begins and an end date and time when it finishes. Actual minutes are calculated from those timestamps. The engineer is selected from active maintenance staff across production units. Each changed part is recorded separately so maintenance history can be searched and filtered by part.
+
 _Avoid_: browser prompts for checklist points, treating a partial draft as completed work, repeating the same checklist point across production units.
 
 ## Machine Breakdown

@@ -229,6 +229,7 @@ import {
   qualityInspectionReadingResult as qualityReadingResult,
 } from "@/lib/quality-parameter-set"
 import {
+  maintenanceEmployeeOptions,
   productionDispatchApproverOptions,
   productionMachinistOptions,
   productionQualityOptions,
@@ -12066,6 +12067,7 @@ function MachineMasterPanel({
   const [historyQuery, setHistoryQuery] = useState("")
   const [historyTypeFilter, setHistoryTypeFilter] = useState("")
   const [historyCodeFilter, setHistoryCodeFilter] = useState("")
+  const [historyPartFilter, setHistoryPartFilter] = useState("")
   const [historyResultFilter, setHistoryResultFilter] = useState("")
   const [selectedReportKey, setSelectedReportKey] = useState("")
   const [isScheduleFormOpen, setIsScheduleFormOpen] = useState(false)
@@ -12090,6 +12092,7 @@ function MachineMasterPanel({
       historyQuery,
       historyTypeFilter,
       historyCodeFilter,
+      historyPartFilter,
       historyResultFilter
     )
   )
@@ -12119,6 +12122,7 @@ function MachineMasterPanel({
       .map((row) => displayValue(row.result))
       .filter((value) => value !== "-")
   )
+  const partOptions = uniqueValues(machineHistory.flatMap(maintenanceChangedItems))
 
   function closeMachine() {
     window.location.assign(dashboardTabHref("machineMasterTab"))
@@ -12581,7 +12585,7 @@ function MachineMasterPanel({
           <CardTitle>Maintenance History</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4">
-          <div className="grid gap-3 @4xl/main:grid-cols-[minmax(0,1fr)_repeat(3,180px)]">
+          <div className="grid gap-3 @4xl/main:grid-cols-2 @6xl/main:grid-cols-[minmax(0,1fr)_repeat(4,160px)]">
             <Label className="grid gap-1 text-xs font-medium text-muted-foreground">
               <span>Search</span>
               <div className="relative">
@@ -12612,6 +12616,17 @@ function MachineMasterPanel({
               options={[
                 ["", "All codes"],
                 ...codeOptions.map(
+                  (value) => [value, value] as [string, string]
+                ),
+              ]}
+            />
+            <FilterSelect
+              label="Part"
+              value={historyPartFilter}
+              onChange={setHistoryPartFilter}
+              options={[
+                ["", "All parts"],
+                ...partOptions.map(
                   (value) => [value, value] as [string, string]
                 ),
               ]}
@@ -12671,12 +12686,7 @@ function MachineMasterPanel({
                           </div>
                         </TableCell>
                         <TableCell className="max-w-64 truncate">
-                          {(Array.isArray(row.changedItems)
-                            ? row.changedItems
-                                .map(str)
-                                .filter(Boolean)
-                                .join(", ")
-                            : "") || displayValue(row.partsChanged)}
+                          {maintenanceChangedItems(row).join(", ") || "-"}
                         </TableCell>
                         <TableCell>{displayValue(row.completedBy)}</TableCell>
                         <TableCell>
@@ -12729,8 +12739,9 @@ function MaintenancePanel({
     MaintenanceChecklistStep[]
   >([])
   const [completedBy, setCompletedBy] = useState("")
-  const [actualMinutes, setActualMinutes] = useState("")
-  const [partsChanged, setPartsChanged] = useState("")
+  const [startedAt, setStartedAt] = useState("")
+  const [endedAt, setEndedAt] = useState("")
+  const [plannedChangedItems, setPlannedChangedItems] = useState([""])
   const [workDone, setWorkDone] = useState("")
   const [checklistStatus, setChecklistStatus] = useState<ActionStatus>(null)
   const [isSavingChecklist, setIsSavingChecklist] = useState(false)
@@ -12747,6 +12758,11 @@ function MaintenancePanel({
     [productionControl.maintenanceScheduleRows]
   )
   const completionRows = asArray(productionControl.maintenanceTaskRows)
+  const employeeMasterPage = usePostgresOperationalPage("/api/employee-master")
+  const engineerOptions = useMemo(
+    () => maintenanceEmployeeOptions(asArray(employeeMasterPage.data?.rows)),
+    [employeeMasterPage.data?.rows]
+  )
   const checklistRows = asArray(
     productionControl.maintenanceChecklistMasterRows
   )
@@ -12858,9 +12874,18 @@ function MaintenancePanel({
         draft?.checklistSteps
       )
     )
-    setCompletedBy(str(draft?.completedBy))
-    setActualMinutes(str(draft?.actualMinutes))
-    setPartsChanged(str(draft?.partsChanged))
+    setCompletedBy(str(draft?.completedByEmployeeCode || draft?.completedBy))
+    setStartedAt(
+      draft?.startedAt
+        ? istDateTimeInputValue(str(draft.startedAt))
+        : istDateTimeInputValue()
+    )
+    setEndedAt(draft?.endedAt ? istDateTimeInputValue(str(draft.endedAt)) : "")
+    setPlannedChangedItems(
+      maintenanceChangedItems(draft ?? {}).length
+        ? maintenanceChangedItems(draft ?? {})
+        : [""]
+    )
     setWorkDone(str(draft?.workDone))
     setChecklistStatus(null)
     setSelectedSchedule(row)
@@ -12895,10 +12920,29 @@ function MaintenancePanel({
   async function saveMaintenanceChecklist(complete: boolean) {
     const row = selectedSchedule
     if (!row || isSavingChecklist) return
-    if (complete && !completedBy.trim()) {
+    const engineer = engineerOptions.find(
+      (option) => option.code === completedBy || option.name === completedBy
+    )
+    if (complete && !engineer) {
       setChecklistStatus({
         tone: "destructive",
-        message: "Enter the maintenance engineer.",
+        message: "Select the maintenance engineer.",
+      })
+      return
+    }
+    const startIso = istDateTimeInputToIso(startedAt)
+    const endIso = endedAt ? istDateTimeInputToIso(endedAt) : ""
+    if (!startIso || (complete && !endIso)) {
+      setChecklistStatus({
+        tone: "destructive",
+        message: "Enter valid maintenance start and end times.",
+      })
+      return
+    }
+    if (endIso && new Date(endIso).getTime() < new Date(startIso).getTime()) {
+      setChecklistStatus({
+        tone: "destructive",
+        message: "End time must be after start time.",
       })
       return
     }
@@ -12913,9 +12957,11 @@ function MaintenancePanel({
       })
       return
     }
-    const completedDate = todayIsoDate()
+    const completedDate = endIso ? istDateValue(endIso) : todayIsoDate()
     const dueDate = isoDateValue(row.nextDueDate) || completedDate
     const frequencyDays = optionalNumber(row.frequencyDays) ?? 0
+    const changedItems = plannedChangedItems.map(str).filter(Boolean)
+    const actualMinutes = maintenanceDurationMinutes(startIso, endIso)
     const payload = {
       taskId: taskKeyForSchedule(row),
       maintenanceType: "Planned",
@@ -12940,12 +12986,16 @@ function MaintenancePanel({
       checklistSteps,
       dueDate,
       completedDate: complete ? completedDate : "",
-      completedAt: new Date().toISOString(),
-      completedBy: completedBy.trim(),
-      actualMinutes: optionalNumber(actualMinutes) ?? actualMinutes,
+      startedAt: startIso,
+      endedAt: endIso,
+      completedAt: complete ? endIso : "",
+      completedBy: engineer?.name ?? "",
+      completedByEmployeeCode: engineer?.code ?? "",
+      actualMinutes,
       status: complete ? "Completed" : "In Progress",
       result: complete ? "Completed" : "In Progress",
-      partsChanged,
+      changedItems,
+      partsChanged: changedItems.join(", "),
       workDone,
       nextDueDate:
         !complete || maintenanceFrequencyBasis(row) === "running"
@@ -13065,6 +13115,10 @@ function MaintenancePanel({
     const answeredCount = checklistSteps.filter((step) =>
       step.value.trim()
     ).length
+    const elapsedMinutes = maintenanceDurationMinutes(
+      istDateTimeInputToIso(startedAt),
+      istDateTimeInputToIso(endedAt)
+    )
     return (
       <section className="grid min-w-0 gap-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -13182,34 +13236,106 @@ function MaintenancePanel({
                 <Label htmlFor="maintenance-completed-by">
                   Maintenance engineer
                 </Label>
-                <Input
+                <SearchableSelect
                   id="maintenance-completed-by"
                   disabled={isSavingChecklist}
-                  value={completedBy}
+                  value={
+                    engineerOptions.find(
+                      (option) =>
+                        option.code === completedBy || option.name === completedBy
+                    )?.code ?? completedBy
+                  }
                   onChange={(event) => setCompletedBy(event.target.value)}
+                >
+                  <option value="">Select engineer</option>
+                  {completedBy &&
+                  !engineerOptions.some(
+                    (option) =>
+                      option.code === completedBy || option.name === completedBy
+                  ) ? (
+                    <option value={completedBy}>{completedBy}</option>
+                  ) : null}
+                  {engineerOptions.map((option) => (
+                    <option key={option.code} value={option.code}>
+                      {option.name} ({option.code})
+                    </option>
+                  ))}
+                </SearchableSelect>
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="maintenance-started-at">Start date and time</Label>
+                <Input
+                  id="maintenance-started-at"
+                  type="datetime-local"
+                  disabled={isSavingChecklist}
+                  value={startedAt}
+                  onChange={(event) => setStartedAt(event.target.value)}
                 />
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="maintenance-actual-minutes">
-                  Actual minutes
-                </Label>
+                <Label htmlFor="maintenance-ended-at">End date and time</Label>
+                <Input
+                  id="maintenance-ended-at"
+                  type="datetime-local"
+                  disabled={isSavingChecklist}
+                  value={endedAt}
+                  onChange={(event) => setEndedAt(event.target.value)}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="maintenance-actual-minutes">Actual minutes</Label>
                 <Input
                   id="maintenance-actual-minutes"
-                  type="number"
-                  min="0"
-                  disabled={isSavingChecklist}
-                  value={actualMinutes}
-                  onChange={(event) => setActualMinutes(event.target.value)}
+                  readOnly
+                  value={elapsedMinutes ?? ""}
                 />
               </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor="maintenance-parts-changed">Parts changed</Label>
-                <Input
-                  id="maintenance-parts-changed"
+              <div className="grid gap-2">
+                <Label>Parts changed</Label>
+                {plannedChangedItems.map((item, index) => (
+                  <div className="flex gap-2" key={index}>
+                    <Input
+                      aria-label={`Changed part ${index + 1}`}
+                      disabled={isSavingChecklist}
+                      value={item}
+                      onChange={(event) =>
+                        setPlannedChangedItems((current) =>
+                          current.map((value, itemIndex) =>
+                            itemIndex === index ? event.target.value : value
+                          )
+                        )
+                      }
+                    />
+                    {plannedChangedItems.length > 1 ? (
+                      <Button
+                        aria-label={`Remove changed part ${index + 1}`}
+                        disabled={isSavingChecklist}
+                        onClick={() =>
+                          setPlannedChangedItems((current) =>
+                            current.filter((_, itemIndex) => itemIndex !== index)
+                          )
+                        }
+                        size="icon"
+                        type="button"
+                        variant="outline"
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
+                    ) : null}
+                  </div>
+                ))}
+                <Button
+                  className="w-fit"
                   disabled={isSavingChecklist}
-                  value={partsChanged}
-                  onChange={(event) => setPartsChanged(event.target.value)}
-                />
+                  onClick={() =>
+                    setPlannedChangedItems((current) => [...current, ""])
+                  }
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  <Plus className="size-4" /> Add part
+                </Button>
               </div>
               <div className="grid gap-1.5">
                 <Label htmlFor="maintenance-work-done">
@@ -13701,15 +13827,19 @@ function MaintenanceReportDetail({ row }: { row: DashboardPayload }) {
           important
         />
         <TileField label="Completed By" value={row.completedBy} />
+        <TileField
+          label="Started At"
+          value={row.startedAt ? formatIstDateTime(str(row.startedAt)) : ""}
+        />
+        <TileField
+          label="Ended At"
+          value={row.endedAt ? formatIstDateTime(str(row.endedAt)) : ""}
+        />
         <TileField label="Actual Minutes" value={row.actualMinutes} numeric />
         <TileField label="Result" value={row.result} />
         <TileField
           label="Items Changed"
-          value={
-            (Array.isArray(row.changedItems)
-              ? row.changedItems.map(str).filter(Boolean).join(", ")
-              : "") || row.partsChanged
-          }
+          value={maintenanceChangedItems(row).join(", ")}
         />
         <TileField label="Breakdown Reason" value={row.breakdownReason} />
         <TileField label="Work Done" value={row.workDone} />
@@ -19698,11 +19828,27 @@ function maintenanceHistoryRowsForMachine(
     )
 }
 
+function maintenanceChangedItems(row: DashboardPayload) {
+  const items = Array.isArray(row.changedItems)
+    ? row.changedItems
+    : str(row.partsChanged).split(",")
+  return items.map(str).filter(Boolean)
+}
+
+function maintenanceDurationMinutes(startedAt: string, endedAt: string) {
+  if (!startedAt || !endedAt) return null
+  const minutes = (Date.parse(endedAt) - Date.parse(startedAt)) / 60_000
+  return Number.isFinite(minutes) && minutes >= 0
+    ? Math.round(minutes)
+    : null
+}
+
 function maintenanceHistoryMatches(
   row: DashboardPayload,
   query: string,
   typeFilter: string,
   codeFilter: string,
+  partFilter: string,
   resultFilter: string
 ) {
   const type = displayValue(row.maintenanceType || "Planned")
@@ -19715,7 +19861,7 @@ function maintenanceHistoryMatches(
     row.maintenanceTitle,
     row.completedDate,
     row.completedBy,
-    row.partsChanged,
+    maintenanceChangedItems(row).join(" "),
     row.workDone,
     row.breakdownReason,
     row.remark,
@@ -19728,6 +19874,10 @@ function maintenanceHistoryMatches(
     queryMatch &&
     typedFilterMatches(type, typeFilter) &&
     typedFilterMatches(code, codeFilter) &&
+    (!partFilter ||
+      maintenanceChangedItems(row).some(
+        (item) => item.toLowerCase() === partFilter.toLowerCase()
+      )) &&
     typedFilterMatches(result, resultFilter)
   )
 }
