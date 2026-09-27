@@ -2,6 +2,7 @@ import type { RecruitmentPostRow } from "@workspace/db"
 import { describe, expect, it } from "vitest"
 
 import {
+  maintenanceEmployeeOptions,
   productionDispatchApproverOptions,
   productionQualityOptions,
   productionShopFloorOptions,
@@ -38,6 +39,18 @@ function post(
 }
 
 describe("shared Employee Master", () => {
+  it("offers active maintenance staff from every production unit", () => {
+    const rows = sharedEmployeeMasterRows([
+      post({ id: "1", status: "Occupied", department: "Ppac Cnc-01 Maintenance", designation: "Assistant", employeeCode: "M-1", employeeName: "Cnc Engineer" }),
+      post({ id: "2", status: "Occupied", department: "Ppac Conventional-01 Maintenance", designation: "Manager", employeeCode: "M-2", employeeName: "Conventional Engineer" }),
+      post({ id: "3", status: "Occupied", department: "Production", designation: "Operator", employeeCode: "P-1", employeeName: "Operator" }),
+      post({ id: "4", status: "Resigned", department: "Maintenance", designation: "Assistant", employeeCode: "M-3", employeeName: "Former Engineer" }),
+    ])
+    expect(maintenanceEmployeeOptions(rows)).toEqual([
+      { code: "M-1", name: "Cnc Engineer" },
+      { code: "M-2", name: "Conventional Engineer" },
+    ])
+  })
   it("includes active CNC Programmer staff and supervisors only in CNC Machinist tasks", () => {
     const department = "Ppac Cnc-01 Programmer"
     const rows = sharedEmployeeMasterRows([

@@ -258,6 +258,7 @@ function maintenanceTaskPlan(payload: Payload) {
     operation: "planned-task",
     input: {
       ...common,
+      startedAt: optionalText(payload.startedAt),
       dueOn: text(payload.dueDate || payload.completedDate),
       status: text(payload.status) === "In Progress" ? "In Progress" : "Completed",
       nextDueOn: optionalText(payload.nextDueDate),

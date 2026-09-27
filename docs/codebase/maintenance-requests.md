@@ -34,6 +34,8 @@ Departments. Trade reads exclude Pending Approval, Returned, Rejected, and Close
 Maintenance navigation contains Manager Approval, All Requests, Electrical, Plumbing, and Mechanical. Electrical and Plumbing are server-rendered request work lists. Mechanical retains the existing company-wide scheduled workspace and merges approved Mechanical requests through the unified work-list projection.
 Mechanical reads only maintenance and machine context from the dashboard read model across all floors. `maintenance.workspace.read` opens it without granting production dashboard data for those floors.
 Scheduled rows open the full maintenance checklist in `MaintenancePanel`. The company-wide projection is deduplicated by checklist code and sequence. Draft and completed answers use the existing `maintenance.tasks` and `maintenance.task_results` tables; only completion updates `machine_schedules.last_completed_on` and `next_due_on`.
+Planned tasks persist `startedAt`, optional draft `endedAt`, selected engineer code/name, calculated `actualMinutes`, and `changedItems[]` in the task source payload. The repository writes `maintenance.tasks.started_at` from the form and leaves `completed_at` empty for drafts. Empty checklist points are omitted from task-result writes. Machine Maintenance History filters each changed part separately.
+Resaving a draft clears its old answer rows through `maintenance.clear_draft_task_results` (migration `0175`), which accepts only a matching organization and In Progress task. The web role has function execute access and no table-wide DELETE privilege.
 
 ## Invariants
 

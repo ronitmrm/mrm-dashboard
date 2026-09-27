@@ -172,6 +172,13 @@ export function productionQualityOptions(
   )
 }
 
+export function maintenanceEmployeeOptions(rows: readonly EmployeeOptionSource[]) {
+  return employeeOptions(rows, (row) =>
+    /maintenance/i.test(String(row.department)) ||
+    /maintenance/i.test(String(row.designation))
+  )
+}
+
 export function productionShopFloorOptions(
   rows: readonly EmployeeOptionSource[],
   productionFloorCode: ProductionFloorCode

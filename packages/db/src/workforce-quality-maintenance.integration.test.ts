@@ -886,25 +886,37 @@ describe("workforce, quality, and maintenance workflows", () => {
     expect((await maintenance.listMachineMaintenancePlan(organizationId, "2026-07"))
       .filter((row) => row.machineNumber === machineNumber)).toHaveLength(1)
     const draft = await maintenance.completeTask({
+      startedAt: "2026-07-21T09:30:00.000Z",
       completedAt: "2026-07-21T10:00:00.000Z",
       completedBy: "TECH-1",
       dueOn: "2026-07-21",
       machineNumber,
       organizationId,
       payload: { status: "In Progress" },
-      results: [{ itemKey: "oil", value: true }],
+      results: [
+        { itemKey: "oil", value: true },
+        { itemKey: "not-yet-answered", value: "" },
+      ],
       scheduleKey: `${machineNumber}|MAINT-${suffix}`,
       status: "In Progress",
       taskKey: `TASK-${suffix}`,
       taskType: "Planned",
     })
     const draftState = await pool.query(`
-      SELECT task.status, task.completed_at, schedule.next_due_on::text
+      SELECT task.status,
+        task.started_at = '2026-07-21T09:30:00.000Z'::timestamptz AS started_at_matches,
+        task.completed_at,
+        schedule.next_due_on::text
       FROM maintenance.tasks task
       JOIN maintenance.machine_schedules schedule ON schedule.id = task.machine_schedule_id
       WHERE task.id = $1
     `, [draft.id])
-    expect(draftState.rows[0]).toEqual({ status: "In Progress", completed_at: null, next_due_on: "2026-07-21" })
+    expect(draftState.rows[0]).toEqual({
+      status: "In Progress",
+      started_at_matches: true,
+      completed_at: null,
+      next_due_on: "2026-07-21",
+    })
     await expect(maintenance.completeTask({
       completedAt: "2026-07-21T12:00:00.000Z",
       dueOn: "2026-07-21",
