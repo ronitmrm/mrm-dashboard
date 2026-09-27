@@ -1,6 +1,8 @@
 import type { RecruitmentPostRow } from "@workspace/db"
 
-export function employeeHandoverRows(posts: RecruitmentPostRow[]) {
+export function employeeHandoverRows(
+  posts: RecruitmentPostRow[]
+): (RecruitmentPostRow & { sourcePostId?: string })[] {
   return posts.flatMap((post) => [
     post,
     ...(post.replacementAppointments ?? []).flatMap((replacement) =>
@@ -8,6 +10,7 @@ export function employeeHandoverRows(posts: RecruitmentPostRow[]) {
         ? [{
             ...post,
             id: `pending:${replacement.id}`,
+            sourcePostId: post.id,
             employeeName: replacement.employeeName,
             employeeCode: replacement.employeeCode,
             joiningDate: replacement.joiningDate ?? null,
