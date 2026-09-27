@@ -1,12 +1,32 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  maintenanceChecklistStepsForSchedule,
   maintenanceChecklistRowsForSchedule,
   maintenanceDowntimeReasonRows,
   maintenanceMasterRowsForMachineAssignment,
 } from "./maintenance-schedule-options"
 
 describe("maintenance schedule checklist options", () => {
+  it("opens one editable step per checklist point and restores saved progress", () => {
+    const rows = Array.from({ length: 14 }, (_, index) => ({
+      checklistCode: "MC001",
+      sequence: index + 1,
+      stepDescription: `Point ${index + 1}`,
+      inputType: "checkbox",
+      required: "Yes",
+      status: "Active",
+    }))
+    const steps = maintenanceChecklistStepsForSchedule(
+      [...rows, ...rows, ...rows, ...rows],
+      "MC001",
+      [{ sequence: 1, value: "Yes", remark: "Checked" }]
+    )
+    expect(steps).toHaveLength(14)
+    expect(steps[0]).toMatchObject({ value: "Yes", remark: "Checked" })
+    expect(steps[1]).toMatchObject({ value: "", remark: "" })
+  })
+
   it("includes a saved checklist projected only through production control", () => {
     const checklist = {
       checklistCode: "MCL-100",

@@ -258,7 +258,8 @@ function maintenanceTaskPlan(payload: Payload) {
     operation: "planned-task",
     input: {
       ...common,
-      dueOn: text(payload.completedDate || payload.dueDate),
+      dueOn: text(payload.dueDate || payload.completedDate),
+      status: text(payload.status) === "In Progress" ? "In Progress" : "Completed",
       nextDueOn: optionalText(payload.nextDueDate),
       results: records(payload.checklistSteps).map((step) => ({
         itemKey:
@@ -266,12 +267,14 @@ function maintenanceTaskPlan(payload: Payload) {
           `${text(step.checklistCode || payload.checklistCode)}|${text(step.sequence)}`,
         itemPrompt: optionalText(step.stepDescription || step.prompt),
         notes: optionalText(step.remark),
-        passed: ["ok", "pass", "passed", "completed"].includes(
-          text(step.result).toLowerCase()
-        ),
+        passed: text(step.result)
+          ? ["ok", "pass", "passed", "completed"].includes(text(step.result).toLowerCase())
+          : null,
         sequence: numberOrUndefined(step.sequence),
         value:
-          step.value === null ||
+          text(step.inputType).toLowerCase() === "number" && text(step.value).trim()
+            ? Number(step.value)
+            : step.value === null ||
           typeof step.value === "boolean" ||
           typeof step.value === "number"
             ? step.value

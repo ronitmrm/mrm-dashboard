@@ -14,7 +14,6 @@ import {
   type ProductionFloorCode,
 } from "./production-floors"
 
-
 type ChecklistItemInput = {
   active?: boolean
   inputType: string
@@ -47,6 +46,7 @@ type CompleteTaskInput = {
   scheduleKey: string
   taskKey: string
   taskType: string
+  status?: "In Progress" | "Completed"
 }
 
 export type MachineBreakdownRow = {
@@ -121,7 +121,6 @@ async function generatedMaintenanceChecklistCode(
   )
   return `MC${String(result.rows[0]?.nextNumber ?? 1).padStart(3, "0")}`
 }
-
 
 async function machineIdFor(
   client: PoolClient,
@@ -286,6 +285,7 @@ async function completeMaintenanceTask(
   client: PoolClient,
   input: CompleteTaskInput
 ) {
+  const isComplete = (input.status ?? "Completed") === "Completed"
   const taskKey = requiredText(input.taskKey, "Maintenance task key")
   await client.query(
     "SELECT pg_advisory_xact_lock(hashtext('maintenance.task'), hashtext(lower($1)))",
@@ -329,9 +329,9 @@ async function completeMaintenanceTask(
   if (schedule.rows[0].machine_id !== machineId) {
     throw new Error("Maintenance schedule does not belong to this machine.")
   }
-  const existing = await client.query<{ id: string }>(
+  const existing = await client.query<{ id: string; status: string }>(
     `
-      SELECT id FROM maintenance.tasks
+      SELECT id, status FROM maintenance.tasks
       WHERE organization_id = $1
         AND lower(task_key) = lower($2)
         AND machine_schedule_id = $3
@@ -339,15 +339,20 @@ async function completeMaintenanceTask(
     `,
     [input.organizationId, taskKey, schedule.rows[0].id]
   )
+  if (!isComplete && existing.rows[0]?.status === "Completed") {
+    throw new Error("Completed maintenance cannot be saved as a draft.")
+  }
   const result = existing.rows[0]
     ? await client.query<{ id: string }>(
         `
           UPDATE maintenance.tasks
           SET machine_schedule_id = $1,
             due_on = COALESCE(migration.try_date($2), due_on),
-            status = 'Completed',
-            completed_at = COALESCE(migration.try_timestamptz($3), now()),
-            completed_by_user_id = $4, legacy_completer = $5,
+            status = $9,
+            started_at = COALESCE(started_at, now()),
+            completed_at = CASE WHEN $10::boolean THEN COALESCE(migration.try_timestamptz($3), now()) ELSE NULL END,
+            completed_by_user_id = CASE WHEN $10::boolean THEN $4::uuid ELSE NULL END,
+            legacy_completer = CASE WHEN $10::boolean THEN $5 ELSE NULL END,
             task_type = $6, source_payload = $7,
             updated_by_user_id = $4, updated_at = now(),
             row_version = row_version + 1
@@ -362,19 +367,23 @@ async function completeMaintenanceTask(
           requiredText(input.taskType, "Maintenance task type"),
           input.payload,
           existing.rows[0].id,
+          isComplete ? "Completed" : "In Progress",
+          isComplete,
         ]
       )
     : await client.query<{ id: string }>(
         `
           INSERT INTO maintenance.tasks (
             organization_id, machine_schedule_id, due_on, status,
-            completed_at, completed_by_user_id, legacy_completer,
+            started_at, completed_at, completed_by_user_id, legacy_completer,
             created_by_user_id, updated_by_user_id, task_key, task_type,
             source_system, source_table, source_id, source_payload
           )
           VALUES ($1, $2, COALESCE(migration.try_date($3), current_date),
-            'Completed', COALESCE(migration.try_timestamptz($4), now()),
-            $5, $6, $5, $5, $7, $8, 'mrm-dashboard',
+            $11, CASE WHEN $12::boolean THEN NULL ELSE now() END,
+            CASE WHEN $12::boolean THEN COALESCE(migration.try_timestamptz($4), now()) ELSE NULL END,
+            CASE WHEN $12::boolean THEN $5::uuid ELSE NULL END,
+            CASE WHEN $12::boolean THEN $6 ELSE NULL END, $5, $5, $7, $8, 'mrm-dashboard',
             'maintenance_task', $9, $10)
           RETURNING id
         `,
@@ -389,12 +398,15 @@ async function completeMaintenanceTask(
           requiredText(input.taskType, "Maintenance task type"),
           randomUUID(),
           input.payload,
+          isComplete ? "Completed" : "In Progress",
+          isComplete,
         ]
       )
   await client.query(
     "DELETE FROM maintenance.task_results WHERE task_id = $1",
     [result.rows[0]!.id]
   )
+  const answeredItemIds = new Set<string>()
   for (const itemResult of input.results) {
     const item = await client.query<{ id: string }>(
       `
@@ -428,6 +440,10 @@ async function completeMaintenanceTask(
         `Maintenance checklist item ${itemResult.itemKey} was not found.`
       )
     }
+    const answered =
+      itemResult.value !== null && String(itemResult.value).trim() !== ""
+    if (answered) answeredItemIds.add(item.rows[0].id)
+    if (!answered && !itemResult.notes?.trim()) continue
     const columns = resultColumns(itemResult.value)
     await client.query(
       `
@@ -455,22 +471,34 @@ async function completeMaintenanceTask(
       ]
     )
   }
-  await client.query(
-    `
-      UPDATE maintenance.machine_schedules
-      SET last_completed_on = COALESCE(migration.try_date($1), current_date),
-        next_due_on = COALESCE(migration.try_date($2), next_due_on),
-        updated_by_user_id = $3, updated_at = now(),
-        row_version = row_version + 1
-      WHERE id = $4
-    `,
-    [
-      input.completedAt,
-      input.nextDueOn ?? null,
-      input.actorUserId ?? null,
-      schedule.rows[0].id,
-    ]
-  )
+  if (isComplete) {
+    await client.query(
+      `
+        UPDATE maintenance.machine_schedules
+        SET last_completed_on = COALESCE(migration.try_date($1), current_date),
+          next_due_on = COALESCE(migration.try_date($2), next_due_on),
+          updated_by_user_id = $3, updated_at = now(),
+          row_version = row_version + 1
+        WHERE id = $4
+      `,
+      [
+        input.completedAt,
+        input.nextDueOn ?? null,
+        input.actorUserId ?? null,
+        schedule.rows[0].id,
+      ]
+    )
+  }
+  if (isComplete) {
+    const requiredItems = await client.query<{ id: string }>(
+      `SELECT id FROM maintenance.checklist_items
+       WHERE definition_id = $1 AND active AND required`,
+      [schedule.rows[0].checklist_definition_id]
+    )
+    if (requiredItems.rows.some((item) => !answeredItemIds.has(item.id))) {
+      throw new Error("Complete every required maintenance checklist point.")
+    }
+  }
   return result.rows[0]!
 }
 
@@ -491,7 +519,8 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
         completedAt: string
         completedBy: string | null
         workDone: string | null
-      }>(`
+      }>(
+        `
         SELECT task.id, machine.machine_number AS "machineNumber",
           floor.name AS "productionUnit", definition.name AS maintenance,
           task.task_type AS "taskType", task.due_on::text AS "dueOn",
@@ -510,7 +539,9 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
         WHERE task.organization_id = $1 AND task.status = 'Completed'
           AND task.completed_at IS NOT NULL
         ORDER BY task.completed_at DESC, machine.machine_number, task.id
-      `, [organizationId])
+      `,
+        [organizationId]
+      )
       return result.rows
     },
 
@@ -567,7 +598,8 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
     },
 
     async listMachineMaintenancePlan(organizationId: string, month: string) {
-      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new Error("Select a valid month.")
+      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month))
+        throw new Error("Select a valid month.")
       const result = await pool.query<{
         id: string
         machineId: string
@@ -577,7 +609,8 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
         dueOn: string
         status: string
         completedAt: string | null
-      }>(`
+      }>(
+        `
         WITH planned AS (
           SELECT task.id::text, task.machine_schedule_id AS schedule_id,
             task.due_on, task.status, task.completed_at
@@ -614,7 +647,9 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
         JOIN catalog.machines machine ON machine.id = schedule.machine_id AND machine.organization_id = $1
         JOIN manufacturing.production_floors floor ON floor.id = machine.production_floor_id
         ORDER BY planned.due_on, machine.machine_number, planned.id
-      `, [organizationId, `${month}-01`])
+      `,
+        [organizationId, `${month}-01`]
+      )
       return result.rows
     },
 
@@ -728,7 +763,10 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
           [code, input.item.sequence]
         )
         const payload = { ...input.payload, checklistCode: code }
-        const normalizedItem = { ...input.item, itemKey: `${code}|${input.item.sequence}` }
+        const normalizedItem = {
+          ...input.item,
+          itemKey: `${code}|${input.item.sequence}`,
+        }
         await client.query(
           `
             INSERT INTO maintenance.definitions (
@@ -845,9 +883,11 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
     },
 
     async completeTask(input: CompleteTaskInput) {
-      return transaction(pool, (client) =>
-        completeMaintenanceTask(client, input)
-      )
+      return transaction(pool, async (client) => {
+        const task = await completeMaintenanceTask(client, input)
+        await queueDashboardRefresh(client, input.organizationId)
+        return task
+      })
     },
 
     async startBreakdown(input: {
@@ -1123,7 +1163,9 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
         const linkedDowntime = downtime.rows[0]
         if (linkedDowntime && !linkedDowntime.ended_at) {
           if (completedAt <= linkedDowntime.started_at) {
-            throw new Error("Breakdown completion must be after downtime start.")
+            throw new Error(
+              "Breakdown completion must be after downtime start."
+            )
           }
           const durationMinutes = Math.max(
             Math.ceil(

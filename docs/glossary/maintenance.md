@@ -37,6 +37,12 @@ The unified Mechanical table containing existing scheduled machine-maintenance r
 
 _Avoid_: separate Scheduled and Request tables, converting scheduled rows into requests.
 
+## Planned Maintenance Checklist
+
+The checklist assigned to one machine maintenance schedule is completed for each due occurrence. An engineer may save an In Progress task with partial step responses and reopen it later. Completing the task requires every active required checklist point and advances the schedule's next due date. A draft does not advance the schedule or appear as completed maintenance history.
+
+_Avoid_: browser prompts for checklist points, treating a partial draft as completed work, repeating the same checklist point across production units.
+
 ## Machine Breakdown
 
 One machine-linked maintenance task that starts In Progress and completes only
