@@ -220,8 +220,8 @@ export function SingleEmployeeAssignmentFields({
       ) : null}
       {pendingReplacement ? (
         <FieldDescription>
-          Select Confirm Replacement Joined and enter {pendingReplacement.employeeName}'s own Employee ID.
-          Both employees remain listed until the outgoing employee's last working date.
+          Select Confirm Replacement Joined and enter {pendingReplacement.employeeName}&apos;s own Employee ID.
+          Both employees remain listed until the outgoing employee&apos;s last working date.
         </FieldDescription>
       ) : null}
       {selected?.post.replacementAppointments?.length ? (
@@ -365,7 +365,7 @@ export function SingleEmployeeAssignmentFields({
       </Field>
       {event === "Resigned" ? (
         <Field className="w-full min-w-0">
-          <FieldLabel htmlFor="last-working-date">Last Working Date</FieldLabel>
+          <FieldLabel htmlFor="last-working-date">Planned Last Working Date</FieldLabel>
           <Input
             defaultValue={selected?.post.lastWorkingDate ?? ""}
             key={postId}
@@ -378,6 +378,60 @@ export function SingleEmployeeAssignmentFields({
             The Approved Post Becomes Vacant After This Date.
           </FieldDescription>
         </Field>
+      ) : null}
+      {event === "Joined" || event === "Replacement Joined" ? (
+        <>
+          <Field className="w-full min-w-0">
+            <FieldLabel htmlFor="actual-joining-date">Actual Joining Date</FieldLabel>
+            <Input
+              defaultValue={selected?.post.joiningDate ?? ""}
+              id="actual-joining-date"
+              key={postId}
+              name="joining_date"
+              required
+              type="date"
+            />
+          </Field>
+          <Field className="w-full min-w-0">
+            <FieldLabel htmlFor="probation-due-on">Probation Ends On</FieldLabel>
+            <Input id="probation-due-on" name="probation_due_on" type="date" />
+            <FieldDescription>
+              Leave blank to use the accepted Offer Letter probation period.
+              Enter a date for employees without an Offer Letter.
+            </FieldDescription>
+          </Field>
+        </>
+      ) : null}
+      {event === "Removed" &&
+      (selected?.post.status === "Occupied" || selected?.post.status === "Resigned") ? (
+        <>
+          <Field className="w-full min-w-0">
+            <FieldLabel htmlFor="actual-last-working-date">Actual Last Working Date</FieldLabel>
+            <Input
+              id="actual-last-working-date"
+              name="last_working_date"
+              required
+              type="date"
+            />
+          </Field>
+          <Field className="w-full min-w-0">
+            <FieldLabel htmlFor="exit-type">How Did They Leave?</FieldLabel>
+            <NativeSelect
+              defaultValue={selected.post.status === "Resigned" ? "Resigned" : ""}
+              id="exit-type"
+              name="exit_type"
+              required
+            >
+              <NativeSelectOption value="">Select Exit Type</NativeSelectOption>
+              <NativeSelectOption value="Resigned">Resigned Through Process</NativeSelectOption>
+              <NativeSelectOption value="Left Without Process">Left Without Process</NativeSelectOption>
+            </NativeSelect>
+          </Field>
+          <Field className="w-full min-w-0">
+            <FieldLabel htmlFor="exit-note">Exit Note</FieldLabel>
+            <Input id="exit-note" name="exit_note" />
+          </Field>
+        </>
       ) : null}
     </>
   )

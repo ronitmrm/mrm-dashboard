@@ -4,8 +4,10 @@ import {
   type RecruitmentCandidateEventRow,
   type RecruitmentCandidateRow,
   type RecruitmentCombinedRoleRow,
+  type RecruitmentEmployeeAssignmentRow,
   type RecruitmentInterviewRow,
   type RecruitmentPendingOfferRow,
+  type RecruitmentOfferOutcomeRow,
   type RecruitmentInterviewRecordRow,
   type RecruitmentJobRow,
   type RecruitmentMasterSnapshot,
@@ -83,8 +85,10 @@ export default async function HrRecruitmentPage({
   let candidateEvents: RecruitmentCandidateEventRow[] = []
   let combinedRoles: RecruitmentCombinedRoleRow[] = []
   let employmentLetters: RecruitmentEmploymentLetterRow[] = []
+  let employeeAssignments: RecruitmentEmployeeAssignmentRow[] = []
   let interviews: RecruitmentInterviewRow[] = []
   let pendingOffers: RecruitmentPendingOfferRow[] = []
+  let offerOutcomes: RecruitmentOfferOutcomeRow[] = []
   let interviewRecords: RecruitmentInterviewRecordRow[] = []
   let jobs: RecruitmentJobRow[] = []
   let posts: RecruitmentPostRow[] = []
@@ -147,6 +151,8 @@ export default async function HrRecruitmentPage({
       loadedPendingOffers,
       loadedCandidateEvents,
       loadedEmploymentLetters,
+      loadedEmployeeAssignments,
+      loadedOfferOutcomes,
     ] = await Promise.all([
       repository.count(organizationId),
       needsMasters
@@ -180,6 +186,12 @@ export default async function HrRecruitmentPage({
       panelId === "employeeMasterPanel"
         ? letterRepository.list(organizationId)
         : Promise.resolve(employmentLetters),
+      panelId === "employeeMasterPanel"
+        ? repository.listEmployeeAssignments(organizationId)
+        : Promise.resolve(employeeAssignments),
+      panelId === "interviewWorkspacePanel"
+        ? repository.listOfferOutcomes(organizationId)
+        : Promise.resolve(offerOutcomes),
     ])
     stats = loadedStats
     masters = loadedMasters
@@ -193,6 +205,8 @@ export default async function HrRecruitmentPage({
     pendingOffers = loadedPendingOffers
     candidateEvents = loadedCandidateEvents
     employmentLetters = loadedEmploymentLetters
+    employeeAssignments = loadedEmployeeAssignments
+    offerOutcomes = loadedOfferOutcomes
   } finally {
     await Promise.all([repository.close(), letterRepository.close()])
   }
@@ -295,9 +309,12 @@ export default async function HrRecruitmentPage({
         candidateEvents={candidateEvents}
         combinedRoles={combinedRoles}
         employmentLetters={employmentLetters}
+        employeeAssignments={employeeAssignments}
         interviews={interviews}
         interviewRecords={interviewRecords}
         pendingOffers={pendingOffers}
+        offerOutcomes={offerOutcomes}
+        canViewOfferLetters={rawGrants.includes(masterCapability("employee_assignments", "read"))}
         jobs={jobs}
         masters={masters}
         masterKind={normalizeRecruitmentMasterKind(feedback.kind)}

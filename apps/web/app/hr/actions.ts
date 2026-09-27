@@ -308,9 +308,18 @@ export async function assignEmployeeAction(formData: FormData) {
         employeeCode: value(formData, "employee_code"),
         employeeEvent: value(formData, "employee_event"),
         employeeName: value(formData, "employee_name"),
+        exitNote: value(formData, "exit_note"),
+        exitType:
+          value(formData, "exit_type") === "Resigned"
+            ? "Resigned"
+            : value(formData, "exit_type") === "Left Without Process"
+              ? "Left Without Process"
+              : null,
         identityCorrection: value(formData, "identity_correction") === "true",
+        joiningDate: value(formData, "joining_date"),
         lastWorkingDate: value(formData, "last_working_date"),
         postId: value(formData, "post_id"),
+        probationDueOn: value(formData, "probation_due_on"),
       })
   )
 }
@@ -786,6 +795,33 @@ export async function reviseCandidateAppointmentAction(formData: FormData) {
       revalidatePath("/hr/candidates", "layout")
     },
     "Appointment corrected and updated Offer Letter PDF generated. Previous offers remain in candidate history."
+  )
+}
+
+export async function updateEmployeeFollowupAction(formData: FormData) {
+  await mutate(
+    formData,
+    masterCapability("employee_assignments", "save"),
+    (repository, context) => {
+      const status = (key: string) => {
+        const selected = value(formData, key)
+        if (
+          selected === "Pending" || selected === "Completed" ||
+          selected === "Not Applicable" || selected === "Unknown"
+        ) return selected
+        throw new Error("Select a valid follow-up status.")
+      }
+      return repository.updateEmployeeFollowup({
+        ...context,
+        assignmentId: value(formData, "assignment_id"),
+        probationDueOn: value(formData, "probation_due_on") || null,
+        pfStatus: status("pf_status"),
+        pfCompletedOn: value(formData, "pf_completed_on") || null,
+        uniformStatus: status("uniform_status"),
+        uniformCompletedOn: value(formData, "uniform_completed_on") || null,
+      })
+    },
+    "HR follow-up updated."
   )
 }
 

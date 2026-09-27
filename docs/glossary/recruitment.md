@@ -150,6 +150,33 @@ _Avoid_: Regenerating a historical letter from current master data, storing a
 letter only on an Approved Post, appointment letter before probation completion,
 experience letter before departure.
 
+## Employee Assignment and HR Follow-up
+
+A joined employee's assignment to an Approved Post remains a separate historical
+record after the post is vacated or another employee joins. It retains the
+employee identity, post code, actual joining date, planned last working date,
+actual last working date, exit type and note. An employee may resign through the
+normal process or leave without completing it; both departures use the actual
+last working date. A planned resignation date is kept separately until the
+employee leaves. Pending appointments remain in the existing candidate and post
+records until joining is confirmed. Older current assignments start as a baseline;
+prior occupants without a retained letter or replacement snapshot cannot be
+reconstructed reliably.
+
+For each joined assignment, HR tracks probation completion, Appointment Letter
+issuance, PF enrolment and uniform issue. An issued Appointment Letter completes
+that item through its retained PDF. PF and uniform outcomes have completion dates
+or a Not Applicable status. Historical records with unknown outcomes remain
+Unknown rather than being shown as unfinished work. PF eligibility is checked
+from joining, independently of probation completion. If no probation date was
+recorded, HR enters it before relying on the due list.
+
+The Offer and Joining Register follows each candidate application through final
+HR approval, response, Offer Letter issuance, joining or Did Not Join. A declined
+response is shown even when no formal Offer Letter was generated. Joining is
+derived from the retained employee assignment so vacating the post never changes
+the historical Joined outcome.
+
 ## Interview Assessment Correction
 
 The latest completed Recruitment Interview Round may correct its schedule,

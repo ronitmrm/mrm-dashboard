@@ -9,8 +9,10 @@ import {
   type RecruitmentCandidateRow,
   type RecruitmentCombinedRoleRow,
   type RecruitmentEmploymentLetterRow,
+  type RecruitmentEmployeeAssignmentRow,
   type RecruitmentInterviewRow,
   type RecruitmentPendingOfferRow,
+  type RecruitmentOfferOutcomeRow,
   type RecruitmentInterviewRecordRow,
   type RecruitmentJobRow,
   type RecruitmentMasterSnapshot,
@@ -71,11 +73,13 @@ import { CompanyWideMasterScope } from "@/components/company-wide-master-scope"
 import { DataDownloadButton } from "@/components/data-download-button"
 import { ConversationLogsTable } from "@/components/hr/conversation-logs-table"
 import { EmployeeAssignmentUpload } from "@/components/hr/employee-assignment-upload"
+import { EmployeeLifecycleRegisters } from "@/components/hr/employee-lifecycle-registers"
 import {
   InterviewResultsWorkspace,
   InterviewScheduleBoard,
 } from "@/components/hr/interview-workspace"
 import { InterviewScheduleForm } from "@/components/hr/interview-schedule-form"
+import { OfferJoiningRegister } from "@/components/hr/offer-joining-register"
 import { JobTemplatesTable } from "@/components/hr/job-templates-table"
 import { MasterDataViewTabs } from "@/components/master-data-view-tabs"
 import {
@@ -97,14 +101,17 @@ type RecruitmentPanelProps = {
   canCreateJob: boolean
   canLogCandidateEvent: boolean
   canManageEmployees: boolean
+  canViewOfferLetters: boolean
   canWrite: boolean
   candidateEvents: RecruitmentCandidateEventRow[]
   candidates: RecruitmentCandidateRow[]
   combinedRoles: RecruitmentCombinedRoleRow[]
   employmentLetters: RecruitmentEmploymentLetterRow[]
+  employeeAssignments: RecruitmentEmployeeAssignmentRow[]
   interviews: RecruitmentInterviewRow[]
   interviewRecords: RecruitmentInterviewRecordRow[]
   pendingOffers: RecruitmentPendingOfferRow[]
+  offerOutcomes: RecruitmentOfferOutcomeRow[]
   jobs: RecruitmentJobRow[]
   masters: RecruitmentMasterSnapshot
   masterView?: "dataEntry" | "masterTables"
@@ -638,6 +645,7 @@ function EmployeePanel({
   masterControls,
   combinedRoles,
   employmentLetters,
+  employeeAssignments,
   jobs,
   masterView,
   posts,
@@ -649,6 +657,7 @@ function EmployeePanel({
   | "masterControls"
   | "combinedRoles"
   | "employmentLetters"
+  | "employeeAssignments"
   | "jobs"
   | "masterView"
   | "posts"
@@ -712,6 +721,12 @@ function EmployeePanel({
           masterView={masterView}
           posts={posts}
           templates={templates}
+        />
+      ) : null}
+      {showMasterTables ? (
+        <EmployeeLifecycleRegisters
+          assignments={employeeAssignments}
+          canManageEmployees={canManageEmployees}
         />
       ) : null}
     </>
@@ -1075,6 +1090,7 @@ export function RecruitmentPanel(props: RecruitmentPanelProps) {
           masterControls={props.masterControls}
           combinedRoles={props.combinedRoles}
           employmentLetters={props.employmentLetters}
+          employeeAssignments={props.employeeAssignments}
           jobs={props.jobs}
           masterView={props.masterView}
           posts={props.posts}
@@ -1123,10 +1139,13 @@ export function RecruitmentPanel(props: RecruitmentPanelProps) {
       )
     case "interviewWorkspacePanel":
       return (
-        <InterviewResultsWorkspace
-          records={props.interviewRecords}
-          pendingOffers={props.pendingOffers}
-        />
+        <>
+          <InterviewResultsWorkspace
+            records={props.interviewRecords}
+            pendingOffers={props.pendingOffers}
+          />
+          <OfferJoiningRegister rows={props.offerOutcomes} canViewOfferLetters={props.canViewOfferLetters} />
+        </>
       )
     case "conversationLogsPanel":
       return (
