@@ -183,11 +183,14 @@ export type RecruitmentOfferOutcomeRow = {
 export type RecruitmentEmployeeAssignmentRow = {
   id: string
   postCode: string
+  department: string | null
+  designation: string | null
   employeeName: string
   employeeCode: string | null
   joinedOn: string | null
   probationDueOn: string | null
   legacyProbationCompleted: boolean
+  legacyProbationRecordedOn: string | null
   plannedEndOn: string | null
   endedOn: string | null
   exitType: string | null
@@ -3092,24 +3095,42 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       const result = await pool.query<{
         id: string
         post_code: string
+        department: string | null
+        designation: string | null
         employee_name: string
         employee_code: string | null
         joined_on: string | null
         probation_due_on: string | null
         legacy_probation_completed: boolean
+        legacy_probation_recorded_on: string | null
         planned_end_on: string | null
         ended_on: string | null
         exit_type: string | null
         exit_note: string | null
         appointment_letter_issued_on: string | null
       }>(
-        `SELECT assignment.id, assignment.post_code, assignment.employee_name,
+        `SELECT assignment.id, assignment.post_code,
+           department.name AS department, designation.name AS designation,
+           assignment.employee_name,
            assignment.employee_code, assignment.joined_on::text,
            assignment.probation_due_on::text, assignment.legacy_probation_completed,
+           legacy_event.recorded_on AS legacy_probation_recorded_on,
            assignment.planned_end_on::text,
            assignment.ended_on::text, assignment.exit_type, assignment.exit_note,
            letter.issued_on::text AS appointment_letter_issued_on
          FROM recruitment.employee_post_assignments assignment
+         LEFT JOIN recruitment.posts post ON post.id = assignment.post_id
+         LEFT JOIN recruitment.departments department ON department.id = post.department_id
+         LEFT JOIN recruitment.designations designation ON designation.id = post.designation_id
+         LEFT JOIN LATERAL (
+           SELECT event.occurred_at::date::text AS recorded_on
+           FROM audit.events event
+           WHERE event.target_schema = 'recruitment'
+             AND event.target_table = 'employee_post_assignments'
+             AND event.target_id = assignment.id
+             AND event.event_type = 'recruitment.employee.legacy_probation_imported'
+           ORDER BY event.occurred_at DESC LIMIT 1
+         ) legacy_event ON assignment.legacy_probation_completed
          LEFT JOIN LATERAL (
            SELECT issued_on FROM recruitment.employment_letters letter
            WHERE letter.organization_id = assignment.organization_id
@@ -3125,11 +3146,14 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       return result.rows.map((row) => ({
         id: row.id,
         postCode: row.post_code,
+        department: row.department,
+        designation: row.designation,
         employeeName: row.employee_name,
         employeeCode: row.employee_code,
         joinedOn: row.joined_on,
         probationDueOn: row.probation_due_on,
         legacyProbationCompleted: row.legacy_probation_completed,
+        legacyProbationRecordedOn: row.legacy_probation_recorded_on,
         plannedEndOn: row.planned_end_on,
         endedOn: row.ended_on,
         exitType: row.exit_type,

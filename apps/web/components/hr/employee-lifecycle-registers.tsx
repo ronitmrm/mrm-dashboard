@@ -14,8 +14,8 @@ import {
 } from "@workspace/ui/components/table"
 
 import { updateEmployeeProbationAction } from "@/app/hr/actions"
-import { probationReminderStatus } from "@/lib/hr/probation-reminder"
-import { StandardDialogContent, StandardState } from "@/components/ui/golden-patterns"
+import { probationReminderStatus, splitProbationAssignments } from "@/lib/hr/probation-reminder"
+import { MetricSummary, StandardDialogContent, StandardState } from "@/components/ui/golden-patterns"
 
 function ProbationDateEditor({ assignment }: { assignment: RecruitmentEmployeeAssignmentRow }) {
   return (
@@ -61,51 +61,98 @@ export function ProbationEndReminders({
   const approaching = new Date(`${today}T00:00:00Z`)
   approaching.setUTCDate(approaching.getUTCDate() + 30)
   const approachingOn = approaching.toISOString().slice(0, 10)
-  const active = assignments.filter(
-    (assignment) => !assignment.endedOn || assignment.endedOn >= today
-  ).sort((left, right) => {
-    const priority = (assignment: RecruitmentEmployeeAssignmentRow) =>
-      assignment.appointmentLetterIssuedOn || assignment.legacyProbationCompleted
-        ? "9999-12-31"
-        : assignment.probationDueOn ?? "0000-01-01"
-    return priority(left).localeCompare(priority(right))
-  })
+  const { open, completed } = splitProbationAssignments(assignments, today, approachingOn)
+  open.sort((left, right) =>
+    (left.probationDueOn ?? "0000-01-01").localeCompare(right.probationDueOn ?? "0000-01-01")
+  )
+  completed.sort((left, right) =>
+    (right.appointmentLetterIssuedOn ?? right.legacyProbationRecordedOn ?? "")
+      .localeCompare(left.appointmentLetterIssuedOn ?? left.legacyProbationRecordedOn ?? "")
+  )
+  const due = open.filter((assignment) => assignment.probationDueOn && assignment.probationDueOn <= today).length
+  const approachingCount = open.filter((assignment) =>
+    assignment.probationDueOn && assignment.probationDueOn > today && assignment.probationDueOn <= approachingOn
+  ).length
+  const dateNeeded = open.filter((assignment) => !assignment.probationDueOn).length
   return (
+    <>
+      <MetricSummary
+        scope="Probation assignment tasks and completion log · before table filters"
+        items={[
+          { label: "Open Tasks", value: open.length, tone: "information" },
+          { label: "Due", value: due, tone: "warning" },
+          { label: "Approaching", value: approachingCount, tone: "accent" },
+          { label: "Date Needed", value: dateNeeded, tone: "warning" },
+          { label: "Completed Log", value: completed.length, tone: "positive" },
+        ]}
+      />
       <SectionCard>
         <CardHeader>
-          <CardTitle>Probation End Reminders ({active.length})</CardTitle>
+          <CardTitle>Open Probation Tasks ({open.length})</CardTitle>
           <CardDescription>
-            Review approaching probation end dates. Completed reminders include issued Appointment Letters and recorded legacy completions.
+            Review dates that need attention. Completed probation records appear in the log below.
           </CardDescription>
         </CardHeader>
         <CardContent className="min-w-0">
           <OperationalTable filterStorageKey="hr-probation-end-reminders" containerClassName="max-h-[36rem] rounded-md border">
             <TableHeader><TableRow>
-              <TableHead>Employee Code</TableHead><TableHead>Employee Name</TableHead><TableHead>Post</TableHead>
+              <TableHead>Employee Code</TableHead><TableHead>Employee Name</TableHead>
+              <TableHead>Department</TableHead><TableHead>Designation</TableHead>
               <TableHead>Joined</TableHead><TableHead>Probation Ends</TableHead>
               <TableHead>Reminder</TableHead>
               {canManageEmployees ? <TableHead className="text-right">Action</TableHead> : null}
             </TableRow></TableHeader>
             <TableBody>
-              {active.map((assignment) => {
+              {open.map((assignment) => {
                 const reminderStatus = probationReminderStatus(assignment, today, approachingOn)
                 return <TableRow key={assignment.id}>
                   <TableCell className="font-mono">{assignment.employeeCode ?? "—"}</TableCell>
                   <TableCell className="font-medium">{assignment.employeeName}</TableCell>
-                  <TableCell className="font-mono">{assignment.postCode}</TableCell>
+                  <TableCell>{assignment.department ?? "—"}</TableCell>
+                  <TableCell>{assignment.designation ?? "—"}</TableCell>
                   <TableCell>{assignment.joinedOn ?? "Date needed"}</TableCell>
                   <TableCell>{assignment.probationDueOn ?? "Date needed"}</TableCell>
-                  <TableCell><StatusBadge value={reminderStatus} tone={reminderStatus === "Completed" ? "positive" : reminderStatus === "Scheduled" ? "information" : "warning"} /></TableCell>
+                  <TableCell><StatusBadge value={reminderStatus} tone={reminderStatus === "Scheduled" ? "information" : "warning"} /></TableCell>
                   {canManageEmployees ? <TableCell className="text-right"><ProbationDateEditor assignment={assignment} /></TableCell> : null}
                 </TableRow>
               })}
-              {!active.length ? <TableRow><TableCell colSpan={canManageEmployees ? 7 : 6}>
-                <StandardState title="No Probation Reminders" description="Joined employees appear here when their assignment is recorded." />
+              {!open.length ? <TableRow><TableCell colSpan={canManageEmployees ? 8 : 7}>
+                <StandardState title="No Open Probation Tasks" description="New assignments appear here until probation is recorded complete." />
               </TableCell></TableRow> : null}
             </TableBody>
           </OperationalTable>
         </CardContent>
       </SectionCard>
+      <SectionCard>
+        <CardHeader>
+          <CardTitle>Probation Completion Log ({completed.length})</CardTitle>
+          <CardDescription>Issued Appointment Letters and recorded completions from the former system.</CardDescription>
+        </CardHeader>
+        <CardContent className="min-w-0">
+          <OperationalTable filterStorageKey="hr-probation-completion-log" containerClassName="max-h-[36rem] rounded-md border">
+            <TableHeader><TableRow>
+              <TableHead>Employee Code</TableHead><TableHead>Employee Name</TableHead>
+              <TableHead>Department</TableHead><TableHead>Designation</TableHead>
+              <TableHead>Probation Ends</TableHead><TableHead>Recorded On</TableHead><TableHead>Completion Record</TableHead>
+            </TableRow></TableHeader>
+            <TableBody>
+              {completed.map((assignment) => <TableRow key={assignment.id}>
+                <TableCell className="font-mono">{assignment.employeeCode ?? "—"}</TableCell>
+                <TableCell className="font-medium">{assignment.employeeName}</TableCell>
+                <TableCell>{assignment.department ?? "—"}</TableCell>
+                <TableCell>{assignment.designation ?? "—"}</TableCell>
+                <TableCell>{assignment.probationDueOn ?? "—"}</TableCell>
+                <TableCell>{assignment.appointmentLetterIssuedOn ?? assignment.legacyProbationRecordedOn ?? "—"}</TableCell>
+                <TableCell><StatusBadge value={assignment.appointmentLetterIssuedOn ? "Appointment Letter" : "Legacy Completion"} tone="positive" /></TableCell>
+              </TableRow>)}
+              {!completed.length ? <TableRow><TableCell colSpan={7}>
+                <StandardState title="No Completed Probation Records" description="Completed assignments will be logged here." />
+              </TableCell></TableRow> : null}
+            </TableBody>
+          </OperationalTable>
+        </CardContent>
+      </SectionCard>
+    </>
   )
 }
 
@@ -114,40 +161,57 @@ export function EmployeeAssignmentHistory({
 }: {
   assignments: RecruitmentEmployeeAssignmentRow[]
 }) {
+  const departed = assignments.filter((assignment) => assignment.endedOn)
   return (
+    <>
+      <MetricSummary
+        scope="Employee assignment records · before table filters"
+        items={[
+          { label: "Assignments", value: assignments.length, tone: "information" },
+          { label: "Current", value: assignments.length - departed.length, tone: "positive" },
+          { label: "Planned Exits", value: assignments.filter((assignment) => assignment.plannedEndOn && !assignment.endedOn).length, tone: "warning" },
+          { label: "Departed", value: departed.length, tone: "inactive" },
+          { label: "Left Without Process", value: departed.filter((assignment) => assignment.exitType === "Left Without Process").length, tone: "warning" },
+        ]}
+      />
       <SectionCard>
         <CardHeader>
           <CardTitle>Employee Assignment History</CardTitle>
-          <CardDescription>Each joined employee remains recorded against the approved post after departure.</CardDescription>
+          <CardDescription>Joined assignments remain here after resignation or departure without process.</CardDescription>
         </CardHeader>
         <CardContent className="min-w-0">
           <OperationalTable filterStorageKey="hr-employee-assignment-history" containerClassName="max-h-[36rem] rounded-md border">
             <TableHeader><TableRow>
-              <TableHead>Employee Code</TableHead><TableHead>Employee Name</TableHead><TableHead>Post</TableHead>
+              <TableHead>Employee Code</TableHead><TableHead>Employee Name</TableHead>
+              <TableHead>Department</TableHead><TableHead>Designation</TableHead>
               <TableHead>Joined</TableHead><TableHead>Planned End</TableHead>
               <TableHead>Actual End</TableHead><TableHead>Exit</TableHead>
             </TableRow></TableHeader>
             <TableBody>
-              {assignments.map((assignment) => <TableRow key={assignment.id}>
-                <TableCell className="font-mono">{assignment.employeeCode ?? "—"}</TableCell>
-                <TableCell className="font-medium">{assignment.employeeName}</TableCell>
-                <TableCell className="font-mono">{assignment.postCode}</TableCell>
-                <TableCell>{assignment.joinedOn ?? "Not recorded"}</TableCell>
-                <TableCell>{assignment.plannedEndOn ?? "—"}</TableCell>
-                <TableCell>{assignment.endedOn ?? "—"}</TableCell>
-                <TableCell>
-                  {assignment.exitType
-                    ? <><StatusBadge value={assignment.exitType} tone={assignment.exitType === "Left Without Process" ? "warning" : "neutral"} />
-                      {assignment.exitNote ? <span className="block text-xs text-muted-foreground">{assignment.exitNote}</span> : null}</>
-                    : <StatusBadge value="Current" tone="positive" />}
-                </TableCell>
-              </TableRow>)}
-              {!assignments.length ? <TableRow><TableCell colSpan={7}>
+              {assignments.map((assignment) => {
+                const exitStatus = assignment.endedOn
+                  ? assignment.exitType ?? "Unspecified"
+                  : assignment.exitType === "Resigned" ? "Resignation Planned" : "Current"
+                return <TableRow key={assignment.id}>
+                  <TableCell className="font-mono">{assignment.employeeCode ?? "—"}</TableCell>
+                  <TableCell className="font-medium">{assignment.employeeName}</TableCell>
+                  <TableCell>{assignment.department ?? "—"}</TableCell>
+                  <TableCell>{assignment.designation ?? "—"}</TableCell>
+                  <TableCell>{assignment.joinedOn ?? "Not recorded"}</TableCell>
+                  <TableCell>{assignment.plannedEndOn ?? "—"}</TableCell>
+                  <TableCell>{assignment.endedOn ?? "—"}</TableCell>
+                  <TableCell>
+                    <StatusBadge value={exitStatus} tone={exitStatus === "Left Without Process" ? "warning" : exitStatus === "Resignation Planned" ? "information" : exitStatus === "Current" ? "positive" : "neutral"} />
+                    {assignment.exitNote ? <span className="block text-xs text-muted-foreground">{assignment.exitNote}</span> : null}
+                  </TableCell>
+                </TableRow>})}
+              {!assignments.length ? <TableRow><TableCell colSpan={8}>
                 <StandardState title="No Assignment History" description="Joined employees will appear here." />
               </TableCell></TableRow> : null}
             </TableBody>
           </OperationalTable>
         </CardContent>
       </SectionCard>
+    </>
   )
 }

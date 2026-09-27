@@ -170,6 +170,12 @@ completed when the Appointment Letter is issued and its PDF retained.
 For employees carried over from the former system, HR may record that
 probation was already completed there. That explicit migration record also
 completes the reminder; a past due date alone does not.
+Completed reminders leave the open HR task list and remain in a probation
+completion log. The log identifies whether completion came from an issued
+Appointment Letter or a recorded legacy completion; its recorded date is the
+letter issue date or the legacy audit date, not an inferred probation end date.
+Assignment history includes departures recorded as Left Without Process as
+well as formal resignations, with the actual last working date and exit note.
 
 The Offer and Joining Register follows each candidate application through final
 HR approval, response, Offer Letter issuance, joining or Did Not Join. A declined
