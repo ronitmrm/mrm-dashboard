@@ -225,6 +225,41 @@ test("planner-added first-position parallel work is ready today ahead of older u
   expect(rows.find(row => row.jcNo === "P2275")?.plannedProductionStartDate).toBe("27-Sept-26")
 })
 
+test("move setup honors first position when its source interruption has no output", () => {
+  vi.useFakeTimers()
+  vi.setSystemTime(new Date("2026-09-28T12:30:00Z"))
+  const createdAt = "2026-09-28T10:28:25Z"
+  const entry = (entryType: string, payload: Record<string, unknown>) => ({ entryType, payload, createdAt })
+  const dataEntries = [
+    ...[
+      { jcNo: "P2262", partCode: "M2159B", orderPcs: 50, rmInwardDate: "2026-09-20" },
+      { jcNo: "P1428", partCode: "M269", orderPcs: 500, rmInwardDate: "2026-09-01" },
+    ].flatMap((job) => [
+      entry("work_order", { ...job, optionNumber: "1", rmInwardKg: 1 }),
+      entry("route", { partNo: job.partCode, optionNumber: "1", setupNo: "1", machineType: "CNC", machineFamily: "T42" }),
+      entry("cycle", { partNo: job.partCode, optionNumber: "1", setupNo: "1", cycleTime: 87 }),
+    ]),
+    ...["CNC-1", "CNC-2"].map((machineNo) => entry("machine_master", { machineNo, machineType: "CNC", machineFamily: "T42", status: "Active" })),
+  ]
+  const rows = buildLegacyDashboardSnapshot({
+    productionFloorCode: "cnc", workbookName: "PostgreSQL", productionEntries: [], dataEntries,
+    previousMachinePlanDetailRows: [
+      { jcNo: "P2262", partCode: "M2159B", optionNumber: "1", setupNo: "1", machine: "CNC-1", routeMachine: "T42" },
+      { jcNo: "P1428", partCode: "M269", optionNumber: "1", setupNo: "1", machine: "CNC-2", routeMachine: "T42" },
+    ],
+    planOverrides: [{
+      target: "P2262", setupNo: "1", fromMachine: "CNC-1", toMachine: "CNC-2", assignmentMode: "move", createdAt,
+      interruptedSetups: [{ jobCardNumber: "P2262", machineNumber: "CNC-1", setupNumber: 1, finishedQuantity: 0 }],
+      queuePlacements: [{ targetJobCardNumber: "P2262", targetPartCode: "M2159B", targetSetupNumber: 1, targetSourceMachineNumber: "CNC-1", targetMachineNumber: "CNC-2" }],
+    }],
+  }).productionControl.machinePlanDetailRows
+  const moved = rows.find((row) => row.jcNo === "P2262")
+  expect(moved).toMatchObject({ machine: "CNC-2", plannedProductionStartDate: "28-Sept-26", shopFloorTaskReady: true })
+  expect(rows.filter((row) => row.machine === "CNC-2").sort((a, b) =>
+    String(a.plannedProductionStartDate).localeCompare(String(b.plannedProductionStartDate))
+  )[0]?.jcNo).toBe("P2262")
+})
+
 test("revised cycle time forecasts only the remaining quantity after recorded production", () => {
   vi.useFakeTimers()
   vi.setSystemTime(new Date("2026-09-07T05:00:00.000Z"))
