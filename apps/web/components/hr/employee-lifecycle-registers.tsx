@@ -138,7 +138,7 @@ export function ProbationEndReminders({
                     </TableRow>
                   })}
                   {!open.length ? <TableRow><TableCell colSpan={canManageEmployees ? 9 : 8}>
-                    <StandardState title="No Open Probation Tasks" description="New assignments appear here until probation is recorded complete." />
+                    <StandardState title="No Open Probation Tasks" description="Joined assignments appear here until probation is completed or the employee leaves." />
                   </TableCell></TableRow> : null}
                 </TableBody>
               </OperationalTable>

@@ -25,7 +25,7 @@ export function splitProbationAssignments<
   for (const assignment of assignments) {
     if (probationReminderStatus(assignment, today, approachingOn) === "Completed") {
       completed.push(assignment)
-    } else if (!assignment.endedOn || assignment.endedOn >= today) {
+    } else if (!assignment.endedOn || assignment.endedOn > today) {
       open.push(assignment)
     }
   }

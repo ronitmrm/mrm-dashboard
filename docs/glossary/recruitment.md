@@ -186,6 +186,9 @@ Completed reminders leave the open HR task list and remain in a probation
 completion log. The log identifies whether completion came from an issued
 Appointment Letter or a recorded legacy completion; its recorded date is the
 letter issue date or the legacy audit date, not an inferred probation end date.
+If an employee leaves before probation is completed, the open reminder closes
+on the actual last working date. Departure does not count as probation
+completion; the exit remains in Employee Assignment History.
 Assignment history includes departures recorded as Left Without Process as
 well as formal resignations, with the actual last working date and exit note.
 
