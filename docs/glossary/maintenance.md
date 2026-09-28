@@ -61,3 +61,12 @@ single free-text part field.
 
 _Avoid_: completed-only breakdown entry, ending the Production Session when the
 breakdown starts, starting production while a machine breakdown remains open.
+
+## Legacy Machine Maintenance History
+
+A migrated completed record preserves the machine, maintenance type, recorded
+start and end dates, and source work notes. If the source has no time, engineer,
+or checklist answers, those facts remain **Not recorded**. Historical completion
+does not advance an active schedule or replace its saved next due date. A legacy
+record without an original due date belongs in completed history and the
+maintenance register, not in the monthly maintenance plan.

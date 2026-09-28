@@ -527,6 +527,7 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
         completedAt: string
         completedBy: string | null
         workDone: string | null
+        legacyHistory: boolean
       }>(
         `
         SELECT task.id, machine.machine_number AS "machineNumber",
@@ -534,7 +535,8 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
           task.task_type AS "taskType", task.due_on::text AS "dueOn",
           task.completed_at::text AS "completedAt",
           COALESCE(NULLIF(task.legacy_completer, ''), technician.name) AS "completedBy",
-          task.source_payload->>'workDone' AS "workDone"
+          task.source_payload->>'workDone' AS "workDone",
+          task.source_payload->>'legacyHistory' = 'true' AS "legacyHistory"
         FROM maintenance.tasks task
         JOIN maintenance.machine_schedules schedule ON schedule.id = task.machine_schedule_id
           AND schedule.organization_id = task.organization_id
@@ -626,6 +628,7 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
           WHERE task.organization_id = $1 AND lower(task.task_type) = 'planned'
             AND task.due_on >= $2::date AND task.due_on < $2::date + interval '1 month'
             AND task.status <> 'Cancelled'
+            AND task.source_payload->>'legacyHistory' IS DISTINCT FROM 'true'
           UNION ALL
           SELECT 'schedule-' || schedule.id::text, schedule.id, schedule.next_due_on,
             'Planned', NULL::timestamptz

@@ -36,6 +36,7 @@ async function readReportRows(isPlan: boolean, month: string) {
         taskType: "Planned",
         completedBy: null,
         workDone: null,
+        legacyHistory: false,
       }))
     }
     return (
@@ -151,7 +152,9 @@ export function MachineMaintenanceReportView({
               <TableCell className="whitespace-nowrap">
                 {isPlan
                   ? formatIstDate(row.dueOn)
-                  : formatIstDateTime(row.completedAt)}
+                  : row.legacyHistory
+                    ? formatIstDate(row.completedAt)
+                    : formatIstDateTime(row.completedAt)}
               </TableCell>
               <TableCell>{row.machineNumber}</TableCell>
               <TableCell>{row.productionUnit}</TableCell>
