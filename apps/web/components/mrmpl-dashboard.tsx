@@ -9514,6 +9514,7 @@ function ShopFloorItemSummary({
         </span>
         <StatusBadge value={statusLabel} />
         <span>{jobCardNumber(row)}</span>
+        <span>FG PO: {displayValue(row.fgPoNo)}</span>
         <span>Setup {displayValue(row.setupNo)}</span>
         <span>Option {displayValue(row.optionNumber)}</span>
         <span>Rm: {displayValue(row.rmStatus)}</span>
@@ -9527,8 +9528,8 @@ function ShopFloorItemSummary({
         <StatusBadge value={statusLabel} />
       </div>
       <div className="text-xs text-muted-foreground">
-        {jobCardNumber(row)} | Setup {displayValue(row.setupNo)} | Option{" "}
-        {displayValue(row.optionNumber)}
+        {jobCardNumber(row)} | FG PO: {displayValue(row.fgPoNo)} | Setup{" "}
+        {displayValue(row.setupNo)} | Option {displayValue(row.optionNumber)}
       </div>
       <div className="text-xs text-muted-foreground">
         Setup: {displayValue(row.setupPlannedDate || row.plannedDate)} |
