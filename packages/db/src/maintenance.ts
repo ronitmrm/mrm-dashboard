@@ -886,6 +886,7 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
             input.payload,
           ]
         )
+        await queueDashboardRefresh(client, input.organizationId)
         return result.rows[0]!
       })
     },
