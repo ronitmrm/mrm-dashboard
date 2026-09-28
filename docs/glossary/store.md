@@ -158,7 +158,10 @@ and Asset Name suggestions from the current Store Classification Master or type
 new requested values without creating master records. An exact existing master
 path remains linked to the request; a new or mixed path stays as request text for
 Store to review. It is reviewed separately from Store Requests and cannot be
-allocated until it resolves to a Store Item Type.
+allocated until it resolves to a Store Item Type. Resolution requires an
+explicitly selected Asset Code of the requested Asset Type; the request remains
+Pending until that link is saved. The register shows the linked Asset Code after
+resolution.
 
 **Request Allocation Queue**: The filterable Store worklist of Coded Item
 Request Lines. It shows the Department, requesting individual, item, requested

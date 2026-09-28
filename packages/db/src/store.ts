@@ -3243,23 +3243,35 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
 
     async listCodeRequests(organizationId: string) {
       const result = await pool.query<{
+        assetCategory: string
         assetName: string
+        assetSubcategory: string
+        assetType: string
         createdAt: Date
         department: string
         id: string
         identificationName: string
+        linkedAssetCode: string | null
+        linkedAssetName: string | null
         requestNumber: string
         requestedBy: string
         status: string
       }>(
         `
-          SELECT id, request_number AS "requestNumber",
-            requested_asset_name AS "assetName",
-            identification_name AS "identificationName", requested_by AS "requestedBy",
-            department, status, created_at AS "createdAt"
-          FROM store.code_requests
-          WHERE organization_id = $1
-          ORDER BY created_at DESC
+          SELECT request.id, request.request_number AS "requestNumber",
+            request.requested_asset_type AS "assetType",
+            request.requested_category AS "assetCategory",
+            request.requested_subcategory AS "assetSubcategory",
+            request.requested_asset_name AS "assetName",
+            request.identification_name AS "identificationName",
+            request.requested_by AS "requestedBy", request.department,
+            request.status, request.created_at AS "createdAt",
+            item.type_code AS "linkedAssetCode",
+            item.asset_name AS "linkedAssetName"
+          FROM store.code_requests request
+          LEFT JOIN store.item_types item ON item.id = request.resolved_item_type_id
+          WHERE request.organization_id = $1
+          ORDER BY request.created_at DESC
           LIMIT 200
         `,
         [organizationId]
@@ -3281,7 +3293,14 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             resolved_at = now(), resolved_by_user_id = $2
           FROM store.item_types item
           WHERE request.id = $3 AND request.organization_id = $4
+            AND request.status = 'Pending'
             AND item.id = $5 AND item.organization_id = request.organization_id
+            AND (
+              (request.requested_asset_type = 'Non Consumable'
+                AND item.tracking_mode = 'SERIALIZED')
+              OR (request.requested_asset_type = 'Consumable'
+                AND item.tracking_mode = 'CONSUMABLE')
+            )
           RETURNING request.id
         `,
         [
@@ -3293,7 +3312,9 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         ]
       )
       if (!result.rows[0])
-        throw new Error("Code request or Store item was not found.")
+        throw new Error(
+          "Choose an Asset Code of the requested type for a pending request."
+        )
       return result.rows[0]
     },
 
