@@ -2,6 +2,9 @@
 import { revalidatePath } from "next/cache"
 import { unstable_rethrow } from "next/navigation"
 import { withRejections } from "@/lib/rejections-server"
+import { readMasterCsv } from "@/lib/master-data-csv"
+import { parseQualityRejectionCsv } from "@/lib/quality-rejection-csv"
+import { withCsvImportFeedback } from "@/lib/csv-import-action-feedback"
 
 export async function saveQualityRejection(form: FormData) {
   try {
@@ -31,4 +34,17 @@ export async function saveQualityRejection(form: FormData) {
           : "Rejection could not be saved. Please try again.",
     }
   }
+}
+
+export async function importQualityRejectionsCsv(form: FormData) {
+  return withCsvImportFeedback(async () => {
+    await withRejections("write", async ({ repository, organizationId, userId }) => {
+      const rows = parseQualityRejectionCsv(
+        await readMasterCsv(form.get("rejections_csv_file"), "Quality Control CSV")
+      )
+      return repository.bulkUpdate({ organizationId, userId, rows })
+    })
+    revalidatePath("/iso-document/rejections")
+    revalidatePath("/quality-control")
+  }, "Quality Control CSV could not be imported.")
 }

@@ -58,24 +58,33 @@ export function MasterDataCsvImportButton({
   action,
   fields = {},
   fileField = "master_csv_file",
+  successMessage,
 }: {
   action: CsvImportAction
   fields?: Record<string, string>
   fileField?: string
+  successMessage?: string
 }) {
   const formRef = useRef<HTMLFormElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string>()
+  const [success, setSuccess] = useState(false)
 
   return (
     <form
       action={async (formData) => {
         setSubmitting(true)
         setError(undefined)
+        setSuccess(false)
         try {
           const result = await action(formData)
-          setError(getUploadResultError(result))
+          const resultError = getUploadResultError(result)
+          setError(resultError)
+          if (!resultError) {
+            setSuccess(true)
+            if (inputRef.current) inputRef.current.value = ""
+          }
         } catch (error) {
           unstable_rethrow(error)
           setError(getUploadErrorMessage(error, "CSV import failed."))
@@ -92,6 +101,11 @@ export function MasterDataCsvImportButton({
           title="CSV import stopped"
           description={error}
         />
+      ) : null}
+      {success && successMessage ? (
+        <p role="status" className="basis-full text-sm">
+          {successMessage}
+        </p>
       ) : null}
       {Object.entries(fields).map(([name, value]) => (
         <input key={name} name={name} type="hidden" value={value} />

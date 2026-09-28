@@ -67,7 +67,13 @@ export function QualityControlEntry({
         <FormGrid className="xl:grid-cols-2">
           <div className="grid gap-2 sm:col-span-2">
             <Label htmlFor="qc-job">Job Card · Part · Unit</Label>
-            <NativeSelect id="qc-job" name="jobId" required defaultValue="">
+            <NativeSelect
+              id="qc-job"
+              name="jobId"
+              required
+              defaultValue=""
+              searchPlaceholder="Search Job Card, part or unit…"
+            >
               <NativeSelectOption value="">Select Job Card</NativeSelectOption>
               {jobs.map((job) => (
                 <NativeSelectOption key={job.id} value={job.id}>

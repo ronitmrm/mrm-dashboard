@@ -32,18 +32,14 @@ export function createRejectionRepository(options: RepositoryPoolOptions) {
       if (!row) throw new Error("Organization not found.")
       return row.id
     },
-    async entryOptions(
-      organizationId: string,
-      filters: { unit: string; part: string; job: string }
-    ) {
+    async entryOptions(organizationId: string) {
       const [jobs, types, defects, reasons] = await Promise.all([
         pool.query<Job>(
           `SELECT w.id, w.job_card_number AS "jobCard", i.uid AS "partCode", ${unitSql} AS unit
           FROM manufacturing.work_orders w JOIN catalog.items i ON i.id = w.item_id
-          WHERE w.organization_id = $1 AND w.status <> 'Cancelled' AND ($2 = '' OR ${unitSql} = $2)
-            AND ($3 = '' OR i.uid ILIKE '%' || $3 || '%') AND ($4 = '' OR w.job_card_number ILIKE '%' || $4 || '%')
-          ORDER BY w.job_card_number, w.id LIMIT 101`,
-          [organizationId, filters.unit, filters.part, filters.job]
+          WHERE w.organization_id = $1 AND w.status <> 'Cancelled'
+          ORDER BY w.job_card_number, w.id`,
+          [organizationId]
         ),
         pool.query<{ id: string; label: string }>(
           "SELECT id, name AS label FROM quality.rejection_types WHERE organization_id = $1 AND active AND code NOT LIKE '__LEGACY%' ORDER BY name",
@@ -59,13 +55,12 @@ export function createRejectionRepository(options: RepositoryPoolOptions) {
         ),
       ])
       return {
-        jobs: jobs.rows.slice(0, 100).map((job) => ({
+        jobs: jobs.rows.map((job) => ({
           id: job.id,
           jobCard: job.jobCard,
           partCode: job.partCode,
           unit: job.unit,
         })),
-        hasMore: jobs.rows.length > 100,
         types: types.rows,
         defects: defects.rows,
         reasons: reasons.rows,
@@ -128,6 +123,124 @@ export function createRejectionRepository(options: RepositoryPoolOptions) {
             ]
           )
         ).rows[0]
+      })
+    },
+    async listEditable(organizationId: string) {
+      return (
+        await pool.query<{
+          id: string
+          jobCard: string
+          date: string
+          stage: string
+          type: string
+          defect: string
+          reason: string
+          pieces: number
+          kg: string
+        }>(
+          `SELECT e.id, w.job_card_number AS "jobCard", e.rejection_date::text AS date,
+            e.stage, e.type_name AS type, e.defect_name AS defect, e.reason_name AS reason,
+            e.pieces, e.kg::text AS kg
+           FROM quality.rejection_entries e
+           JOIN manufacturing.work_orders w ON w.id = e.work_order_id
+           WHERE e.organization_id = $1
+           ORDER BY e.rejection_date DESC, w.job_card_number, e.id`,
+          [organizationId]
+        )
+      ).rows
+    },
+    async bulkUpdate(input: {
+      organizationId: string
+      userId: string
+      rows: {
+        id: string
+        jobCard: string
+        date: string
+        stage: string
+        type: string
+        defect: string
+        reason: string
+        pieces: number
+        kg: number
+      }[]
+    }) {
+      return withTransaction(pool, async (client) => {
+        const activeMasters = {
+          type: new Set((await client.query<{ name: string }>(
+            "SELECT name FROM quality.rejection_types WHERE organization_id = $1 AND active",
+            [input.organizationId]
+          )).rows.map((row) => row.name)),
+          defect: new Set((await client.query<{ name: string }>(
+            "SELECT name FROM quality.rejection_reasons WHERE organization_id = $1 AND active",
+            [input.organizationId]
+          )).rows.map((row) => row.name)),
+          reason: new Set((await client.query<{ name: string }>(
+            "SELECT remark AS name FROM quality.rejection_remarks WHERE organization_id = $1 AND active",
+            [input.organizationId]
+          )).rows.map((row) => row.name)),
+        }
+        let updated = 0
+        for (const [index, row] of input.rows.entries()) {
+          const line = index + 2
+          try {
+            validateRejectionEntry(row)
+            if (!row.jobCard || !row.type || !row.defect || !row.reason)
+              throw new Error("Job Card, type, defect and reason are required.")
+            const existing = (
+              await client.query<{
+                id: string; jobId: string; jobCard: string; date: string; stage: string
+                type: string; defect: string; reason: string; pieces: number; kg: number
+              }>(
+                `SELECT e.id, e.work_order_id AS "jobId", w.job_card_number AS "jobCard",
+                  e.rejection_date::text AS date, e.stage, e.type_name AS type,
+                  e.defect_name AS defect, e.reason_name AS reason,
+                  e.pieces, e.kg::float8 AS kg
+                 FROM quality.rejection_entries e
+                 JOIN manufacturing.work_orders w ON w.id = e.work_order_id
+                 WHERE e.organization_id = $1 AND e.id = $2 FOR UPDATE OF e`,
+                [input.organizationId, row.id]
+              )
+            ).rows[0]
+            if (!existing) throw new Error("Entry ID does not match a Quality Control rejection.")
+            if (
+              row.jobCard.toLowerCase() === existing.jobCard.toLowerCase() &&
+              row.date === existing.date && row.stage === existing.stage &&
+              row.type === existing.type && row.defect === existing.defect &&
+              row.reason === existing.reason && row.pieces === existing.pieces &&
+              row.kg === existing.kg
+            ) continue
+            const job = row.jobCard.toLowerCase() === existing.jobCard.toLowerCase()
+              ? { id: existing.jobId, unit: null }
+              : (
+                  await client.query<{ id: string; unit: string }>(
+                    `SELECT w.id, ${unitSql} AS unit FROM manufacturing.work_orders w
+                     WHERE w.organization_id = $1 AND lower(w.job_card_number) = lower($2)
+                       AND w.status <> 'Cancelled'`,
+                    [input.organizationId, row.jobCard]
+                  )
+                ).rows[0]
+            if (!job) throw new Error("Job Card number was not found.")
+            for (const field of ["type", "defect", "reason"] as const)
+              if (row[field] !== existing[field] && !activeMasters[field].has(row[field]))
+                throw new Error(`${row[field]} is not an active rejection master.`)
+            await client.query(
+              `UPDATE quality.rejection_entries SET work_order_id = $3,
+                 production_floor_code = COALESCE($4, production_floor_code),
+                 rejection_date = $5, stage = $6, type_name = $7, defect_name = $8,
+                 reason_name = $9, pieces = $10, kg = $11,
+                 updated_at = now(), updated_by_user_id = $12
+               WHERE organization_id = $1 AND id = $2`,
+              [input.organizationId, row.id, job.id, job.unit, row.date, row.stage,
+                row.type, row.defect, row.reason, row.pieces, row.kg, input.userId]
+            )
+            updated += 1
+          } catch (error) {
+            if (error instanceof Error && !("code" in error))
+              throw new Error(`CSV row ${line}: ${error.message}`)
+            throw error
+          }
+        }
+        return updated
       })
     },
     async list(
