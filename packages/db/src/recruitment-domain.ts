@@ -62,7 +62,7 @@ export function deriveRecruitmentEmployeeAssignment(input: {
   lastWorkingDate?: string | null
 }) {
   const event = requiredText(input.employeeEvent, "Employee event")
-  if (event === "Removed") {
+  if (event === "Removed" || event === "Role Changed") {
     return {
       employeeCode: null,
       employeeName: null,

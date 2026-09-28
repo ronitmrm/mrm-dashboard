@@ -63,6 +63,56 @@ test("removing a joined employee requires an actual end date and exit type", asy
   expect(query.mock.calls.some(([statement]) => statement.includes("UPDATE recruitment.posts"))).toBe(false)
 })
 
+test("role change releases only the standalone post and records a non-departure event", async () => {
+  const query = vi.fn(async (statement: string, parameters?: unknown[]) => {
+    if (statement.includes("SELECT id, employee_name, employee_code")) return { rows: [{
+      id: "post-1", employee_name: "Khattar Ronit", employee_code: "34",
+      status: "Occupied", combined_role_id: null, can_replace: false,
+      joining_date: "2025-01-01", last_working_date: null,
+    }] }
+    if (statement.includes("SELECT 1 FROM recruitment.posts")) return { rows: [{ "?column?": 1 }] }
+    if (statement.includes("UPDATE recruitment.posts")) {
+      expect(parameters?.[2]).toBe("Vacant")
+      expect(parameters?.[7]).toEqual(["post-1"])
+      return { rows: [{ id: "post-1" }] }
+    }
+    return { rows: [] }
+  })
+  const client = { query, release: vi.fn() } as unknown as PoolClient
+  const repository = createRecruitmentRepository({
+    pool: { connect: vi.fn(async () => client) } as unknown as Pool,
+  })
+  await repository.assignEmployee({
+    organizationId: "org-1", postId: "post-1", employeeEvent: "Role Changed",
+    lastWorkingDate: "2026-09-20", exitNote: "Combined role split",
+  })
+  const lifecycle = query.mock.calls.find(([statement]) => statement.includes("mrm.employee_exit_type"))
+  expect(lifecycle?.[1]?.slice(0, 3)).toEqual(["2026-09-20", "Role Changed", "Combined role split"])
+  const audit = query.mock.calls.find(([statement]) => statement.includes("INSERT INTO audit.events"))
+  expect(audit?.[1]?.[0]).toContain("recruitment.employee.role_changed")
+})
+
+test("role change cannot release a whole combined job", async () => {
+  const query = vi.fn(async (statement: string) => ({ rows: statement.includes("SELECT id, employee_name, employee_code")
+    ? [{ id: "post-1", employee_name: "Employee One", employee_code: "101",
+      status: "Occupied", combined_role_id: "combined-1", can_replace: false,
+      joining_date: "2025-01-01", last_working_date: null }]
+    : statement.includes("FROM recruitment.combined_role_posts")
+      ? [{ id: "post-1", employee_name: "Employee One", employee_code: "101",
+        status: "Occupied", can_replace: false, joining_date: "2025-01-01",
+        last_working_date: null }]
+      : [] }))
+  const client = { query, release: vi.fn() } as unknown as PoolClient
+  const repository = createRecruitmentRepository({
+    pool: { connect: vi.fn(async () => client) } as unknown as Pool,
+  })
+  await expect(repository.assignEmployee({
+    organizationId: "org-1", postId: "post-1", employeeEvent: "Role Changed",
+    lastWorkingDate: "2026-09-20",
+  })).rejects.toThrow("standalone post")
+  expect(query.mock.calls.some(([statement]) => statement.includes("UPDATE recruitment.posts"))).toBe(false)
+})
+
 describe("reviseCandidateAppointment", () => {
   function fixture() {
     const query = vi.fn(async (sql: string) => {

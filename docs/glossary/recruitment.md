@@ -163,6 +163,13 @@ records until joining is confirmed. Older current assignments start as a baselin
 prior occupants without a retained letter or replacement snapshot cannot be
 reconstructed reliably.
 
+When a combined job is split, an employee who stays employed may stop covering
+one standalone Approved Post. HR records a Role Changed date for that post only.
+The post becomes Vacant, its assignment history retains the employee and role end
+date with a Role Changed status, and an audit event records the change. This is
+not a resignation or departure; the employee's other posts remain occupied.
+Role Changed is available only when the employee holds another occupied post.
+
 For each joined assignment, HR sees a reminder as probation end approaches.
 The date comes from the Offer Letter probation period when available, or HR
 enters it when missing. The reminder is due on the probation end date and

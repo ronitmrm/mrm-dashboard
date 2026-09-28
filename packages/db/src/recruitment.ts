@@ -600,9 +600,12 @@ async function setEmployeeLifecycleContext(
       set_config('mrm.probation_due_on', $4, true),
       set_config('mrm.identity_correction', $5, true)`,
     [
-      input.employeeEvent === "Removed" ? optional(input.lastWorkingDate) ?? "" : "",
-      input.employeeEvent === "Removed" ? input.exitType ?? "" : "",
-      input.employeeEvent === "Removed" ? optional(input.exitNote) ?? "" : "",
+      input.employeeEvent === "Removed" || input.employeeEvent === "Role Changed"
+        ? optional(input.lastWorkingDate) ?? "" : "",
+      input.employeeEvent === "Role Changed"
+        ? "Role Changed" : input.employeeEvent === "Removed" ? input.exitType ?? "" : "",
+      input.employeeEvent === "Removed" || input.employeeEvent === "Role Changed"
+        ? optional(input.exitNote) ?? "" : "",
       optional(input.probationDueOn) ?? "",
       String(identityCorrection),
     ]
@@ -686,6 +689,35 @@ async function assignEmployeeInTransaction(
     }
     if (input.exitType !== "Resigned" && input.exitType !== "Left Without Process") {
       throw new Error("Select how the employee left.")
+    }
+  }
+  if (input.employeeEvent === "Role Changed") {
+    if (currentPost.combined_role_id || currentPost.status !== "Occupied" ||
+        !currentPost.employee_code) {
+      throw new Error("Role Changed requires an occupied standalone post with an employee ID.")
+    }
+    const endedOn = required(input.lastWorkingDate, "Role change date")
+    const roleChangeDate = new Date(`${endedOn}T00:00:00Z`)
+    const today = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit",
+    }).format(new Date())
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(endedOn) ||
+        Number.isNaN(roleChangeDate.getTime()) ||
+        roleChangeDate.toISOString().slice(0, 10) !== endedOn ||
+        endedOn > today) {
+      throw new Error("Enter a valid role change date that is not in the future.")
+    }
+    if (currentPost.joining_date && endedOn < currentPost.joining_date) {
+      throw new Error("Role change date cannot precede joining date.")
+    }
+    const remaining = await client.query(
+      `SELECT 1 FROM recruitment.posts
+       WHERE organization_id = $1 AND id <> $2 AND status = 'Occupied'
+         AND employee_code = $3 LIMIT 1`,
+      [input.organizationId, currentPost.id, currentPost.employee_code]
+    )
+    if (!remaining.rows.length) {
+      throw new Error("Role Changed requires another occupied post for this employee.")
     }
   }
   await setEmployeeLifecycleContext(client, input)
@@ -822,7 +854,10 @@ async function assignEmployeeInTransaction(
     return recruitmentAssignmentAudit(
       {
         ...input,
-        eventType: `recruitment.employee.${assignment.status.toLowerCase()}`,
+        eventType: input.employeeEvent === "Role Changed"
+          ? "recruitment.employee.role_changed"
+          : `recruitment.employee.${assignment.status.toLowerCase()}`,
+        reason: input.employeeEvent === "Role Changed" ? optional(input.exitNote) : null,
         metadata: {
           assignmentScope: currentPost.combined_role_id
             ? "combined-role"
@@ -834,6 +869,8 @@ async function assignEmployeeInTransaction(
           postId: post.id,
           status: assignment.status,
           lastWorkingDate: assignment.lastWorkingDate,
+          roleChangedOn: input.employeeEvent === "Role Changed"
+            ? optional(input.lastWorkingDate) : null,
         },
         targetId: post.id,
         targetTable: "posts",

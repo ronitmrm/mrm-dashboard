@@ -187,23 +187,25 @@ export function EmployeeAssignmentHistory({
 }: {
   assignments: RecruitmentEmployeeAssignmentRow[]
 }) {
-  const departed = assignments.filter((assignment) => assignment.endedOn)
+  const departed = assignments.filter((assignment) => assignment.endedOn && assignment.exitType !== "Role Changed")
+  const roleChanges = assignments.filter((assignment) => assignment.exitType === "Role Changed" && assignment.endedOn)
   return (
     <>
       <MetricSummary
         scope="Employee assignment records · before table filters"
         items={[
           { label: "Assignments", value: assignments.length, tone: "information" },
-          { label: "Current", value: assignments.length - departed.length, tone: "positive" },
+          { label: "Current", value: assignments.filter((assignment) => !assignment.endedOn).length, tone: "positive" },
           { label: "Planned Exits", value: assignments.filter((assignment) => assignment.plannedEndOn && !assignment.endedOn).length, tone: "warning" },
           { label: "Departed", value: departed.length, tone: "inactive" },
+          { label: "Role Changes", value: roleChanges.length, tone: "information" },
           { label: "Left Without Process", value: departed.filter((assignment) => assignment.exitType === "Left Without Process").length, tone: "warning" },
         ]}
       />
       <SectionCard>
         <CardHeader>
           <CardTitle>Employee Assignment History</CardTitle>
-          <CardDescription>Joined assignments remain here after resignation or departure without process.</CardDescription>
+          <CardDescription>Joined assignments remain here after a role change or departure.</CardDescription>
         </CardHeader>
         <CardContent className="min-w-0">
           <OperationalTable filterStorageKey="hr-employee-assignment-history" containerClassName="max-h-[36rem] rounded-md border">
@@ -227,7 +229,7 @@ export function EmployeeAssignmentHistory({
                   <TableCell>{assignment.plannedEndOn ?? "—"}</TableCell>
                   <TableCell>{assignment.endedOn ?? "—"}</TableCell>
                   <TableCell>
-                    <StatusBadge value={exitStatus} tone={exitStatus === "Left Without Process" ? "warning" : exitStatus === "Resignation Planned" ? "information" : exitStatus === "Current" ? "positive" : "neutral"} />
+                    <StatusBadge value={exitStatus} tone={exitStatus === "Left Without Process" ? "warning" : exitStatus === "Resignation Planned" || exitStatus === "Role Changed" ? "information" : exitStatus === "Current" ? "positive" : "neutral"} />
                     {assignment.exitNote ? <span className="block text-xs text-muted-foreground">{assignment.exitNote}</span> : null}
                   </TableCell>
                 </TableRow>})}
