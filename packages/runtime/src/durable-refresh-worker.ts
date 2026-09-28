@@ -263,8 +263,15 @@ export function createDurableRefreshWorker({
         },
         async () => {
           const client = await pool.connect()
+          // A checked-out pg client can emit an error between queries when its
+          // server connection is lost. Keep the worker alive so the queue can retry.
+          const onClientError = () => undefined
+          client.on("error", onClientError)
           try {
             await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ")
+            await client.query(
+              "SET LOCAL idle_in_transaction_session_timeout = '15min'"
+            )
             const claim = await client.query<{
               attempts: number
               id: string
@@ -461,6 +468,7 @@ export function createDurableRefreshWorker({
             throw error
           } finally {
             client.release()
+            client.off("error", onClientError)
           }
         }
       )
@@ -477,6 +485,8 @@ export function createDurableRefreshWorker({
         },
         async () => {
           const client = await pool.connect()
+          const onClientError = () => undefined
+          client.on("error", onClientError)
           let event: OutboxRow | undefined
           try {
             await client.query("BEGIN")
@@ -513,6 +523,7 @@ export function createDurableRefreshWorker({
             throw error
           } finally {
             client.release()
+            client.off("error", onClientError)
           }
 
           try {

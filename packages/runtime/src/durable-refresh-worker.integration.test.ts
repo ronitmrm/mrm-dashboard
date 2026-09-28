@@ -58,7 +58,13 @@ describe("durable dashboard refresh runtime", () => {
   it("claims coalesced jobs once and retries without duplicate read-model versions", async () => {
     await enqueueRefresh()
     const first = createDurableRefreshWorker({
-      buildReadModel: model(1),
+      buildReadModel: async (client) => {
+        const timeout = await client.query<{ value: string }>(
+          "SELECT current_setting('idle_in_transaction_session_timeout') AS value"
+        )
+        expect(timeout.rows[0]?.value).toBe("15min")
+        return model(1)()
+      },
       organizationId,
       postgresUrl,
       redisUrl,

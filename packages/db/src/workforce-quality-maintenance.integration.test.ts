@@ -859,6 +859,12 @@ describe("workforce, quality, and maintenance workflows", () => {
       organizationId,
       payload: { source: "master" },
     })
+    await pool.query(
+      `UPDATE derived.refresh_jobs SET status = 'complete'
+       WHERE organization_id = $1 AND queue_key = 'dashboard'
+         AND status = 'pending'`,
+      [organizationId]
+    )
     const schedule = await maintenance.upsertMachineSchedule({
       definitionCode: `MAINT-${suffix}`,
       machineNumber,
@@ -867,6 +873,13 @@ describe("workforce, quality, and maintenance workflows", () => {
       payload: { firstDueDate: "2026-07-21" },
       scheduleKey: `${machineNumber}|MAINT-${suffix}`,
     })
+    const refresh = await pool.query<{ count: number }>(
+      `SELECT count(*)::int AS count FROM derived.refresh_jobs
+       WHERE organization_id = $1 AND queue_key = 'dashboard'
+         AND status = 'pending'`,
+      [organizationId]
+    )
+    expect(refresh.rows[0]?.count).toBe(1)
     await maintenance.upsertChecklistItem({
       checklistCode: `MAINT-${suffix}`,
       checklistTitle: "Monthly maintenance",
