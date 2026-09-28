@@ -1103,11 +1103,37 @@ describe("masters", () => {
 })
 
 describe("combined job templates", () => {
+  test("creates a distinct job for a vacant post with a closed recruitment history", async () => {
+    const query = vi.fn(async (statement: string, parameters?: readonly unknown[]) => {
+      if (statement.includes("SELECT selected.combined_role_id")) {
+        return { rows: [{ post_id: "post-1", combined_role_id: null, vacancy_code: "PC0IQ-AS-7", has_pending_replacement: false }] }
+      }
+      if (statement.includes("FROM recruitment.job_posts job")) return { rows: [], rowCount: 0 }
+      if (statement.includes("SELECT job_number FROM recruitment.job_posts")) {
+        return { rows: [{ job_number: "PC0IQ-AS-7" }] }
+      }
+      if (statement.includes("INSERT INTO recruitment.job_posts")) {
+        expect(parameters).toContain("PC0IQ-AS-7-2")
+        return { rows: [{ id: "new-job" }] }
+      }
+      return { rows: [] }
+    })
+    const client = { query, release: vi.fn() } as unknown as PoolClient
+    const repository = createRecruitmentRepository({
+      pool: { connect: vi.fn(async () => client) } as unknown as Pool,
+    })
+
+    await expect(repository.createJobFromPost({
+      organizationId: "org-1", postId: "post-1",
+    })).resolves.toEqual({ id: "new-job" })
+    expect(query.mock.calls.some(([statement]) => statement.includes("UPDATE recruitment.job_posts"))).toBe(false)
+  })
+
   test("creates a job with the chosen template and target date, or explicitly no template", async () => {
     const query = vi.fn(async (statement: string, _parameters?: readonly unknown[]) => {
       void _parameters
       if (statement.includes("SELECT selected.combined_role_id")) {
-        return { rows: [{ post_id: "post-1", combined_role_id: null }] }
+        return { rows: [{ post_id: "post-1", combined_role_id: null, vacancy_code: "POST-1" }] }
       }
       if (statement.includes("FROM recruitment.job_posts job")) return { rows: [], rowCount: 0 }
       if (statement.includes("SELECT id FROM recruitment.requirement_templates")) return { rows: [{ id: "template-1" }] }
@@ -1120,8 +1146,8 @@ describe("combined job templates", () => {
     await repository.createJobFromPost({ ...input, requirementTemplateCode: "JT-1" })
     await repository.createJobFromPost({ ...input, requirementTemplateCode: "" })
     const inserts = query.mock.calls.filter(([sql]) => sql.includes("INSERT INTO recruitment.job_posts"))
-    expect(inserts[0]?.[1]).toEqual(["2026-10-01", null, expect.any(String), "post-1", "org-1", true, "JT-1"])
-    expect(inserts[1]?.[1]?.slice(-2)).toEqual([true, null])
+    expect(inserts[0]?.[1]).toEqual(["2026-10-01", null, expect.any(String), "post-1", "org-1", true, "JT-1", "POST-1"])
+    expect(inserts[1]?.[1]?.slice(-3)).toEqual([true, null, "POST-1"])
     expect(query.mock.calls.find(([sql]) => sql.includes("SELECT id FROM recruitment.requirement_templates"))?.[1]).toEqual(["org-1", "JT-1", null])
   })
 
@@ -1131,7 +1157,7 @@ describe("combined job templates", () => {
     const query = vi.fn(async (statement: string) => {
       if (statement.includes("SELECT selected.combined_role_id")) {
         return {
-          rows: [{ combined_role_id: combinedRoleId, post_id: postId }],
+          rows: [{ combined_role_id: combinedRoleId, post_id: postId, vacancy_code: "CMB-1" }],
         }
       }
       if (statement.includes("FROM recruitment.job_posts job")) {
