@@ -711,9 +711,10 @@ describe("production and shop-floor workflows", () => {
     const type = await quality.upsertRejectionType({ organizationId, code: "", name: `QC type ${suffix}`, payload: {} })
     const defect = await quality.upsertRejectionReason({ organizationId, code: "", name: `QC defect ${suffix}`, payload: {} })
     const reason = await quality.upsertRejectionRemark({ organizationId, code: "", remark: `QC reason ${suffix}`, payload: {} })
-    const options = await rejections.entryOptions(organizationId, { unit: "cnc", part: itemUid, job: cncJobCard })
-    expect(options.jobs).toHaveLength(1)
-    const rejectionInput = { organizationId, userId: actor, requestId: randomUUID(), jobId: options.jobs[0]!.id,
+    const options = await rejections.entryOptions(organizationId)
+    const job = options.jobs.find((candidate) => candidate.jobCard === cncJobCard)
+    expect(job).toMatchObject({ partCode: itemUid, unit: "cnc" })
+    const rejectionInput = { organizationId, userId: actor, requestId: randomUUID(), jobId: job!.id,
       date: "2026-09-18", stage: "Checking", typeId: type.id, defectId: defect.id, reasonId: reason.id, pieces: 3, kg: 1.5 }
     await rejections.save(rejectionInput)
     await rejections.save(rejectionInput)
@@ -909,6 +910,28 @@ describe("production and shop-floor workflows", () => {
        WHERE session.id = $1`, [second.id]
     )
     expect(closedTarget.rows[0]?.target).toBe(50)
+    const editable = (await rejections.listEditable(organizationId)).find(
+      (row) => row.id === allRejects.find((entry) => entry.stage === "Checking")?.id
+    )!
+    await rejections.bulkUpdate({
+      organizationId,
+      userId: actor,
+      rows: [{
+        id: editable.id,
+        jobCard: editable.jobCard,
+        date: editable.date,
+        stage: editable.stage,
+        type: editable.type,
+        defect: editable.defect,
+        reason: editable.reason,
+        pieces: 4,
+        kg: 2,
+      }],
+    })
+    const revisedRejects = (await rejections.list(organizationId, registerFilter))
+      .filter((row) => row.jobCard === cncJobCard)
+    expect(revisedRejects.find((row) => row.id === editable.id)).toMatchObject({ pieces: 4, kg: 2 })
+    expect(revisedRejects.find((row) => row.id !== editable.id)).toMatchObject({ pieces: 7 })
   })
 
   test("allows delayed weight and missed events to correct a closed session", async () => {
