@@ -219,8 +219,10 @@ describe("Store requests", () => {
     const saved = await pool.query<{
       requested_asset_name: string
       requested_category_id: string | null
+      resolved_item_type_id: string | null
+      status: string
     }>(
-      `SELECT requested_asset_name, requested_category_id
+      `SELECT requested_asset_name, requested_category_id, resolved_item_type_id, status
        FROM store.code_requests WHERE id = $1`,
       [request.id]
     )
@@ -228,6 +230,44 @@ describe("Store requests", () => {
     expect(saved.rows[0]).toEqual({
       requested_asset_name: `New Asset ${suffix}`,
       requested_category_id: null,
+      resolved_item_type_id: null,
+      status: "Pending",
+    })
+
+    const wrongType = await store.createItemType({
+      ...(await createClassification("Wrong request type")),
+      assetType: "CONSUMABLE",
+      organizationId,
+      unit: "Nos",
+    })
+    await expect(
+      store.resolveCodeRequest({
+        codeRequestId: request.id,
+        itemTypeId: wrongType.id,
+        organizationId,
+        resolution: "Code Created",
+      })
+    ).rejects.toThrow("requested type")
+
+    const matchingType = await store.createItemType({
+      ...(await createClassification("Matching request type")),
+      assetType: "NON_CONSUMABLE",
+      organizationId,
+      unit: "Nos",
+    })
+    await store.resolveCodeRequest({
+      codeRequestId: request.id,
+      itemTypeId: matchingType.id,
+      organizationId,
+      resolution: "Code Created",
+    })
+    expect(
+      (await store.listCodeRequests(organizationId)).find(
+        (row) => row.id === request.id
+      )
+    ).toMatchObject({
+      linkedAssetCode: matchingType.typeCode,
+      status: "Code Created",
     })
   })
 

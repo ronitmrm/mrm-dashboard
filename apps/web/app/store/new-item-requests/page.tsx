@@ -169,6 +169,7 @@ export default async function NewItemRequestsPage() {
                 <TableHead>Department</TableHead>
                 <TableHead>Requested By</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Asset Code</TableHead>
                 {canResolveRequests ? <TableHead>Resolve</TableHead> : null}
               </TableRow>
             </TableHeader>
@@ -181,12 +182,23 @@ export default async function NewItemRequestsPage() {
                       {formatIstDateTime(request.createdAt)}
                     </span>
                   </TableCell>
-                  <TableCell>{request.assetName}</TableCell>
+                  <TableCell>
+                    {request.assetName}
+                    <span className="block text-xs text-muted-foreground">
+                      {request.assetType} · {request.assetCategory} /{" "}
+                      {request.assetSubcategory}
+                    </span>
+                  </TableCell>
                   <TableCell>{request.identificationName}</TableCell>
                   <TableCell>{request.department}</TableCell>
                   <TableCell>{request.requestedBy}</TableCell>
                   <TableCell>
                     <Badge variant="outline">{request.status}</Badge>
+                  </TableCell>
+                  <TableCell>
+                    {request.linkedAssetCode
+                      ? `${request.linkedAssetCode} — ${request.linkedAssetName}`
+                      : "—"}
                   </TableCell>
                   {canResolveRequests ? (
                     <TableCell>
@@ -202,19 +214,40 @@ export default async function NewItemRequestsPage() {
                           />
                           <NativeSelect
                             aria-label={`Resolved code for ${request.requestNumber}`}
+                            defaultValue=""
                             name="item_type_id"
                             required
                           >
-                            {data.items.map((item) => (
-                              <NativeSelectOption key={item.id} value={item.id}>
-                                {item.typeCode} — {item.identificationName}
-                              </NativeSelectOption>
-                            ))}
+                            <NativeSelectOption disabled value="">
+                              Select Asset Code
+                            </NativeSelectOption>
+                            {data.items
+                              .filter(
+                                (item) =>
+                                  item.assetType ===
+                                  (request.assetType === "Non Consumable"
+                                    ? "NON_CONSUMABLE"
+                                    : "CONSUMABLE")
+                              )
+                              .map((item) => (
+                                <NativeSelectOption
+                                  key={item.id}
+                                  value={item.id}
+                                >
+                                  {item.typeCode} — {item.assetName} ·{" "}
+                                  {item.assetCategory} / {item.assetSubcategory}
+                                </NativeSelectOption>
+                              ))}
                           </NativeSelect>
                           <NativeSelect
                             aria-label="Resolution"
+                            defaultValue=""
                             name="resolution"
+                            required
                           >
+                            <NativeSelectOption disabled value="">
+                              Select Resolution
+                            </NativeSelectOption>
                             <NativeSelectOption value="Existing Code Found">
                               Existing Code Found
                             </NativeSelectOption>
@@ -241,7 +274,7 @@ export default async function NewItemRequestsPage() {
                 <TableRow>
                   <TableCell
                     className="h-24 text-center text-muted-foreground"
-                    colSpan={canResolveRequests ? 7 : 6}
+                    colSpan={canResolveRequests ? 8 : 7}
                   >
                     No New Item Requests.
                   </TableCell>

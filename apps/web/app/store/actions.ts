@@ -822,6 +822,10 @@ export async function requestMissingStoreCodeAction(formData: FormData) {
 }
 
 export async function resolveMissingStoreCodeAction(formData: FormData) {
+  const resolution = requiredText(formData, "resolution")
+  if (resolution !== "Existing Code Found" && resolution !== "Code Created") {
+    throw new Error("Select a resolution for this request.")
+  }
   await withStore(
     "store.new_item_requests.resolve",
     (repository, actorUserId, organizationId) =>
@@ -830,10 +834,7 @@ export async function resolveMissingStoreCodeAction(formData: FormData) {
         codeRequestId: requiredText(formData, "code_request_id"),
         itemTypeId: requiredText(formData, "item_type_id"),
         organizationId,
-        resolution:
-          requiredText(formData, "resolution") === "Existing Code Found"
-            ? "Existing Code Found"
-            : "Code Created",
+        resolution,
       })
   )
   revalidateStore()
