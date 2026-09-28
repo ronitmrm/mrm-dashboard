@@ -127,6 +127,7 @@ import {
   type ProductionFloorCode,
 } from "@/lib/dashboard-view-model"
 import {
+  formatIstDate,
   formatIstDateTime,
   formatIstTime,
   istDateTimeInputToIso,
@@ -12676,9 +12677,11 @@ function MachineMasterPanel({
                         }
                       >
                         <TableCell>
-                          {formatIstDateTime(
-                            str(row.completedAt || row.completedDate)
-                          )}
+                          {row.legacyHistory
+                            ? formatIstDate(str(row.completedDate))
+                            : formatIstDateTime(
+                                str(row.completedAt || row.completedDate)
+                              )}
                         </TableCell>
                         <TableCell>
                           <StatusBadge
@@ -13852,11 +13855,23 @@ function MaintenanceReportDetail({ row }: { row: DashboardPayload }) {
         <TileField label="Completed By" value={row.completedBy} />
         <TileField
           label="Started At"
-          value={row.startedAt ? formatIstDateTime(str(row.startedAt)) : ""}
+          value={
+            row.legacyHistory
+              ? `${formatIstDate(str(row.startedDate))} · Time not recorded`
+              : row.startedAt
+                ? formatIstDateTime(str(row.startedAt))
+                : ""
+          }
         />
         <TileField
           label="Ended At"
-          value={row.endedAt ? formatIstDateTime(str(row.endedAt)) : ""}
+          value={
+            row.legacyHistory
+              ? `${formatIstDate(str(row.completedDate))} · Time not recorded`
+              : row.endedAt
+                ? formatIstDateTime(str(row.endedAt))
+                : ""
+          }
         />
         <TileField label="Actual Minutes" value={row.actualMinutes} numeric />
         <TileField label="Result" value={row.result} />
@@ -20096,7 +20111,8 @@ function latestMaintenanceCompletion(
     .filter(
       (row) =>
         maintenanceScheduleKey(row) === maintenanceScheduleKey(schedule) &&
-        str(row.status || row.result).toLowerCase() === "completed"
+        str(row.status || row.result).toLowerCase() === "completed" &&
+        !row.legacyHistory
     )
     .sort(
       (a, b) =>
