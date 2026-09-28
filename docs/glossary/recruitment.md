@@ -41,6 +41,9 @@ any member makes the entire combined role unavailable. Filled or Appointed posts
 also remain unavailable. Closing the recruitment job does not release an
 appointment. HR must explicitly record Did Not Join to cancel that reservation
 and reopen the same job; it does not create a duplicate recruitment opening.
+When HR appoints or joins an employee directly from Employee Master, any Open
+job linked to that Approved Post closes in the same transaction. The post and
+employee assignment remain intact; closing the job only stops recruitment.
 
 Search Candidate shows candidate profiles before a job is selected. HR may select
 candidates first and then an Open job, or select the job first. Choosing or changing
