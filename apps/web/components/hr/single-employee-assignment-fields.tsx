@@ -118,8 +118,19 @@ export function SingleEmployeeAssignmentFields({
   const canCorrectIdentity = Boolean(
     allowIdentityCorrection &&
     assigned &&
+    (event === "Appointed" || event === "Joined") &&
     (selected?.post.status === "Appointed" ||
       selected?.post.status === "Occupied")
+  )
+  const canChangeRole = Boolean(
+    selected?.post.status === "Occupied" &&
+    !selected.combinedRole &&
+    selected.post.employeeCode &&
+    posts.some((post) =>
+      post.id !== selected?.post.id &&
+      post.status === "Occupied" &&
+      post.employeeCode === selected?.post.employeeCode
+    )
   )
 
   function selectTarget(nextPostId: string) {
@@ -337,6 +348,11 @@ export function SingleEmployeeAssignmentFields({
                 Joined — Becomes Occupied
               </NativeSelectOption>
               <NativeSelectOption value="Resigned">Resigned</NativeSelectOption>
+              {canChangeRole ? (
+                <NativeSelectOption value="Role Changed">
+                  Role Changed — Release This Post Only
+                </NativeSelectOption>
+              ) : null}
               <NativeSelectOption
                 value="Removed"
                 disabled={Boolean(pendingReplacement)}
@@ -399,6 +415,22 @@ export function SingleEmployeeAssignmentFields({
               Leave blank to use the accepted Offer Letter probation period.
               Enter a date for employees without an Offer Letter.
             </FieldDescription>
+          </Field>
+        </>
+      ) : null}
+      {event === "Role Changed" ? (
+        <>
+          <FieldDescription>
+            This releases only this standalone post. The employee stays on their
+            other occupied posts, and this role change appears in assignment history.
+          </FieldDescription>
+          <Field className="w-full min-w-0">
+            <FieldLabel htmlFor="role-change-date">Last Day In This Role</FieldLabel>
+            <Input id="role-change-date" name="last_working_date" required type="date" />
+          </Field>
+          <Field className="w-full min-w-0">
+            <FieldLabel htmlFor="role-change-note">Role Change Note</FieldLabel>
+            <Input id="role-change-note" name="exit_note" />
           </Field>
         </>
       ) : null}
