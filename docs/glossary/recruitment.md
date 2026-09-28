@@ -44,6 +44,9 @@ and reopen the same job; it does not create a duplicate recruitment opening.
 When HR appoints or joins an employee directly from Employee Master, any Open
 job linked to that Approved Post closes in the same transaction. The post and
 employee assignment remain intact; closing the job only stops recruitment.
+When a filled Approved Post later becomes vacant, a new recruitment cycle
+creates a new Job Post with the same vacancy code and a distinct job number.
+Earlier Closed jobs and their applications remain as recruitment history.
 
 Search Candidate shows candidate profiles before a job is selected. HR may select
 candidates first and then an Open job, or select the job first. Choosing or changing

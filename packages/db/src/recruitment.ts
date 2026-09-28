@@ -3629,6 +3629,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           combined_role_id: string | null
           has_pending_replacement: boolean
           post_id: string
+          vacancy_code: string
         }>(
           `
             SELECT selected.combined_role_id,
@@ -3640,7 +3641,9 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
                   AND (member.id = selected.id OR
                     (combined.id IS NOT NULL AND member.combined_role_id = combined.id))
               ) AS has_pending_replacement,
-              COALESCE(primary_post.id, selected.id) AS post_id
+              COALESCE(primary_post.id, selected.id) AS post_id,
+              COALESCE(combined.vacancy_code, primary_post.vacancy_code,
+                selected.vacancy_code) AS vacancy_code
             FROM recruitment.posts selected
             LEFT JOIN recruitment.combined_roles combined
               ON combined.id = selected.combined_role_id
@@ -3694,6 +3697,22 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             throw new Error("Select an active job template for this post.")
           }
         }
+        const vacancyCode = required(targetPost.vacancy_code, "Vacancy code")
+        const historicalNumbers = await client.query<{ job_number: string }>(
+          `SELECT job_number FROM recruitment.job_posts
+           WHERE organization_id = $1
+             AND (lower(job_number) = lower($2::text)
+               OR left(lower(job_number), length($2::text) + 1) =
+                 lower($2::text) || '-')`,
+          [input.organizationId, vacancyCode]
+        )
+        const usedNumbers = new Set(
+          historicalNumbers.rows.map((job) => job.job_number.toLowerCase())
+        )
+        let jobNumber = vacancyCode
+        for (let sequence = 2; usedNumbers.has(jobNumber.toLowerCase()); sequence++) {
+          jobNumber = `${vacancyCode}-${sequence}`
+        }
         const result = await client.query<{ id: string }>(
           `
             INSERT INTO recruitment.job_posts (
@@ -3704,7 +3723,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
               source_system, source_table, source_id
             )
             SELECT selected.organization_id, post.id, template.id,
-              COALESCE(combined.vacancy_code, post.vacancy_code),
+              $8,
               COALESCE(combined.vacancy_code, post.vacancy_code),
               COALESCE(combined.name,
                 designation.name || ' / ' || department.name),
@@ -3766,6 +3785,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             input.organizationId,
             input.requirementTemplateCode !== undefined,
             templateCode,
+            jobNumber,
           ]
         )
         if (!result.rows[0]) throw new Error("Approved post was not found.")
