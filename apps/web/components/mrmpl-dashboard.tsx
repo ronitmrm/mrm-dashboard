@@ -12193,13 +12193,17 @@ function MachineMasterPanel({
   if (!selectedMachineNo) {
     return (
       <section className="grid gap-4">
-        <TrackingSummary
-          tones={["brand", "information", "accent", "positive"]}
+        <MetricSummary
+          scope="All machines and maintenance records across production units, before table filters."
           items={[
-            ["Machines", formatNumber(machineRows.length)],
-            ["Schedule master", formatNumber(maintenanceMasterRows.length)],
-            ["Schedules", formatNumber(scheduleRows.length)],
-            ["Records", formatNumber(completionRows.length)],
+            { label: "Machines", tone: "brand", value: machineRows.length },
+            {
+              label: "Schedule master",
+              tone: "information",
+              value: maintenanceMasterRows.length,
+            },
+            { label: "Schedules", tone: "accent", value: scheduleRows.length },
+            { label: "Records", tone: "positive", value: completionRows.length },
           ]}
         />
         <SectionCard>
@@ -12317,13 +12321,17 @@ function MachineMasterPanel({
           Back To Machines
         </Button>
       </div>
-      <TrackingSummary
-        tones={["accent", "positive", "information", "brand"]}
+      <MetricSummary
+        scope={`Machine ${displayValue(selectedMachine.machineNo)} · Schedule master includes all production units.`}
         items={[
-          ["Schedules", formatNumber(machineSchedules.length)],
-          ["Records", formatNumber(machineHistory.length)],
-          ["Filtered", formatNumber(filteredHistory.length)],
-          ["Schedule master", formatNumber(maintenanceMasterRows.length)],
+          { label: "Schedules", tone: "accent", value: machineSchedules.length },
+          { label: "Records", tone: "positive", value: machineHistory.length },
+          { label: "Filtered", tone: "information", value: filteredHistory.length },
+          {
+            label: "Schedule master",
+            tone: "brand",
+            value: maintenanceMasterRows.length,
+          },
         ]}
       />
       <SectionCard>
