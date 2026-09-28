@@ -806,8 +806,9 @@ export async function updateEmployeeProbationAction(formData: FormData) {
       ...context,
       assignmentId: value(formData, "assignment_id"),
       probationDueOn: value(formData, "probation_due_on") || null,
+      remark: value(formData, "remark") || null,
     }),
-    "Probation end date updated."
+    "Probation update saved."
   )
 }
 

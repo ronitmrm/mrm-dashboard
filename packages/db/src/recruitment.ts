@@ -189,6 +189,7 @@ export type RecruitmentEmployeeAssignmentRow = {
   employeeCode: string | null
   joinedOn: string | null
   probationDueOn: string | null
+  probationRemark: string | null
   legacyProbationCompleted: boolean
   legacyProbationRecordedOn: string | null
   plannedEndOn: string | null
@@ -3101,6 +3102,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         employee_code: string | null
         joined_on: string | null
         probation_due_on: string | null
+        probation_remark: string | null
         legacy_probation_completed: boolean
         legacy_probation_recorded_on: string | null
         planned_end_on: string | null
@@ -3113,7 +3115,8 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
            department.name AS department, designation.name AS designation,
            assignment.employee_name,
            assignment.employee_code, assignment.joined_on::text,
-           assignment.probation_due_on::text, assignment.legacy_probation_completed,
+           assignment.probation_due_on::text, remark_event.reason AS probation_remark,
+           assignment.legacy_probation_completed,
            legacy_event.recorded_on AS legacy_probation_recorded_on,
            assignment.planned_end_on::text,
            assignment.ended_on::text, assignment.exit_type, assignment.exit_note,
@@ -3131,6 +3134,16 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
              AND event.event_type = 'recruitment.employee.legacy_probation_imported'
            ORDER BY event.occurred_at DESC LIMIT 1
          ) legacy_event ON assignment.legacy_probation_completed
+         LEFT JOIN LATERAL (
+           SELECT event.reason
+           FROM audit.events event
+           WHERE event.target_schema = 'recruitment'
+             AND event.target_table = 'employee_post_assignments'
+             AND event.target_id = assignment.id
+             AND event.event_type = 'recruitment.employee.probation_date_updated'
+             AND nullif(trim(event.reason), '') IS NOT NULL
+           ORDER BY event.occurred_at DESC, event.id DESC LIMIT 1
+         ) remark_event ON true
          LEFT JOIN LATERAL (
            SELECT issued_on FROM recruitment.employment_letters letter
            WHERE letter.organization_id = assignment.organization_id
@@ -3152,6 +3165,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         employeeCode: row.employee_code,
         joinedOn: row.joined_on,
         probationDueOn: row.probation_due_on,
+        probationRemark: row.probation_remark,
         legacyProbationCompleted: row.legacy_probation_completed,
         legacyProbationRecordedOn: row.legacy_probation_recorded_on,
         plannedEndOn: row.planned_end_on,
@@ -3166,10 +3180,15 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       input: MutationContext & {
         assignmentId: string
         probationDueOn: string | null
+        remark?: string | null
       }
     ) {
       if (input.probationDueOn && !/^\d{4}-\d{2}-\d{2}$/.test(input.probationDueOn)) {
         throw new Error("Enter a valid probation end date.")
+      }
+      const remark = input.remark?.trim() || null
+      if (remark && remark.length > 1000) {
+        throw new Error("Keep the probation remark within 1,000 characters.")
       }
       return transaction(pool, async (client) => {
         const before = await client.query<{
@@ -3192,6 +3211,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         await audit(client, {
           ...input,
           eventType: "recruitment.employee.probation_date_updated",
+          reason: remark,
           beforeState: before.rows[0],
           afterState: after.rows[0],
           targetId: input.assignmentId,

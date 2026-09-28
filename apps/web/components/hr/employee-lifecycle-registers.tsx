@@ -13,6 +13,7 @@ import {
   OperationalTable, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@workspace/ui/components/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@workspace/ui/components/tabs"
+import { Textarea } from "@workspace/ui/components/textarea"
 
 import { updateEmployeeProbationAction } from "@/app/hr/actions"
 import { probationReminderStatus, splitProbationAssignments } from "@/lib/hr/probation-reminder"
@@ -42,7 +43,19 @@ function ProbationDateEditor({ assignment }: { assignment: RecruitmentEmployeeAs
             />
             <FieldDescription>Set this date if it was unavailable at joining.</FieldDescription>
           </Field>
-          <Button className="w-fit" type="submit">Save Date</Button>
+          <Field>
+            <FieldLabel htmlFor={`probation-remark-${assignment.id}`}>Remark</FieldLabel>
+            <Textarea
+              id={`probation-remark-${assignment.id}`}
+              maxLength={1000}
+              name="remark"
+              placeholder="Add a note about this update"
+              rows={3}
+            />
+            <FieldDescription>Optional. Saved with this update in the audit history.</FieldDescription>
+          </Field>
+          {assignment.probationRemark ? <p className="text-sm text-muted-foreground">Latest remark: {assignment.probationRemark}</p> : null}
+          <Button className="w-fit" type="submit">Save Update</Button>
         </form>
       </StandardDialogContent>
     </Dialog>
@@ -106,7 +119,7 @@ export function ProbationEndReminders({
                   <TableHead>Employee Code</TableHead><TableHead>Employee Name</TableHead>
                   <TableHead>Department</TableHead><TableHead>Designation</TableHead>
                   <TableHead>Joined</TableHead><TableHead>Probation Ends</TableHead>
-                  <TableHead>Reminder</TableHead>
+                  <TableHead>Reminder</TableHead><TableHead>Latest Remark</TableHead>
                   {canManageEmployees ? <TableHead className="text-right">Action</TableHead> : null}
                 </TableRow></TableHeader>
                 <TableBody>
@@ -120,10 +133,11 @@ export function ProbationEndReminders({
                       <TableCell>{assignment.joinedOn ?? "Date needed"}</TableCell>
                       <TableCell>{assignment.probationDueOn ?? "Date needed"}</TableCell>
                       <TableCell><StatusBadge value={reminderStatus} tone={reminderStatus === "Scheduled" ? "information" : "warning"} /></TableCell>
+                      <TableCell>{assignment.probationRemark ?? "—"}</TableCell>
                       {canManageEmployees ? <TableCell className="text-right"><ProbationDateEditor assignment={assignment} /></TableCell> : null}
                     </TableRow>
                   })}
-                  {!open.length ? <TableRow><TableCell colSpan={canManageEmployees ? 8 : 7}>
+                  {!open.length ? <TableRow><TableCell colSpan={canManageEmployees ? 9 : 8}>
                     <StandardState title="No Open Probation Tasks" description="New assignments appear here until probation is recorded complete." />
                   </TableCell></TableRow> : null}
                 </TableBody>
@@ -142,7 +156,7 @@ export function ProbationEndReminders({
                 <TableHeader><TableRow>
                   <TableHead>Employee Code</TableHead><TableHead>Employee Name</TableHead>
                   <TableHead>Department</TableHead><TableHead>Designation</TableHead>
-                  <TableHead>Probation Ends</TableHead><TableHead>Recorded On</TableHead><TableHead>Completion Record</TableHead>
+                  <TableHead>Probation Ends</TableHead><TableHead>Recorded On</TableHead><TableHead>Completion Record</TableHead><TableHead>Latest Remark</TableHead>
                 </TableRow></TableHeader>
                 <TableBody>
                   {completed.map((assignment) => <TableRow key={assignment.id}>
@@ -153,8 +167,9 @@ export function ProbationEndReminders({
                     <TableCell>{assignment.probationDueOn ?? "—"}</TableCell>
                     <TableCell>{assignment.appointmentLetterIssuedOn ?? assignment.legacyProbationRecordedOn ?? "—"}</TableCell>
                     <TableCell><StatusBadge value={assignment.appointmentLetterIssuedOn ? "Appointment Letter" : "Legacy Completion"} tone="positive" /></TableCell>
+                    <TableCell>{assignment.probationRemark ?? "—"}</TableCell>
                   </TableRow>)}
-                  {!completed.length ? <TableRow><TableCell colSpan={7}>
+                  {!completed.length ? <TableRow><TableCell colSpan={8}>
                     <StandardState title="No Completed Probation Records" description="Completed assignments will be logged here." />
                   </TableCell></TableRow> : null}
                 </TableBody>
