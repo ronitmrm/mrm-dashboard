@@ -4311,8 +4311,7 @@ function machineQueueSort(a: Record<string, unknown>, b: Record<string, unknown>
 }
 
 function applyMachineUnavailableQueuePlacementOrder(queue: Array<Record<string, unknown>>) {
-  const placementTargets = queue.filter((row) =>
-    machineUnavailableHasQueuePlacement(row) && !planOverrideInterruptionHasFinishedQty(row));
+  const placementTargets = queue.filter(machineUnavailableHasQueuePlacement);
   let ordered = [...queue];
   for (const target of placementTargets) {
     const remaining = ordered.filter((row) => row !== target);
@@ -4366,7 +4365,7 @@ function shopFloorSupersedesStop(row: Record<string, unknown>, decisionAt: unkno
 }
 
 function applyPlanOverrideInterruptionQuantities(details: Array<Record<string, unknown>>) {
-  const stopOverrides = details.filter((row) => planOverrideInterruptionHasFinishedQty(row));
+  const stopOverrides = details.filter((row) => planOverrideInterruptedSetups(row).length > 0);
   for (const overrideRow of stopOverrides) {
     const setupInterruptions = planOverrideInterruptedSetups(overrideRow);
     for (const row of details) {
@@ -4395,10 +4394,6 @@ function applyPlanOverrideInterruptionQuantities(details: Array<Record<string, u
       row.shopFloorStageLabel = "Planner stopped";
     }
   }
-}
-
-function planOverrideInterruptionHasFinishedQty(row: Record<string, unknown>) {
-  return planOverrideInterruptedSetups(row).length > 0;
 }
 
 function planOverrideInterruptedSetups(row: Record<string, unknown>) {
