@@ -63,6 +63,41 @@ test("removing a joined employee requires an actual end date and exit type", asy
   expect(query.mock.calls.some(([statement]) => statement.includes("UPDATE recruitment.posts"))).toBe(false)
 })
 
+test("joining directly from Employee Master closes the linked open job", async () => {
+  const query = vi.fn(async (statement: string, parameters?: readonly unknown[]) => {
+    if (statement.includes("SELECT id, employee_name, employee_code")) return { rows: [{
+      id: "post-1", employee_name: null, employee_code: null,
+      status: "Vacant", combined_role_id: null, can_replace: true,
+      joining_date: null, last_working_date: null,
+    }] }
+    if (statement.includes("UPDATE recruitment.posts")) {
+      expect(parameters?.[2]).toBe("Occupied")
+      return { rows: [{ id: "post-1" }] }
+    }
+    if (statement.includes("UPDATE recruitment.job_posts")) {
+      return { rows: [{ id: "job-1", post_id: "post-1" }] }
+    }
+    return { rows: [], rowCount: 0 }
+  })
+  const client = { query, release: vi.fn() } as unknown as PoolClient
+  const repository = createRecruitmentRepository({
+    pool: { connect: vi.fn(async () => client) } as unknown as Pool,
+  })
+
+  await repository.assignEmployee({
+    organizationId: "org-1", postId: "post-1", employeeEvent: "Joined",
+    employeeName: "Bhavesh Khichda", employeeCode: "36", joiningDate: "2026-09-08",
+  })
+
+  const close = query.mock.calls.find(([statement]) => statement.includes("UPDATE recruitment.job_posts"))
+  expect(close?.[0]).toContain("status = 'Closed'")
+  expect(close?.[1]?.[2]).toContain("post-1")
+  const audits = query.mock.calls
+    .filter(([statement]) => statement.includes("INSERT INTO audit.events"))
+    .map(([, parameters]) => parameters?.[0])
+  expect(audits.join(" ")).toContain("recruitment.job.closed")
+})
+
 test("role change releases only the standalone post and records a non-departure event", async () => {
   const query = vi.fn(async (statement: string, parameters?: unknown[]) => {
     if (statement.includes("SELECT id, employee_name, employee_code")) return { rows: [{

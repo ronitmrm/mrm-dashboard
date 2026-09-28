@@ -612,6 +612,32 @@ async function setEmployeeLifecycleContext(
   )
 }
 
+async function closeOpenJobsForManualAssignment(
+  client: PoolClient,
+  input: EmployeeAssignmentInput,
+  postIds: string[]
+) {
+  if (input.appointedApplicationId) return
+  const closed = await client.query<{ id: string; post_id: string }>(
+    `UPDATE recruitment.job_posts
+     SET status = 'Closed', closed_on = current_date,
+       updated_by_user_id = $1, updated_at = now(), row_version = row_version + 1
+     WHERE organization_id = $2 AND post_id = ANY($3::uuid[]) AND status = 'Open'
+     RETURNING id, post_id`,
+    [input.actorUserId ?? null, input.organizationId, postIds]
+  )
+  await auditMany(client, closed.rows.map((job) => ({
+    ...input,
+    eventType: "recruitment.job.closed",
+    reason: "Approved post assigned through Employee Master",
+    beforeState: { status: "Open" },
+    afterState: { status: "Closed" },
+    metadata: { postId: job.post_id, employeeEvent: input.employeeEvent },
+    targetId: job.id,
+    targetTable: "job_posts",
+  })))
+}
+
 async function assignEmployeeInTransaction(
   client: PoolClient,
   input: EmployeeAssignmentInput,
@@ -731,6 +757,9 @@ async function assignEmployeeInTransaction(
       targets.rows
     )
     if (replacementEvent) {
+      if (replacementEvent === "replacement_appointed" || replacementEvent === "replacement_joined") {
+        await closeOpenJobsForManualAssignment(client, input, targets.rows.map((post) => post.id))
+      }
       await auditMany(
         client,
         targets.rows.map((post, ordinal) =>
@@ -845,6 +874,9 @@ async function assignEmployeeInTransaction(
   )
   if (result.rows.length !== targetIds.length) {
     throw new Error("Not every approved post in the assignment was updated.")
+  }
+  if (assignment.status === "Appointed" || assignment.status === "Occupied") {
+    await closeOpenJobsForManualAssignment(client, input, targetIds)
   }
   const updatedIds = new Set(result.rows.map((post) => post.id))
   const orderedAudits = targets.rows.map((post, commandOrdinal) => {
