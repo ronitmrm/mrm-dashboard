@@ -169,7 +169,12 @@ enters it when missing. The reminder is due on the probation end date and
 completed when the Appointment Letter is issued and its PDF retained.
 For employees carried over from the former system, HR may record that
 probation was already completed there. That explicit migration record also
-completes the reminder; a past due date alone does not.
+completes the reminder; a past due date alone does not. When HR supplies a
+legacy workbook with joining and probation end dates and confirms completion
+for its past-dated rows, those rows receive an explicit completion record.
+Future-dated rows remain pending. A probation-date update may include an
+optional remark retained in the assignment audit history and shown with the
+current reminder.
 Completed reminders leave the open HR task list and remain in a probation
 completion log. The log identifies whether completion came from an issued
 Appointment Letter or a recorded legacy completion; its recorded date is the
