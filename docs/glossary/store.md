@@ -245,7 +245,9 @@ merging logical drawing links. Historical Store document rows remain readable.
 
 **Asset Movement**: An immutable change in the holder of one Non Consumable
 Unit ID between the Store, a Department, a Machine, or a Vendor. A Store Return
-is an Asset Movement back to a Store location; Consumables never participate.
+is an Asset Movement back to a Store location. Store records direct movements
+in its Movement submodule without a request; the Unit ID workspace shows the
+movement history. Consumables never participate.
 
 **Asset Maintenance Plan**: One active Calendar Days Maintenance Master assigned
 to one physical Unit ID. The selected Master supplies the name, frequency and
