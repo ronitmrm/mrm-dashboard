@@ -3421,6 +3421,9 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       organizationId: string
     }) {
       const result = await pool.query<{
+        assetCategory: string
+        assetName: string
+        assetSubcategory: string
         assetCodeRequired: boolean
         availableStock: string
         availableUnitIds: string[]
@@ -3449,6 +3452,9 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             trim_scale(request.requested_quantity - request.issued_quantity)::text AS "remainingQuantity",
             request.status, header.created_at AS "requestedAt",
             item.type_code AS "typeCode",
+            item.asset_category AS "assetCategory",
+            item.asset_subcategory AS "assetSubcategory",
+            item.asset_name AS "assetName",
             item.identification_name AS "identificationName",
             item.tracking_mode AS "trackingMode", item.unit,
             (item.tracking_mode = 'SERIALIZED') AS "assetCodeRequired",
@@ -3485,6 +3491,32 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         [input.organizationId, input.locationId ?? null]
       )
       return { rows: result.rows }
+    },
+
+    async cancelRequisition(input: {
+      actorUserId?: string | null
+      organizationId: string
+      requisitionId: string
+    }) {
+      const result = await pool.query<{ id: string }>(
+        `
+          UPDATE store.requisitions
+          SET status = 'Cancelled', updated_at = now(),
+            updated_by_user_id = $3
+          WHERE id = $1 AND organization_id = $2
+            AND status IN ('Pending', 'Partially Issued')
+          RETURNING id
+        `,
+        [
+          requiredText(input.requisitionId, "Store request line"),
+          input.organizationId,
+          input.actorUserId ?? null,
+        ]
+      )
+      if (!result.rows[0]) {
+        throw new Error("Only an open Store request line can be cancelled.")
+      }
+      return result.rows[0]
     },
 
     async issueRequisition(input: {
@@ -3906,14 +3938,18 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         lastCompletedOn: string | null
         name: string
         nextDueOn: string
+        scheduleType: "MAINTENANCE" | "CALIBRATION"
       }>(
         `
-          SELECT schedule.id, definition.code, definition.name,
-            definition.frequency_value AS "frequencyDays",
+          SELECT schedule.id,
+            COALESCE(definition.code, schedule.schedule_type) AS code,
+            COALESCE(definition.name, schedule.name) AS name,
+            COALESCE(definition.frequency_value, schedule.frequency_days) AS "frequencyDays",
+            schedule.schedule_type AS "scheduleType",
             schedule.last_completed_on::text AS "lastCompletedOn",
             schedule.next_due_on::text AS "nextDueOn", schedule.active
           FROM store.asset_maintenance_schedules schedule
-          JOIN maintenance.definitions definition ON definition.id = schedule.definition_id
+          LEFT JOIN maintenance.definitions definition ON definition.id = schedule.definition_id
           WHERE schedule.organization_id = $1 AND schedule.asset_id = $2
           ORDER BY schedule.next_due_on
         `,
@@ -4226,38 +4262,38 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
     async scheduleAssetMaintenance(input: {
       actorUserId?: string | null
       assetCode: string
-      definitionCode: string
       firstDueOn: string
+      frequencyDays: number
+      name: string
       organizationId: string
+      scheduleType: "MAINTENANCE" | "CALIBRATION"
     }) {
+      if (!Number.isInteger(input.frequencyDays) || input.frequencyDays <= 0) {
+        throw new Error("Frequency must be a positive number of days.")
+      }
       const result = await pool.query<{ id: string }>(
         `
           INSERT INTO store.asset_maintenance_schedules (
-            organization_id, asset_id, definition_id, first_due_on,
-            next_due_on, created_by_user_id, updated_by_user_id
+            organization_id, asset_id, schedule_type, name, frequency_days,
+            first_due_on, next_due_on, created_by_user_id, updated_by_user_id
           )
-          SELECT $1, asset.id, definition.id, $4::date, $4::date, $5, $5
+          SELECT $1, asset.id, $3, $4, $5, $6::date, $6::date, $7, $7
           FROM store.assets asset
-          JOIN maintenance.definitions definition
-            ON definition.organization_id = asset.organization_id
-            AND lower(definition.code) = lower($3)
           WHERE asset.organization_id = $1 AND lower(asset.asset_code) = lower($2)
-          ON CONFLICT (asset_id, definition_id)
-          DO UPDATE SET first_due_on = EXCLUDED.first_due_on,
-            next_due_on = EXCLUDED.next_due_on, active = true,
-            updated_at = now(), updated_by_user_id = EXCLUDED.updated_by_user_id
           RETURNING id
         `,
         [
           input.organizationId,
           requiredText(input.assetCode, "Unit ID"),
-          requiredText(input.definitionCode, "Maintenance code"),
+          input.scheduleType,
+          requiredText(input.name, "Schedule name"),
+          input.frequencyDays,
           requiredText(input.firstDueOn, "First due date"),
           input.actorUserId ?? null,
         ]
       )
       if (!result.rows[0]) {
-        throw new Error("Unit ID or Maintenance Master code was not found.")
+        throw new Error("Unit ID was not found.")
       }
       return result.rows[0]
     },
@@ -4363,18 +4399,30 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         if (input.scheduleId) {
           const schedule = await client.query<{
             frequency_value: number
+            schedule_type: "MAINTENANCE" | "CALIBRATION"
+            definition_id: string | null
           }>(
             `
-              SELECT definition.frequency_value
+              SELECT COALESCE(definition.frequency_value, schedule.frequency_days)
+                AS frequency_value,
+                schedule.schedule_type, schedule.definition_id
               FROM store.asset_maintenance_schedules schedule
-              JOIN maintenance.definitions definition ON definition.id = schedule.definition_id
-              WHERE schedule.id = $1 AND schedule.asset_id = $2
+              LEFT JOIN maintenance.definitions definition ON definition.id = schedule.definition_id
+              WHERE schedule.id = $1 AND schedule.asset_id = $2 AND schedule.active
               FOR UPDATE OF schedule
             `,
             [input.scheduleId, asset.rows[0].id]
           )
           if (!schedule.rows[0])
             throw new Error("Asset maintenance schedule was not found.")
+          if (
+            !schedule.rows[0].definition_id &&
+            schedule.rows[0].schedule_type !== input.maintenanceType
+          ) {
+            throw new Error(
+              "The selected timetable has a different maintenance type."
+            )
+          }
           const due = await client.query<{ next_due_on: string }>(
             `SELECT ($1::date + $2::integer)::text AS next_due_on`,
             [input.completedOn, schedule.rows[0].frequency_value]
@@ -4423,23 +4471,6 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         )
         return { id: result.rows[0]!.id, nextDueOn }
       })
-    },
-
-    async listMaintenanceDefinitions(organizationId: string) {
-      const result = await pool.query<{
-        code: string
-        frequencyDays: number
-        name: string
-      }>(
-        `
-          SELECT code, name, frequency_value AS "frequencyDays"
-          FROM maintenance.definitions
-          WHERE organization_id = $1 AND active
-          ORDER BY code
-        `,
-        [organizationId]
-      )
-      return result.rows
     },
 
     async listAssetsForMachine(input: {

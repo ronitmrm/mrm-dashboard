@@ -95,13 +95,11 @@ export default async function StoreAssetWorkspacePage({
         }),
       }
     }
-    const [definitions, suppliers, vendors] = await Promise.all([
-      repository.listMaintenanceDefinitions(organizationId),
+    const [suppliers, vendors] = await Promise.all([
       repository.listSuppliers(organizationId),
       repository.listVendors(organizationId),
     ])
     return {
-      definitions,
       kind: "asset" as const,
       suppliers,
       vendors,
@@ -363,8 +361,7 @@ export default async function StoreAssetWorkspacePage({
             <CardHeader>
               <CardTitle>Add Timetable</CardTitle>
               <CardDescription>
-                Schedules come from Maintenance Master and belong to this
-                specific Unit ID.
+                Schedule maintenance or calibration for this Unit ID.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -376,25 +373,33 @@ export default async function StoreAssetWorkspacePage({
                 />
                 <FieldGroup className="gap-4">
                   <Field>
-                    <FieldLabel htmlFor="definition-code">
-                      Maintenance Master
-                    </FieldLabel>
+                    <FieldLabel htmlFor="asset-schedule-type">Type</FieldLabel>
                     <NativeSelect
-                      id="definition-code"
-                      name="definition_code"
+                      id="asset-schedule-type"
+                      name="schedule_type"
                       required
                     >
-                      {data.definitions.map((definition) => (
-                        <NativeSelectOption
-                          key={definition.code}
-                          value={definition.code}
-                        >
-                          {definition.code} — {definition.name} (
-                          {definition.frequencyDays} days)
-                        </NativeSelectOption>
-                      ))}
+                      <NativeSelectOption value="MAINTENANCE">
+                        Maintenance
+                      </NativeSelectOption>
+                      <NativeSelectOption value="CALIBRATION">
+                        Calibration
+                      </NativeSelectOption>
                     </NativeSelect>
                   </Field>
+                  <TextField
+                    label="Schedule Name"
+                    name="schedule_name"
+                    required
+                  />
+                  <TextField
+                    label="Frequency (days)"
+                    min="1"
+                    name="frequency_days"
+                    required
+                    step="1"
+                    type="number"
+                  />
                   <TextField
                     label="First Due Date"
                     name="first_due_on"
@@ -404,7 +409,6 @@ export default async function StoreAssetWorkspacePage({
                 </FieldGroup>
                 <Button
                   className="mt-5"
-                  disabled={!data.definitions.length}
                   type="submit"
                 >
                   Add Timetable
@@ -463,7 +467,9 @@ export default async function StoreAssetWorkspacePage({
                           key={schedule.id}
                           value={schedule.id}
                         >
-                          {schedule.code} — due {schedule.nextDueOn}
+                          {schedule.name} ({schedule.scheduleType === "CALIBRATION"
+                            ? "Calibration"
+                            : "Maintenance"}) — due {schedule.nextDueOn}
                         </NativeSelectOption>
                       ))}
                     </NativeSelect>
@@ -653,6 +659,7 @@ export default async function StoreAssetWorkspacePage({
             <TableHeader>
               <TableRow>
                 <TableHead>Code</TableHead>
+                <TableHead>Type</TableHead>
                 <TableHead>Schedule</TableHead>
                 <TableHead>Frequency</TableHead>
                 <TableHead>Last Completed</TableHead>
@@ -667,6 +674,11 @@ export default async function StoreAssetWorkspacePage({
                   <TableRow key={schedule.id}>
                     <TableCell className="font-medium">
                       {schedule.code}
+                    </TableCell>
+                    <TableCell>
+                      {schedule.scheduleType === "CALIBRATION"
+                        ? "Calibration"
+                        : "Maintenance"}
                     </TableCell>
                     <TableCell>{schedule.name}</TableCell>
                     <TableCell>{schedule.frequencyDays} days</TableCell>
@@ -690,7 +702,7 @@ export default async function StoreAssetWorkspacePage({
                 <TableRow>
                   <TableCell
                     className="h-24 text-center text-muted-foreground"
-                    colSpan={6}
+                    colSpan={7}
                   >
                     No maintenance timetable assigned.
                   </TableCell>

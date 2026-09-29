@@ -9,7 +9,6 @@ import {
   type ArtifactStorageProvider,
 } from "./artifacts"
 import { migrateDatabase } from "./migrate"
-import { createMaintenanceRepository } from "./maintenance"
 import {
   authorizeStoreItemTypeArtifactTarget,
   authorizeStorePurchaseOrderArtifactTarget,
@@ -24,7 +23,6 @@ const connectionString =
 
 const pool = new Pool({ connectionString })
 const store = createStoreRepository({ connectionString })
-const maintenance = createMaintenanceRepository({ connectionString })
 const suffix = randomUUID().slice(0, 8)
 let organizationId: string
 let legacyItemTypeId: string
@@ -139,7 +137,6 @@ beforeAll(async () => {
 afterAll(async () => {
   await issuanceArtifacts.close()
   await store.close()
-  await maintenance.close()
   await pool.end()
 })
 
@@ -1180,6 +1177,39 @@ describe("Store requests", () => {
     )
   })
 
+  test("Store can cancel an open request line and prevent later issue", async () => {
+    const location = await store.ensurePrimaryStoreLocation({ organizationId })
+    const item = await store.createItemType({
+      ...(await createClassification("Cancelled Request")),
+      assetType: "CONSUMABLE",
+      identificationName: `Cancelled Request ${suffix}`,
+      organizationId,
+      unit: "Nos",
+    })
+    const request = await store.createRequisition({
+      department: "Production",
+      itemTypeId: item.id,
+      locationId: location.id,
+      organizationId,
+      quantity: 1,
+      requestedBy: "Production Supervisor",
+    })
+
+    await store.cancelRequisition({ organizationId, requisitionId: request.id })
+    expect(
+      (await store.listRequisitions({ organizationId })).rows.find(
+        (row) => row.id === request.id
+      )?.status
+    ).toBe("Cancelled")
+    await expect(
+      store.issueRequisition({
+        organizationId,
+        quantity: 1,
+        requisitionId: request.id,
+      })
+    ).rejects.toThrow("already closed")
+  })
+
   test("bulk allocation rejects request lines for different Departments", async () => {
     const location = await store.ensurePrimaryStoreLocation({ organizationId })
     const item = await store.createItemType({
@@ -1497,22 +1527,33 @@ describe("Store requests", () => {
       vendorId: vendor.id,
     })
 
-    const definitionCode = `AM-${suffix}`
-    await maintenance.upsertDefinition({
-      active: true,
-      code: definitionCode,
-      frequencyDays: 30,
-      items: [],
-      name: "Monthly asset inspection",
-      organizationId,
-      payload: {},
-    })
     const schedule = await store.scheduleAssetMaintenance({
       assetCode: receipt.assetCodes[0]!,
-      definitionCode,
       firstDueOn: "2026-08-20",
+      frequencyDays: 30,
+      name: "Monthly calibration",
       organizationId,
+      scheduleType: "CALIBRATION",
     })
+    await store.scheduleAssetMaintenance({
+      assetCode: receipt.assetCodes[0]!,
+      firstDueOn: "2026-08-22",
+      frequencyDays: 90,
+      name: "Quarterly inspection",
+      organizationId,
+      scheduleType: "MAINTENANCE",
+    })
+    expect(
+      (
+        await store.getAssetWorkspace({
+          assetCode: receipt.assetCodes[0]!,
+          organizationId,
+        })
+      )?.schedules.map(({ name, scheduleType }) => ({ name, scheduleType }))
+    ).toEqual([
+      { name: "Monthly calibration", scheduleType: "CALIBRATION" },
+      { name: "Quarterly inspection", scheduleType: "MAINTENANCE" },
+    ])
     const completion = await store.completeAssetMaintenance({
       assetCode: receipt.assetCodes[0]!,
       completedBy: "Maintenance Technician",

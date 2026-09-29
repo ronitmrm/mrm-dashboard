@@ -3,6 +3,14 @@ import { createStoreRepository } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@workspace/ui/components/dialog"
+import {
   SectionCard,
   CardContent,
   CardHeader,
@@ -32,6 +40,7 @@ import { createStoreIssueFormModel } from "@/lib/store-issue-form"
 import { storePurchaseOrderHref } from "@/lib/unified-navigation"
 
 import {
+  cancelStoreRequisitionAction,
   issueRemainingStoreRequisitionBatchAction,
   issueStoreRequisitionAction,
 } from "../actions"
@@ -61,9 +70,9 @@ export default async function StoreRequestsPage() {
           Requests & Issues
         </h2>
         <p className="text-sm text-muted-foreground">
-          Allocate coded item request lines individually, or select fully
-          available lines to allocate them together. Saving immediately updates
-          Current Stock.
+          Allocate coded item request lines individually, select fully available
+          lines together, or cancel an unneeded request. Saving an allocation
+          immediately updates Current Stock.
         </p>
       </div>
 
@@ -121,13 +130,16 @@ export default async function StoreRequestsPage() {
                 {canManage ? <TableHead>Select</TableHead> : null}
                 <TableHead>Request No.</TableHead>
                 <TableHead>Department / Individual</TableHead>
-                <TableHead>Item</TableHead>
+                <TableHead>Asset Code</TableHead>
+                <TableHead>Asset Category</TableHead>
+                <TableHead>Asset Subcategory</TableHead>
+                <TableHead>Asset Name</TableHead>
                 <TableHead>Requested</TableHead>
                 <TableHead>Issued</TableHead>
                 <TableHead>Remaining</TableHead>
                 <TableHead>Current Stock</TableHead>
                 <TableHead>Status</TableHead>
-                {canManage ? <TableHead>Allocate Line</TableHead> : null}
+                {canManage ? <TableHead>Actions</TableHead> : null}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -191,6 +203,9 @@ export default async function StoreRequestsPage() {
                         {request.identificationName}
                       </span>
                     </TableCell>
+                    <TableCell>{request.assetCategory}</TableCell>
+                    <TableCell>{request.assetSubcategory}</TableCell>
+                    <TableCell>{request.assetName}</TableCell>
                     <TableCell>
                       {request.requestedQuantity} {request.unit}
                     </TableCell>
@@ -213,87 +228,144 @@ export default async function StoreRequestsPage() {
                     {canManage ? (
                       <TableCell>
                         {isOpen ? (
-                          <div className="grid min-w-72 gap-3">
-                            <Button asChild size="sm" variant="outline">
-                              <Link
-                                href={storePurchaseOrderHref({
-                                  itemTypeId: request.itemTypeId,
-                                  quantity: request.remainingQuantity,
-                                  requestNumber: request.requestNumber,
-                                })}
-                              >
-                                Make Order
-                              </Link>
-                            </Button>
-                            <form
-                              action={issueStoreRequisitionAction}
-                              className="grid gap-2"
-                            >
-                              <input
-                                name="requisition_id"
-                                type="hidden"
-                                value={request.id}
-                              />
-                              <Input
-                                aria-label={`Allocate quantity for ${request.requestNumber} ${request.typeCode}`}
-                                defaultValue={
-                                  issueForm.requiresUnitSelection
-                                    ? "1"
-                                    : request.remainingQuantity
-                                }
-                                max={request.remainingQuantity}
-                                min="0.001"
-                                name="issue_quantity"
-                                readOnly={issueForm.requiresUnitSelection}
-                                step="0.001"
-                                type="number"
-                              />
-                              <label className="grid gap-1 text-xs font-medium">
-                                Department
-                                <Input readOnly value={issueForm.department} />
-                              </label>
-                              <label className="grid gap-1 text-xs font-medium">
-                                Issued By
-                                <Input readOnly value={issueForm.issuedBy} />
-                              </label>
-                              {issueForm.requiresUnitSelection ? (
-                                <NativeSelect
-                                  aria-label="Specific Unit ID / Serial ID"
-                                  defaultValue={
-                                    issueForm.availableUnitIds.length === 1
-                                      ? issueForm.availableUnitIds[0]
-                                      : ""
-                                  }
-                                  name="asset_code"
-                                  required
+                          <div className="flex flex-wrap gap-2">
+                            <Dialog>
+                              <DialogTrigger asChild>
+                                <Button size="sm" variant="outline">
+                                  Allocate / Make Order
+                                </Button>
+                              </DialogTrigger>
+                              <DialogContent>
+                                <DialogHeader>
+                                  <DialogTitle>
+                                    Allocate or order {request.typeCode}
+                                  </DialogTitle>
+                                  <DialogDescription>
+                                    {request.assetName} for {request.department}{" "}
+                                    · {request.remainingQuantity} {request.unit}{" "}
+                                    remaining
+                                  </DialogDescription>
+                                </DialogHeader>
+                                <Button asChild size="sm" variant="outline">
+                                  <Link
+                                    href={storePurchaseOrderHref({
+                                      itemTypeId: request.itemTypeId,
+                                      quantity: request.remainingQuantity,
+                                      requestNumber: request.requestNumber,
+                                    })}
+                                  >
+                                    Make Order
+                                  </Link>
+                                </Button>
+                                <form
+                                  action={issueStoreRequisitionAction}
+                                  className="grid gap-2"
                                 >
-                                  <NativeSelectOption disabled value="">
-                                    Select available Unit ID / Serial ID
-                                  </NativeSelectOption>
-                                  {issueForm.availableUnitIds.map((unitId) => (
-                                    <NativeSelectOption
-                                      key={unitId}
-                                      value={unitId}
+                                  <input
+                                    name="requisition_id"
+                                    type="hidden"
+                                    value={request.id}
+                                  />
+                                  <Input
+                                    aria-label={`Allocate quantity for ${request.requestNumber} ${request.typeCode}`}
+                                    defaultValue={
+                                      issueForm.requiresUnitSelection
+                                        ? "1"
+                                        : request.remainingQuantity
+                                    }
+                                    max={request.remainingQuantity}
+                                    min="0.001"
+                                    name="issue_quantity"
+                                    readOnly={issueForm.requiresUnitSelection}
+                                    step="0.001"
+                                    type="number"
+                                  />
+                                  <label className="grid gap-1 text-xs font-medium">
+                                    Department
+                                    <Input
+                                      readOnly
+                                      value={issueForm.department}
+                                    />
+                                  </label>
+                                  <label className="grid gap-1 text-xs font-medium">
+                                    Issued By
+                                    <Input
+                                      readOnly
+                                      value={issueForm.issuedBy}
+                                    />
+                                  </label>
+                                  {issueForm.requiresUnitSelection ? (
+                                    <NativeSelect
+                                      aria-label="Specific Unit ID / Serial ID"
+                                      defaultValue={
+                                        issueForm.availableUnitIds.length === 1
+                                          ? issueForm.availableUnitIds[0]
+                                          : ""
+                                      }
+                                      name="asset_code"
+                                      required
                                     >
-                                      {unitId}
-                                    </NativeSelectOption>
-                                  ))}
-                                </NativeSelect>
-                              ) : null}
-                              <Button
-                                disabled={
-                                  issueForm.requiresUnitSelection &&
-                                  !issueForm.availableUnitIds.length
-                                }
-                                size="sm"
-                                type="submit"
-                              >
-                                {issueForm.requiresUnitSelection &&
-                                !issueForm.availableUnitIds.length
-                                  ? "No Unit Available"
-                                  : "Save Allocation"}
-                              </Button>
-                            </form>
+                                      <NativeSelectOption disabled value="">
+                                        Select available Unit ID / Serial ID
+                                      </NativeSelectOption>
+                                      {issueForm.availableUnitIds.map(
+                                        (unitId) => (
+                                          <NativeSelectOption
+                                            key={unitId}
+                                            value={unitId}
+                                          >
+                                            {unitId}
+                                          </NativeSelectOption>
+                                        )
+                                      )}
+                                    </NativeSelect>
+                                  ) : null}
+                                  <Button
+                                    disabled={
+                                      issueForm.requiresUnitSelection &&
+                                      !issueForm.availableUnitIds.length
+                                    }
+                                    size="sm"
+                                    type="submit"
+                                  >
+                                    {issueForm.requiresUnitSelection &&
+                                    !issueForm.availableUnitIds.length
+                                      ? "No Unit Available"
+                                      : "Save Allocation"}
+                                  </Button>
+                                </form>
+                              </DialogContent>
+                            </Dialog>
+                            <Dialog>
+                              <DialogTrigger asChild>
+                                <Button size="sm" variant="ghost">
+                                  Cancel Request
+                                </Button>
+                              </DialogTrigger>
+                              <DialogContent>
+                                <DialogHeader>
+                                  <DialogTitle>
+                                    Cancel this request line?
+                                  </DialogTitle>
+                                  <DialogDescription>
+                                    Store will not issue the remaining{" "}
+                                    {request.remainingQuantity} {request.unit}{" "}
+                                    of {request.typeCode}. Already issued
+                                    quantity stays issued.
+                                  </DialogDescription>
+                                </DialogHeader>
+                                <form action={cancelStoreRequisitionAction}>
+                                  <input
+                                    name="requisition_id"
+                                    type="hidden"
+                                    value={request.id}
+                                  />
+                                  <Button type="submit" variant="destructive">
+                                    Cancel Remaining Request
+                                  </Button>
+                                </form>
+                              </DialogContent>
+                            </Dialog>
                           </div>
                         ) : (
                           "—"
@@ -307,7 +379,7 @@ export default async function StoreRequestsPage() {
                 <TableRow>
                   <TableCell
                     className="h-24 text-center text-muted-foreground"
-                    colSpan={canManage ? 10 : 8}
+                    colSpan={canManage ? 13 : 11}
                   >
                     No coded item request lines available.
                   </TableCell>

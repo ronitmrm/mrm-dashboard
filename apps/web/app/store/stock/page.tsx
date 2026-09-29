@@ -49,12 +49,16 @@ export default async function StoreStockPage({
     mode?: string | string[]
     orderItemId?: string | string[]
     orderQuantity?: string | string[]
+    ordersSaved?: string | string[]
     requestNumber?: string | string[]
   }>
 }) {
   const session = await requireCapability("store.stock.read", "/store/stock")
   const capabilities = new Set(
-    await listGrantedCapabilities(session.user.id, ["store.asset_history.read"])
+    await listGrantedCapabilities(session.user.id, [
+      "store.asset_history.read",
+      "store.purchase_register.read",
+    ])
   )
   const storeActions = await listGrantedStoreActions(session.user.id)
   const params = await searchParams
@@ -69,6 +73,7 @@ export default async function StoreStockPage({
   const orderItemId = firstValue(params.orderItemId)
   const orderQuantity = firstValue(params.orderQuantity)
   const requestNumber = firstValue(params.requestNumber)
+  const savedOrderCount = Number(firstValue(params.ordersSaved))
   const repository = createStoreRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
@@ -89,6 +94,22 @@ export default async function StoreStockPage({
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">Stock</h2>
       </div>
+
+      {Number.isInteger(savedOrderCount) && savedOrderCount > 0 ? (
+        <SectionCard role="status">
+          <CardContent className="flex flex-wrap items-center gap-3 py-4 text-sm">
+            <span>
+              {savedOrderCount} supplier purchase order
+              {savedOrderCount === 1 ? " was" : "s were"} saved.
+            </span>
+            {capabilities.has("store.purchase_register.read") ? (
+              <Button asChild size="sm" variant="outline">
+                <Link href="/store/orders">Open Purchase Register</Link>
+              </Button>
+            ) : null}
+          </CardContent>
+        </SectionCard>
+      ) : null}
 
       <MetricSummary
         scope="Stock register · before table filters"

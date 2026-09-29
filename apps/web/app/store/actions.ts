@@ -906,6 +906,19 @@ export async function issueStoreRequisitionAction(formData: FormData) {
   revalidateStore()
 }
 
+export async function cancelStoreRequisitionAction(formData: FormData) {
+  await withStore(
+    "store.requests.issue",
+    (repository, actorUserId, organizationId) =>
+      repository.cancelRequisition({
+        actorUserId,
+        organizationId,
+        requisitionId: requiredText(formData, "requisition_id"),
+      })
+  )
+  revalidateStore()
+}
+
 export async function issueRemainingStoreRequisitionBatchAction(
   formData: FormData
 ) {
@@ -1066,7 +1079,7 @@ export async function createStorePurchaseOrdersAction(formData: FormData) {
   if (!itemTypeIds.length) {
     throw new Error("Select at least one Store item to order.")
   }
-  await withStore(
+  const created = await withStore(
     "store.purchase_orders.create",
     async (repository, actorUserId, organizationId) => {
       const artifacts = createArtifactService({
@@ -1093,7 +1106,7 @@ export async function createStorePurchaseOrdersAction(formData: FormData) {
     }
   )
   revalidateStore()
-  redirect("/store/orders")
+  redirect(`/store/stock?ordersSaved=${created.orders.length}`)
 }
 
 export async function createStoreRepairPurchaseOrderAction(formData: FormData) {
@@ -1169,15 +1182,21 @@ export async function moveStoreAssetAction(formData: FormData) {
 
 export async function scheduleStoreAssetMaintenanceAction(formData: FormData) {
   const assetCode = requiredText(formData, "asset_code")
+  const scheduleType = requiredText(formData, "schedule_type")
+  if (scheduleType !== "MAINTENANCE" && scheduleType !== "CALIBRATION") {
+    throw new Error("Timetable type must be Maintenance or Calibration.")
+  }
   await withStore(
     "store.asset_maintenance.write",
     (repository, actorUserId, organizationId) =>
       repository.scheduleAssetMaintenance({
         actorUserId,
         assetCode,
-        definitionCode: requiredText(formData, "definition_code"),
         firstDueOn: requiredText(formData, "first_due_on"),
+        frequencyDays: positiveNumber(formData, "frequency_days"),
+        name: requiredText(formData, "schedule_name"),
         organizationId,
+        scheduleType,
       })
   )
   revalidatePath(`/store/assets/${encodeURIComponent(assetCode)}`)
