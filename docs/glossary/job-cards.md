@@ -31,12 +31,11 @@ forecast displays `-`.
 
 Use the table's per-column filters, including Job Card. The register does not have a separate search strip. Setup Completion and Dispatch Approval remain visible together; selecting a machine for Setup Completion fills its current Job Card and setup from planning.
 
-Setup Completion can be recorded only by a user with Shop Floor permission and
-an active Shop Floor assignment in the selected Production Unit. Its Completed By
-identity is the signed-in Employee ID. Dispatch Approval lists only undispatched
-Job Cards for which every planned setup/operation is Item Complete. Its Approved
-By identity is the signed-in Employee ID, which must have an active Planner or
-Shop Floor assignment in that Production Unit.
+Setup Completion can be recorded by a user with the task permission for the
+selected Production Unit. Completed By is the signed-in performer's active
+Employee ID and name when linked, or the signed-in account name otherwise.
+Dispatch Approval lists only undispatched Job Cards for which every planned
+setup/operation is Item Complete. Approved By follows the same performer rule.
 
 ## Job Card Workspace
 

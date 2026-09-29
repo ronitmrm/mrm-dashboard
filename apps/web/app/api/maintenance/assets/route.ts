@@ -4,7 +4,7 @@ import { createStoreRepository } from "@workspace/db"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
-import { signedInEmployee } from "@/lib/auth/signed-in-machinist"
+import { signedInPerformer } from "@/lib/auth/signed-in-machinist"
 
 const returnPath = "/?tab=maintenanceTab"
 
@@ -31,18 +31,6 @@ export async function POST(request: Request) {
   const repository = createStoreRepository({ connectionString })
   try {
     const organizationId = await repository.organizationIdForCode("MRMPL")
-    const engineer = await signedInEmployee({
-      connectionString,
-      organizationId,
-      role: "maintenance",
-      userId: session.user.id,
-    })
-    if (!engineer) {
-      return NextResponse.json(
-        { error: "Your Employee ID needs an active Maintenance assignment." },
-        { status: 403 }
-      )
-    }
     const required = (value: unknown, label: string) => {
       if (typeof value !== "string" || !value.trim()) {
         throw new Error(`${label} is required.`)
@@ -61,6 +49,18 @@ export async function POST(request: Request) {
           startedAt: required(body.startedAt, "Start time"),
         })
       } else {
+        const performer = await signedInPerformer({
+          connectionString,
+          organizationId,
+          userId: session.user.id,
+          userName: session.user.name,
+        })
+        if (!performer) {
+          return NextResponse.json(
+            { error: "Your signed-in account needs a name to complete maintenance work." },
+            { status: 403 }
+          )
+        }
         await repository.completeAssetBreakdown({
           actorUserId: session.user.id,
           breakdownId: required(body.breakdownId, "Breakdown"),
@@ -68,8 +68,8 @@ export async function POST(request: Request) {
             ? body.changedItems.filter((item): item is string => typeof item === "string")
             : [],
           completedAt: required(body.completedAt, "Completion time"),
-          completedBy: engineer.name,
-          completedByEmployeeCode: engineer.code,
+          completedBy: performer.name,
+          completedByEmployeeCode: performer.code || null,
           organizationId,
           remark: typeof body.remark === "string" ? body.remark : null,
           workDone: required(body.workDone, "Work done"),

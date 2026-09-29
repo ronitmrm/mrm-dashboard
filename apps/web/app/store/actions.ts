@@ -21,6 +21,7 @@ import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
+import { signedInPerformer } from "@/lib/auth/signed-in-machinist"
 import { masterCapability } from "@/lib/auth/master-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
 import {
@@ -92,7 +93,8 @@ async function withStore<T>(
     repository: ReturnType<typeof createStoreRepository>,
     actorUserId: string,
     organizationId: string,
-    actorEmail: string
+    actorEmail: string,
+    actorUserName: string
   ) => Promise<T>
 ) {
   const session = isStoreActionCapability(capability)
@@ -107,7 +109,8 @@ async function withStore<T>(
       repository,
       session.user.id,
       organizationId,
-      session.user.email
+      session.user.email,
+      session.user.name
     )
   } finally {
     await repository.close()
@@ -987,7 +990,7 @@ export async function receiveStoreStockAction(formData: FormData) {
         organizationId,
         purchaseOrderLineId,
         quantity: positiveNumber(formData, "quantity"),
-        receivedBy: requestContext.requesterEmail,
+        receivedBy: storeRequestFormPolicy(requestContext).requestedBy,
         warrantyUntil: optionalText(formData, "warranty_until"),
       })
       if (guaranteeUploadId && pendingAuthorization) {
@@ -1053,7 +1056,7 @@ export async function receiveRemainingStoreStockBatchAction(
         organizationId,
         purchaseOrderId,
         purchaseOrderLineIds,
-        receivedBy: requestContext.requesterEmail,
+        receivedBy: storeRequestFormPolicy(requestContext).requestedBy,
         warrantyUntil: optionalText(formData, "warranty_until"),
       })
       if (guaranteeUploadId && pendingAuthorization) {
@@ -1163,18 +1166,26 @@ export async function moveStoreAssetAction(formData: FormData) {
   const assetCode = requiredText(formData, "asset_code")
   await withStore(
     "store.asset_movement.write",
-    (repository, actorUserId, organizationId) =>
-      repository.moveAsset({
+    async (repository, actorUserId, organizationId, _actorEmail, actorUserName) => {
+      const performer = await signedInPerformer({
+        connectionString: readAuthEnvironment().connectionString,
+        organizationId,
+        userId: actorUserId,
+        userName: actorUserName,
+      })
+      if (!performer) throw new Error("Your account needs a name to move this asset.")
+      return repository.moveAsset({
         actorUserId,
         assetCode,
         holderName: optionalText(formData, "holder_name"),
         holderReference: optionalText(formData, "holder_reference"),
         holderType: holderType(formData),
-        movedBy: optionalText(formData, "moved_by"),
+        movedBy: [performer.code, performer.name].filter(Boolean).join(" - "),
         organizationId,
         remark: optionalText(formData, "remark"),
         vendorId: optionalText(formData, "vendor_id"),
       })
+    }
   )
   revalidatePath(`/store/assets/${encodeURIComponent(assetCode)}`)
   revalidateStore()
@@ -1212,15 +1223,23 @@ export async function setStoreAssetLifecycleAction(formData: FormData) {
   }
   await withStore(
     "store.asset_lifecycle.write",
-    (repository, actorUserId, organizationId) =>
-      repository.setAssetLifecycleStatus({
+    async (repository, actorUserId, organizationId, _actorEmail, actorUserName) => {
+      const performer = await signedInPerformer({
+        connectionString: readAuthEnvironment().connectionString,
+        organizationId,
+        userId: actorUserId,
+        userName: actorUserName,
+      })
+      if (!performer) throw new Error("Your account needs a name to update asset status.")
+      return repository.setAssetLifecycleStatus({
         actorUserId,
         assetCode,
-        changedBy: optionalText(formData, "changed_by"),
+        changedBy: [performer.code, performer.name].filter(Boolean).join(" - "),
         organizationId,
         remark: optionalText(formData, "status_remark"),
         status: status as "BROKEN" | "SCRAPPED" | "UNDER_MAINTENANCE",
       })
+    }
   )
   revalidatePath(`/store/assets/${encodeURIComponent(assetCode)}`)
   revalidateStore()
@@ -1234,12 +1253,19 @@ export async function completeStoreAssetMaintenanceAction(formData: FormData) {
   }
   await withStore(
     "store.asset_maintenance.write",
-    (repository, actorUserId, organizationId) =>
-      repository.completeAssetMaintenance({
+    async (repository, actorUserId, organizationId, _actorEmail, actorUserName) => {
+      const performer = await signedInPerformer({
+        connectionString: readAuthEnvironment().connectionString,
+        organizationId,
+        userId: actorUserId,
+        userName: actorUserName,
+      })
+      if (!performer) throw new Error("Your account needs a name to complete maintenance.")
+      return repository.completeAssetMaintenance({
         actorUserId,
         assetCode,
         certificateNumber: optionalText(formData, "certificate_number"),
-        completedBy: requiredText(formData, "completed_by"),
+        completedBy: [performer.code, performer.name].filter(Boolean).join(" - "),
         completedOn: requiredText(formData, "completed_on"),
         cost: optionalText(formData, "cost"),
         maintenanceType: type as "CALIBRATION" | "MAINTENANCE",
@@ -1249,6 +1275,7 @@ export async function completeStoreAssetMaintenanceAction(formData: FormData) {
         supplierName: optionalText(formData, "supplier_name"),
         workDone: optionalText(formData, "work_done"),
       })
+    }
   )
   revalidatePath(`/store/assets/${encodeURIComponent(assetCode)}`)
   revalidateStore()

@@ -37,6 +37,7 @@ import {
   StoreItemWorkspaceTabs,
 } from "@/components/store-asset-workspace-tabs"
 import { readAuthEnvironment } from "@/lib/auth/auth"
+import { signedInPerformer } from "@/lib/auth/signed-in-machinist"
 import { formatIstDateTime, istDateValue } from "@/lib/date-time"
 import { storeAssetWorkspaceHref } from "@/lib/store-asset-workspace"
 import {
@@ -95,12 +96,21 @@ export default async function StoreAssetWorkspacePage({
         }),
       }
     }
-    const [suppliers, vendors] = await Promise.all([
+    const [suppliers, vendors, performer] = await Promise.all([
       repository.listSuppliers(organizationId),
       repository.listVendors(organizationId),
+      canMove || canMaintain || canManageLifecycle
+        ? signedInPerformer({
+            connectionString: readAuthEnvironment().connectionString,
+            organizationId,
+            userId: session.user.id,
+            userName: session.user.name,
+          })
+        : Promise.resolve(null),
     ])
     return {
       kind: "asset" as const,
+      performer,
       suppliers,
       vendors,
       workspace,
@@ -126,6 +136,9 @@ export default async function StoreAssetWorkspacePage({
     schedules,
     supplierPrices,
   } = data.workspace
+  const performerDisplay = data.performer
+    ? [data.performer.code, data.performer.name].filter(Boolean).join(" - ")
+    : "Signed-in account name required"
 
   return (
     <div className="flex flex-col gap-6">
@@ -260,7 +273,7 @@ export default async function StoreAssetWorkspacePage({
                     label="Department / Destination Name"
                     name="holder_name"
                   />
-                  <TextField label="Moved By" name="moved_by" />
+                  <TextField label="Moved By" name="moved_by" readOnly value={performerDisplay} />
                   <TextField label="Remark" name="remark" />
                 </FieldGroup>
                 <Button className="mt-5" type="submit">
@@ -482,7 +495,9 @@ export default async function StoreAssetWorkspacePage({
                   <TextField
                     label="Completed By"
                     name="completed_by"
+                    readOnly
                     required
+                    value={performerDisplay}
                   />
                         <TextField
                           label="Supplier / Lab"
@@ -550,7 +565,7 @@ export default async function StoreAssetWorkspacePage({
                   </NativeSelectOption>
                 </NativeSelect>
               </Field>
-              <TextField label="Changed By" name="changed_by" />
+              <TextField label="Changed By" name="changed_by" readOnly value={performerDisplay} />
               <TextField label="Reason / Remark" name="status_remark" />
               <div className="flex items-end">
                 <Button type="submit">Update Status</Button>

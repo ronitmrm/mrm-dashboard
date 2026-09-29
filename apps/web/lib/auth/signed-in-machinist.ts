@@ -78,6 +78,15 @@ export function signedInMachinist(input: EmployeeIdentityInput & {
   return signedInEmployee({ ...input, role: "machinist" })
 }
 
+export async function signedInPerformer(input: EmployeeIdentityInput & {
+  userName: string
+}) {
+  const employee = await signedInEmployee({ ...input, role: "authorized_staff" })
+  if (employee) return employee
+  const name = input.userName.trim()
+  return name ? { code: "", name } : null
+}
+
 export async function activeProductionWorker({
   connectionString,
   employeeCode,

@@ -15,6 +15,7 @@ const dependencies = vi.hoisted(() => ({
   recordShopFloorStage: vi.fn(),
   recordDispatchApproval: vi.fn(),
   signedInEmployee: vi.fn(),
+  signedInPerformer: vi.fn(),
   activeProductionWorker: vi.fn(),
   executePostgresOperationalEntry: vi.fn(),
   isPostgresOperationalEntryType: vi.fn(),
@@ -57,6 +58,7 @@ vi.mock("@/lib/auth/auth", () => ({
 
 vi.mock("../../lib/auth/signed-in-machinist", () => ({
   signedInEmployee: dependencies.signedInEmployee,
+  signedInPerformer: dependencies.signedInPerformer,
   activeProductionWorker: dependencies.activeProductionWorker,
 }))
 vi.mock("../../lib/auth/auth", () => ({
@@ -139,6 +141,7 @@ describe("production entry mutation API authorization", () => {
     dependencies.upsertRawMaterialReceipts.mockResolvedValue({ ok: true })
     dependencies.isPostgresOperationalEntryType.mockReturnValue(false)
     dependencies.signedInEmployee.mockResolvedValue({ code: "42", name: "CNC Programmer" })
+    dependencies.signedInPerformer.mockResolvedValue({ code: "42", name: "CNC Programmer" })
   })
 
   afterEach(() => vi.restoreAllMocks())
@@ -157,8 +160,8 @@ describe("production entry mutation API authorization", () => {
     })
     expect(response.status).toBe(409)
     expect(await response.json()).toEqual({ error: message })
-    expect(dependencies.signedInEmployee).toHaveBeenCalledWith(
-      expect.objectContaining({ role: "shop_floor", userId: "entry-writer" })
+    expect(dependencies.signedInPerformer).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: "entry-writer", userName: "System Administrator" })
     )
   })
 
@@ -167,7 +170,7 @@ describe("production entry mutation API authorization", () => {
       "operations.dispatch.write",
       "operations.floors.cnc.job_cards.dispatch_approval.write",
     ])
-    dependencies.signedInEmployee.mockResolvedValue({ code: "42", name: "Planner One" })
+    dependencies.signedInPerformer.mockResolvedValue({ code: "42", name: "Planner One" })
     dependencies.recordDispatchApproval.mockResolvedValue({ ok: true })
 
     const response = await post("dispatch-approval", {
@@ -209,6 +212,16 @@ describe("production entry mutation API authorization", () => {
     })
     expect(forged.status).toBe(403)
     expect(dependencies.recordShopFloorStage).not.toHaveBeenCalled()
+
+    dependencies.signedInPerformer.mockResolvedValue({ code: "", name: "System Administrator" })
+    expect((await post("data-entry", {
+      entryType: "shop_floor_status", productionFloorCode: "cnc", payload,
+    })).status).toBe(200)
+    expect(dependencies.recordShopFloorStage).toHaveBeenCalledWith(
+      expect.objectContaining({ payload: expect.objectContaining({
+        doneBy: "System Administrator", doneByEmployeeCode: null,
+      }) })
+    )
   })
 
   it("starts a session under an authorized planner while assigning a selected Worker", async () => {
@@ -294,14 +307,14 @@ describe("production entry mutation API authorization", () => {
     }
 
     expect((await post("data-entry", body)).status).toBe(200)
-    expect(dependencies.signedInEmployee).toHaveBeenCalledWith(
-      expect.objectContaining({ role: "authorized_staff", userId: "entry-writer" })
+    expect(dependencies.signedInPerformer).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: "entry-writer", userName: "System Administrator" })
     )
     expect(dependencies.closeProductionSession).toHaveBeenCalledWith(
       expect.objectContaining({ actorUserId: "entry-writer", enteredRole: "authorized_staff", endCount: 65 })
     )
 
-    dependencies.signedInEmployee.mockResolvedValue(null)
+    dependencies.signedInPerformer.mockResolvedValue(null)
     dependencies.closeProductionSession.mockClear()
     expect((await post("data-entry", body)).status).toBe(403)
     expect(dependencies.closeProductionSession).not.toHaveBeenCalled()
@@ -331,6 +344,12 @@ describe("production entry mutation API authorization", () => {
     dependencies.startBulkProductionSessionDowntime.mockClear()
     expect((await post("data-entry", body)).status).toBe(403)
     expect(dependencies.startBulkProductionSessionDowntime).not.toHaveBeenCalled()
+
+    const authorizedStaff = { ...body, payload: { ...body.payload, enteredRole: "authorized_staff" } }
+    expect((await post("data-entry", authorizedStaff)).status).toBe(200)
+    expect(dependencies.startBulkProductionSessionDowntime).toHaveBeenCalledWith(
+      expect.objectContaining({ enteredRole: "authorized_staff", actorUserId: "entry-writer" })
+    )
   })
 
   it("passes the edited cycle record identity and queues recalculation", async () => {

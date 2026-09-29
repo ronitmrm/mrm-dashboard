@@ -25,7 +25,8 @@ snapshot of every parameter's definition and their recorded readings/results;
 master edits never rewrite that evidence. Reopening a saved hourly check uses
 its saved definitions, including parameters subsequently removed from the master.
 Saving an hourly check completes it with an overall OK or Not OK result. Saved
-hourly checks use the signed-in Quality employee's linked ID as Checked By.
+hourly checks use the signed-in performer's active Employee ID and name when
+linked, or the signed-in account name otherwise, as Checked By.
 FPIR and completed hourly checks may have their readings and remarks corrected
 only with a required reason. Each correction preserves the original inspection
 identity, checker and time, and records the editor, reason, time, and before/after
@@ -60,25 +61,24 @@ Setting, without requiring an earlier checklist session. Historical Pre Setting
 evidence remains recorded; it does not complete Setting or block the next action.
 Other production units retain their existing Pre Setting workflow.
 
-Department task attribution requires an active assignment in the task's
-department and production unit. This applies to Shop Floor, Inprocess Quality,
-Machinist, and Planner work. In CNC, the Programmer department performs Machinist
-tasks. The signed-in user's linked Employee ID supplies the performer for RM at
-Machine, Pre Setting, Setting, Quality Approval, Machine Start, first-piece
-inspection, and dispatch approval. A user cannot record these actions for another
-employee. Dispatch approval accepts active Planner or Shop Floor assignments.
-Eligible department Assistants, HODs and Managers may perform these tasks.
+The task's permission in the selected Production Unit controls who may record
+Shop Floor, Inprocess Quality, Machinist, and Planner work. RM at Machine, Pre
+Setting, Setting, Quality Approval, Machine Start, first-piece inspection, and
+dispatch approval record the signed-in performer's active linked Employee ID and
+name when available, or their signed-in account name otherwise. A user cannot
+record these actions for another employee. Machine Start separately assigns an
+active Worker as operator.
 Any user with Production Sessions recording permission for the unit may start a
 Production Session. The starter is filled from their active linked Employee ID
 and name when available; an authorized account without an Employee link uses
 its signed-in account name and is audited by user ID. They select the operator
 from active Shop Floor Workers in that production unit.
 The starter and assigned operator are recorded separately.
-Session close and corrections may be recorded by any linked, active employee with
-the Production Sessions recording permission for that unit. They display that
-employee's ID. Shop Floor and CNC Quality assignments retain their department
-attribution; other permitted employees are recorded as Authorized Staff. Downtime
-still requires an eligible department assignment. A user with one eligible
+Session close, corrections, downtime, and rejection may be recorded by an account
+with Production Sessions recording permission for that unit. They display the
+active linked Employee ID and name when available, or the signed-in account name
+otherwise. An eligible department assignment retains its department attribution;
+an account without one is recorded as Authorized Staff. A user with one eligible
 department has it selected automatically, while a user with multiple eligible
 departments chooses the department for the action.
 The separate machine Worker selection is an assignment and still requires a
@@ -101,9 +101,9 @@ productive runtime and target quantity. A session outside a break loses no time;
 non-production time, not downtime events or machine faults. Where a recorded
 downtime interval overlaps a break, that minute is excluded only once.
 
-An authorized employee starts sessions. A linked, active employee with Production Sessions
-recording permission for the unit may close a session. Quality, Shop Floor, and
-Machinist may record downtime; only Quality may record rejection.
+An authorized account starts and closes sessions and may record downtime or
+rejection with Production Sessions recording permission for the unit. Department
+attribution uses the signed-in user's active assignment when one applies.
 
 Quality Control is the working queue for both pending first-piece inspections
 and open downtime entered by Quality. A Quality-entered downtime stays in that
@@ -311,7 +311,7 @@ An active machine-unavailable window is a hard scheduling constraint. Automatic 
 
 ## Operational and analytical views
 
-Production Sessions belongs inside each Production Unit. Start Session offers a dropdown containing only currently running machines in that unit and fetches the selected machine's current planner assignment for verification before the authorized signed-in employee chooses an active Worker as operator and enters the start time, measurement method, and applicable machine start count. It does not expose a daily all-machine board or queued machines.
+Production Sessions belongs inside each Production Unit. Start Session offers a dropdown containing only currently running machines in that unit and fetches the selected machine's current planner assignment for verification before the authorized signed-in person chooses an active Worker as operator and enters the start time, measurement method, and applicable machine start count. It does not expose a daily all-machine board or queued machines.
 
 The Production Session Register shows one row per session for the selected Production Unit. The Production Event Log presents that unit's lifecycle actions and child events chronologically for analysis without creating a second source of truth.
 

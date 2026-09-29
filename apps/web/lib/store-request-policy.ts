@@ -3,6 +3,7 @@ export type StoreRequestContext = {
   isAdministrator: boolean
   organizationDepartments: readonly string[]
   requesterEmail: string
+  requesterIdentity: { code: string; name: string }
   storeLocation: { code: string; id?: string; name: string } | null
 }
 
@@ -39,7 +40,12 @@ export function storeRequestFormPolicy(
     departmentOptions,
     departmentValue:
       departmentOptions.length === 1 ? departmentOptions[0]! : "",
-    requestedBy: context.requesterEmail.trim().toLocaleLowerCase(),
+    requestedBy: [
+      context.requesterIdentity.code.trim(),
+      context.requesterIdentity.name.trim() || context.requesterEmail.trim(),
+    ]
+      .filter(Boolean)
+      .join(" - "),
     storeLabel: context.storeLocation
       ? `${context.storeLocation.code} — ${context.storeLocation.name}`
       : "Main Store",

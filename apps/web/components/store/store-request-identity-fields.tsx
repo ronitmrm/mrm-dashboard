@@ -54,7 +54,7 @@ export function StoreRequestIdentityFields({
       </Field>
       <Field>
         <FieldLabel htmlFor="request-requested-by">
-          Requested By / Signed-in ID
+          Requested By
         </FieldLabel>
         <Input
           id="request-requested-by"
