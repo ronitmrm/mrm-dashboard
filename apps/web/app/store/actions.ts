@@ -1186,7 +1186,7 @@ export async function scheduleStoreAssetMaintenanceAction(formData: FormData) {
   if (scheduleType !== "MAINTENANCE" && scheduleType !== "CALIBRATION") {
     throw new Error("Timetable type must be Maintenance or Calibration.")
   }
-  await withStore(
+  const schedule = await withStore(
     "store.asset_maintenance.write",
     (repository, actorUserId, organizationId) =>
       repository.scheduleAssetMaintenance({
@@ -1200,6 +1200,7 @@ export async function scheduleStoreAssetMaintenanceAction(formData: FormData) {
       })
   )
   revalidatePath(`/store/assets/${encodeURIComponent(assetCode)}`)
+  revalidatePath(`/store/assets/${encodeURIComponent(schedule.typeCode)}`)
   revalidateStore()
 }
 
@@ -1228,7 +1229,7 @@ export async function setStoreAssetLifecycleAction(formData: FormData) {
 export async function completeStoreAssetMaintenanceAction(formData: FormData) {
   const assetCode = requiredText(formData, "asset_code")
   const type = requiredText(formData, "maintenance_type")
-  if (!["MAINTENANCE", "CALIBRATION", "BREAKDOWN"].includes(type)) {
+  if (!["MAINTENANCE", "CALIBRATION"].includes(type)) {
     throw new Error("Maintenance type is invalid.")
   }
   await withStore(
@@ -1241,7 +1242,7 @@ export async function completeStoreAssetMaintenanceAction(formData: FormData) {
         completedBy: requiredText(formData, "completed_by"),
         completedOn: requiredText(formData, "completed_on"),
         cost: optionalText(formData, "cost"),
-        maintenanceType: type as "BREAKDOWN" | "CALIBRATION" | "MAINTENANCE",
+        maintenanceType: type as "CALIBRATION" | "MAINTENANCE",
         organizationId,
         result: optionalText(formData, "result"),
         scheduleId: optionalText(formData, "schedule_id"),

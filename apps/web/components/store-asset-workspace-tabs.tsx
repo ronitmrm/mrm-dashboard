@@ -81,14 +81,15 @@ export function StoreAssetWorkspacePane({
     </section>
   )
 }
-type ItemWorkspaceTabKey = "overview" | "drawings" | "supplier-quotes"
+type ItemWorkspaceTabKey = "overview" | "maintenance" | "drawings" | "supplier-quotes"
 
 const itemWorkspaceTabContext = createContext<ItemWorkspaceTabKey>("overview")
 
-export function StoreItemWorkspaceTabs({ children }: { children?: ReactNode }) {
+export function StoreItemWorkspaceTabs({ children, showMaintenance = false }: { children?: ReactNode; showMaintenance?: boolean }) {
   const [activeTab, setActiveTab] = useState<ItemWorkspaceTabKey>("overview")
   const tabs: Array<{ key: ItemWorkspaceTabKey; label: string }> = [
     { key: "overview", label: "Overview" },
+    ...(showMaintenance ? [{ key: "maintenance" as const, label: "Maintenance" }] : []),
     { key: "drawings", label: "Drawings" },
     { key: "supplier-quotes", label: "Supplier Quotes" },
   ]

@@ -110,6 +110,7 @@ export default async function StoreAssetWorkspacePage({
   if (data.kind === "item") {
     return (
       <StoreItemWorkspace
+        canMaintain={canMaintain}
         canUploadDrawing={masterGrants.includes(masterCapability("ITEM_TYPE", "save"))}
         canUploadQuote={masterGrants.includes(masterCapability("SUPPLIER_PRICE", "save"))}
         workspace={data.workspace}
@@ -448,9 +449,6 @@ export default async function StoreAssetWorkspacePage({
                       </NativeSelectOption>
                       <NativeSelectOption value="CALIBRATION">
                         Calibration
-                      </NativeSelectOption>
-                      <NativeSelectOption value="BREAKDOWN">
-                        Breakdown
                       </NativeSelectOption>
                     </NativeSelect>
                   </Field>
@@ -914,15 +912,17 @@ type StoreItemWorkspaceData = NonNullable<
 >
 
 function StoreItemWorkspace({
+  canMaintain,
   canUploadDrawing,
   canUploadQuote,
   workspace,
 }: {
+  canMaintain: boolean
   canUploadDrawing: boolean
   canUploadQuote: boolean
   workspace: StoreItemWorkspaceData
 }) {
-  const { assets, drawing, item, supplierPrices } = workspace
+  const { assets, drawing, item, maintenance, schedules, supplierPrices } = workspace
   const isNonConsumable = item.assetType === "NON_CONSUMABLE"
 
   return (
@@ -946,7 +946,7 @@ function StoreItemWorkspace({
         </div>
       </div>
 
-      <StoreItemWorkspaceTabs>
+      <StoreItemWorkspaceTabs showMaintenance={isNonConsumable}>
         <StoreItemWorkspacePane tab="overview">
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Info label="Asset Name" value={item.assetName} />
@@ -1033,6 +1033,89 @@ function StoreItemWorkspace({
         </CardContent>
  </SectionCard>
         </StoreItemWorkspacePane>
+
+        {isNonConsumable ? (
+          <StoreItemWorkspacePane tab="maintenance">
+            <p className="text-sm text-muted-foreground">
+              Schedules and history belong to each physical Unit ID. Choose the unit when assigning a timetable.
+            </p>
+            {canMaintain && assets.length ? (
+              <div className="grid gap-4 xl:grid-cols-2">
+                {(["MAINTENANCE", "CALIBRATION"] as const).map((scheduleType) => (
+                  <SectionCard key={scheduleType} width="standard">
+                    <CardHeader>
+                      <CardTitle>Assign {scheduleType === "MAINTENANCE" ? "Maintenance" : "Calibration"} Schedule</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <form action={scheduleStoreAssetMaintenanceAction} className="grid gap-4">
+                        <input name="schedule_type" type="hidden" value={scheduleType} />
+                        <Field>
+                          <FieldLabel htmlFor={`item-${scheduleType}-unit`}>Unit ID</FieldLabel>
+                          <NativeSelect id={`item-${scheduleType}-unit`} name="asset_code" required defaultValue="">
+                            <NativeSelectOption value="">Select Unit ID</NativeSelectOption>
+                            {assets.filter((asset) => asset.status !== "SCRAPPED").map((asset) => (
+                              <NativeSelectOption key={asset.id} value={asset.assetCode}>
+                                {asset.assetCode} · {asset.holderName || asset.locationName || asset.holderType}
+                              </NativeSelectOption>
+                            ))}
+                          </NativeSelect>
+                        </Field>
+                        <TextField label="Schedule Name" name="schedule_name" required />
+                        <TextField label="Frequency (days)" min="1" name="frequency_days" required step="1" type="number" />
+                        <TextField label="First Due Date" name="first_due_on" required type="date" />
+                        <Button className="w-fit" type="submit">Assign Schedule</Button>
+                      </form>
+                    </CardContent>
+                  </SectionCard>
+                ))}
+              </div>
+            ) : null}
+            <SectionCard>
+              <CardHeader><CardTitle>Assigned Maintenance & Calibration Schedules</CardTitle></CardHeader>
+              <CardContent className="min-w-0">
+                <OperationalTable>
+                  <TableHeader><TableRow>
+                    <TableHead>Unit ID</TableHead><TableHead>Type</TableHead><TableHead>Schedule</TableHead>
+                    <TableHead>Frequency</TableHead><TableHead>Last Completed</TableHead><TableHead>Next Due</TableHead>
+                  </TableRow></TableHeader>
+                  <TableBody>
+                    {schedules.map((schedule) => (
+                      <TableRow key={schedule.id}>
+                        <TableCell><Link className="underline underline-offset-4" href={storeAssetWorkspaceHref(schedule.assetCode)}>{schedule.assetCode}</Link></TableCell>
+                        <TableCell>{schedule.scheduleType === "CALIBRATION" ? "Calibration" : "Maintenance"}</TableCell>
+                        <TableCell>{schedule.name}</TableCell><TableCell>{schedule.frequencyDays} days</TableCell>
+                        <TableCell>{schedule.lastCompletedOn || "—"}</TableCell><TableCell>{schedule.nextDueOn}</TableCell>
+                      </TableRow>
+                    ))}
+                    {!schedules.length ? <TableRow><TableCell className="h-24 text-center text-muted-foreground" colSpan={6}>No schedules assigned to physical units.</TableCell></TableRow> : null}
+                  </TableBody>
+                </OperationalTable>
+              </CardContent>
+            </SectionCard>
+            <SectionCard>
+              <CardHeader><CardTitle>Maintenance & Calibration History</CardTitle></CardHeader>
+              <CardContent className="min-w-0">
+                <OperationalTable>
+                  <TableHeader><TableRow>
+                    <TableHead>Unit ID</TableHead><TableHead>Date</TableHead><TableHead>Type</TableHead>
+                    <TableHead>Completed By</TableHead><TableHead>Work / Result</TableHead><TableHead>Certificate</TableHead>
+                  </TableRow></TableHeader>
+                  <TableBody>
+                    {maintenance.map((record) => (
+                      <TableRow key={record.id}>
+                        <TableCell><Link className="underline underline-offset-4" href={storeAssetWorkspaceHref(record.assetCode)}>{record.assetCode}</Link></TableCell>
+                        <TableCell>{record.completedOn}</TableCell><TableCell>{record.maintenanceType}</TableCell>
+                        <TableCell>{record.completedBy}</TableCell><TableCell>{record.workDone || record.result || "—"}</TableCell>
+                        <TableCell>{record.certificateNumber || "—"}</TableCell>
+                      </TableRow>
+                    ))}
+                    {!maintenance.length ? <TableRow><TableCell className="h-24 text-center text-muted-foreground" colSpan={6}>No completed maintenance or calibration records.</TableCell></TableRow> : null}
+                  </TableBody>
+                </OperationalTable>
+              </CardContent>
+            </SectionCard>
+          </StoreItemWorkspacePane>
+        ) : null}
 
         <StoreItemWorkspacePane tab="drawings">
  <SectionCard>

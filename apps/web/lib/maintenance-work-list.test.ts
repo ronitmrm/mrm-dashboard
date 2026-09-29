@@ -1,8 +1,15 @@
 import { describe, expect, test } from "vitest"
 
-import { unifiedMechanicalWorkRows } from "./maintenance-work-list"
+import { plannedMaintenanceScheduleRows, unifiedMechanicalWorkRows } from "./maintenance-work-list"
 
 describe("unified Mechanical work list", () => {
+  test("excludes generated history backing rows from planned work", () => {
+    expect(plannedMaintenanceScheduleRows([
+      { generated: true, legacyHistory: true },
+      { machineNo: "CNC-1", maintenanceCode: "MM001" },
+    ])).toEqual([{ machineNo: "CNC-1", maintenanceCode: "MM001" }])
+  })
+
   test("combines scheduled and request work while keeping urgent requests first", () => {
     const scheduled = {
       machineNo: "C501",
