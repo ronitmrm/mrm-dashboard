@@ -3359,7 +3359,6 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           JOIN store.assets asset ON asset.id = movement.asset_id
           JOIN store.item_types item ON item.id = movement.item_type_id
           WHERE movement.organization_id = $1
-            AND movement.movement_type IN ('TRANSFER_OUT', 'RETURN')
           ORDER BY movement.moved_at DESC
           LIMIT 300`,
         [organizationId]
