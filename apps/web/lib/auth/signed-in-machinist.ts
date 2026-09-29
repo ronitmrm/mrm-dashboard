@@ -7,6 +7,7 @@ import {
 import type { ProductionFloorCode } from "@workspace/db/production-floors"
 
 import {
+  activeEmployeeForCode,
   maintenanceEmployeeOptions,
   productionDispatchApproverOptions,
   productionMachinistOptions,
@@ -17,6 +18,7 @@ import {
 } from "../shared-employee-master"
 
 export type SignedInWorkRole =
+  | "authorized_staff"
   | "dispatch"
   | "machinist"
   | "maintenance"
@@ -46,6 +48,7 @@ export async function signedInEmployee({
     ])
     if (!employeeCode) return null
     const rows = sharedEmployeeMasterRows(posts)
+    if (role === "authorized_staff") return activeEmployeeForCode(rows, employeeCode)
     const options = role === "maintenance"
       ? maintenanceEmployeeOptions(rows)
       : productionFloorCode

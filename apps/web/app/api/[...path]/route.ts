@@ -1547,12 +1547,11 @@ async function post(request: NextRequest, context: RouteContext) {
             const starter = await signedInEmployee({
               connectionString: readAuthEnvironment().connectionString,
               organizationId,
-              productionFloorCode: floor,
-              role: "machinist",
+              role: "authorized_staff",
               userId: actorUserId,
             })
             if (!starter) {
-              throw new RouteError(403, "Your Employee ID needs an active Machinist or Programmer assignment in this production unit.")
+              throw new RouteError(403, "Your account needs an active linked Employee ID to start a production session.")
             }
             const operator = await activeProductionWorker({
               connectionString: readAuthEnvironment().connectionString,
