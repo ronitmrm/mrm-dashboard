@@ -4361,7 +4361,15 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           input.jobCardNumber,
           input.productionFloorCode
         )
-        const sourcePayload = input
+        const existing = await client.query<{ id: string }>(
+          `SELECT id FROM manufacturing.dispatch_approval_events
+           WHERE work_order_id = $1 AND decision = 'approved'
+             AND reversed_at IS NULL
+           LIMIT 1`,
+          [workOrder.work_order_id]
+        )
+        if (existing.rows[0]) throw new Error("This Job Card is already dispatched.")
+        const sourcePayload = { ...input, decision: "approved" }
         const result = await client.query<{ id: string }>(
           `
             INSERT INTO manufacturing.dispatch_approval_events (
@@ -4383,6 +4391,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             sourcePayload,
           ]
         )
+        await queueDashboardRefresh(client, input.organizationId)
         return { id: result.rows[0]!.id, ok: true }
       })
     },

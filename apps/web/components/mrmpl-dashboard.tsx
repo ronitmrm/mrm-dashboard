@@ -7748,7 +7748,7 @@ function RouteChangePlannerForm({
   )
 }
 
-function DispatchApprovalActionForm({
+function JobCardDispatchActionForm({
   approver,
   jobCards,
   onSubmit,
@@ -7769,12 +7769,13 @@ function DispatchApprovalActionForm({
     setIsSubmitting(true)
     try {
       await onSubmit({
-        approvedBy: approver?.name ?? "",
         jcNo: String(formData.get("jcNo") ?? "").trim(),
         productionFloorCode,
         remark: String(formData.get("remark") ?? "").trim(),
       })
       form.reset()
+    } catch {
+      // submitAction already displays the error; preserve the selected Job Card.
     } finally {
       setIsSubmitting(false)
     }
@@ -7788,10 +7789,10 @@ function DispatchApprovalActionForm({
     >
       <fieldset className="contents" disabled={isSubmitting}>
         <div>
-          <div className="text-sm font-medium">Dispatch Approval</div>
+          <div className="text-sm font-medium">Job Card Dispatch</div>
           <div className="text-xs text-muted-foreground">
             Only Job Cards With Every Planned Setup Completed Are Ready For
-            Approval.
+            Dispatch.
           </div>
         </div>
         <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
@@ -7813,7 +7814,7 @@ function DispatchApprovalActionForm({
               ))}
             </SearchableSelect>
           </Field>
-          <Field label="Approved By">
+          <Field label="Dispatched By">
             <Input
               readOnly
               value={approver
@@ -7831,7 +7832,7 @@ function DispatchApprovalActionForm({
           disabled={!jobCards.length || !approver || isSubmitting}
         >
           <Wrench className="size-4" />
-          {isSubmitting ? "Processing..." : "Approve dispatch"}
+          {isSubmitting ? "Dispatching..." : "Dispatch Job Card"}
         </Button>
       </fieldset>
     </form>
@@ -7847,7 +7848,11 @@ function JobCardsPanel({
   productionControl: DashboardPayload
   productionFloorCode: ProductionFloorCode
   storeMasterData?: StoreMasterData | null
-  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
+  submitAction: (
+    path: string,
+    body: Record<string, unknown>,
+    options?: { throwOnError?: boolean },
+  ) => Promise<void>
   openMasterReadiness: () => void
 }) {
   const { signedInDispatchApprover } =
@@ -7881,10 +7886,10 @@ function JobCardsPanel({
           <CardTitle>Job Card Actions</CardTitle>
         </CardHeader>
         <CardContent className="max-w-2xl">
-          <DispatchApprovalActionForm
+          <JobCardDispatchActionForm
             approver={signedInDispatchApprover}
             jobCards={readyJobCards}
-            onSubmit={(body) => submitAction("dispatch-approval", body)}
+            onSubmit={(body) => submitAction("dispatch-approval", body, { throwOnError: true })}
             productionFloorCode={productionFloorCode}
           />
         </CardContent>
@@ -18245,7 +18250,7 @@ function jobCardTrackingState(
   setupRows: DashboardPayload[] = []
 ) {
   const dispatchStatus = str(row.dispatchStatus).toLowerCase()
-  if (dispatchStatus.includes("dispatch")) return "Dispatch"
+  if (dispatchStatus.includes("dispatch")) return "Dispatched"
 
   const statuses = [
     row.planningBlocker,

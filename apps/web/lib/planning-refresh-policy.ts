@@ -1,6 +1,7 @@
 import { productionMasterTableEntryTypes } from "./production-master-tables";
 
 const autoRefreshActionPaths = new Set([
+  "dispatch-approval",
   "planner-priority",
   "machine-constraint",
   "machine-constraint-review",

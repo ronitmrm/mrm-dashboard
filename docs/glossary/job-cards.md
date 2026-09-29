@@ -29,13 +29,15 @@ recalculates production progress and machine constraints. Both values are
 matched by Job Card and part within the selected floor. An unavailable current
 forecast displays `-`.
 
-Use the table's per-column filters, including Job Card. The register does not have a separate search strip. Setup Completion and Dispatch Approval remain visible together; selecting a machine for Setup Completion fills its current Job Card and setup from planning.
+Use the table's per-column filters, including Job Card. The register does not have a separate search strip. Setup Completion and Job Card Dispatch remain visible together; selecting a machine for Setup Completion fills its current Job Card and setup from planning.
 
 Setup Completion can be recorded by a user with the task permission for the
 selected Production Unit. Completed By is the signed-in performer's active
 Employee ID and name when linked, or the signed-in account name otherwise.
-Dispatch Approval lists only undispatched Job Cards for which every planned
-setup/operation is Item Complete. Approved By follows the same performer rule.
+Job Card Dispatch lists only undispatched Job Cards for which every planned
+setup/operation is Item Complete. Dispatching records the signed-in performer
+and marks the Job Card as dispatched in the register and dispatch overview.
+The Job Card leaves the ready-to-dispatch picker after dispatch.
 
 ## Job Card Workspace
 

@@ -16,7 +16,7 @@ export const productionFloorTaskDefinitions = {
     tab: "productionControlTab",
   },
   dispatch_approval: {
-    label: "Approve dispatch",
+    label: "Dispatch Job Card",
     legacyCapability: "operations.dispatch.write",
     tab: "jobCardStatusTab",
   },
