@@ -2278,6 +2278,7 @@ function SetupChecklistShell({
 }: {
   productionFloorCode: ProductionFloorCode
 }) {
+  const { signedInMachinist } = useProductionEmployeeDirectory(productionFloorCode)
   const isClientHydrated = useSyncExternalStore(
     subscribeToHydration,
     clientHydrationSnapshot,
@@ -2308,6 +2309,7 @@ function SetupChecklistShell({
     DashboardPayload | undefined
   >(undefined)
   const [doneBy, setDoneBy] = useState("")
+  const effectiveDoneBy = phase === "end" ? signedInMachinist?.name ?? "" : doneBy
   const [remark, setRemark] = useState("")
   const [values, setValues] = useState<Record<string, string>>({})
   const [itemRemarks, setItemRemarks] = useState<Record<string, string>>({})
@@ -2341,7 +2343,7 @@ function SetupChecklistShell({
   const canSave =
     Boolean(
       sessionId &&
-      doneBy &&
+      effectiveDoneBy &&
       (phase === "start" || phase === "end") &&
       phaseChecklistItems.length
     ) &&
@@ -2416,7 +2418,7 @@ function SetupChecklistShell({
       items: checklistItems,
       masterRows: activeChecklistMasters,
       existingSession: currentChecklistSession,
-      doneBy,
+      doneBy: effectiveDoneBy,
       remark,
       completedAt: new Date().toISOString(),
     })
@@ -2502,7 +2504,9 @@ function SetupChecklistShell({
                       <Input
                         value={
                           phase === "end"
-                            ? doneBy
+                            ? signedInMachinist
+                              ? `${signedInMachinist.code} - ${signedInMachinist.name}`
+                              : "Signed-in Machinist or Programmer required"
                             : str(currentChecklistSession?.endedBy)
                         }
                         readOnly
@@ -8008,6 +8012,10 @@ function useProductionEmployeeDirectory(
     () => productionMachinistOptions(rows, floor),
     [floor, rows]
   )
+  const currentEmployeeCode = str(employeeMasterPage.data?.currentEmployeeCode)
+  const signedInMachinist = machinistOptions.find(
+    (employee) => employee.code.toLowerCase() === currentEmployeeCode.toLowerCase()
+  )
   const qualityOptions = useMemo(
     () => productionQualityOptions(rows, floor),
     [floor, rows]
@@ -8030,6 +8038,7 @@ function useProductionEmployeeDirectory(
     dispatchApproverOptions,
     loaded: employeeMasterPage.data !== undefined,
     machinistOptions,
+    signedInMachinist,
     qualityOptions,
     shopFloorOptions,
     workerOptions,
@@ -8043,7 +8052,7 @@ function ShopFloorStatusPanel({
   productionControl: DashboardPayload
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
 }) {
-  const { machinistOptions, qualityOptions, shopFloorOptions, workerOptions } =
+  const { machinistOptions, qualityOptions, shopFloorOptions, signedInMachinist, workerOptions } =
     useProductionEmployeeDirectory()
   const productionFloorCode = productionFloorFromLocation()
   const productionSessionsPage = usePostgresOperationalPage(
@@ -8352,6 +8361,7 @@ function ShopFloorStatusPanel({
                         <ShopFloorRowAction
                           next={row.actionNext}
                           machinistOptions={machinistOptions}
+                          signedInMachinist={signedInMachinist}
                           onSaveStage={saveStage}
                           onSaveSetupChecklistSession={
                             saveSetupChecklistSession
@@ -8401,7 +8411,7 @@ function RoleTaskPanel({
   onStartFirstPieceInspection?: (row: DashboardPayload) => void
   role: RoleTaskKind
 }) {
-  const { machinistOptions, qualityOptions, shopFloorOptions, workerOptions } =
+  const { machinistOptions, qualityOptions, shopFloorOptions, signedInMachinist, workerOptions } =
     useProductionEmployeeDirectory()
   const copy = enableFirstPieceInspection
     ? {
@@ -8705,6 +8715,7 @@ function RoleTaskPanel({
                               productionControl.setupChecklistSessionRows
                             )}
                             machinistOptions={machinistOptions}
+                            signedInMachinist={signedInMachinist}
                             qualityOptions={qualityOptions}
                             shopFloorOptions={shopFloorOptions}
                             workerOptions={workerOptions}
@@ -9556,6 +9567,7 @@ function ShopFloorRowAction({
   setupChecklistMasters = [],
   setupChecklistSessions = [],
   machinistOptions = [],
+  signedInMachinist,
   qualityOptions = [],
   shopFloorOptions = [],
   workerOptions = [],
@@ -9579,6 +9591,7 @@ function ShopFloorRowAction({
   setupChecklistMasters?: DashboardPayload[]
   setupChecklistSessions?: DashboardPayload[]
   machinistOptions?: Array<{ code: string; name: string }>
+  signedInMachinist?: { code: string; name: string }
   qualityOptions?: Array<{ code: string; name: string }>
   shopFloorOptions?: Array<{ code: string; name: string }>
   workerOptions?: Array<{ code: string; name: string }>
@@ -9654,9 +9667,11 @@ function ShopFloorRowAction({
       : nextStage?.id === "quality_approval"
         ? "Quality Employee"
         : "Machinist"
-  const hasEligibleDoneBy = doneByOptions.some(
-    (employee) => employee.name === doneBy
-  )
+  const effectiveDoneBy =
+    nextStage?.id === "setting" ? signedInMachinist?.name ?? "" : doneBy
+  const hasEligibleDoneBy = nextStage?.id === "setting"
+    ? Boolean(signedInMachinist)
+    : doneByOptions.some((employee) => employee.name === doneBy)
   const hasEligibleWorker = workerOptions.some(
     (employee) => employee.name === worker
   )
@@ -9673,7 +9688,7 @@ function ShopFloorRowAction({
       ))
   const checklistPageHref =
     next && checklistPhase
-      ? setupChecklistPageHref(next, checklistPhase, doneBy)
+      ? setupChecklistPageHref(next, checklistPhase, effectiveDoneBy)
       : ""
   const setupChecklistStatus = !needsSetupChecklist
     ? "Not required"
@@ -9808,7 +9823,7 @@ function ShopFloorRowAction({
         ? currentChecklistSession
         : undefined
       await onSaveStage(next, nextStage.id, {
-        doneBy,
+        doneBy: effectiveDoneBy,
         worker: nextStage.id === "operator_started" ? worker : "",
         remark,
         firstPieceInspection,
@@ -9861,22 +9876,33 @@ function ShopFloorRowAction({
         <>
           <div className="text-sm font-medium">{nextStage.label}</div>
           <div className="grid gap-2 sm:grid-cols-2">
-            <SearchableSelect
-              className="h-8 rounded-md border bg-background px-2 text-sm"
-              value={doneBy}
-              onChange={(event) => setDoneBy(event.target.value)}
-            >
-              <option value="">
-                {doneByOptions.length
-                  ? `Select ${doneByRole}`
-                  : `No ${doneByRole}s In This Production Unit`}
-              </option>
-              {doneByOptions.map((employee) => (
-                <option key={employee.code} value={employee.name}>
-                  {employee.code} - {employee.name}
+            {nextStage.id === "setting" ? (
+              <Input
+                aria-label="Setting done by"
+                className="h-8"
+                readOnly
+                value={signedInMachinist
+                  ? `${signedInMachinist.code} - ${signedInMachinist.name}`
+                  : "Signed-in Machinist or Programmer required"}
+              />
+            ) : (
+              <SearchableSelect
+                className="h-8 rounded-md border bg-background px-2 text-sm"
+                value={doneBy}
+                onChange={(event) => setDoneBy(event.target.value)}
+              >
+                <option value="">
+                  {doneByOptions.length
+                    ? `Select ${doneByRole}`
+                    : `No ${doneByRole}s In This Production Unit`}
                 </option>
-              ))}
-            </SearchableSelect>
+                {doneByOptions.map((employee) => (
+                  <option key={employee.code} value={employee.name}>
+                    {employee.code} - {employee.name}
+                  </option>
+                ))}
+              </SearchableSelect>
+            )}
             {nextStage.id === "operator_started" ? (
               <SearchableSelect
                 className="h-8 rounded-md border bg-background px-2 text-sm"

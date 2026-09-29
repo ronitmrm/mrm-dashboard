@@ -19,6 +19,7 @@ import { telemetryRequestId } from "./request-telemetry"
 import { productionCapabilityForTab } from "./auth/production-capabilities"
 import { productionMasterCapability } from "./auth/production-master-access"
 import { masterCapability } from "./auth/master-capabilities"
+import { signedInMachinist } from "./auth/signed-in-machinist"
 
 const operationalEntryTypes = new Set([
   "parameter_master",
@@ -169,10 +170,18 @@ export async function readPostgresEmployeeMaster(request: NextRequest) {
     createRecruitmentRepository(actor),
     async (repository) => {
       const organizationId = await repository.organizationIdForCode("MRMPL")
-      return {
-        rows: sharedEmployeeMasterRows(
-          await repository.listPosts(organizationId)
-        ),
+      const authorization = createAuthorizationRepository(actor)
+      try {
+        const [posts, currentEmployeeCode] = await Promise.all([
+          repository.listPosts(organizationId),
+          authorization.linkedEmployeeCode(actor.actorUserId, organizationId),
+        ])
+        return {
+          currentEmployeeCode,
+          rows: sharedEmployeeMasterRows(posts),
+        }
+      } finally {
+        await authorization.close()
       }
     },
     {
@@ -306,6 +315,33 @@ export async function executePostgresOperationalEntry(
           })
         }
         if (plan.operation === "legacy-setup-session") {
+          const settingMachinist = await signedInMachinist({
+            connectionString: actor.connectionString,
+            organizationId,
+            productionFloorCode: normalizeProductionFloorCode(
+              payload.productionFloorCode
+            ),
+            userId: actor.actorUserId,
+          })
+          if (!settingMachinist) {
+            throw new OperationalEntryError(
+              403,
+              "Your signed-in Employee ID must be an active Machinist or Programmer in this production unit."
+            )
+          }
+          const settingInput = {
+            ...plan.input,
+            completedBy: settingMachinist.name,
+            payload: {
+              ...plan.input.payload,
+              setterCode: settingMachinist.code,
+            },
+            results: plan.input.results.map((result) =>
+              result.itemKey === "setterCode"
+                ? { ...result, value: settingMachinist.code }
+                : result
+            ),
+          }
           const legacyItems = [
             ["modhiyu", "Modhiyu"],
             ["helperCode", "Helper code"],
@@ -327,19 +363,50 @@ export async function executePostgresOperationalEntry(
             })),
             name: "Legacy setup checklist",
             organizationId,
-            payload: plan.input.payload,
+            payload: settingInput.payload,
             revision: 1,
           })
           return await repository.saveSetupChecklistSession({
-            ...plan.input,
+            ...settingInput,
             actorUserId: actor.actorUserId,
             organizationId,
           })
         }
         let result: { id: string } | undefined
+        const settingPhase = plan.phases.some(
+          (phase) => phase.input.phase === "end"
+        )
+        const settingMachinist = settingPhase
+          ? await signedInMachinist({
+              connectionString: actor.connectionString,
+              organizationId,
+              productionFloorCode: normalizeProductionFloorCode(
+                payload.productionFloorCode
+              ),
+              userId: actor.actorUserId,
+            })
+          : null
+        if (settingPhase && !settingMachinist) {
+          throw new OperationalEntryError(
+            403,
+            "Your signed-in Employee ID must be an active Machinist or Programmer in this production unit."
+          )
+        }
         for (const phase of plan.phases) {
+          const settingInput =
+            phase.input.phase === "end" && settingMachinist
+              ? {
+                  ...phase.input,
+                  completedBy: settingMachinist.name,
+                  payload: {
+                    ...phase.input.payload,
+                    endedBy: settingMachinist.name,
+                    endedByEmployeeCode: settingMachinist.code,
+                  },
+                }
+              : phase.input
           result = await repository.saveSetupChecklistSession({
-            ...phase.input,
+            ...settingInput,
             actorUserId: actor.actorUserId,
             organizationId,
           })

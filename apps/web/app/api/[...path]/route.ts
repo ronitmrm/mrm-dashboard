@@ -6,6 +6,7 @@ import {
   isMasterDataKind,
 } from "@workspace/db"
 import {
+  normalizeProductionFloorCode,
   parseProductionFloorCode,
   ProductionUnitAccessError,
 } from "@workspace/db/production-floors"
@@ -14,6 +15,7 @@ import { validateProductionBreaks } from "@workspace/db/production-breaks"
 import { NextResponse, type NextRequest } from "next/server"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
+import { signedInMachinist } from "../../../lib/auth/signed-in-machinist"
 import { productionMasterCapability } from "../../../lib/auth/production-master-access"
 import { masterCapability } from "../../../lib/auth/master-capabilities"
 import { qualityParameterControlKey } from "../../../lib/auth/quality-parameter-controls"
@@ -1789,17 +1791,48 @@ async function post(request: NextRequest, context: RouteContext) {
         const result = await withProductionRepository(
           request,
           "operations.shop_floor.write",
-          ({ actorUserId, organizationId, repository }) =>
-            repository.recordShopFloorStage({
+          async ({ actorUserId, organizationId, repository }) => {
+            const isSetting = text(payload.stage).toLowerCase() === "setting"
+            const settingMachinist = isSetting
+              ? await signedInMachinist({
+                  connectionString: readAuthEnvironment().connectionString,
+                  organizationId,
+                  productionFloorCode: normalizeProductionFloorCode(
+                    payload.productionFloorCode
+                  ),
+                  userId: actorUserId,
+                })
+              : null
+            if (isSetting && !settingMachinist) {
+              throw new RouteError(
+                403,
+                "Your signed-in Employee ID must be an active Machinist or Programmer in this production unit."
+              )
+            }
+            if (
+              settingMachinist &&
+              text(payload.doneBy) &&
+              text(payload.doneBy) !== settingMachinist.name
+            ) {
+              throw new RouteError(403, "Setting can only be recorded under your own Employee ID.")
+            }
+            return repository.recordShopFloorStage({
               actorUserId,
               jobCardNumber: text(payload.jcNo || payload.jobCard),
               machineNumber: text(payload.machine || payload.machineNo),
               operationSetupCode: text(payload.setupNo),
               organizationId,
-              payload,
+              payload: settingMachinist
+                ? {
+                    ...payload,
+                    doneBy: settingMachinist.name,
+                    doneByEmployeeCode: settingMachinist.code,
+                  }
+                : payload,
               productionFloorCode: text(payload.productionFloorCode),
               stage: text(payload.stage),
             })
+          }
         )
         return json(
           await withPlanningRefresh(request, path, body, {

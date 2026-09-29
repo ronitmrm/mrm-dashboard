@@ -11,6 +11,7 @@ const dependencies = vi.hoisted(() => ({
   upsertCycleStandard: vi.fn(),
   startBulkProductionSessionDowntime: vi.fn(),
   recordShopFloorStage: vi.fn(),
+  signedInMachinist: vi.fn(),
   executePostgresOperationalEntry: vi.fn(),
   isPostgresOperationalEntryType: vi.fn(),
   requestRefresh: vi.fn(),
@@ -45,6 +46,10 @@ vi.mock("@workspace/db", async (importOriginal) => ({
 vi.mock("@/lib/auth/auth", () => ({
   getAuth: () => ({ api: { getSession: dependencies.getSession } }),
   readAuthEnvironment: () => ({ connectionString: "postgres://test" }),
+}))
+
+vi.mock("../../lib/auth/signed-in-machinist", () => ({
+  signedInMachinist: dependencies.signedInMachinist,
 }))
 vi.mock("../../lib/auth/auth", () => ({
   getAuth: () => ({ api: { getSession: dependencies.getSession } }),
@@ -125,6 +130,7 @@ describe("production entry mutation API authorization", () => {
     dependencies.upsertRawMaterialReceipt.mockResolvedValue({ ok: true })
     dependencies.upsertRawMaterialReceipts.mockResolvedValue({ ok: true })
     dependencies.isPostgresOperationalEntryType.mockReturnValue(false)
+    dependencies.signedInMachinist.mockResolvedValue({ code: "42", name: "CNC Programmer" })
   })
 
   afterEach(() => vi.restoreAllMocks())
@@ -143,6 +149,38 @@ describe("production entry mutation API authorization", () => {
     })
     expect(response.status).toBe(409)
     expect(await response.json()).toEqual({ error: message })
+  })
+
+  it("records Setting under the signed-in programmer and rejects another person", async () => {
+    dependencies.listAllGrantedCapabilities.mockResolvedValue([
+      "operations.shop_floor.write",
+      "operations.floors.cnc.machinist_tasks.machinist_progress.write",
+    ])
+    dependencies.recordShopFloorStage.mockResolvedValue({ ok: true })
+    const payload = {
+      jcNo: "P2046", machine: "CNC-9", setupNo: "1",
+      productionFloorCode: "cnc", stage: "setting",
+    }
+
+    const saved = await post("data-entry", {
+      entryType: "shop_floor_status", productionFloorCode: "cnc", payload,
+    })
+    expect(saved.status).toBe(200)
+    expect(dependencies.recordShopFloorStage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          doneBy: "CNC Programmer", doneByEmployeeCode: "42",
+        }),
+      })
+    )
+
+    dependencies.recordShopFloorStage.mockClear()
+    const forged = await post("data-entry", {
+      entryType: "shop_floor_status", productionFloorCode: "cnc",
+      payload: { ...payload, stage: "SETTING", doneBy: "Another Employee" },
+    })
+    expect(forged.status).toBe(403)
+    expect(dependencies.recordShopFloorStage).not.toHaveBeenCalled()
   })
 
   it("requires the selected floor's recording permission for bulk breakdown", async () => {
