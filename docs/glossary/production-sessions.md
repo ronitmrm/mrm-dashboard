@@ -69,6 +69,10 @@ HOD and Manager are eligible for the CNC Machinist task selector.
 Employees from other units or departments are not substitutes. These selections
 record who performed the work; they do not grant application permissions.
 The separate machine Worker selection still requires a Worker designation.
+For Setting Done and Setting checklist completion, the performer is the signed-in
+Machinist or CNC Programmer's linked Employee ID in that production unit. The
+performer cannot be selected or changed to another employee. The machine Worker
+remains a separate assignment.
 
 Planner decisions identify the operation by its setup number. Display labels
 such as `P1` and `Setup 1` refer to setup `1`; they must not prevent a saved

@@ -106,6 +106,16 @@ export function createAuthorizationRepository(
   return {
     close,
 
+    async linkedEmployeeCode(userId: string, organizationId: string) {
+      const result = await pool.query<{ employee_code: string }>(
+        `SELECT btrim(employee_code) AS employee_code
+         FROM identity.employee_links
+         WHERE user_id = $1 AND organization_id = $2`,
+        [userId, organizationId]
+      )
+      return result.rows[0]?.employee_code ?? null
+    },
+
     async hasCapability(userId: string, capability: string) {
       return (await listGrantedCapabilities(userId, [capability])).length === 1
     },

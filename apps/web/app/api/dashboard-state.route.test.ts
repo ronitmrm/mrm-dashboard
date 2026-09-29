@@ -81,6 +81,10 @@ vi.mock("@/lib/postgres-operational-entry-server", () => ({
   readPostgresSetupChecklistPage: vi.fn(),
 }))
 
+vi.mock("../../lib/auth/signed-in-machinist", () => ({
+  signedInMachinist: vi.fn(),
+}))
+
 import { GET } from "./[...path]/route"
 
 describe("dashboard-state route", () => {
