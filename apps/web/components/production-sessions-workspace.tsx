@@ -17,6 +17,7 @@ import { Field as FormField, FieldGroup, FieldLabel } from "@workspace/ui/compon
 import { SectionCard, CardContent, CardHeader, CardTitle } from "@workspace/ui/components/card"
 import { Input } from "@workspace/ui/components/input"
 import { NativeSelect, NativeSelectOption } from "@workspace/ui/components/native-select"
+import { SearchableSelect } from "@workspace/ui/components/searchable-select"
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@workspace/ui/components/sheet"
 import { OperationalTable, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@workspace/ui/components/table"
 import { Clock3, History, Pencil, Play, Search, Square, TriangleAlert } from "lucide-react"
@@ -57,6 +58,7 @@ import {
   productionMachinistOptions,
   productionQualityOptions,
   productionShopFloorOptions,
+  productionWorkerOptions,
 } from "@/lib/shared-employee-master"
 
 type View = "start" | "register" | "events"
@@ -151,9 +153,10 @@ export function ProductionSessionsWorkspace({
   const [view, setView] = useState<View>("start")
   const [sessions, setSessions] = useState<Row[]>([])
   const [eventRows, setEventRows] = useState<Row[]>([])
-  const [signedInOperator, setSignedInOperator] = useState<{ code: string; name: string } | null>(null)
+  const [signedInMachinist, setSignedInMachinist] = useState<{ code: string; name: string } | null>(null)
   const [signedInPerson, setSignedInPerson] = useState<{ code: string; name: string } | null>(null)
   const [signedInRoles, setSignedInRoles] = useState<EntryRole[]>([])
+  const [workerOptions, setWorkerOptions] = useState<Array<{ code: string; name: string }>>([])
   const [query, setQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<SessionStatusFilter>("all")
   const [now, setNow] = useState(() => new Date())
@@ -192,12 +195,14 @@ export function ProductionSessionsWorkspace({
       const employeeCode = text(employeeBody.currentEmployeeCode).toLowerCase()
       const employeeRows = rows(employeeBody.rows)
       const shopFloor = productionShopFloorOptions(employeeRows, floor)
-      setSignedInOperator(
-        shopFloor.find((employee) => employee.code.toLowerCase() === employeeCode) ?? null
+      const machinists = productionMachinistOptions(employeeRows, floor)
+      setSignedInMachinist(
+        machinists.find((employee) => employee.code.toLowerCase() === employeeCode) ?? null
       )
+      setWorkerOptions(productionWorkerOptions(employeeRows, floor))
       const eligibleRoles = ([
         ["shop_floor", shopFloor],
-        ["machinist", productionMachinistOptions(employeeRows, floor)],
+        ["machinist", machinists],
         ["quality", productionQualityOptions(employeeRows, floor)],
       ] as const)
       setSignedInRoles(eligibleRoles.flatMap(([role, options]) =>
@@ -342,7 +347,7 @@ export function ProductionSessionsWorkspace({
  </SectionCard>
       {!loading && view === "start" ? <CarriedDowntimeTable rows={carriedDowntime} sessions={sessions} options={machineOptions} onSelect={setSelectedMachine} onAction={openAction} /> : null}
       {bulkOpen ? <BulkBreakdownDialog floor={floor} control={control} signedInPerson={signedInPerson} signedInRoles={signedInRoles} onClose={() => setBulkOpen(false)} onSaved={(savedText) => { setBulkOpen(false); setMessage(savedText); void load() }} /> : null}
-      <ActionSheet key={`${action}-${text(target?.id) || machine(target ?? {})}`} action={action} target={target} floor={floor} shift={shift} signedInOperator={signedInOperator} signedInPerson={signedInPerson} signedInRoles={signedInRoles} control={control} saving={saving} message={message} onOpenChange={(open) => { if (!open) setAction(null) }} onSave={(type, payload) => void save(type, payload)} />
+      <ActionSheet key={`${action}-${text(target?.id) || machine(target ?? {})}`} action={action} target={target} floor={floor} shift={shift} signedInMachinist={signedInMachinist} signedInPerson={signedInPerson} signedInRoles={signedInRoles} workerOptions={workerOptions} control={control} saving={saving} message={message} onOpenChange={(open) => { if (!open) setAction(null) }} onSave={(type, payload) => void save(type, payload)} />
       <DetailSheet session={detail} events={detailEvents} floor={floor} now={now} onOpenChange={(open) => { if (!open) setDetail(null) }} onAction={(next, row) => { setDetail(null); openAction(next, row) }} />
     </div>
   )
@@ -559,13 +564,14 @@ function ScrollableTable({ headers, children }: { headers: string[]; children: R
  return <div className="rounded-md border min-w-0"><OperationalTable containerClassName="max-h-[65vh]"><TableHeader className="sticky top-0 z-10 bg-background"><TableRow>{headers.map((header) => <TableHead key={header}>{header}</TableHead>)}</TableRow></TableHeader><TableBody>{children}</TableBody></OperationalTable></div>
 }
 
-function ActionSheet({ action, target, floor, shift, signedInOperator, signedInPerson, signedInRoles, control, saving, message, onOpenChange, onSave }: { action: Action | null; target: Row | null; floor: ProductionFloorCode; shift: ReturnType<typeof productionShiftAt>; signedInOperator: { code: string; name: string } | null; signedInPerson: { code: string; name: string } | null; signedInRoles: EntryRole[]; control: Row; saving: boolean; message: string; onOpenChange: (open: boolean) => void; onSave: (entryType: string, payload: Row) => void }) {
+function ActionSheet({ action, target, floor, shift, signedInMachinist, signedInPerson, signedInRoles, workerOptions, control, saving, message, onOpenChange, onSave }: { action: Action | null; target: Row | null; floor: ProductionFloorCode; shift: ReturnType<typeof productionShiftAt>; signedInMachinist: { code: string; name: string } | null; signedInPerson: { code: string; name: string } | null; signedInRoles: EntryRole[]; workerOptions: Array<{ code: string; name: string }>; control: Row; saving: boolean; message: string; onOpenChange: (open: boolean) => void; onSave: (entryType: string, payload: Row) => void }) {
   const defaults = productionSessionActionDefaults(floor, new Date(), {
     action: action === "downtime" ? "downtime" : undefined,
     productionDate: text(target?.productionDate),
     shift: text(target?.shift),
   })
-  const operator = signedInOperator?.code ?? ""
+  const [operatorCode, setOperatorCode] = useState("")
+  const operator = workerOptions.find((worker) => worker.code === operatorCode)
   const storedMethod = text(target?.measurementMethod)
   const [method, setMethod] = useState<"weight" | "counter">(
     storedMethod === "weight" || storedMethod === "counter"
@@ -667,7 +673,7 @@ function ActionSheet({ action, target, floor, shift, signedInOperator, signedInP
   const hasCrateCount = crates !== ""
   const hasCrateWeight = crateWeightKg !== ""
   const submit = () => {
-    if (action === "start") onSave("production_session_start", { machine: machine(plan), jobCard: job(plan), setupNo: setup(plan), operatorCode: operator, measurementMethod: method, startCount: method === "counter" && !text(plan.carriedStartCount) ? number(startCount) : undefined, startedAt: startAtIso, cycleTime: number(first(plan, ["cycleTime", "cycleTimeSeconds", "cycleTimeSec"])), pieceWeightGrams: pieceWeight })
+    if (action === "start") onSave("production_session_start", { machine: machine(plan), jobCard: job(plan), setupNo: setup(plan), operatorCode: operator?.code, measurementMethod: method, startCount: method === "counter" && !text(plan.carriedStartCount) ? number(startCount) : undefined, startedAt: startAtIso, cycleTime: number(first(plan, ["cycleTime", "cycleTimeSeconds", "cycleTimeSec"])), pieceWeightGrams: pieceWeight })
     if (action === "end") onSave("production_session_close", { sessionId, enteredRole: role, endedAt: endAtIso, endReason, endCount: method === "counter" ? number(endCount) : undefined, grossWeightKg: method === "weight" && hasGrossWeight ? number(grossKg) : undefined, crateCount: method === "weight" && hasCrateCount ? number(crates) : undefined, crateWeightKg: method === "weight" && hasCrateWeight ? number(crateWeightKg) : undefined })
     if (action === "correctClose") onSave("production_session_correct", { sessionId, correctionReason, enteredRole: role, expectedRowVersion: number(target.rowVersion), endedAt: endAtIso, endReason, endCount: method === "counter" ? number(endCount) : undefined, grossWeightKg: method === "weight" && hasGrossWeight ? number(grossKg) : undefined, crateCount: method === "weight" && hasCrateCount ? number(crates) : undefined, crateWeightKg: method === "weight" && hasCrateWeight ? number(crateWeightKg) : undefined, downtimeCorrection })
     if (action === "downtime") onSave("production_session_downtime_start", { sessionId, enteredRole: role, startedAt: startAtIso, reasonCode: reason, reasonName: selectedDowntimeReason?.label || text(target.carriedReasonName) })
@@ -678,7 +684,7 @@ function ActionSheet({ action, target, floor, shift, signedInOperator, signedInP
     if (action === "lateRejection") onSave("production_session_rejection", { sessionId, correctionReason, quantity: number(quantity), typeCode, typeName: selectedType?.label, reasonCode: reason, reasonName: selectedReason?.label, remarkCode: remark, remarkName: selectedRemark?.label })
   }
   const weightCloseIsValid = (!hasGrossWeight && !hasCrateCount && !hasCrateWeight) || (hasGrossWeight && hasCrateCount && hasCrateWeight)
-  const valid = action === "start" ? Boolean(operator && startAtIso && method && pieceWeight > 0 && (method === "weight" || startCount || text(plan.carriedStartCount)))
+  const valid = action === "start" ? Boolean(signedInMachinist && operator && startAtIso && method && pieceWeight > 0 && (method === "weight" || startCount || text(plan.carriedStartCount)))
     : action === "end" ? Boolean(role && endAtIso && endReason && (method === "counter" ? endCount : weightCloseIsValid))
     : action === "correctClose" ? Boolean(role && correctionReason && endAtIso && endReason && (method === "counter" ? endCount : ((hasGrossWeight && hasCrateCount && hasCrateWeight) || (outputPending(target) && downtimeCorrection && !hasGrossWeight && !hasCrateCount && !hasCrateWeight))) && (downtimeChange === "none" || (selectedDowntime && (downtimeChange === "reverse" || (istDateTimeInputToIso(downtimeStart) && istDateTimeInputToIso(downtimeEnd) && correctedDowntimeReason)))))
     : action === "downtime" ? Boolean(reason && startAtIso && role)
@@ -704,10 +710,16 @@ function ActionSheet({ action, target, floor, shift, signedInOperator, signedInP
   return <Sheet open={Boolean(action)} onOpenChange={onOpenChange}><StandardDrawerContent side="right" title={sheetTitle} description={`${machine(target)} · ${job(target)} · ${part(target)} · Setup ${setup(target)}`} className="!w-full overflow-y-auto sm:!max-w-2xl"><div className="grid min-w-0 gap-4 px-6 [&_[data-slot=searchable-select]]:w-full">
     {action !== "start" ? <Field label="Entered by"><Input readOnly value={signedInPerson ? `${signedInPerson.code} · ${signedInPerson.name}` : "Linked employee assignment required"} /></Field> : null}
     {action === "start" ? <>
-      <Field label="Operator">
-        <Input readOnly value={signedInOperator
-          ? `${signedInOperator.code} · ${signedInOperator.name}`
-          : "Signed-in Shop Floor employee required"} />
+      <Field label="Started by">
+        <Input readOnly value={signedInMachinist
+          ? `${signedInMachinist.code} · ${signedInMachinist.name}`
+          : "Signed-in Machinist or Programmer required"} />
+      </Field>
+      <Field label="Operator (Worker)">
+        <SearchableSelect value={operatorCode} onChange={(event) => setOperatorCode(event.target.value)}>
+          <option value="">{workerOptions.length ? "Select Worker" : "No active Workers in this production unit"}</option>
+          {workerOptions.map((worker) => <option key={worker.code} value={worker.code}>{worker.code} · {worker.name}</option>)}
+        </SearchableSelect>
       </Field>
       <IstDateTimeField label="Start time (IST)" value={startAt} onChange={setStartAt} />
       <Field label="Production method"><NativeSelect value={method} onChange={(event) => setMethod(event.target.value as "weight" | "counter")}><NativeSelectOption value="weight">Weight at session end</NativeSelectOption>{floor === "cnc" ? <NativeSelectOption value="counter">Machine counter</NativeSelectOption> : null}</NativeSelect></Field>
@@ -761,6 +773,11 @@ function DetailSheet({ session, events, floor, now, onOpenChange, onAction }: { 
   const status = sessionOperationalStatus(session, floor, now)
   const pending = outputPending(session)
   const endedAt = text(session.endedAt)
+  const sessionPayload = session.sessionPayload && typeof session.sessionPayload === "object" && !Array.isArray(session.sessionPayload)
+    ? session.sessionPayload as Row
+    : {}
+  const startedBy = [text(sessionPayload.startedByEmployeeCode), text(sessionPayload.startedBy)]
+    .filter(Boolean).join(" · ") || text(session.startedByName) || "-"
   const measurementMethod = text(session.measurementMethod).toLowerCase()
   const efficiency = productionSessionEfficiency({
     targetPieces: number(session.targetPieces),
@@ -768,7 +785,8 @@ function DetailSheet({ session, events, floor, now, onOpenChange, onAction }: { 
   })
   const summary: Array<[string, string | number]> = [
     ["Status", pending ? "Weight Pending" : titleCase(status)],
-    ["Employee ID", text(session.operatorCode) || "-"],
+    ["Started by", startedBy],
+    ["Operator ID", text(session.operatorCode) || "-"],
     ["Operator name", text(session.operatorName) || "-"],
     ["Start date", formatIstDate(text(session.startedAt))],
     ["Start time", formatIstTime(text(session.startedAt))],

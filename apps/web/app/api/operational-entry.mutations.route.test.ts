@@ -9,10 +9,12 @@ const dependencies = vi.hoisted(() => ({
   upsertRawMaterialReceipt: vi.fn(),
   upsertRawMaterialReceipts: vi.fn(),
   upsertCycleStandard: vi.fn(),
+  startProductionSession: vi.fn(),
   startBulkProductionSessionDowntime: vi.fn(),
   recordShopFloorStage: vi.fn(),
   recordDispatchApproval: vi.fn(),
   signedInEmployee: vi.fn(),
+  activeProductionWorker: vi.fn(),
   executePostgresOperationalEntry: vi.fn(),
   isPostgresOperationalEntryType: vi.fn(),
   requestRefresh: vi.fn(),
@@ -34,6 +36,7 @@ vi.mock("@workspace/db", async (importOriginal) => ({
     organizationIdForCode: dependencies.organizationIdForCode,
     upsertRawMaterialReceipt: dependencies.upsertRawMaterialReceipt,
     upsertRawMaterialReceipts: dependencies.upsertRawMaterialReceipts,
+    startProductionSession: dependencies.startProductionSession,
     startBulkProductionSessionDowntime: dependencies.startBulkProductionSessionDowntime,
     recordShopFloorStage: dependencies.recordShopFloorStage,
     recordDispatchApproval: dependencies.recordDispatchApproval,
@@ -52,6 +55,7 @@ vi.mock("@/lib/auth/auth", () => ({
 
 vi.mock("../../lib/auth/signed-in-machinist", () => ({
   signedInEmployee: dependencies.signedInEmployee,
+  activeProductionWorker: dependencies.activeProductionWorker,
 }))
 vi.mock("../../lib/auth/auth", () => ({
   getAuth: () => ({ api: { getSession: dependencies.getSession } }),
@@ -203,6 +207,44 @@ describe("production entry mutation API authorization", () => {
     })
     expect(forged.status).toBe(403)
     expect(dependencies.recordShopFloorStage).not.toHaveBeenCalled()
+  })
+
+  it("starts a session under the machinist while assigning a selected Worker", async () => {
+    dependencies.listAllGrantedCapabilities.mockResolvedValue([
+      "operations.production.write",
+      "operations.floors.cnc.production_sessions.production_recording.write",
+    ])
+    dependencies.activeProductionWorker.mockResolvedValue({ code: "WORK-7", name: "Worker Seven" })
+    dependencies.startProductionSession.mockResolvedValue({ id: "session-1" })
+    const body = {
+      entryType: "production_session_start", productionFloorCode: "cnc",
+      payload: {
+        productionFloorCode: "cnc", machine: "CNC-9", jobCard: "P2046",
+        setupNo: "1", operatorCode: "WORK-7", startedAt: "2026-09-29T04:00:00Z",
+      },
+    }
+
+    expect((await post("data-entry", body)).status).toBe(200)
+    expect(dependencies.signedInEmployee).toHaveBeenCalledWith(
+      expect.objectContaining({ role: "machinist", userId: "entry-writer" })
+    )
+    expect(dependencies.activeProductionWorker).toHaveBeenCalledWith(
+      expect.objectContaining({ employeeCode: "WORK-7", productionFloorCode: "cnc" })
+    )
+    expect(dependencies.startProductionSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorUserId: "entry-writer",
+        operatorCode: "WORK-7",
+        sourcePayload: expect.objectContaining({
+          startedByEmployeeCode: "42", operatorCode: "WORK-7",
+        }),
+      })
+    )
+
+    dependencies.activeProductionWorker.mockResolvedValue(null)
+    dependencies.startProductionSession.mockClear()
+    expect((await post("data-entry", body)).status).toBe(400)
+    expect(dependencies.startProductionSession).not.toHaveBeenCalled()
   })
 
   it("requires the selected floor's recording permission for bulk breakdown", async () => {
