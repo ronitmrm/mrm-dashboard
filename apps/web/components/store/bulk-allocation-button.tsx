@@ -25,6 +25,7 @@ type AllocationSelection = {
   itemLabel: string
   itemTypeId: string
   remainingQuantity: number
+  requestedUnitCode: string | null
   trackingMode: "BULK" | "SERIALIZED"
 }
 
@@ -63,6 +64,7 @@ function selectedAllocationLines(formId: string): AllocationSelection[] {
       itemLabel: input.dataset.allocationItemLabel ?? input.value,
       itemTypeId: input.dataset.allocationItemTypeId ?? "",
       remainingQuantity: Number(input.dataset.allocationRemainingQuantity ?? 0),
+      requestedUnitCode: input.dataset.allocationRequestedUnitCode || null,
       trackingMode:
         input.dataset.allocationTrackingMode === "SERIALIZED"
           ? "SERIALIZED"
@@ -90,7 +92,25 @@ export function BulkAllocationButton({ formId }: { formId: string }) {
   >({})
 
   const syncSelection = React.useCallback(() => {
-    const nextSelection = selectedAllocationLines(formId)
+    const requestedUnits = selectedAllocationLines(formId)
+    const reservedUnits = new Set(
+      requestedUnits.flatMap((line) =>
+        line.requestedUnitCode
+          ? [`${line.itemTypeId}:${line.requestedUnitCode.toLowerCase()}`]
+          : []
+      )
+    )
+    const nextSelection = requestedUnits.map((line) =>
+      line.requestedUnitCode
+        ? line
+        : {
+            ...line,
+            availableUnitIds: line.availableUnitIds.filter(
+              (unitId) =>
+                !reservedUnits.has(`${line.itemTypeId}:${unitId.toLowerCase()}`)
+            ),
+          }
+    )
     const activeSlots = new Set(
       assetSlotsFor(nextSelection).map((slot) => slot.key)
     )
@@ -135,14 +155,17 @@ export function BulkAllocationButton({ formId }: { formId: string }) {
   const assetSlots = assetSlotsFor(selection)
   const chosenAssetKeys = new Set(
     assetSlots.flatMap((slot) => {
-      const assetCode = assetSelections[slot.key]
+      const assetCode =
+        slot.line.requestedUnitCode ?? assetSelections[slot.key]
       return assetCode
         ? [`${slot.line.itemTypeId}:${assetCode.toLowerCase()}`]
         : []
     })
   )
   const hasCompleteAssetSelection =
-    assetSlots.every((slot) => Boolean(assetSelections[slot.key])) &&
+    assetSlots.every((slot) =>
+      Boolean(slot.line.requestedUnitCode ?? assetSelections[slot.key])
+    ) &&
     chosenAssetKeys.size === assetSlots.length
   const department = selection[0]?.department ?? ""
 
@@ -165,9 +188,9 @@ export function BulkAllocationButton({ formId }: { formId: string }) {
           <>
             Allocate {selection.length} selected{" "}
             {selection.length === 1 ? "line" : "lines"} in full to one
-            Department. Quantity-one serialized lines start with the first
-            available Unit ID; change it if needed. If any stock changed, no
-            line is allocated.
+            Department. Store can choose a unit for Asset Code requests. Exact
+            Unit ID requests stay fixed. If any stock changed, no line is
+            allocated.
           </>
         }
         title="Allocate selected request lines"
@@ -197,45 +220,58 @@ export function BulkAllocationButton({ formId }: { formId: string }) {
                   {lineSlots.length ? (
                     <div className="mt-3 grid gap-3 sm:grid-cols-2">
                       {lineSlots.map((slot) => {
-                        const selectedCode = assetSelections[slot.key] ?? ""
+                        const selectedCode =
+                          line.requestedUnitCode ?? assetSelections[slot.key] ?? ""
                         return (
                           <label
                             className="grid gap-1 text-xs font-medium"
                             key={slot.key}
                           >
                             Unit ID {slot.index + 1}
-                            <NativeSelect
-                              aria-label={`${line.itemLabel} Unit ID ${slot.index + 1}`}
-                              form={formId}
-                              name={`asset_code_${line.id}`}
-                              onChange={(event) =>
-                                setAssetSelections((current) => ({
-                                  ...current,
-                                  [slot.key]: event.target.value,
-                                }))
-                              }
-                              required
-                              value={selectedCode}
-                            >
-                              <NativeSelectOption disabled value="">
-                                Select available Unit ID / Serial ID
-                              </NativeSelectOption>
-                              {line.availableUnitIds.map((unitId) => {
-                                const assetKey = `${line.itemTypeId}:${unitId.toLowerCase()}`
-                                return (
-                                  <NativeSelectOption
-                                    disabled={
-                                      selectedCode !== unitId &&
-                                      chosenAssetKeys.has(assetKey)
-                                    }
-                                    key={unitId}
-                                    value={unitId}
-                                  >
-                                    {unitId}
-                                  </NativeSelectOption>
-                                )
-                              })}
-                            </NativeSelect>
+                            {line.requestedUnitCode ? (
+                              <>
+                                <Input readOnly value={line.requestedUnitCode} />
+                                <input
+                                  form={formId}
+                                  name={`asset_code_${line.id}`}
+                                  type="hidden"
+                                  value={line.requestedUnitCode}
+                                />
+                              </>
+                            ) : (
+                              <NativeSelect
+                                aria-label={`${line.itemLabel} Unit ID ${slot.index + 1}`}
+                                form={formId}
+                                name={`asset_code_${line.id}`}
+                                onChange={(event) =>
+                                  setAssetSelections((current) => ({
+                                    ...current,
+                                    [slot.key]: event.target.value,
+                                  }))
+                                }
+                                required
+                                value={selectedCode}
+                              >
+                                <NativeSelectOption disabled value="">
+                                  Select available Unit ID / Serial ID
+                                </NativeSelectOption>
+                                {line.availableUnitIds.map((unitId) => {
+                                  const assetKey = `${line.itemTypeId}:${unitId.toLowerCase()}`
+                                  return (
+                                    <NativeSelectOption
+                                      disabled={
+                                        selectedCode !== unitId &&
+                                        chosenAssetKeys.has(assetKey)
+                                      }
+                                      key={unitId}
+                                      value={unitId}
+                                    >
+                                      {unitId}
+                                    </NativeSelectOption>
+                                  )
+                                })}
+                              </NativeSelect>
+                            )}
                           </label>
                         )
                       })}

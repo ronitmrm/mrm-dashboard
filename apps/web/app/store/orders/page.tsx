@@ -185,7 +185,9 @@ export default async function StoreOrdersPage() {
                     </TableCell>
                     <TableCell>{order.orderDate}</TableCell>
                     <TableCell>
-                      {order.orderType === "REPAIR" ? "Repair" : "Goods"}
+                      {order.calibrationVisitId
+                        ? "Calibration"
+                        : order.orderType === "REPAIR" ? "Repair" : "Goods"}
                     </TableCell>
                     <TableCell>{order.supplierName}</TableCell>
                     <TableCell>

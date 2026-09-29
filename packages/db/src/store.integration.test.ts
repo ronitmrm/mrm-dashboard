@@ -1177,6 +1177,80 @@ describe("Store requests", () => {
     )
   })
 
+  test("issues only the exact Unit ID named in a Store request", async () => {
+    const location = await store.ensurePrimaryStoreLocation({ organizationId })
+    const item = await store.createItemType({
+      ...(await createClassification("Exact Unit Request")),
+      assetType: "NON_CONSUMABLE",
+      identificationName: `Exact Unit Request ${suffix}`,
+      organizationId,
+      unit: "Nos",
+    })
+    const receipt = await store.receiveStock({
+      locationId: location.id,
+      organizationId,
+      purchaseOrderLineId: (await createPurchaseOrder(item.id, 2, "100.00")).id,
+      quantity: 2,
+    })
+    const requestedCode = receipt.assetCodes[0]!
+    const otherCode = receipt.assetCodes[1]!
+    const requestedUnit = (await store.listAssets({ organizationId })).find(
+      (asset) => asset.assetCode === requestedCode
+    )!
+    const request = await store.createRequisitionBatch({
+      department: "Production",
+      items: [
+        { itemTypeId: item.id, quantity: 1, requestedUnitId: requestedUnit.id },
+      ],
+      locationId: location.id,
+      organizationId,
+      requestedBy: "Production Supervisor",
+    })
+    const lineId = request.lineIds[0]!
+    const listed = (await store.listRequisitions({ organizationId })).rows.find(
+      (line) => line.id === lineId
+    )!
+    expect(listed).toEqual(
+      expect.objectContaining({
+        requestedUnitCode: requestedCode,
+        requestedUnitId: requestedUnit.id,
+        availableUnitIds: [requestedCode],
+      })
+    )
+
+    await expect(
+      store.issueRemainingRequisitionBatch({
+        lines: [{ assetCodes: [otherCode], requisitionId: lineId }],
+        organizationId,
+      })
+    ).rejects.toThrow("exact Unit ID")
+    expect(
+      (await store.listRequisitions({ organizationId })).rows.find(
+        (line) => line.id === lineId
+      )?.status
+    ).toBe("Pending")
+
+    await store.issueRemainingRequisitionBatch({
+      lines: [{ assetCodes: [requestedCode], requisitionId: lineId }],
+      organizationId,
+    })
+    expect(
+      (await store.listRequisitions({ organizationId })).rows.find(
+        (line) => line.id === lineId
+      )?.status
+    ).toBe("Fulfilled")
+    expect(
+      (await store.listAssets({ organizationId }))
+        .filter((asset) => [requestedCode, otherCode].includes(asset.assetCode))
+        .map((asset) => ({ code: asset.assetCode, status: asset.status }))
+    ).toEqual(
+      expect.arrayContaining([
+        { code: requestedCode, status: "ASSIGNED" },
+        { code: otherCode, status: "AVAILABLE" },
+      ])
+    )
+  })
+
   test("Store can cancel an open request line and prevent later issue", async () => {
     const location = await store.ensurePrimaryStoreLocation({ organizationId })
     const item = await store.createItemType({
@@ -1465,11 +1539,11 @@ describe("Store requests", () => {
       RETURNING id`,
       [organizationId, maintenanceCode, randomUUID()]
     )
-    await store.scheduleItemTypeMaintenance({
+    await store.scheduleAssetMaintenanceMaster({
+      assetCode: receipt.assetCodes[0]!,
       definitionId: definition.rows[0]!.id,
       firstDueOn: "2026-08-22",
       organizationId,
-      typeCode: itemType.typeCode,
     })
     const firstMasterSchedule = (
       await store.getAssetWorkspace({
@@ -1501,6 +1575,19 @@ describe("Store requests", () => {
       `${itemType.typeCode}-0001`,
       `${itemType.typeCode}-0002`,
     ])
+    const inheritedSecondSchedule = (
+      await store.getAssetWorkspace({
+        assetCode: assetCodes[1],
+        organizationId,
+      })
+    )?.schedules.find((schedule) => schedule.code === maintenanceCode)
+    expect(inheritedSecondSchedule).toBeUndefined()
+    await store.scheduleAssetMaintenanceMaster({
+      assetCode: assetCodes[1],
+      definitionId: definition.rows[0]!.id,
+      firstDueOn: "2026-11-30",
+      organizationId,
+    })
     const secondMasterSchedule = (
       await store.getAssetWorkspace({
         assetCode: assetCodes[1],
@@ -1525,9 +1612,6 @@ describe("Store requests", () => {
       typeCode: itemType.typeCode,
     })
     expect(itemWorkspace?.item.typeCode).toBe(itemType.typeCode)
-    expect(itemWorkspace?.maintenanceMasters).toContainEqual(
-      expect.objectContaining({ code: maintenanceCode, frequencyDays: 90 })
-    )
     expect(itemWorkspace?.assets.map((asset) => asset.assetCode)).toEqual(
       assetCodes
     )

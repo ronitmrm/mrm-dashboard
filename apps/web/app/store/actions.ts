@@ -850,10 +850,16 @@ export async function createStoreRequisitionBatchAction(formData: FormData) {
   const quantities = formData
     .getAll("quantity")
     .map((value) => Number(value.toString()))
+  const requestedUnitIds = formData
+    .getAll("requested_unit_id")
+    .map((value) => value.toString().trim())
   if (!itemTypeIds.length || itemTypeIds.length !== quantities.length) {
     throw new Error(
       "Select at least one coded Store item and enter its quantity."
     )
+  }
+  if (requestedUnitIds.length && requestedUnitIds.length !== itemTypeIds.length) {
+    throw new Error("Each request line needs a Unit ID selection or blank value.")
   }
   await withStore(
     "store.requests.submit",
@@ -878,6 +884,7 @@ export async function createStoreRequisitionBatchAction(formData: FormData) {
         items: itemTypeIds.map((itemTypeId, index) => ({
           itemTypeId,
           quantity: quantities[index]!,
+          requestedUnitId: requestedUnitIds[index] || null,
         })),
         locationId: location.id,
         organizationId,
@@ -1194,8 +1201,8 @@ export async function moveStoreAssetAction(formData: FormData) {
 export async function scheduleStoreAssetMaintenanceAction(formData: FormData) {
   const assetCode = requiredText(formData, "asset_code")
   const scheduleType = requiredText(formData, "schedule_type")
-  if (scheduleType !== "MAINTENANCE" && scheduleType !== "CALIBRATION") {
-    throw new Error("Timetable type must be Maintenance or Calibration.")
+  if (scheduleType !== "CALIBRATION") {
+    throw new Error("Assign maintenance from Maintenance Master.")
   }
   const schedule = await withStore(
     "store.asset_maintenance.write",
@@ -1215,20 +1222,21 @@ export async function scheduleStoreAssetMaintenanceAction(formData: FormData) {
   revalidateStore()
 }
 
-export async function scheduleStoreItemTypeMaintenanceAction(formData: FormData) {
-  const typeCode = requiredText(formData, "item_type_code")
-  await withStore(
+export async function scheduleStoreAssetMaintenanceMasterAction(formData: FormData) {
+  const assetCode = requiredText(formData, "asset_code")
+  const schedule = await withStore(
     "store.asset_maintenance.write",
     (repository, actorUserId, organizationId) =>
-      repository.scheduleItemTypeMaintenance({
+      repository.scheduleAssetMaintenanceMaster({
         actorUserId,
+        assetCode,
         definitionId: requiredText(formData, "definition_id"),
         firstDueOn: requiredText(formData, "first_due_on"),
         organizationId,
-        typeCode,
       })
   )
-  revalidatePath(`/store/assets/${encodeURIComponent(typeCode)}`)
+  revalidatePath(`/store/assets/${encodeURIComponent(assetCode)}`)
+  revalidatePath(`/store/assets/${encodeURIComponent(schedule.typeCode)}`)
   revalidateStore()
 }
 
@@ -1262,11 +1270,28 @@ export async function setStoreAssetLifecycleAction(formData: FormData) {
   revalidateStore()
 }
 
+export async function recordStoreAssetAcquisitionAction(formData: FormData) {
+  const assetCode = requiredText(formData, "asset_code")
+  await withStore(
+    "store.receipts.receive",
+    (repository, actorUserId, organizationId) =>
+      repository.recordAssetAcquisition({
+        actorUserId,
+        assetCode,
+        organizationId,
+        supplierId: requiredText(formData, "supplier_id"),
+        unitPrice: requiredText(formData, "unit_price"),
+      })
+  )
+  revalidatePath(`/store/assets/${encodeURIComponent(assetCode)}`)
+  revalidateStore()
+}
+
 export async function completeStoreAssetMaintenanceAction(formData: FormData) {
   const assetCode = requiredText(formData, "asset_code")
   const type = requiredText(formData, "maintenance_type")
-  if (!["MAINTENANCE", "CALIBRATION"].includes(type)) {
-    throw new Error("Maintenance type is invalid.")
+  if (type !== "MAINTENANCE") {
+    throw new Error("Record calibration through a Calibration Visit.")
   }
   await withStore(
     "store.asset_maintenance.write",
@@ -1285,11 +1310,254 @@ export async function completeStoreAssetMaintenanceAction(formData: FormData) {
         completedBy: [performer.code, performer.name].filter(Boolean).join(" - "),
         completedOn: requiredText(formData, "completed_on"),
         cost: optionalText(formData, "cost"),
-        maintenanceType: type as "CALIBRATION" | "MAINTENANCE",
+        maintenanceType: "MAINTENANCE",
         organizationId,
         result: optionalText(formData, "result"),
         scheduleId: optionalText(formData, "schedule_id"),
         supplierName: optionalText(formData, "supplier_name"),
+        workDone: optionalText(formData, "work_done"),
+      })
+    }
+  )
+  revalidatePath(`/store/assets/${encodeURIComponent(assetCode)}`)
+  revalidateStore()
+}
+
+export async function openStoreCalibrationVisitAction(formData: FormData) {
+  const assetCode = requiredText(formData, "asset_code")
+  await withStore(
+    "store.asset_maintenance.write",
+    (repository, actorUserId, organizationId) =>
+      repository.openCalibrationVisit({
+        actorUserId,
+        assetCode,
+        organizationId,
+        scheduleId: requiredText(formData, "schedule_id"),
+        scope: requiredText(formData, "scope"),
+      })
+  )
+  revalidatePath(`/store/assets/${encodeURIComponent(assetCode)}`)
+  revalidateStore()
+}
+
+export async function addStoreCalibrationOfferAction(formData: FormData) {
+  const assetCode = requiredText(formData, "asset_code")
+  await withStore(
+    "store.asset_maintenance.write",
+    (repository, actorUserId, organizationId) =>
+      repository.addCalibrationOffer({
+        actorUserId,
+        notes: optionalText(formData, "notes"),
+        organizationId,
+        quoteReference: optionalText(formData, "quote_reference"),
+        quotedOn: requiredText(formData, "quoted_on"),
+        quotedPrice: requiredText(formData, "quoted_price"),
+        supplierId: requiredText(formData, "supplier_id"),
+        visitId: requiredText(formData, "visit_id"),
+      })
+  )
+  revalidatePath(`/store/assets/${encodeURIComponent(assetCode)}`)
+  revalidateStore()
+}
+
+export async function cancelStoreCalibrationVisitAction(formData: FormData) {
+  await requireStoreAction("store.asset_repair.write", storePath)
+  const assetCode = requiredText(formData, "asset_code")
+  await withStore(
+    "store.asset_maintenance.write",
+    (repository, actorUserId, organizationId) =>
+      repository.cancelCalibrationVisit({
+        actorUserId,
+        organizationId,
+        visitId: requiredText(formData, "visit_id"),
+      })
+  )
+  revalidatePath(`/store/assets/${encodeURIComponent(assetCode)}`)
+  revalidateStore()
+}
+
+export async function dispatchStoreCalibrationVisitAction(formData: FormData) {
+  await requireStoreAction("store.asset_repair.write", storePath)
+  await requireStoreAction("store.asset_movement.write", storePath)
+  const assetCode = requiredText(formData, "asset_code")
+  await withStore(
+    "store.asset_maintenance.write",
+    async (repository, actorUserId, organizationId, _actorEmail, actorUserName) => {
+      const performer = await signedInPerformer({
+        connectionString: readAuthEnvironment().connectionString,
+        organizationId,
+        userId: actorUserId,
+        userName: actorUserName,
+      })
+      if (!performer) throw new Error("Your account needs a name to dispatch an asset.")
+      const visitId = requiredText(formData, "visit_id")
+      const prepared = await repository.prepareCalibrationDispatch({
+        actorUserId,
+        offerId: requiredText(formData, "offer_id"),
+        orderDate: requiredText(formData, "order_date"),
+        organizationId,
+        remark: optionalText(formData, "remark"),
+        visitId,
+      })
+      const artifacts = createArtifactService({
+        connectionString: readAuthEnvironment().connectionString,
+        provider: createGoogleCloudArtifactProvider(),
+      })
+      try {
+        await storeIssuedPurchaseOrderPdf(artifacts, actorUserId)({
+          document: prepared.document,
+          organizationId,
+          purchaseOrderId: prepared.purchaseOrderId,
+        })
+      } finally {
+        await artifacts.close()
+      }
+      await repository.finalizeCalibrationDispatch({
+        actorUserId,
+        movedBy: [performer.code, performer.name].filter(Boolean).join(" - "),
+        organizationId,
+        visitId,
+      })
+    }
+  )
+  revalidatePath(`/store/assets/${encodeURIComponent(assetCode)}`)
+  revalidateStore()
+}
+
+export async function returnStoreCalibrationVisitAction(formData: FormData) {
+  await requireStoreAction("store.asset_movement.write", storePath)
+  const assetCode = requiredText(formData, "asset_code")
+  await withStore(
+    "store.asset_maintenance.write",
+    async (repository, actorUserId, organizationId, _actorEmail, actorUserName) => {
+      const performer = await signedInPerformer({
+        connectionString: readAuthEnvironment().connectionString,
+        organizationId,
+        userId: actorUserId,
+        userName: actorUserName,
+      })
+      if (!performer) throw new Error("Your account needs a name to return an asset.")
+      const location = await repository.ensurePrimaryStoreLocation({
+        actorUserId,
+        organizationId,
+      })
+      await repository.returnCalibrationVisit({
+        actorUserId,
+        locationId: location.id,
+        movedBy: [performer.code, performer.name].filter(Boolean).join(" - "),
+        organizationId,
+        remark: optionalText(formData, "remark"),
+        returnedOn: requiredText(formData, "returned_on"),
+        visitId: requiredText(formData, "visit_id"),
+      })
+    }
+  )
+  revalidatePath(`/store/assets/${encodeURIComponent(assetCode)}`)
+  revalidateStore()
+}
+
+export async function uploadStoreCalibrationCertificateAction(formData: FormData) {
+  const assetCode = requiredText(formData, "asset_code")
+  const visitId = requiredText(formData, "visit_id")
+  const uploadId = pendingUploadId(formData, "calibration_certificate")
+  if (!uploadId) throw new Error("Select a calibration certificate PDF.")
+  await withStore(
+    "store.asset_maintenance.write",
+    async (repository, actorUserId, organizationId) => {
+      const authorization = await pendingUploadAuthorizationForUser(actorUserId)
+      const expectedIntent = {
+        kind: "store-calibration-certificate" as const,
+        visitId,
+      }
+      const artifacts = createArtifactService({
+        connectionString: readAuthEnvironment().connectionString,
+        provider: createGoogleCloudArtifactProvider(),
+      })
+      try {
+        const fileId = await consumePendingArtifactUpload({
+          authorization,
+          expectedIntent,
+          finalize: async (source) => {
+            const sha256 = createHash("sha256").update(source.bytes).digest("hex")
+            const artifact = await artifacts.store({
+              actorUserId,
+              authorizeTarget: async (client) => {
+                const visit = await client.query<{ id: string }>(
+                  `SELECT id FROM store.calibration_visits
+                    WHERE id = $1 AND organization_id = $2
+                      AND status = 'RETURNED'
+                    FOR KEY SHARE`,
+                  [visitId, organizationId]
+                )
+                if (!visit.rows[0]) {
+                  throw new Error("Returned calibration visit was not found.")
+                }
+              },
+              bytes: source.bytes,
+              fileName: source.fileName,
+              idempotencyKey: ["calibration-certificate", visitId,
+                source.fileName, sha256].join(":"),
+              mediaType: source.mediaType,
+              organizationId,
+              origin: "uploaded",
+              pendingUploadId: source.pendingUploadId,
+              purpose: "calibration_certificate",
+              target: { id: visitId, schema: "store", table: "calibration_visits" },
+            })
+            return {
+              binding: {
+                artifactId: artifact.id,
+                purpose: "calibration_certificate",
+                target: { id: visitId, schema: "store", table: "calibration_visits" },
+              },
+              value: artifact.id,
+            }
+          },
+          recover: (binding) => binding.artifactId,
+          uploadId,
+        })
+        await repository.setCalibrationCertificate({
+          actorUserId,
+          fileId,
+          organizationId,
+          visitId,
+        })
+      } finally {
+        await artifacts.close()
+      }
+    }
+  )
+  revalidatePath(`/store/assets/${encodeURIComponent(assetCode)}`)
+  revalidateStore()
+}
+
+export async function completeStoreCalibrationVisitAction(formData: FormData) {
+  await requireStoreAction("store.asset_repair.write", storePath)
+  await requireStoreAction("store.asset_movement.write", storePath)
+  const assetCode = requiredText(formData, "asset_code")
+  const result = requiredText(formData, "result")
+  if (result !== "PASSED" && result !== "FAILED") {
+    throw new Error("Choose Passed or Failed.")
+  }
+  await withStore(
+    "store.asset_maintenance.write",
+    async (repository, actorUserId, organizationId, _actorEmail, actorUserName) => {
+      const performer = await signedInPerformer({
+        connectionString: readAuthEnvironment().connectionString,
+        organizationId,
+        userId: actorUserId,
+        userName: actorUserName,
+      })
+      if (!performer) throw new Error("Your account needs a name to record calibration.")
+      await repository.completeCalibrationVisit({
+        actorUserId,
+        certificateNumber: requiredText(formData, "certificate_number"),
+        completedBy: [performer.code, performer.name].filter(Boolean).join(" - "),
+        completedOn: requiredText(formData, "completed_on"),
+        organizationId,
+        passed: result === "PASSED",
+        result,
+        visitId: requiredText(formData, "visit_id"),
         workDone: optionalText(formData, "work_done"),
       })
     }

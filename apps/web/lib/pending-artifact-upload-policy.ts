@@ -11,22 +11,22 @@ import {
 } from "@workspace/db"
 import type { PoolClient } from "pg"
 
-import { parseEnquiryImportFile } from "@/app/commercial/enquiries/enquiry-workbook"
-import { masterCapability } from "@/lib/auth/master-capabilities"
-import { commercialTaskCapabilities } from "@/lib/auth/task-capabilities"
+import { parseEnquiryImportFile } from "../app/commercial/enquiries/enquiry-workbook"
+import { masterCapability } from "./auth/master-capabilities"
+import { commercialTaskCapabilities } from "./auth/task-capabilities"
 import {
   isStoreActionCapability,
   resolveStoreActionCapabilities,
-} from "@/lib/auth/store-action-access"
+} from "./auth/store-action-access"
 import {
   commercialAttachmentRequestLimitBytes,
   validateCommercialAttachment,
-} from "@/lib/commercial-attachment"
+} from "./commercial-attachment"
 import {
   parsePendingUploadIntent,
   type PendingUploadIntent,
-} from "@/lib/artifact-upload-contract"
-import { validateUserAttachment } from "@/lib/user-attachment-security"
+} from "./artifact-upload-contract"
+import { validateUserAttachment } from "./user-attachment-security"
 
 const tenMiB = 10 * 1024 * 1024
 const twentyFiveMiB = 25 * 1024 * 1024
@@ -247,6 +247,18 @@ export async function authorizePendingUploadIntent(
     }
     case "maintenance-request-photo":
       return organizationForCode(client, "MRMPL")
+    case "store-calibration-certificate": {
+      requireCapability(authorization, "store.asset_maintenance.write")
+      const organizationId = await organizationForCode(client, "MRMPL")
+      await organizationForTarget(
+        client,
+        `SELECT organization_id FROM store.calibration_visits
+         WHERE id = $1 AND organization_id = $2 AND status = 'RETURNED'
+         FOR KEY SHARE`,
+        [intent.visitId, organizationId]
+      )
+      return organizationId
+    }
     case "store-item-drawing": {
       requireCapability(authorization, masterCapability("ITEM_TYPE", "save"))
       const organizationId = await organizationForCode(client, "MRMPL")
@@ -361,6 +373,20 @@ export function validatePendingUploadBytes(input: {
         fileName,
         purpose: "maintenance-photo",
       })
+    case "store-calibration-certificate": {
+      try {
+        return {
+          ...validateUserAttachment({
+            bytes,
+            fileName,
+            purpose: "supplier-quote",
+          }),
+          mediaType: "application/pdf",
+        }
+      } catch {
+        throw new Error("Calibration certificate must be a valid PDF.")
+      }
+    }
     case "store-item-drawing": {
       if (
         !new Set(["application/pdf", "image/jpeg", "image/png"]).has(mediaType)

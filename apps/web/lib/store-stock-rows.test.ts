@@ -3,61 +3,92 @@ import { describe, expect, it } from "vitest"
 import { storeStockRows } from "./store-stock-rows"
 
 describe("Store Stock rows", () => {
-  it("shows every Non Consumable Unit ID as its own searchable row", () => {
+  it("separates a Non Consumable Asset Code from available and assigned units", () => {
     expect(
-      storeStockRows([
-        {
-          availableStock: "2",
-          availableUnitIds: ["NC001-0001", "NC001-0002"],
-          id: "chair",
-          trackingMode: "SERIALIZED" as const,
-          typeCode: "NC001",
-          unit: "Nos",
-        },
-      ])
+      storeStockRows(
+        [
+          {
+            availableStock: "1",
+            id: "compressor",
+            trackingMode: "SERIALIZED" as const,
+            typeCode: "NC285",
+            unit: "Nos",
+          },
+        ],
+        [
+          {
+            assetCode: "NC285-0001",
+            holderName: "CNC-01",
+            holderType: "MACHINE",
+            id: "one",
+            itemTypeId: "compressor",
+            locationName: null,
+            status: "ASSIGNED",
+            supplierName: "Supplier A",
+            unitPrice: "100",
+          },
+          {
+            assetCode: "NC285-0002",
+            holderName: null,
+            holderType: "STORE",
+            id: "two",
+            itemTypeId: "compressor",
+            locationName: "Main Store",
+            status: "AVAILABLE",
+            supplierName: "Supplier B",
+            unitPrice: "120",
+          },
+        ]
+      ).map(({ actionItem, displayedCode, displayedQuantity, physicalUnit }) => ({
+        actionItem,
+        displayedCode,
+        displayedQuantity,
+        supplierName: physicalUnit?.supplierName ?? null,
+        unitPrice: physicalUnit?.unitPrice ?? null,
+      }))
     ).toEqual([
       {
         actionItem: true,
-        availableStock: "2",
-        availableUnitIds: ["NC001-0001", "NC001-0002"],
-        displayedQuantity: "1 physical unit",
-        id: "chair",
-        rowKey: "chair:NC001-0001",
-        trackingMode: "SERIALIZED",
-        typeCode: "NC001",
-        unit: "Nos",
-        unitId: "NC001-0001",
+        displayedCode: "NC285",
+        displayedQuantity: "—",
+        supplierName: null,
+        unitPrice: null,
       },
       {
         actionItem: false,
-        availableStock: "2",
-        availableUnitIds: ["NC001-0001", "NC001-0002"],
+        displayedCode: "NC285-0001",
+        displayedQuantity: "—",
+        supplierName: "Supplier A",
+        unitPrice: "100",
+      },
+      {
+        actionItem: false,
+        displayedCode: "NC285-0002",
         displayedQuantity: "1 physical unit",
-        id: "chair",
-        rowKey: "chair:NC001-0002",
-        trackingMode: "SERIALIZED",
-        typeCode: "NC001",
-        unit: "Nos",
-        unitId: "NC001-0002",
+        supplierName: "Supplier B",
+        unitPrice: "120",
       },
     ])
   })
 
   it("keeps a Consumable as one quantity-managed row", () => {
     expect(
-      storeStockRows([
-        {
-          availableStock: "25",
-          availableUnitIds: [],
-          id: "oil",
-          trackingMode: "CONSUMABLE" as const,
-          typeCode: "C001",
-          unit: "Ltr",
-        },
-      ])
+      storeStockRows(
+        [
+          {
+            availableStock: "25",
+            id: "oil",
+            trackingMode: "CONSUMABLE" as const,
+            typeCode: "C001",
+            unit: "Ltr",
+          },
+        ],
+        []
+      )
     ).toMatchObject([
       {
         actionItem: true,
+        displayedCode: "C001",
         displayedQuantity: "25 Ltr",
         rowKey: "oil",
         unitId: null,

@@ -47,6 +47,7 @@ export type PendingUploadIntent =
   | { kind: "commercial-purchase-order-source"; purchaseOrderId: string }
   | { candidateId?: string; kind: "recruitment-candidate-resume" }
   | { index: number; kind: "maintenance-request-photo" }
+  | { kind: "store-calibration-certificate"; visitId: string }
   | { itemTypeId?: string; kind: "store-item-drawing" }
   | {
       itemTypeId?: string
@@ -167,6 +168,8 @@ export function parsePendingUploadIntent(value: unknown): PendingUploadIntent {
       }
       return { index, kind }
     }
+    case "store-calibration-certificate":
+      return { kind, visitId: text(input.visitId, "visitId") }
     case "store-item-drawing": {
       const itemTypeId = optionalText(input.itemTypeId, "itemTypeId")
       return { ...(itemTypeId ? { itemTypeId } : {}), kind }

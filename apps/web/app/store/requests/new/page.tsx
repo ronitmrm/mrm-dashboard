@@ -11,6 +11,10 @@ import {
 import { Field, FieldGroup, FieldLabel } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
 import {
+  NativeSelect,
+  NativeSelectOption,
+} from "@workspace/ui/components/native-select"
+import {
  OperationalTable,
   TableBody,
   TableCell,
@@ -47,8 +51,9 @@ export default async function NewStoreRequestPage({
   })
   const data = await (async () => {
     const organizationId = await repository.organizationIdForCode("MRMPL")
-    const [items, requestContext] = await Promise.all([
+    const [items, physicalUnits, requestContext] = await Promise.all([
       repository.listItemTypes(organizationId),
+      repository.listStockPhysicalUnits(organizationId),
       repository.requisitionRequestContext({
         organizationId,
         userId: session.user.id,
@@ -60,6 +65,7 @@ export default async function NewStoreRequestPage({
         const item = itemById.get(id)
         return item ? [item] : []
       }),
+      physicalUnits,
       requestContext,
     }
   })().finally(() => repository.close())
@@ -95,8 +101,8 @@ export default async function NewStoreRequestPage({
           <CardHeader>
             <CardTitle>Request Details</CardTitle>
             <CardDescription>
-              Enter the quantity for each line, then release the grouped request
-              to Store.
+              Request an Asset Code and let Store choose a unit, or name one
+              exact Unit ID. An exact Unit ID request has quantity one.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -136,6 +142,7 @@ export default async function NewStoreRequestPage({
                       <TableHead>Item Code</TableHead>
                       <TableHead>Identification</TableHead>
                       <TableHead>Current Stock</TableHead>
+                      <TableHead className="min-w-52">Requested Unit ID</TableHead>
                       <TableHead className="w-48">Requested Quantity</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -155,12 +162,45 @@ export default async function NewStoreRequestPage({
                           {item.availableStock} {item.unit}
                         </TableCell>
                         <TableCell>
+                          {item.trackingMode === "SERIALIZED" ? (
+                            <NativeSelect
+                              aria-label={`Requested Unit ID for ${item.typeCode}`}
+                              defaultValue=""
+                              name="requested_unit_id"
+                            >
+                              <NativeSelectOption value="">
+                                Any Unit ID / Store selects
+                              </NativeSelectOption>
+                              {data.physicalUnits
+                                .filter(
+                                  (unit) =>
+                                    unit.itemTypeId === item.id &&
+                                    unit.status !== "SCRAPPED"
+                                )
+                                .map((unit) => (
+                                  <NativeSelectOption key={unit.id} value={unit.id}>
+                                    {unit.assetCode} · {unit.status}
+                                  </NativeSelectOption>
+                                ))}
+                            </NativeSelect>
+                          ) : (
+                            <>
+                              Not applicable
+                              <input
+                                name="requested_unit_id"
+                                type="hidden"
+                                value=""
+                              />
+                            </>
+                          )}
+                        </TableCell>
+                        <TableCell>
                           <Input
                             aria-label={`Requested quantity for ${item.typeCode}`}
-                            min="0.001"
+                            min={item.trackingMode === "SERIALIZED" ? "1" : "0.001"}
                             name="quantity"
                             required
-                            step="0.001"
+                            step={item.trackingMode === "SERIALIZED" ? "1" : "0.001"}
                             type="number"
                           />
                         </TableCell>

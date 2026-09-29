@@ -18,6 +18,7 @@ import {
   type RepositoryPoolOptions,
 } from "./postgres-runtime"
 import { storeItemCodeSeries, storeUnitId } from "./store-item-codes"
+import { createStoreCalibrationRepository } from "./store-calibration"
 
 export type StoreTrackingMode = "CONSUMABLE" | "SERIALIZED"
 export type StoreAssetType = "CONSUMABLE" | "NON_CONSUMABLE"
@@ -33,7 +34,7 @@ export type StoreHolderType =
 export const storePurchaseOrderPdfArtifactPurpose =
   "issued_store_purchase_order_pdf"
 
-type StorePurchaseOrderDocument = {
+export type StorePurchaseOrderDocument = {
   lines: Array<{
     assetCategory: string
     assetName: string
@@ -60,7 +61,7 @@ type StorePurchaseOrderDocument = {
   }
 }
 
-type StoreIssuedPdfWriter = (input: {
+export type StoreIssuedPdfWriter = (input: {
   document: StorePurchaseOrderDocument
   organizationId: string
   purchaseOrderId: string
@@ -69,7 +70,11 @@ type StoreIssuedPdfWriter = (input: {
 type StoreRequisitionBatchInput = {
   actorUserId?: string | null
   department: string
-  items: Array<{ itemTypeId: string; quantity: number }>
+  items: Array<{
+    itemTypeId: string
+    quantity: number
+    requestedUnitId?: string | null
+  }>
   locationId: string
   organizationId: string
   purpose?: string | null
@@ -120,7 +125,7 @@ function trackingModeForAssetType(
   return assetType === "NON_CONSUMABLE" ? "SERIALIZED" : "CONSUMABLE"
 }
 
-async function nextDocumentNumber(
+export async function nextDocumentNumber(
   client: PoolClient,
   input: {
     counterKey: string
@@ -330,7 +335,7 @@ async function machineIdForReference(
   return result.rows[0].id
 }
 
-async function getStorePurchaseOrderWithClient(
+export async function getStorePurchaseOrderWithClient(
   client: PoolClient,
   input: { organizationId: string; purchaseOrderId: string },
   options: { includePending?: boolean } = {}
@@ -390,7 +395,7 @@ async function getStorePurchaseOrderWithClient(
   return { lines: lines.rows, order: order.rows[0] }
 }
 
-async function hasIssuedStorePurchaseOrderPdf(
+export async function hasIssuedStorePurchaseOrderPdf(
   client: PoolClient,
   input: { organizationId: string; purchaseOrderId: string }
 ) {
@@ -719,32 +724,6 @@ async function receiveStockWithClient(
         lineAssetCodes.push(assetCode)
         await client.query(
           `
-            INSERT INTO store.asset_maintenance_schedules (
-              organization_id, asset_id, definition_id, first_due_on,
-              next_due_on, created_by_user_id, updated_by_user_id
-            )
-            SELECT $1, asset.id, plan.definition_id,
-              asset.acquired_on + definition.frequency_value,
-              asset.acquired_on + definition.frequency_value, $4, $4
-            FROM store.assets asset
-            JOIN store.item_type_maintenance_plans plan
-              ON plan.item_type_id = asset.item_type_id
-                AND plan.organization_id = asset.organization_id
-                AND plan.active
-            JOIN maintenance.definitions definition
-              ON definition.id = plan.definition_id
-            WHERE asset.id = $2 AND asset.item_type_id = $3
-            ON CONFLICT (asset_id, definition_id) DO NOTHING
-          `,
-          [
-            input.organizationId,
-            asset.rows[0]!.id,
-            orderLine.item_type_id,
-            input.actorUserId ?? null,
-          ]
-        )
-        await client.query(
-          `
           INSERT INTO store.stock_movements (
             organization_id, item_type_id, asset_id, location_id,
             receipt_line_id, movement_type, quantity,
@@ -863,11 +842,13 @@ async function issueRequisitionWithClient(
     item_type_id: string
     location_id: string
     requested_quantity: string
+    requested_asset_id: string | null
     status: string
     tracking_mode: StoreTrackingMode
   }>(
     `
       SELECT request.item_type_id, request.location_id,
+        request.requested_asset_id,
         request.requested_quantity::text, request.issued_quantity::text,
         request.status, header.department, item.tracking_mode
       FROM store.requisitions request
@@ -913,6 +894,23 @@ async function issueRequisitionWithClient(
       throw new Error(
         `Select exactly ${quantity} distinct Unit ID${quantity === 1 ? "" : "s"}.`
       )
+    }
+    if (row.requested_asset_id) {
+      if (quantity !== 1) {
+        throw new Error("An exact Unit ID request must be issued as one unit.")
+      }
+      const requestedUnit = await client.query<{ asset_code: string }>(
+        `SELECT asset_code FROM store.assets
+          WHERE id = $1 AND organization_id = $2`,
+        [row.requested_asset_id, input.organizationId]
+      )
+      if (
+        !requestedUnit.rows[0] ||
+        requestedAssetCodes[0]?.toLowerCase() !==
+          requestedUnit.rows[0].asset_code.toLowerCase()
+      ) {
+        throw new Error("Issue the exact Unit ID named in this request.")
+      }
     }
     const machineId =
       holderType === "MACHINE"
@@ -1056,6 +1054,7 @@ async function issueRequisitionWithClient(
 
 export function createStoreRepository(options: RepositoryPoolOptions) {
   const { close, pool } = repositoryPool(options)
+  const calibration = createStoreCalibrationRepository(pool)
 
   const issuePurchaseOrder = async (input: {
     organizationId: string
@@ -1280,16 +1279,31 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       )
       const lineIds: string[] = []
       for (const [index, item] of input.items.entries()) {
+        const requestedUnitId = item.requestedUnitId?.trim() || null
+        if (requestedUnitId) {
+          if (item.quantity !== 1) {
+            throw new Error("An exact Unit ID request must have quantity 1.")
+          }
+          const requestedUnit = await client.query<{ id: string }>(
+            `SELECT id FROM store.assets
+              WHERE id = $1 AND item_type_id = $2 AND organization_id = $3
+                AND status <> 'SCRAPPED'`,
+            [requestedUnitId, item.itemTypeId, input.organizationId]
+          )
+          if (!requestedUnit.rows[0]) {
+            throw new Error("Selected physical Unit ID was not found.")
+          }
+        }
         const lineNumber = `${requestNumber}-${String(index + 1).padStart(2, "0")}`
         const line = await client.query<{ id: string }>(
           `
             INSERT INTO store.requisitions (
               organization_id, request_header_id, request_number,
-              item_type_id, location_id, department, requested_by,
+              item_type_id, requested_asset_id, location_id, department, requested_by,
               requested_quantity, required_on, purpose,
               created_by_user_id, updated_by_user_id
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
-              NULLIF($9, '')::date, $10, $11, $11)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9,
+              NULLIF($10, '')::date, $11, $12, $12)
             RETURNING id
           `,
           [
@@ -1297,6 +1311,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             header.rows[0]!.id,
             lineNumber,
             item.itemTypeId,
+            requestedUnitId,
             input.locationId,
             department,
             requestedBy,
@@ -1313,6 +1328,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
 
   return {
     close,
+    ...calibration,
 
     async organizationIdForCode(code: string) {
       const result = await pool.query<{ id: string }>(
@@ -2343,6 +2359,10 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             AND lower(asset.asset_code) = lower($4)
             AND purchase_order.issuance_state = 'issued'
             AND purchase_order.status = 'Open'
+            AND NOT EXISTS (
+              SELECT 1 FROM store.calibration_visits visit
+              WHERE visit.purchase_order_id = purchase_order.id
+            )
           RETURNING purchase_order.id
         `,
         [
@@ -2571,6 +2591,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
 
     async listPurchaseOrders(organizationId: string) {
       const result = await pool.query<{
+        calibrationVisitId: string | null
         id: string
         itemName: string
         itemTypeId: string | null
@@ -2592,6 +2613,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       }>(
         `
           SELECT COALESCE(line.id, purchase_order.id) AS id,
+            calibration_visit.id AS "calibrationVisitId",
             purchase_order.id AS "purchaseOrderId",
             purchase_order.order_number AS "orderNumber",
             purchase_order.order_date::text AS "orderDate",
@@ -2632,6 +2654,8 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             END AS "orderTotal",
             purchase_order.status
           FROM store.purchase_orders purchase_order
+          LEFT JOIN store.calibration_visits calibration_visit
+            ON calibration_visit.purchase_order_id = purchase_order.id
           JOIN store.suppliers supplier ON supplier.id = purchase_order.supplier_id
           LEFT JOIN store.purchase_order_lines line
             ON line.purchase_order_id = purchase_order.id
@@ -3196,6 +3220,78 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       return result.rows
     },
 
+    async listStockPhysicalUnits(organizationId: string) {
+      const result = await pool.query<{
+        assetCode: string
+        holderName: string | null
+        holderType: StoreHolderType
+        id: string
+        itemTypeId: string
+        locationName: string | null
+        status: string
+        supplierName: string | null
+        unitPrice: string | null
+      }>(
+        `SELECT asset.id, asset.item_type_id AS "itemTypeId",
+            asset.asset_code AS "assetCode", asset.status,
+            asset.current_holder_type AS "holderType",
+            asset.current_holder_name AS "holderName",
+            location.name AS "locationName",
+            COALESCE(supplier.name, legacy_supplier.name) AS "supplierName",
+            COALESCE(receipt_line.unit_price,
+              asset.acquisition_unit_price)::text AS "unitPrice"
+          FROM store.assets asset
+          LEFT JOIN store.locations location ON location.id = asset.current_location_id
+          LEFT JOIN store.receipt_lines receipt_line
+            ON receipt_line.id = asset.receipt_line_id
+          LEFT JOIN store.receipts receipt ON receipt.id = receipt_line.receipt_id
+          LEFT JOIN store.suppliers supplier ON supplier.id = receipt.supplier_id
+          LEFT JOIN store.suppliers legacy_supplier
+            ON legacy_supplier.id = asset.acquisition_supplier_id
+          WHERE asset.organization_id = $1
+          ORDER BY asset.asset_code`,
+        [organizationId]
+      )
+      return result.rows
+    },
+
+    async recordAssetAcquisition(input: {
+      actorUserId?: string | null
+      assetCode: string
+      organizationId: string
+      supplierId: string
+      unitPrice: string
+    }) {
+      const unitPrice = requiredText(input.unitPrice, "Purchase price")
+      if (!/^\d+(?:\.\d{1,2})?$/.test(unitPrice)) {
+        throw new Error("Purchase price must be zero or greater, with up to two decimals.")
+      }
+      const result = await pool.query<{ id: string }>(
+        `UPDATE store.assets asset
+          SET acquisition_supplier_id = $3,
+            acquisition_unit_price = $4::numeric,
+            acquisition_recorded_at = now(),
+            acquisition_recorded_by_user_id = $5,
+            updated_at = now(), updated_by_user_id = $5
+          WHERE asset.organization_id = $1
+            AND lower(asset.asset_code) = lower($2)
+            AND asset.receipt_line_id IS NULL
+            AND EXISTS (
+              SELECT 1 FROM store.suppliers supplier
+              WHERE supplier.id = $3 AND supplier.organization_id = $1
+                AND supplier.active
+            )
+          RETURNING asset.id`,
+        [input.organizationId, requiredText(input.assetCode, "Unit ID"),
+          requiredText(input.supplierId, "Supplier"), unitPrice,
+          input.actorUserId ?? null]
+      )
+      if (!result.rows[0]) {
+        throw new Error("Receiptless Unit ID or active Store Supplier was not found.")
+      }
+      return result.rows[0]
+    },
+
     async listRecentStockMovements(organizationId: string) {
       const result = await pool.query<{
         assetCode: string | null
@@ -3494,6 +3590,8 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         locationName: string
         remainingQuantity: string
         requestNumber: string
+        requestedUnitCode: string | null
+        requestedUnitId: string | null
         requestedAt: Date
         requestedBy: string
         requestedQuantity: string
@@ -3504,6 +3602,8 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       }>(
         `
           SELECT request.id, request.item_type_id AS "itemTypeId",
+            request.requested_asset_id AS "requestedUnitId",
+            requested_asset.asset_code AS "requestedUnitCode",
             header.request_number AS "requestNumber",
             header.department, header.requested_by AS "requestedBy",
             trim_scale(request.requested_quantity)::text AS "requestedQuantity",
@@ -3522,7 +3622,9 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
               THEN (SELECT count(*)::numeric FROM store.assets asset
                 WHERE asset.item_type_id = request.item_type_id
                   AND asset.current_location_id = request.location_id
-                  AND asset.status = 'AVAILABLE')
+                  AND asset.status = 'AVAILABLE'
+                  AND (request.requested_asset_id IS NULL
+                    OR asset.id = request.requested_asset_id))
               ELSE (SELECT COALESCE(sum(movement.quantity), 0)
                 FROM store.stock_movements movement
                 WHERE movement.item_type_id = request.item_type_id
@@ -3534,12 +3636,16 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
               WHERE asset.item_type_id = request.item_type_id
                 AND asset.current_location_id = request.location_id
                 AND asset.status = 'AVAILABLE'
+                AND (request.requested_asset_id IS NULL
+                  OR asset.id = request.requested_asset_id)
               ORDER BY asset.asset_code
             ) ELSE ARRAY[]::text[] END AS "availableUnitIds"
           FROM store.requisitions request
           JOIN store.requisition_headers header
             ON header.id = request.request_header_id
           JOIN store.item_types item ON item.id = request.item_type_id
+          LEFT JOIN store.assets requested_asset
+            ON requested_asset.id = request.requested_asset_id
           JOIN store.locations location ON location.id = request.location_id
           WHERE request.organization_id = $1
             AND ($2::uuid IS NULL OR request.location_id = $2)
@@ -4019,6 +4125,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         locationName: string | null
         manufacturerSerialNumber: string | null
         orderNumber: string | null
+        receiptLineId: string | null
         status: string
         subcategory: string
         supplierName: string | null
@@ -4044,8 +4151,10 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             asset.warranty_until::text AS "warrantyUntil",
             asset.acquired_on::text AS "acquiredOn",
             purchase_order.order_number AS "orderNumber",
-            supplier.name AS "supplierName",
-            receipt_line.unit_price::text AS "unitPrice"
+            asset.receipt_line_id AS "receiptLineId",
+            COALESCE(supplier.name, legacy_supplier.name) AS "supplierName",
+            COALESCE(receipt_line.unit_price,
+              asset.acquisition_unit_price)::text AS "unitPrice"
           FROM store.assets asset
           JOIN store.item_types item ON item.id = asset.item_type_id
           LEFT JOIN store.locations location ON location.id = asset.current_location_id
@@ -4060,6 +4169,8 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           LEFT JOIN store.purchase_orders purchase_order
             ON purchase_order.id = purchase_order_line.purchase_order_id
           LEFT JOIN store.suppliers supplier ON supplier.id = receipt.supplier_id
+          LEFT JOIN store.suppliers legacy_supplier
+            ON legacy_supplier.id = asset.acquisition_supplier_id
           WHERE asset.organization_id = $1 AND lower(asset.asset_code) = lower($2)
         `,
         [input.organizationId, requiredText(input.assetCode, "Unit ID")]
@@ -4112,6 +4223,37 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         `,
         [input.organizationId, asset.rows[0].id]
       )
+      const [calibrationVisits, calibrationSuppliers] = await Promise.all([
+        calibration.listCalibrationVisits({
+          assetId: asset.rows[0].id,
+          organizationId: input.organizationId,
+        }),
+        this.listSuppliers(input.organizationId),
+      ])
+      const maintenanceMasters = await pool.query<{
+        checklistCode: string | null
+        code: string
+        frequencyDays: number
+        id: string
+        name: string
+      }>(
+        `SELECT definition.id, definition.code, definition.name,
+            definition.frequency_value AS "frequencyDays",
+            definition.checklist_code AS "checklistCode"
+          FROM maintenance.definitions definition
+          WHERE definition.organization_id = $1 AND definition.active
+            AND definition.source_table IN ('dataEntries', 'maintenance_master')
+            AND definition.code <> 'BREAKDOWN'
+            AND definition.frequency_unit = 'day'
+            AND lower(btrim(COALESCE(definition.frequency_basis, 'Calendar days')))
+              = 'calendar days'
+            AND NOT EXISTS (
+              SELECT 1 FROM store.asset_maintenance_schedules schedule
+              WHERE schedule.asset_id = $2 AND schedule.definition_id = definition.id
+            )
+          ORDER BY definition.code`,
+        [input.organizationId, asset.rows[0].id]
+      )
       const maintenance = await pool.query<{
         certificateNumber: string | null
         completedBy: string
@@ -4156,6 +4298,10 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             AND purchase_order.repair_asset_id = $2
             AND purchase_order.order_type = 'REPAIR'
             AND purchase_order.issuance_state = 'issued'
+            AND NOT EXISTS (
+              SELECT 1 FROM store.calibration_visits visit
+              WHERE visit.purchase_order_id = purchase_order.id
+            )
           ORDER BY purchase_order.order_date DESC, purchase_order.created_at DESC
         `,
         [input.organizationId, asset.rows[0].id]
@@ -4258,8 +4404,22 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       )
       return {
         asset: asset.rows[0],
+        calibrationSuppliers,
+        calibrationVisits: calibrationVisits.map((visit) => ({
+          ...visit,
+          certificateHref: visit.certificateFileId
+            ? `/store/assets/${encodeURIComponent(asset.rows[0]!.assetCode)}/calibrations/${visit.id}/certificate`
+            : null,
+          dispatchedOn: visit.dispatchedOn?.toLocaleDateString("en-IN", {
+            timeZone: "Asia/Kolkata",
+          }) ?? null,
+          returnedOn: visit.returnedOn?.toLocaleDateString("en-IN", {
+            timeZone: "Asia/Kolkata",
+          }) ?? null,
+        })),
         documents: documents.rows,
         maintenance: maintenance.rows,
+        maintenanceMasters: maintenanceMasters.rows,
         movements: movements.rows,
         repairOrders: repairOrders.rows,
         schedules: schedules.rows,
@@ -4301,6 +4461,26 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         if (!asset.rows[0]) throw new Error("Asset was not found.")
         if (asset.rows[0].status === "SCRAPPED") {
           throw new Error("A scrapped asset cannot be moved or reassigned.")
+        }
+        const calibrationHold = await client.query<{ id: string }>(
+          `SELECT visit.id FROM store.calibration_visits visit
+            WHERE visit.organization_id = $1 AND visit.asset_id = $2
+              AND (
+                visit.status IN ('DISPATCHED', 'RETURNED')
+                OR (visit.status = 'FAILED' AND NOT EXISTS (
+                  SELECT 1 FROM store.calibration_visits later
+                  WHERE later.schedule_id = visit.schedule_id
+                    AND later.asset_id = visit.asset_id
+                    AND later.status = 'PASSED'
+                    AND (later.created_at, later.id) >
+                      (visit.created_at, visit.id)
+                ))
+              )
+            LIMIT 1`,
+          [input.organizationId, asset.rows[0].id]
+        )
+        if (calibrationHold.rows[0]) {
+          throw new Error("Complete a passing calibration before moving this Unit ID.")
         }
         const openBreakdown = await client.query(
           `SELECT 1 FROM store.asset_breakdowns WHERE organization_id = $1
@@ -4423,24 +4603,26 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       })
     },
 
-    async scheduleItemTypeMaintenance(input: {
+    async scheduleAssetMaintenanceMaster(input: {
       actorUserId?: string | null
+      assetCode: string
       definitionId: string
       firstDueOn: string
       organizationId: string
-      typeCode: string
     }) {
       return withTransaction(pool, async (client) => {
-        const item = await client.query<{ id: string; typeCode: string }>(
-          `SELECT id, type_code AS "typeCode"
-            FROM store.item_types
-            WHERE organization_id = $1 AND lower(type_code) = lower($2)
-              AND tracking_mode = 'SERIALIZED' AND active
+        const asset = await client.query<{ id: string; typeCode: string }>(
+          `SELECT asset.id, item.type_code AS "typeCode"
+            FROM store.assets asset
+            JOIN store.item_types item ON item.id = asset.item_type_id
+            WHERE asset.organization_id = $1
+              AND lower(asset.asset_code) = lower($2)
+              AND asset.status <> 'SCRAPPED'
             FOR UPDATE`,
-          [input.organizationId, requiredText(input.typeCode, "Asset Code")]
+          [input.organizationId, requiredText(input.assetCode, "Unit ID")]
         )
-        if (!item.rows[0]) {
-          throw new Error("Non Consumable Asset Code was not found.")
+        if (!asset.rows[0]) {
+          throw new Error("Active physical Unit ID was not found.")
         }
         const definition = await client.query<{ id: string }>(
           `SELECT id FROM maintenance.definitions
@@ -4455,36 +4637,25 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           throw new Error("Active Calendar Days Maintenance Master was not found.")
         }
         const existing = await client.query<{ id: string }>(
-          `SELECT id FROM store.item_type_maintenance_plans
-            WHERE item_type_id = $1 AND definition_id = $2`,
-          [item.rows[0].id, definition.rows[0].id]
+          `SELECT id FROM store.asset_maintenance_schedules
+            WHERE asset_id = $1 AND definition_id = $2`,
+          [asset.rows[0].id, definition.rows[0].id]
         )
         if (existing.rows[0]) {
-          throw new Error("This Maintenance Master is already assigned to the Asset Code.")
+          throw new Error("This Maintenance Master is already assigned to the Unit ID.")
         }
-        const plan = await client.query<{ id: string }>(
-          `INSERT INTO store.item_type_maintenance_plans (
-              organization_id, item_type_id, definition_id, first_due_on,
-              created_by_user_id, updated_by_user_id
-            ) VALUES ($1, $2, $3, $4::date, $5, $5)
-            RETURNING id`,
-          [input.organizationId, item.rows[0].id, definition.rows[0].id,
-            requiredText(input.firstDueOn, "First due date"), input.actorUserId ?? null]
-        )
-        await client.query(
+        const schedule = await client.query<{ id: string }>(
           `INSERT INTO store.asset_maintenance_schedules (
               organization_id, asset_id, definition_id, first_due_on,
-              next_due_on, created_by_user_id, updated_by_user_id
-            )
-            SELECT $1, asset.id, $3, $4::date, $4::date, $5, $5
-            FROM store.assets asset
-            WHERE asset.organization_id = $1 AND asset.item_type_id = $2
-              AND asset.status <> 'SCRAPPED'
-            ON CONFLICT (asset_id, definition_id) DO NOTHING`,
-          [input.organizationId, item.rows[0].id, definition.rows[0].id,
-            input.firstDueOn, input.actorUserId ?? null]
+              next_due_on,
+              created_by_user_id, updated_by_user_id
+            ) VALUES ($1, $2, $3, $4::date, $4::date, $5, $5)
+            RETURNING id`,
+          [input.organizationId, asset.rows[0].id, definition.rows[0].id,
+            requiredText(input.firstDueOn, "First due date"), input.actorUserId ?? null]
         )
-        return { id: plan.rows[0]!.id, typeCode: item.rows[0].typeCode }
+        await queueDashboardRefresh(client, input.organizationId)
+        return { id: schedule.rows[0]!.id, typeCode: asset.rows[0].typeCode }
       })
     },
 
@@ -4716,6 +4887,16 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           [input.organizationId, requiredText(input.assetCode, "Unit ID")]
         )
         if (!asset.rows[0]) throw new Error("Asset was not found.")
+        const activeCalibration = await client.query(
+          `SELECT 1 FROM store.calibration_visits
+           WHERE organization_id = $1 AND asset_id = $2
+             AND status IN ('OPEN', 'DISPATCHED', 'RETURNED')
+           LIMIT 1`,
+          [input.organizationId, asset.rows[0].id]
+        )
+        if (activeCalibration.rowCount) {
+          throw new Error("Finish or cancel the active calibration visit before changing this Unit ID's lifecycle status.")
+        }
         if (input.status === "SCRAPPED") {
           const openBreakdown = await client.query(
             `SELECT 1 FROM store.asset_breakdowns WHERE organization_id = $1
