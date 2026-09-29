@@ -131,6 +131,12 @@ function setupTemplateCode(payload: Payload) {
 
 function setupSessionPlan(payload: Payload) {
   const items = records(payload.items)
+  const requestedPhase = text(payload.phase)
+  const activePhase = requestedPhase === "start" || requestedPhase === "end"
+    ? requestedPhase
+    : items.some((item) => Object.hasOwn(item, "endValue"))
+      ? "end"
+      : "start"
   const common = {
     jobCardNumber: text(payload.jcNo || payload.jobCard),
     machineNumber: optionalText(payload.machine || payload.machineNo),
@@ -188,7 +194,7 @@ function setupSessionPlan(payload: Payload) {
           })),
       },
     },
-  ].filter((phase) => phase.input.results.length > 0 &&
+  ].filter((phase) => phase.input.phase === activePhase && phase.input.results.length > 0 &&
     (common.productionFloorCode !== "cnc" || phase.input.phase === "end"))
 
   return {

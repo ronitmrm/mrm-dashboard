@@ -6,7 +6,6 @@ import {
   isMasterDataKind,
 } from "@workspace/db"
 import {
-  normalizeProductionFloorCode,
   parseProductionFloorCode,
   ProductionUnitAccessError,
 } from "@workspace/db/production-floors"
@@ -15,7 +14,10 @@ import { validateProductionBreaks } from "@workspace/db/production-breaks"
 import { NextResponse, type NextRequest } from "next/server"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
-import { signedInMachinist } from "../../../lib/auth/signed-in-machinist"
+import {
+  signedInEmployee,
+  type SignedInWorkRole,
+} from "../../../lib/auth/signed-in-machinist"
 import { productionMasterCapability } from "../../../lib/auth/production-master-access"
 import { masterCapability } from "../../../lib/auth/master-capabilities"
 import { qualityParameterControlKey } from "../../../lib/auth/quality-parameter-controls"
@@ -104,6 +106,39 @@ class RouteError extends Error {
   ) {
     super(message)
   }
+}
+
+function requiredProductionFloor(value: unknown) {
+  const floor = parseProductionFloorCode(value)
+  if (!floor) throw new RouteError(400, "Select a production unit.")
+  return floor
+}
+
+async function requireOwnProductionRole({
+  actorUserId,
+  enteredRole,
+  organizationId,
+  productionFloorCode,
+}: {
+  actorUserId: string
+  enteredRole: string
+  organizationId: string
+  productionFloorCode: unknown
+}) {
+  if (!["shop_floor", "machinist", "quality"].includes(enteredRole)) {
+    throw new RouteError(400, "Select your assigned production department.")
+  }
+  const performer = await signedInEmployee({
+    connectionString: readAuthEnvironment().connectionString,
+    organizationId,
+    productionFloorCode: requiredProductionFloor(productionFloorCode),
+    role: enteredRole as SignedInWorkRole,
+    userId: actorUserId,
+  })
+  if (!performer) {
+    throw new RouteError(403, "Your Employee ID is not active in the selected production department and unit.")
+  }
+  return enteredRole
 }
 
 type RouteContext = {
@@ -1356,15 +1391,24 @@ async function post(request: NextRequest, context: RouteContext) {
       const result = await withProductionRepository(
         request,
         "operations.dispatch.write",
-        ({ actorUserId, organizationId, repository }) =>
-          repository.recordDispatchApproval({
+        async ({ actorUserId, organizationId, repository }) => {
+          const approver = await signedInEmployee({
+            connectionString: readAuthEnvironment().connectionString,
+            organizationId,
+            productionFloorCode: requiredProductionFloor(body.productionFloorCode),
+            role: "dispatch",
+            userId: actorUserId,
+          })
+          if (!approver) throw new RouteError(403, "Your Employee ID needs an active Planner or Shop Floor assignment in this production unit.")
+          return repository.recordDispatchApproval({
             actorUserId,
-            approvedBy: text(body.approvedBy),
+            approvedBy: approver.name,
             jobCardNumber: text(body.jcNo),
             organizationId,
             productionFloorCode: text(body.productionFloorCode),
             remark: optionalText(body.remark),
           })
+        }
       )
       return json({ ...result, message: "Dispatch approved." })
     }
@@ -1373,10 +1417,18 @@ async function post(request: NextRequest, context: RouteContext) {
       const result = await withProductionRepository(
         request,
         "operations.shop_floor.write",
-        ({ actorUserId, organizationId, repository }) =>
-          repository.recordSetupCompletion({
+        async ({ actorUserId, organizationId, repository }) => {
+          const performer = await signedInEmployee({
+            connectionString: readAuthEnvironment().connectionString,
+            organizationId,
+            productionFloorCode: requiredProductionFloor(body.productionFloorCode),
+            role: "shop_floor",
+            userId: actorUserId,
+          })
+          if (!performer) throw new RouteError(403, "Your Employee ID needs an active Shop Floor assignment in this production unit.")
+          return repository.recordSetupCompletion({
             actorUserId,
-            completedBy: text(body.completedBy),
+            completedBy: performer.name,
             jobCardNumber: text(body.jcNo),
             machineNumber: optionalText(body.machine),
             operationSetupCode: optionalText(body.setupNo),
@@ -1384,6 +1436,7 @@ async function post(request: NextRequest, context: RouteContext) {
             productionFloorCode: text(body.productionFloorCode),
             remark: optionalText(body.remark),
           })
+        }
       )
       return json(
         await withPlanningRefresh(request, path, body, {
@@ -1488,15 +1541,26 @@ async function post(request: NextRequest, context: RouteContext) {
         const result = await withProductionRepository(
           request,
           "operations.production.write",
-          ({ actorUserId, organizationId, repository }) =>
-            repository.startProductionSession({
+          async ({ actorUserId, organizationId, repository }) => {
+            const operator = await signedInEmployee({
+              connectionString: readAuthEnvironment().connectionString,
+              organizationId,
+              productionFloorCode: requiredProductionFloor(payload.productionFloorCode),
+              role: "shop_floor",
+              userId: actorUserId,
+            })
+            if (!operator) throw new RouteError(403, "Your Employee ID needs an active Shop Floor assignment in this production unit.")
+            if (text(payload.operatorCode || payload.operatorId) && text(payload.operatorCode || payload.operatorId).toLowerCase() !== operator.code.toLowerCase()) {
+              throw new RouteError(403, "You can start a Production Session only under your own Employee ID.")
+            }
+            return repository.startProductionSession({
               actorUserId,
               cycleTimeSeconds: optionalNumeric(payload.cycleTime),
               jobCardNumber: text(payload.jobCard || payload.jcNo),
               machineNumber: text(payload.machine || payload.machineNo),
               measurementMethod: text(payload.measurementMethod),
               operationSetupCode: text(payload.setupNo),
-              operatorCode: text(payload.operatorCode || payload.operatorId),
+              operatorCode: operator.code,
               organizationId,
               pieceWeightGrams: firstNumeric(
                 payload.pieceWeightGrams,
@@ -1505,10 +1569,11 @@ async function post(request: NextRequest, context: RouteContext) {
               productionDate: text(payload.productionDate || payload.prodDate),
               productionFloorCode: text(payload.productionFloorCode),
               shift: text(payload.shift),
-              sourcePayload: payload,
+              sourcePayload: { ...payload, operatorCode: operator.code },
               startCount: optionalNumeric(payload.startCount),
               startedAt: text(payload.startedAt),
             })
+          }
         )
         return json(
           await withPlanningRefresh(request, path, body, {
@@ -1522,8 +1587,14 @@ async function post(request: NextRequest, context: RouteContext) {
         const result = await withProductionRepository(
           request,
           "operations.production.write",
-          ({ actorUserId, organizationId, repository }) =>
-            repository.closeProductionSession({
+          async ({ actorUserId, organizationId, repository }) => {
+            const enteredRole = await requireOwnProductionRole({
+              actorUserId,
+              enteredRole: text(payload.enteredRole) || "shop_floor",
+              organizationId,
+              productionFloorCode: payload.productionFloorCode,
+            })
+            return repository.closeProductionSession({
               actorUserId,
               crateCount: optionalNumeric(
                 payload.crateCount ?? payload.cratesUsed
@@ -1532,13 +1603,14 @@ async function post(request: NextRequest, context: RouteContext) {
               endCount: optionalNumeric(payload.endCount),
               endedAt: text(payload.endedAt),
               endReason: text(payload.endReason),
-              enteredRole: text(payload.enteredRole) || undefined,
+              enteredRole,
               grossWeightKg: optionalNumeric(
                 payload.grossWeightKg ?? payload.grossWeight
               ),
               organizationId,
               sessionId: text(payload.sessionId),
             })
+          }
         )
         return json(
           await withPlanningRefresh(request, path, body, {
@@ -1557,8 +1629,14 @@ async function post(request: NextRequest, context: RouteContext) {
         const result = await withProductionRepository(
           request,
           "operations.production.write",
-          ({ actorUserId, organizationId, repository }) =>
-            repository.correctProductionSession({
+          async ({ actorUserId, organizationId, repository }) => {
+            const enteredRole = await requireOwnProductionRole({
+              actorUserId,
+              enteredRole: text(payload.enteredRole) || "shop_floor",
+              organizationId,
+              productionFloorCode: payload.productionFloorCode,
+            })
+            return repository.correctProductionSession({
               actorUserId,
               correctionReason: text(payload.correctionReason),
               downtimeCorrection: downtimeCorrection
@@ -1579,7 +1657,7 @@ async function post(request: NextRequest, context: RouteContext) {
               endCount: optionalNumeric(payload.endCount),
               endedAt: text(payload.endedAt),
               endReason: text(payload.endReason),
-              enteredRole: text(payload.enteredRole) || undefined,
+              enteredRole,
               expectedRowVersion: optionalNumeric(payload.expectedRowVersion),
               grossWeightKg: optionalNumeric(
                 payload.grossWeightKg ?? payload.grossWeight
@@ -1587,6 +1665,7 @@ async function post(request: NextRequest, context: RouteContext) {
               organizationId,
               sessionId: text(payload.sessionId),
             })
+          }
         )
         return json(
           await withPlanningRefresh(request, path, body, {
@@ -1600,18 +1679,25 @@ async function post(request: NextRequest, context: RouteContext) {
         const result = await withProductionRepository(
           request,
           "operations.production.write",
-          ({ actorUserId, organizationId, repository }) =>
-            repository.recordProductionSessionDowntime({
+          async ({ actorUserId, organizationId, repository }) => {
+            const enteredRole = await requireOwnProductionRole({
+              actorUserId,
+              enteredRole: text(payload.enteredRole),
+              organizationId,
+              productionFloorCode: payload.productionFloorCode,
+            })
+            return repository.recordProductionSessionDowntime({
               actorUserId,
               correctionReason: text(payload.correctionReason) || undefined,
               endedAt: text(payload.endedAt),
-              enteredRole: text(payload.enteredRole),
+              enteredRole,
               organizationId,
               reasonCode: text(payload.reasonCode || payload.downtimeCode),
               reasonName: text(payload.reasonName || payload.downtimeReason),
               sessionId: text(payload.sessionId),
               startedAt: text(payload.startedAt),
             })
+          }
         )
         return json({ ...result, rowsUpdated: 1, savedText: "Downtime saved." })
       }
@@ -1621,8 +1707,14 @@ async function post(request: NextRequest, context: RouteContext) {
         const result = await withProductionRepository(
           request,
           "operations.production.write",
-          ({ actorUserId, organizationId, repository }) =>
-            repository.startBulkProductionSessionDowntime({
+          async ({ actorUserId, organizationId, repository }) => {
+            const enteredRole = await requireOwnProductionRole({
+              actorUserId,
+              enteredRole: text(payload.enteredRole),
+              organizationId,
+              productionFloorCode: floor,
+            })
+            return repository.startBulkProductionSessionDowntime({
               actorUserId,
               organizationId,
               productionFloorCode: floor,
@@ -1631,11 +1723,12 @@ async function post(request: NextRequest, context: RouteContext) {
                     (id): id is string => typeof id === "string"
                   )
                 : [],
-              enteredRole: text(payload.enteredRole),
+              enteredRole,
               reasonCode: text(payload.reasonCode),
               reasonName: text(payload.reasonName),
               startedAt: text(payload.startedAt),
             })
+          }
         )
         return json({
           ...result,
@@ -1646,16 +1739,23 @@ async function post(request: NextRequest, context: RouteContext) {
         const result = await withProductionRepository(
           request,
           "operations.production.write",
-          ({ actorUserId, organizationId, repository }) =>
-            repository.startProductionSessionDowntime({
+          async ({ actorUserId, organizationId, repository }) => {
+            const enteredRole = await requireOwnProductionRole({
               actorUserId,
               enteredRole: text(payload.enteredRole),
+              organizationId,
+              productionFloorCode: payload.productionFloorCode,
+            })
+            return repository.startProductionSessionDowntime({
+              actorUserId,
+              enteredRole,
               organizationId,
               reasonCode: text(payload.reasonCode || payload.downtimeCode),
               reasonName: text(payload.reasonName || payload.downtimeReason),
               sessionId: text(payload.sessionId),
               startedAt: text(payload.startedAt),
             })
+          }
         )
         return json({
           ...result,
@@ -1707,8 +1807,14 @@ async function post(request: NextRequest, context: RouteContext) {
         const result = await withProductionRepository(
           request,
           "operations.production.write",
-          ({ actorUserId, organizationId, repository }) =>
-            repository.recordProductionSessionRejection({
+          async ({ actorUserId, organizationId, repository }) => {
+            await requireOwnProductionRole({
+              actorUserId,
+              enteredRole: "quality",
+              organizationId,
+              productionFloorCode: payload.productionFloorCode,
+            })
+            return repository.recordProductionSessionRejection({
               actorUserId,
               correctionReason: text(payload.correctionReason) || undefined,
               enteredRole: "quality",
@@ -1726,6 +1832,7 @@ async function post(request: NextRequest, context: RouteContext) {
               typeCode: text(payload.typeCode || payload.rejectionTypeCode),
               typeName: text(payload.typeName || payload.rejectionType),
             })
+          }
         )
         return json({
           ...result,
@@ -1792,29 +1899,40 @@ async function post(request: NextRequest, context: RouteContext) {
           request,
           "operations.shop_floor.write",
           async ({ actorUserId, organizationId, repository }) => {
-            const isSetting = text(payload.stage).toLowerCase() === "setting"
-            const settingMachinist = isSetting
-              ? await signedInMachinist({
+            const performerRole: SignedInWorkRole | undefined = {
+              raw_material_at_machine: "shop_floor",
+              shop_floor_rm: "shop_floor",
+              presetting: "machinist",
+              tools_drawing: "machinist",
+              setting: "machinist",
+              quality_approval: "quality",
+              qc_approval: "quality",
+              operator_started: "machinist",
+              worker_start: "machinist",
+            }[text(payload.stage).toLowerCase()] as SignedInWorkRole | undefined
+            const performer = performerRole
+              ? await signedInEmployee({
                   connectionString: readAuthEnvironment().connectionString,
                   organizationId,
-                  productionFloorCode: normalizeProductionFloorCode(
+                  productionFloorCode: requiredProductionFloor(
                     payload.productionFloorCode
                   ),
+                  role: performerRole,
                   userId: actorUserId,
                 })
               : null
-            if (isSetting && !settingMachinist) {
+            if (performerRole && !performer) {
               throw new RouteError(
                 403,
-                "Your signed-in Employee ID must be an active Machinist or Programmer in this production unit."
+                "Your signed-in Employee ID must have an active assignment for this task in this production unit."
               )
             }
             if (
-              settingMachinist &&
+              performer &&
               text(payload.doneBy) &&
-              text(payload.doneBy) !== settingMachinist.name
+              text(payload.doneBy) !== performer.name
             ) {
-              throw new RouteError(403, "Setting can only be recorded under your own Employee ID.")
+              throw new RouteError(403, "You can record this task only under your own Employee ID.")
             }
             return repository.recordShopFloorStage({
               actorUserId,
@@ -1822,11 +1940,11 @@ async function post(request: NextRequest, context: RouteContext) {
               machineNumber: text(payload.machine || payload.machineNo),
               operationSetupCode: text(payload.setupNo),
               organizationId,
-              payload: settingMachinist
+              payload: performer
                 ? {
                     ...payload,
-                    doneBy: settingMachinist.name,
-                    doneByEmployeeCode: settingMachinist.code,
+                    doneBy: performer.name,
+                    doneByEmployeeCode: performer.code,
                   }
                 : payload,
               productionFloorCode: text(payload.productionFloorCode),

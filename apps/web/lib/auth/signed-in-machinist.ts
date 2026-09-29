@@ -7,21 +7,35 @@ import {
 import type { ProductionFloorCode } from "@workspace/db/production-floors"
 
 import {
+  maintenanceEmployeeOptions,
+  productionDispatchApproverOptions,
   productionMachinistOptions,
+  productionQualityOptions,
+  productionShopFloorOptions,
   sharedEmployeeMasterRows,
 } from "../shared-employee-master"
 
-export async function signedInMachinist({
+export type SignedInWorkRole =
+  | "dispatch"
+  | "machinist"
+  | "maintenance"
+  | "quality"
+  | "shop_floor"
+
+type EmployeeIdentityInput = {
+  connectionString: string
+  organizationId: string
+  productionFloorCode?: ProductionFloorCode
+  userId: string
+}
+
+export async function signedInEmployee({
   connectionString,
   organizationId,
   productionFloorCode,
+  role,
   userId,
-}: {
-  connectionString: string
-  organizationId: string
-  productionFloorCode: ProductionFloorCode
-  userId: string
-}) {
+}: EmployeeIdentityInput & { role: SignedInWorkRole }) {
   const authorization = createAuthorizationRepository({ connectionString })
   const recruitment = createRecruitmentRepository({ connectionString })
   try {
@@ -30,11 +44,20 @@ export async function signedInMachinist({
       recruitment.listPosts(organizationId),
     ])
     if (!employeeCode) return null
+    const rows = sharedEmployeeMasterRows(posts)
+    const options = role === "maintenance"
+      ? maintenanceEmployeeOptions(rows)
+      : productionFloorCode
+        ? role === "dispatch"
+          ? productionDispatchApproverOptions(rows, productionFloorCode)
+          : role === "quality"
+            ? productionQualityOptions(rows, productionFloorCode)
+            : role === "shop_floor"
+              ? productionShopFloorOptions(rows, productionFloorCode)
+              : productionMachinistOptions(rows, productionFloorCode)
+        : []
     return (
-      productionMachinistOptions(
-        sharedEmployeeMasterRows(posts),
-        productionFloorCode
-      ).find((employee) =>
+      options.find((employee) =>
         employee.code.localeCompare(employeeCode, "en-IN", {
           sensitivity: "accent",
         }) === 0
@@ -43,4 +66,10 @@ export async function signedInMachinist({
   } finally {
     await Promise.all([authorization.close(), recruitment.close()])
   }
+}
+
+export function signedInMachinist(input: EmployeeIdentityInput & {
+  productionFloorCode: ProductionFloorCode
+}) {
+  return signedInEmployee({ ...input, role: "machinist" })
 }

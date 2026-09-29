@@ -53,7 +53,11 @@ import {
   productionSessionStartOptions,
   type ProductionSessionMachineOption,
 } from "@/lib/production-session-start"
-import { productionShopFloorOptions } from "@/lib/shared-employee-master"
+import {
+  productionMachinistOptions,
+  productionQualityOptions,
+  productionShopFloorOptions,
+} from "@/lib/shared-employee-master"
 
 type View = "start" | "register" | "events"
 type SessionStatusFilter = "all" | ProductionSessionOperationalStatus
@@ -62,6 +66,13 @@ type Action =
   | "carryResolve"
   | ProductionSessionDetailAction
 type Row = Record<string, unknown>
+type EntryRole = "shop_floor" | "machinist" | "quality"
+
+const entryRoleLabels: Record<EntryRole, string> = {
+  shop_floor: "Shop Floor",
+  machinist: "Machinist",
+  quality: "QC",
+}
 
 const text = (value: unknown) => String(value ?? "").trim()
 const number = (value: unknown) => Number.isFinite(Number(value)) ? Number(value) : 0
@@ -140,7 +151,9 @@ export function ProductionSessionsWorkspace({
   const [view, setView] = useState<View>("start")
   const [sessions, setSessions] = useState<Row[]>([])
   const [eventRows, setEventRows] = useState<Row[]>([])
-  const [employees, setEmployees] = useState<Array<{ code: string; name: string }>>([])
+  const [signedInOperator, setSignedInOperator] = useState<{ code: string; name: string } | null>(null)
+  const [signedInPerson, setSignedInPerson] = useState<{ code: string; name: string } | null>(null)
+  const [signedInRoles, setSignedInRoles] = useState<EntryRole[]>([])
   const [query, setQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<SessionStatusFilter>("all")
   const [now, setNow] = useState(() => new Date())
@@ -176,7 +189,24 @@ export function ProductionSessionsWorkspace({
       const loadedSessions = rows(sessionBody.rows)
       setSessions(loadedSessions)
       setEventRows(rows(eventsBody.rows))
-      setEmployees(productionShopFloorOptions(rows(employeeBody.rows), floor))
+      const employeeCode = text(employeeBody.currentEmployeeCode).toLowerCase()
+      const employeeRows = rows(employeeBody.rows)
+      const shopFloor = productionShopFloorOptions(employeeRows, floor)
+      setSignedInOperator(
+        shopFloor.find((employee) => employee.code.toLowerCase() === employeeCode) ?? null
+      )
+      const eligibleRoles = ([
+        ["shop_floor", shopFloor],
+        ["machinist", productionMachinistOptions(employeeRows, floor)],
+        ["quality", productionQualityOptions(employeeRows, floor)],
+      ] as const)
+      setSignedInRoles(eligibleRoles.flatMap(([role, options]) =>
+        options.some((employee) => employee.code.toLowerCase() === employeeCode)
+          ? [role]
+          : []
+      ))
+      setSignedInPerson(eligibleRoles.flatMap(([, options]) => options)
+        .find((employee) => employee.code.toLowerCase() === employeeCode) ?? null)
       const requestedSession = initialSessionId
         ? loadedSessions.find((session) => text(session.id) === initialSessionId)
         : undefined
@@ -311,16 +341,18 @@ export function ProductionSessionsWorkspace({
           </CardContent>
  </SectionCard>
       {!loading && view === "start" ? <CarriedDowntimeTable rows={carriedDowntime} sessions={sessions} options={machineOptions} onSelect={setSelectedMachine} onAction={openAction} /> : null}
-      {bulkOpen ? <BulkBreakdownDialog floor={floor} control={control} onClose={() => setBulkOpen(false)} onSaved={(savedText) => { setBulkOpen(false); setMessage(savedText); void load() }} /> : null}
-      <ActionSheet key={`${action}-${text(target?.id) || machine(target ?? {})}`} action={action} target={target} floor={floor} shift={shift} employees={employees} control={control} saving={saving} message={message} onOpenChange={(open) => { if (!open) setAction(null) }} onSave={(type, payload) => void save(type, payload)} />
+      {bulkOpen ? <BulkBreakdownDialog floor={floor} control={control} signedInPerson={signedInPerson} signedInRoles={signedInRoles} onClose={() => setBulkOpen(false)} onSaved={(savedText) => { setBulkOpen(false); setMessage(savedText); void load() }} /> : null}
+      <ActionSheet key={`${action}-${text(target?.id) || machine(target ?? {})}`} action={action} target={target} floor={floor} shift={shift} signedInOperator={signedInOperator} signedInPerson={signedInPerson} signedInRoles={signedInRoles} control={control} saving={saving} message={message} onOpenChange={(open) => { if (!open) setAction(null) }} onSave={(type, payload) => void save(type, payload)} />
       <DetailSheet session={detail} events={detailEvents} floor={floor} now={now} onOpenChange={(open) => { if (!open) setDetail(null) }} onAction={(next, row) => { setDetail(null); openAction(next, row) }} />
     </div>
   )
 }
 
-function BulkBreakdownDialog({ floor, control, onClose, onSaved }: {
+function BulkBreakdownDialog({ floor, control, signedInPerson, signedInRoles, onClose, onSaved }: {
   floor: ProductionFloorCode
   control: Row
+  signedInPerson: { code: string; name: string } | null
+  signedInRoles: EntryRole[]
   onClose: () => void
   onSaved: (message: string) => void
 }) {
@@ -330,7 +362,10 @@ function BulkBreakdownDialog({ floor, control, onClose, onSaved }: {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
   const [reason, setReason] = useState("")
-  const [role, setRole] = useState("shop_floor")
+  const [selectedRole, setSelectedRole] = useState<EntryRole | "">("")
+  const role = signedInRoles.includes(selectedRole as EntryRole)
+    ? selectedRole
+    : signedInRoles.length === 1 ? signedInRoles[0]! : ""
   const [startAt, setStartAt] = useState(() => istDateTimeInputValue(new Date()))
   const reasonOptions = downtimeOptions(control)
   const selectedReason = reasonOptions.find((item) => item.code === reason)
@@ -364,7 +399,7 @@ function BulkBreakdownDialog({ floor, control, onClose, onSaved }: {
   useEffect(() => { queueMicrotask(() => void refreshPreview()) }, [refreshPreview])
 
   async function submit() {
-    if (!selectedReason || saving || loading || !preview.length) return
+    if (!selectedReason || !role || saving || loading || !preview.length) return
     setSaving(true)
     setError("")
     try {
@@ -390,12 +425,18 @@ function BulkBreakdownDialog({ floor, control, onClose, onSaved }: {
     <StandardDialogContent title="Bulk Breakdown" className="max-h-[90dvh] overflow-y-auto sm:max-w-3xl"
       description={`${unit.shortLabel} · Applies to all running sessions, regardless of register filters. Sessions stay open; machine assignments remain unchanged.`}>
       <FieldGroup>
-        <FormField><FieldLabel htmlFor="bulk-breakdown-role">Entered by</FieldLabel>
-          <NativeSelect id="bulk-breakdown-role" value={role} disabled={saving} onChange={(event) => setRole(event.target.value)}>
-            <NativeSelectOption value="shop_floor">Shop Floor</NativeSelectOption>
-            <NativeSelectOption value="machinist">Machinist</NativeSelectOption>
-            <NativeSelectOption value="quality">QC</NativeSelectOption>
-          </NativeSelect>
+        <FormField><FieldLabel htmlFor="bulk-breakdown-person">Entered by</FieldLabel>
+          <Input id="bulk-breakdown-person" readOnly value={signedInPerson ? `${signedInPerson.code} · ${signedInPerson.name}` : "Linked employee assignment required"} />
+        </FormField>
+        <FormField><FieldLabel htmlFor="bulk-breakdown-role">Department</FieldLabel>
+          {signedInRoles.length === 1 ? (
+            <Input id="bulk-breakdown-role" readOnly value={entryRoleLabels[signedInRoles[0]!]} />
+          ) : (
+            <NativeSelect id="bulk-breakdown-role" value={role} disabled={saving} onChange={(event) => setSelectedRole(event.target.value as EntryRole)}>
+              <NativeSelectOption value="">Select your department</NativeSelectOption>
+              {signedInRoles.map((option) => <NativeSelectOption key={option} value={option}>{entryRoleLabels[option]}</NativeSelectOption>)}
+            </NativeSelect>
+          )}
         </FormField>
         <FormField><FieldLabel htmlFor="bulk-breakdown-reason">Breakdown / downtime reason</FieldLabel>
           <NativeSelect id="bulk-breakdown-reason" value={reason} disabled={saving} onChange={(event) => setReason(event.target.value)}>
@@ -418,7 +459,7 @@ function BulkBreakdownDialog({ floor, control, onClose, onSaved }: {
       <DialogFooter>
         <Button variant="outline" disabled={loading || saving} onClick={() => void refreshPreview()}>Refresh preview</Button>
         <Button variant="outline" disabled={saving} onClick={onClose}>Cancel</Button>
-        <Button disabled={loading || saving || !preview.length || !selectedReason || !istDateTimeInputToIso(startAt)} onClick={() => void submit()}>
+        <Button disabled={loading || saving || !preview.length || !selectedReason || !role || !istDateTimeInputToIso(startAt)} onClick={() => void submit()}>
           {saving ? "Saving…" : `Apply to ${preview.length} running sessions`}
         </Button>
       </DialogFooter>
@@ -471,7 +512,7 @@ function StartSessionLookup({ options, selected, shift, floor, now, onSelect, on
         <PlanField label="Piece weight" value={pieceWeight ? `${pieceWeight} g` : "Not configured"} />
         {session ? <><PlanField label="Operator" value={`${text(session.operatorCode)} · ${text(session.operatorName)}`} /><PlanField label="Started" value={formatDateTime(session.startedAt)} /><PlanField label="Session" value={text(session.sessionReference)} /></> : null}
       </div>
-      <div className="mt-4 flex flex-wrap gap-2">{session ? <><Button className="h-11" variant="outline" onClick={() => onDetail(session)}><History />View Session</Button><Button className="h-11" variant="outline" disabled={session.hasOpenDowntime === true && session.hasOpenBreakdownDowntime !== true} title={session.hasOpenDowntime && !session.hasOpenBreakdownDowntime ? "Close the open downtime before ending this session." : session.hasOpenBreakdownDowntime ? "Shift Ends will carry the open breakdown into Maintenance." : undefined} onClick={() => onAction("end", session)}><Square />End</Button>{session.hasOpenDowntime ? session.hasOpenBreakdownDowntime ? null : <Button className="h-11" variant="destructive" onClick={() => onAction("downtimeEnd", session)}><Clock3 />Close downtime</Button> : <Button className="h-11" variant="outline" onClick={() => onAction("downtime", session)}><Clock3 />Start downtime</Button>}<Button className="h-11" variant="outline" onClick={() => onAction("rejection", session)}><TriangleAlert />Rejection</Button></> : <Button className="h-11" disabled={!shift || !pieceWeight} onClick={() => onAction("start", plan)}><Play />Enter operator and start details</Button>}</div>
+      <div className="mt-4 flex flex-wrap gap-2">{session ? <><Button className="h-11" variant="outline" onClick={() => onDetail(session)}><History />View Session</Button><Button className="h-11" variant="outline" disabled={session.hasOpenDowntime === true && session.hasOpenBreakdownDowntime !== true} title={session.hasOpenDowntime && !session.hasOpenBreakdownDowntime ? "Close the open downtime before ending this session." : session.hasOpenBreakdownDowntime ? "Shift Ends will carry the open breakdown into Maintenance." : undefined} onClick={() => onAction("end", session)}><Square />End</Button>{session.hasOpenDowntime ? session.hasOpenBreakdownDowntime ? null : <Button className="h-11" variant="destructive" onClick={() => onAction("downtimeEnd", session)}><Clock3 />Close downtime</Button> : <Button className="h-11" variant="outline" onClick={() => onAction("downtime", session)}><Clock3 />Start downtime</Button>}<Button className="h-11" variant="outline" onClick={() => onAction("rejection", session)}><TriangleAlert />Rejection</Button></> : <Button className="h-11" disabled={!shift || !pieceWeight} onClick={() => onAction("start", plan)}><Play />Enter start details</Button>}</div>
  {session?.hasOpenDowntime ? <p className="mt-2 text-sm text-[var(--color-warning-text)] ">{session.hasOpenBreakdownDowntime ? "End with Shift Ends to carry this breakdown; Maintenance completes it after repair." : "Close the open downtime before ending this production session."}</p> : null}
       {!session && !shift ? <p className="mt-2 text-sm text-destructive">A session can be started only during the Production Unit&apos;s configured shift.</p> : null}
       {!session && !pieceWeight ? <p className="mt-2 text-sm text-destructive">A positive piece weight is required in the Route or Cycle Time Master.</p> : null}
@@ -518,13 +559,13 @@ function ScrollableTable({ headers, children }: { headers: string[]; children: R
  return <div className="rounded-md border min-w-0"><OperationalTable containerClassName="max-h-[65vh]"><TableHeader className="sticky top-0 z-10 bg-background"><TableRow>{headers.map((header) => <TableHead key={header}>{header}</TableHead>)}</TableRow></TableHeader><TableBody>{children}</TableBody></OperationalTable></div>
 }
 
-function ActionSheet({ action, target, floor, shift, employees, control, saving, message, onOpenChange, onSave }: { action: Action | null; target: Row | null; floor: ProductionFloorCode; shift: ReturnType<typeof productionShiftAt>; employees: Array<{ code: string; name: string }>; control: Row; saving: boolean; message: string; onOpenChange: (open: boolean) => void; onSave: (entryType: string, payload: Row) => void }) {
+function ActionSheet({ action, target, floor, shift, signedInOperator, signedInPerson, signedInRoles, control, saving, message, onOpenChange, onSave }: { action: Action | null; target: Row | null; floor: ProductionFloorCode; shift: ReturnType<typeof productionShiftAt>; signedInOperator: { code: string; name: string } | null; signedInPerson: { code: string; name: string } | null; signedInRoles: EntryRole[]; control: Row; saving: boolean; message: string; onOpenChange: (open: boolean) => void; onSave: (entryType: string, payload: Row) => void }) {
   const defaults = productionSessionActionDefaults(floor, new Date(), {
     action: action === "downtime" ? "downtime" : undefined,
     productionDate: text(target?.productionDate),
     shift: text(target?.shift),
   })
-  const [operator, setOperator] = useState("")
+  const operator = signedInOperator?.code ?? ""
   const storedMethod = text(target?.measurementMethod)
   const [method, setMethod] = useState<"weight" | "counter">(
     storedMethod === "weight" || storedMethod === "counter"
@@ -560,7 +601,15 @@ function ActionSheet({ action, target, floor, shift, employees, control, saving,
   const [downtimeEndOutcome, setDowntimeEndOutcome] = useState<
     "resolved" | "shift_end_unresolved"
   >("resolved")
-  const [role, setRole] = useState("shop_floor")
+  const [selectedRole, setSelectedRole] = useState<EntryRole | "">("")
+  const allowedRoles = signedInRoles.filter((candidate) =>
+    action === "downtime" ||
+    candidate === "shop_floor" ||
+    (floor === "cnc" && candidate === "quality")
+  )
+  const role = allowedRoles.includes(selectedRole as EntryRole)
+    ? selectedRole
+    : allowedRoles.length === 1 ? allowedRoles[0]! : ""
   const [reason, setReason] = useState(text(target?.carriedReasonCode))
   const [typeCode, setTypeCode] = useState("")
   const [remark, setRemark] = useState("")
@@ -630,8 +679,8 @@ function ActionSheet({ action, target, floor, shift, employees, control, saving,
   }
   const weightCloseIsValid = (!hasGrossWeight && !hasCrateCount && !hasCrateWeight) || (hasGrossWeight && hasCrateCount && hasCrateWeight)
   const valid = action === "start" ? Boolean(operator && startAtIso && method && pieceWeight > 0 && (method === "weight" || startCount || text(plan.carriedStartCount)))
-    : action === "end" ? Boolean(endAtIso && endReason && (method === "counter" ? endCount : weightCloseIsValid))
-    : action === "correctClose" ? Boolean(correctionReason && endAtIso && endReason && (method === "counter" ? endCount : ((hasGrossWeight && hasCrateCount && hasCrateWeight) || (outputPending(target) && downtimeCorrection && !hasGrossWeight && !hasCrateCount && !hasCrateWeight))) && (downtimeChange === "none" || (selectedDowntime && (downtimeChange === "reverse" || (istDateTimeInputToIso(downtimeStart) && istDateTimeInputToIso(downtimeEnd) && correctedDowntimeReason)))))
+    : action === "end" ? Boolean(role && endAtIso && endReason && (method === "counter" ? endCount : weightCloseIsValid))
+    : action === "correctClose" ? Boolean(role && correctionReason && endAtIso && endReason && (method === "counter" ? endCount : ((hasGrossWeight && hasCrateCount && hasCrateWeight) || (outputPending(target) && downtimeCorrection && !hasGrossWeight && !hasCrateCount && !hasCrateWeight))) && (downtimeChange === "none" || (selectedDowntime && (downtimeChange === "reverse" || (istDateTimeInputToIso(downtimeStart) && istDateTimeInputToIso(downtimeEnd) && correctedDowntimeReason)))))
     : action === "downtime" ? Boolean(reason && startAtIso && role)
     : action === "lateDowntime" ? Boolean(correctionReason && reason && startAtIso && endAtIso && role)
     : action === "downtimeEnd" || action === "carryResolve" ? Boolean(endAtIso)
@@ -653,11 +702,22 @@ function ActionSheet({ action, target, floor, shift, employees, control, saving,
     : action === "correctClose" ? outputPending(target) && !hasGrossWeight ? "Save downtime correction" : "Save correction"
     : `Save ${titleCase(action)}`
   return <Sheet open={Boolean(action)} onOpenChange={onOpenChange}><StandardDrawerContent side="right" title={sheetTitle} description={`${machine(target)} · ${job(target)} · ${part(target)} · Setup ${setup(target)}`} className="!w-full overflow-y-auto sm:!max-w-2xl"><div className="grid min-w-0 gap-4 px-6 [&_[data-slot=searchable-select]]:w-full">
-    {action === "start" ? <><Field label="Operator"><NativeSelect value={operator} onChange={(event) => setOperator(event.target.value)}><NativeSelectOption value="">Select operator</NativeSelectOption>{employees.map((employee) => <NativeSelectOption key={employee.code} value={employee.code}>{employee.code} · {employee.name}</NativeSelectOption>)}</NativeSelect></Field><IstDateTimeField label="Start time (IST)" value={startAt} onChange={setStartAt} /><Field label="Production method"><NativeSelect value={method} onChange={(event) => setMethod(event.target.value as "weight" | "counter")}><NativeSelectOption value="weight">Weight at session end</NativeSelectOption>{floor === "cnc" ? <NativeSelectOption value="counter">Machine counter</NativeSelectOption> : null}</NativeSelect></Field>{method === "counter" ? text(plan.carriedStartCount) ? <div className="rounded-md bg-muted p-3 text-sm">Start count carried from the previous matching session: <b>{text(plan.carriedStartCount)}</b></div> : <Field label="Machine start count"><Input inputMode="numeric" type="number" min="0" value={startCount} onChange={(event) => setStartCount(event.target.value)} /></Field> : null}<div className="rounded-md bg-muted p-3 text-sm">Shift and production date are automatic: <b>{shift?.shift ?? "Outside shift"} · {shift?.productionDate ?? "-"}</b></div></> : null}
-    {action === "end" ? <><IstDateTimeField label="End time (IST)" value={endAt} onChange={setEndAt} /><Field label="End reason"><NativeSelect value={endReason} onChange={(event) => setEndReason(event.target.value)}>{endReasons.map(({ label, value }) => <NativeSelectOption key={value} value={value}>{label}</NativeSelectOption>)}</NativeSelect></Field><Field label="Entry role"><NativeSelect value={role} onChange={(event) => setRole(event.target.value)}><NativeSelectOption value="shop_floor">Shop Floor</NativeSelectOption>{floor === "cnc" ? <NativeSelectOption value="quality">QC</NativeSelectOption> : null}</NativeSelect></Field><Field label="Production method"><NativeSelect value={method} onChange={(event) => setMethod(event.target.value as "weight" | "counter")}><NativeSelectOption value="weight">Weight</NativeSelectOption>{floor === "cnc" ? <NativeSelectOption value="counter">Machine counter</NativeSelectOption> : null}</NativeSelect></Field>{method === "counter" ? <Field label="Machine end count"><Input inputMode="numeric" type="number" min="0" value={endCount} onChange={(event) => setEndCount(event.target.value)} /></Field> : <><div className="grid gap-3 sm:grid-cols-3"><Field label="Gross weight incl. crates (kg)"><Input inputMode="decimal" type="number" min="0" step="0.001" value={grossKg} onChange={(event) => setGrossKg(event.target.value)} /></Field><Field label="Crates used"><Input inputMode="numeric" type="number" min="0" step="1" value={crates} onChange={(event) => setCrates(event.target.value)} /></Field><CrateWeightField value={crateWeightKg} onChange={setCrateWeightKg} /></div><p className="text-sm text-muted-foreground">Net produced weight = gross weight − crates × selected crate weight. If weighing is not ready, leave all three fields blank.</p></>}</> : null}
-    {action === "correctClose" ? <><IstDateTimeField label="End time (IST)" value={endAt} onChange={setEndAt} /><Field label="End reason"><NativeSelect value={endReason} onChange={(event) => setEndReason(event.target.value)}>{endReasons.map(({ label, value }) => <NativeSelectOption key={value} value={value}>{label}</NativeSelectOption>)}</NativeSelect></Field><Field label="Entry role"><NativeSelect value={role} onChange={(event) => setRole(event.target.value)}><NativeSelectOption value="shop_floor">Shop Floor</NativeSelectOption>{floor === "cnc" ? <NativeSelectOption value="quality">QC</NativeSelectOption> : null}</NativeSelect></Field><div className="rounded-md bg-muted p-3 text-sm">Production method: <b>{method === "counter" ? "Machine counter" : "Weight"}</b></div>{method === "counter" ? <Field label="Machine end count"><Input inputMode="numeric" type="number" min="0" value={endCount} onChange={(event) => setEndCount(event.target.value)} /></Field> : <><div className="grid gap-3 sm:grid-cols-3"><Field label="Gross weight incl. crates (kg)"><Input inputMode="decimal" type="number" min="0" step="0.001" value={grossKg} onChange={(event) => setGrossKg(event.target.value)} /></Field><Field label="Crates used"><Input inputMode="numeric" type="number" min="0" step="1" value={crates} onChange={(event) => setCrates(event.target.value)} /></Field><CrateWeightField value={crateWeightKg} onChange={setCrateWeightKg} /></div><p className="text-sm text-muted-foreground">Net produced weight = gross weight − crates × selected crate weight.</p></>}<Field label="Correction remark"><Input value={correctionReason} onChange={(event) => setCorrectionReason(event.target.value)} placeholder="Explain the session or downtime correction" /></Field></> : null}
- {action === "downtime" ? <><Field label="Entered by"><NativeSelect value={role} onChange={(event) => setRole(event.target.value)}><NativeSelectOption value="shop_floor">Shop Floor</NativeSelectOption><NativeSelectOption value="machinist">Machinist</NativeSelectOption><NativeSelectOption value="quality">QC</NativeSelectOption></NativeSelect></Field>{text(target.carriedReasonName) ? <div className="rounded-md bg-[var(--color-warning-bg)] p-3 text-sm "><div className="text-xs text-muted-foreground">Continuing carried problem</div><div className="font-medium">{reason} · {text(target.carriedReasonName)}</div></div> : <Field label="Downtime reason"><MasterSelect value={reason} options={downtimeReasonOptions} onChange={setReason} placeholder="Select downtime reason" /></Field>}<IstDateTimeField label="Downtime starts (IST)" value={startAt} onChange={setStartAt} /><p className="text-sm text-muted-foreground">Close this downtime with an actual end time before resuming production or ending the session.</p></> : null}
-    {action === "lateDowntime" ? <><Field label="Entered by"><NativeSelect value={role} onChange={(event) => setRole(event.target.value)}><NativeSelectOption value="shop_floor">Shop Floor</NativeSelectOption><NativeSelectOption value="quality">QC</NativeSelectOption></NativeSelect></Field><Field label="Downtime reason"><MasterSelect value={reason} options={downtimeReasonOptions} onChange={setReason} placeholder="Select downtime reason" /></Field><IstDateTimeField label="Downtime starts (IST)" value={startAt} onChange={setStartAt} /><IstDateTimeField label="Downtime ends (IST)" value={endAt} onChange={setEndAt} /><Field label="Correction reason"><Input value={correctionReason} onChange={(event) => setCorrectionReason(event.target.value)} placeholder="Why was this downtime entered late?" /></Field></> : null}
+    {action !== "start" ? <Field label="Entered by"><Input readOnly value={signedInPerson ? `${signedInPerson.code} · ${signedInPerson.name}` : "Linked employee assignment required"} /></Field> : null}
+    {action === "start" ? <>
+      <Field label="Operator">
+        <Input readOnly value={signedInOperator
+          ? `${signedInOperator.code} · ${signedInOperator.name}`
+          : "Signed-in Shop Floor employee required"} />
+      </Field>
+      <IstDateTimeField label="Start time (IST)" value={startAt} onChange={setStartAt} />
+      <Field label="Production method"><NativeSelect value={method} onChange={(event) => setMethod(event.target.value as "weight" | "counter")}><NativeSelectOption value="weight">Weight at session end</NativeSelectOption>{floor === "cnc" ? <NativeSelectOption value="counter">Machine counter</NativeSelectOption> : null}</NativeSelect></Field>
+      {method === "counter" ? text(plan.carriedStartCount) ? <div className="rounded-md bg-muted p-3 text-sm">Start count carried from the previous matching session: <b>{text(plan.carriedStartCount)}</b></div> : <Field label="Machine start count"><Input inputMode="numeric" type="number" min="0" value={startCount} onChange={(event) => setStartCount(event.target.value)} /></Field> : null}
+      <div className="rounded-md bg-muted p-3 text-sm">Shift and production date are automatic: <b>{shift?.shift ?? "Outside shift"} · {shift?.productionDate ?? "-"}</b></div>
+    </> : null}
+    {action === "end" ? <><IstDateTimeField label="End time (IST)" value={endAt} onChange={setEndAt} /><Field label="End reason"><NativeSelect value={endReason} onChange={(event) => setEndReason(event.target.value)}>{endReasons.map(({ label, value }) => <NativeSelectOption key={value} value={value}>{label}</NativeSelectOption>)}</NativeSelect></Field><EntryRoleField label="Entry role" roles={allowedRoles} value={role} onChange={setSelectedRole} /><Field label="Production method"><NativeSelect value={method} onChange={(event) => setMethod(event.target.value as "weight" | "counter")}><NativeSelectOption value="weight">Weight</NativeSelectOption>{floor === "cnc" ? <NativeSelectOption value="counter">Machine counter</NativeSelectOption> : null}</NativeSelect></Field>{method === "counter" ? <Field label="Machine end count"><Input inputMode="numeric" type="number" min="0" value={endCount} onChange={(event) => setEndCount(event.target.value)} /></Field> : <><div className="grid gap-3 sm:grid-cols-3"><Field label="Gross weight incl. crates (kg)"><Input inputMode="decimal" type="number" min="0" step="0.001" value={grossKg} onChange={(event) => setGrossKg(event.target.value)} /></Field><Field label="Crates used"><Input inputMode="numeric" type="number" min="0" step="1" value={crates} onChange={(event) => setCrates(event.target.value)} /></Field><CrateWeightField value={crateWeightKg} onChange={setCrateWeightKg} /></div><p className="text-sm text-muted-foreground">Net produced weight = gross weight − crates × selected crate weight. If weighing is not ready, leave all three fields blank.</p></>}</> : null}
+    {action === "correctClose" ? <><IstDateTimeField label="End time (IST)" value={endAt} onChange={setEndAt} /><Field label="End reason"><NativeSelect value={endReason} onChange={(event) => setEndReason(event.target.value)}>{endReasons.map(({ label, value }) => <NativeSelectOption key={value} value={value}>{label}</NativeSelectOption>)}</NativeSelect></Field><EntryRoleField label="Entry role" roles={allowedRoles} value={role} onChange={setSelectedRole} /><div className="rounded-md bg-muted p-3 text-sm">Production method: <b>{method === "counter" ? "Machine counter" : "Weight"}</b></div>{method === "counter" ? <Field label="Machine end count"><Input inputMode="numeric" type="number" min="0" value={endCount} onChange={(event) => setEndCount(event.target.value)} /></Field> : <><div className="grid gap-3 sm:grid-cols-3"><Field label="Gross weight incl. crates (kg)"><Input inputMode="decimal" type="number" min="0" step="0.001" value={grossKg} onChange={(event) => setGrossKg(event.target.value)} /></Field><Field label="Crates used"><Input inputMode="numeric" type="number" min="0" step="1" value={crates} onChange={(event) => setCrates(event.target.value)} /></Field><CrateWeightField value={crateWeightKg} onChange={setCrateWeightKg} /></div><p className="text-sm text-muted-foreground">Net produced weight = gross weight − crates × selected crate weight.</p></>}<Field label="Correction remark"><Input value={correctionReason} onChange={(event) => setCorrectionReason(event.target.value)} placeholder="Explain the session or downtime correction" /></Field></> : null}
+ {action === "downtime" ? <><EntryRoleField label="Entered by" roles={allowedRoles} value={role} onChange={setSelectedRole} />{text(target.carriedReasonName) ? <div className="rounded-md bg-[var(--color-warning-bg)] p-3 text-sm "><div className="text-xs text-muted-foreground">Continuing carried problem</div><div className="font-medium">{reason} · {text(target.carriedReasonName)}</div></div> : <Field label="Downtime reason"><MasterSelect value={reason} options={downtimeReasonOptions} onChange={setReason} placeholder="Select downtime reason" /></Field>}<IstDateTimeField label="Downtime starts (IST)" value={startAt} onChange={setStartAt} /><p className="text-sm text-muted-foreground">Close this downtime with an actual end time before resuming production or ending the session.</p></> : null}
+    {action === "lateDowntime" ? <><EntryRoleField label="Entered by" roles={allowedRoles} value={role} onChange={setSelectedRole} /><Field label="Downtime reason"><MasterSelect value={reason} options={downtimeReasonOptions} onChange={setReason} placeholder="Select downtime reason" /></Field><IstDateTimeField label="Downtime starts (IST)" value={startAt} onChange={setStartAt} /><IstDateTimeField label="Downtime ends (IST)" value={endAt} onChange={setEndAt} /><Field label="Correction reason"><Input value={correctionReason} onChange={(event) => setCorrectionReason(event.target.value)} placeholder="Why was this downtime entered late?" /></Field></> : null}
  {action === "downtimeEnd" ? <><IstDateTimeField label="Downtime end (IST)" value={endAt} onChange={setEndAt} /><Field label="Closure outcome"><NativeSelect value={downtimeEndOutcome} onChange={(event) => { const outcome = event.target.value as "resolved" | "shift_end_unresolved"; setDowntimeEndOutcome(outcome); setEndAt(outcome === "shift_end_unresolved" ? defaults.endAt : istDateTimeInputValue(new Date())) }}><NativeSelectOption value="resolved">Resolved — Resume production</NativeSelectOption><NativeSelectOption value="shift_end_unresolved">Shift ended — Unresolved</NativeSelectOption></NativeSelect></Field>{downtimeEndOutcome === "shift_end_unresolved" ? <div className="rounded-md bg-[var(--color-warning-bg)] p-3 text-sm ">The interval ends at this shift&apos;s end. The machine problem remains in Unresolved Downtime for the next shift; off-shift hours are excluded.</div> : null}</> : null}
     {action === "carryResolve" ? <><IstDateTimeField label="Problem resolved at (IST)" value={endAt} onChange={setEndAt} /><div className="rounded-md bg-muted p-3 text-sm">Use this when the machine was repaired before another production shift interval was started. No off-shift hours will be counted as production downtime.</div></> : null}
     {action === "rejection" || action === "lateRejection" ? <><Field label="Rejection type"><MasterSelect value={typeCode} options={typeOptions} onChange={setTypeCode} placeholder="Select rejection type" /></Field><Field label="Rejection reason"><MasterSelect value={reason} options={reasonOptions} onChange={setReason} placeholder="Select rejection reason" /></Field><Field label="Rejection remark"><MasterSelect value={remark} options={remarkOptions} onChange={setRemark} placeholder="Select remark" /></Field><Field label="Rejected pieces"><Input inputMode="numeric" type="number" min="1" step="1" value={quantity} onChange={(event) => setQuantity(event.target.value)} /></Field>{action === "lateRejection" ? <Field label="Correction reason"><Input value={correctionReason} onChange={(event) => setCorrectionReason(event.target.value)} placeholder="Why was this rejection entered late?" /></Field> : null}<p className="text-sm text-muted-foreground">Rejected pieces are deducted from good production automatically.</p></> : null}
@@ -673,6 +733,20 @@ function ActionSheet({ action, target, floor, shift, employees, control, saving,
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) { return <label className="grid min-w-0 gap-1.5 text-sm font-medium"><span>{label}</span>{children}</label> }
+function EntryRoleField({ label, roles, value, onChange }: {
+  label: string
+  roles: EntryRole[]
+  value: string
+  onChange: (role: EntryRole) => void
+}) {
+  return <Field label={label}>{roles.length === 1
+    ? <Input readOnly value={entryRoleLabels[roles[0]!]} />
+    : <NativeSelect value={value} onChange={(event) => onChange(event.target.value as EntryRole)}>
+        <NativeSelectOption value="">{roles.length ? "Select your department" : "Linked employee assignment required"}</NativeSelectOption>
+        {roles.map((role) => <NativeSelectOption key={role} value={role}>{entryRoleLabels[role]}</NativeSelectOption>)}
+      </NativeSelect>}
+  </Field>
+}
 function CrateWeightField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   return <Field label="Crate weight (kg)"><NativeSelect value={value} onChange={(event) => onChange(event.target.value)}><NativeSelectOption value="">Select crate weight</NativeSelectOption>{productionCrateWeightOptions.map((weight) => <NativeSelectOption key={weight} value={String(weight)}>{weight} kg</NativeSelectOption>)}</NativeSelect></Field>
 }

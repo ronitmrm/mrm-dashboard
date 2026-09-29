@@ -41,7 +41,7 @@ _Avoid_: separate Scheduled and Request tables, converting scheduled rows into r
 
 The checklist assigned to one machine maintenance schedule is completed for each due occurrence. An engineer may save an In Progress task with partial step responses and reopen it later. Completing the task requires every active required checklist point and advances the schedule's next due date. A draft does not advance the schedule or appear as completed maintenance history.
 
-The task records a start date and time when work begins and an end date and time when it finishes. Actual minutes are calculated from those timestamps. The engineer is selected from active maintenance staff across production units. Each changed part is recorded separately so maintenance history can be searched and filtered by part.
+The task records a start date and time when work begins and an end date and time when it finishes. Actual minutes are calculated from those timestamps. The engineer is the signed-in user's linked Employee ID with an active maintenance assignment. Each changed part is recorded separately so maintenance history can be searched and filtered by part.
 
 _Avoid_: browser prompts for checklist points, treating a partial draft as completed work, repeating the same checklist point across production units.
 
@@ -53,8 +53,8 @@ on that machine's current Production Session when one exists. The same breakdown
 remains open when the shift session closes unresolved; completing it resolves the
 carried problem and makes the machine eligible for a new Production Session.
 
-A completed breakdown records its actual start and completion times, an engineer
-selected from active maintenance staff across all production units, work done,
+A completed breakdown records its actual start and completion times, the
+signed-in engineer's active Maintenance Employee ID, work done,
 optional remarks, and zero or more separately entered Changed Items.
 One breakdown may contain multiple Changed Items; they are not flattened into a
 single free-text part field.

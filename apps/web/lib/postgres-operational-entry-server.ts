@@ -8,7 +8,10 @@ import {
   createWorkforceRepository,
 } from "@workspace/db"
 import type { NextRequest } from "next/server"
-import { normalizeProductionFloorCode } from "@workspace/db/production-floors"
+import {
+  normalizeProductionFloorCode,
+  parseProductionFloorCode,
+} from "@workspace/db/production-floors"
 
 import { getAuth, readAuthEnvironment } from "@/lib/auth/auth"
 import { operationalEntryPlan } from "@/lib/postgres-operational-entry"
@@ -19,7 +22,7 @@ import { telemetryRequestId } from "./request-telemetry"
 import { productionCapabilityForTab } from "./auth/production-capabilities"
 import { productionMasterCapability } from "./auth/production-master-access"
 import { masterCapability } from "./auth/master-capabilities"
-import { signedInMachinist } from "./auth/signed-in-machinist"
+import { signedInEmployee, signedInMachinist } from "./auth/signed-in-machinist"
 
 const operationalEntryTypes = new Set([
   "parameter_master",
@@ -55,6 +58,12 @@ export class OperationalEntryError extends Error {
 
 export function isPostgresOperationalEntryType(entryType: string) {
   return operationalEntryTypes.has(entryType)
+}
+
+function requiredProductionFloor(value: unknown) {
+  const floor = parseProductionFloorCode(value)
+  if (!floor) throw new OperationalEntryError(400, "Select a production unit.")
+  return floor
 }
 
 async function authorizedActor(request: NextRequest, capability: string) {
@@ -118,11 +127,19 @@ export async function readPostgresHourlyQualityPage(
         organizationId,
         productionFloorCode: floor,
       })
+      const inspector = await signedInEmployee({
+        connectionString: actor.connectionString,
+        organizationId,
+        productionFloorCode: floor,
+        role: "quality",
+        userId: actor.actorUserId,
+      })
       return {
         ...page,
         currentDashboardUser: {
-          displayId: actor.actorUser.email || actor.actorUser.id,
+          displayId: inspector ? `${inspector.code} · ${inspector.name}` : "",
           email: actor.actorUser.email,
+          employeeCode: inspector?.code ?? "",
           name: actor.actorUser.name,
           userId: actor.actorUser.id,
         },
@@ -292,17 +309,56 @@ export async function executePostgresOperationalEntry(
           })
         }
         if (plan.operation === "first-piece") {
+          const inspector = await signedInEmployee({
+            connectionString: actor.connectionString,
+            organizationId,
+            productionFloorCode: requiredProductionFloor(
+              payload.productionFloorCode
+            ),
+            role: "quality",
+            userId: actor.actorUserId,
+          })
+          if (!inspector) {
+            throw new OperationalEntryError(
+              403,
+              "Your Employee ID needs an active Quality assignment in this production unit."
+            )
+          }
           return await repository.recordFirstPieceInspection({
             ...plan.input,
             actorUserId: actor.actorUserId,
+            approvedBy: inspector.name,
             organizationId,
+            payload: {
+              ...plan.input.payload,
+              approvedBy: inspector.name,
+              approvedByEmployeeCode: inspector.code,
+            },
           })
         }
         if (plan.operation === "hourly") {
+          const inspector = await signedInEmployee({
+            connectionString: actor.connectionString,
+            organizationId,
+            productionFloorCode: requiredProductionFloor(
+              payload.productionFloorCode
+            ),
+            role: "quality",
+            userId: actor.actorUserId,
+          })
+          if (!inspector) {
+            throw new OperationalEntryError(
+              403,
+              "Your Employee ID needs an active Quality assignment in this production unit."
+            )
+          }
+          const checkedBy = `${inspector.code} · ${inspector.name}`
           return await repository.recordHourlyCheck({
             ...plan.input,
             actorUserId: actor.actorUserId,
+            checkedBy,
             organizationId,
+            payload: { ...plan.input.payload, checkedBy, checkedByEmployeeCode: inspector.code },
           })
         }
         if (plan.operation === "setup-template") {
@@ -318,7 +374,7 @@ export async function executePostgresOperationalEntry(
           const settingMachinist = await signedInMachinist({
             connectionString: actor.connectionString,
             organizationId,
-            productionFloorCode: normalizeProductionFloorCode(
+            productionFloorCode: requiredProductionFloor(
               payload.productionFloorCode
             ),
             userId: actor.actorUserId,
@@ -373,38 +429,37 @@ export async function executePostgresOperationalEntry(
           })
         }
         let result: { id: string } | undefined
-        const settingPhase = plan.phases.some(
-          (phase) => phase.input.phase === "end"
-        )
-        const settingMachinist = settingPhase
+        const settingMachinist = plan.phases.length
           ? await signedInMachinist({
               connectionString: actor.connectionString,
               organizationId,
-              productionFloorCode: normalizeProductionFloorCode(
+              productionFloorCode: requiredProductionFloor(
                 payload.productionFloorCode
               ),
               userId: actor.actorUserId,
             })
           : null
-        if (settingPhase && !settingMachinist) {
+        if (plan.phases.length && !settingMachinist) {
           throw new OperationalEntryError(
             403,
             "Your signed-in Employee ID must be an active Machinist or Programmer in this production unit."
           )
         }
         for (const phase of plan.phases) {
-          const settingInput =
-            phase.input.phase === "end" && settingMachinist
-              ? {
-                  ...phase.input,
-                  completedBy: settingMachinist.name,
-                  payload: {
-                    ...phase.input.payload,
-                    endedBy: settingMachinist.name,
-                    endedByEmployeeCode: settingMachinist.code,
-                  },
-                }
-              : phase.input
+          const attribution = phase.input.phase === "start"
+            ? {
+                startedBy: settingMachinist?.name,
+                startedByEmployeeCode: settingMachinist?.code,
+              }
+            : {
+                endedBy: settingMachinist?.name,
+                endedByEmployeeCode: settingMachinist?.code,
+              }
+          const settingInput = {
+            ...phase.input,
+            completedBy: settingMachinist?.name,
+            payload: { ...phase.input.payload, ...attribution },
+          }
           result = await repository.saveSetupChecklistSession({
             ...settingInput,
             actorUserId: actor.actorUserId,
@@ -455,11 +510,37 @@ export async function executePostgresOperationalEntry(
           organizationId,
         })
       }
+      const performer = plan.operation === "breakdown-task" ||
+          plan.operation === "breakdown-complete" ||
+          plan.operation === "planned-task"
+        ? await signedInEmployee({
+            connectionString: actor.connectionString,
+            organizationId,
+            role: "maintenance",
+            userId: actor.actorUserId,
+          })
+        : null
+      if (
+        (plan.operation === "breakdown-task" ||
+          plan.operation === "breakdown-complete" ||
+          plan.operation === "planned-task") && !performer
+      ) {
+        throw new OperationalEntryError(
+          403,
+          "Your Employee ID needs an active Maintenance assignment."
+        )
+      }
       if (plan.operation === "breakdown-task") {
         return await repository.completeBreakdownTask({
           ...plan.input,
           actorUserId: actor.actorUserId,
+          completedBy: performer?.name ?? "",
           organizationId,
+          payload: {
+            ...plan.input.payload,
+            completedBy: performer?.name,
+            completedByEmployeeCode: performer?.code,
+          },
         })
       }
       if (plan.operation === "breakdown-start") {
@@ -473,13 +554,25 @@ export async function executePostgresOperationalEntry(
         return await repository.completeBreakdown({
           ...plan.input,
           actorUserId: actor.actorUserId,
+          completedBy: performer?.name ?? "",
           organizationId,
+          payload: {
+            ...plan.input.payload,
+            completedBy: performer?.name,
+            completedByEmployeeCode: performer?.code,
+          },
         })
       }
       return await repository.completeTask({
         ...plan.input,
         actorUserId: actor.actorUserId,
+        completedBy: performer?.name,
         organizationId,
+        payload: {
+          ...plan.input.payload,
+          completedBy: performer?.name,
+          completedByEmployeeCode: performer?.code,
+        },
       })
     },
     {

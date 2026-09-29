@@ -1346,12 +1346,10 @@ function HourlyQualityCheckShell({
   const currentDashboardUserRecord = asRecord(
     hourlyQualityPageRecord.currentDashboardUser
   )
-  const performerId = str(currentDashboardUserRecord.userId)
+  const performerId = str(currentDashboardUserRecord.employeeCode)
   const performerDisplay = str(
     currentDashboardUserRecord.displayId ||
-      currentDashboardUserRecord.email ||
-      currentDashboardUserRecord.name ||
-      performerId
+      "Signed-in Quality employee required"
   )
   const runningRows = useMemo(
     () => asArray(hourlyQualityPageRecord.runningRows),
@@ -2287,14 +2285,12 @@ function SetupChecklistShell({
   const {
     sessionId,
     phase: requestedPhase,
-    selectedMachinist,
     row,
   } = isClientHydrated
     ? setupChecklistQueryFromLocation()
     : {
         sessionId: "",
         phase: "",
-        selectedMachinist: "",
         row: {} as DashboardPayload,
       }
   const settingOnly = productionFloorCode === "cnc"
@@ -2308,8 +2304,7 @@ function SetupChecklistShell({
   const [localChecklistSession, setLocalChecklistSession] = useState<
     DashboardPayload | undefined
   >(undefined)
-  const [doneBy, setDoneBy] = useState("")
-  const effectiveDoneBy = phase === "end" ? signedInMachinist?.name ?? "" : doneBy
+  const effectiveDoneBy = signedInMachinist?.name ?? ""
   const [remark, setRemark] = useState("")
   const [values, setValues] = useState<Record<string, string>>({})
   const [itemRemarks, setItemRemarks] = useState<Record<string, string>>({})
@@ -2364,7 +2359,6 @@ function SetupChecklistShell({
       if (!currentChecklistSession) {
         setValues({})
         setItemRemarks({})
-        setDoneBy(selectedMachinist)
         setRemark("")
         return
       }
@@ -2377,13 +2371,6 @@ function SetupChecklistShell({
       }
       setValues(nextValues)
       setItemRemarks(nextItemRemarks)
-      setDoneBy(
-        str(
-          phase === "start"
-            ? currentChecklistSession.startedBy
-            : currentChecklistSession.endedBy
-        ) || selectedMachinist
-      )
       setRemark(
         str(
           phase === "start"
@@ -2393,7 +2380,7 @@ function SetupChecklistShell({
       )
     }, 0)
     return () => window.clearTimeout(timeout)
-  }, [currentChecklistSession, phase, selectedMachinist])
+  }, [currentChecklistSession, phase])
 
   function updateValue(item: DashboardPayload, value: string) {
     const itemKey = setupChecklistItemKey(item)
@@ -2422,7 +2409,7 @@ function SetupChecklistShell({
       remark,
       completedAt: new Date().toISOString(),
     })
-    const payload = setupChecklistSessionPayload(row, session)
+    const payload = { ...setupChecklistSessionPayload(row, session), phase }
     setIsSaving(true)
     setStatus(null)
     try {
@@ -2492,7 +2479,9 @@ function SetupChecklistShell({
                         <Input
                           value={
                             phase === "start"
-                              ? doneBy
+                              ? signedInMachinist
+                                ? `${signedInMachinist.code} - ${signedInMachinist.name}`
+                                : "Signed-in Machinist or Programmer required"
                               : str(currentChecklistSession?.startedBy)
                           }
                           readOnly
@@ -7761,13 +7750,15 @@ function RouteChangePlannerForm({
 }
 
 function DispatchApprovalActionForm({
-  approverOptions,
+  approver,
   jobCards,
   onSubmit,
+  productionFloorCode,
 }: {
-  approverOptions: EmployeeOption[]
+  approver?: EmployeeOption
   jobCards: string[]
   onSubmit: (body: Record<string, unknown>) => void | Promise<void>
+  productionFloorCode: ProductionFloorCode
 }) {
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -7779,8 +7770,9 @@ function DispatchApprovalActionForm({
     setIsSubmitting(true)
     try {
       await onSubmit({
-        approvedBy: String(formData.get("approvedBy") ?? "").trim(),
+        approvedBy: approver?.name ?? "",
         jcNo: String(formData.get("jcNo") ?? "").trim(),
+        productionFloorCode,
         remark: String(formData.get("remark") ?? "").trim(),
       })
       form.reset()
@@ -7823,22 +7815,12 @@ function DispatchApprovalActionForm({
             </SearchableSelect>
           </Field>
           <Field label="Approved By">
-            <SearchableSelect
-              className="h-9 rounded-md border bg-background px-3 text-sm"
-              name="approvedBy"
-              required
-            >
-              <option value="">
-                {approverOptions.length
-                  ? "Select Planner Or Shop Floor Employee"
-                  : "No Eligible Approvers In This Production Unit"}
-              </option>
-              {approverOptions.map((employee) => (
-                <option key={employee.code} value={employee.name}>
-                  {employee.code} - {employee.name}
-                </option>
-              ))}
-            </SearchableSelect>
+            <Input
+              readOnly
+              value={approver
+                ? `${approver.code} - ${approver.name}`
+                : "Signed-in Planner or Shop Floor employee required"}
+            />
           </Field>
           <Field label="Dispatch Remark">
             <Input name="remark" placeholder="Optional" />
@@ -7847,7 +7829,7 @@ function DispatchApprovalActionForm({
         <Button
           className="w-fit"
           type="submit"
-          disabled={!jobCards.length || !approverOptions.length || isSubmitting}
+          disabled={!jobCards.length || !approver || isSubmitting}
         >
           <Wrench className="size-4" />
           {isSubmitting ? "Processing..." : "Approve dispatch"}
@@ -7869,7 +7851,7 @@ function JobCardsPanel({
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
   openMasterReadiness: () => void
 }) {
-  const { dispatchApproverOptions } =
+  const { signedInDispatchApprover } =
     useProductionEmployeeDirectory(productionFloorCode)
   const plannedRows = useMemo(
     () => asArray(productionControl.machinePlanDetailRows),
@@ -7901,9 +7883,10 @@ function JobCardsPanel({
         </CardHeader>
         <CardContent className="max-w-2xl">
           <DispatchApprovalActionForm
-            approverOptions={dispatchApproverOptions}
+            approver={signedInDispatchApprover}
             jobCards={readyJobCards}
             onSubmit={(body) => submitAction("dispatch-approval", body)}
+            productionFloorCode={productionFloorCode}
           />
         </CardContent>
       </SectionCard>
@@ -8013,9 +7996,10 @@ function useProductionEmployeeDirectory(
     [floor, rows]
   )
   const currentEmployeeCode = str(employeeMasterPage.data?.currentEmployeeCode)
-  const signedInMachinist = machinistOptions.find(
+  const signedInOption = (options: EmployeeOption[]) => options.find(
     (employee) => employee.code.toLowerCase() === currentEmployeeCode.toLowerCase()
   )
+  const signedInMachinist = signedInOption(machinistOptions)
   const qualityOptions = useMemo(
     () => productionQualityOptions(rows, floor),
     [floor, rows]
@@ -8035,10 +8019,12 @@ function useProductionEmployeeDirectory(
 
   return {
     error: employeeMasterPage.error,
-    dispatchApproverOptions,
     loaded: employeeMasterPage.data !== undefined,
     machinistOptions,
     signedInMachinist,
+    signedInQuality: signedInOption(qualityOptions),
+    signedInShopFloor: signedInOption(shopFloorOptions),
+    signedInDispatchApprover: signedInOption(dispatchApproverOptions),
     qualityOptions,
     shopFloorOptions,
     workerOptions,
@@ -8052,7 +8038,7 @@ function ShopFloorStatusPanel({
   productionControl: DashboardPayload
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
 }) {
-  const { machinistOptions, qualityOptions, shopFloorOptions, signedInMachinist, workerOptions } =
+  const { signedInMachinist, signedInQuality, signedInShopFloor, workerOptions } =
     useProductionEmployeeDirectory()
   const productionFloorCode = productionFloorFromLocation()
   const productionSessionsPage = usePostgresOperationalPage(
@@ -8360,20 +8346,19 @@ function ShopFloorStatusPanel({
                       ) : (
                         <ShopFloorRowAction
                           next={row.actionNext}
-                          machinistOptions={machinistOptions}
                           signedInMachinist={signedInMachinist}
+                          signedInQuality={signedInQuality}
+                          signedInShopFloor={signedInShopFloor}
                           onSaveStage={saveStage}
                           onSaveSetupChecklistSession={
                             saveSetupChecklistSession
                           }
-                          qualityOptions={qualityOptions}
                           setupChecklistMasters={asArray(
                             productionControl.setupChecklistMasterRows
                           )}
                           setupChecklistSessions={asArray(
                             productionControl.setupChecklistSessionRows
                           )}
-                          shopFloorOptions={shopFloorOptions}
                           workerOptions={workerOptions}
                         />
                       )}
@@ -8411,7 +8396,7 @@ function RoleTaskPanel({
   onStartFirstPieceInspection?: (row: DashboardPayload) => void
   role: RoleTaskKind
 }) {
-  const { machinistOptions, qualityOptions, shopFloorOptions, signedInMachinist, workerOptions } =
+  const { signedInMachinist, signedInQuality, signedInShopFloor, workerOptions } =
     useProductionEmployeeDirectory()
   const copy = enableFirstPieceInspection
     ? {
@@ -8714,10 +8699,9 @@ function RoleTaskPanel({
                             setupChecklistSessions={asArray(
                               productionControl.setupChecklistSessionRows
                             )}
-                            machinistOptions={machinistOptions}
                             signedInMachinist={signedInMachinist}
-                            qualityOptions={qualityOptions}
-                            shopFloorOptions={shopFloorOptions}
+                            signedInQuality={signedInQuality}
+                            signedInShopFloor={signedInShopFloor}
                             workerOptions={workerOptions}
                             onSaveSetupChecklistSession={
                               saveSetupChecklistSession
@@ -8767,7 +8751,7 @@ function FirstPieceInspectionPanel({
   openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void
   onTaskComplete: (row: DashboardPayload) => void
 }) {
-  const { qualityOptions } = useProductionEmployeeDirectory()
+  const { signedInQuality } = useProductionEmployeeDirectory()
   const masters = combinedQualityInspectionMasterRows(productionControl)
   const [expandedTaskKey, setExpandedTaskKey] = useState<string | null>(null)
   const defaultExpandedTaskKey = tasks[0] ? shopFloorPlanKey(tasks[0]) : ""
@@ -8922,7 +8906,7 @@ function FirstPieceInspectionPanel({
                                 onSaveStage={saveStage}
                                 onSaveFirstPieceReport={saveFirstPieceReport}
                                 inspectionMasters={masters}
-                                qualityOptions={qualityOptions}
+                                signedInQuality={signedInQuality}
                                 openDataEntry={openDataEntry}
                               />
                             </TableCell>
@@ -9566,10 +9550,9 @@ function ShopFloorRowAction({
   inspectionMasters = [],
   setupChecklistMasters = [],
   setupChecklistSessions = [],
-  machinistOptions = [],
   signedInMachinist,
-  qualityOptions = [],
-  shopFloorOptions = [],
+  signedInQuality,
+  signedInShopFloor,
   workerOptions = [],
   openDataEntry,
 }: {
@@ -9590,17 +9573,15 @@ function ShopFloorRowAction({
   inspectionMasters?: DashboardPayload[]
   setupChecklistMasters?: DashboardPayload[]
   setupChecklistSessions?: DashboardPayload[]
-  machinistOptions?: Array<{ code: string; name: string }>
   signedInMachinist?: { code: string; name: string }
-  qualityOptions?: Array<{ code: string; name: string }>
-  shopFloorOptions?: Array<{ code: string; name: string }>
+  signedInQuality?: { code: string; name: string }
+  signedInShopFloor?: { code: string; name: string }
   workerOptions?: Array<{ code: string; name: string }>
   openDataEntry?: (
     entryType: string,
     defaults?: Record<string, unknown>
   ) => void
 }) {
-  const [doneBy, setDoneBy] = useState("")
   const [worker, setWorker] = useState("")
   const [remark, setRemark] = useState("")
   const [inspectionReadings, setInspectionReadings] = useState<
@@ -9655,23 +9636,14 @@ function ShopFloorRowAction({
     checklistPhase && onSaveSetupChecklistSession
   )
   const needsWorkerSelection = nextStage?.id === "operator_started"
-  const doneByOptions =
+  const performer =
     nextStage?.id === "raw_material_at_machine"
-      ? shopFloorOptions
+      ? signedInShopFloor
       : nextStage?.id === "quality_approval"
-        ? qualityOptions
-        : machinistOptions
-  const doneByRole =
-    nextStage?.id === "raw_material_at_machine"
-      ? "Shop Floor Employee"
-      : nextStage?.id === "quality_approval"
-        ? "Quality Employee"
-        : "Machinist"
-  const effectiveDoneBy =
-    nextStage?.id === "setting" ? signedInMachinist?.name ?? "" : doneBy
-  const hasEligibleDoneBy = nextStage?.id === "setting"
-    ? Boolean(signedInMachinist)
-    : doneByOptions.some((employee) => employee.name === doneBy)
+        ? signedInQuality
+        : signedInMachinist
+  const effectiveDoneBy = performer?.name ?? ""
+  const hasEligibleDoneBy = Boolean(performer)
   const hasEligibleWorker = workerOptions.some(
     (employee) => employee.name === worker
   )
@@ -9699,19 +9671,6 @@ function ShopFloorRowAction({
       : currentChecklistSession
         ? "Saved progress"
         : "Checklist pending"
-  useEffect(() => {
-    if (!currentChecklistSession || !checklistPhase) return
-    const savedMachinist = str(
-      checklistPhase === "start"
-        ? currentChecklistSession.startedBy
-        : currentChecklistSession.endedBy
-    )
-    if (!savedMachinist) return
-    const timeout = window.setTimeout(() => {
-      setDoneBy((current) => current || savedMachinist)
-    }, 0)
-    return () => window.clearTimeout(timeout)
-  }, [checklistPhase, currentChecklistSession])
   const firstPieceMasters = useMemo(
     () =>
       next && nextStage?.id === "quality_approval"
@@ -9738,7 +9697,6 @@ function ShopFloorRowAction({
         return
       }
       const draft = readStoredFirstPieceInspectionDraft(firstPieceDraftKey)
-      setDoneBy(draft?.approvedBy ?? "")
       setRemark(draft?.remark ?? "")
       setInspectionReadings(draft?.readings ?? {})
       setLoadedFirstPieceDraftKey(firstPieceDraftKey)
@@ -9750,12 +9708,12 @@ function ShopFloorRowAction({
     if (!firstPieceDraftKey || loadedFirstPieceDraftKey !== firstPieceDraftKey)
       return
     writeStoredFirstPieceInspectionDraft(firstPieceDraftKey, {
-      approvedBy: doneBy,
+      approvedBy: effectiveDoneBy,
       readings: inspectionReadings,
       remark,
     })
   }, [
-    doneBy,
+    effectiveDoneBy,
     firstPieceDraftKey,
     inspectionReadings,
     loadedFirstPieceDraftKey,
@@ -9815,7 +9773,7 @@ function ShopFloorRowAction({
       ) {
         await onSaveFirstPieceReport(next, {
           ...firstPieceInspection,
-          approvedBy: doneBy,
+          approvedBy: effectiveDoneBy,
           remark,
         })
       }
@@ -9831,7 +9789,6 @@ function ShopFloorRowAction({
       })
       if (firstPieceDraftKey)
         removeStoredFirstPieceInspectionDraft(firstPieceDraftKey)
-      setDoneBy("")
       setWorker("")
       setRemark("")
       setInspectionReadings({})
@@ -9876,33 +9833,14 @@ function ShopFloorRowAction({
         <>
           <div className="text-sm font-medium">{nextStage.label}</div>
           <div className="grid gap-2 sm:grid-cols-2">
-            {nextStage.id === "setting" ? (
-              <Input
-                aria-label="Setting done by"
-                className="h-8"
-                readOnly
-                value={signedInMachinist
-                  ? `${signedInMachinist.code} - ${signedInMachinist.name}`
-                  : "Signed-in Machinist or Programmer required"}
-              />
-            ) : (
-              <SearchableSelect
-                className="h-8 rounded-md border bg-background px-2 text-sm"
-                value={doneBy}
-                onChange={(event) => setDoneBy(event.target.value)}
-              >
-                <option value="">
-                  {doneByOptions.length
-                    ? `Select ${doneByRole}`
-                    : `No ${doneByRole}s In This Production Unit`}
-                </option>
-                {doneByOptions.map((employee) => (
-                  <option key={employee.code} value={employee.name}>
-                    {employee.code} - {employee.name}
-                  </option>
-                ))}
-              </SearchableSelect>
-            )}
+            <Input
+              aria-label={`${nextStage.label} done by`}
+              className="h-8"
+              readOnly
+              value={performer
+                ? `${performer.code} - ${performer.name}`
+                : "Signed-in employee assignment required"}
+            />
             {nextStage.id === "operator_started" ? (
               <SearchableSelect
                 className="h-8 rounded-md border bg-background px-2 text-sm"
@@ -12776,7 +12714,6 @@ function MaintenancePanel({
   const [checklistSteps, setChecklistSteps] = useState<
     MaintenanceChecklistStep[]
   >([])
-  const [completedBy, setCompletedBy] = useState("")
   const [startedAt, setStartedAt] = useState("")
   const [endedAt, setEndedAt] = useState("")
   const [plannedChangedItems, setPlannedChangedItems] = useState([""])
@@ -12800,6 +12737,10 @@ function MaintenancePanel({
   const engineerOptions = useMemo(
     () => maintenanceEmployeeOptions(asArray(employeeMasterPage.data?.rows)),
     [employeeMasterPage.data?.rows]
+  )
+  const currentEmployeeCode = str(employeeMasterPage.data?.currentEmployeeCode)
+  const signedInEngineer = engineerOptions.find(
+    (option) => option.code.toLowerCase() === currentEmployeeCode.toLowerCase()
   )
   const checklistRows = asArray(
     productionControl.maintenanceChecklistMasterRows
@@ -12912,7 +12853,6 @@ function MaintenancePanel({
         draft?.checklistSteps
       )
     )
-    setCompletedBy(str(draft?.completedByEmployeeCode || draft?.completedBy))
     setStartedAt(
       draft?.startedAt
         ? istDateTimeInputValue(str(draft.startedAt))
@@ -12958,13 +12898,11 @@ function MaintenancePanel({
   async function saveMaintenanceChecklist(complete: boolean) {
     const row = selectedSchedule
     if (!row || isSavingChecklist) return
-    const engineer = engineerOptions.find(
-      (option) => option.code === completedBy || option.name === completedBy
-    )
-    if (complete && !engineer) {
+    const engineer = signedInEngineer
+    if (!engineer) {
       setChecklistStatus({
         tone: "destructive",
-        message: "Select the maintenance engineer.",
+        message: "Your signed-in Employee ID needs an active Maintenance assignment.",
       })
       return
     }
@@ -13129,9 +13067,8 @@ function MaintenancePanel({
     const taskId = str(formData.get("taskId"))
     const completedAt = istDateTimeInputToIso(str(formData.get("completedAt")))
     if (!completedAt) throw new Error("Select a valid completion time.")
-    const engineer = engineerOptions.find(
-      (option) => option.code === str(formData.get("completedByEmployeeCode"))
-    )
+    const engineer = signedInEngineer
+    if (!engineer) throw new Error("Your signed-in Employee ID needs an active Maintenance assignment.")
     const payload = {
       breakdownAction: "complete",
       changedItems: changedItems.map(str).filter(Boolean),
@@ -13278,31 +13215,13 @@ function MaintenancePanel({
                 <Label htmlFor="maintenance-completed-by">
                   Maintenance engineer
                 </Label>
-                <SearchableSelect
+                <Input
                   id="maintenance-completed-by"
-                  disabled={isSavingChecklist}
-                  value={
-                    engineerOptions.find(
-                      (option) =>
-                        option.code === completedBy || option.name === completedBy
-                    )?.code ?? completedBy
-                  }
-                  onChange={(event) => setCompletedBy(event.target.value)}
-                >
-                  <option value="">Select engineer</option>
-                  {completedBy &&
-                  !engineerOptions.some(
-                    (option) =>
-                      option.code === completedBy || option.name === completedBy
-                  ) ? (
-                    <option value={completedBy}>{completedBy}</option>
-                  ) : null}
-                  {engineerOptions.map((option) => (
-                    <option key={option.code} value={option.code}>
-                      {option.name} ({option.code})
-                    </option>
-                  ))}
-                </SearchableSelect>
+                  readOnly
+                  value={signedInEngineer
+                    ? `${signedInEngineer.code} - ${signedInEngineer.name}`
+                    : "Signed-in Maintenance employee required"}
+                />
               </div>
               <div className="grid gap-1.5">
                 <Label htmlFor="maintenance-started-at">Start date and time</Label>
@@ -13400,14 +13319,14 @@ function MaintenancePanel({
               <Button
                 type="button"
                 variant="outline"
-                disabled={isSavingChecklist}
+                disabled={isSavingChecklist || !signedInEngineer}
                 onClick={() => void saveMaintenanceChecklist(false)}
               >
                 Save Progress
               </Button>
               <Button
                 type="button"
-                disabled={isSavingChecklist || !checklistSteps.length}
+                disabled={isSavingChecklist || !signedInEngineer || !checklistSteps.length}
                 onClick={() => void saveMaintenanceChecklist(true)}
               >
                 <CheckCircle2 className="size-4" /> Complete Maintenance
@@ -13771,18 +13690,12 @@ function MaintenancePanel({
                   />
                 </Field>
                 <Field label="Completed By">
-                  <SearchableSelect
-                    className="h-9 rounded-md border bg-background px-3 text-sm"
-                    name="completedByEmployeeCode"
-                    required
-                  >
-                    <option value="">Select maintenance engineer</option>
-                    {engineerOptions.map((option) => (
-                      <option key={option.code} value={option.code}>
-                        {option.name} ({option.code})
-                      </option>
-                    ))}
-                  </SearchableSelect>
+                  <Input
+                    readOnly
+                    value={signedInEngineer
+                      ? `${signedInEngineer.code} - ${signedInEngineer.name}`
+                      : "Signed-in Maintenance employee required"}
+                  />
                 </Field>
               </div>
               <Field label="Work Done">
@@ -13837,7 +13750,7 @@ function MaintenancePanel({
                 <Input name="remark" />
               </Field>
               <div className="flex flex-wrap gap-2">
-                <Button type="submit">
+                <Button disabled={!signedInEngineer} type="submit">
                   <CheckCircle2 className="size-4" /> Complete Breakdown
                 </Button>
                 <Button
