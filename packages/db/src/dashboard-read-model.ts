@@ -58,6 +58,11 @@ type FinishBaselineRow = {
   work_order_source_payload: JsonRecord | null
 }
 
+type CurrentShopFloorStateRow = {
+  production_floor_code: ProductionFloorCode
+  payload: JsonRecord
+}
+
 export type CanonicalDashboardSource = {
   allDataEntries: ReturnType<typeof dataEntryRecord>[]
   attendanceRecords: JsonRecord[]
@@ -652,6 +657,19 @@ export async function buildCanonicalDashboardReadModel(
     client,
     context.organizationId
   )
+  const currentShopFloorStates = await client.query<CurrentShopFloorStateRow>(
+    `SELECT floor.code AS production_floor_code,
+      state.source_payload || jsonb_build_object('stage', state.stage) ||
+        CASE WHEN state.completed_at IS NOT NULL
+          THEN jsonb_build_object('completedAt', state.completed_at)
+          ELSE '{}'::jsonb END AS payload
+     FROM manufacturing.shop_floor_setup_state state
+     JOIN catalog.machines machine ON machine.id = state.machine_id
+     JOIN manufacturing.production_floors floor
+       ON floor.id = machine.production_floor_id
+     WHERE state.organization_id = $1 AND state.source_payload IS NOT NULL`,
+    [context.organizationId]
+  )
   const correctionTargets = dataEntryCorrectionTargetsWithWorkflowCascade(
     source.allDataEntries,
     activeCorrectionTargetKeys(source.corrections as CorrectionTargetRow[]),
@@ -807,6 +825,9 @@ export async function buildCanonicalDashboardReadModel(
       includeToolFixtureNumbers:
         floorCode === "conventional" || floorCode === "conventional-02",
       productionFloorCode: floorCode,
+      currentShopFloorStatusRows: currentShopFloorStates.rows
+        .filter((row) => row.production_floor_code === floorCode)
+        .map((row) => row.payload),
       attendanceRecords: floorRows(
         corrected(source.attendanceRecords, "attendanceRecords"),
         floorCode

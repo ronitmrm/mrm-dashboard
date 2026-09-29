@@ -122,6 +122,9 @@ a later session.
 When a setup runs on parallel machines, each machine keeps its own Shop Floor
 setup state. Starting or finishing work on one machine does not move or finish
 the other machine's setup state.
+Shop Floor Status reads the current saved setup state. A historical stage event
+with a later effective time must not reopen a setup completed through a
+closed-session correction. The session timeline shows the selected close reason.
 
 A Counter session requires its end counter before it can close. A Weight session
 may close after its work ends even when weighing is not yet practical. It then

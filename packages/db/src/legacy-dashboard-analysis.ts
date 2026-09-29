@@ -23,6 +23,7 @@ export type LegacyDashboardInput = {
   attendanceRecords?: AttendanceRecord[];
   trainingRecords?: TrainingRecord[];
   dataEntries?: DataEntry[];
+  currentShopFloorStatusRows?: Array<Record<string, unknown>>;
   routeSelections?: ActionRow[];
   plannerPriorities?: ActionRow[];
   machineConstraints?: ActionRow[];
@@ -332,7 +333,7 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
   const maintenanceScheduleRows = latestEntryRowsByKey(entryRows(byType, "maintenance_schedule"), maintenanceScheduleEntryKey);
   const maintenanceTaskRows = latestEntryRowsByKey(entryRows(byType, "maintenance_task"), maintenanceTaskEntryKey);
   const shopFloorStatusRows = singleActiveShopFloorStatusRows(
-    latestEntryRowsByKey(entryRows(byType, "shop_floor_status"), shopFloorStatusEntryKey),
+    input.currentShopFloorStatusRows ?? latestEntryRowsByKey(entryRows(byType, "shop_floor_status"), shopFloorStatusEntryKey),
   );
   const firstPieceInspectionMasterRows = entryRows(byType, "first_piece_inspection_master");
   const firstPieceInspectionReportRows = latestEntryRowsByKey(entryRows(byType, "first_piece_inspection_report"), firstPieceReportEntryKey);
