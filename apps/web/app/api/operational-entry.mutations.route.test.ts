@@ -130,7 +130,7 @@ describe("production entry mutation API authorization", () => {
   beforeEach(() => {
     for (const mock of Object.values(dependencies)) mock.mockReset()
     vi.spyOn(console, "info").mockImplementation(() => undefined)
-    dependencies.getSession.mockResolvedValue({ user: { id: "entry-writer" } })
+    dependencies.getSession.mockResolvedValue({ user: { id: "entry-writer", name: "System Administrator" } })
     dependencies.listAllGrantedCapabilities.mockResolvedValue([])
     dependencies.organizationIdForCode.mockResolvedValue("organization-1")
     dependencies.upsertRawMaterialReceipt.mockResolvedValue({ ok: true })
@@ -246,8 +246,34 @@ describe("production entry mutation API authorization", () => {
     dependencies.startProductionSession.mockClear()
     expect((await post("data-entry", body)).status).toBe(400)
     expect(dependencies.startProductionSession).not.toHaveBeenCalled()
+  })
 
+  it("uses the signed-in account name when an authorized starter has no Employee link", async () => {
+    dependencies.listAllGrantedCapabilities.mockResolvedValue([
+      "operations.production.write",
+      "operations.floors.cnc.production_sessions.production_recording.write",
+    ])
     dependencies.signedInEmployee.mockResolvedValue(null)
+    dependencies.activeProductionWorker.mockResolvedValue({ code: "WORK-7", name: "Worker Seven" })
+    dependencies.startProductionSession.mockResolvedValue({ id: "session-1" })
+    const body = {
+      entryType: "production_session_start", productionFloorCode: "cnc",
+      payload: { productionFloorCode: "cnc", machine: "CNC-9", jobCard: "P2046", setupNo: "1", operatorCode: "WORK-7", startedBy: "Another Employee" },
+    }
+
+    expect((await post("data-entry", body)).status).toBe(200)
+    expect(dependencies.startProductionSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorUserId: "entry-writer",
+        operatorCode: "WORK-7",
+        sourcePayload: expect.objectContaining({
+          startedBy: "System Administrator", startedByEmployeeCode: null,
+        }),
+      })
+    )
+
+    dependencies.getSession.mockResolvedValue({ user: { id: "entry-writer", name: "" } })
+    dependencies.startProductionSession.mockClear()
     expect((await post("data-entry", body)).status).toBe(403)
     expect(dependencies.startProductionSession).not.toHaveBeenCalled()
   })

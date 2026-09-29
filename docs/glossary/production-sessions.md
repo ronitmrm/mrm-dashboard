@@ -68,10 +68,11 @@ Machine, Pre Setting, Setting, Quality Approval, Machine Start, first-piece
 inspection, and dispatch approval. A user cannot record these actions for another
 employee. Dispatch approval accepts active Planner or Shop Floor assignments.
 Eligible department Assistants, HODs and Managers may perform these tasks.
-Any user with Production Sessions recording permission for the unit and an
-active linked Employee ID may start a Production Session. The starter's own ID
-is recorded automatically. They select its operator from active Shop Floor
-Workers in that production unit.
+Any user with Production Sessions recording permission for the unit may start a
+Production Session. The starter is filled from their active linked Employee ID
+and name when available; an authorized account without an Employee link uses
+its signed-in account name and is audited by user ID. They select the operator
+from active Shop Floor Workers in that production unit.
 The starter and assigned operator are recorded separately.
 Session close, corrections, and downtime display that employee's ID; a user with
 one eligible department has it selected automatically, while a user with multiple

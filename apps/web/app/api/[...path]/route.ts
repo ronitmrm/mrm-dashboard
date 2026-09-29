@@ -614,7 +614,7 @@ async function authenticatedProductionContext(
   const repository = createProductionShopFloorRepository({ connectionString })
   try {
     const organizationId = await repository.organizationIdForCode("MRMPL")
-    return { actorUserId: session.user.id, organizationId, repository }
+    return { actorUserId: session.user.id, actorUserName: session.user.name, organizationId, repository }
   } catch (error) {
     await repository.close()
     throw error
@@ -1542,7 +1542,7 @@ async function post(request: NextRequest, context: RouteContext) {
         const result = await withProductionRepository(
           request,
           "operations.production.write",
-          async ({ actorUserId, organizationId, repository }) => {
+          async ({ actorUserId, actorUserName, organizationId, repository }) => {
             const floor = requiredProductionFloor(payload.productionFloorCode)
             const starter = await signedInEmployee({
               connectionString: readAuthEnvironment().connectionString,
@@ -1550,9 +1550,8 @@ async function post(request: NextRequest, context: RouteContext) {
               role: "authorized_staff",
               userId: actorUserId,
             })
-            if (!starter) {
-              throw new RouteError(403, "Your account needs an active linked Employee ID to start a production session.")
-            }
+            const starterName = starter?.name ?? text(actorUserName)
+            if (!starterName) throw new RouteError(403, "Your account needs a name to start a production session.")
             const operator = await activeProductionWorker({
               connectionString: readAuthEnvironment().connectionString,
               employeeCode: text(payload.operatorCode || payload.operatorId),
@@ -1580,8 +1579,8 @@ async function post(request: NextRequest, context: RouteContext) {
                 ...payload,
                 operatorCode: operator.code,
                 operatorName: operator.name,
-                startedBy: starter.name,
-                startedByEmployeeCode: starter.code,
+                startedBy: starterName,
+                startedByEmployeeCode: starter?.code ?? null,
               },
               startCount: optionalNumeric(payload.startCount),
               startedAt: text(payload.startedAt),

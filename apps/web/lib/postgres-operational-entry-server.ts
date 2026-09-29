@@ -195,6 +195,7 @@ export async function readPostgresEmployeeMaster(request: NextRequest) {
         ])
         return {
           currentEmployeeCode,
+          currentUserName: actor.actorUser.name,
           rows: sharedEmployeeMasterRows(posts),
         }
       } finally {
