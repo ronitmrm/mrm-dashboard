@@ -340,3 +340,34 @@ test("does not backfill an idle machine during its Shift All unavailable window"
     vi.useRealTimers()
   }
 })
+
+test("does not replan a completed setup after a later machine breakdown", () => {
+  vi.useFakeTimers()
+  vi.setSystemTime(new Date("2026-09-29T06:00:00Z"))
+  const createdAt = "2026-09-29T05:00:00Z"
+  const entry = (entryType: string, payload: Record<string, unknown>) => ({ entryType, payload, createdAt })
+
+  try {
+    const control = buildLegacyDashboardSnapshot({
+      workbookName: "PostgreSQL",
+      productionFloorCode: "cnc",
+      productionEntries: [{ jobCard: "P1497", partCode: "M909B", setupNo: "2", machine: "CNC-14", machineType: "CNC", operatorId: "OP1", prodDate: "2026-09-24", outputQty: 693, actualQty: 693, rejectQty: 0, targetQty: 705 }],
+      dataEntries: [
+        entry("work_order", { jcNo: "P1497", partCode: "M909B", optionNumber: "1", orderPcs: 705, rmInwardDate: "2026-09-22", rmInwardKg: 1 }),
+        entry("route", { partNo: "M909B", optionNumber: "1", setupNo: "2", machineType: "CNC", machineFamily: "JT" }),
+        entry("cycle", { partNo: "M909B", optionNumber: "1", setupNo: "2", cycleTime: 82 }),
+        entry("machine_master", { machineNo: "CNC-14", machineType: "CNC", machineFamily: "JT", status: "Active" }),
+        entry("machine_master", { machineNo: "CNC-3", machineType: "CNC", machineFamily: "JT", status: "Active" }),
+        entry("shop_floor_status", { jcNo: "P1497", partCode: "M909B", optionNumber: "1", setupNo: "2", machine: "CNC-14", stage: "item_complete", completedAt: "2026-09-24T21:05:00Z" }),
+      ],
+      machineConstraints: [{ machineNo: "CNC-14", unavailableFrom: "2026-09-28", unavailableTo: "2026-10-03", rescheduleAction: "shift_all", status: "Active", createdAt, interruptedSetups: [{ jobCardNumber: "P1497", setupNumber: 2, machineNumber: "CNC-14", finishedQuantity: 0 }], queuePlacements: [{ targetJobCardNumber: "P1497", targetPartCode: "M909B", targetSetupNumber: 2, targetSourceMachineNumber: "CNC-14", targetMachineNumber: "CNC-3" }] }],
+    }).productionControl!
+    if (!("machinePlanDetailRows" in control)) throw new Error("Missing plan")
+
+    expect(control.machinePlanDetailRows.filter((row) => row.jcNo === "P1497" && row.setupNo === "2").map((row) => ({ machine: row.machine, stage: row.shopFloorStage, good: row.rawActualQty }))).toEqual([
+      { machine: "CNC-14", stage: "item_complete", good: 693 },
+    ])
+  } finally {
+    vi.useRealTimers()
+  }
+})

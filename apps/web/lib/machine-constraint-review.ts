@@ -27,6 +27,7 @@ export function machineConstraintAffectedRows(
 
   const machineRows = rows.filter(
     (row) => machineKey(machineValue(row)) === targetMachine
+      && machineKey(rowText(row, "shopFloorStage", "stage")) !== "item_complete"
   );
   if (machineKey(issue.rescheduleAction) === "shift_all") {
     return machineRows.sort(machinePlanSort);

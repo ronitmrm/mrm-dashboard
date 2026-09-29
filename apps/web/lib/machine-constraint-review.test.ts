@@ -6,7 +6,7 @@ import {
 } from "./machine-constraint-review";
 
 describe("machineConstraintAffectedRows", () => {
-  it("selects the full machine plan when the planner chooses Shift All", () => {
+  it("selects unfinished machine rows when the planner chooses Shift All", () => {
     const affected = machineConstraintAffectedRows(
       [
         {
@@ -20,6 +20,13 @@ describe("machineConstraintAffectedRows", () => {
           machine: "CNC-11",
           plannedProductionStartDate: "26-Sept-26",
           plannedProductionEndDate: "28-Sept-26",
+        },
+        {
+          jcNo: "P1497",
+          machine: "CNC-11",
+          shopFloorStage: "item_complete",
+          plannedProductionStartDate: "24-Sept-26",
+          plannedProductionEndDate: "24-Sept-26",
         },
         {
           jcNo: "P9999",

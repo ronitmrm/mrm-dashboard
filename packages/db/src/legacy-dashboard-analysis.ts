@@ -3127,6 +3127,14 @@ function machinePlanDetails(
         lockedMachines: interruptedLockedMachines,
       }) : undefined;
       const recordedSetupInterruption = planOverrideInterruption ?? breakdownInterruption;
+      const interruptedShopFloorStatus = recordedSetupInterruption ? findShopFloorStatus(shopFloorStatusBySetup, {
+        jcNo: rowText(row, "jcNo"),
+        partCode,
+        optionNumber,
+        setupNo: displaySetupNo,
+        machine: recordedSetupInterruption.machine,
+      }) : undefined;
+      const interruptedSetupComplete = normalizeSetupLifecycleStage(rowText(interruptedShopFloorStatus ?? {}, "stage")) === "item_complete";
       const interruptionActual = recordedSetupInterruption
         ? rawBySetup.get(productionSetupKey({
             jcNo: rowText(row, "jcNo"),
@@ -3140,7 +3148,7 @@ function machinePlanDetails(
             machine: recordedSetupInterruption.machine,
           }))
         : undefined;
-      const setupInterruption = recordedSetupInterruption
+      const setupInterruption = recordedSetupInterruption && !interruptedSetupComplete
         ? {
             ...recordedSetupInterruption,
             finishedQty: Math.max(
