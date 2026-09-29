@@ -47,12 +47,6 @@ export async function signedInEmployee({
       recruitment.listPosts(organizationId),
     ])
     if (!employeeCode) return null
-    if (role === "authorized_staff") {
-      const post = posts.find((candidate) =>
-        candidate.employeeCode?.trim().toLowerCase() === employeeCode.trim().toLowerCase()
-      )
-      return post?.employeeName ? { code: employeeCode, name: post.employeeName } : null
-    }
     const rows = sharedEmployeeMasterRows(posts)
     if (role === "authorized_staff") return activeEmployeeForCode(rows, employeeCode)
     const options = role === "maintenance"
