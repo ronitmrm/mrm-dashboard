@@ -95,13 +95,13 @@ CNC-01 has 22.5 productive machine hours per working day: three shifts of
 Finish estimates retain fractional working days, shown as productive hours
 into the finish date, rather than invented wall-clock shift times. Machine
 queue reservations still use whole dates. Fridays and Planning Calendar
-holidays are excluded, and availability and WIP handoff constraints still apply.
+holidays are excluded, and material and WIP availability constraints still apply.
 
 Shop Floor Status shows completion of the setup's assigned quantity on that
 machine. Job Card Current Estimated Finish includes all remaining route setups,
 using the same cycle-based supply and remaining-work calculation. Forecast-only
 downstream work does not reserve a machine or bypass actual-WIP readiness, and
-the whole-job finish cannot precede an upstream setup and its handoff buffer.
+the whole-job finish cannot precede the upstream supply needed by that setup.
 The immutable RM-receipt Planned Finish Date remains historical.
 
 If an upstream setup is Item Complete below the customer order quantity, its
@@ -130,7 +130,8 @@ checks still decide whether that machine is feasible.
 An Item Complete setup releases its machine on its recorded completion date;
 it does not reserve another full working day. Ready matching-setup work across
 Job Cards can retain that machine's settings before a newly available next
-route step. Actual-WIP handoff buffers still apply to the next route step.
+route step. Recorded WIP can release the next route step on the same working date
+when its pooled quantity is sufficient and the machine and tooling are available.
 
 Useful overlap means a feasible separate-machine start before the preceding
 setup finishes that improves completion by at least one working day, the
