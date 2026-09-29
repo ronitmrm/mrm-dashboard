@@ -83,7 +83,7 @@ type ProductionSessionEndReason =
   | "job_change"
   | "manual_stop"
 
-type ProductionEntryRole = "quality" | "shop_floor" | "machinist"
+type ProductionEntryRole = "quality" | "shop_floor" | "machinist" | "authorized_staff"
 
 const stageAliases: Record<string, string> = {
   item_complete: "item_complete",
@@ -237,6 +237,7 @@ function productionSessionEndReason(value: string) {
 
 function productionEntryRole(value: string) {
   const roles = new Set<ProductionEntryRole>([
+    "authorized_staff",
     "quality",
     "shop_floor",
     "machinist",

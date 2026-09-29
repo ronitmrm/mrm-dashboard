@@ -74,9 +74,13 @@ and name when available; an authorized account without an Employee link uses
 its signed-in account name and is audited by user ID. They select the operator
 from active Shop Floor Workers in that production unit.
 The starter and assigned operator are recorded separately.
-Session close, corrections, and downtime display that employee's ID; a user with
-one eligible department has it selected automatically, while a user with multiple
-eligible departments chooses the department for the action.
+Session close and corrections may be recorded by any linked, active employee with
+the Production Sessions recording permission for that unit. They display that
+employee's ID. Shop Floor and CNC Quality assignments retain their department
+attribution; other permitted employees are recorded as Authorized Staff. Downtime
+still requires an eligible department assignment. A user with one eligible
+department has it selected automatically, while a user with multiple eligible
+departments chooses the department for the action.
 The separate machine Worker selection is an assignment and still requires a
 Worker designation.
 
@@ -97,9 +101,9 @@ productive runtime and target quantity. A session outside a break loses no time;
 non-production time, not downtime events or machine faults. Where a recorded
 downtime interval overlaps a break, that minute is excluded only once.
 
-An authorized employee starts sessions; Shop Floor closes them. Quality may also close CNC
-sessions. Quality, Shop Floor, and Machinist may record downtime; only Quality
-may record rejection.
+An authorized employee starts sessions. A linked, active employee with Production Sessions
+recording permission for the unit may close a session. Quality, Shop Floor, and
+Machinist may record downtime; only Quality may record rejection.
 
 Quality Control is the working queue for both pending first-piece inspections
 and open downtime entered by Quality. A Quality-entered downtime stays in that

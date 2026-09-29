@@ -117,16 +117,18 @@ function requiredProductionFloor(value: unknown) {
 
 async function requireOwnProductionRole({
   actorUserId,
+  allowAuthorizedStaff = false,
   enteredRole,
   organizationId,
   productionFloorCode,
 }: {
   actorUserId: string
+  allowAuthorizedStaff?: boolean
   enteredRole: string
   organizationId: string
   productionFloorCode: unknown
 }) {
-  if (!["shop_floor", "machinist", "quality"].includes(enteredRole)) {
+  if (!["shop_floor", "machinist", "quality", ...(allowAuthorizedStaff ? ["authorized_staff"] : [])].includes(enteredRole)) {
     throw new RouteError(400, "Select your assigned production department.")
   }
   const performer = await signedInEmployee({
@@ -137,7 +139,9 @@ async function requireOwnProductionRole({
     userId: actorUserId,
   })
   if (!performer) {
-    throw new RouteError(403, "Your Employee ID is not active in the selected production department and unit.")
+    throw new RouteError(403, enteredRole === "authorized_staff"
+      ? "Your account needs a linked, active Employee ID to record this session."
+      : "Your Employee ID is not active in the selected production department and unit.")
   }
   return enteredRole
 }
@@ -1602,6 +1606,7 @@ async function post(request: NextRequest, context: RouteContext) {
           async ({ actorUserId, organizationId, repository }) => {
             const enteredRole = await requireOwnProductionRole({
               actorUserId,
+              allowAuthorizedStaff: true,
               enteredRole: text(payload.enteredRole) || "shop_floor",
               organizationId,
               productionFloorCode: payload.productionFloorCode,
@@ -1644,6 +1649,7 @@ async function post(request: NextRequest, context: RouteContext) {
           async ({ actorUserId, organizationId, repository }) => {
             const enteredRole = await requireOwnProductionRole({
               actorUserId,
+              allowAuthorizedStaff: true,
               enteredRole: text(payload.enteredRole) || "shop_floor",
               organizationId,
               productionFloorCode: payload.productionFloorCode,
