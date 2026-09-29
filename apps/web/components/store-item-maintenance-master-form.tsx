@@ -52,7 +52,7 @@ export function StoreItemMaintenanceMasterForm({
             className="w-full"
             id="item-maintenance-master"
             name="definition_id"
-            onChange={(event) => setSelectedId(event.target.value)}
+            onValueChange={setSelectedId}
             required
             value={selected?.id ?? ""}
           >
