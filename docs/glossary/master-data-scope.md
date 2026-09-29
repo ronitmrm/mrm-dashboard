@@ -179,6 +179,10 @@ or production execution retains its physical assignment. The unreserved downstre
 forecast still contributes every remaining route setup to the Job Card's current
 probable dispatch date; forecast visibility and physical machine reservation are
 separate planning decisions.
+Recorded WIP can make the next setup ready on the same working date. There is no
+automatic one-day transfer delay once its pooled WIP quantity is sufficient.
+Forecast output becomes available after its production date; it does not count
+as recorded stock before production happens.
 If every machine on the preceding setup is marked Item Complete below the ordered
 quantity, its recorded good output is the final available supply for the next
 setup. Plan that stock without waiting for pieces the completed setup cannot

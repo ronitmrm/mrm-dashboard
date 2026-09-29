@@ -43,9 +43,16 @@ function inputFor(good: number) {
 
 test("plans available WIP after an upstream setup completes below its order", () => {
   const input = inputFor(992)
+  vi.setSystemTime(new Date("2026-09-20T09:00:00Z"))
   input.dataEntries.find(row => row.entryType === "work_order")!.payload.orderPcs = 1_100
   input.dataEntries.find(row => row.entryType === "shop_floor_status")!.payload.stage = "item_complete"
   input.productionEntries[0]!.targetQty = 1_100
+  const unstarted = buildLegacyDashboardSnapshot(input).productionControl.machinePlanDetailRows
+    .find(row => row.setupNo === "2")
+  expect(unstarted).toMatchObject({
+    physicalWipQty: 992, plannedStartDate: "20-Sept-26",
+    shopFloorTaskReady: true, shopFloorTaskBlocker: "",
+  })
   input.dataEntries.push({
     entryType: "shop_floor_status",
     payload: { jcNo: "A", partCode: "M5551", optionNumber: "1", setupNo: "2", machine: "CNC-1", stage: "raw_material_at_machine" },
@@ -55,6 +62,7 @@ test("plans available WIP after an upstream setup completes below its order", ()
   const rows = buildLegacyDashboardSnapshot(input).productionControl.machinePlanDetailRows
   expect(rows.find(row => row.setupNo === "2")).toMatchObject({
     physicalWipQty: 992, totalOrderPcs: 992, pendingGoodQty: 992, customerOrderPcs: 1_100,
+    plannedStartDate: "20-Sept-26",
     shopFloorTaskReady: true, shopFloorTaskBlocker: "",
   })
 })

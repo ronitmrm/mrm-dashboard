@@ -299,9 +299,9 @@ customer order. Already recorded good output is retained, never recreated.
 Recalculation replaces allocations for the same Job Card/route/setup. New upstream
 good output increases its existing remaining plan; it does not append a duplicate
 batch. Sum remaining allocations across machines once. Production rejects consume
-input stock and do not become downstream good stock. Existing WIP timing/buffer
-rules still control when stock can move. Explicit route-change quantities retain
-their selected setup scope.
+input stock and do not become downstream good stock. Pooled WIP quantity and
+machine-capacity rules still control when stock can move. Explicit route-change
+quantities retain their selected setup scope.
 
 The interruption evidence also stores the immutable Production Session references and latest settlement time. This lets the Job Card trace every planner movement back to the exact weighed or counter-based production records.
 

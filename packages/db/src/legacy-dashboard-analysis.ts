@@ -82,6 +82,7 @@ type WipProductionStream = {
   endDate: string;
   quantity: number;
   dailyQty: number;
+  recorded?: boolean;
 };
 
 type PlanningProductionActual = {
@@ -183,8 +184,6 @@ const monthShort = ["Jan", "Feb", "Mar", "Apr", "May", "June", "July", "Aug", "S
 const monthShortLegacy = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const defaultProductiveHoursPerDay = 8;
 const cncProductiveHoursPerDay = 22.5;
-const wipAvailabilityBufferDays = 1;
-const interSetupTransferBufferDays = 1;
 const planningSetupBufferDays = 1;
 const planningDispatchTargetDays = 25;
 const minimumParallelMachineWorkDays = 15;
@@ -1744,7 +1743,7 @@ function projectedRouteDispatchDate({
     const machineOrderPcs = assignedMachineOrderPcs(setupOrderPcs, machineCount);
     projectedFinish = latestProductionFinish([
       plannedProductionFinish(projectedStartDate, machineOrderPcs, cycle, undefined, planningCalendar),
-      { date: practicalSetupHandoffEndDate(projectedFinish.date, planningCalendar), workingHours: projectedFinish.workingHours },
+      projectedFinish,
     ]);
     if (!projectedFinish.date) return physicalPlanEndDate;
     previousStreams = Array.from({ length: machineCount }, (_, index) => ({
@@ -3116,7 +3115,7 @@ function machinePlanDetails(
       }));
       if (routePlanningBlocked && !productionActualMachines.size && !lockedShopFloorMachines.size) continue;
       const interruptedLockedMachines = new Set([...lockedShopFloorMachines, ...productionActualMachines]);
-      const readyDateForAssignment = operationReadyDate || plannedSetupDate(rmInwardDate, routeIndex, planningCalendar);
+      const readyDateForAssignment = operationReadyDate || addDays(parseDate(rmInwardDate) || rmInwardDate, 0, planningCalendar);
       const breakdownInterruption = machineUnavailableInterruptionForSetup(machineUnavailableWindows, {
         jcNo: rowText(row, "jcNo"),
         setupNo: displaySetupNo,
@@ -3319,7 +3318,7 @@ function machinePlanDetails(
         const itemComplete = effectiveStage === "item_complete";
         const shopFloorCompletedAt = shopFloorStatus ? rowText(shopFloorStatus, "completedAt", "createdAt") : "";
         const shopFloorDoneBy = shopFloorStatus ? rowText(shopFloorStatus, "doneBy") : "";
-        const staticBaseReadyDate = routeIndex === 0 ? addDays(parseDate(rmInwardDate) || rmInwardDate, 0, planningCalendar) : plannedSetupDate(rmInwardDate, routeIndex, planningCalendar);
+        const staticBaseReadyDate = addDays(parseDate(rmInwardDate) || rmInwardDate, 0, planningCalendar);
         const baseSetupDate = splitRole === "remaining_moved_to_alternate_machine"
           ? maxDateValue(operationReadyDate || staticBaseReadyDate, setupInterruption?.window.fromDate ?? "")
           : splitRole === "remaining_delayed_on_same_machine"
@@ -3465,7 +3464,7 @@ function machinePlanDetails(
         plannerParallelMachineTargets: appliedParallelOverrides.map((parallelOverride) => rowText(parallelOverride, "toMachine", "TO MACHINE", "PLAN ON MACHINE", "TARGET MACHINE")),
         machineAssignment: splitRole === "produced_on_unavailable_machine" ? "Breakdown produced quantity locked on stopped machine" : splitRole === "remaining_moved_to_alternate_machine" ? "Breakdown remaining quantity replanned by system rules" : splitRole === "remaining_delayed_on_same_machine" ? "Breakdown remaining quantity delayed on same machine" : parallelAssignmentOverride ? "Planner-added parallel machine" : appliedParallelOverrides.length ? "Planner-retained parallel machine" : machine === routeMachine ? "Route family fallback" : assignedMachines.length > 1 ? "Parallel 25-day plan" : "Assigned physical machine",
         parallelMachineCount: assignedMachines.length,
-        planningAssumption: `${planningCalendar.productiveHoursPerDay} hrs/day; Friday is plant shutdown; manual planning holidays are skipped; parallel setup WIP is pooled after each machine stream produces it; forecast WIP does not reserve a downstream physical machine; an unstarted downstream setup is assigned only after recorded WIP satisfies its pooled buffer; next setup waits for cumulative downstream WIP availability through the full run plus ${wipAvailabilityBufferDays} buffer day; stopped-machine WIP starts downstream only when it can feed ${minimumParallelMachineWorkDays} days or complete the order; downstream setup end includes ${interSetupTransferBufferDays} handoff buffer day after previous setup end; RM-at-machine, started shop-floor, or production-actual machines stay locked during recalculation; the same setup keeps its previously planned physical machine unless a material load/date gain justifies moving it; compatible sequential setups and matching Job Cards prefer the preceding machine when separate capacity does not finish earlier; automatic parallel machines require at least ${minimumParallelMachineWorkDays} production days each; a planner-added idle machine overrides only that minimum-run split rule`,
+        planningAssumption: `${planningCalendar.productiveHoursPerDay} hrs/day; Friday is plant shutdown; manual planning holidays are skipped; parallel setup WIP is pooled after each machine stream produces it; forecast WIP does not reserve a downstream physical machine; an unstarted downstream setup is assigned only after recorded WIP satisfies its pooled buffer; recorded WIP can feed the next setup on the same working date when cumulative supply covers its full run; stopped-machine WIP starts downstream only when it can feed ${minimumParallelMachineWorkDays} days or complete the order; downstream setup finish cannot precede previous setup finish; RM-at-machine, started shop-floor, or production-actual machines stay locked during recalculation; the same setup keeps its previously planned physical machine unless a material load/date gain justifies moving it; compatible sequential setups and matching Job Cards prefer the preceding machine when separate capacity does not finish earlier; automatic parallel machines require at least ${minimumParallelMachineWorkDays} production days each; a planner-added idle machine overrides only that minimum-run split rule`,
         };
         Object.defineProperty(detail, "__planningMeta", {
           enumerable: false,
@@ -4091,7 +4090,7 @@ function refreshSetupDependencyReadyDates(details: Array<Record<string, unknown>
       const groupReadyDate = maxDateValue(operationReadyDate, baseReadyDate);
       for (const row of group.rows) {
         planningMeta(row).readyDate = groupReadyDate;
-        planningMeta(row).minimumProductionEndDate = practicalSetupHandoffEndDate(previousSetupEndDate, planningCalendar);
+        planningMeta(row).minimumProductionEndDate = previousSetupEndDate;
       }
 
       const nextGroup = setupGroups[index + 1];
@@ -4115,11 +4114,6 @@ function refreshSetupDependencyReadyDates(details: Array<Record<string, unknown>
       previousSetupEndDate = maxDateValue(previousSetupEndDate, groupEndDate);
     }
   }
-}
-
-function practicalSetupHandoffEndDate(previousSetupEndDate: string, planningCalendar: PlanningCalendar) {
-  const normalizedEndDate = parseDate(previousSetupEndDate) || previousSetupEndDate;
-  return normalizedEndDate ? addDays(normalizedEndDate, interSetupTransferBufferDays, planningCalendar) : "";
 }
 
 function wipProductionStreamsFromRows(rows: Array<Record<string, unknown>>, planningCalendar: PlanningCalendar): WipProductionStream[] {
@@ -4858,11 +4852,6 @@ function plannerSetupKey(value: string) {
   const key = canonicalKey(value);
   const numbered = /^(?:p\s*|setup\s*)?(\d+)$/.exec(key);
   return numbered ? String(Number(numbered[1])) : key;
-}
-
-function plannedSetupDate(rmInwardDate: string, setupIndex: number, planningCalendar: PlanningCalendar) {
-  const start = parseDate(rmInwardDate);
-  return start ? addDays(start, setupIndex, planningCalendar) : "";
 }
 
 function setupPlanVsActual(plannedCompletionDate: string, actualCompletionDate: string) {
@@ -5617,6 +5606,7 @@ function plannedWipBufferReadyDate({
         endDate: parseDate(actual.latestDate) || actual.latestDate,
         quantity,
         dailyQty: quantity / dateCount,
+        recorded: true,
       };
     })
     .filter((stream) => stream.startDate && stream.endDate && stream.endDate >= stream.startDate && stream.quantity > 0 && stream.dailyQty > 0);
@@ -5657,14 +5647,15 @@ function plannedWipBufferReadyDate({
     : futurePlannedStreams.map((stream) => stream.startDate).sort()[0];
   if (!firstStart) return "";
   let date = firstStart;
-  const lastPossibleDate = maxDateValue(...supplyStreams.map((stream) => stream.endDate)) || addDays(date, Math.max(365, Math.ceil(orderPcs / previousDailyQty) + supplyStreams.length + 30), planningCalendar);
+  const lastPossibleDate = addDays(maxDateValue(...supplyStreams.map((stream) => stream.endDate)), 1, planningCalendar)
+    || addDays(date, Math.max(365, Math.ceil(orderPcs / previousDailyQty) + supplyStreams.length + 30), planningCalendar);
 
   while (date && date <= lastPossibleDate) {
-    const producedQty = Math.min(orderPcs, sum(supplyStreams.map((stream) => streamProducedQtyThroughDate(stream, date, planningCalendar))));
+    const producedQty = Math.min(orderPcs, sum(supplyStreams.map((stream) => availableWipThroughDate(stream, date, planningCalendar))));
     if (producedQty >= requiredBufferQty) {
       return downstreamWipFeasibleStartDate({
         supplyStreams,
-        startNotBefore: addDays(date, wipAvailabilityBufferDays, planningCalendar),
+        startNotBefore: date,
         orderPcs,
         nextDailyQty,
         planningCalendar,
@@ -5714,8 +5705,7 @@ function downstreamWipRunIsFeasible(
   while (current && downstreamConsumedQty < orderPcs && guard < 1000) {
     if (isPlanningDate(current, planningCalendar)) {
       downstreamConsumedQty = Math.min(orderPcs, downstreamConsumedQty + nextDailyQty);
-      const availableThroughDate = addDays(current, -wipAvailabilityBufferDays, planningCalendar);
-      const availableWipQty = Math.min(orderPcs, sum(supplyStreams.map((stream) => streamProducedQtyThroughDate(stream, availableThroughDate, planningCalendar))));
+      const availableWipQty = Math.min(orderPcs, sum(supplyStreams.map((stream) => availableWipThroughDate(stream, current, planningCalendar))));
       if (availableWipQty + 0.001 < downstreamConsumedQty) return false;
     }
     current = addCalendarDays(current, 1);
@@ -5728,6 +5718,10 @@ function streamProducedQtyThroughDate(stream: WipProductionStream, dateValue: st
   const end = minDateValue(parseDate(stream.endDate) || stream.endDate, parseDate(dateValue) || dateValue);
   if (!start || !end || end < start) return 0;
   return Math.min(stream.quantity, plannedProductionDays(start, end, planningCalendar) * stream.dailyQty);
+}
+function availableWipThroughDate(stream: WipProductionStream, dateValue: string, planningCalendar: PlanningCalendar) {
+  const availableThroughDate = stream.recorded ? dateValue : addDays(dateValue, -1, planningCalendar);
+  return streamProducedQtyThroughDate(stream, availableThroughDate, planningCalendar);
 }
 
 function actualWipBufferAvailable({
