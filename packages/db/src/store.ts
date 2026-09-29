@@ -3335,6 +3335,38 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       return result.rows
     },
 
+    async listRecentAssetMovements(organizationId: string) {
+      const result = await pool.query<{
+        assetCode: string
+        fromHolder: string | null
+        movedAt: Date
+        movedBy: string | null
+        movementType: string
+        remark: string | null
+        toHolder: string | null
+        typeCode: string
+      }>(
+        `SELECT asset.asset_code AS "assetCode",
+            item.type_code AS "typeCode",
+            movement.movement_type AS "movementType",
+            concat_ws(' / ', movement.from_holder_type,
+              movement.from_holder_name, movement.from_holder_reference) AS "fromHolder",
+            concat_ws(' / ', movement.to_holder_type,
+              movement.to_holder_name, movement.to_holder_reference) AS "toHolder",
+            movement.moved_at AS "movedAt", movement.moved_by AS "movedBy",
+            movement.remark
+          FROM store.stock_movements movement
+          JOIN store.assets asset ON asset.id = movement.asset_id
+          JOIN store.item_types item ON item.id = movement.item_type_id
+          WHERE movement.organization_id = $1
+            AND movement.movement_type IN ('TRANSFER_OUT', 'RETURN')
+          ORDER BY movement.moved_at DESC
+          LIMIT 300`,
+        [organizationId]
+      )
+      return result.rows
+    },
+
     async createCodeRequest(input: {
       actorUserId?: string | null
       assetCategory?: string | null

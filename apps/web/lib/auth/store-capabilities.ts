@@ -61,6 +61,12 @@ export const storePageAccess = [
   ),
   page("store.stock", "Stock", "/store/stock", storeCapabilities.stock),
   page(
+    "store.movement",
+    "Movement",
+    "/store/movement",
+    storeCapabilities.assetHistory
+  ),
+  page(
     "store.asset_history",
     "Asset Movement & Maintenance History",
     "/store/assets/:assetCode",

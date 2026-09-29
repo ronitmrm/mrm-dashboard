@@ -94,7 +94,7 @@ const taskHrefs: Record<string, string> = {
   "store.requests.issue": "/store/requests",
   "store.asset_maintenance.write": "/store/assets/RBAC-DEMO-001",
   "store.asset_repair.write": "/store/assets/RBAC-DEMO-001",
-  "store.asset_movement.write": "/store/assets/RBAC-DEMO-001",
+  "store.asset_movement.write": "/store/movement",
   "store.purchase_orders.create": "/store/orders",
   "store.asset_lifecycle.write": "/store/assets/RBAC-DEMO-001",
 }
@@ -102,7 +102,6 @@ const taskHrefs: Record<string, string> = {
 const assetTabs: Record<string, string> = {
   "store.asset_lifecycle.write": "Lifecycle",
   "store.asset_maintenance.write": "Maintenance",
-  "store.asset_movement.write": "Movement",
   "store.asset_repair.write": "Repairs",
 }
 

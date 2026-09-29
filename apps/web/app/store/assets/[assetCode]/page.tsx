@@ -58,7 +58,6 @@ import {
   completeStoreAssetMaintenanceAction,
   completeStoreRepairPurchaseOrderAction,
   createStoreRepairPurchaseOrderAction,
-  moveStoreAssetAction,
   recordStoreAssetAcquisitionAction,
   scheduleStoreAssetMaintenanceAction,
   scheduleStoreAssetMaintenanceMasterAction,
@@ -113,9 +112,8 @@ export default async function StoreAssetWorkspacePage({
         }),
       }
     }
-    const [suppliers, vendors, performer] = await Promise.all([
+    const [suppliers, performer] = await Promise.all([
       repository.listSuppliers(organizationId),
-      repository.listVendors(organizationId),
       canMove || canMaintain || canManageLifecycle
         ? signedInPerformer({
             connectionString: readAuthEnvironment().connectionString,
@@ -129,7 +127,6 @@ export default async function StoreAssetWorkspacePage({
       kind: "asset" as const,
       performer,
       suppliers,
-      vendors,
       workspace,
     }
   })().finally(() => repository.close())
@@ -313,79 +310,6 @@ export default async function StoreAssetWorkspacePage({
 
         {canManage ? (
           <>
-            <StoreAssetWorkspacePane tab="movement">
-              {canMove ? (
- <SectionCard width="standard">
-            <CardHeader>
-              <CardTitle>Move / Assign Asset</CardTitle>
-              <CardDescription>
-                      Non Consumables can move to a Department, Machine,
-                      registered Vendor, or return to Store.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form action={moveStoreAssetAction}>
-                <input
-                  name="asset_code"
-                  type="hidden"
-                  value={asset.assetCode}
-                />
-                <FieldGroup className="gap-4">
-                  <Field>
-                          <FieldLabel htmlFor="holder-type">
-                            Assign To
-                          </FieldLabel>
-                    <NativeSelect id="holder-type" name="holder_type">
-                      <NativeSelectOption value="MACHINE">
-                        Machine
-                      </NativeSelectOption>
-                      <NativeSelectOption value="DEPARTMENT">
-                        Department
-                      </NativeSelectOption>
-                      <NativeSelectOption value="VENDOR">
-                        Vendor
-                      </NativeSelectOption>
-                      <NativeSelectOption value="STORE">
-                        Store Return
-                      </NativeSelectOption>
-                    </NativeSelect>
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="vendor-id">Vendor</FieldLabel>
-                    <NativeSelect id="vendor-id" name="vendor_id">
-                      <NativeSelectOption value="">
-                        Select only when assigning to Vendor
-                      </NativeSelectOption>
-                      {data.vendors.map((vendor) => (
-                              <NativeSelectOption
-                                key={vendor.id}
-                                value={vendor.id}
-                              >
-                          {vendor.code} — {vendor.name}
-                        </NativeSelectOption>
-                      ))}
-                    </NativeSelect>
-                  </Field>
-                  <TextField
-                    label="Reference / Machine No. / Store Code"
-                    name="holder_reference"
-                  />
-                  <TextField
-                    label="Department / Destination Name"
-                    name="holder_name"
-                  />
-                  <TextField label="Moved By" name="moved_by" readOnly value={performerDisplay} />
-                  <TextField label="Remark" name="remark" />
-                </FieldGroup>
-                <Button className="mt-5" type="submit">
-                  Record Movement
-                </Button>
-              </form>
-            </CardContent>
- </SectionCard>
-              ) : null}
-            </StoreAssetWorkspacePane>
-
             <StoreAssetWorkspacePane tab="repairs">
               {canRepair ? (
  <SectionCard width="standard">

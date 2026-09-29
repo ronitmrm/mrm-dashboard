@@ -70,6 +70,7 @@ describe("store page capability contract", () => {
       ["/store/new-item-requests", "store.new_item_requests.read"],
       ["/store/orders", "store.purchase_register.read"],
       ["/store/stock", "store.stock.read"],
+      ["/store/movement", "store.asset_history.read"],
     ])
   })
 })

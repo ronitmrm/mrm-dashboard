@@ -124,6 +124,7 @@ function revalidateStore() {
   revalidatePath("/store/masters")
   revalidatePath("/store/orders")
   revalidatePath("/store/stock")
+  revalidatePath("/store/movement")
   revalidatePath("/store/requests")
   revalidatePath("/store/requests/new")
   revalidatePath("/store/new-item-requests")
@@ -1196,6 +1197,7 @@ export async function moveStoreAssetAction(formData: FormData) {
   )
   revalidatePath(`/store/assets/${encodeURIComponent(assetCode)}`)
   revalidateStore()
+  redirect(`/store/movement?moved=${encodeURIComponent(assetCode)}`)
 }
 
 export async function scheduleStoreAssetMaintenanceAction(formData: FormData) {
