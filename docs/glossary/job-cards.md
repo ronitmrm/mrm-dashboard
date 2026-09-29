@@ -97,12 +97,17 @@ into the finish date, rather than invented wall-clock shift times. Machine
 queue reservations still use whole dates. Fridays and Planning Calendar
 holidays are excluded, and material and WIP availability constraints still apply.
 
-Shop Floor Status shows completion of the setup's assigned quantity on that
+Shop Floor Status shows the recorded lifecycle of each setup on its assigned
 machine. Job Card Current Estimated Finish includes all remaining route setups,
 using the same cycle-based supply and remaining-work calculation. Forecast-only
 downstream work does not reserve a machine or bypass actual-WIP readiness, and
 the whole-job finish cannot precede the upstream supply needed by that setup.
 The immutable RM-receipt Planned Finish Date remains historical.
+
+A machine-unavailable action affects unfinished work only. A setup already
+marked Item Complete stays complete on its recorded machine, even when its
+good output is below the upstream input quantity. Unprocessed input remains
+physical WIP; the action must not create another planned run for it.
 
 If an upstream setup is Item Complete below the customer order quantity, its
 recorded good output less downstream pieces already processed is the available
