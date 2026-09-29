@@ -205,6 +205,7 @@ export default async function StoreStockPage({
           ) : null}
 
           <OperationalTable
+            filterStorageKey="store-stock-register-unit-ids"
             filteredSelection={
               mode === "view"
                 ? undefined
@@ -272,7 +273,7 @@ export default async function StoreStockPage({
                     ) : null}
                     <TableCell
                       className="font-medium"
-                      data-filter-value={`${item.typeCode} ${item.unitId ?? ""}`}
+                      data-filter-value={item.displayedCode}
                     >
                       {capabilities.has("store.asset_history.read") ? (
                         <Link
