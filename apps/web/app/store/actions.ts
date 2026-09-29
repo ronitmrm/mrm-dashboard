@@ -1215,6 +1215,23 @@ export async function scheduleStoreAssetMaintenanceAction(formData: FormData) {
   revalidateStore()
 }
 
+export async function scheduleStoreItemTypeMaintenanceAction(formData: FormData) {
+  const typeCode = requiredText(formData, "item_type_code")
+  await withStore(
+    "store.asset_maintenance.write",
+    (repository, actorUserId, organizationId) =>
+      repository.scheduleItemTypeMaintenance({
+        actorUserId,
+        definitionId: requiredText(formData, "definition_id"),
+        firstDueOn: requiredText(formData, "first_due_on"),
+        organizationId,
+        typeCode,
+      })
+  )
+  revalidatePath(`/store/assets/${encodeURIComponent(typeCode)}`)
+  revalidateStore()
+}
+
 export async function setStoreAssetLifecycleAction(formData: FormData) {
   const assetCode = requiredText(formData, "asset_code")
   const status = requiredText(formData, "asset_status")

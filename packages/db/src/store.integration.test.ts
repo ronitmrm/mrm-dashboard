@@ -1449,28 +1449,87 @@ describe("Store requests", () => {
     })
     const order = await createPurchaseOrder(itemType.id, 2, "4500.00")
     const receipt = await store.receiveStock({
+      billDate: "2026-08-17",
       locationId: location.id,
       organizationId,
       purchaseOrderLineId: order.id,
-      quantity: 2,
+      quantity: 1,
     })
-    expect(receipt.assetCodes).toEqual([
+    const maintenanceCode = `MM-${suffix}`
+    const definition = await pool.query<{ id: string }>(
+      `INSERT INTO maintenance.definitions (
+        organization_id, code, name, frequency_unit, frequency_value,
+        source_system, source_table, source_id
+      ) VALUES ($1, $2, 'Quarterly inspection', 'day', 90,
+        'store-test', 'maintenance_master', $3)
+      RETURNING id`,
+      [organizationId, maintenanceCode, randomUUID()]
+    )
+    await store.scheduleItemTypeMaintenance({
+      definitionId: definition.rows[0]!.id,
+      firstDueOn: "2026-08-22",
+      organizationId,
+      typeCode: itemType.typeCode,
+    })
+    const firstMasterSchedule = (
+      await store.getAssetWorkspace({
+        assetCode: receipt.assetCodes[0]!,
+        organizationId,
+      })
+    )?.schedules.find((schedule) => schedule.code === maintenanceCode)
+    expect(firstMasterSchedule).toEqual(
+      expect.objectContaining({
+        frequencyDays: 90,
+        name: "Quarterly inspection",
+        nextDueOn: "2026-08-22",
+        scheduleType: "MAINTENANCE",
+      })
+    )
+
+    const secondReceipt = await store.receiveStock({
+      billDate: "2026-09-01",
+      locationId: location.id,
+      organizationId,
+      purchaseOrderLineId: order.id,
+      quantity: 1,
+    })
+    const assetCodes: [string, string] = [
+      receipt.assetCodes[0]!,
+      secondReceipt.assetCodes[0]!,
+    ]
+    expect(assetCodes).toEqual([
       `${itemType.typeCode}-0001`,
       `${itemType.typeCode}-0002`,
     ])
+    const secondMasterSchedule = (
+      await store.getAssetWorkspace({
+        assetCode: assetCodes[1],
+        organizationId,
+      })
+    )?.schedules.find((schedule) => schedule.code === maintenanceCode)
+    expect(secondMasterSchedule).toEqual(
+      expect.objectContaining({
+        frequencyDays: 90,
+        nextDueOn: "2026-11-30",
+        scheduleType: "MAINTENANCE",
+      })
+    )
     expect(
       (await store.listItemTypes(organizationId)).find(
         (item) => item.id === itemType.id
       )?.availableUnitIds
-    ).toEqual(receipt.assetCodes)
+    ).toEqual(assetCodes)
 
     const itemWorkspace = await store.getItemTypeWorkspace({
       organizationId,
       typeCode: itemType.typeCode,
     })
     expect(itemWorkspace?.item.typeCode).toBe(itemType.typeCode)
+    expect(itemWorkspace?.maintenanceMasters).toContainEqual(
+      expect.objectContaining({ code: maintenanceCode, frequencyDays: 90 })
+    )
     expect(itemWorkspace?.assets.map((asset) => asset.assetCode)).toEqual(
-      receipt.assetCodes
+      assetCodes
     )
     expect(itemWorkspace?.supplierPrices).toContainEqual(
       expect.objectContaining({
@@ -1491,9 +1550,9 @@ describe("Store requests", () => {
       (await store.listRequisitions({ organizationId })).rows.find(
         (row) => row.id === request.id
       )?.availableUnitIds
-    ).toEqual(receipt.assetCodes)
+    ).toEqual(assetCodes)
     await store.issueRequisition({
-      assetCode: receipt.assetCodes[0],
+      assetCode: assetCodes[0],
       holderType: "DEPARTMENT",
       issuedBy: "store.manager@mayankrawmint.com",
       organizationId,
@@ -1504,10 +1563,10 @@ describe("Store requests", () => {
       (await store.listRequisitions({ organizationId })).rows.find(
         (row) => row.id === request.id
       )?.availableUnitIds
-    ).toEqual([receipt.assetCodes[1]])
+    ).toEqual([assetCodes[1]])
     expect(
       (await store.listRecentStockMovements(organizationId)).find(
-        (movement) => movement.assetCode === receipt.assetCodes[0]
+        (movement) => movement.assetCode === assetCodes[0]
       )
     ).toEqual(
       expect.objectContaining({
@@ -1521,32 +1580,24 @@ describe("Store requests", () => {
       organizationId,
     })
     await store.moveAsset({
-      assetCode: receipt.assetCodes[0]!,
+      assetCode: assetCodes[0],
       holderType: "VENDOR",
       organizationId,
       vendorId: vendor.id,
     })
 
     const schedule = await store.scheduleAssetMaintenance({
-      assetCode: receipt.assetCodes[0]!,
+      assetCode: assetCodes[0],
       firstDueOn: "2026-08-20",
       frequencyDays: 30,
       name: "Monthly calibration",
       organizationId,
       scheduleType: "CALIBRATION",
     })
-    await store.scheduleAssetMaintenance({
-      assetCode: receipt.assetCodes[0]!,
-      firstDueOn: "2026-08-22",
-      frequencyDays: 90,
-      name: "Quarterly inspection",
-      organizationId,
-      scheduleType: "MAINTENANCE",
-    })
     expect(
       (
         await store.getAssetWorkspace({
-          assetCode: receipt.assetCodes[0]!,
+          assetCode: assetCodes[0],
           organizationId,
         })
       )?.schedules.map(({ name, scheduleType }) => ({ name, scheduleType }))
@@ -1555,7 +1606,7 @@ describe("Store requests", () => {
       { name: "Quarterly inspection", scheduleType: "MAINTENANCE" },
     ])
     const completion = await store.completeAssetMaintenance({
-      assetCode: receipt.assetCodes[0]!,
+      assetCode: assetCodes[0],
       completedBy: "Maintenance Technician",
       completedOn: "2026-08-20",
       maintenanceType: "CALIBRATION",
@@ -1564,8 +1615,26 @@ describe("Store requests", () => {
     })
     expect(completion.nextDueOn).toBe("2026-09-19")
 
+    const maintenanceCompletion = await store.completeAssetMaintenance({
+      assetCode: assetCodes[0],
+      completedBy: "Maintenance Technician",
+      completedOn: "2026-08-22",
+      maintenanceType: "MAINTENANCE",
+      organizationId,
+      scheduleId: firstMasterSchedule!.id,
+    })
+    expect(maintenanceCompletion.nextDueOn).toBe("2026-11-20")
+    const updatedFirstSchedule = (
+      await store.getAssetWorkspace({ assetCode: assetCodes[0], organizationId })
+    )?.schedules.find((entry) => entry.code === maintenanceCode)
+    const unchangedSecondSchedule = (
+      await store.getAssetWorkspace({ assetCode: assetCodes[1], organizationId })
+    )?.schedules.find((entry) => entry.code === maintenanceCode)
+    expect(updatedFirstSchedule?.nextDueOn).toBe("2026-11-20")
+    expect(unchangedSecondSchedule?.nextDueOn).toBe(secondMasterSchedule?.nextDueOn)
+
     await store.setAssetLifecycleStatus({
-      assetCode: receipt.assetCodes[0]!,
+      assetCode: assetCodes[0],
       organizationId,
       status: "BROKEN",
     })
@@ -1583,7 +1652,7 @@ describe("Store requests", () => {
     expect(replacement.assetCodes).toEqual([`${itemType.typeCode}-0003`])
 
     const workspace = await store.getAssetWorkspace({
-      assetCode: receipt.assetCodes[0]!,
+      assetCode: assetCodes[0],
       organizationId,
     })
     expect(workspace?.asset.status).toBe("BROKEN")
@@ -1594,8 +1663,8 @@ describe("Store requests", () => {
     ).toEqual(
       expect.arrayContaining(["RECEIPT", "ISSUE", "TRANSFER_OUT", "ADJUSTMENT"])
     )
-    expect(workspace?.maintenance[0]?.maintenanceType).toBe("CALIBRATION")
-    expect(workspace?.schedules[0]?.nextDueOn).toBe("2026-09-19")
+    expect(workspace?.maintenance.map((record) => record.maintenanceType)).toContain("CALIBRATION")
+    expect(workspace?.schedules.find((entry) => entry.id === schedule.id)?.nextDueOn).toBe("2026-09-19")
   })
 
   test("creates a Repair PO against one Physical Asset and keeps its drawing", async () => {
