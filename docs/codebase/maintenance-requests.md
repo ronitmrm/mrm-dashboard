@@ -38,7 +38,7 @@ filtered from the planned schedule projection in
 `apps/web/lib/maintenance-work-list.ts`; their historical records remain stored.
 Scheduled rows open the full maintenance checklist in `MaintenancePanel`. The company-wide projection is deduplicated by checklist code and sequence. Draft and completed answers use the existing `maintenance.tasks` and `maintenance.task_results` tables; only completion updates `machine_schedules.last_completed_on` and `next_due_on`.
 Assigning or updating a machine maintenance schedule queues a durable dashboard refresh in the same transaction so Machine Master and Mechanical read the saved schedule.
-Planned tasks persist `startedAt`, optional draft `endedAt`, selected engineer code/name, calculated `actualMinutes`, and `changedItems[]` in the task source payload. The repository writes `maintenance.tasks.started_at` from the form and leaves `completed_at` empty for drafts. Empty checklist points are omitted from task-result writes. Machine Maintenance History filters each changed part separately.
+Planned tasks persist `startedAt`, optional draft `endedAt`, the signed-in performer's name and active linked Employee ID when available, calculated `actualMinutes`, and `changedItems[]` in the task source payload. An authorized user without an active Employee link is recorded by account name with no Employee ID. The repository writes `maintenance.tasks.started_at` from the form and leaves `completed_at` empty for drafts. Empty checklist points are omitted from task-result writes. Machine Maintenance History filters each changed part separately.
 Resaving a draft clears its old answer rows through `maintenance.clear_draft_task_results` (migration `0175`), which accepts only a matching organization and In Progress task. The web role has function execute access and no table-wide DELETE privilege.
 
 ## Invariants
@@ -67,8 +67,8 @@ in the event source payload by maintenance task key. A second open breakdown on
 the same machine is rejected, and Production Session start is blocked while the
 breakdown remains open.
 
-Completion updates the same task, records the actual completion time, the selected
-active maintenance engineer's name and employee code from the company-wide directory,
+Completion updates the same task, records the actual completion time, the
+authorized signed-in performer's name and active linked Employee ID when available,
 work performed, and `changedItems[]`, and resolves either the linked open downtime
 or its Shift Ended — Unresolved carry-forward. Completed breakdowns continue to
 feed the Machine Maintenance Register through the existing task query.
@@ -79,5 +79,7 @@ Physical asset breakdowns use `store.asset_breakdowns` (migration `0183`),
 exposed to Mechanical through `/api/maintenance/assets` and scoped to Unit IDs.
 The start transition marks the unit Broken; completion inserts a Store asset
 maintenance record and restores Available or Assigned from its holder. Both
-transitions require `maintenance.tasks.write` and an active Maintenance Employee
-ID. Machine Production Session downtime is unaffected by asset breakdowns.
+transitions require `maintenance.tasks.write`. Completion stores the signed-in
+performer's active linked Employee ID and name when available, or the account
+name with a null Employee ID. Machine Production Session downtime is unaffected
+by asset breakdowns.

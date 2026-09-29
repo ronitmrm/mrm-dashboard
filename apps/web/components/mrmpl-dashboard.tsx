@@ -230,11 +230,7 @@ import {
   qualityInspectionReadingResult as qualityReadingResult,
 } from "@/lib/quality-parameter-set"
 import {
-  maintenanceEmployeeOptions,
-  productionDispatchApproverOptions,
-  productionMachinistOptions,
-  productionQualityOptions,
-  productionShopFloorOptions,
+  activeEmployeeForCode,
   productionWorkerOptions,
   type EmployeeOption,
 } from "@/lib/shared-employee-master"
@@ -1346,10 +1342,13 @@ function HourlyQualityCheckShell({
   const currentDashboardUserRecord = asRecord(
     hourlyQualityPageRecord.currentDashboardUser
   )
-  const performerId = str(currentDashboardUserRecord.employeeCode)
+  const performerId = str(
+    currentDashboardUserRecord.employeeCode || currentDashboardUserRecord.name
+  )
   const performerDisplay = str(
     currentDashboardUserRecord.displayId ||
-      "Signed-in Quality employee required"
+      currentDashboardUserRecord.name ||
+      "Signed-in account required"
   )
   const runningRows = useMemo(
     () => asArray(hourlyQualityPageRecord.runningRows),
@@ -2480,8 +2479,8 @@ function SetupChecklistShell({
                           value={
                             phase === "start"
                               ? signedInMachinist
-                                ? `${signedInMachinist.code} - ${signedInMachinist.name}`
-                                : "Signed-in Machinist or Programmer required"
+                                ? [signedInMachinist.code, signedInMachinist.name].filter(Boolean).join(" - ")
+                                : "Signed-in account required"
                               : str(currentChecklistSession?.startedBy)
                           }
                           readOnly
@@ -2494,8 +2493,8 @@ function SetupChecklistShell({
                         value={
                           phase === "end"
                             ? signedInMachinist
-                              ? `${signedInMachinist.code} - ${signedInMachinist.name}`
-                              : "Signed-in Machinist or Programmer required"
+                              ? [signedInMachinist.code, signedInMachinist.name].filter(Boolean).join(" - ")
+                              : "Signed-in account required"
                             : str(currentChecklistSession?.endedBy)
                         }
                         readOnly
@@ -7818,8 +7817,8 @@ function DispatchApprovalActionForm({
             <Input
               readOnly
               value={approver
-                ? `${approver.code} - ${approver.name}`
-                : "Signed-in Planner or Shop Floor employee required"}
+                ? [approver.code, approver.name].filter(Boolean).join(" - ")
+                : "Signed-in account required"}
             />
           </Field>
           <Field label="Dispatch Remark">
@@ -7991,27 +7990,10 @@ function useProductionEmployeeDirectory(
     [employeeMasterPage.data?.rows]
   )
   const floor = productionFloorCode ?? productionFloorFromLocation()
-  const machinistOptions = useMemo(
-    () => productionMachinistOptions(rows, floor),
-    [floor, rows]
-  )
   const currentEmployeeCode = str(employeeMasterPage.data?.currentEmployeeCode)
-  const signedInOption = (options: EmployeeOption[]) => options.find(
-    (employee) => employee.code.toLowerCase() === currentEmployeeCode.toLowerCase()
-  )
-  const signedInMachinist = signedInOption(machinistOptions)
-  const qualityOptions = useMemo(
-    () => productionQualityOptions(rows, floor),
-    [floor, rows]
-  )
-  const shopFloorOptions = useMemo(
-    () => productionShopFloorOptions(rows, floor),
-    [floor, rows]
-  )
-  const dispatchApproverOptions = useMemo(
-    () => productionDispatchApproverOptions(rows, floor),
-    [floor, rows]
-  )
+  const accountName = str(employeeMasterPage.data?.currentUserName)
+  const signedInPerformer = activeEmployeeForCode(rows, currentEmployeeCode) ??
+    (accountName ? { code: "", name: accountName } : undefined)
   const workerOptions = useMemo(
     () => productionWorkerOptions(rows, floor),
     [floor, rows]
@@ -8020,13 +8002,10 @@ function useProductionEmployeeDirectory(
   return {
     error: employeeMasterPage.error,
     loaded: employeeMasterPage.data !== undefined,
-    machinistOptions,
-    signedInMachinist,
-    signedInQuality: signedInOption(qualityOptions),
-    signedInShopFloor: signedInOption(shopFloorOptions),
-    signedInDispatchApprover: signedInOption(dispatchApproverOptions),
-    qualityOptions,
-    shopFloorOptions,
+    signedInMachinist: signedInPerformer,
+    signedInQuality: signedInPerformer,
+    signedInShopFloor: signedInPerformer,
+    signedInDispatchApprover: signedInPerformer,
     workerOptions,
   }
 }
@@ -9838,8 +9817,8 @@ function ShopFloorRowAction({
               className="h-8"
               readOnly
               value={performer
-                ? `${performer.code} - ${performer.name}`
-                : "Signed-in employee assignment required"}
+                ? [performer.code, performer.name].filter(Boolean).join(" - ")
+                : "Signed-in account required"}
             />
             {nextStage.id === "operator_started" ? (
               <SearchableSelect
@@ -12743,14 +12722,17 @@ function MaintenancePanel({
   )
   const completionRows = asArray(productionControl.maintenanceTaskRows)
   const employeeMasterPage = usePostgresOperationalPage("/api/employee-master")
-  const engineerOptions = useMemo(
-    () => maintenanceEmployeeOptions(asArray(employeeMasterPage.data?.rows)),
-    [employeeMasterPage.data?.rows]
-  )
   const currentEmployeeCode = str(employeeMasterPage.data?.currentEmployeeCode)
-  const signedInEngineer = engineerOptions.find(
-    (option) => option.code.toLowerCase() === currentEmployeeCode.toLowerCase()
+  const signedInAccountName = str(employeeMasterPage.data?.currentUserName)
+  const linkedEmployee = useMemo(
+    () => activeEmployeeForCode(asArray(employeeMasterPage.data?.rows), currentEmployeeCode),
+    [employeeMasterPage.data?.rows, currentEmployeeCode]
   )
+  const signedInPerformer = linkedEmployee ??
+    (signedInAccountName ? { code: "", name: signedInAccountName } : null)
+  const performerDisplay = signedInPerformer
+    ? [signedInPerformer.code, signedInPerformer.name].filter(Boolean).join(" - ")
+    : "Signed-in account name required"
   const checklistRows = asArray(
     productionControl.maintenanceChecklistMasterRows
   )
@@ -12938,11 +12920,11 @@ function MaintenancePanel({
   async function saveMaintenanceChecklist(complete: boolean) {
     const row = selectedSchedule
     if (!row || isSavingChecklist) return
-    const engineer = signedInEngineer
-    if (!engineer) {
+    const performer = signedInPerformer
+    if (!performer) {
       setChecklistStatus({
         tone: "destructive",
-        message: "Your signed-in Employee ID needs an active Maintenance assignment.",
+        message: "Your signed-in account needs a name to record maintenance work.",
       })
       return
     }
@@ -13005,8 +12987,8 @@ function MaintenancePanel({
       startedAt: startIso,
       endedAt: endIso,
       completedAt: complete ? endIso : "",
-      completedBy: engineer?.name ?? "",
-      completedByEmployeeCode: engineer?.code ?? "",
+      completedBy: performer.name,
+      completedByEmployeeCode: performer.code || null,
       actualMinutes,
       status: complete ? "Completed" : "In Progress",
       result: complete ? "Completed" : "In Progress",
@@ -13131,14 +13113,14 @@ function MaintenancePanel({
     const taskId = str(formData.get("taskId"))
     const completedAt = istDateTimeInputToIso(str(formData.get("completedAt")))
     if (!completedAt) throw new Error("Select a valid completion time.")
-    const engineer = signedInEngineer
-    if (!engineer) throw new Error("Your signed-in Employee ID needs an active Maintenance assignment.")
+    const performer = signedInPerformer
+    if (!performer) throw new Error("Your signed-in account needs a name to record maintenance work.")
     const payload = {
       breakdownAction: "complete",
       changedItems: changedItems.map(str).filter(Boolean),
       completedAt,
-      completedBy: engineer?.name ?? "",
-      completedByEmployeeCode: engineer?.code ?? "",
+      completedBy: performer.name,
+      completedByEmployeeCode: performer.code || null,
       maintenanceType: "Breakdown",
       result: "Completed",
       taskId,
@@ -13303,14 +13285,12 @@ function MaintenancePanel({
             <div className="grid gap-3 md:grid-cols-2">
               <div className="grid gap-1.5">
                 <Label htmlFor="maintenance-completed-by">
-                  Maintenance engineer
+                  Performed by
                 </Label>
                 <Input
                   id="maintenance-completed-by"
                   readOnly
-                  value={signedInEngineer
-                    ? `${signedInEngineer.code} - ${signedInEngineer.name}`
-                    : "Signed-in Maintenance employee required"}
+                  value={performerDisplay}
                 />
               </div>
               <div className="grid gap-1.5">
@@ -13409,14 +13389,14 @@ function MaintenancePanel({
               <Button
                 type="button"
                 variant="outline"
-                disabled={isSavingChecklist || !signedInEngineer}
+                disabled={isSavingChecklist || !signedInPerformer}
                 onClick={() => void saveMaintenanceChecklist(false)}
               >
                 Save Progress
               </Button>
               <Button
                 type="button"
-                disabled={isSavingChecklist || !signedInEngineer || !checklistSteps.length}
+                disabled={isSavingChecklist || !signedInPerformer || !checklistSteps.length}
                 onClick={() => void saveMaintenanceChecklist(true)}
               >
                 <CheckCircle2 className="size-4" /> Complete Maintenance
@@ -13815,9 +13795,7 @@ function MaintenancePanel({
                 <Field label="Completed By">
                   <Input
                     readOnly
-                    value={signedInEngineer
-                      ? `${signedInEngineer.code} - ${signedInEngineer.name}`
-                      : "Signed-in Maintenance employee required"}
+                    value={performerDisplay}
                   />
                 </Field>
               </div>
@@ -13873,7 +13851,7 @@ function MaintenancePanel({
                 <Input name="remark" />
               </Field>
               <div className="flex flex-wrap gap-2">
-                <Button disabled={!signedInEngineer} type="submit">
+                <Button disabled={!signedInPerformer} type="submit">
                   <CheckCircle2 className="size-4" /> Complete Breakdown
                 </Button>
                 <Button
@@ -13906,7 +13884,7 @@ function MaintenancePanel({
                   <Input defaultValue={istDateTimeInputValue()} name="completedAt" required type="datetime-local" />
                 </Field>
                 <Field label="Completed By">
-                  <Input readOnly value={signedInEngineer ? `${signedInEngineer.code} - ${signedInEngineer.name}` : "Signed-in Maintenance employee required"} />
+                  <Input readOnly value={performerDisplay} />
                 </Field>
               </div>
               <Field label="Work Done"><Input name="workDone" required /></Field>
@@ -13923,7 +13901,7 @@ function MaintenancePanel({
               </div>
               <Field label="Remark"><Input name="remark" /></Field>
               <div className="flex flex-wrap gap-2">
-                <Button disabled={!signedInEngineer} type="submit"><CheckCircle2 className="size-4" /> Complete Breakdown</Button>
+                <Button disabled={!signedInPerformer} type="submit"><CheckCircle2 className="size-4" /> Complete Breakdown</Button>
                 <Button onClick={() => { setSelectedAssetBreakdownId(""); setChangedItems([""]) }} type="button" variant="outline">Cancel</Button>
               </div>
             </form>

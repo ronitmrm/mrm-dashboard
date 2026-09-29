@@ -1364,10 +1364,15 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       organizationId: string
       userId: string
     }) {
-      const [account, employeeDepartments, organizationDepartments, location] =
-        await Promise.all([
-          pool.query<{ email: string; is_administrator: boolean }>(
-            `SELECT email, COALESCE(role = 'admin', false) AS is_administrator
+      const [
+        account,
+        employeeDepartments,
+        organizationDepartments,
+        location,
+        linkedEmployee,
+      ] = await Promise.all([
+          pool.query<{ email: string; is_administrator: boolean; name: string }>(
+            `SELECT email, name, COALESCE(role = 'admin', false) AS is_administrator
              FROM identity.users
              WHERE id = $1`,
             [input.userId]
@@ -1431,6 +1436,27 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
              LIMIT 1`,
             [input.organizationId]
           ),
+          pool.query<{ code: string; name: string }>(
+            `SELECT post.employee_code AS code, post.employee_name AS name
+             FROM identity.employee_links employee
+             JOIN recruitment.posts post
+               ON post.organization_id = employee.organization_id
+              AND lower(btrim(post.employee_code)) =
+                  lower(btrim(employee.employee_code))
+             WHERE employee.user_id = $1
+               AND employee.organization_id = $2
+               AND nullif(btrim(post.employee_name), '') IS NOT NULL
+               AND (
+                 post.status = 'Occupied'
+                 OR (post.status = 'Appointed'
+                   AND post.joining_date <= current_date)
+                 OR (post.status = 'Resigned'
+                   AND post.last_working_date >= current_date)
+               )
+             ORDER BY post.post_code
+             LIMIT 1`,
+            [input.userId, input.organizationId]
+          ),
         ])
       const user = account.rows[0]
       if (!user) throw new Error("The signed-in user account was not found.")
@@ -1444,6 +1470,13 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           ({ department }) => department
         ),
         requesterEmail: user.email,
+        requesterIdentity: {
+          code: linkedEmployee.rows[0]?.code?.trim() ?? "",
+          name:
+            linkedEmployee.rows[0]?.name?.trim() ||
+            user.name.trim() ||
+            user.email,
+        },
         storeLocation: location.rows[0] ?? null,
       }
     },
@@ -4450,7 +4483,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       changedItems: string[]
       completedAt: string
       completedBy: string
-      completedByEmployeeCode: string
+      completedByEmployeeCode: string | null
       organizationId: string
       remark?: string | null
       workDone: string
@@ -4479,7 +4512,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           throw new Error("Completion must follow the breakdown start.")
         }
         const workDone = requiredText(input.workDone, "Work done")
-        const completedBy = requiredText(input.completedBy, "Maintenance employee")
+        const completedBy = requiredText(input.completedBy, "Completed by")
         const record = await client.query<{ id: string }>(
           `INSERT INTO store.asset_maintenance_records (
               organization_id, asset_id, maintenance_type, completed_on,
@@ -4500,7 +4533,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
               completed_by_user_id = $9
             WHERE organization_id = $1 AND id = $2`,
           [input.organizationId, input.breakdownId, completedAt, completedBy,
-            requiredText(input.completedByEmployeeCode, "Maintenance Employee ID"),
+            input.completedByEmployeeCode?.trim() || null,
             workDone, JSON.stringify(input.changedItems.map((item) => item.trim()).filter(Boolean)),
             record.rows[0].id, input.actorUserId]
         )

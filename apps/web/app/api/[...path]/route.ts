@@ -17,6 +17,7 @@ import { readAuthEnvironment } from "@/lib/auth/auth"
 import {
   activeProductionWorker,
   signedInEmployee,
+  signedInPerformer,
   type SignedInWorkRole,
 } from "../../../lib/auth/signed-in-machinist"
 import { productionMasterCapability } from "../../../lib/auth/production-master-access"
@@ -117,12 +118,14 @@ function requiredProductionFloor(value: unknown) {
 
 async function requireOwnProductionRole({
   actorUserId,
+  actorUserName,
   allowAuthorizedStaff = false,
   enteredRole,
   organizationId,
   productionFloorCode,
 }: {
   actorUserId: string
+  actorUserName: string
   allowAuthorizedStaff?: boolean
   enteredRole: string
   organizationId: string
@@ -131,16 +134,22 @@ async function requireOwnProductionRole({
   if (!["shop_floor", "machinist", "quality", ...(allowAuthorizedStaff ? ["authorized_staff"] : [])].includes(enteredRole)) {
     throw new RouteError(400, "Select your assigned production department.")
   }
-  const performer = await signedInEmployee({
+  const floor = requiredProductionFloor(productionFloorCode)
+  const identity = {
     connectionString: readAuthEnvironment().connectionString,
     organizationId,
-    productionFloorCode: requiredProductionFloor(productionFloorCode),
-    role: enteredRole as SignedInWorkRole,
     userId: actorUserId,
-  })
+  }
+  const performer = enteredRole === "authorized_staff"
+    ? await signedInPerformer({ ...identity, userName: actorUserName })
+    : await signedInEmployee({
+        ...identity,
+        productionFloorCode: floor,
+        role: enteredRole as SignedInWorkRole,
+      })
   if (!performer) {
     throw new RouteError(403, enteredRole === "authorized_staff"
-      ? "Your account needs a linked, active Employee ID to record this session."
+      ? "Your account needs a name to record this session."
       : "Your Employee ID is not active in the selected production department and unit.")
   }
   return enteredRole
@@ -1396,15 +1405,14 @@ async function post(request: NextRequest, context: RouteContext) {
       const result = await withProductionRepository(
         request,
         "operations.dispatch.write",
-        async ({ actorUserId, organizationId, repository }) => {
-          const approver = await signedInEmployee({
+        async ({ actorUserId, actorUserName, organizationId, repository }) => {
+          const approver = await signedInPerformer({
             connectionString: readAuthEnvironment().connectionString,
             organizationId,
-            productionFloorCode: requiredProductionFloor(body.productionFloorCode),
-            role: "dispatch",
             userId: actorUserId,
+            userName: actorUserName,
           })
-          if (!approver) throw new RouteError(403, "Your Employee ID needs an active Planner or Shop Floor assignment in this production unit.")
+          if (!approver) throw new RouteError(403, "Your account needs a name to approve dispatch.")
           return repository.recordDispatchApproval({
             actorUserId,
             approvedBy: approver.name,
@@ -1422,15 +1430,14 @@ async function post(request: NextRequest, context: RouteContext) {
       const result = await withProductionRepository(
         request,
         "operations.shop_floor.write",
-        async ({ actorUserId, organizationId, repository }) => {
-          const performer = await signedInEmployee({
+        async ({ actorUserId, actorUserName, organizationId, repository }) => {
+          const performer = await signedInPerformer({
             connectionString: readAuthEnvironment().connectionString,
             organizationId,
-            productionFloorCode: requiredProductionFloor(body.productionFloorCode),
-            role: "shop_floor",
             userId: actorUserId,
+            userName: actorUserName,
           })
-          if (!performer) throw new RouteError(403, "Your Employee ID needs an active Shop Floor assignment in this production unit.")
+          if (!performer) throw new RouteError(403, "Your account needs a name to complete this setup.")
           return repository.recordSetupCompletion({
             actorUserId,
             completedBy: performer.name,
@@ -1603,11 +1610,12 @@ async function post(request: NextRequest, context: RouteContext) {
         const result = await withProductionRepository(
           request,
           "operations.production.write",
-          async ({ actorUserId, organizationId, repository }) => {
+          async ({ actorUserId, actorUserName, organizationId, repository }) => {
             const enteredRole = await requireOwnProductionRole({
               actorUserId,
+              actorUserName,
               allowAuthorizedStaff: true,
-              enteredRole: text(payload.enteredRole) || "shop_floor",
+              enteredRole: text(payload.enteredRole) || "authorized_staff",
               organizationId,
               productionFloorCode: payload.productionFloorCode,
             })
@@ -1646,11 +1654,12 @@ async function post(request: NextRequest, context: RouteContext) {
         const result = await withProductionRepository(
           request,
           "operations.production.write",
-          async ({ actorUserId, organizationId, repository }) => {
+          async ({ actorUserId, actorUserName, organizationId, repository }) => {
             const enteredRole = await requireOwnProductionRole({
               actorUserId,
+              actorUserName,
               allowAuthorizedStaff: true,
-              enteredRole: text(payload.enteredRole) || "shop_floor",
+              enteredRole: text(payload.enteredRole) || "authorized_staff",
               organizationId,
               productionFloorCode: payload.productionFloorCode,
             })
@@ -1697,9 +1706,11 @@ async function post(request: NextRequest, context: RouteContext) {
         const result = await withProductionRepository(
           request,
           "operations.production.write",
-          async ({ actorUserId, organizationId, repository }) => {
+          async ({ actorUserId, actorUserName, organizationId, repository }) => {
             const enteredRole = await requireOwnProductionRole({
               actorUserId,
+              actorUserName,
+              allowAuthorizedStaff: true,
               enteredRole: text(payload.enteredRole),
               organizationId,
               productionFloorCode: payload.productionFloorCode,
@@ -1725,9 +1736,11 @@ async function post(request: NextRequest, context: RouteContext) {
         const result = await withProductionRepository(
           request,
           "operations.production.write",
-          async ({ actorUserId, organizationId, repository }) => {
+          async ({ actorUserId, actorUserName, organizationId, repository }) => {
             const enteredRole = await requireOwnProductionRole({
               actorUserId,
+              actorUserName,
+              allowAuthorizedStaff: true,
               enteredRole: text(payload.enteredRole),
               organizationId,
               productionFloorCode: floor,
@@ -1757,9 +1770,11 @@ async function post(request: NextRequest, context: RouteContext) {
         const result = await withProductionRepository(
           request,
           "operations.production.write",
-          async ({ actorUserId, organizationId, repository }) => {
+          async ({ actorUserId, actorUserName, organizationId, repository }) => {
             const enteredRole = await requireOwnProductionRole({
               actorUserId,
+              actorUserName,
+              allowAuthorizedStaff: true,
               enteredRole: text(payload.enteredRole),
               organizationId,
               productionFloorCode: payload.productionFloorCode,
@@ -1825,17 +1840,26 @@ async function post(request: NextRequest, context: RouteContext) {
         const result = await withProductionRepository(
           request,
           "operations.production.write",
-          async ({ actorUserId, organizationId, repository }) => {
-            await requireOwnProductionRole({
+          async ({ actorUserId, actorUserName, organizationId, repository }) => {
+            const qualityPerformer = await signedInEmployee({
+              connectionString: readAuthEnvironment().connectionString,
+              organizationId,
+              productionFloorCode: requiredProductionFloor(payload.productionFloorCode),
+              role: "quality",
+              userId: actorUserId,
+            })
+            const enteredRole = qualityPerformer ? "quality" : await requireOwnProductionRole({
               actorUserId,
-              enteredRole: "quality",
+              actorUserName,
+              allowAuthorizedStaff: true,
+              enteredRole: "authorized_staff",
               organizationId,
               productionFloorCode: payload.productionFloorCode,
             })
             return repository.recordProductionSessionRejection({
               actorUserId,
               correctionReason: text(payload.correctionReason) || undefined,
-              enteredRole: "quality",
+              enteredRole,
               organizationId,
               quantity: firstNumeric(payload.quantity, payload.rejectQty),
               reasonCode: text(
@@ -1916,33 +1940,24 @@ async function post(request: NextRequest, context: RouteContext) {
         const result = await withProductionRepository(
           request,
           "operations.shop_floor.write",
-          async ({ actorUserId, organizationId, repository }) => {
-            const performerRole: SignedInWorkRole | undefined = {
-              raw_material_at_machine: "shop_floor",
-              shop_floor_rm: "shop_floor",
-              presetting: "machinist",
-              tools_drawing: "machinist",
-              setting: "machinist",
-              quality_approval: "quality",
-              qc_approval: "quality",
-              operator_started: "machinist",
-              worker_start: "machinist",
-            }[text(payload.stage).toLowerCase()] as SignedInWorkRole | undefined
-            const performer = performerRole
-              ? await signedInEmployee({
+          async ({ actorUserId, actorUserName, organizationId, repository }) => {
+            const performerStage = new Set([
+              "raw_material_at_machine", "shop_floor_rm", "presetting",
+              "tools_drawing", "setting", "quality_approval", "qc_approval",
+              "operator_started", "worker_start",
+            ]).has(text(payload.stage).toLowerCase())
+            const performer = performerStage
+              ? await signedInPerformer({
                   connectionString: readAuthEnvironment().connectionString,
                   organizationId,
-                  productionFloorCode: requiredProductionFloor(
-                    payload.productionFloorCode
-                  ),
-                  role: performerRole,
                   userId: actorUserId,
+                  userName: actorUserName,
                 })
               : null
-            if (performerRole && !performer) {
+            if (performerStage && !performer) {
               throw new RouteError(
                 403,
-                "Your signed-in Employee ID must have an active assignment for this task in this production unit."
+                "Your account needs a name to record this task."
               )
             }
             if (
@@ -1962,7 +1977,7 @@ async function post(request: NextRequest, context: RouteContext) {
                 ? {
                     ...payload,
                     doneBy: performer.name,
-                    doneByEmployeeCode: performer.code,
+                    doneByEmployeeCode: performer.code || null,
                   }
                 : payload,
               productionFloorCode: text(payload.productionFloorCode),

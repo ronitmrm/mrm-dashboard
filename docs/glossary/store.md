@@ -144,12 +144,18 @@ remaining quantity into the primary Store in one atomic operation. Supplier Bill
 Number, Supplier Bill Date, and an optional warranty / guarantee document belong
 to the receipt header, while a common Warranty / Guarantee Until date is copied
 to every selected receipt line and its Physical Assets. A receipt selection can
-never mix lines from different Purchase Orders.
+never mix lines from different Purchase Orders. Received By is the authorized
+signed-in person's active linked Employee ID and name, or account name when no
+active link exists.
 
 **Store Request**: One numbered demand submitted by a Department and an
 individual to one Store location. It contains one or more Coded Item Request
 Lines selected from Current Stock and receives an immutable number such as
-`STR-REQ-2026-000001`.
+`STR-REQ-2026-000001`. Requested By is filled from the signed-in user's active
+linked Employee ID and name, or their account name when no active link exists.
+An assigned single Department is automatic; multiple assigned Departments
+require a choice. System Administrators without an assignment may choose an
+active Department.
 
 **Coded Item Request Line**: One Store Item Type and requested quantity within
 a Store Request. Store allocates and saves each line independently; its live
@@ -167,6 +173,8 @@ allocated until it resolves to a Store Item Type. Resolution requires an
 explicitly selected Asset Code of the requested Asset Type; the request remains
 Pending until that link is saved. The register shows the linked Asset Code after
 resolution.
+It uses the same signed-in requester identity and Department choice as a Store
+Request.
 
 **Request Allocation Queue**: The filterable Store worklist of Coded Item
 Request Lines. It shows the Department, requesting individual, item, requested
@@ -235,6 +243,9 @@ directly to one received Unit ID, with a name, frequency in days, and first due
 date. Completing the matching work records evidence and advances the next due
 date by that frequency. Existing timetables linked to Maintenance Master remain
 readable and completable. Timetables do not belong to the Store Item Type.
+Moved By, Completed By, and asset-status Changed By identify the authorized signed-in
+performer: active linked Employee ID and name when available, or account name
+otherwise. Supplier / Lab separately records an external service provider.
 
 **Tooling Asset**: A Store Item Type created before it can be used as fixture,
 tooling, or foam tooling in production. Its Asset Code is the only identity

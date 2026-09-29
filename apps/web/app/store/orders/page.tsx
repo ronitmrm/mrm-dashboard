@@ -35,6 +35,7 @@ import { readAuthEnvironment } from "@/lib/auth/auth"
 import { MetricSummary } from "@/components/ui/golden-patterns"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { listGrantedStoreActions } from "@/lib/auth/store-action-access"
+import { storeRequestFormPolicy } from "@/lib/store-request-policy"
 
 import {
   receiveRemainingStoreStockBatchAction,
@@ -54,10 +55,21 @@ export default async function StoreOrdersPage() {
   const repository = createStoreRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
-  const data = await (async () => {
+  const [data, requestContext] = await (async () => {
     const organizationId = await repository.organizationIdForCode("MRMPL")
-    return repository.listPurchaseOrders(organizationId)
+    return Promise.all([
+      repository.listPurchaseOrders(organizationId),
+      canManage
+        ? repository.requisitionRequestContext({
+            organizationId,
+            userId: session.user.id,
+          })
+        : Promise.resolve(null),
+    ])
   })().finally(() => repository.close())
+  const receivedBy = requestContext
+    ? storeRequestFormPolicy(requestContext).requestedBy
+    : ""
 
   return (
     <div className="flex flex-col gap-6">
@@ -114,6 +126,7 @@ export default async function StoreOrdersPage() {
                 <BulkReceiveButton
                   action={receiveRemainingStoreStockBatchAction}
                   formId={bulkReceiptFormId}
+                  receivedBy={receivedBy}
                 />
               ) : null
             }
@@ -250,6 +263,16 @@ export default async function StoreOrdersPage() {
                                   value={order.id}
                                 />
                                 <FieldGroup className="grid gap-4 sm:grid-cols-2">
+                                  <Field>
+                                    <FieldLabel htmlFor={`receipt-received-by-${order.id}`}>
+                                      Received By
+                                    </FieldLabel>
+                                    <Input
+                                      id={`receipt-received-by-${order.id}`}
+                                      readOnly
+                                      value={receivedBy}
+                                    />
+                                  </Field>
                                   <Field>
                                     <FieldLabel
                                       htmlFor={`receipt-quantity-${order.id}`}

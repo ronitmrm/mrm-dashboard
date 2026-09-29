@@ -13,13 +13,14 @@ describe("Store Request policy", () => {
         isAdministrator: false,
         organizationDepartments: ["Production", "Quality"],
         requesterEmail: "operator@mayankrawmint.com",
+        requesterIdentity: { code: "OP-01", name: "Operator One" },
         storeLocation: null,
       })
     ).toEqual({
       departmentLocked: true,
       departmentOptions: ["Production"],
       departmentValue: "Production",
-      requestedBy: "operator@mayankrawmint.com",
+      requestedBy: "OP-01 - Operator One",
       storeLabel: "Main Store",
       submitDisabled: false,
     })
@@ -31,6 +32,7 @@ describe("Store Request policy", () => {
       isAdministrator: false,
       organizationDepartments: ["Production", "Quality", "Store"],
       requesterEmail: "manager@mayankrawmint.com",
+      requesterIdentity: { code: "MAN-01", name: "Manager One" },
       storeLocation: { code: "MAIN", name: "Main Store" },
     })
 
@@ -49,10 +51,12 @@ describe("Store Request policy", () => {
       isAdministrator: true,
       organizationDepartments: ["Production", "Quality"],
       requesterEmail: "admin@mayankrawmint.com",
+      requesterIdentity: { code: "", name: "System Administrator" },
       storeLocation: null,
     })
 
     expect(policy.departmentOptions).toEqual(["Production", "Quality"])
+    expect(policy.requestedBy).toBe("System Administrator")
     expect(policy.submitDisabled).toBe(false)
     expect(resolveStoreRequestDepartment(policy, "Production")).toBe(
       "Production"
@@ -65,6 +69,7 @@ describe("Store Request policy", () => {
       isAdministrator: false,
       organizationDepartments: ["Production"],
       requesterEmail: "unlinked@mayankrawmint.com",
+      requesterIdentity: { code: "", name: "Unlinked User" },
       storeLocation: null,
     })
 

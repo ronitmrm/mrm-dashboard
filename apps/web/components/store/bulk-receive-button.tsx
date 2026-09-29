@@ -52,9 +52,11 @@ function selectedReceipt(formId: string): Selection {
 export function BulkReceiveButton({
   action,
   formId,
+  receivedBy,
 }: {
   action: (data: FormData) => void | Promise<unknown>
   formId: string
+  receivedBy: string
 }) {
   const [open, setOpen] = React.useState(false)
   const [selection, setSelection] = React.useState(emptySelection)
@@ -142,6 +144,10 @@ export function BulkReceiveButton({
             value={selection.purchaseOrderId}
           />
           <FieldGroup className="grid gap-4 sm:grid-cols-2">
+            <Field>
+              <FieldLabel htmlFor="bulk-receipt-received-by">Received By</FieldLabel>
+              <Input id="bulk-receipt-received-by" readOnly value={receivedBy} />
+            </Field>
             <Field>
               <FieldLabel htmlFor="bulk-receipt-bill-number">
                 Supplier Bill Number (optional)
