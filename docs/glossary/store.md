@@ -55,9 +55,10 @@ one-time normalization; after that migration, the new codes remain immutable.
 
 **Physical Asset**: One Non Consumable item tracked individually through receipt,
 assignment, movement, maintenance, calibration, breakage, and scrap.
-Its Unit ID owns maintenance and calibration schedules, completed history, and
-any open breakdown. The shared Asset Code page presents those unit records and
-requires Unit ID selection for schedule assignment.
+Its Unit ID owns due dates, completed maintenance and calibration history, and
+any open breakdown. The shared Asset Code can have a Maintenance Master plan
+that applies to every physical unit of that Store Item Type. Calibration
+appointments and their supplier work remain specific to one Unit ID.
 
 **Unit ID / Serial ID**: The permanent identity of one Physical Asset, separate
 from its shared Asset Code. It may use the manufacturer's serial number and has
@@ -238,11 +239,18 @@ merging logical drawing links. Historical Store document rows remain readable.
 Unit ID between the Store, a Department, a Machine, or a Vendor. A Store Return
 is an Asset Movement back to a Store location; Consumables never participate.
 
-**Asset Maintenance Timetable**: A maintenance or calibration schedule assigned
-directly to one received Unit ID, with a name, frequency in days, and first due
-date. Completing the matching work records evidence and advances the next due
-date by that frequency. Existing timetables linked to Maintenance Master remain
-readable and completable. Timetables do not belong to the Store Item Type.
+**Asset Maintenance Plan**: One active Calendar Days Maintenance Master assigned
+to a Non Consumable Store Item Type by its shared Asset Code. The selected
+Master supplies the name and frequency. The chosen first due date applies to
+existing physical units; units received later start with a due date calculated
+from their acquisition date plus that Master frequency. Each unit keeps its
+own next due date, and completing one unit advances only its timetable.
+
+**Asset Maintenance Timetable**: The due and completion state for one physical
+Unit ID. A Store Item Type Maintenance Plan creates its unit timetables, while
+existing directly assigned maintenance and calibration timetables remain
+readable and completable. Calibration scheduling and service evidence belong
+to the individual Unit ID.
 Moved By, Completed By, and asset-status Changed By identify the authorized signed-in
 performer: active linked Employee ID and name when available, or account name
 otherwise. Supplier / Lab separately records an external service provider.

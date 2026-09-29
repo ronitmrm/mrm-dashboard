@@ -25,14 +25,18 @@ export function StoreItemScheduleSection({
   maintenanceForm: ReactNode
 }) {
   const [activeForm, setActiveForm] = useState<ScheduleType | null>(null)
+  const availableForms = ([
+    ["MAINTENANCE", maintenanceForm],
+    ["CALIBRATION", calibrationForm],
+  ] as const).filter(([, form]) => form !== null)
 
   return (
     <SectionCard>
       <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <CardTitle>Assigned Maintenance & Calibration Schedules</CardTitle>
-        {canAssign ? (
+        {canAssign && availableForms.length ? (
           <div className="flex flex-wrap items-center gap-2">
-            {(["MAINTENANCE", "CALIBRATION"] as const).map((scheduleType) => (
+            {availableForms.map(([scheduleType]) => (
               <Button
                 aria-controls={activeForm === scheduleType ? "item-schedule-assignment-form" : undefined}
                 aria-expanded={activeForm === scheduleType}
@@ -49,7 +53,7 @@ export function StoreItemScheduleSection({
         ) : null}
       </CardHeader>
       <CardContent className="grid min-w-0 gap-4">
-        {canAssign && activeForm ? (
+        {canAssign && activeForm && availableForms.some(([type]) => type === activeForm) ? (
           <section
             aria-label={`Assign ${activeForm === "MAINTENANCE" ? "Maintenance" : "Calibration"} Schedule`}
             className="grid w-full max-w-2xl gap-4 rounded-lg border p-4"

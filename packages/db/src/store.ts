@@ -719,6 +719,32 @@ async function receiveStockWithClient(
         lineAssetCodes.push(assetCode)
         await client.query(
           `
+            INSERT INTO store.asset_maintenance_schedules (
+              organization_id, asset_id, definition_id, first_due_on,
+              next_due_on, created_by_user_id, updated_by_user_id
+            )
+            SELECT $1, asset.id, plan.definition_id,
+              asset.acquired_on + definition.frequency_value,
+              asset.acquired_on + definition.frequency_value, $4, $4
+            FROM store.assets asset
+            JOIN store.item_type_maintenance_plans plan
+              ON plan.item_type_id = asset.item_type_id
+                AND plan.organization_id = asset.organization_id
+                AND plan.active
+            JOIN maintenance.definitions definition
+              ON definition.id = plan.definition_id
+            WHERE asset.id = $2 AND asset.item_type_id = $3
+            ON CONFLICT (asset_id, definition_id) DO NOTHING
+          `,
+          [
+            input.organizationId,
+            asset.rows[0]!.id,
+            orderLine.item_type_id,
+            input.actorUserId ?? null,
+          ]
+        )
+        await client.query(
+          `
           INSERT INTO store.stock_movements (
             organization_id, item_type_id, asset_id, location_id,
             receipt_line_id, movement_type, quantity,
@@ -3754,7 +3780,15 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         [input.organizationId, requiredText(input.typeCode, "Asset Code")]
       )
       if (!item.rows[0]) return null
-      const [assets, drawing, supplierPrices, schedules, maintenance] = await Promise.all([
+      const [
+        assets,
+        drawing,
+        supplierPrices,
+        schedules,
+        maintenance,
+        maintenanceMasters,
+        maintenancePlans,
+      ] = await Promise.all([
         pool.query<{
           acquiredOn: string | null
           assetCode: string
@@ -3914,12 +3948,53 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             ORDER BY record.completed_on DESC, record.created_at DESC`,
           [input.organizationId, item.rows[0].id]
         ),
+        pool.query<{
+          checklistCode: string | null
+          code: string
+          frequencyDays: number
+          id: string
+          name: string
+        }>(
+          `SELECT definition.id, definition.code, definition.name,
+              definition.frequency_value AS "frequencyDays",
+              definition.checklist_code AS "checklistCode"
+            FROM maintenance.definitions definition
+            WHERE definition.organization_id = $1 AND definition.active
+              AND definition.source_table IN ('dataEntries', 'maintenance_master')
+              AND definition.code <> 'BREAKDOWN'
+              AND definition.frequency_unit = 'day'
+              AND lower(btrim(COALESCE(definition.frequency_basis, 'Calendar days')))
+                = 'calendar days'
+            ORDER BY definition.code`,
+          [input.organizationId]
+        ),
+        pool.query<{
+          code: string
+          definitionId: string
+          firstDueOn: string
+          frequencyDays: number
+          id: string
+          name: string
+        }>(
+          `SELECT plan.id, plan.definition_id AS "definitionId",
+              definition.code, definition.name,
+              definition.frequency_value AS "frequencyDays",
+              plan.first_due_on::text AS "firstDueOn"
+            FROM store.item_type_maintenance_plans plan
+            JOIN maintenance.definitions definition ON definition.id = plan.definition_id
+            WHERE plan.organization_id = $1 AND plan.item_type_id = $2
+              AND plan.active
+            ORDER BY definition.code`,
+          [input.organizationId, item.rows[0].id]
+        ),
       ])
       return {
         assets: assets.rows,
         drawing: drawing.rows[0] ?? null,
         item: item.rows[0],
         maintenance: maintenance.rows,
+        maintenanceMasters: maintenanceMasters.rows,
+        maintenancePlans: maintenancePlans.rows,
         schedules: schedules.rows,
         supplierPrices: supplierPrices.rows,
       }
@@ -4345,6 +4420,71 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           input.assetCode
         )
         await queueDashboardRefresh(client, input.organizationId)
+      })
+    },
+
+    async scheduleItemTypeMaintenance(input: {
+      actorUserId?: string | null
+      definitionId: string
+      firstDueOn: string
+      organizationId: string
+      typeCode: string
+    }) {
+      return withTransaction(pool, async (client) => {
+        const item = await client.query<{ id: string; typeCode: string }>(
+          `SELECT id, type_code AS "typeCode"
+            FROM store.item_types
+            WHERE organization_id = $1 AND lower(type_code) = lower($2)
+              AND tracking_mode = 'SERIALIZED' AND active
+            FOR UPDATE`,
+          [input.organizationId, requiredText(input.typeCode, "Asset Code")]
+        )
+        if (!item.rows[0]) {
+          throw new Error("Non Consumable Asset Code was not found.")
+        }
+        const definition = await client.query<{ id: string }>(
+          `SELECT id FROM maintenance.definitions
+            WHERE id = $1 AND organization_id = $2 AND active
+              AND source_table IN ('dataEntries', 'maintenance_master')
+              AND code <> 'BREAKDOWN' AND frequency_unit = 'day'
+              AND lower(btrim(COALESCE(frequency_basis, 'Calendar days')))
+                = 'calendar days'`,
+          [requiredText(input.definitionId, "Maintenance Master"), input.organizationId]
+        )
+        if (!definition.rows[0]) {
+          throw new Error("Active Calendar Days Maintenance Master was not found.")
+        }
+        const existing = await client.query<{ id: string }>(
+          `SELECT id FROM store.item_type_maintenance_plans
+            WHERE item_type_id = $1 AND definition_id = $2`,
+          [item.rows[0].id, definition.rows[0].id]
+        )
+        if (existing.rows[0]) {
+          throw new Error("This Maintenance Master is already assigned to the Asset Code.")
+        }
+        const plan = await client.query<{ id: string }>(
+          `INSERT INTO store.item_type_maintenance_plans (
+              organization_id, item_type_id, definition_id, first_due_on,
+              created_by_user_id, updated_by_user_id
+            ) VALUES ($1, $2, $3, $4::date, $5, $5)
+            RETURNING id`,
+          [input.organizationId, item.rows[0].id, definition.rows[0].id,
+            requiredText(input.firstDueOn, "First due date"), input.actorUserId ?? null]
+        )
+        await client.query(
+          `INSERT INTO store.asset_maintenance_schedules (
+              organization_id, asset_id, definition_id, first_due_on,
+              next_due_on, created_by_user_id, updated_by_user_id
+            )
+            SELECT $1, asset.id, $3, $4::date, $4::date, $5, $5
+            FROM store.assets asset
+            WHERE asset.organization_id = $1 AND asset.item_type_id = $2
+              AND asset.status <> 'SCRAPPED'
+            ON CONFLICT (asset_id, definition_id) DO NOTHING`,
+          [input.organizationId, item.rows[0].id, definition.rows[0].id,
+            input.firstDueOn, input.actorUserId ?? null]
+        )
+        return { id: plan.rows[0]!.id, typeCode: item.rows[0].typeCode }
       })
     },
 
