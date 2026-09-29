@@ -145,6 +145,10 @@ shop-floor work, explicit planner placements and higher-priority commitments
 remain protected. Continuity must not postpone the setup's existing forecast
 finish; it is a preference, not permission to delay delivery. Setup and quality
 approval remain required, and unrecorded changeover savings are not invented.
+Automatic rebalancing must retain an existing feasible machine when the proposed
+machine would start the same unstarted setup later, after accounting for its
+queue and unavailable dates. A lighter machine queue alone is not a reason to
+delay that setup.
 
 - Machinist setup time: Pre Setting start to Setting complete.
 - QC wait: Setting complete to QC approval.
