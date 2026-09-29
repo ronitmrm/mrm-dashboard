@@ -36,6 +36,7 @@ import {
   StoreItemWorkspacePane,
   StoreItemWorkspaceTabs,
 } from "@/components/store-asset-workspace-tabs"
+import { StoreItemScheduleSection } from "@/components/store-item-schedule-section"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { signedInPerformer } from "@/lib/auth/signed-in-machinist"
 import { formatIstDateTime, istDateValue } from "@/lib/date-time"
@@ -939,6 +940,28 @@ function StoreItemWorkspace({
 }) {
   const { assets, drawing, item, maintenance, schedules, supplierPrices } = workspace
   const isNonConsumable = item.assetType === "NON_CONSUMABLE"
+  const assignableAssets = assets.filter((asset) => asset.status !== "SCRAPPED")
+  const canAssignSchedule = canMaintain && assignableAssets.length > 0
+  const scheduleForm = (scheduleType: "MAINTENANCE" | "CALIBRATION") => (
+    <form action={scheduleStoreAssetMaintenanceAction} className="grid gap-4">
+      <input name="schedule_type" type="hidden" value={scheduleType} />
+      <Field>
+        <FieldLabel htmlFor={`item-${scheduleType}-unit`}>Unit ID</FieldLabel>
+        <NativeSelect id={`item-${scheduleType}-unit`} name="asset_code" required defaultValue="">
+          <NativeSelectOption value="">Select Unit ID</NativeSelectOption>
+          {assignableAssets.map((asset) => (
+            <NativeSelectOption key={asset.id} value={asset.assetCode}>
+              {asset.assetCode} · {asset.holderName || asset.locationName || asset.holderType}
+            </NativeSelectOption>
+          ))}
+        </NativeSelect>
+      </Field>
+      <TextField label="Schedule Name" name="schedule_name" required />
+      <TextField label="Frequency (days)" min="1" name="frequency_days" required step="1" type="number" />
+      <TextField label="First Due Date" name="first_due_on" required type="date" />
+      <Button className="w-fit" type="submit">Assign Schedule</Button>
+    </form>
+  )
 
   return (
     <div className="flex flex-col gap-6">
@@ -1054,40 +1077,11 @@ function StoreItemWorkspace({
             <p className="text-sm text-muted-foreground">
               Schedules and history belong to each physical Unit ID. Choose the unit when assigning a timetable.
             </p>
-            {canMaintain && assets.length ? (
-              <div className="grid gap-4 xl:grid-cols-2">
-                {(["MAINTENANCE", "CALIBRATION"] as const).map((scheduleType) => (
-                  <SectionCard key={scheduleType} width="standard">
-                    <CardHeader>
-                      <CardTitle>Assign {scheduleType === "MAINTENANCE" ? "Maintenance" : "Calibration"} Schedule</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <form action={scheduleStoreAssetMaintenanceAction} className="grid gap-4">
-                        <input name="schedule_type" type="hidden" value={scheduleType} />
-                        <Field>
-                          <FieldLabel htmlFor={`item-${scheduleType}-unit`}>Unit ID</FieldLabel>
-                          <NativeSelect id={`item-${scheduleType}-unit`} name="asset_code" required defaultValue="">
-                            <NativeSelectOption value="">Select Unit ID</NativeSelectOption>
-                            {assets.filter((asset) => asset.status !== "SCRAPPED").map((asset) => (
-                              <NativeSelectOption key={asset.id} value={asset.assetCode}>
-                                {asset.assetCode} · {asset.holderName || asset.locationName || asset.holderType}
-                              </NativeSelectOption>
-                            ))}
-                          </NativeSelect>
-                        </Field>
-                        <TextField label="Schedule Name" name="schedule_name" required />
-                        <TextField label="Frequency (days)" min="1" name="frequency_days" required step="1" type="number" />
-                        <TextField label="First Due Date" name="first_due_on" required type="date" />
-                        <Button className="w-fit" type="submit">Assign Schedule</Button>
-                      </form>
-                    </CardContent>
-                  </SectionCard>
-                ))}
-              </div>
-            ) : null}
-            <SectionCard>
-              <CardHeader><CardTitle>Assigned Maintenance & Calibration Schedules</CardTitle></CardHeader>
-              <CardContent className="min-w-0">
+            <StoreItemScheduleSection
+              canAssign={canAssignSchedule}
+              calibrationForm={canAssignSchedule ? scheduleForm("CALIBRATION") : null}
+              maintenanceForm={canAssignSchedule ? scheduleForm("MAINTENANCE") : null}
+            >
                 <OperationalTable>
                   <TableHeader><TableRow>
                     <TableHead>Unit ID</TableHead><TableHead>Type</TableHead><TableHead>Schedule</TableHead>
@@ -1105,8 +1099,7 @@ function StoreItemWorkspace({
                     {!schedules.length ? <TableRow><TableCell className="h-24 text-center text-muted-foreground" colSpan={6}>No schedules assigned to physical units.</TableCell></TableRow> : null}
                   </TableBody>
                 </OperationalTable>
-              </CardContent>
-            </SectionCard>
+            </StoreItemScheduleSection>
             <SectionCard>
               <CardHeader><CardTitle>Maintenance & Calibration History</CardTitle></CardHeader>
               <CardContent className="min-w-0">
