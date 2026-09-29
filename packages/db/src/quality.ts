@@ -1043,7 +1043,10 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
         `
           SELECT check_row.id::text AS "id", check_row.check_key AS "checkId",
             check_row.checked_at AS "checkedAt", check_row.status,
-            COALESCE(checker.email, check_row.legacy_checker) AS "checkedBy",
+            CASE WHEN NULLIF(check_row.source_payload->>'checkedByEmployeeCode', '') IS NOT NULL
+              THEN check_row.legacy_checker
+              ELSE COALESCE(checker.email, check_row.legacy_checker)
+            END AS "checkedBy",
             work_order.job_card_number AS "jobCard",
             work_order.job_card_number AS "jcNo", item.uid AS "partCode",
             machine.machine_number AS "machine", machine_type.name AS "machineType",
@@ -1112,7 +1115,10 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
           `
             SELECT check_row.id::text AS "id", check_row.check_key AS "checkId",
               check_row.checked_at AS "checkedAt", check_row.status,
-              COALESCE(checker.email, check_row.legacy_checker) AS "checkedBy",
+              CASE WHEN NULLIF(check_row.source_payload->>'checkedByEmployeeCode', '') IS NOT NULL
+                THEN check_row.legacy_checker
+                ELSE COALESCE(checker.email, check_row.legacy_checker)
+              END AS "checkedBy",
               work_order.job_card_number AS "jobCard",
               work_order.job_card_number AS "jcNo", item.uid AS "partCode",
               machine.machine_number AS "machine", machine_type.name AS "machineType",

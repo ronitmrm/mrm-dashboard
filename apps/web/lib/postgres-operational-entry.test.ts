@@ -114,7 +114,7 @@ describe("PostgreSQL operational entry mapping", () => {
     })
   })
 
-  test("keeps both setup checklist phases and their original value types", () => {
+  test("saves only the active setup checklist phase with its original value type", () => {
     expect(
       operationalEntryPlan("setup_checklist_session", {
         sessionId: "JC-9|M15|1|2|TR506",
@@ -151,19 +151,6 @@ describe("PostgreSQL operational entry mapping", () => {
       family: "quality",
       operation: "setup-session",
       phases: [
-        {
-          input: {
-            completedBy: "MACH-1",
-            phase: "start",
-            results: [
-              {
-                itemKey: "1|Drawing checked",
-                notes: "Drawing available",
-                value: true,
-              },
-            ],
-          },
-        },
         {
           input: {
             completedBy: "MACH-2",

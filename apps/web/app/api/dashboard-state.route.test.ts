@@ -83,6 +83,7 @@ vi.mock("@/lib/postgres-operational-entry-server", () => ({
 
 vi.mock("../../lib/auth/signed-in-machinist", () => ({
   signedInMachinist: vi.fn(),
+  signedInEmployee: vi.fn(),
 }))
 
 import { GET } from "./[...path]/route"

@@ -11,7 +11,8 @@ const dependencies = vi.hoisted(() => ({
   upsertCycleStandard: vi.fn(),
   startBulkProductionSessionDowntime: vi.fn(),
   recordShopFloorStage: vi.fn(),
-  signedInMachinist: vi.fn(),
+  recordDispatchApproval: vi.fn(),
+  signedInEmployee: vi.fn(),
   executePostgresOperationalEntry: vi.fn(),
   isPostgresOperationalEntryType: vi.fn(),
   requestRefresh: vi.fn(),
@@ -35,6 +36,7 @@ vi.mock("@workspace/db", async (importOriginal) => ({
     upsertRawMaterialReceipts: dependencies.upsertRawMaterialReceipts,
     startBulkProductionSessionDowntime: dependencies.startBulkProductionSessionDowntime,
     recordShopFloorStage: dependencies.recordShopFloorStage,
+    recordDispatchApproval: dependencies.recordDispatchApproval,
   }),
   createDashboardPlanningRepository: () => ({
     close: dependencies.close,
@@ -49,7 +51,7 @@ vi.mock("@/lib/auth/auth", () => ({
 }))
 
 vi.mock("../../lib/auth/signed-in-machinist", () => ({
-  signedInMachinist: dependencies.signedInMachinist,
+  signedInEmployee: dependencies.signedInEmployee,
 }))
 vi.mock("../../lib/auth/auth", () => ({
   getAuth: () => ({ api: { getSession: dependencies.getSession } }),
@@ -96,7 +98,7 @@ import { POST } from "./[...path]/route"
 import { ShopFloorConflictError } from "@workspace/db"
 
 function post(
-  path: "data-entry" | "data-import",
+  path: "data-entry" | "data-import" | "dispatch-approval",
   body: Record<string, unknown>
 ) {
   return POST(
@@ -130,7 +132,7 @@ describe("production entry mutation API authorization", () => {
     dependencies.upsertRawMaterialReceipt.mockResolvedValue({ ok: true })
     dependencies.upsertRawMaterialReceipts.mockResolvedValue({ ok: true })
     dependencies.isPostgresOperationalEntryType.mockReturnValue(false)
-    dependencies.signedInMachinist.mockResolvedValue({ code: "42", name: "CNC Programmer" })
+    dependencies.signedInEmployee.mockResolvedValue({ code: "42", name: "CNC Programmer" })
   })
 
   afterEach(() => vi.restoreAllMocks())
@@ -149,6 +151,26 @@ describe("production entry mutation API authorization", () => {
     })
     expect(response.status).toBe(409)
     expect(await response.json()).toEqual({ error: message })
+    expect(dependencies.signedInEmployee).toHaveBeenCalledWith(
+      expect.objectContaining({ role: "shop_floor", userId: "entry-writer" })
+    )
+  })
+
+  it("uses the signed-in employee for dispatch approval", async () => {
+    dependencies.listAllGrantedCapabilities.mockResolvedValue([
+      "operations.dispatch.write",
+      "operations.floors.cnc.job_cards.dispatch_approval.write",
+    ])
+    dependencies.signedInEmployee.mockResolvedValue({ code: "42", name: "Planner One" })
+    dependencies.recordDispatchApproval.mockResolvedValue({ ok: true })
+
+    const response = await post("dispatch-approval", {
+      jcNo: "P2046", productionFloorCode: "cnc", approvedBy: "Another Employee",
+    })
+    expect(response.status).toBe(200)
+    expect(dependencies.recordDispatchApproval).toHaveBeenCalledWith(
+      expect.objectContaining({ approvedBy: "Planner One", actorUserId: "entry-writer" })
+    )
   })
 
   it("records Setting under the signed-in programmer and rejects another person", async () => {
@@ -203,6 +225,10 @@ describe("production entry mutation API authorization", () => {
     expect(dependencies.startBulkProductionSessionDowntime).toHaveBeenCalledWith({
       ...body.payload, actorUserId: "entry-writer", organizationId: "organization-1",
     })
+    dependencies.signedInEmployee.mockResolvedValue(null)
+    dependencies.startBulkProductionSessionDowntime.mockClear()
+    expect((await post("data-entry", body)).status).toBe(403)
+    expect(dependencies.startBulkProductionSessionDowntime).not.toHaveBeenCalled()
   })
 
   it("passes the edited cycle record identity and queues recalculation", async () => {
