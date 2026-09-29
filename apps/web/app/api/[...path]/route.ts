@@ -1412,7 +1412,7 @@ async function post(request: NextRequest, context: RouteContext) {
             userId: actorUserId,
             userName: actorUserName,
           })
-          if (!approver) throw new RouteError(403, "Your account needs a name to approve dispatch.")
+          if (!approver) throw new RouteError(403, "Your account needs a name to dispatch a Job Card.")
           return repository.recordDispatchApproval({
             actorUserId,
             approvedBy: approver.name,
@@ -1423,7 +1423,7 @@ async function post(request: NextRequest, context: RouteContext) {
           })
         }
       )
-      return json({ ...result, message: "Dispatch approved." })
+      return json({ ...result, message: "Job Card dispatched." })
     }
 
     if (path === "mark-complete") {

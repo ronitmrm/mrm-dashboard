@@ -2,6 +2,34 @@ import { describe, expect, test } from "vitest"
 
 import { buildLegacyDashboardSnapshot } from "./legacy-dashboard-analysis"
 
+test("approved dispatch marks the Job Card dispatched", () => {
+  const createdAt = "2026-09-29T10:00:00Z"
+  const snapshot = buildLegacyDashboardSnapshot({
+    workbookName: "PostgreSQL",
+    productionEntries: [],
+    dataEntries: ["P-DISPATCHED", "P-REJECTED"].map((jcNo) => ({
+      entryType: "work_order",
+      createdAt,
+      payload: { jcNo, partCode: "M1", optionNumber: "1", orderPcs: 10 },
+    })),
+    dispatchApprovals: [
+      { jobCardNumber: "P-DISPATCHED", decision: "approved", createdAt },
+      { jobCardNumber: "P-REJECTED", decision: "rejected", createdAt },
+    ],
+  })
+
+  expect(snapshot.productionControl).toMatchObject({
+    jobCardStatusTiles: expect.arrayContaining([
+      expect.objectContaining({ jcNo: "P-DISPATCHED", dispatchStatus: "Shifted to dispatch" }),
+      expect.objectContaining({ jcNo: "P-REJECTED", dispatchStatus: "In production" }),
+    ]),
+    productionDashboardRows: expect.arrayContaining([
+      expect.objectContaining({ jcNo: "P-DISPATCHED", status: "Dispatched" }),
+      expect.objectContaining({ jcNo: "P-REJECTED", status: "Pending" }),
+    ]),
+  })
+})
+
 test("current setup state wins over a later-timed historical stage event", () => {
   const entry = (entryType: string, payload: Record<string, unknown>, createdAt: string) => ({ entryType, payload, createdAt })
   const identity = { jcNo: "P2263", partCode: "M2160B", optionNumber: "1", setupNo: "1", machine: "CNC-10" }

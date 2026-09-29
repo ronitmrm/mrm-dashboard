@@ -1369,6 +1369,11 @@ describe("production and shop-floor workflows", () => {
       organizationId,
       remark: "Approved after completion",
     })
+    await expect(repository.recordDispatchApproval({
+      approvedBy: "Dispatch lead",
+      jobCardNumber: firstJobCard,
+      organizationId,
+    })).rejects.toThrow("already dispatched")
     await repository.reverseProductionEntry({
       actorUserId: null,
       productionEntryId,

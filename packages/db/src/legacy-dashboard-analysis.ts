@@ -1138,7 +1138,13 @@ function buildProductionControl({
       if (machine) setupRec.machines.add(machine);
     }
   }
-  const dispatchJcKeys = new Set(dispatchRows.map((row) => canonicalKey(rowText(row, "JC NO.", "JC NO", "jcNo"))).filter(Boolean));
+  const dispatchJcKeys = new Set(
+    [...dispatchRows, ...dispatchApprovals.filter((row) =>
+      !["rejected", "cancelled"].includes(rowText(row, "decision").toLowerCase())
+    )]
+      .map((row) => canonicalKey(rowText(row, "jobCardNumber", "JC NO.", "JC NO", "jcNo")))
+      .filter(Boolean)
+  );
   const readinessSetupGapsByWorkOrder = new WeakMap<object, ReadinessSetupGap[]>();
   const workOrderOutputRows = workOrderRows.map((row) => {
     const jcNo = rowText(row, "JC NO.", "JC NO", "jcNo");
@@ -1577,7 +1583,9 @@ function buildProductionDashboardRows({
     baselineRows.map((row) => [productionDashboardRowKey(row), row]),
   );
   const dispatchedByJobCard = new Map<string, string>();
-  for (const row of [...dispatchRows, ...dispatchApprovals]) {
+  for (const row of [...dispatchRows, ...dispatchApprovals.filter((approval) =>
+    !["rejected", "cancelled"].includes(rowText(approval, "decision").toLowerCase())
+  )]) {
     const jobCardKey = canonicalKey(rowText(row, "jobCardNumber", "jcNo", "JC NO.", "JC NO"));
     if (!jobCardKey) continue;
     const dispatchedDate = parseDate(rowValue(row, "dispatchedDate", "dispatchDate", "date", "createdAt"));

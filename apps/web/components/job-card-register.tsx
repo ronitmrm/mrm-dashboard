@@ -32,7 +32,7 @@ function jobCardProgress(row: Row) {
 function jobCardStage(row: Row) {
   const progress = jobCardProgress(row)
   const dispatch = first(row, ["dispatchStatus", "status"])
-  if (dispatch.toLowerCase().includes("dispatch")) return "Dispatch"
+  if (dispatch.toLowerCase().includes("dispatch")) return "Dispatched"
   if (progress !== null && progress >= 100) return "Production complete"
   if ((progress ?? 0) > 0 || numeric(row.rawRows) > 0 || numeric(row.rawActualQty) > 0 || numeric(row.rawOutputQty) > 0) return "Production"
   if (first(row, ["rmStatus"]).toLowerCase() !== "received") return "Awaiting RM"
