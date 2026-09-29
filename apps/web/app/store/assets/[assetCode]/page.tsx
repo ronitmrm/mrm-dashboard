@@ -36,8 +36,13 @@ import {
   StoreItemWorkspacePane,
   StoreItemWorkspaceTabs,
 } from "@/components/store-asset-workspace-tabs"
-import { StoreItemScheduleSection } from "@/components/store-item-schedule-section"
+import {
+  StoreAssetAcquisitionSection,
+  StoreAssetCalibrationScheduleSection,
+  StoreAssetMaintenanceSection,
+} from "@/components/store-item-schedule-section"
 import { StoreItemMaintenanceMasterForm } from "@/components/store-item-maintenance-master-form"
+import { StoreAssetCalibration } from "@/components/store-asset-calibration"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { signedInPerformer } from "@/lib/auth/signed-in-machinist"
 import { formatIstDateTime, istDateValue } from "@/lib/date-time"
@@ -54,8 +59,16 @@ import {
   completeStoreRepairPurchaseOrderAction,
   createStoreRepairPurchaseOrderAction,
   moveStoreAssetAction,
+  recordStoreAssetAcquisitionAction,
   scheduleStoreAssetMaintenanceAction,
-  scheduleStoreItemTypeMaintenanceAction,
+  scheduleStoreAssetMaintenanceMasterAction,
+  openStoreCalibrationVisitAction,
+  addStoreCalibrationOfferAction,
+  cancelStoreCalibrationVisitAction,
+  dispatchStoreCalibrationVisitAction,
+  returnStoreCalibrationVisitAction,
+  uploadStoreCalibrationCertificateAction,
+  completeStoreCalibrationVisitAction,
   setStoreAssetLifecycleAction,
   uploadStoreItemDrawingAction,
   uploadStoreSupplierQuoteAction,
@@ -75,6 +88,7 @@ export default async function StoreAssetWorkspacePage({
   const canMove = capabilities.has("store.asset_movement.write")
   const canMaintain = capabilities.has("store.asset_maintenance.write")
   const canRepair = capabilities.has("store.asset_repair.write")
+  const canRecordAcquisition = capabilities.has("store.receipts.receive")
   const canManageLifecycle = capabilities.has("store.asset_lifecycle.write")
   const canManage = canMove || canMaintain || canRepair
   const masterGrants = await listGrantedCapabilities(session.user.id, [
@@ -123,7 +137,6 @@ export default async function StoreAssetWorkspacePage({
   if (data.kind === "item") {
     return (
       <StoreItemWorkspace
-        canMaintain={canMaintain}
         canUploadDrawing={masterGrants.includes(masterCapability("ITEM_TYPE", "save"))}
         canUploadQuote={masterGrants.includes(masterCapability("SUPPLIER_PRICE", "save"))}
         workspace={data.workspace}
@@ -132,8 +145,11 @@ export default async function StoreAssetWorkspacePage({
   }
   const {
     asset,
+    calibrationSuppliers,
+    calibrationVisits,
     documents,
     maintenance,
+    maintenanceMasters,
     movements,
     repairOrders,
     schedules,
@@ -142,6 +158,55 @@ export default async function StoreAssetWorkspacePage({
   const performerDisplay = data.performer
     ? [data.performer.code, data.performer.name].filter(Boolean).join(" - ")
     : "Signed-in account name required"
+  const maintenanceSchedules = schedules.filter((schedule) => schedule.scheduleType === "MAINTENANCE")
+  const calibrationSchedules = schedules.filter((schedule) => schedule.scheduleType === "CALIBRATION")
+  const maintenanceForm = canMaintain ? (
+    <StoreItemMaintenanceMasterForm
+      action={scheduleStoreAssetMaintenanceMasterAction}
+      unitId={asset.assetCode}
+      masters={maintenanceMasters.filter((master) =>
+        !maintenanceSchedules.some((schedule) => schedule.code === master.code)
+      )}
+    />
+  ) : null
+  const calibrationForm = canMaintain ? (
+    <form action={scheduleStoreAssetMaintenanceAction} className="grid gap-4">
+      <input name="asset_code" type="hidden" value={asset.assetCode} />
+      <input name="schedule_type" type="hidden" value="CALIBRATION" />
+      <TextField label="Schedule Name" name="schedule_name" required />
+      <TextField label="Frequency (days)" min="1" name="frequency_days" required step="1" type="number" />
+      <TextField label="First Due Date" name="first_due_on" required type="date" />
+      <Button className="w-fit" type="submit">Assign Schedule</Button>
+    </form>
+  ) : null
+  const completionForm = canMaintain ? (
+    <form action={completeStoreAssetMaintenanceAction} className="grid gap-4">
+      <input name="asset_code" type="hidden" value={asset.assetCode} />
+      <input name="maintenance_type" type="hidden" value="MAINTENANCE" />
+      <Field>
+        <FieldLabel htmlFor="schedule-id">Timetable</FieldLabel>
+        <NativeSelect id="schedule-id" name="schedule_id">
+          <NativeSelectOption value="">Unscheduled Maintenance</NativeSelectOption>
+          {maintenanceSchedules.filter((schedule) => schedule.active).map((schedule) => (
+            <NativeSelectOption key={schedule.id} value={schedule.id}>
+              {schedule.name} — due {schedule.nextDueOn}
+            </NativeSelectOption>
+          ))}
+        </NativeSelect>
+      </Field>
+      <TextField defaultValue={istDateValue()} label="Completed On" name="completed_on" required type="date" />
+      <TextField label="Completed By" name="completed_by" readOnly required value={performerDisplay} />
+      <TextField label="Supplier / Lab" name="supplier_name" />
+      <TextField label="Certificate Number" name="certificate_number" />
+      <TextField label="Cost" name="cost" step="0.01" type="number" />
+      <TextField label="Result" name="result" />
+      <Field>
+        <FieldLabel htmlFor="work-done">Work Done</FieldLabel>
+        <Textarea id="work-done" name="work_done" />
+      </Field>
+      <Button className="w-fit" type="submit">Complete & Calculate Next Due</Button>
+    </form>
+  ) : null
 
   return (
     <div className="flex flex-col gap-6">
@@ -184,6 +249,39 @@ export default async function StoreAssetWorkspacePage({
         </StoreAssetWorkspacePane>
 
         <StoreAssetWorkspacePane tab="suppliers">
+          {canRecordAcquisition && asset.receiptLineId === null ? (
+            <StoreAssetAcquisitionSection>
+              <p className="mb-4 text-sm text-muted-foreground">
+                Record the original supplier and purchase price for this legacy Unit ID.
+              </p>
+              <form action={recordStoreAssetAcquisitionAction} className="grid gap-4">
+                <input name="asset_code" type="hidden" value={asset.assetCode} />
+                <Field>
+                  <FieldLabel htmlFor="acquisition-supplier">Acquisition Supplier</FieldLabel>
+                  <NativeSelect id="acquisition-supplier" name="supplier_id" required>
+                    <NativeSelectOption value="">Select supplier</NativeSelectOption>
+                    {calibrationSuppliers.map((supplier) => (
+                      <NativeSelectOption key={supplier.id} value={supplier.id}>
+                        {supplier.code} — {supplier.name}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                </Field>
+                <TextField
+                  defaultValue={asset.unitPrice ?? undefined}
+                  label="Purchase Price"
+                  min="0"
+                  name="unit_price"
+                  required
+                  step="0.01"
+                  type="number"
+                />
+                <Button className="w-fit" disabled={!calibrationSuppliers.length} type="submit">
+                  Record Acquisition
+                </Button>
+              </form>
+            </StoreAssetAcquisitionSection>
+          ) : null}
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <Info
               label="Purchase Order"
@@ -369,167 +467,6 @@ export default async function StoreAssetWorkspacePage({
               ) : null}
             </StoreAssetWorkspacePane>
 
-            <StoreAssetWorkspacePane
-              className="grid gap-4 xl:grid-cols-2"
-              tab="maintenance"
-            >
-              {canMaintain ? (
- <SectionCard width="standard">
-            <CardHeader>
-              <CardTitle>Add Timetable</CardTitle>
-              <CardDescription>
-                Schedule maintenance or calibration for this Unit ID.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form action={scheduleStoreAssetMaintenanceAction}>
-                <input
-                  name="asset_code"
-                  type="hidden"
-                  value={asset.assetCode}
-                />
-                <FieldGroup className="gap-4">
-                  <Field>
-                    <FieldLabel htmlFor="asset-schedule-type">Type</FieldLabel>
-                    <NativeSelect
-                      id="asset-schedule-type"
-                      name="schedule_type"
-                      required
-                    >
-                      <NativeSelectOption value="MAINTENANCE">
-                        Maintenance
-                      </NativeSelectOption>
-                      <NativeSelectOption value="CALIBRATION">
-                        Calibration
-                      </NativeSelectOption>
-                    </NativeSelect>
-                  </Field>
-                  <TextField
-                    label="Schedule Name"
-                    name="schedule_name"
-                    required
-                  />
-                  <TextField
-                    label="Frequency (days)"
-                    min="1"
-                    name="frequency_days"
-                    required
-                    step="1"
-                    type="number"
-                  />
-                  <TextField
-                    label="First Due Date"
-                    name="first_due_on"
-                    required
-                    type="date"
-                  />
-                </FieldGroup>
-                <Button
-                  className="mt-5"
-                  type="submit"
-                >
-                  Add Timetable
-                </Button>
-              </form>
-            </CardContent>
- </SectionCard>
-              ) : null}
-
-              {canMaintain ? (
- <SectionCard width="standard">
-            <CardHeader>
-              <CardTitle>Complete Maintenance</CardTitle>
-              <CardDescription>
-                Calibration is recorded as a maintenance type; completion
-                calculates the next due date.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form action={completeStoreAssetMaintenanceAction}>
-                <input
-                  name="asset_code"
-                  type="hidden"
-                  value={asset.assetCode}
-                />
-                <FieldGroup className="gap-4">
-                  <Field>
-                          <FieldLabel htmlFor="maintenance-type">
-                            Type
-                          </FieldLabel>
-                          <NativeSelect
-                            id="maintenance-type"
-                            name="maintenance_type"
-                          >
-                      <NativeSelectOption value="MAINTENANCE">
-                        Maintenance
-                      </NativeSelectOption>
-                      <NativeSelectOption value="CALIBRATION">
-                        Calibration
-                      </NativeSelectOption>
-                    </NativeSelect>
-                  </Field>
-                  <Field>
-                          <FieldLabel htmlFor="schedule-id">
-                            Timetable
-                          </FieldLabel>
-                    <NativeSelect id="schedule-id" name="schedule_id">
-                      <NativeSelectOption value="">
-                        Unscheduled / Breakdown
-                      </NativeSelectOption>
-                      {schedules.map((schedule) => (
-                        <NativeSelectOption
-                          key={schedule.id}
-                          value={schedule.id}
-                        >
-                          {schedule.name} ({schedule.scheduleType === "CALIBRATION"
-                            ? "Calibration"
-                            : "Maintenance"}) — due {schedule.nextDueOn}
-                        </NativeSelectOption>
-                      ))}
-                    </NativeSelect>
-                  </Field>
-                  <TextField
-                    defaultValue={istDateValue()}
-                    label="Completed On"
-                    name="completed_on"
-                    required
-                    type="date"
-                  />
-                  <TextField
-                    label="Completed By"
-                    name="completed_by"
-                    readOnly
-                    required
-                    value={performerDisplay}
-                  />
-                        <TextField
-                          label="Supplier / Lab"
-                          name="supplier_name"
-                        />
-                  <TextField
-                    label="Certificate Number"
-                    name="certificate_number"
-                  />
-                  <TextField
-                    label="Cost"
-                    name="cost"
-                    step="0.01"
-                    type="number"
-                  />
-                  <TextField label="Result" name="result" />
-                  <Field>
-                    <FieldLabel htmlFor="work-done">Work Done</FieldLabel>
-                    <Textarea id="work-done" name="work_done" />
-                  </Field>
-                </FieldGroup>
-                <Button className="mt-5" type="submit">
-                  Complete & Calculate Next Due
-                </Button>
-              </form>
-            </CardContent>
- </SectionCard>
-              ) : null}
-            </StoreAssetWorkspacePane>
           </>
         ) : null}
 
@@ -666,16 +603,14 @@ export default async function StoreAssetWorkspacePage({
         </StoreAssetWorkspacePane>
 
         <StoreAssetWorkspacePane tab="maintenance">
- <SectionCard>
-        <CardHeader>
-          <CardTitle>Maintenance & Calibration Timetable</CardTitle>
-        </CardHeader>
-        <CardContent className="min-w-0">
+          <StoreAssetMaintenanceSection
+            maintenanceForm={maintenanceForm}
+            completionForm={completionForm}
+          >
  <OperationalTable>
             <TableHeader>
               <TableRow>
                 <TableHead>Code</TableHead>
-                <TableHead>Type</TableHead>
                 <TableHead>Schedule</TableHead>
                 <TableHead>Frequency</TableHead>
                 <TableHead>Last Completed</TableHead>
@@ -684,17 +619,12 @@ export default async function StoreAssetWorkspacePage({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {schedules.map((schedule) => {
-                const due = schedule.nextDueOn <= istDateValue()
+              {maintenanceSchedules.map((schedule) => {
+                const due = schedule.active && schedule.nextDueOn <= istDateValue()
                 return (
                   <TableRow key={schedule.id}>
                     <TableCell className="font-medium">
                       {schedule.code}
-                    </TableCell>
-                    <TableCell>
-                      {schedule.scheduleType === "CALIBRATION"
-                        ? "Calibration"
-                        : "Maintenance"}
                     </TableCell>
                     <TableCell>{schedule.name}</TableCell>
                     <TableCell>{schedule.frequencyDays} days</TableCell>
@@ -707,18 +637,18 @@ export default async function StoreAssetWorkspacePage({
                       {schedule.nextDueOn}
                     </TableCell>
                     <TableCell>
-                      <Badge variant={due ? "destructive" : "secondary"}>
-                        {due ? "Due" : "Scheduled"}
+                      <Badge variant={due ? "destructive" : schedule.active ? "secondary" : "outline"}>
+                        {schedule.active ? (due ? "Due" : "Scheduled") : "Inactive"}
                       </Badge>
                     </TableCell>
                   </TableRow>
                 )
               })}
-              {!schedules.length ? (
+              {!maintenanceSchedules.length ? (
                 <TableRow>
                   <TableCell
                     className="h-24 text-center text-muted-foreground"
-                    colSpan={7}
+                    colSpan={6}
                   >
                     No maintenance timetable assigned.
                   </TableCell>
@@ -726,8 +656,66 @@ export default async function StoreAssetWorkspacePage({
               ) : null}
             </TableBody>
  </OperationalTable>
-        </CardContent>
- </SectionCard>
+          </StoreAssetMaintenanceSection>
+        </StoreAssetWorkspacePane>
+
+        <StoreAssetWorkspacePane tab="calibration">
+          <StoreAssetCalibrationScheduleSection canAssign={canMaintain} form={calibrationForm}>
+            <OperationalTable>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Schedule</TableHead>
+                  <TableHead>Frequency</TableHead>
+                  <TableHead>Last Completed</TableHead>
+                  <TableHead>Next Due</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {calibrationSchedules.map((schedule) => {
+                  const due = schedule.active && schedule.nextDueOn <= istDateValue()
+                  return (
+                    <TableRow key={schedule.id}>
+                      <TableCell className="font-medium">{schedule.name}</TableCell>
+                      <TableCell>{schedule.frequencyDays} days</TableCell>
+                      <TableCell>{schedule.lastCompletedOn || "—"}</TableCell>
+                      <TableCell className={due ? "font-semibold text-destructive" : ""}>
+                        {schedule.nextDueOn}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={due ? "destructive" : schedule.active ? "secondary" : "outline"}>
+                          {schedule.active ? (due ? "Due" : "Scheduled") : "Inactive"}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+                {!calibrationSchedules.length ? (
+                  <TableRow>
+                    <TableCell className="h-24 text-center text-muted-foreground" colSpan={5}>
+                      No calibration timetable assigned.
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+              </TableBody>
+            </OperationalTable>
+          </StoreAssetCalibrationScheduleSection>
+          <StoreAssetCalibration
+            actions={{
+              openVisit: openStoreCalibrationVisitAction,
+              addOffer: addStoreCalibrationOfferAction,
+              cancelVisit: cancelStoreCalibrationVisitAction,
+              dispatchVisit: dispatchStoreCalibrationVisitAction,
+              returnVisit: returnStoreCalibrationVisitAction,
+              uploadCertificate: uploadStoreCalibrationCertificateAction,
+              completeVisit: completeStoreCalibrationVisitAction,
+            }}
+            assetCode={asset.assetCode}
+            canManage={canMaintain && canMove && canRepair}
+            schedules={calibrationSchedules}
+            suppliers={calibrationSuppliers}
+            visits={calibrationVisits}
+          />
         </StoreAssetWorkspacePane>
 
         <StoreAssetWorkspacePane tab="movement">
@@ -783,7 +771,7 @@ export default async function StoreAssetWorkspacePage({
         <StoreAssetWorkspacePane tab="maintenance">
  <SectionCard>
         <CardHeader>
-          <CardTitle>Maintenance History</CardTitle>
+          <CardTitle>Maintenance & Calibration History</CardTitle>
         </CardHeader>
         <CardContent className="min-w-0">
  <OperationalTable>
@@ -833,7 +821,10 @@ export default async function StoreAssetWorkspacePage({
         <StoreAssetWorkspacePane tab="suppliers">
  <SectionCard>
         <CardHeader>
-          <CardTitle>Supplier Price History</CardTitle>
+          <CardTitle>Future Goods Supplier Quotes</CardTitle>
+          <CardDescription>
+            Asset Code supplier prices. The purchase supplier and price above belong to this Unit ID.
+          </CardDescription>
         </CardHeader>
         <CardContent className="min-w-0">
  <OperationalTable>
@@ -930,40 +921,16 @@ type StoreItemWorkspaceData = NonNullable<
 >
 
 function StoreItemWorkspace({
-  canMaintain,
   canUploadDrawing,
   canUploadQuote,
   workspace,
 }: {
-  canMaintain: boolean
   canUploadDrawing: boolean
   canUploadQuote: boolean
   workspace: StoreItemWorkspaceData
 }) {
-  const { assets, drawing, item, maintenance, maintenanceMasters, maintenancePlans, schedules, supplierPrices } = workspace
+  const { assets, drawing, item, supplierPrices } = workspace
   const isNonConsumable = item.assetType === "NON_CONSUMABLE"
-  const assignableAssets = assets.filter((asset) => asset.status !== "SCRAPPED")
-  const canAssignSchedule = canMaintain
-  const calibrationForm = (
-    <form action={scheduleStoreAssetMaintenanceAction} className="grid gap-4">
-      <input name="schedule_type" type="hidden" value="CALIBRATION" />
-      <Field>
-        <FieldLabel htmlFor="item-calibration-unit">Unit ID</FieldLabel>
-        <NativeSelect id="item-calibration-unit" name="asset_code" required defaultValue="">
-          <NativeSelectOption value="">Select Unit ID</NativeSelectOption>
-          {assignableAssets.map((asset) => (
-            <NativeSelectOption key={asset.id} value={asset.assetCode}>
-              {asset.assetCode} · {asset.holderName || asset.locationName || asset.holderType}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
-      </Field>
-      <TextField label="Schedule Name" name="schedule_name" required />
-      <TextField label="Frequency (days)" min="1" name="frequency_days" required step="1" type="number" />
-      <TextField label="First Due Date" name="first_due_on" required type="date" />
-      <Button className="w-fit" type="submit">Assign Schedule</Button>
-    </form>
-  )
 
   return (
     <div className="flex flex-col gap-6">
@@ -986,7 +953,7 @@ function StoreItemWorkspace({
         </div>
       </div>
 
-      <StoreItemWorkspaceTabs showMaintenance={isNonConsumable}>
+      <StoreItemWorkspaceTabs>
         <StoreItemWorkspacePane tab="overview">
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Info label="Asset Name" value={item.assetName} />
@@ -1073,80 +1040,6 @@ function StoreItemWorkspace({
         </CardContent>
  </SectionCard>
         </StoreItemWorkspacePane>
-
-        {isNonConsumable ? (
-          <StoreItemWorkspacePane tab="maintenance">
-            <p className="text-sm text-muted-foreground">
-              Assign a Maintenance Master once to this Asset Code. Each physical Unit ID keeps its own due date and completed history. Calibration is assigned to the Unit ID sent for testing.
-            </p>
-            <StoreItemScheduleSection
-              canAssign={canAssignSchedule}
-              calibrationForm={canMaintain && assignableAssets.length > 0 ? calibrationForm : null}
-              maintenanceForm={canMaintain ? (
-                <StoreItemMaintenanceMasterForm
-                  action={scheduleStoreItemTypeMaintenanceAction}
-                  assetCode={item.typeCode}
-                  masters={maintenanceMasters.filter((master) =>
-                    !maintenancePlans.some((plan) => plan.definitionId === master.id)
-                  )}
-                />
-              ) : null}
-            >
-                {maintenancePlans.length ? (
-                  <div className="text-sm">
-                    <p className="font-medium">Assigned to Asset Code {item.typeCode}</p>
-                    <ul className="mt-1 list-inside list-disc text-muted-foreground">
-                      {maintenancePlans.map((plan) => (
-                        <li key={plan.id}>
-                          {plan.code} · {plan.name} · Every {plan.frequencyDays} days
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-                <p className="text-sm font-medium">Unit ID due dates</p>
-                <OperationalTable>
-                  <TableHeader><TableRow>
-                    <TableHead>Unit ID</TableHead><TableHead>Type</TableHead><TableHead>Schedule</TableHead>
-                    <TableHead>Frequency</TableHead><TableHead>Last Completed</TableHead><TableHead>Next Due</TableHead>
-                  </TableRow></TableHeader>
-                  <TableBody>
-                    {schedules.map((schedule) => (
-                      <TableRow key={schedule.id}>
-                        <TableCell><Link className="underline underline-offset-4" href={storeAssetWorkspaceHref(schedule.assetCode)}>{schedule.assetCode}</Link></TableCell>
-                        <TableCell>{schedule.scheduleType === "CALIBRATION" ? "Calibration" : "Maintenance"}</TableCell>
-                        <TableCell>{schedule.name}</TableCell><TableCell>{schedule.frequencyDays} days</TableCell>
-                        <TableCell>{schedule.lastCompletedOn || "—"}</TableCell><TableCell>{schedule.nextDueOn}</TableCell>
-                      </TableRow>
-                    ))}
-                    {!schedules.length ? <TableRow><TableCell className="h-24 text-center text-muted-foreground" colSpan={6}>No Unit ID schedules yet.</TableCell></TableRow> : null}
-                  </TableBody>
-                </OperationalTable>
-            </StoreItemScheduleSection>
-            <SectionCard>
-              <CardHeader><CardTitle>Maintenance & Calibration History</CardTitle></CardHeader>
-              <CardContent className="min-w-0">
-                <OperationalTable>
-                  <TableHeader><TableRow>
-                    <TableHead>Unit ID</TableHead><TableHead>Date</TableHead><TableHead>Type</TableHead>
-                    <TableHead>Completed By</TableHead><TableHead>Work / Result</TableHead><TableHead>Certificate</TableHead>
-                  </TableRow></TableHeader>
-                  <TableBody>
-                    {maintenance.map((record) => (
-                      <TableRow key={record.id}>
-                        <TableCell><Link className="underline underline-offset-4" href={storeAssetWorkspaceHref(record.assetCode)}>{record.assetCode}</Link></TableCell>
-                        <TableCell>{record.completedOn}</TableCell><TableCell>{record.maintenanceType}</TableCell>
-                        <TableCell>{record.completedBy}</TableCell><TableCell>{record.workDone || record.result || "—"}</TableCell>
-                        <TableCell>{record.certificateNumber || "—"}</TableCell>
-                      </TableRow>
-                    ))}
-                    {!maintenance.length ? <TableRow><TableCell className="h-24 text-center text-muted-foreground" colSpan={6}>No completed maintenance or calibration records.</TableCell></TableRow> : null}
-                  </TableBody>
-                </OperationalTable>
-              </CardContent>
-            </SectionCard>
-          </StoreItemWorkspacePane>
-        ) : null}
 
         <StoreItemWorkspacePane tab="drawings">
  <SectionCard>

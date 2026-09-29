@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto"
 
 import Link from "next/link"
 import { createStoreRepository } from "@workspace/db"
-import { Badge } from "@workspace/ui/components/badge"
+import { StatusBadge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
   SectionCard,
@@ -79,13 +79,15 @@ export default async function StoreStockPage({
   })
   const data = await (async () => {
     const organizationId = await repository.organizationIdForCode("MRMPL")
-    const [items, supplierPrices] = await Promise.all([
+    const [items, supplierPrices, physicalUnits] = await Promise.all([
       repository.listItemTypes(organizationId),
       repository.listSupplierPrices(organizationId),
+      repository.listStockPhysicalUnits(organizationId),
     ])
-    return { items, supplierPrices }
+    return { items, supplierPrices, physicalUnits }
   })().finally(() => repository.close())
-  const stockRows = storeStockRows(data.items)
+  const stockRows = storeStockRows(data.items, data.physicalUnits)
+  const today = istDateValue()
   const actionFormId = "stock-row-action"
   const columnCount = mode === "view" ? 9 : mode === "request" ? 10 : 11
 
@@ -147,8 +149,9 @@ export default async function StoreStockPage({
             <div>
               <CardTitle>Stock Register</CardTitle>
               <CardDescription>
-                The cheapest active quote is selected by default. Store can
-                choose another quoted Supplier before saving the PO.
+                Asset Codes describe an item type; each Non Consumable unit has
+                its own status, supplier and purchase price. The cheapest active
+                quote is selected by default for a new purchase order.
               </CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -214,17 +217,15 @@ export default async function StoreStockPage({
             <TableHeader>
               <TableRow>
                 {mode !== "view" ? <TableHead>Select</TableHead> : null}
-                <TableHead data-filterable="true">Asset Code</TableHead>
+                <TableHead data-filterable="true">Asset Code / Unit ID</TableHead>
                 <TableHead>Asset Name</TableHead>
                 <TableHead>Asset Category</TableHead>
                 <TableHead>Asset Subcategory</TableHead>
-                <TableHead>Stock Quantity</TableHead>
-                <TableHead data-filterable="true">
-                  Unit ID / Serial ID
-                </TableHead>
-                <TableHead>Storage Location</TableHead>
+                <TableHead>Available Quantity</TableHead>
+                <TableHead data-filterable="true">Status</TableHead>
+                <TableHead>Location / Holder</TableHead>
                 <TableHead>Supplier</TableHead>
-                <TableHead>Master Price</TableHead>
+                <TableHead>Quote / Purchase Price</TableHead>
                 {mode === "order" ? (
                   <TableHead>Order Quantity</TableHead>
                 ) : null}
@@ -232,25 +233,30 @@ export default async function StoreStockPage({
             </TableHeader>
             <TableBody>
               {stockRows.map((item) => {
-                const supplierOptions = data.supplierPrices
-                  .filter(
-                    (price) =>
-                      price.itemTypeId === item.id &&
-                      price.active &&
-                      price.validFrom <= istDateValue()
-                  )
-                  .sort(
-                    (left, right) =>
-                      Number(left.unitPrice) - Number(right.unitPrice)
-                  )
+                const supplierOptions = item.actionItem
+                  ? data.supplierPrices
+                      .filter(
+                        (price) =>
+                          price.itemTypeId === item.id &&
+                          price.active &&
+                          price.validFrom <= today
+                      )
+                      .sort(
+                        (left, right) =>
+                          Number(left.unitPrice) - Number(right.unitPrice)
+                      )
+                  : []
                 const hasPrice = supplierOptions.length > 0
+                const displayedPrice = item.physicalUnit
+                  ? item.physicalUnit.unitPrice
+                  : item.currentUnitPrice
                 return (
                   <TableRow key={item.rowKey}>
                     {mode !== "view" ? (
                       <TableCell>
                         {item.actionItem ? (
                           <input
-                            aria-label={`Select ${item.typeCode} ${item.identificationName}`}
+                            aria-label={`Select Asset Code ${item.typeCode} ${item.identificationName}`}
                             className="size-4 accent-primary"
                             defaultChecked={item.id === orderItemId}
                             disabled={mode === "order" && !hasPrice}
@@ -266,18 +272,21 @@ export default async function StoreStockPage({
                     ) : null}
                     <TableCell
                       className="font-medium"
-                      data-filter-value={item.typeCode}
+                      data-filter-value={`${item.typeCode} ${item.unitId ?? ""}`}
                     >
                       {capabilities.has("store.asset_history.read") ? (
                         <Link
                           className="underline decoration-muted-foreground/50 underline-offset-4 hover:decoration-foreground"
-                          href={storeAssetWorkspaceHref(item.typeCode)}
+                          href={storeAssetWorkspaceHref(item.displayedCode)}
                         >
-                          {item.typeCode}
+                          {item.displayedCode}
                         </Link>
                       ) : (
-                        item.typeCode
+                        item.displayedCode
                       )}
+                      <span className="block text-xs font-normal text-muted-foreground">
+                        {item.physicalUnit ? "Physical Unit" : "Asset Code"}
+                      </span>
                     </TableCell>
                     <TableCell>
                       {item.assetName}
@@ -291,32 +300,35 @@ export default async function StoreStockPage({
                     <TableCell>{item.assetCategory}</TableCell>
                     <TableCell>{item.assetSubcategory}</TableCell>
                     <TableCell>{item.displayedQuantity}</TableCell>
-                    <TableCell
-                      data-filter-value={
-                        item.unitId ??
-                        (item.trackingMode === "SERIALIZED"
-                          ? "None available"
-                          : "Not applicable")
-                      }
-                    >
-                      {item.unitId ? (
-                        capabilities.has("store.asset_history.read") ? (
-                          <Link
-                            className="font-medium underline decoration-muted-foreground/50 underline-offset-4 hover:decoration-foreground"
-                            href={storeAssetWorkspaceHref(item.unitId)}
-                          >
-                            {item.unitId}
-                          </Link>
-                        ) : (
-                          item.unitId
-                        )
+                    <TableCell data-filter-value={item.physicalUnit?.status ?? "Item Type"}>
+                      {item.physicalUnit ? (
+                        <StatusBadge
+                          tone={
+                            item.physicalUnit.status === "AVAILABLE"
+                              ? "positive"
+                              : item.physicalUnit.status === "ASSIGNED"
+                                ? "information"
+                                : item.physicalUnit.status === "BROKEN"
+                                  ? "danger"
+                                : item.physicalUnit.status === "SCRAPPED"
+                                  ? "inactive"
+                                  : "warning"
+                          }
+                          value={item.physicalUnit.status}
+                        />
                       ) : item.trackingMode === "SERIALIZED" ? (
-                        "None available"
+                        "Item Type"
                       ) : (
-                        "Not applicable"
+                        "Consumable"
                       )}
                     </TableCell>
-                    <TableCell>{item.storageLocations}</TableCell>
+                    <TableCell>
+                      {item.physicalUnit
+                        ? item.physicalUnit.locationName ??
+                          item.physicalUnit.holderName ??
+                          item.physicalUnit.holderType
+                        : item.storageLocations}
+                    </TableCell>
                     <TableCell>
                       {mode === "order" &&
                       item.actionItem &&
@@ -336,16 +348,22 @@ export default async function StoreStockPage({
                             </NativeSelectOption>
                           ))}
                         </NativeSelect>
+                      ) : item.physicalUnit ? (
+                        item.physicalUnit.supplierName ?? "Not recorded"
                       ) : item.currentSupplierName ? (
                         item.currentSupplierName
                       ) : (
-                        <Badge variant="outline">Price Master Missing</Badge>
+                        "No current quote"
                       )}
+                      <span className="block text-xs text-muted-foreground">
+                        {item.physicalUnit ? "Purchase supplier" : "Current quote"}
+                      </span>
                     </TableCell>
                     <TableCell>
-                      {item.currentUnitPrice
-                        ? `₹ ${item.currentUnitPrice}`
-                        : "—"}
+                      {displayedPrice ? `₹ ${displayedPrice}` : "—"}
+                      <span className="block text-xs text-muted-foreground">
+                        {item.physicalUnit ? "Purchase price" : "Master quote"}
+                      </span>
                     </TableCell>
                     {mode === "order" ? (
                       <TableCell>

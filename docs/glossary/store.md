@@ -56,9 +56,9 @@ one-time normalization; after that migration, the new codes remain immutable.
 **Physical Asset**: One Non Consumable item tracked individually through receipt,
 assignment, movement, maintenance, calibration, breakage, and scrap.
 Its Unit ID owns due dates, completed maintenance and calibration history, and
-any open breakdown. The shared Asset Code can have a Maintenance Master plan
-that applies to every physical unit of that Store Item Type. Calibration
-appointments and their supplier work remain specific to one Unit ID.
+any open breakdown. Maintenance Masters and calibration appointments are assigned
+to a physical Unit ID. The shared Asset Code describes the item type and never
+receives a maintenance schedule.
 
 **Unit ID / Serial ID**: The permanent identity of one Physical Asset, separate
 from its shared Asset Code. It may use the manufacturer's serial number and has
@@ -162,7 +162,10 @@ active Department.
 a Store Request. Store allocates and saves each line independently; its live
 available stock changes immediately after an issue is saved. Store may cancel
 an open line when it will not fulfill the remaining quantity. Already issued
-units stay issued; a cancelled line cannot be issued again.
+units stay issued; a cancelled line cannot be issued again. A Non Consumable
+line may name one exact Unit ID, in which case its quantity is one and Store
+must issue that Unit ID when it becomes available. A type-only request leaves
+the choice of physical unit to Store.
 
 **New Item Request**: Demand for an item that cannot be found in Current Stock
 and therefore has no Asset Code. The requester may choose Category, Subcategory,
@@ -195,13 +198,18 @@ unchanged.
 
 **Stock Register**: The single filterable Store inventory table containing both
 Consumable and Non Consumable items. A Consumable has one quantity-managed row.
-Every available Non Consumable Physical Asset has its own row with quantity one,
-its shared Asset Code in the Asset Code column, and its permanent Unit ID /
-Serial ID in a separately filterable column. For example, `NC001-0001` and
-`NC001-0002` are two rows that both show Asset Code `NC001`; each Unit ID opens
-its individual Asset Workspace. Purchase Order and request controls remain one
-per shared Store Item Type so repeating physical-unit rows cannot create a
-duplicate order or request line.
+Each Non Consumable Asset Code has a classification row without a stock quantity.
+Every physical unit has a separate row, including assigned or unavailable units,
+showing its permanent Unit ID, status, holder or location, and its actual purchase
+Supplier and cost when recorded. Available units have quantity one; other units
+do not count as available stock. Supplier quotes for future purchases remain on
+the Asset Code, distinct from each unit's acquired Supplier and cost.
+receiptless legacy units may have their verified acquisition Supplier and price
+recorded by Store against that individual Unit ID; receipt-backed units use the
+original receipt and cannot be overridden here. For example, `NC001-0001` and
+`NC001-0002` are different physical rows under Asset Code
+`NC001`; each opens its own Asset Workspace. Purchase Order and type-only request
+controls remain on the Asset Code row.
 
 **Store Page Access**: Access is granted per Store page rather than through one
 module-wide permission. Store Overview, Requests & Issues, New Item Requests,
@@ -240,20 +248,37 @@ Unit ID between the Store, a Department, a Machine, or a Vendor. A Store Return
 is an Asset Movement back to a Store location; Consumables never participate.
 
 **Asset Maintenance Plan**: One active Calendar Days Maintenance Master assigned
-to a Non Consumable Store Item Type by its shared Asset Code. The selected
-Master supplies the name and frequency. The chosen first due date applies to
-existing physical units; units received later start with a due date calculated
-from their acquisition date plus that Master frequency. Each unit keeps its
-own next due date, and completing one unit advances only its timetable.
+to one physical Unit ID. The selected Master supplies the name, frequency and
+checklist. The chosen first due date and subsequent completions belong only to
+that unit. Receiving another unit does not assign a schedule automatically.
+Historical Asset Code plans are inactive; their already created unit timetables
+and completion history remain intact.
 
 **Asset Maintenance Timetable**: The due and completion state for one physical
-Unit ID. A Store Item Type Maintenance Plan creates its unit timetables, while
-existing directly assigned maintenance and calibration timetables remain
-readable and completable. Calibration scheduling and service evidence belong
-to the individual Unit ID.
+Unit ID. A Maintenance Master can supply its maintenance name and frequency;
+existing direct timetables remain readable and completable. Calibration
+scheduling and service evidence also belong to the individual Unit ID.
 Moved By, Completed By, and asset-status Changed By identify the authorized signed-in
 performer: active linked Employee ID and name when available, or account name
 otherwise. Supplier / Lab separately records an external service provider.
+
+**Calibration Timetable**: A named frequency and due date for one physical Unit
+ID. It is assigned directly to the unit. Its next due date advances only after
+a passing calibration result; a failed result remains due for corrective work.
+
+**Calibration Visit**: One due calibration occurrence for a Unit ID and its
+Calibration Timetable. Store opens the visit, compares offers from registered
+Suppliers, selects one offer, issues a service Purchase Order, records transfer
+to the Supplier and return, and stores the Supplier certificate before recording
+the result. The visit keeps the selected price and links to the order, movements,
+certificate, and completion history. A unit can have only one open visit per
+Calibration Timetable.
+
+**Calibration Offer**: One Supplier's quoted service price for one Calibration
+Visit. The Supplier is selected from Store Supplier Master. Offers are retained
+as visit history; the selected price is copied to the visit and service Purchase
+Order so later quotes do not change the agreed price. Goods Supplier Price
+Revisions on an Asset Code remain separate from calibration service offers.
 
 **Tooling Asset**: A Store Item Type created before it can be used as fixture,
 tooling, or foam tooling in production. Its Asset Code is the only identity

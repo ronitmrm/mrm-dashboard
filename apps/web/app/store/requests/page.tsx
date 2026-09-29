@@ -147,11 +147,19 @@ export default async function StoreRequestsPage() {
                 const isOpen = ["Pending", "Partially Issued"].includes(
                   request.status
                 )
+                const exactUnitAvailable =
+                  !request.requestedUnitId ||
+                  request.availableUnitIds.some(
+                    (unitId) =>
+                      unitId.toLowerCase() ===
+                      request.requestedUnitCode?.toLowerCase()
+                  )
                 const canAllocateInFull =
                   isOpen &&
                   Number(request.remainingQuantity) > 0 &&
                   Number(request.availableStock) >=
-                    Number(request.remainingQuantity)
+                    Number(request.remainingQuantity) &&
+                  exactUnitAvailable
                 const issueForm = createStoreIssueFormModel({
                   actorEmail: session.user.email,
                   availableUnitIds: request.availableUnitIds,
@@ -170,6 +178,9 @@ export default async function StoreRequestsPage() {
                             data-allocation-item-type-id={request.itemTypeId}
                             data-allocation-remaining-quantity={
                               request.remainingQuantity
+                            }
+                            data-allocation-requested-unit-code={
+                              request.requestedUnitCode ?? ""
                             }
                             data-allocation-tracking-mode={request.trackingMode}
                             data-allocation-unit-ids={JSON.stringify(
@@ -202,6 +213,11 @@ export default async function StoreRequestsPage() {
                       <span className="block text-xs text-muted-foreground">
                         {request.identificationName}
                       </span>
+                      {request.requestedUnitCode ? (
+                        <span className="block text-xs text-muted-foreground">
+                          Exact Unit ID: {request.requestedUnitCode}
+                        </span>
+                      ) : null}
                     </TableCell>
                     <TableCell>{request.assetCategory}</TableCell>
                     <TableCell>{request.assetSubcategory}</TableCell>
@@ -213,6 +229,13 @@ export default async function StoreRequestsPage() {
                     <TableCell>{request.remainingQuantity}</TableCell>
                     <TableCell className="font-semibold">
                       {request.availableStock} {request.unit}
+                      {request.requestedUnitCode ? (
+                        <span className="block text-xs font-normal text-muted-foreground">
+                          {exactUnitAvailable
+                            ? "Requested unit available"
+                            : "Requested unit unavailable"}
+                        </span>
+                      ) : null}
                     </TableCell>
                     <TableCell>
                       <Badge
@@ -224,6 +247,11 @@ export default async function StoreRequestsPage() {
                       >
                         {request.status}
                       </Badge>
+                      {request.requestedUnitCode && isOpen && !exactUnitAvailable ? (
+                        <span className="block text-xs text-muted-foreground">
+                          Waiting for {request.requestedUnitCode}
+                        </span>
+                      ) : null}
                     </TableCell>
                     {canManage ? (
                       <TableCell>
@@ -232,7 +260,9 @@ export default async function StoreRequestsPage() {
                             <Dialog>
                               <DialogTrigger asChild>
                                 <Button size="sm" variant="outline">
-                                  Allocate / Make Order
+                                  {request.requestedUnitId
+                                    ? "Allocate Unit"
+                                    : "Allocate / Make Order"}
                                 </Button>
                               </DialogTrigger>
                               <DialogContent>
@@ -246,17 +276,24 @@ export default async function StoreRequestsPage() {
                                     remaining
                                   </DialogDescription>
                                 </DialogHeader>
-                                <Button asChild size="sm" variant="outline">
-                                  <Link
-                                    href={storePurchaseOrderHref({
-                                      itemTypeId: request.itemTypeId,
-                                      quantity: request.remainingQuantity,
-                                      requestNumber: request.requestNumber,
-                                    })}
-                                  >
-                                    Make Order
-                                  </Link>
-                                </Button>
+                                {request.requestedUnitId ? (
+                                  <p className="text-sm text-muted-foreground">
+                                    This request stays pending until the exact
+                                    Unit ID is available in Store.
+                                  </p>
+                                ) : (
+                                  <Button asChild size="sm" variant="outline">
+                                    <Link
+                                      href={storePurchaseOrderHref({
+                                        itemTypeId: request.itemTypeId,
+                                        quantity: request.remainingQuantity,
+                                        requestNumber: request.requestNumber,
+                                      })}
+                                    >
+                                      Make Order
+                                    </Link>
+                                  </Button>
+                                )}
                                 <form
                                   action={issueStoreRequisitionAction}
                                   className="grid gap-2"
@@ -294,7 +331,20 @@ export default async function StoreRequestsPage() {
                                       value={issueForm.issuedBy}
                                     />
                                   </label>
-                                  {issueForm.requiresUnitSelection ? (
+                                  {request.requestedUnitCode ? (
+                                    <>
+                                      <Input
+                                        aria-label="Requested Unit ID / Serial ID"
+                                        readOnly
+                                        value={request.requestedUnitCode}
+                                      />
+                                      <input
+                                        name="asset_code"
+                                        type="hidden"
+                                        value={request.requestedUnitCode}
+                                      />
+                                    </>
+                                  ) : issueForm.requiresUnitSelection ? (
                                     <NativeSelect
                                       aria-label="Specific Unit ID / Serial ID"
                                       defaultValue={
@@ -322,15 +372,18 @@ export default async function StoreRequestsPage() {
                                   ) : null}
                                   <Button
                                     disabled={
-                                      issueForm.requiresUnitSelection &&
-                                      !issueForm.availableUnitIds.length
+                                      !exactUnitAvailable ||
+                                      (issueForm.requiresUnitSelection &&
+                                        !issueForm.availableUnitIds.length)
                                     }
                                     size="sm"
                                     type="submit"
                                   >
-                                    {issueForm.requiresUnitSelection &&
-                                    !issueForm.availableUnitIds.length
-                                      ? "No Unit Available"
+                                    {!exactUnitAvailable
+                                      ? "Exact Unit Pending"
+                                      : issueForm.requiresUnitSelection &&
+                                          !issueForm.availableUnitIds.length
+                                        ? "No Unit Available"
                                       : "Save Allocation"}
                                   </Button>
                                 </form>

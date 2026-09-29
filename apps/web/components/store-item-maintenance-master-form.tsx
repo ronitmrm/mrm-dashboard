@@ -23,11 +23,11 @@ type MaintenanceMaster = {
 
 export function StoreItemMaintenanceMasterForm({
   action,
-  assetCode,
+  unitId,
   masters,
 }: {
   action: (formData: FormData) => Promise<void>
-  assetCode: string
+  unitId: string
   masters: MaintenanceMaster[]
 }) {
   const [selectedId, setSelectedId] = useState("")
@@ -44,7 +44,7 @@ export function StoreItemMaintenanceMasterForm({
 
   return (
     <form action={action} className="grid gap-4">
-      <input name="item_type_code" type="hidden" value={assetCode} />
+      <input name="asset_code" type="hidden" value={unitId} />
       <FormGrid className="xl:grid-cols-2">
         <Field className="sm:col-span-2">
           <FieldLabel htmlFor="item-maintenance-master">Maintenance Master</FieldLabel>
@@ -92,7 +92,7 @@ export function StoreItemMaintenanceMasterForm({
           <FieldLabel htmlFor="item-maintenance-first-due">First Due Date</FieldLabel>
           <Input id="item-maintenance-first-due" name="first_due_on" required type="date" />
           <FieldDescription>
-            Applies to existing Unit IDs. New units start from their acquisition date plus the Master frequency.
+            This schedule applies only to {unitId}.
           </FieldDescription>
         </Field>
       </FormGrid>

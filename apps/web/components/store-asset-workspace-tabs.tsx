@@ -8,6 +8,7 @@ type AssetWorkspaceTabKey =
   | "overview"
   | "movement"
   | "maintenance"
+  | "calibration"
   | "repairs"
   | "suppliers"
   | "documents"
@@ -27,6 +28,7 @@ export function StoreAssetWorkspaceTabs({
     { key: "overview", label: "Overview" },
     { key: "movement", label: "Movement" },
     { key: "maintenance", label: "Maintenance" },
+    { key: "calibration", label: "Calibration" },
     { key: "repairs", label: "Repairs" },
     { key: "suppliers", label: "Suppliers" },
     { key: "documents", label: "Documents" },
@@ -81,15 +83,14 @@ export function StoreAssetWorkspacePane({
     </section>
   )
 }
-type ItemWorkspaceTabKey = "overview" | "maintenance" | "drawings" | "supplier-quotes"
+type ItemWorkspaceTabKey = "overview" | "drawings" | "supplier-quotes"
 
 const itemWorkspaceTabContext = createContext<ItemWorkspaceTabKey>("overview")
 
-export function StoreItemWorkspaceTabs({ children, showMaintenance = false }: { children?: ReactNode; showMaintenance?: boolean }) {
+export function StoreItemWorkspaceTabs({ children }: { children?: ReactNode }) {
   const [activeTab, setActiveTab] = useState<ItemWorkspaceTabKey>("overview")
   const tabs: Array<{ key: ItemWorkspaceTabKey; label: string }> = [
     { key: "overview", label: "Overview" },
-    ...(showMaintenance ? [{ key: "maintenance" as const, label: "Maintenance" }] : []),
     { key: "drawings", label: "Drawings" },
     { key: "supplier-quotes", label: "Supplier Quotes" },
   ]
