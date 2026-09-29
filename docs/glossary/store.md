@@ -55,6 +55,9 @@ one-time normalization; after that migration, the new codes remain immutable.
 
 **Physical Asset**: One Non Consumable item tracked individually through receipt,
 assignment, movement, maintenance, calibration, breakage, and scrap.
+Its Unit ID owns maintenance and calibration schedules, completed history, and
+any open breakdown. The shared Asset Code page presents those unit records and
+requires Unit ID selection for schedule assignment.
 
 **Unit ID / Serial ID**: The permanent identity of one Physical Asset, separate
 from its shared Asset Code. It may use the manufacturer's serial number and has

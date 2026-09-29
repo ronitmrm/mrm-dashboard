@@ -42,6 +42,19 @@ function text(value: unknown) {
   return typeof value === "string" ? value : ""
 }
 
+export function plannedMaintenanceScheduleRows<
+  Row extends { generated?: unknown; legacyHistory?: unknown; machine?: unknown; machineNo?: unknown; maintenanceCode?: unknown; status?: unknown },
+>(rows: Row[]): Row[] {
+  return rows.filter((row) =>
+    !row.generated &&
+    !row.legacyHistory &&
+    text(row.machineNo || row.machine).trim() &&
+    text(row.maintenanceCode).trim() &&
+    text(row.maintenanceCode).toUpperCase() !== "BREAKDOWN" &&
+    text(row.status).toLowerCase() !== "inactive"
+  )
+}
+
 const priorityRank: Record<UnifiedMechanicalWorkRow["priority"], number> = {
   Urgent: 0,
   Scheduled: 1,

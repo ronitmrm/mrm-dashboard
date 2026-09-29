@@ -203,7 +203,7 @@ import {
   maintenanceDowntimeReasonRows,
   maintenanceMasterRowsForMachineAssignment,
 } from "@/lib/maintenance-schedule-options"
-import { unifiedMechanicalWorkRows } from "@/lib/maintenance-work-list"
+import { plannedMaintenanceScheduleRows, unifiedMechanicalWorkRows } from "@/lib/maintenance-work-list"
 import { MachineStoreAssets } from "@/components/machine-store-assets"
 import { MetricSummary } from "@/components/ui/golden-patterns"
 import {
@@ -12004,7 +12004,7 @@ function MachineMasterPanel({
     [productionControl.machinePlanningRows]
   )
   const scheduleRows = useMemo(
-    () => asArray(productionControl.maintenanceScheduleRows),
+    () => plannedMaintenanceScheduleRows(asArray(productionControl.maintenanceScheduleRows)),
     [productionControl.maintenanceScheduleRows]
   )
   const completionRows = asArray(productionControl.maintenanceTaskRows)
@@ -12709,6 +12709,14 @@ function MaintenancePanel({
   const [requestRows, setRequestRows] = useState<MaintenanceRequestRow[]>([])
   const [requestReloadKey, setRequestReloadKey] = useState(0)
   const [selectedBreakdownTaskKey, setSelectedBreakdownTaskKey] = useState("")
+  const [breakdownTarget, setBreakdownTarget] = useState<"machine" | "asset">("machine")
+  const [selectedAssetBreakdownId, setSelectedAssetBreakdownId] = useState("")
+  const [assetBreakdownReloadKey, setAssetBreakdownReloadKey] = useState(0)
+  const [assetBreakdownStatus, setAssetBreakdownStatus] = useState<ActionStatus>(null)
+  const [assetBreakdownData, setAssetBreakdownData] = useState<{
+    assets: Array<{ assetCode: string; assetName: string; holderName: string | null; itemCode: string; status: string }>
+    breakdowns: Array<{ assetCode: string; id: string; reasonName: string; startedAt: string }>
+  }>({ assets: [], breakdowns: [] })
   const [changedItems, setChangedItems] = useState([""])
   const [selectedSchedule, setSelectedSchedule] =
     useState<DashboardPayload | null>(null)
@@ -12730,7 +12738,7 @@ function MaintenancePanel({
     [productionControl.machinePlanningRows]
   )
   const scheduleRows = useMemo(
-    () => asArray(productionControl.maintenanceScheduleRows),
+    () => plannedMaintenanceScheduleRows(asArray(productionControl.maintenanceScheduleRows)),
     [productionControl.maintenanceScheduleRows]
   )
   const completionRows = asArray(productionControl.maintenanceTaskRows)
@@ -12785,6 +12793,9 @@ function MaintenancePanel({
   const selectedBreakdown = openBreakdownRows.find(
     (row) => str(row.taskId) === selectedBreakdownTaskKey
   )
+  const selectedAssetBreakdown = assetBreakdownData.breakdowns.find(
+    (row) => row.id === selectedAssetBreakdownId
+  )
   const downtimeReasons = useMemo(() => {
     const byCode = new Map<string, { code: string; name: string }>()
     for (const row of asArray(productionControl.rejectionReasonMasterRows)) {
@@ -12817,6 +12828,34 @@ function MaintenancePanel({
       active = false
     }
   }, [requestReloadKey])
+
+  useEffect(() => {
+    let active = true
+    void fetch("/api/maintenance/assets", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Asset breakdowns could not be loaded.")
+        return (await response.json()) as typeof assetBreakdownData
+      })
+      .then((data) => { if (active) setAssetBreakdownData(data) })
+      .catch((error: unknown) => {
+        if (active) setAssetBreakdownStatus({
+          tone: "destructive",
+          message: error instanceof Error ? error.message : "Asset breakdowns could not be loaded.",
+        })
+      })
+    return () => { active = false }
+  }, [assetBreakdownReloadKey])
+
+  async function submitAssetBreakdown(body: Record<string, unknown>) {
+    const response = await fetch("/api/maintenance/assets", {
+      body: JSON.stringify(body),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    })
+    const result = (await response.json()) as { error?: string }
+    if (!response.ok) throw new Error(result.error || "Asset breakdown update failed.")
+    setAssetBreakdownReloadKey((current) => current + 1)
+  }
 
   async function advanceRequest(
     requestId: string,
@@ -13013,6 +13052,30 @@ function MaintenancePanel({
     event.preventDefault()
     const form = event.currentTarget
     const formData = new FormData(form)
+    if (breakdownTarget === "asset") {
+      const startedAt = istDateTimeInputToIso(str(formData.get("startedAt")))
+      const reasonCode = str(formData.get("downtimeReasonCode"))
+      const reason = downtimeReasons.find((candidate) => candidate.code === reasonCode)
+      try {
+        if (!startedAt || !reason) throw new Error("Select a valid start time and reason.")
+        await submitAssetBreakdown({
+          action: "start",
+          assetCode: str(formData.get("assetCode")),
+          reasonCode,
+          reasonName: reason.name,
+          remark: str(formData.get("remark")),
+          startedAt,
+        })
+        setAssetBreakdownStatus({ tone: "default", message: "Asset breakdown started." })
+        form.reset()
+      } catch (error) {
+        setAssetBreakdownStatus({
+          tone: "destructive",
+          message: error instanceof Error ? error.message : "Asset breakdown failed.",
+        })
+      }
+      return
+    }
     const machineNo = str(formData.get("machineNo"))
     const machine = machineRows.find(
       (row) => machineKey(row.machineNo) === machineKey(machineNo)
@@ -13089,6 +13152,32 @@ function MaintenancePanel({
     })
     setSelectedBreakdownTaskKey("")
     setChangedItems([""])
+  }
+
+  async function completeAssetBreakdownMaintenance(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!selectedAssetBreakdown) return
+    const formData = new FormData(event.currentTarget)
+    try {
+      const completedAt = istDateTimeInputToIso(str(formData.get("completedAt")))
+      if (!completedAt) throw new Error("Select a valid completion time.")
+      await submitAssetBreakdown({
+        action: "complete",
+        breakdownId: selectedAssetBreakdown.id,
+        changedItems: changedItems.map(str).filter(Boolean),
+        completedAt,
+        remark: str(formData.get("remark")),
+        workDone: str(formData.get("workDone")),
+      })
+      setSelectedAssetBreakdownId("")
+      setChangedItems([""])
+      setAssetBreakdownStatus({ tone: "default", message: "Asset breakdown completed." })
+    } catch (error) {
+      setAssetBreakdownStatus({
+        tone: "destructive",
+        message: error instanceof Error ? error.message : "Asset breakdown could not be completed.",
+      })
+    }
   }
 
   if (selectedSchedule) {
@@ -13359,7 +13448,7 @@ function MaintenancePanel({
           {
             label: "Open breakdowns",
             tone: "danger",
-            value: openBreakdownRows.length,
+            value: openBreakdownRows.length + assetBreakdownData.breakdowns.length,
           },
         ]}
       />
@@ -13545,16 +13634,15 @@ function MaintenancePanel({
         <CardHeader>
           <CardTitle>Open Breakdowns</CardTitle>
           <CardDescription>
-            Breakdown maintenance remains open across shift closure until the
-            machine is repaired.
+            Machine and physical asset breakdowns remain open until repaired.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {openBreakdownRows.length ? (
+          {openBreakdownRows.length || assetBreakdownData.breakdowns.length ? (
             <OperationalTable>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Machine</TableHead>
+                  <TableHead>Machine / Unit ID</TableHead>
                   <TableHead>Started</TableHead>
                   <TableHead>Reason</TableHead>
                   <TableHead>Status</TableHead>
@@ -13588,10 +13676,24 @@ function MaintenancePanel({
                     </TableCell>
                   </TableRow>
                 ))}
+                {assetBreakdownData.breakdowns.map((row) => (
+                  <TableRow key={row.id}>
+                    <TableCell className="font-medium">
+                      <Link className="underline underline-offset-4" href={`/store/assets/${encodeURIComponent(row.assetCode)}`}>{row.assetCode}</Link>
+                      <span className="ml-2 text-xs text-muted-foreground">Asset</span>
+                    </TableCell>
+                    <TableCell>{formatIstDateTime(row.startedAt)}</TableCell>
+                    <TableCell>{row.reasonName}</TableCell>
+                    <TableCell><StatusBadge value="In Progress" /></TableCell>
+                    <TableCell>
+                      <Button onClick={() => { setSelectedAssetBreakdownId(row.id); setSelectedBreakdownTaskKey(""); setChangedItems([""]) }} size="sm" type="button">Complete</Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
               </TableBody>
             </OperationalTable>
           ) : (
-            <EmptyRowsMessage>No open machine breakdowns.</EmptyRowsMessage>
+            <EmptyRowsMessage>No open breakdowns.</EmptyRowsMessage>
           )}
         </CardContent>
       </SectionCard>
@@ -13599,14 +13701,24 @@ function MaintenancePanel({
         <CardHeader>
           <CardTitle>Start Breakdown</CardTitle>
           <CardDescription>
-            Starts downtime automatically when the selected machine has a
-            running production session.
+            Machine breakdowns start Production Session downtime when running.
+            Asset breakdowns track the selected physical Unit ID.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form className="grid gap-3" onSubmit={startBreakdownMaintenance}>
             <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
-              <Field label="Machine No.">
+              <Field label="Select Machine or Asset">
+                <SearchableSelect
+                  className="h-9 rounded-md border bg-background px-3 text-sm"
+                  onChange={(event) => setBreakdownTarget(event.target.value as "machine" | "asset")}
+                  value={breakdownTarget}
+                >
+                  <option value="machine">Machine</option>
+                  <option value="asset">Asset</option>
+                </SearchableSelect>
+              </Field>
+              {breakdownTarget === "machine" ? <Field label="Machine No.">
                 <SearchableSelect
                   className="h-9 rounded-md border bg-background px-3 text-sm"
                   name="machineNo"
@@ -13622,7 +13734,16 @@ function MaintenancePanel({
                     </option>
                   ))}
                 </SearchableSelect>
-              </Field>
+              </Field> : <Field label="Asset Unit ID">
+                <SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" name="assetCode" required>
+                  <option value="">Select Asset Unit ID</option>
+                  {assetBreakdownData.assets.filter((asset) => !assetBreakdownData.breakdowns.some((breakdown) => breakdown.assetCode === asset.assetCode)).map((asset) => (
+                    <option key={asset.assetCode} value={asset.assetCode}>
+                      {asset.assetCode} · {asset.assetName}{asset.holderName ? ` · ${asset.holderName}` : ""}
+                    </option>
+                  ))}
+                </SearchableSelect>
+              </Field>}
               <Field label="Breakdown Started At">
                 <Input
                   name="startedAt"
@@ -13652,12 +13773,13 @@ function MaintenancePanel({
             <Button
               type="submit"
               className="w-fit"
-              disabled={!machineRows.length}
+              disabled={breakdownTarget === "machine" ? !machineRows.length : !assetBreakdownData.assets.length}
             >
               <Wrench className="size-4" />
               Start Breakdown
             </Button>
           </form>
+          {assetBreakdownStatus ? <div className="mt-3"><AlertMessage tone={assetBreakdownStatus.tone}>{assetBreakdownStatus.message}</AlertMessage></div> : null}
         </CardContent>
       </SectionCard>
       {selectedBreakdown ? (
@@ -13764,6 +13886,45 @@ function MaintenancePanel({
                 >
                   Cancel
                 </Button>
+              </div>
+            </form>
+          </CardContent>
+        </SectionCard>
+      ) : null}
+      {selectedAssetBreakdown ? (
+        <SectionCard width="wide">
+          <CardHeader>
+            <CardTitle>Complete Asset Breakdown · {selectedAssetBreakdown.assetCode}</CardTitle>
+            <CardDescription>
+              Started {formatIstDateTime(selectedAssetBreakdown.startedAt)} · {selectedAssetBreakdown.reasonName}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form className="grid gap-4" onSubmit={completeAssetBreakdownMaintenance}>
+              <div className="grid gap-3 md:grid-cols-2">
+                <Field label="Completed At">
+                  <Input defaultValue={istDateTimeInputValue()} name="completedAt" required type="datetime-local" />
+                </Field>
+                <Field label="Completed By">
+                  <Input readOnly value={signedInEngineer ? `${signedInEngineer.code} - ${signedInEngineer.name}` : "Signed-in Maintenance employee required"} />
+                </Field>
+              </div>
+              <Field label="Work Done"><Input name="workDone" required /></Field>
+              <div className="grid gap-2">
+                <Label>Items Changed</Label>
+                {changedItems.map((item, index) => (
+                  <div className="flex gap-2" key={index}>
+                    <Input aria-label={`Changed item ${index + 1}`} value={item}
+                      onChange={(event) => setChangedItems((current) => current.map((value, itemIndex) => itemIndex === index ? event.target.value : value))} />
+                    {changedItems.length > 1 ? <Button aria-label={`Remove changed item ${index + 1}`} onClick={() => setChangedItems((current) => current.filter((_, itemIndex) => itemIndex !== index))} size="icon" type="button" variant="outline"><Trash2 className="size-4" /></Button> : null}
+                  </div>
+                ))}
+                <Button className="w-fit" onClick={() => setChangedItems((current) => [...current, ""])} size="sm" type="button" variant="outline"><Plus className="size-4" /> Add Item</Button>
+              </div>
+              <Field label="Remark"><Input name="remark" /></Field>
+              <div className="flex flex-wrap gap-2">
+                <Button disabled={!signedInEngineer} type="submit"><CheckCircle2 className="size-4" /> Complete Breakdown</Button>
+                <Button onClick={() => { setSelectedAssetBreakdownId(""); setChangedItems([""]) }} type="button" variant="outline">Cancel</Button>
               </div>
             </form>
           </CardContent>

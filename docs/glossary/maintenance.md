@@ -62,6 +62,15 @@ single free-text part field.
 _Avoid_: completed-only breakdown entry, ending the Production Session when the
 breakdown starts, starting production while a machine breakdown remains open.
 
+## Physical Asset Breakdown
+
+One open breakdown belongs to one Non Consumable physical Unit ID. Mechanical
+staff choose Machine or Asset when starting breakdown work. An Asset breakdown
+marks that unit Broken, remains open until repaired, and completes into the
+unit's maintenance history with the signed-in Maintenance employee, work done,
+and optional changed items. A shared Asset Code cannot own a breakdown.
+An Asset breakdown does not open machine Production Session downtime.
+
 ## Legacy Machine Maintenance History
 
 A migrated completed record preserves the machine, maintenance type, recorded

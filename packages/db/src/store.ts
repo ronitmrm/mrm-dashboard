@@ -3721,7 +3721,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         [input.organizationId, requiredText(input.typeCode, "Asset Code")]
       )
       if (!item.rows[0]) return null
-      const [assets, drawing, supplierPrices] = await Promise.all([
+      const [assets, drawing, supplierPrices, schedules, maintenance] = await Promise.all([
         pool.query<{
           acquiredOn: string | null
           assetCode: string
@@ -3834,11 +3834,60 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           `,
           [input.organizationId, item.rows[0].id]
         ),
+        pool.query<{
+          assetCode: string
+          code: string
+          frequencyDays: number
+          id: string
+          lastCompletedOn: string | null
+          name: string
+          nextDueOn: string
+          scheduleType: "MAINTENANCE" | "CALIBRATION"
+        }>(
+          `SELECT schedule.id, asset.asset_code AS "assetCode",
+              COALESCE(definition.code, schedule.schedule_type) AS code,
+              COALESCE(definition.name, schedule.name) AS name,
+              COALESCE(definition.frequency_value, schedule.frequency_days) AS "frequencyDays",
+              schedule.schedule_type AS "scheduleType",
+              schedule.last_completed_on::text AS "lastCompletedOn",
+              schedule.next_due_on::text AS "nextDueOn"
+            FROM store.asset_maintenance_schedules schedule
+            JOIN store.assets asset ON asset.id = schedule.asset_id
+            LEFT JOIN maintenance.definitions definition ON definition.id = schedule.definition_id
+            WHERE schedule.organization_id = $1 AND asset.item_type_id = $2
+              AND schedule.active
+            ORDER BY schedule.next_due_on, asset.asset_code`,
+          [input.organizationId, item.rows[0].id]
+        ),
+        pool.query<{
+          assetCode: string
+          certificateNumber: string | null
+          completedBy: string
+          completedOn: string
+          id: string
+          maintenanceType: string
+          result: string | null
+          workDone: string | null
+        }>(
+          `SELECT record.id, asset.asset_code AS "assetCode",
+              record.maintenance_type AS "maintenanceType",
+              record.completed_on::text AS "completedOn",
+              record.completed_by AS "completedBy",
+              record.certificate_number AS "certificateNumber",
+              record.work_done AS "workDone", record.result
+            FROM store.asset_maintenance_records record
+            JOIN store.assets asset ON asset.id = record.asset_id
+            WHERE record.organization_id = $1 AND asset.item_type_id = $2
+            ORDER BY record.completed_on DESC, record.created_at DESC`,
+          [input.organizationId, item.rows[0].id]
+        ),
       ])
       return {
         assets: assets.rows,
         drawing: drawing.rows[0] ?? null,
         item: item.rows[0],
+        maintenance: maintenance.rows,
+        schedules: schedules.rows,
         supplierPrices: supplierPrices.rows,
       }
     },
@@ -4145,6 +4194,11 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         if (asset.rows[0].status === "SCRAPPED") {
           throw new Error("A scrapped asset cannot be moved or reassigned.")
         }
+        const openBreakdown = await client.query(
+          `SELECT 1 FROM store.asset_breakdowns WHERE organization_id = $1
+            AND asset_id = $2 AND status = 'In Progress'`,
+          [input.organizationId, asset.rows[0].id]
+        )
         const machineId =
           input.holderType === "MACHINE"
             ? await machineIdForReference(
@@ -4209,7 +4263,9 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             WHERE id = $9
           `,
           [
-            input.holderType === "STORE" ? "AVAILABLE" : "ASSIGNED",
+            openBreakdown.rowCount
+              ? "BROKEN"
+              : input.holderType === "STORE" ? "AVAILABLE" : "ASSIGNED",
             input.holderType,
             destinationReference,
             destinationName,
@@ -4271,7 +4327,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       if (!Number.isInteger(input.frequencyDays) || input.frequencyDays <= 0) {
         throw new Error("Frequency must be a positive number of days.")
       }
-      const result = await pool.query<{ id: string }>(
+      const result = await pool.query<{ id: string; typeCode: string }>(
         `
           INSERT INTO store.asset_maintenance_schedules (
             organization_id, asset_id, schedule_type, name, frequency_days,
@@ -4280,7 +4336,9 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           SELECT $1, asset.id, $3, $4, $5, $6::date, $6::date, $7, $7
           FROM store.assets asset
           WHERE asset.organization_id = $1 AND lower(asset.asset_code) = lower($2)
-          RETURNING id
+          RETURNING id, (SELECT item.type_code FROM store.assets asset
+            JOIN store.item_types item ON item.id = asset.item_type_id
+            WHERE asset.id = asset_id) AS "typeCode"
         `,
         [
           input.organizationId,
@@ -4296,6 +4354,165 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         throw new Error("Unit ID was not found.")
       }
       return result.rows[0]
+    },
+
+    async listBreakdownAssets(organizationId: string) {
+      const [assets, breakdowns] = await Promise.all([
+        pool.query<{
+          assetCode: string
+          assetName: string
+          holderName: string | null
+          itemCode: string
+          status: string
+        }>(
+          `SELECT asset.asset_code AS "assetCode", item.type_code AS "itemCode",
+              item.asset_name AS "assetName", asset.current_holder_name AS "holderName",
+              asset.status
+            FROM store.assets asset
+            JOIN store.item_types item ON item.id = asset.item_type_id
+            WHERE asset.organization_id = $1 AND asset.status <> 'SCRAPPED'
+            ORDER BY asset.asset_code`,
+          [organizationId]
+        ),
+        pool.query<{
+          assetCode: string
+          id: string
+          reasonName: string
+          startedAt: Date
+        }>(
+          `SELECT breakdown.id, asset.asset_code AS "assetCode",
+              breakdown.reason_name AS "reasonName",
+              breakdown.started_at AS "startedAt"
+            FROM store.asset_breakdowns breakdown
+            JOIN store.assets asset ON asset.id = breakdown.asset_id
+            WHERE breakdown.organization_id = $1
+              AND breakdown.status = 'In Progress'
+            ORDER BY breakdown.started_at DESC`,
+          [organizationId]
+        ),
+      ])
+      return { assets: assets.rows, breakdowns: breakdowns.rows }
+    },
+
+    async startAssetBreakdown(input: {
+      actorUserId: string
+      assetCode: string
+      organizationId: string
+      reasonCode: string
+      reasonName: string
+      remark?: string | null
+      startedAt: string
+    }) {
+      return withTransaction(pool, async (client) => {
+        const asset = await client.query<{ id: string; status: string }>(
+          `SELECT id, status FROM store.assets
+            WHERE organization_id = $1 AND lower(asset_code) = lower($2)
+            FOR UPDATE`,
+          [input.organizationId, requiredText(input.assetCode, "Unit ID")]
+        )
+        if (!asset.rows[0]) throw new Error("Unit ID was not found.")
+        if (asset.rows[0].status === "SCRAPPED") {
+          throw new Error("A scrapped unit cannot start a breakdown.")
+        }
+        const open = await client.query(
+          `SELECT 1 FROM store.asset_breakdowns
+            WHERE organization_id = $1 AND asset_id = $2
+              AND status = 'In Progress'`,
+          [input.organizationId, asset.rows[0].id]
+        )
+        if (open.rowCount) throw new Error("This unit already has an open breakdown.")
+        const startedAt = new Date(input.startedAt)
+        if (!Number.isFinite(startedAt.getTime())) throw new Error("Start time is invalid.")
+        const breakdown = await client.query<{ id: string }>(
+          `INSERT INTO store.asset_breakdowns (
+              organization_id, asset_id, started_at, reason_code,
+              reason_name, remark, created_by_user_id
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+            RETURNING id`,
+          [input.organizationId, asset.rows[0].id, startedAt,
+            requiredText(input.reasonCode, "Reason code"),
+            requiredText(input.reasonName, "Reason"),
+            input.remark?.trim() || null, input.actorUserId]
+        )
+        await client.query(
+          `UPDATE store.assets SET status = 'BROKEN', updated_at = now(),
+              updated_by_user_id = $2 WHERE id = $1`,
+          [asset.rows[0].id, input.actorUserId]
+        )
+        await queueDashboardRefresh(client, input.organizationId)
+        return breakdown.rows[0]
+      })
+    },
+
+    async completeAssetBreakdown(input: {
+      actorUserId: string
+      breakdownId: string
+      changedItems: string[]
+      completedAt: string
+      completedBy: string
+      completedByEmployeeCode: string
+      organizationId: string
+      remark?: string | null
+      workDone: string
+    }) {
+      return withTransaction(pool, async (client) => {
+        const breakdown = await client.query<{
+          assetId: string
+          holderType: string
+          startedAt: Date
+          status: string
+        }>(
+          `SELECT breakdown.asset_id AS "assetId", breakdown.started_at AS "startedAt",
+              asset.current_holder_type AS "holderType", asset.status
+            FROM store.asset_breakdowns breakdown
+            JOIN store.assets asset ON asset.id = breakdown.asset_id
+            WHERE breakdown.organization_id = $1 AND breakdown.id = $2
+              AND breakdown.status = 'In Progress'
+            FOR UPDATE OF breakdown, asset`,
+          [input.organizationId, input.breakdownId]
+        )
+        const row = breakdown.rows[0]
+        if (!row) throw new Error("Open asset breakdown was not found.")
+        if (row.status === "SCRAPPED") throw new Error("A scrapped unit cannot be repaired.")
+        const completedAt = new Date(input.completedAt)
+        if (!Number.isFinite(completedAt.getTime()) || completedAt < row.startedAt) {
+          throw new Error("Completion must follow the breakdown start.")
+        }
+        const workDone = requiredText(input.workDone, "Work done")
+        const completedBy = requiredText(input.completedBy, "Maintenance employee")
+        const record = await client.query<{ id: string }>(
+          `INSERT INTO store.asset_maintenance_records (
+              organization_id, asset_id, maintenance_type, completed_on,
+              completed_by, work_done, result, remark, created_by_user_id
+            ) VALUES ($1, $2, 'BREAKDOWN',
+              ($3::timestamptz AT TIME ZONE 'Asia/Kolkata')::date, $4, $5,
+              'Completed', $6, $7) RETURNING id`,
+          [input.organizationId, row.assetId, input.completedAt,
+            completedBy,
+            workDone, input.remark?.trim() || null, input.actorUserId]
+        )
+        if (!record.rows[0]) throw new Error("Breakdown maintenance record was not created.")
+        await client.query(
+          `UPDATE store.asset_breakdowns SET status = 'Completed',
+              completed_at = $3, completed_by = $4,
+              completed_by_employee_code = $5, work_done = $6,
+              changed_items = $7::jsonb, maintenance_record_id = $8,
+              completed_by_user_id = $9
+            WHERE organization_id = $1 AND id = $2`,
+          [input.organizationId, input.breakdownId, completedAt, completedBy,
+            requiredText(input.completedByEmployeeCode, "Maintenance Employee ID"),
+            workDone, JSON.stringify(input.changedItems.map((item) => item.trim()).filter(Boolean)),
+            record.rows[0].id, input.actorUserId]
+        )
+        await client.query(
+          `UPDATE store.assets SET status = $2, updated_at = now(),
+              updated_by_user_id = $3 WHERE id = $1`,
+          [row.assetId, row.holderType === "STORE" ? "AVAILABLE" : "ASSIGNED",
+            input.actorUserId]
+        )
+        await queueDashboardRefresh(client, input.organizationId)
+        return record.rows[0]
+      })
     },
 
     async setAssetLifecycleStatus(input: {
@@ -4326,6 +4543,16 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           [input.organizationId, requiredText(input.assetCode, "Unit ID")]
         )
         if (!asset.rows[0]) throw new Error("Asset was not found.")
+        if (input.status === "SCRAPPED") {
+          const openBreakdown = await client.query(
+            `SELECT 1 FROM store.asset_breakdowns WHERE organization_id = $1
+              AND asset_id = $2 AND status = 'In Progress'`,
+            [input.organizationId, asset.rows[0].id]
+          )
+          if (openBreakdown.rowCount) {
+            throw new Error("Complete the open breakdown before scrapping this unit.")
+          }
+        }
         const fallbackLocation = await client.query<{ id: string }>(
           `SELECT id FROM store.locations
            WHERE organization_id = $1 AND active ORDER BY created_at LIMIT 1`,
@@ -4381,7 +4608,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       completedBy: string
       completedOn: string
       cost?: string | null
-      maintenanceType: "BREAKDOWN" | "CALIBRATION" | "MAINTENANCE"
+      maintenanceType: "CALIBRATION" | "MAINTENANCE"
       organizationId: string
       result?: string | null
       scheduleId?: string | null
