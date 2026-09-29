@@ -209,24 +209,25 @@ describe("production entry mutation API authorization", () => {
     expect(dependencies.recordShopFloorStage).not.toHaveBeenCalled()
   })
 
-  it("starts a session under the machinist while assigning a selected Worker", async () => {
+  it("starts a session under an authorized planner while assigning a selected Worker", async () => {
     dependencies.listAllGrantedCapabilities.mockResolvedValue([
       "operations.production.write",
       "operations.floors.cnc.production_sessions.production_recording.write",
     ])
     dependencies.activeProductionWorker.mockResolvedValue({ code: "WORK-7", name: "Worker Seven" })
+    dependencies.signedInEmployee.mockResolvedValue({ code: "42", name: "Planner One" })
     dependencies.startProductionSession.mockResolvedValue({ id: "session-1" })
     const body = {
       entryType: "production_session_start", productionFloorCode: "cnc",
       payload: {
         productionFloorCode: "cnc", machine: "CNC-9", jobCard: "P2046",
-        setupNo: "1", operatorCode: "WORK-7", startedAt: "2026-09-29T04:00:00Z",
+        setupNo: "1", operatorCode: "WORK-7", startedBy: "Another Employee", startedAt: "2026-09-29T04:00:00Z",
       },
     }
 
     expect((await post("data-entry", body)).status).toBe(200)
     expect(dependencies.signedInEmployee).toHaveBeenCalledWith(
-      expect.objectContaining({ role: "machinist", userId: "entry-writer" })
+      expect.objectContaining({ role: "authorized_staff", userId: "entry-writer" })
     )
     expect(dependencies.activeProductionWorker).toHaveBeenCalledWith(
       expect.objectContaining({ employeeCode: "WORK-7", productionFloorCode: "cnc" })
@@ -236,7 +237,7 @@ describe("production entry mutation API authorization", () => {
         actorUserId: "entry-writer",
         operatorCode: "WORK-7",
         sourcePayload: expect.objectContaining({
-          startedByEmployeeCode: "42", operatorCode: "WORK-7",
+          startedBy: "Planner One", startedByEmployeeCode: "42", operatorCode: "WORK-7",
         }),
       })
     )
@@ -244,6 +245,10 @@ describe("production entry mutation API authorization", () => {
     dependencies.activeProductionWorker.mockResolvedValue(null)
     dependencies.startProductionSession.mockClear()
     expect((await post("data-entry", body)).status).toBe(400)
+    expect(dependencies.startProductionSession).not.toHaveBeenCalled()
+
+    dependencies.signedInEmployee.mockResolvedValue(null)
+    expect((await post("data-entry", body)).status).toBe(403)
     expect(dependencies.startProductionSession).not.toHaveBeenCalled()
   })
 

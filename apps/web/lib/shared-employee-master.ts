@@ -129,6 +129,19 @@ function employeeOptions(
   )
 }
 
+export function activeEmployeeForCode(
+  rows: readonly EmployeeOptionSource[],
+  employeeCode: string
+): EmployeeOption | null {
+  const code = employeeCode.trim().toLocaleLowerCase("en-IN")
+  if (!code) return null
+  return employeeOptions(rows, (row) =>
+    String(row.empId ?? row.employeeCode ?? "")
+      .trim()
+      .toLocaleLowerCase("en-IN") === code
+  )[0] ?? null
+}
+
 function belongsToProductionDepartment(
   row: EmployeeOptionSource,
   productionFloorCode: ProductionFloorCode,

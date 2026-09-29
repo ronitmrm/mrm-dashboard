@@ -2,6 +2,7 @@ import type { RecruitmentPostRow } from "@workspace/db"
 import { describe, expect, it } from "vitest"
 
 import {
+  activeEmployeeForCode,
   maintenanceEmployeeOptions,
   productionDispatchApproverOptions,
   productionQualityOptions,
@@ -39,6 +40,18 @@ function post(
 }
 
 describe("shared Employee Master", () => {
+  it("finds an active linked employee across departments and ignores a former post", () => {
+    const rows = sharedEmployeeMasterRows([
+      post({ id: "1", status: "Resigned", department: "Planning", designation: "Planner", employeeCode: "42", employeeName: "Planner One" }),
+      post({ id: "2", status: "Occupied", department: "Management", designation: "Manager", employeeCode: "42", employeeName: "Manager One" }),
+    ])
+    expect(activeEmployeeForCode(rows, " 42 ")).toEqual({ code: "42", name: "Manager One" })
+    expect(activeEmployeeForCode(rows, "missing")).toBeNull()
+    expect(activeEmployeeForCode(sharedEmployeeMasterRows([
+      post({ id: "3", status: "Resigned", employeeCode: "99", employeeName: "Former Employee" }),
+    ]), "99")).toBeNull()
+  })
+
   it("offers active maintenance staff from every production unit", () => {
     const rows = sharedEmployeeMasterRows([
       post({ id: "1", status: "Occupied", department: "Ppac Cnc-01 Maintenance", designation: "Assistant", employeeCode: "M-1", employeeName: "Cnc Engineer" }),
