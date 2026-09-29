@@ -150,7 +150,9 @@ Lines selected from Current Stock and receives an immutable number such as
 
 **Coded Item Request Line**: One Store Item Type and requested quantity within
 a Store Request. Store allocates and saves each line independently; its live
-available stock changes immediately after an issue is saved.
+available stock changes immediately after an issue is saved. Store may cancel
+an open line when it will not fulfill the remaining quantity. Already issued
+units stay issued; a cancelled line cannot be issued again.
 
 **New Item Request**: Demand for an item that cannot be found in Current Stock
 and therefore has no Asset Code. The requester may choose Category, Subcategory,
@@ -225,10 +227,11 @@ merging logical drawing links. Historical Store document rows remain readable.
 Unit ID between the Store, a Department, a Machine, or a Vendor. A Store Return
 is an Asset Movement back to a Store location; Consumables never participate.
 
-**Asset Maintenance Timetable**: A Maintenance Master definition assigned to
-one specific Unit ID. Completing the work records evidence and calculates
-the next due date from the definition frequency. Calibration is a maintenance
-type and does not belong to the Store Item Type.
+**Asset Maintenance Timetable**: A maintenance or calibration schedule assigned
+directly to one received Unit ID, with a name, frequency in days, and first due
+date. Completing the matching work records evidence and advances the next due
+date by that frequency. Existing timetables linked to Maintenance Master remain
+readable and completable. Timetables do not belong to the Store Item Type.
 
 **Tooling Asset**: A Store Item Type created before it can be used as fixture,
 tooling, or foam tooling in production. Its Asset Code is the only identity
