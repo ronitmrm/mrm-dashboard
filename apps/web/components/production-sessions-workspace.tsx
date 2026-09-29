@@ -69,9 +69,10 @@ type Action =
   | "carryResolve"
   | ProductionSessionDetailAction
 type Row = Record<string, unknown>
-type EntryRole = "shop_floor" | "machinist" | "quality"
+type EntryRole = "shop_floor" | "machinist" | "quality" | "authorized_staff"
 
 const entryRoleLabels: Record<EntryRole, string> = {
+  authorized_staff: "Authorized Staff",
   shop_floor: "Shop Floor",
   machinist: "Machinist",
   quality: "QC",
@@ -209,7 +210,9 @@ export function ProductionSessionsWorkspace({
           : []
       ))
       const signedInEmployee = activeEmployeeForCode(employeeRows, employeeCode)
-      setSignedInPerson(signedInEmployee)
+      setSignedInPerson(employeeCode
+        ? { code: text(employeeBody.currentEmployeeCode), name: text(employeeBody.currentEmployeeName) }
+        : null)
       const accountName = text(employeeBody.currentUserName)
       setSignedInStarter(signedInEmployee ?? (accountName ? { code: "", name: accountName } : null))
       const requestedSession = initialSessionId
@@ -608,11 +611,14 @@ function ActionSheet({ action, target, floor, shift, signedInPerson, signedInSta
     "resolved" | "shift_end_unresolved"
   >("resolved")
   const [selectedRole, setSelectedRole] = useState<EntryRole | "">("")
-  const allowedRoles = signedInRoles.filter((candidate) =>
+  const departmentRoles = signedInRoles.filter((candidate) =>
     action === "downtime" ||
     candidate === "shop_floor" ||
     (floor === "cnc" && candidate === "quality")
   )
+  const allowedRoles = (action === "end" || action === "correctClose") && signedInPerson && !departmentRoles.length
+    ? ["authorized_staff" as const]
+    : departmentRoles
   const role = allowedRoles.includes(selectedRole as EntryRole)
     ? selectedRole
     : allowedRoles.length === 1 ? allowedRoles[0]! : ""

@@ -10,6 +10,7 @@ const dependencies = vi.hoisted(() => ({
   upsertRawMaterialReceipts: vi.fn(),
   upsertCycleStandard: vi.fn(),
   startProductionSession: vi.fn(),
+  closeProductionSession: vi.fn(),
   startBulkProductionSessionDowntime: vi.fn(),
   recordShopFloorStage: vi.fn(),
   recordDispatchApproval: vi.fn(),
@@ -37,6 +38,7 @@ vi.mock("@workspace/db", async (importOriginal) => ({
     upsertRawMaterialReceipt: dependencies.upsertRawMaterialReceipt,
     upsertRawMaterialReceipts: dependencies.upsertRawMaterialReceipts,
     startProductionSession: dependencies.startProductionSession,
+    closeProductionSession: dependencies.closeProductionSession,
     startBulkProductionSessionDowntime: dependencies.startBulkProductionSessionDowntime,
     recordShopFloorStage: dependencies.recordShopFloorStage,
     recordDispatchApproval: dependencies.recordDispatchApproval,
@@ -276,6 +278,33 @@ describe("production entry mutation API authorization", () => {
     dependencies.startProductionSession.mockClear()
     expect((await post("data-entry", body)).status).toBe(403)
     expect(dependencies.startProductionSession).not.toHaveBeenCalled()
+  })
+
+  it("closes a session under a permitted linked employee outside Shop Floor and Quality", async () => {
+    dependencies.listAllGrantedCapabilities.mockResolvedValue([
+      "operations.production.write",
+      "operations.floors.cnc.production_sessions.production_recording.write",
+    ])
+    dependencies.closeProductionSession.mockResolvedValue({ id: "session-1" })
+    const body = {
+      entryType: "production_session_close", productionFloorCode: "cnc",
+      payload: { productionFloorCode: "cnc", sessionId: "session-1",
+        enteredRole: "authorized_staff", endReason: "shift_end",
+        endedAt: "2026-09-29T08:30:00Z", endCount: 65 },
+    }
+
+    expect((await post("data-entry", body)).status).toBe(200)
+    expect(dependencies.signedInEmployee).toHaveBeenCalledWith(
+      expect.objectContaining({ role: "authorized_staff", userId: "entry-writer" })
+    )
+    expect(dependencies.closeProductionSession).toHaveBeenCalledWith(
+      expect.objectContaining({ actorUserId: "entry-writer", enteredRole: "authorized_staff", endCount: 65 })
+    )
+
+    dependencies.signedInEmployee.mockResolvedValue(null)
+    dependencies.closeProductionSession.mockClear()
+    expect((await post("data-entry", body)).status).toBe(403)
+    expect(dependencies.closeProductionSession).not.toHaveBeenCalled()
   })
 
   it("requires the selected floor's recording permission for bulk breakdown", async () => {

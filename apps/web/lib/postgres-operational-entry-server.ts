@@ -193,9 +193,13 @@ export async function readPostgresEmployeeMaster(request: NextRequest) {
           repository.listPosts(organizationId),
           authorization.linkedEmployeeCode(actor.actorUserId, organizationId),
         ])
+        const currentEmployeeName = posts.find((post) =>
+          post.employeeCode?.trim().toLowerCase() === currentEmployeeCode?.trim().toLowerCase()
+        )?.employeeName ?? null
         return {
           currentEmployeeCode,
           currentUserName: actor.actorUser.name,
+          currentEmployeeName,
           rows: sharedEmployeeMasterRows(posts),
         }
       } finally {
