@@ -1,7 +1,25 @@
 import { afterEach, expect, test, vi } from "vitest"
-import { buildLegacyDashboardSnapshot } from "./legacy-dashboard-analysis"
+import { buildLegacyDashboardSnapshot, stableMachineAssignmentCandidates } from "./legacy-dashboard-analysis"
 
 afterEach(() => vi.useRealTimers())
+
+test("retains an earlier assigned machine despite a lighter post-outage queue", () => {
+  const earlier = { machine: "CNC-10" }
+  const later = { machine: "CNC-11" }
+  const candidates = stableMachineAssignmentCandidates([later, earlier], ["CNC-10"], {
+    machineLoad: new Map([["cnc-10", 4], ["cnc-11", 1]]),
+    machineNextSetupDate: new Map([["cnc-10", "2026-10-07"], ["cnc-11", "2026-09-29"]]),
+    machinePlannedDays: new Map([["cnc-10", 6], ["cnc-11", 1]]),
+    machinePlannedQty: new Map([["cnc-10", 5_000], ["cnc-11", 100]]),
+    machineUnavailableWindows: [{ machine: "cnc-11", fromDate: "2026-09-22", toDate: "2026-10-22", action: "shift_all", reason: "Breakdown", interruptedSetups: [], queuePlacements: [] }],
+    orderPcs: 12_000,
+    cycle: { cycleTime: 83 },
+    plannedQtyBand: 1_000,
+    readyDate: "2026-09-29",
+    planningCalendar: { holidayDates: new Set<string>(), productiveHoursPerDay: 22.5 },
+  })
+  expect(candidates[0]).toBe(earlier)
+})
 
 function inputFor(good: number) {
   vi.useFakeTimers()

@@ -5437,6 +5437,9 @@ function assignedPhysicalMachines({
     machineNextSetupDate,
     machinePlannedDays,
     machinePlannedQty,
+    machineUnavailableWindows,
+    orderPcs,
+    cycle,
     plannedQtyBand: Math.max(1, Math.ceil(cycleDailyQty(cycle, planningCalendar))),
     readyDate,
     planningCalendar,
@@ -5796,7 +5799,7 @@ function candidatePhysicalMachines(
     );
 }
 
-function stableMachineAssignmentCandidates(
+export function stableMachineAssignmentCandidates(
   candidates: Array<{ machine: string }>,
   previousMachineList: string[],
   context: {
@@ -5804,6 +5807,9 @@ function stableMachineAssignmentCandidates(
     machineNextSetupDate: Map<string, string>;
     machinePlannedDays: Map<string, number>;
     machinePlannedQty: Map<string, number>;
+    machineUnavailableWindows: MachineUnavailableWindow[];
+    orderPcs: number;
+    cycle?: Record<string, unknown>;
     plannedQtyBand: number;
     readyDate: string;
     planningCalendar: PlanningCalendar;
@@ -5833,6 +5839,9 @@ function previousAssignmentMoveIsMaterial(
     machineNextSetupDate: Map<string, string>;
     machinePlannedDays: Map<string, number>;
     machinePlannedQty: Map<string, number>;
+    machineUnavailableWindows: MachineUnavailableWindow[];
+    orderPcs: number;
+    cycle?: Record<string, unknown>;
     plannedQtyBand: number;
     readyDate: string;
     planningCalendar: PlanningCalendar;
@@ -5840,6 +5849,9 @@ function previousAssignmentMoveIsMaterial(
 ) {
   const bestKey = canonicalKey(bestCandidate.machine);
   const previousKey = canonicalKey(previousCandidate.machine);
+  const bestStart = feasibleMachineAssignmentStart(bestCandidate.machine, context);
+  const previousStart = feasibleMachineAssignmentStart(previousCandidate.machine, context);
+  if (bestStart > previousStart) return false;
   const plannedDaysGain = (context.machinePlannedDays.get(previousKey) ?? 0) - (context.machinePlannedDays.get(bestKey) ?? 0);
   if (plannedDaysGain >= 2) return true;
   const plannedQtyGain = (context.machinePlannedQty.get(previousKey) ?? 0) - (context.machinePlannedQty.get(bestKey) ?? 0);
@@ -5853,6 +5865,30 @@ function previousAssignmentMoveIsMaterial(
   if (nextAvailableGain >= 2) return true;
   const loadGain = (context.machineLoad.get(previousKey) ?? 0) - (context.machineLoad.get(bestKey) ?? 0);
   return loadGain >= 2;
+}
+
+function feasibleMachineAssignmentStart(
+  machine: string,
+  context: {
+    readyDate: string;
+    machineNextSetupDate: Map<string, string>;
+    machineUnavailableWindows: MachineUnavailableWindow[];
+    orderPcs: number;
+    cycle?: Record<string, unknown>;
+    planningCalendar: PlanningCalendar;
+  },
+) {
+  let start = maxDateValue(context.readyDate, context.machineNextSetupDate.get(canonicalKey(machine)) ?? "");
+  const windows = machineUnavailableWindowsFor(context.machineUnavailableWindows, machine);
+  for (let guard = 0; guard < 20; guard += 1) {
+    const end = plannedProductionEnd(start, context.orderPcs, context.cycle, undefined, context.planningCalendar);
+    const overlapping = firstOverlappingMachineUnavailableWindow(windows, start, end);
+    if (!overlapping) break;
+    const resumeDate = machineUnavailableResumeDate(overlapping, context.planningCalendar);
+    if (!resumeDate || resumeDate <= start) break;
+    start = resumeDate;
+  }
+  return start;
 }
 
 function planningDateGap(leftDate: string, rightDate: string, fallbackDate: string, planningCalendar: PlanningCalendar) {
