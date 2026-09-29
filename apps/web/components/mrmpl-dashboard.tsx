@@ -9843,6 +9843,7 @@ function ShopFloorRowAction({
             />
             {nextStage.id === "operator_started" ? (
               <SearchableSelect
+                aria-label="Operator (Worker)"
                 className="h-8 rounded-md border bg-background px-2 text-sm"
                 value={worker}
                 onChange={(event) => setWorker(event.target.value)}

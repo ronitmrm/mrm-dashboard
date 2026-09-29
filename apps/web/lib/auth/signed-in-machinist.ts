@@ -12,6 +12,7 @@ import {
   productionMachinistOptions,
   productionQualityOptions,
   productionShopFloorOptions,
+  productionWorkerOptions,
   sharedEmployeeMasterRows,
 } from "../shared-employee-master"
 
@@ -72,4 +73,27 @@ export function signedInMachinist(input: EmployeeIdentityInput & {
   productionFloorCode: ProductionFloorCode
 }) {
   return signedInEmployee({ ...input, role: "machinist" })
+}
+
+export async function activeProductionWorker({
+  connectionString,
+  employeeCode,
+  organizationId,
+  productionFloorCode,
+}: {
+  connectionString: string
+  employeeCode: string
+  organizationId: string
+  productionFloorCode: ProductionFloorCode
+}) {
+  const recruitment = createRecruitmentRepository({ connectionString })
+  try {
+    const posts = await recruitment.listPosts(organizationId)
+    return productionWorkerOptions(
+      sharedEmployeeMasterRows(posts),
+      productionFloorCode
+    ).find((employee) => employee.code.toLowerCase() === employeeCode.toLowerCase()) ?? null
+  } finally {
+    await recruitment.close()
+  }
 }

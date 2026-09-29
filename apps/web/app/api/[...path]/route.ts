@@ -15,6 +15,7 @@ import { NextResponse, type NextRequest } from "next/server"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import {
+  activeProductionWorker,
   signedInEmployee,
   type SignedInWorkRole,
 } from "../../../lib/auth/signed-in-machinist"
@@ -1542,17 +1543,24 @@ async function post(request: NextRequest, context: RouteContext) {
           request,
           "operations.production.write",
           async ({ actorUserId, organizationId, repository }) => {
-            const operator = await signedInEmployee({
+            const floor = requiredProductionFloor(payload.productionFloorCode)
+            const starter = await signedInEmployee({
               connectionString: readAuthEnvironment().connectionString,
               organizationId,
-              productionFloorCode: requiredProductionFloor(payload.productionFloorCode),
-              role: "shop_floor",
+              productionFloorCode: floor,
+              role: "machinist",
               userId: actorUserId,
             })
-            if (!operator) throw new RouteError(403, "Your Employee ID needs an active Shop Floor assignment in this production unit.")
-            if (text(payload.operatorCode || payload.operatorId) && text(payload.operatorCode || payload.operatorId).toLowerCase() !== operator.code.toLowerCase()) {
-              throw new RouteError(403, "You can start a Production Session only under your own Employee ID.")
+            if (!starter) {
+              throw new RouteError(403, "Your Employee ID needs an active Machinist or Programmer assignment in this production unit.")
             }
+            const operator = await activeProductionWorker({
+              connectionString: readAuthEnvironment().connectionString,
+              employeeCode: text(payload.operatorCode || payload.operatorId),
+              organizationId,
+              productionFloorCode: floor,
+            })
+            if (!operator) throw new RouteError(400, "Select an active Worker in this production unit as operator.")
             return repository.startProductionSession({
               actorUserId,
               cycleTimeSeconds: optionalNumeric(payload.cycleTime),
@@ -1569,7 +1577,13 @@ async function post(request: NextRequest, context: RouteContext) {
               productionDate: text(payload.productionDate || payload.prodDate),
               productionFloorCode: text(payload.productionFloorCode),
               shift: text(payload.shift),
-              sourcePayload: { ...payload, operatorCode: operator.code },
+              sourcePayload: {
+                ...payload,
+                operatorCode: operator.code,
+                operatorName: operator.name,
+                startedBy: starter.name,
+                startedByEmployeeCode: starter.code,
+              },
               startCount: optionalNumeric(payload.startCount),
               startedAt: text(payload.startedAt),
             })

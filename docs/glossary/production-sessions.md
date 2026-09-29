@@ -68,7 +68,9 @@ Machine, Pre Setting, Setting, Quality Approval, Machine Start, first-piece
 inspection, and dispatch approval. A user cannot record these actions for another
 employee. Dispatch approval accepts active Planner or Shop Floor assignments.
 Eligible department Assistants, HODs and Managers may perform these tasks.
-Production Session start uses the signed-in Shop Floor employee as operator.
+The signed-in Machinist or CNC Programmer starts a Production Session and
+selects its operator from active Shop Floor Workers in that production unit.
+The starter and assigned operator are recorded separately.
 Session close, corrections, and downtime display that employee's ID; a user with
 one eligible department has it selected automatically, while a user with multiple
 eligible departments chooses the department for the action.
@@ -92,7 +94,9 @@ productive runtime and target quantity. A session outside a break loses no time;
 non-production time, not downtime events or machine faults. Where a recorded
 downtime interval overlaps a break, that minute is excluded only once.
 
-Shop Floor starts and closes sessions. Quality may also close CNC sessions. Quality, Shop Floor, and Machinist may record downtime; only Quality may record rejection.
+Machinist starts sessions; Shop Floor closes them. Quality may also close CNC
+sessions. Quality, Shop Floor, and Machinist may record downtime; only Quality
+may record rejection.
 
 Quality Control is the working queue for both pending first-piece inspections
 and open downtime entered by Quality. A Quality-entered downtime stays in that
@@ -300,7 +304,7 @@ An active machine-unavailable window is a hard scheduling constraint. Automatic 
 
 ## Operational and analytical views
 
-Production Sessions belongs inside each Production Unit. Start Session offers a dropdown containing only currently running machines in that unit and fetches the selected machine's current planner assignment for verification before Shop Floor enters the start time, measurement method, and applicable machine start count. Operator comes from the signed-in employee ID. It does not expose a daily all-machine board or queued machines.
+Production Sessions belongs inside each Production Unit. Start Session offers a dropdown containing only currently running machines in that unit and fetches the selected machine's current planner assignment for verification before the signed-in Machinist chooses an active Worker as operator and enters the start time, measurement method, and applicable machine start count. It does not expose a daily all-machine board or queued machines.
 
 The Production Session Register shows one row per session for the selected Production Unit. The Production Event Log presents that unit's lifecycle actions and child events chronologically for analysis without creating a second source of truth.
 
