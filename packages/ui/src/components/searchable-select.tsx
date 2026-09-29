@@ -15,6 +15,7 @@ type SearchableSelectProps = Omit<
   "multiple" | "size"
 > & {
   emptyMessage?: string
+  onValueChange?: (value: string) => void
   searchPlaceholder?: string
   wrapLabels?: boolean
   size?: "sm" | "default"
@@ -84,6 +85,7 @@ function SearchableSelect({
   emptyMessage = "No matching options",
   id,
   onChange,
+  onValueChange,
   onInvalid,
   required,
   searchPlaceholder = "Type to filter...",
@@ -143,6 +145,7 @@ function SearchableSelect({
     valueSetter?.call(select, nextValue)
     select.dispatchEvent(new Event("change", { bubbles: true }))
     if (!isControlled) setInternalValue(nextValue)
+    onValueChange?.(nextValue)
     setOpen(false)
     setQuery("")
     window.requestAnimationFrame(() => triggerRef.current?.focus())
