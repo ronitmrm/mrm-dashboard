@@ -2,6 +2,29 @@ import { describe, expect, test } from "vitest"
 
 import { buildLegacyDashboardSnapshot } from "./legacy-dashboard-analysis"
 
+test("current setup state wins over a later-timed historical stage event", () => {
+  const entry = (entryType: string, payload: Record<string, unknown>, createdAt: string) => ({ entryType, payload, createdAt })
+  const identity = { jcNo: "P2263", partCode: "M2160B", optionNumber: "1", setupNo: "1", machine: "CNC-10" }
+  const snapshot = buildLegacyDashboardSnapshot({
+    workbookName: "PostgreSQL",
+    productionFloorCode: "cnc",
+    productionEntries: [{ jobCard: "P2263", partCode: "M2160B", setupNo: "1", machine: "CNC-10", machineType: "CNC", operatorId: "OP1", prodDate: "2026-09-29", outputQty: 60, actualQty: 60, rejectQty: 0, targetQty: 60 }],
+    dataEntries: [
+      entry("work_order", { jcNo: "P2263", partCode: "M2160B", optionNumber: "1", orderPcs: 60, rmInwardDate: "2026-09-29", rmInwardKg: 1 }, "2026-09-29T05:00:00Z"),
+      entry("route", { partNo: "M2160B", optionNumber: "1", setupNo: "1", machineType: "CNC", machineFamily: "JT" }, "2026-09-29T05:00:00Z"),
+      entry("cycle", { partNo: "M2160B", optionNumber: "1", setupNo: "1", cycleTime: 50 }, "2026-09-29T05:00:00Z"),
+      entry("machine_master", { machineNo: "CNC-10", machineType: "CNC", machineFamily: "JT", status: "Active" }, "2026-09-29T05:00:00Z"),
+      entry("shop_floor_status", { ...identity, stage: "item_complete", completedAt: "2026-09-29T10:55:00Z" }, "2026-09-29T10:55:00Z"),
+      entry("shop_floor_status", { ...identity, stage: "operator_started", completedAt: "2026-09-29T13:09:00Z" }, "2026-09-29T13:09:00Z"),
+    ],
+    currentShopFloorStatusRows: [{ ...identity, stage: "item_complete", completedAt: "2026-09-29T10:55:00Z" }],
+  })
+
+  expect(snapshot.productionControl?.machinePlanDetailRows.find((row) => row.jcNo === "P2263" && row.setupNo === "1")).toMatchObject({
+    machine: "CNC-10", shopFloorStage: "item_complete", runningStatus: "Complete", rawActualQty: 60,
+  })
+})
+
 describe("legacy dashboard route selections", () => {
   test("retains all uploaded dimensions when parameter codes are generated", () => {
     const dimensions = [
