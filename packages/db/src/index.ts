@@ -98,6 +98,11 @@ export {
 export { createDashboardReadModelRepository } from "./dashboard-read-model-repository"
 export { createMaintenanceRepository } from "./maintenance"
 export {
+  authorizeMaintenanceWorkPhotoTarget,
+  createMaintenanceWorkPhotoRepository,
+  type MaintenanceWorkPhotoTarget,
+} from "./maintenance-work-photos"
+export {
   createPendingArtifactUploadRepository,
   PendingArtifactUploadNotFoundError,
   type PendingArtifactUploadRecord,

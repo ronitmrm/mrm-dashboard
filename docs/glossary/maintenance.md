@@ -45,6 +45,8 @@ The task records a start date and time when work begins and an end date and time
 
 The same checklist workflow applies to physical Unit ID schedules. Its saved due occurrence, draft answers, performer, changed items, and completion belong to that Unit ID. Existing direct Unit ID timetables without checklist points remain completable from Mechanical with work notes.
 
+Up to eight JPG or PNG work photos may be attached to each saved machine or Unit ID planned maintenance job. A photo belongs to that job's due occurrence, including while it is In Progress. Saved photos remain available from the completed maintenance register.
+
 _Avoid_: browser prompts for checklist points, treating a partial draft as completed work, repeating the same checklist point across production units.
 
 ## Machine Breakdown
@@ -60,6 +62,7 @@ authorized signed-in performer's Employee ID and name when linked, or account na
 optional remarks, and zero or more separately entered Changed Items.
 One breakdown may contain multiple Changed Items; they are not flattened into a
 single free-text part field.
+Up to eight work photos may be attached to the open breakdown before completion. They remain with that completed breakdown in the maintenance register.
 
 _Avoid_: completed-only breakdown entry, ending the Production Session when the
 breakdown starts, starting production while a machine breakdown remains open.
@@ -72,6 +75,7 @@ marks that unit Broken, remains open until repaired, and completes into the
 unit's maintenance history with the authorized signed-in performer, work done,
 and optional changed items. A shared Asset Code cannot own a breakdown.
 An Asset breakdown does not open machine Production Session downtime.
+Its work photos follow the same limit and retention as machine breakdown photos.
 
 ## Legacy Machine Maintenance History
 
