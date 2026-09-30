@@ -36,10 +36,7 @@ import { istDateValue } from "@/lib/date-time"
 import { storeAssetWorkspaceHref } from "@/lib/store-asset-workspace"
 import { storeStockRows } from "@/lib/store-stock-rows"
 
-import {
-  createStorePurchaseOrdersAction,
-  createStoreRepairPurchaseOrderAction,
-} from "../actions"
+import { createStorePurchaseOrdersAction } from "../actions"
 
 function firstValue(value: string | string[] | undefined) {
   return (Array.isArray(value) ? value[0] : value) ?? ""
@@ -50,10 +47,12 @@ export default async function StoreStockPage({
 }: {
   searchParams: Promise<{
     mode?: string | string[]
+    asset_code?: string | string[]
+    issuance_id?: string | string[]
     orderItemId?: string | string[]
     orderQuantity?: string | string[]
     ordersSaved?: string | string[]
-    repairOrderSaved?: string | string[]
+    repairOrdersSaved?: string | string[]
     requestNumber?: string | string[]
   }>
 }) {
@@ -79,6 +78,21 @@ export default async function StoreStockPage({
           ? "request"
           : "view"
   const orderItemId = firstValue(params.orderItemId)
+  const requestedIssuanceId = firstValue(params.issuance_id)
+  const resumingRepairSelection = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(
+    requestedIssuanceId
+  )
+  const repairIssuanceId = resumingRepairSelection
+    ? requestedIssuanceId
+    : randomUUID()
+  const selectedRepairCodes = new Set(
+    (Array.isArray(params.asset_code)
+      ? params.asset_code
+      : params.asset_code
+        ? [params.asset_code]
+        : []
+    ).map((code) => code.toLowerCase())
+  )
   const orderQuantity = firstValue(params.orderQuantity)
   const requestNumber = firstValue(params.requestNumber)
   const savedOrderCount = Number(firstValue(params.ordersSaved))
@@ -87,23 +101,19 @@ export default async function StoreStockPage({
   })
   const data = await (async () => {
     const organizationId = await repository.organizationIdForCode("MRMPL")
-    const [items, supplierPrices, physicalUnits, suppliers] = await Promise.all(
+    const [items, supplierPrices, physicalUnits] = await Promise.all(
       [
         repository.listItemTypes(organizationId),
         repository.listSupplierPrices(organizationId),
         repository.listStockPhysicalUnits(organizationId),
-        mode === "repair"
-          ? repository.listSuppliers(organizationId)
-          : Promise.resolve([]),
       ]
     )
-    return { items, supplierPrices, physicalUnits, suppliers }
+    return { items, supplierPrices, physicalUnits }
   })().finally(() => repository.close())
   const stockRows = storeStockRows(data.items, data.physicalUnits)
   const today = istDateValue()
   const actionFormId = "stock-row-action"
-  const columnCount =
-    mode === "view" ? 10 : mode === "request" ? 11 : mode === "repair" ? 13 : 12
+  const columnCount = mode === "view" ? 10 : mode === "order" ? 12 : 11
 
   return (
     <div className="flex flex-col gap-6">
@@ -127,10 +137,11 @@ export default async function StoreStockPage({
         </SectionCard>
       ) : null}
 
-      {firstValue(params.repairOrderSaved) ? (
+      {Number(firstValue(params.repairOrdersSaved)) > 0 ? (
         <SectionCard role="status">
           <CardContent className="flex flex-wrap items-center gap-3 py-4 text-sm">
-            Repair PO {firstValue(params.repairOrderSaved)} was saved.
+            {firstValue(params.repairOrdersSaved)} Repair PO
+            {Number(firstValue(params.repairOrdersSaved)) === 1 ? " was" : "s were"} saved.
             {capabilities.has("store.purchase_register.read") ? (
               <Button asChild size="sm" variant="outline">
                 <Link href="/store/orders">Open Purchase Register</Link>
@@ -177,7 +188,7 @@ export default async function StoreStockPage({
               <CardTitle>Stock Register</CardTitle>
               <CardDescription>
                 {mode === "repair"
-                  ? "Select physical Unit IDs, enter each repair scope and agreed price, then choose one Supplier for the Repair PO."
+                  ? "Select physical Unit IDs, then continue to enter repair details and Suppliers for each unit."
                   : "Asset Codes describe an item type; each Non Consumable unit has its own status, supplier and purchase price. The cheapest active quote is selected by default for a new purchase order."}
               </CardDescription>
             </div>
@@ -238,15 +249,8 @@ export default async function StoreStockPage({
               />
             </form>
           ) : mode === "repair" ? (
-            <form
-              action={createStoreRepairPurchaseOrderAction}
-              id={actionFormId}
-            >
-              <input
-                defaultValue={randomUUID()}
-                name="issuance_id"
-                type="hidden"
-              />
+            <form action="/store/stock/repair" id={actionFormId} method="get">
+              <input name="issuance_id" type="hidden" value={repairIssuanceId} />
             </form>
           ) : null}
 
@@ -283,12 +287,6 @@ export default async function StoreStockPage({
                 {mode === "order" ? (
                   <TableHead>Order Quantity</TableHead>
                 ) : null}
-                {mode === "repair" ? (
-                  <>
-                    <TableHead>Repair Scope</TableHead>
-                    <TableHead>Agreed Repair Price</TableHead>
-                  </>
-                ) : null}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -310,17 +308,24 @@ export default async function StoreStockPage({
                 const displayedPrice = item.physicalUnit
                   ? item.physicalUnit.unitPrice
                   : item.currentUnitPrice
+                const selectedRepairUnit = selectedRepairCodes.has(
+                  item.displayedCode.toLowerCase()
+                )
+                const canSelectRepairUnit =
+                  item.physicalUnit &&
+                  item.physicalUnit.status !== "SCRAPPED" &&
+                  (item.physicalUnit.holderType !== "SUPPLIER" ||
+                    (resumingRepairSelection && selectedRepairUnit))
                 return (
                   <TableRow key={item.rowKey}>
                     {mode !== "view" ? (
                       <TableCell>
                         {mode === "repair" ? (
-                          item.physicalUnit &&
-                          item.physicalUnit.status !== "SCRAPPED" &&
-                          item.physicalUnit.holderType !== "SUPPLIER" ? (
+                          canSelectRepairUnit ? (
                             <input
                               aria-label={`Select Unit ID ${item.displayedCode} for repair`}
                               className="size-4 accent-primary"
+                              defaultChecked={selectedRepairUnit}
                               form={actionFormId}
                               name="asset_code"
                               type="checkbox"
@@ -465,39 +470,6 @@ export default async function StoreStockPage({
                         ) : null}
                       </TableCell>
                     ) : null}
-                    {mode === "repair" ? (
-                      <>
-                        <TableCell>
-                          {item.physicalUnit &&
-                          item.physicalUnit.status !== "SCRAPPED" &&
-                          item.physicalUnit.holderType !== "SUPPLIER" ? (
-                            <Input
-                              aria-label={`Repair scope for ${item.displayedCode}`}
-                              className="min-w-48"
-                              form={actionFormId}
-                              name={`service_description_${item.displayedCode}`}
-                              placeholder="Work to be done"
-                            />
-                          ) : null}
-                        </TableCell>
-                        <TableCell>
-                          {item.physicalUnit &&
-                          item.physicalUnit.status !== "SCRAPPED" &&
-                          item.physicalUnit.holderType !== "SUPPLIER" ? (
-                            <Input
-                              aria-label={`Agreed repair price for ${item.displayedCode}`}
-                              className="min-w-32"
-                              form={actionFormId}
-                              min="0"
-                              name={`service_price_${item.displayedCode}`}
-                              placeholder="₹"
-                              step="0.01"
-                              type="number"
-                            />
-                          ) : null}
-                        </TableCell>
-                      </>
-                    ) : null}
                   </TableRow>
                 )
               })}
@@ -528,60 +500,9 @@ export default async function StoreStockPage({
               </span>
             </div>
           ) : mode === "repair" ? (
-            <div className="grid w-full max-w-2xl gap-4 sm:grid-cols-2">
-              <div className="grid gap-1.5">
-                <label
-                  className="text-sm font-medium"
-                  htmlFor="repair-supplier"
-                >
-                  Repair Supplier
-                </label>
-                <NativeSelect
-                  form={actionFormId}
-                  id="repair-supplier"
-                  name="supplier_id"
-                  required
-                >
-                  <NativeSelectOption value="">
-                    Select supplier
-                  </NativeSelectOption>
-                  {data.suppliers.map((supplier) => (
-                    <NativeSelectOption key={supplier.id} value={supplier.id}>
-                      {supplier.code} — {supplier.name}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
-              </div>
-              <div className="grid gap-1.5">
-                <label
-                  className="text-sm font-medium"
-                  htmlFor="repair-order-date"
-                >
-                  PO Date
-                </label>
-                <Input
-                  defaultValue={today}
-                  form={actionFormId}
-                  id="repair-order-date"
-                  name="order_date"
-                  type="date"
-                />
-              </div>
-              <div className="grid gap-1.5 sm:col-span-2">
-                <label className="text-sm font-medium" htmlFor="repair-remark">
-                  Remark (optional)
-                </label>
-                <Input form={actionFormId} id="repair-remark" name="remark" />
-              </div>
-              <Button
-                className="w-fit"
-                disabled={!data.suppliers.length}
-                form={actionFormId}
-                type="submit"
-              >
-                Create Repair PO for Selected Units
-              </Button>
-            </div>
+            <Button className="w-fit" form={actionFormId} type="submit">
+              Continue with Selected Unit IDs
+            </Button>
           ) : null}
 
           <p className="text-sm text-muted-foreground">

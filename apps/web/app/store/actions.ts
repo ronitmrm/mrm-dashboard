@@ -124,6 +124,7 @@ function revalidateStore() {
   revalidatePath("/store/masters")
   revalidatePath("/store/orders")
   revalidatePath("/store/stock")
+  revalidatePath("/store/stock/repair")
   revalidatePath("/store/movement")
   revalidatePath("/store/requests")
   revalidatePath("/store/requests/new")
@@ -1136,7 +1137,7 @@ export async function createStoreRepairPurchaseOrderAction(formData: FormData) {
         provider: createGoogleCloudArtifactProvider(),
       })
       try {
-        return await repository.createRepairPurchaseOrderFromSelection({
+        return await repository.createRepairPurchaseOrdersFromSelection({
           actorUserId,
           items: assetCodes.map((assetCode) => ({
             assetCode,
@@ -1145,13 +1146,13 @@ export async function createStoreRepairPurchaseOrderAction(formData: FormData) {
               `service_description_${assetCode}`
             ),
             servicePrice: requiredText(formData, `service_price_${assetCode}`),
+            supplierId: requiredText(formData, `supplier_${assetCode}`),
           })),
           issuanceId: requiredText(formData, "issuance_id"),
           orderDate: optionalText(formData, "order_date"),
           organizationId,
           remark: optionalText(formData, "remark"),
           storeIssuedPdf: storeIssuedPurchaseOrderPdf(artifacts, actorUserId),
-          supplierId: requiredText(formData, "supplier_id"),
         })
       } finally {
         await artifacts.close()
@@ -1163,7 +1164,7 @@ export async function createStoreRepairPurchaseOrderAction(formData: FormData) {
   }
   revalidateStore()
   redirect(
-    `/store/stock?repairOrderSaved=${encodeURIComponent(created.orderNumber)}`
+    `/store/stock?repairOrdersSaved=${created.orders.length}`
   )
 }
 

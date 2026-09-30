@@ -128,10 +128,12 @@ matches the first page's height and title scale.
 
 **Repair Purchase Order**: A Purchase Order for one or more individually tracked
 Non Consumable Unit IDs sent to one Supplier for repair. Store selects the Unit
-IDs from Stock and records each unit's service scope and agreed price before
-issuing one order. Issuance temporarily assigns every selected Physical Asset
-to that Supplier. Each unit's line remains visible in the Purchase Register
-and its Asset Workspace and may be marked completed separately; the order is
+IDs from Stock, then reviews each unit's service scope, agreed price, and
+repair Supplier on a separate page. One Supplier may be applied to all selected
+units; when Suppliers differ, Store issues one order per Supplier. Issuance
+temporarily assigns every selected Physical Asset to its order's Supplier.
+Each unit's line remains visible in the Purchase Register and its Asset
+Workspace and may be marked completed separately; the order is
 complete when every unit is complete. Return uses Asset Movement and Maintenance
 History flows and creates no stock receipt quantity. Calibration service orders
 also use this order type for a single unit and retain their visit workflow.
