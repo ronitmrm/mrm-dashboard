@@ -106,6 +106,7 @@ export default async function StoreMovementPage({
                 <TableHead>Movement</TableHead>
                 <TableHead>From</TableHead>
                 <TableHead>Destination</TableHead>
+                <TableHead>Department</TableHead>
                 <TableHead>Moved By</TableHead>
                 <TableHead>Remark</TableHead>
               </TableRow>
@@ -124,15 +125,20 @@ export default async function StoreMovementPage({
                   </TableCell>
                   <TableCell>{movement.typeCode}</TableCell>
                   <TableCell><StatusBadge value={movement.movementType} /></TableCell>
-                  <TableCell>{movement.fromHolder || "—"}</TableCell>
-                  <TableCell>{movement.toHolder || "—"}</TableCell>
+                  <TableCell>
+                    {movement.fromHolderType === "DEPARTMENT" ? "Department" : movement.fromHolder || "—"}
+                  </TableCell>
+                  <TableCell>
+                    {movement.toHolderType === "DEPARTMENT" ? "Department" : movement.toHolder || "—"}
+                  </TableCell>
+                  <TableCell>{movement.department || "—"}</TableCell>
                   <TableCell>{movement.movedBy || "—"}</TableCell>
                   <TableCell>{movement.remark || "—"}</TableCell>
                 </TableRow>
               ))}
               {!data.movements.length ? (
                 <TableRow>
-                  <TableCell className="h-24 text-center text-muted-foreground" colSpan={8}>
+                  <TableCell className="h-24 text-center text-muted-foreground" colSpan={9}>
                     No Unit ID movements recorded.
                   </TableCell>
                 </TableRow>
