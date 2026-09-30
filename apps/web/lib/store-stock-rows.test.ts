@@ -39,32 +39,44 @@ describe("Store Stock rows", () => {
             unitPrice: "120",
           },
         ]
-      ).map(({ actionItem, displayedCode, displayedQuantity, physicalUnit }) => ({
-        actionItem,
-        displayedCode,
-        displayedQuantity,
-        supplierName: physicalUnit?.supplierName ?? null,
-        unitPrice: physicalUnit?.unitPrice ?? null,
-      }))
+      ).map(
+        ({
+          actionItem,
+          assignedQuantity,
+          availableQuantity,
+          displayedCode,
+          physicalUnit,
+        }) => ({
+          actionItem,
+          assignedQuantity,
+          availableQuantity,
+          displayedCode,
+          supplierName: physicalUnit?.supplierName ?? null,
+          unitPrice: physicalUnit?.unitPrice ?? null,
+        })
+      )
     ).toEqual([
       {
         actionItem: true,
+        assignedQuantity: "1",
+        availableQuantity: "—",
         displayedCode: "NC285",
-        displayedQuantity: "—",
         supplierName: null,
         unitPrice: null,
       },
       {
         actionItem: false,
+        assignedQuantity: "1",
+        availableQuantity: "0",
         displayedCode: "NC285-0001",
-        displayedQuantity: "—",
         supplierName: "Supplier A",
         unitPrice: "100",
       },
       {
         actionItem: false,
+        assignedQuantity: "0",
+        availableQuantity: "1",
         displayedCode: "NC285-0002",
-        displayedQuantity: "1 physical unit",
         supplierName: "Supplier B",
         unitPrice: "120",
       },
@@ -88,8 +100,9 @@ describe("Store Stock rows", () => {
     ).toMatchObject([
       {
         actionItem: true,
+        assignedQuantity: "—",
+        availableQuantity: "25 Ltr",
         displayedCode: "C001",
-        displayedQuantity: "25 Ltr",
         rowKey: "oil",
         unitId: null,
       },

@@ -103,7 +103,7 @@ export default async function StoreStockPage({
   const today = istDateValue()
   const actionFormId = "stock-row-action"
   const columnCount =
-    mode === "view" ? 9 : mode === "request" ? 10 : mode === "repair" ? 12 : 11
+    mode === "view" ? 10 : mode === "request" ? 11 : mode === "repair" ? 13 : 12
 
   return (
     <div className="flex flex-col gap-6">
@@ -275,6 +275,7 @@ export default async function StoreStockPage({
                 <TableHead>Asset Category</TableHead>
                 <TableHead>Asset Subcategory</TableHead>
                 <TableHead>Available Quantity</TableHead>
+                <TableHead>Assigned Quantity</TableHead>
                 <TableHead data-filterable="true">Status</TableHead>
                 <TableHead>Location / Holder</TableHead>
                 <TableHead>Supplier</TableHead>
@@ -371,7 +372,8 @@ export default async function StoreStockPage({
                     </TableCell>
                     <TableCell>{item.assetCategory}</TableCell>
                     <TableCell>{item.assetSubcategory}</TableCell>
-                    <TableCell>{item.displayedQuantity}</TableCell>
+                    <TableCell>{item.availableQuantity}</TableCell>
+                    <TableCell>{item.assignedQuantity}</TableCell>
                     <TableCell
                       data-filter-value={
                         item.physicalUnit?.status ?? "Item Type"
