@@ -125,6 +125,14 @@ function trackingModeForAssetType(
   return assetType === "NON_CONSUMABLE" ? "SERIALIZED" : "CONSUMABLE"
 }
 
+function movementHolderSql(side: "from" | "to") {
+  const holder = `movement.${side}_holder`
+  return `concat_ws(' / ', ${holder}_type, nullif(${holder}_name, ''),
+    CASE WHEN ${holder}_type IS DISTINCT FROM 'STORE'
+      AND nullif(${holder}_reference, '') IS DISTINCT FROM nullif(${holder}_name, '')
+      THEN nullif(${holder}_reference, '') END)`
+}
+
 export async function nextDocumentNumber(
   client: PoolClient,
   input: {
@@ -729,10 +737,12 @@ async function receiveStockWithClient(
           INSERT INTO store.stock_movements (
             organization_id, item_type_id, asset_id, location_id,
             receipt_line_id, movement_type, quantity,
-            to_holder_type, to_holder_reference, moved_by,
+            to_holder_type, to_holder_reference, to_holder_name, moved_by,
             created_by_user_id
-          ) VALUES ($1, $2, $3, $4, $5, 'RECEIPT', 1,
-            'STORE', $4::uuid::text, $6, $7)
+          ) SELECT $1, $2, $3, $4, $5, 'RECEIPT', 1,
+            'STORE', location.code, location.name, $6, $7
+          FROM store.locations location
+          WHERE location.id = $4 AND location.organization_id = $1
         `,
           [
             input.organizationId,
@@ -761,9 +771,11 @@ async function receiveStockWithClient(
         INSERT INTO store.stock_movements (
           organization_id, item_type_id, location_id, receipt_line_id,
           movement_type, quantity, to_holder_type,
-          to_holder_reference, moved_by, created_by_user_id
-        ) VALUES ($1, $2, $3, $4, 'RECEIPT', $5,
-          'STORE', $3::uuid::text, $6, $7)
+          to_holder_reference, to_holder_name, moved_by, created_by_user_id
+        ) SELECT $1, $2, $3, $4, 'RECEIPT', $5,
+          'STORE', location.code, location.name, $6, $7
+        FROM store.locations location
+        WHERE location.id = $3 AND location.organization_id = $1
       `,
         [
           input.organizationId,
@@ -971,13 +983,15 @@ async function issueRequisitionWithClient(
         INSERT INTO store.stock_movements (
           organization_id, item_type_id, asset_id, location_id,
           requisition_id, movement_type, quantity,
-          from_holder_type, from_holder_reference,
+          from_holder_type, from_holder_reference, from_holder_name,
           to_holder_type, to_holder_reference, to_holder_name,
           moved_by, remark, created_by_user_id
         )
         SELECT $1, $2, asset_id, $3, $4, 'ISSUE', -1,
-          'STORE', $3::uuid::text, $5, $6, $7, $8, $9, $10
+          'STORE', location.code, location.name, $5, $6, $7, $8, $9, $10
         FROM unnest($11::uuid[]) AS selected_asset(asset_id)
+        JOIN store.locations location
+          ON location.id = $3 AND location.organization_id = $1
       `,
       [
         input.organizationId,
@@ -1016,10 +1030,13 @@ async function issueRequisitionWithClient(
         INSERT INTO store.stock_movements (
           organization_id, item_type_id, location_id, requisition_id,
           movement_type, quantity, from_holder_type,
-          from_holder_reference, to_holder_type, to_holder_reference,
+          from_holder_reference, from_holder_name,
+          to_holder_type, to_holder_reference,
           to_holder_name, moved_by, remark, created_by_user_id
-        ) VALUES ($1, $2, $3, $4, 'ISSUE', $5 * -1,
-          'STORE', $3::uuid::text, $6, $7, $8, $9, $10, $11)
+        ) SELECT $1, $2, $3, $4, 'ISSUE', $5 * -1,
+          'STORE', location.code, location.name, $6, $7, $8, $9, $10, $11
+        FROM store.locations location
+        WHERE location.id = $3 AND location.organization_id = $1
       `,
       [
         input.organizationId,
@@ -3547,21 +3564,29 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
     async listRecentAssetMovements(organizationId: string) {
       const result = await pool.query<{
         assetCode: string
+        department: string | null
         fromHolder: string | null
+        fromHolderType: StoreHolderType | null
         movedAt: Date
         movedBy: string | null
         movementType: string
         remark: string | null
         toHolder: string | null
+        toHolderType: StoreHolderType | null
         typeCode: string
       }>(
         `SELECT asset.asset_code AS "assetCode",
             item.type_code AS "typeCode",
             movement.movement_type AS "movementType",
-            concat_ws(' / ', movement.from_holder_type,
-              movement.from_holder_name, movement.from_holder_reference) AS "fromHolder",
-            concat_ws(' / ', movement.to_holder_type,
-              movement.to_holder_name, movement.to_holder_reference) AS "toHolder",
+            movement.from_holder_type AS "fromHolderType",
+            movement.to_holder_type AS "toHolderType",
+            ${movementHolderSql("from")} AS "fromHolder",
+            ${movementHolderSql("to")} AS "toHolder",
+            CASE WHEN movement.to_holder_type = 'DEPARTMENT'
+              THEN COALESCE(movement.to_holder_name, movement.to_holder_reference)
+              WHEN movement.from_holder_type = 'DEPARTMENT'
+              THEN COALESCE(movement.from_holder_name, movement.from_holder_reference)
+              END AS department,
             movement.moved_at AS "movedAt", movement.moved_by AS "movedBy",
             movement.remark
           FROM store.stock_movements movement
@@ -4426,15 +4451,15 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         toHolder: string | null
       }>(
         `
-          SELECT movement_type AS "movementType", quantity::text,
-            concat_ws(' / ', from_holder_type, from_holder_name,
-              from_holder_reference) AS "fromHolder",
-            concat_ws(' / ', to_holder_type, to_holder_name,
-              to_holder_reference) AS "toHolder",
-            moved_at AS "movedAt", moved_by AS "movedBy", remark
-          FROM store.stock_movements
-          WHERE organization_id = $1 AND asset_id = $2
-          ORDER BY moved_at DESC
+          SELECT movement.movement_type AS "movementType",
+            movement.quantity::text,
+            ${movementHolderSql("from")} AS "fromHolder",
+            ${movementHolderSql("to")} AS "toHolder",
+            movement.moved_at AS "movedAt",
+            movement.moved_by AS "movedBy", movement.remark
+          FROM store.stock_movements movement
+          WHERE movement.organization_id = $1 AND movement.asset_id = $2
+          ORDER BY movement.moved_at DESC
         `,
         [input.organizationId, asset.rows[0].id]
       )
@@ -5351,10 +5376,8 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             item.asset_name AS "assetName",
             asset.identification_name AS "identificationName",
             movement.movement_type AS "movementType",
-            concat_ws(' / ', movement.from_holder_type,
-              movement.from_holder_name, movement.from_holder_reference) AS "fromHolder",
-            concat_ws(' / ', movement.to_holder_type,
-              movement.to_holder_name, movement.to_holder_reference) AS "toHolder",
+            ${movementHolderSql("from")} AS "fromHolder",
+            ${movementHolderSql("to")} AS "toHolder",
             movement.moved_at AS "movedAt"
           FROM store.stock_movements movement
           JOIN store.assets asset ON asset.id = movement.asset_id

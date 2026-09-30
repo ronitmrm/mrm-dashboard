@@ -1508,8 +1508,9 @@ describe("Store requests", () => {
   })
 
   test("keeps movement and maintenance history on each numbered physical asset", async () => {
+    const locationCode = `ASSET-${suffix}`
     const location = await store.createLocation({
-      code: `ASSET-${suffix}`,
+      code: locationCode,
       name: "Asset Store",
       organizationId,
     })
@@ -1658,6 +1659,40 @@ describe("Store requests", () => {
         toHolder: expect.stringContaining("Production"),
       })
     )
+    const holderRows = await pool.query<{
+      from_holder_name: string | null
+      from_holder_reference: string | null
+      movement_type: string
+      to_holder_name: string | null
+      to_holder_reference: string | null
+    }>(
+      `SELECT movement_type, from_holder_reference, from_holder_name,
+        to_holder_reference, to_holder_name
+       FROM store.stock_movements movement
+       JOIN store.assets asset ON asset.id = movement.asset_id
+       WHERE asset.organization_id = $1 AND asset.asset_code = $2`,
+      [organizationId, assetCodes[0]]
+    )
+    expect(holderRows.rows).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        movement_type: "RECEIPT",
+        to_holder_reference: locationCode,
+        to_holder_name: "Asset Store",
+      }),
+      expect.objectContaining({
+        movement_type: "ISSUE",
+        from_holder_reference: locationCode,
+        from_holder_name: "Asset Store",
+      }),
+    ]))
+    const assetMovements = await store.listRecentAssetMovements(organizationId)
+    expect(assetMovements.find((movement) =>
+      movement.assetCode === assetCodes[0] && movement.movementType === "ISSUE"
+    )).toEqual(expect.objectContaining({
+      department: "Production",
+      fromHolder: "STORE / Asset Store",
+      toHolder: "DEPARTMENT / Production",
+    }))
     const vendor = await store.createVendor({
       code: `REPAIR-${suffix}`,
       name: "Approved Repair Vendor",
