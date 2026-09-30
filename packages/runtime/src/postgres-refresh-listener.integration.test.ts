@@ -65,7 +65,7 @@ function durableProcessor(organizationId: string) {
             SELECT id
             FROM derived.refresh_jobs
             WHERE organization_id = $1
-              AND queue_key = 'dashboard'
+              AND (queue_key = 'dashboard' OR queue_key LIKE 'dashboard:%')
               AND status = 'pending'
               AND run_after <= now()
             ORDER BY run_after, created_at, id

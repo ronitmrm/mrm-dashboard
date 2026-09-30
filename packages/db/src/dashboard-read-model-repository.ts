@@ -338,7 +338,7 @@ export function createDashboardReadModelRepository(options: RepositoryPoolOption
               completed_at, last_error
             FROM derived.refresh_jobs
             WHERE organization_id = requested.organization_id
-              AND (queue_key = 'dashboard' OR queue_key LIKE 'dashboard:quality-parameter-set:%')
+              AND (queue_key = 'dashboard' OR queue_key LIKE 'dashboard:%')
             ORDER BY (status IN ('pending', 'running')) DESC,
               updated_at DESC, created_at DESC
             LIMIT 1
@@ -417,7 +417,7 @@ export function createDashboardReadModelRepository(options: RepositoryPoolOption
             completed_at, last_error
           FROM derived.refresh_jobs
           WHERE organization_id = $1
-            AND (queue_key = 'dashboard' OR queue_key LIKE 'dashboard:quality-parameter-set:%')
+            AND (queue_key = 'dashboard' OR queue_key LIKE 'dashboard:%')
           ORDER BY (status IN ('pending', 'running')) DESC,
             updated_at DESC, created_at DESC
           LIMIT 1

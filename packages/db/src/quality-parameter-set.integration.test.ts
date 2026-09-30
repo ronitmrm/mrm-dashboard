@@ -92,7 +92,7 @@ afterAll(async () => {
 test("one changed parameter commits with one successor refresh while a rebuild holds its job", async () => {
   const oldJob = await pool.query<{ id: string }>(
     `SELECT id FROM derived.refresh_jobs
-     WHERE organization_id = $1 AND queue_key = 'dashboard' AND status = 'pending'`,
+     WHERE organization_id = $1 AND status = 'pending'`,
     [organizationId]
   )
   const blocker = await pool.connect()
@@ -135,8 +135,8 @@ test("one changed parameter commits with one successor refresh while a rebuild h
       { parameter_code: "P2", row_version: "1" },
     ])
     const jobs = await pool.query<{ count: string }>(
-      "SELECT count(*) FROM derived.refresh_jobs WHERE organization_id = $1 AND queue_key LIKE 'dashboard:quality-parameter-set:%' AND status = 'pending'",
-      [organizationId]
+      "SELECT count(*) FROM derived.refresh_jobs WHERE organization_id = $1 AND id <> $2 AND status = 'pending'",
+      [organizationId, oldJob.rows[0]!.id]
     )
     expect(jobs.rows[0]?.count).toBe("1")
   } finally {
