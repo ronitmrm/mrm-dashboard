@@ -1310,12 +1310,21 @@ export async function recordStoreAssetAcquisitionAction(formData: FormData) {
 
 export async function openStoreCalibrationVisitAction(formData: FormData) {
   const assetCode = requiredText(formData, "asset_code")
+  const method = requiredText(formData, "method")
+  if (method !== "SUPPLIER" && method !== "IN_HOUSE") {
+    throw new Error("Choose a calibration method.")
+  }
+  if (method === "SUPPLIER") {
+    await requireStoreAction("store.asset_repair.write", storePath)
+    await requireStoreAction("store.asset_movement.write", storePath)
+  }
   await withStore(
     "store.asset_maintenance.write",
     (repository, actorUserId, organizationId) =>
       repository.openCalibrationVisit({
         actorUserId,
         assetCode,
+        method,
         organizationId,
         scheduleId: requiredText(formData, "schedule_id"),
         scope: requiredText(formData, "scope"),
@@ -1353,6 +1362,23 @@ export async function cancelStoreCalibrationVisitAction(formData: FormData) {
     (repository, actorUserId, organizationId) =>
       repository.cancelCalibrationVisit({
         actorUserId,
+        method: "SUPPLIER",
+        organizationId,
+        visitId: requiredText(formData, "visit_id"),
+      })
+  )
+  revalidatePath(`/store/assets/${encodeURIComponent(assetCode)}`)
+  revalidateStore()
+}
+
+export async function cancelInHouseCalibrationVisitAction(formData: FormData) {
+  const assetCode = requiredText(formData, "asset_code")
+  await withStore(
+    "store.asset_maintenance.write",
+    (repository, actorUserId, organizationId) =>
+      repository.cancelCalibrationVisit({
+        actorUserId,
+        method: "IN_HOUSE",
         organizationId,
         visitId: requiredText(formData, "visit_id"),
       })
@@ -1470,12 +1496,13 @@ export async function uploadStoreCalibrationCertificateAction(formData: FormData
                 const visit = await client.query<{ id: string }>(
                   `SELECT id FROM store.calibration_visits
                     WHERE id = $1 AND organization_id = $2
-                      AND status = 'RETURNED'
+                      AND (status = 'RETURNED' OR
+                        (status = 'OPEN' AND method = 'IN_HOUSE'))
                     FOR KEY SHARE`,
                   [visitId, organizationId]
                 )
                 if (!visit.rows[0]) {
-                  throw new Error("Returned calibration visit was not found.")
+                  throw new Error("Calibration visit is not ready for a certificate.")
                 }
               },
               bytes: source.bytes,
@@ -1542,6 +1569,38 @@ export async function completeStoreCalibrationVisitAction(formData: FormData) {
         organizationId,
         passed: result === "PASSED",
         result,
+        visitId: requiredText(formData, "visit_id"),
+        workDone: optionalText(formData, "work_done"),
+      })
+    }
+  )
+  revalidatePath(`/store/assets/${encodeURIComponent(assetCode)}`)
+  revalidateStore()
+}
+
+export async function completeInHouseCalibrationVisitAction(formData: FormData) {
+  const assetCode = requiredText(formData, "asset_code")
+  const result = requiredText(formData, "result")
+  if (result !== "PASSED" && result !== "FAILED") {
+    throw new Error("Choose Passed or Failed.")
+  }
+  await withStore(
+    "store.asset_maintenance.write",
+    async (repository, actorUserId, organizationId, _actorEmail, actorUserName) => {
+      const performer = await signedInPerformer({
+        connectionString: readAuthEnvironment().connectionString,
+        organizationId,
+        userId: actorUserId,
+        userName: actorUserName,
+      })
+      if (!performer) throw new Error("Your account needs a name to record calibration.")
+      await repository.completeInHouseCalibrationVisit({
+        actorUserId,
+        certificateNumber: requiredText(formData, "certificate_number"),
+        completedBy: [performer.code, performer.name].filter(Boolean).join(" - "),
+        completedOn: requiredText(formData, "completed_on"),
+        organizationId,
+        passed: result === "PASSED",
         visitId: requiredText(formData, "visit_id"),
         workDone: optionalText(formData, "work_done"),
       })

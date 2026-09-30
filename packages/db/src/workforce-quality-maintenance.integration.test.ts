@@ -896,7 +896,7 @@ describe("workforce, quality, and maintenance workflows", () => {
     })
     expect((await maintenance.listCompletedMachineMaintenance(organizationId))
       .filter((row) => row.machineNumber === machineNumber)).toHaveLength(0)
-    expect((await maintenance.listMachineMaintenancePlan(organizationId, "2026-07"))
+    expect((await maintenance.listMachineMaintenancePlan(organizationId, "2026-07-01", "2026-07-31"))
       .filter((row) => row.machineNumber === machineNumber)).toHaveLength(1)
     const draft = await maintenance.completeTask({
       startedAt: "2026-07-21T09:30:00.000Z",
@@ -999,11 +999,11 @@ describe("workforce, quality, and maintenance workflows", () => {
       .filter((row) => row.machineNumber === machineNumber)
     expect(completed.map((row) => row.taskType).sort()).toEqual(["Breakdown", "Planned"])
     expect(completed.find((row) => row.id === task.id)?.workDone).toBe("Serviced")
-    const julyPlan = (await maintenance.listMachineMaintenancePlan(organizationId, "2026-07"))
+    const julyPlan = (await maintenance.listMachineMaintenancePlan(organizationId, "2026-07-01", "2026-07-31"))
       .filter((row) => row.machineNumber === machineNumber)
     expect(julyPlan).toHaveLength(1)
     expect(julyPlan[0]).toMatchObject({ dueOn: "2026-07-21", status: "Completed" })
-    const augustPlan = (await maintenance.listMachineMaintenancePlan(organizationId, "2026-08"))
+    const augustPlan = (await maintenance.listMachineMaintenancePlan(organizationId, "2026-08-01", "2026-08-31"))
       .filter((row) => row.machineNumber === machineNumber)
     expect(augustPlan).toHaveLength(1)
     expect(augustPlan[0]).toMatchObject({ dueOn: "2026-08-20", status: "Planned" })

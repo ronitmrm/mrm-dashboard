@@ -57,16 +57,20 @@ async function linkedFile(
 
 export function createStoreCalibrationRepository(pool: Pool) {
   return {
-    async listCalibrationPlan(organizationId: string, month: string) {
-      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
-        throw new Error("Select a valid month.")
+    async listCalibrationPlan(organizationId: string, from: string, to: string) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) {
+        throw new Error("Select a valid date range.")
       }
       const result = await pool.query<{
         assetName: string
+        category: string
+        subcategory: string
         completedOn: string | null
         dueOn: string
         id: string
+        method: "SUPPLIER" | "IN_HOUSE" | null
         scheduleName: string
+        scheduleId: string
         status: VisitStatus | "Planned"
         supplierName: string | null
         typeCode: string
@@ -80,7 +84,7 @@ export function createStoreCalibrationRepository(pool: Pool) {
            WHERE schedule.organization_id = $1
              AND schedule.schedule_type = 'CALIBRATION' AND schedule.active
              AND schedule.next_due_on >= $2::date
-             AND schedule.next_due_on < $2::date + interval '1 month'
+             AND schedule.next_due_on <= $3::date
              AND NOT EXISTS (
                SELECT 1 FROM store.calibration_visits visit
                WHERE visit.organization_id = $1 AND visit.schedule_id = schedule.id
@@ -93,11 +97,13 @@ export function createStoreCalibrationRepository(pool: Pool) {
            FROM store.calibration_visits visit
            WHERE visit.organization_id = $1 AND visit.status <> 'CANCELLED'
              AND visit.due_on >= $2::date
-             AND visit.due_on < $2::date + interval '1 month'
+             AND visit.due_on <= $3::date
          )
-         SELECT planned.id, planned.due_on::text AS "dueOn", planned.status,
+         SELECT planned.id, planned.schedule_id AS "scheduleId", visit.method,
+           planned.due_on::text AS "dueOn", planned.status,
            asset.asset_code AS "unitId",
            item.type_code AS "typeCode", item.asset_name AS "assetName",
+           item.asset_category AS category, item.asset_subcategory AS subcategory,
            COALESCE(definition.name, schedule.name) AS "scheduleName",
            record.completed_on::text AS "completedOn",
            supplier.name AS "supplierName"
@@ -113,7 +119,7 @@ export function createStoreCalibrationRepository(pool: Pool) {
          LEFT JOIN store.suppliers supplier ON supplier.id = offer.supplier_id
          LEFT JOIN store.asset_maintenance_records record ON record.id = visit.maintenance_record_id
          ORDER BY planned.due_on, asset.asset_code, planned.id`,
-        [organizationId, `${month}-01`]
+        [organizationId, from, to]
       )
       return result.rows
     },
@@ -129,6 +135,7 @@ export function createStoreCalibrationRepository(pool: Pool) {
         dueOn: string
         id: string
         maintenanceRecordId: string | null
+        method: "SUPPLIER" | "IN_HOUSE"
         purchaseOrderNumber: string | null
         purchaseOrderId: string | null
         result: string | null
@@ -142,7 +149,7 @@ export function createStoreCalibrationRepository(pool: Pool) {
       }>(
         `SELECT visit.id, visit.schedule_id AS "scheduleId",
            COALESCE(definition.name, schedule.name) AS "scheduleName",
-           visit.due_on::text AS "dueOn", visit.scope, visit.status,
+           visit.due_on::text AS "dueOn", visit.scope, visit.status, visit.method,
            visit.selected_offer_id AS "selectedOfferId",
            visit.agreed_price::text AS "agreedPrice",
            visit.purchase_order_id AS "purchaseOrderId",
@@ -284,6 +291,7 @@ export function createStoreCalibrationRepository(pool: Pool) {
 
     async openCalibrationVisit(input: Actor & {
       assetCode: string
+      method?: "SUPPLIER" | "IN_HOUSE"
       scheduleId: string
       scope?: string | null
     }) {
@@ -293,8 +301,10 @@ export function createStoreCalibrationRepository(pool: Pool) {
           name: string
           nextDueOn: string
           status: string
+          holderType: string
         }>(
           `SELECT asset.id AS "assetId", asset.status,
+             asset.current_holder_type AS "holderType",
              COALESCE(definition.name, schedule.name) AS name,
              schedule.next_due_on::text AS "nextDueOn"
            FROM store.asset_maintenance_schedules schedule
@@ -312,15 +322,19 @@ export function createStoreCalibrationRepository(pool: Pool) {
         if (row.status === "SCRAPPED" || row.status === "BROKEN") {
           throw new Error("A broken or scrapped unit cannot be calibrated.")
         }
+        if (input.method === "IN_HOUSE" &&
+          !["STORE", "MACHINE", "DEPARTMENT"].includes(row.holderType)) {
+          throw new Error("This Unit ID is not available for in-house calibration.")
+        }
         const result = await client.query<{ id: string }>(
           `INSERT INTO store.calibration_visits (
-             organization_id, asset_id, schedule_id, due_on, scope,
+             organization_id, asset_id, schedule_id, due_on, scope, method,
              created_by_user_id, updated_by_user_id
-           ) VALUES ($1, $2, $3, $4::date, $5, $6, $6)
+           ) VALUES ($1, $2, $3, $4::date, $5, $6, $7, $7)
            RETURNING id`,
           [input.organizationId, row.assetId, input.scheduleId,
             row.nextDueOn, required(input.scope || row.name, "Calibration scope"),
-            input.actorUserId ?? null]
+            input.method ?? "SUPPLIER", input.actorUserId ?? null]
         )
         return result.rows[0]!
       })
@@ -364,20 +378,25 @@ export function createStoreCalibrationRepository(pool: Pool) {
       })
     },
 
-    async cancelCalibrationVisit(input: Actor & { visitId: string }) {
+    async cancelCalibrationVisit(input: Actor & {
+      method: "SUPPLIER" | "IN_HOUSE"
+      visitId: string
+    }) {
       return withTransaction(pool, async (client) => {
         const visit = await client.query<{
           id: string
+          method: "SUPPLIER" | "IN_HOUSE"
           outboundMovementId: string | null
           status: VisitStatus
         }>(
-          `SELECT id, status, outbound_movement_id AS "outboundMovementId"
+          `SELECT id, method, status, outbound_movement_id AS "outboundMovementId"
            FROM store.calibration_visits
            WHERE id = $1 AND organization_id = $2
            FOR UPDATE`,
           [input.visitId, input.organizationId]
         )
-        if (!visit.rows[0] || visit.rows[0].status !== "OPEN" ||
+        if (!visit.rows[0] || visit.rows[0].method !== input.method ||
+          visit.rows[0].status !== "OPEN" ||
           visit.rows[0].outboundMovementId) {
           throw new Error("Only an undispatched calibration visit can be cancelled.")
         }
@@ -799,7 +818,8 @@ export function createStoreCalibrationRepository(pool: Pool) {
       return withTransaction(pool, async (client) => {
         const visit = await client.query<{ id: string }>(
           `SELECT id FROM store.calibration_visits
-           WHERE id = $1 AND organization_id = $2 AND status = 'RETURNED'
+           WHERE id = $1 AND organization_id = $2
+             AND (status = 'RETURNED' OR (status = 'OPEN' AND method = 'IN_HOUSE'))
            FOR UPDATE`,
           [input.visitId, input.organizationId]
         )
@@ -842,6 +862,125 @@ export function createStoreCalibrationRepository(pool: Pool) {
           `UPDATE store.calibration_offers SET quote_file_id = $1 WHERE id = $2`,
           [input.fileId, input.offerId]
         )
+      })
+    },
+
+    async completeInHouseCalibrationVisit(input: Actor & {
+      certificateNumber: string
+      completedBy: string
+      completedOn: string
+      passed: boolean
+      visitId: string
+      workDone?: string | null
+    }) {
+      return withTransaction(pool, async (client) => {
+        const visit = await client.query<{
+          assetId: string
+          certificateFileId: string | null
+          scheduleId: string
+          status: VisitStatus
+          unitStatus: string
+          holderType: string
+        }>(
+          `SELECT visit.asset_id AS "assetId", visit.schedule_id AS "scheduleId",
+             visit.certificate_file_id AS "certificateFileId", visit.status,
+             asset.status AS "unitStatus",
+             asset.current_holder_type AS "holderType"
+           FROM store.calibration_visits visit
+           JOIN store.assets asset ON asset.id = visit.asset_id
+           WHERE visit.id = $1 AND visit.organization_id = $2
+             AND visit.method = 'IN_HOUSE'
+           FOR UPDATE OF visit, asset`,
+          [input.visitId, input.organizationId]
+        )
+        const row = visit.rows[0]
+        if (!row || row.status !== "OPEN") {
+          throw new Error("Open in-house calibration visit was not found.")
+        }
+        if (row.unitStatus === "BROKEN" || row.unitStatus === "SCRAPPED" ||
+          !["STORE", "MACHINE", "DEPARTMENT"].includes(row.holderType)) {
+          throw new Error("This Unit ID is not available for in-house calibration.")
+        }
+        if (!row.certificateFileId) {
+          throw new Error("Upload the calibration certificate before completion.")
+        }
+        await linkedFile(client, {
+          fileId: row.certificateFileId,
+          organizationId: input.organizationId,
+          purpose: "calibration_certificate",
+          targetId: input.visitId,
+          targetTable: "calibration_visits",
+        })
+        const schedule = await client.query<{ frequencyDays: number }>(
+          `SELECT COALESCE(definition.frequency_value, schedule.frequency_days)
+             AS "frequencyDays"
+           FROM store.asset_maintenance_schedules schedule
+           LEFT JOIN maintenance.definitions definition ON definition.id = schedule.definition_id
+           WHERE schedule.id = $1 AND schedule.organization_id = $2
+             AND schedule.asset_id = $3 AND schedule.schedule_type = 'CALIBRATION'
+             AND schedule.active
+           FOR UPDATE OF schedule`,
+          [row.scheduleId, input.organizationId, row.assetId]
+        )
+        if (!schedule.rows[0] || !Number.isInteger(schedule.rows[0].frequencyDays)) {
+          throw new Error("Active calibration timetable was not found.")
+        }
+        const completedOn = required(input.completedOn, "Completed date")
+        const validDate = await client.query<{ valid: boolean }>(
+          `SELECT $1::date <= (now() AT TIME ZONE 'Asia/Kolkata')::date AS valid`,
+          [completedOn]
+        )
+        if (!validDate.rows[0]?.valid) throw new Error("Completed date cannot be in the future.")
+        const nextDueOn = input.passed
+          ? (await client.query<{ nextDueOn: string }>(
+              `SELECT ($1::date + $2::integer)::text AS "nextDueOn"`,
+              [completedOn, schedule.rows[0].frequencyDays]
+            )).rows[0]!.nextDueOn
+          : null
+        const record = await client.query<{ id: string }>(
+          `INSERT INTO store.asset_maintenance_records (
+             organization_id, asset_id, schedule_id, maintenance_type,
+             completed_on, completed_by, certificate_number, work_done,
+             result, next_due_on, created_by_user_id
+           ) VALUES ($1, $2, $3, 'CALIBRATION', $4::date, $5, $6,
+             $7, $8, $9::date, $10) RETURNING id`,
+          [input.organizationId, row.assetId, row.scheduleId, completedOn,
+            required(input.completedBy, "Completed by"),
+            required(input.certificateNumber, "Certificate number"),
+            input.workDone?.trim() || null, input.passed ? "PASSED" : "FAILED",
+            nextDueOn, input.actorUserId ?? null]
+        )
+        if (input.passed) {
+          await client.query(
+            `UPDATE store.asset_maintenance_schedules
+             SET last_completed_on = $1::date, next_due_on = $2::date,
+               updated_at = now(), updated_by_user_id = $3 WHERE id = $4`,
+            [completedOn, nextDueOn, input.actorUserId ?? null, row.scheduleId]
+          )
+          if (row.unitStatus === "UNDER_MAINTENANCE") {
+            await client.query(
+              `UPDATE store.assets SET status = $2,
+                 updated_at = now(), updated_by_user_id = $3 WHERE id = $1`,
+              [row.assetId, row.holderType === "STORE" ? "AVAILABLE" : "ASSIGNED",
+                input.actorUserId ?? null]
+            )
+          }
+        } else {
+          await client.query(
+            `UPDATE store.assets SET status = 'UNDER_MAINTENANCE',
+               updated_at = now(), updated_by_user_id = $2 WHERE id = $1`,
+            [row.assetId, input.actorUserId ?? null]
+          )
+        }
+        await client.query(
+          `UPDATE store.calibration_visits
+           SET status = $2, maintenance_record_id = $3,
+             updated_at = now(), updated_by_user_id = $4 WHERE id = $1`,
+          [input.visitId, input.passed ? "PASSED" : "FAILED",
+            record.rows[0]!.id, input.actorUserId ?? null]
+        )
+        await queueDashboardRefresh(client, input.organizationId)
+        return { maintenanceRecordId: record.rows[0]!.id, nextDueOn }
       })
     },
 

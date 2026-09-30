@@ -302,12 +302,14 @@ ID. It is assigned directly to the unit. Its next due date advances only after
 a passing calibration result; a failed result remains due for corrective work.
 
 **Calibration Visit**: One due calibration occurrence for a Unit ID and its
-Calibration Timetable. Store opens the visit, compares offers from registered
+Calibration Timetable. A Supplier visit compares offers from registered
 Suppliers, selects one offer, issues a service Purchase Order, records transfer
 to the Supplier and return, and stores the Supplier certificate before recording
-the result. The visit keeps the selected price and links to the order, movements,
-certificate, and completion history. A unit can have only one open visit per
-Calibration Timetable.
+the result. An in-house visit records the work and result without a Supplier,
+service order, or physical movement; its certificate must be uploaded before
+completion. A passing result advances the timetable. A failed in-house result
+makes the Unit ID unavailable for use until corrective work. A unit can have
+only one open visit per Calibration Timetable.
 
 **Calibration Offer**: One Supplier's quoted service price for one Calibration
 Visit. The Supplier is selected from Store Supplier Master. Offers are retained
