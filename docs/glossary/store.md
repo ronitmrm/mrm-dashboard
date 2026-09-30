@@ -205,14 +205,17 @@ Each Non Consumable Asset Code has a classification row without a stock quantity
 Every physical unit has a separate row, including assigned or unavailable units,
 showing its permanent Unit ID, status, holder or location, and its actual purchase
 Supplier and cost when recorded. Available units have quantity one; other units
-do not count as available stock. Supplier quotes for future purchases remain on
-the Asset Code, distinct from each unit's acquired Supplier and cost.
-receiptless legacy units may have their verified acquisition Supplier and price
+show zero available. Assigned quantity is one only for a unit currently in
+Assigned status and zero for other units. Asset Code rows show no available
+quantity and the total count of assigned units; Consumables show their available
+balance and no assigned quantity. Supplier quotes for future purchases remain
+on the Asset Code, distinct from each unit's acquired Supplier and cost.
+Receiptless legacy units may have their verified acquisition Supplier and price
 recorded by Store against that individual Unit ID; receipt-backed units use the
 original receipt and cannot be overridden here. For example, `NC001-0001` and
-`NC001-0002` are different physical rows under Asset Code
-`NC001`; each opens its own Asset Workspace. Purchase Order and type-only request
-controls remain on the Asset Code row.
+`NC001-0002` are different physical rows under Asset Code `NC001`; each opens
+its own Asset Workspace. Purchase Order and type-only request controls remain
+on the Asset Code row.
 
 **Store Page Access**: Access is granted per Store page rather than through one
 module-wide permission. Store Overview, Requests & Issues, New Item Requests,

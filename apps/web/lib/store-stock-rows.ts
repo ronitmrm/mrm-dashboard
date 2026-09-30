@@ -34,8 +34,9 @@ export function storeStockRows<T extends StoreStockItem>(
         {
           ...item,
           actionItem: true,
+          assignedQuantity: "—",
+          availableQuantity: `${item.availableStock} ${item.unit}`,
           displayedCode: item.typeCode,
-          displayedQuantity: `${item.availableStock} ${item.unit}`,
           physicalUnit: null,
           rowKey: item.id,
           unitId: null,
@@ -43,25 +44,30 @@ export function storeStockRows<T extends StoreStockItem>(
       ]
     }
 
+    const units = unitsByItem.get(item.id) ?? []
     return [
       {
         ...item,
         actionItem: true,
+        assignedQuantity: String(
+          units.filter((unit) => unit.status === "ASSIGNED").length
+        ),
+        availableQuantity: "—",
         displayedCode: item.typeCode,
-        displayedQuantity: "—",
         physicalUnit: null,
         rowKey: item.id,
         unitId: null,
       },
-      ...(unitsByItem.get(item.id) ?? []).map((physicalUnit) => ({
+      ...units.map((physicalUnit) => ({
         ...item,
         actionItem: false,
-        displayedCode: physicalUnit.assetCode,
-        displayedQuantity:
+        assignedQuantity: physicalUnit.status === "ASSIGNED" ? "1" : "0",
+        availableQuantity:
           physicalUnit.status === "AVAILABLE" &&
           physicalUnit.holderType === "STORE"
-            ? "1 physical unit"
-            : "—",
+            ? "1"
+            : "0",
+        displayedCode: physicalUnit.assetCode,
         physicalUnit,
         rowKey: physicalUnit.id,
         unitId: physicalUnit.assetCode,
