@@ -214,11 +214,16 @@ export default async function StoreAssetWorkspacePage({
             {asset.identificationName}
           </p>
         </div>
-        <Badge
-          variant={asset.status === "BROKEN" ? "destructive" : "secondary"}
-        >
-          {asset.status}
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Badge
+            variant={asset.status === "BROKEN" ? "destructive" : "secondary"}
+          >
+            {asset.status}
+          </Badge>
+          <Button asChild size="sm" variant="outline">
+            <Link href="/store/stock">Back to Stock</Link>
+          </Button>
+        </div>
       </div>
 
       <StoreAssetWorkspaceTabs showLifecycle={canManageLifecycle}>
