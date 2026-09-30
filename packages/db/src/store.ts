@@ -376,15 +376,17 @@ export async function getStorePurchaseOrderWithClient(
       WHERE line.purchase_order_id = $1 AND line.organization_id = $2
       UNION ALL
       SELECT asset.asset_code AS "typeCode",
-        purchase_order.service_description AS "itemName",
+        repair_item.service_description AS "itemName",
         item.asset_name AS "assetName", item.asset_category AS "assetCategory",
         item.asset_subcategory AS "assetSubcategory", 'Job' AS unit,
         '1' AS "orderedQuantity",
-        CASE WHEN purchase_order.status = 'Completed' THEN '1' ELSE '0' END
+        CASE WHEN repair_item.status = 'Completed' THEN '1' ELSE '0' END
           AS "receivedQuantity",
-        purchase_order.service_price::text AS "unitPrice"
+        repair_item.service_price::text AS "unitPrice"
       FROM store.purchase_orders purchase_order
-      JOIN store.assets asset ON asset.id = purchase_order.repair_asset_id
+      JOIN store.repair_purchase_order_items repair_item
+        ON repair_item.purchase_order_id = purchase_order.id
+      JOIN store.assets asset ON asset.id = repair_item.asset_id
       JOIN store.item_types item ON item.id = asset.item_type_id
       WHERE purchase_order.id = $1
         AND purchase_order.organization_id = $2
@@ -1090,7 +1092,6 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         order_number: string
         order_type: "GOODS" | "REPAIR"
         remark: string | null
-        repair_asset_id: string | null
         supplier_code: string
         supplier_id: string
         supplier_name: string
@@ -1098,7 +1099,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         `
           SELECT purchase_order.issuance_state, purchase_order.order_number,
             purchase_order.order_type, purchase_order.remark,
-            purchase_order.repair_asset_id, purchase_order.created_by_user_id,
+            purchase_order.created_by_user_id,
             supplier.id AS supplier_id, supplier.code AS supplier_code,
             supplier.name AS supplier_name
           FROM store.purchase_orders purchase_order
@@ -1116,7 +1117,8 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       }
       if (order.rows[0].issuance_state === "pending") {
         if (order.rows[0].order_type === "REPAIR") {
-          const asset = await client.query<{
+          const assets = await client.query<{
+            asset_code: string
             current_holder_name: string | null
             current_holder_reference: string | null
             current_holder_type: StoreHolderType
@@ -1125,26 +1127,31 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             item_type_id: string
           }>(
             `
-              SELECT id, item_type_id, current_location_id,
-                current_holder_type, current_holder_reference,
-                current_holder_name
-              FROM store.assets
-              WHERE id = $1 AND organization_id = $2
-              FOR UPDATE
+              SELECT asset.id, asset.asset_code, asset.item_type_id,
+                asset.current_location_id, asset.current_holder_type,
+                asset.current_holder_reference, asset.current_holder_name
+              FROM store.repair_purchase_order_items repair_item
+              JOIN store.assets asset ON asset.id = repair_item.asset_id
+              WHERE repair_item.purchase_order_id = $1
+                AND repair_item.organization_id = $2
+              ORDER BY asset.id
+              FOR UPDATE OF asset
             `,
-            [order.rows[0].repair_asset_id, input.organizationId]
+            [input.purchaseOrderId, input.organizationId]
           )
-          if (!asset.rows[0]) throw new Error("Repair asset was not found.")
+          if (!assets.rows.length)
+            throw new Error("Repair asset was not found.")
           const fallbackLocation = await client.query<{ id: string }>(
             `SELECT id FROM store.locations
              WHERE organization_id = $1 AND active ORDER BY created_at LIMIT 1`,
             [input.organizationId]
           )
-          const locationId =
-            asset.rows[0].current_location_id ?? fallbackLocation.rows[0]?.id
-          if (!locationId) throw new Error("A Store location is required.")
-          await client.query(
-            `
+          for (const asset of assets.rows) {
+            const locationId =
+              asset.current_location_id ?? fallbackLocation.rows[0]?.id
+            if (!locationId) throw new Error("A Store location is required.")
+            await client.query(
+              `
               UPDATE store.assets
               SET status = 'UNDER_MAINTENANCE',
                 current_holder_type = 'SUPPLIER',
@@ -1157,16 +1164,16 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
                 updated_at = now(), updated_by_user_id = $4
               WHERE id = $5
             `,
-            [
-              order.rows[0].supplier_code,
-              order.rows[0].supplier_name,
-              order.rows[0].supplier_id,
-              order.rows[0].created_by_user_id,
-              asset.rows[0].id,
-            ]
-          )
-          await client.query(
-            `
+              [
+                order.rows[0].supplier_code,
+                order.rows[0].supplier_name,
+                order.rows[0].supplier_id,
+                order.rows[0].created_by_user_id,
+                asset.id,
+              ]
+            )
+            await client.query(
+              `
               INSERT INTO store.stock_movements (
                 organization_id, item_type_id, asset_id, location_id,
                 movement_type, quantity, from_holder_type,
@@ -1176,21 +1183,22 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
               ) VALUES ($1, $2, $3, $4, 'TRANSFER_OUT', -1,
                 $5, $6, $7, 'SUPPLIER', $8, $9, $10, $11)
             `,
-            [
-              input.organizationId,
-              asset.rows[0].item_type_id,
-              asset.rows[0].id,
-              locationId,
-              asset.rows[0].current_holder_type,
-              asset.rows[0].current_holder_reference,
-              asset.rows[0].current_holder_name,
-              order.rows[0].supplier_code,
-              order.rows[0].supplier_name,
-              order.rows[0].remark ??
-                `Sent for repair under ${order.rows[0].order_number}.`,
-              order.rows[0].created_by_user_id,
-            ]
-          )
+              [
+                input.organizationId,
+                asset.item_type_id,
+                asset.id,
+                locationId,
+                asset.current_holder_type,
+                asset.current_holder_reference,
+                asset.current_holder_name,
+                order.rows[0].supplier_code,
+                order.rows[0].supplier_name,
+                order.rows[0].remark ??
+                  `Sent for repair under ${order.rows[0].order_number}.`,
+                order.rows[0].created_by_user_id,
+              ]
+            )
+          }
         }
         await client.query(
           `
@@ -1202,16 +1210,20 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         )
       }
       if (order.rows[0].order_type === "REPAIR") {
-        const unit = await client.query<{ asset_code: string }>(
-          "SELECT asset_code FROM store.assets WHERE id=$1",
-          [order.rows[0].repair_asset_id]
+        const units = await client.query<{ asset_code: string }>(
+          `SELECT asset.asset_code
+           FROM store.repair_purchase_order_items repair_item
+           JOIN store.assets asset ON asset.id = repair_item.asset_id
+           WHERE repair_item.purchase_order_id = $1`,
+          [input.purchaseOrderId]
         )
-        if (unit.rows[0])
+        for (const unit of units.rows) {
           await assertToolingTransferAvailable(
             client,
             input.organizationId,
-            unit.rows[0].asset_code
+            unit.asset_code
           )
+        }
       }
       await queueDashboardRefresh(client, input.organizationId)
       return prepared
@@ -2330,10 +2342,182 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         return prepared
       } catch (error) {
         if (
-          constraintName(error) ===
-          "store_purchase_orders_one_open_repair_unique"
+          [
+            "store_purchase_orders_one_open_repair_unique",
+            "store_repair_purchase_order_items_one_open_asset_unique",
+          ].includes(constraintName(error) ?? "")
         ) {
           throw new Error("This Unit ID already has an open Repair PO.")
+        }
+        throw error
+      }
+    },
+
+    async createRepairPurchaseOrderFromSelection(input: {
+      actorUserId?: string | null
+      issuanceId: string
+      items: Array<{
+        assetCode: string
+        serviceDescription: string
+        servicePrice: string
+      }>
+      orderDate?: string | null
+      organizationId: string
+      remark?: string | null
+      storeIssuedPdf: StoreIssuedPdfWriter
+      supplierId: string
+    }) {
+      if (!input.items.length) {
+        throw new Error("Select at least one Unit ID for repair.")
+      }
+      const items = input.items
+        .map((item) => ({
+          assetCode: requiredText(item.assetCode, "Unit ID").toLowerCase(),
+          serviceDescription: requiredText(
+            item.serviceDescription,
+            "Repair scope"
+          ),
+          servicePrice: requiredText(item.servicePrice, "Repair price"),
+        }))
+        .sort((left, right) => left.assetCode.localeCompare(right.assetCode))
+      if (new Set(items.map((item) => item.assetCode)).size !== items.length) {
+        throw new Error("Each Unit ID can appear only once per Repair PO.")
+      }
+      if (
+        items.some((item) => !/^\d+(?:\.\d{1,2})?$/.test(item.servicePrice))
+      ) {
+        throw new Error(
+          "Repair price must be zero or greater, with up to two decimals."
+        )
+      }
+      const issuanceId = requiredText(input.issuanceId, "Issuance ID")
+      const fingerprint = issuanceFingerprint({
+        items,
+        orderDate: input.orderDate?.trim() || null,
+        orderType: "REPAIR",
+        remark: input.remark?.trim() || null,
+        supplierId: input.supplierId,
+      })
+      try {
+        const prepared = await withTransaction(pool, async (client) => {
+          await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
+            `${input.organizationId}:store-po:${issuanceId}`,
+          ])
+          const existing = await client.query<{
+            id: string
+            issuance_fingerprint: string
+            order_number: string
+          }>(
+            `SELECT id, issuance_fingerprint, order_number
+             FROM store.purchase_orders
+             WHERE organization_id = $1 AND issuance_id = $2::uuid`,
+            [input.organizationId, issuanceId]
+          )
+          if (existing.rows[0]) {
+            if (existing.rows[0].issuance_fingerprint !== fingerprint) {
+              throw new Error(
+                "Issuance ID was already used for another Store PO."
+              )
+            }
+            return {
+              id: existing.rows[0].id,
+              orderNumber: existing.rows[0].order_number,
+            }
+          }
+          const supplier = await client.query<{ id: string }>(
+            `SELECT id FROM store.suppliers
+             WHERE organization_id = $1 AND id = $2 AND active`,
+            [input.organizationId, input.supplierId]
+          )
+          if (!supplier.rows[0])
+            throw new Error("Select an active repair Supplier.")
+          const assets = await client.query<{
+            asset_code: string
+            current_holder_type: StoreHolderType
+            id: string
+            status: string
+          }>(
+            `SELECT asset.id, asset.asset_code, asset.status,
+               asset.current_holder_type
+             FROM store.assets asset
+             JOIN store.item_types item ON item.id = asset.item_type_id
+             WHERE asset.organization_id = $1
+               AND lower(asset.asset_code) = ANY($2::text[])
+               AND item.tracking_mode = 'SERIALIZED'
+             ORDER BY asset.id FOR UPDATE OF asset`,
+            [input.organizationId, items.map((item) => item.assetCode)]
+          )
+          if (
+            assets.rows.length !== items.length ||
+            assets.rows.some(
+              (asset) =>
+                asset.status === "SCRAPPED" ||
+                asset.current_holder_type === "SUPPLIER"
+            )
+          ) {
+            throw new Error(
+              "Select valid Unit IDs that are not scrapped or with a Supplier."
+            )
+          }
+          const orderNumber = await nextDocumentNumber(client, {
+            counterKey: "PURCHASE_ORDER",
+            organizationId: input.organizationId,
+            prefix: "STR-PO",
+          })
+          const order = await client.query<{ id: string }>(
+            `INSERT INTO store.purchase_orders (
+               organization_id, order_number, supplier_id, order_date,
+               order_type, remark, issuance_id, issuance_fingerprint,
+               issuance_state, created_by_user_id, updated_by_user_id
+             ) VALUES ($1, $2, $3,
+               COALESCE(NULLIF($4, '')::date, current_date),
+               'REPAIR', $5, $6::uuid, $7, 'pending', $8, $8)
+             RETURNING id`,
+            [
+              input.organizationId,
+              orderNumber,
+              supplier.rows[0].id,
+              input.orderDate ?? null,
+              input.remark?.trim() || null,
+              issuanceId,
+              fingerprint,
+              input.actorUserId ?? null,
+            ]
+          )
+          const assetsByCode = new Map(
+            assets.rows.map(
+              (asset) => [asset.asset_code.toLowerCase(), asset] as const
+            )
+          )
+          for (const item of items) {
+            await client.query(
+              `INSERT INTO store.repair_purchase_order_items (
+                 organization_id, purchase_order_id, asset_id,
+                 service_description, service_price
+               ) VALUES ($1, $2, $3, $4, $5)`,
+              [
+                input.organizationId,
+                order.rows[0]!.id,
+                assetsByCode.get(item.assetCode)!.id,
+                item.serviceDescription,
+                item.servicePrice,
+              ]
+            )
+          }
+          return { id: order.rows[0]!.id, orderNumber }
+        })
+        await issuePurchaseOrder({
+          organizationId: input.organizationId,
+          purchaseOrderId: prepared.id,
+          storeIssuedPdf: input.storeIssuedPdf,
+        })
+        return prepared
+      } catch (error) {
+        if (
+          constraintName(error) ===
+          "store_repair_purchase_order_items_one_open_asset_unique"
+        ) {
+          throw new Error("A selected Unit ID already has an open Repair PO.")
         }
         throw error
       }
@@ -2345,37 +2529,58 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       organizationId: string
       purchaseOrderId: string
     }) {
-      const result = await pool.query<{ id: string }>(
-        `
-          UPDATE store.purchase_orders purchase_order
-          SET status = 'Completed', updated_at = now(),
-            updated_by_user_id = $1
-          FROM store.assets asset
-          WHERE purchase_order.id = $2
-            AND purchase_order.organization_id = $3
-            AND purchase_order.order_type = 'REPAIR'
-            AND purchase_order.repair_asset_id = asset.id
-            AND asset.organization_id = purchase_order.organization_id
-            AND lower(asset.asset_code) = lower($4)
-            AND purchase_order.issuance_state = 'issued'
-            AND purchase_order.status = 'Open'
-            AND NOT EXISTS (
-              SELECT 1 FROM store.calibration_visits visit
-              WHERE visit.purchase_order_id = purchase_order.id
-            )
-          RETURNING purchase_order.id
-        `,
-        [
-          input.actorUserId ?? null,
-          input.purchaseOrderId,
-          input.organizationId,
-          requiredText(input.assetCode, "Unit ID"),
-        ]
-      )
-      if (!result.rows[0]) {
-        throw new Error("Open Repair PO was not found for this Unit ID.")
-      }
-      return result.rows[0]
+      return withTransaction(pool, async (client) => {
+        const order = await client.query<{ id: string }>(
+          `SELECT purchase_order.id FROM store.purchase_orders purchase_order
+           WHERE purchase_order.id = $1 AND purchase_order.organization_id = $2
+             AND purchase_order.order_type = 'REPAIR'
+             AND purchase_order.issuance_state = 'issued'
+             AND purchase_order.status = 'Open'
+             AND NOT EXISTS (
+               SELECT 1 FROM store.calibration_visits visit
+               WHERE visit.purchase_order_id = purchase_order.id
+             )
+           FOR UPDATE OF purchase_order`,
+          [input.purchaseOrderId, input.organizationId]
+        )
+        if (!order.rows[0]) {
+          throw new Error("Open Repair PO was not found for this Unit ID.")
+        }
+        const item = await client.query<{ id: string }>(
+          `UPDATE store.repair_purchase_order_items repair_item
+           SET status = 'Completed'
+           FROM store.assets asset
+           WHERE repair_item.purchase_order_id = $1
+             AND repair_item.organization_id = $2
+             AND repair_item.asset_id = asset.id
+             AND asset.organization_id = $2
+             AND lower(asset.asset_code) = lower($3)
+             AND repair_item.status = 'Open'
+           RETURNING repair_item.id`,
+          [
+            input.purchaseOrderId,
+            input.organizationId,
+            requiredText(input.assetCode, "Unit ID"),
+          ]
+        )
+        if (!item.rows[0]) {
+          throw new Error("Open Repair PO was not found for this Unit ID.")
+        }
+        const remaining = await client.query<{ id: string }>(
+          `SELECT id FROM store.repair_purchase_order_items
+           WHERE purchase_order_id = $1 AND status = 'Open' LIMIT 1`,
+          [input.purchaseOrderId]
+        )
+        if (!remaining.rows[0]) {
+          await client.query(
+            `UPDATE store.purchase_orders SET status = 'Completed',
+               updated_at = now(), updated_by_user_id = $1
+             WHERE id = $2`,
+            [input.actorUserId ?? null, input.purchaseOrderId]
+          )
+        }
+        return order.rows[0]
+      })
     },
 
     async createPurchaseOrdersFromSelection(input: {
@@ -2612,7 +2817,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         unitPrice: string
       }>(
         `
-          SELECT COALESCE(line.id, purchase_order.id) AS id,
+          SELECT COALESCE(line.id, repair_item.id, purchase_order.id) AS id,
             calibration_visit.id AS "calibrationVisitId",
             purchase_order.id AS "purchaseOrderId",
             purchase_order.order_number AS "orderNumber",
@@ -2625,19 +2830,19 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             COALESCE(item.type_code, repair_asset.asset_code) AS "typeCode",
             COALESCE(
               item.identification_name,
-              purchase_order.service_description
+              repair_item.service_description
             ) AS "itemName",
             COALESCE(item.unit, 'Job') AS unit,
             CASE WHEN purchase_order.order_type = 'REPAIR' THEN '1'
               ELSE trim_scale(line.ordered_quantity)::text
             END AS "orderedQuantity",
             CASE WHEN purchase_order.order_type = 'REPAIR'
-                AND purchase_order.status = 'Completed' THEN '1'
+                AND repair_item.status = 'Completed' THEN '1'
               WHEN purchase_order.order_type = 'REPAIR' THEN '0'
               ELSE trim_scale(line.received_quantity)::text
             END AS "receivedQuantity",
             CASE WHEN purchase_order.order_type = 'REPAIR'
-                AND purchase_order.status = 'Completed' THEN '0'
+                AND repair_item.status = 'Completed' THEN '0'
               WHEN purchase_order.order_type = 'REPAIR' THEN '1'
               ELSE trim_scale(
                 line.ordered_quantity - line.received_quantity
@@ -2645,14 +2850,16 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             END AS "remainingQuantity",
             COALESCE(
               line.unit_price,
-              purchase_order.service_price
+              repair_item.service_price
             )::text AS "unitPrice",
             CASE WHEN purchase_order.order_type = 'REPAIR'
-              THEN purchase_order.service_price::text
+              THEN sum(repair_item.service_price)
+                OVER (PARTITION BY purchase_order.id)::text
               ELSE trim_scale(sum(line.ordered_quantity * line.unit_price)
                 OVER (PARTITION BY purchase_order.id))::text
             END AS "orderTotal",
-            purchase_order.status
+            CASE WHEN purchase_order.order_type = 'REPAIR'
+              THEN repair_item.status ELSE purchase_order.status END AS status
           FROM store.purchase_orders purchase_order
           LEFT JOIN store.calibration_visits calibration_visit
             ON calibration_visit.purchase_order_id = purchase_order.id
@@ -2660,8 +2867,10 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           LEFT JOIN store.purchase_order_lines line
             ON line.purchase_order_id = purchase_order.id
           LEFT JOIN store.item_types item ON item.id = line.item_type_id
+          LEFT JOIN store.repair_purchase_order_items repair_item
+            ON repair_item.purchase_order_id = purchase_order.id
           LEFT JOIN store.assets repair_asset
-            ON repair_asset.id = purchase_order.repair_asset_id
+            ON repair_asset.id = repair_item.asset_id
           WHERE purchase_order.organization_id = $1
             AND purchase_order.issuance_state = 'issued'
           ORDER BY purchase_order.order_date DESC, purchase_order.created_at DESC
@@ -4320,13 +4529,15 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           SELECT purchase_order.id,
             purchase_order.order_number AS "orderNumber",
             purchase_order.order_date::text AS "orderDate",
-            purchase_order.service_description AS "serviceDescription",
-            purchase_order.service_price::text AS "servicePrice",
-            purchase_order.status, supplier.name AS "supplierName"
+            repair_item.service_description AS "serviceDescription",
+            repair_item.service_price::text AS "servicePrice",
+            repair_item.status, supplier.name AS "supplierName"
           FROM store.purchase_orders purchase_order
+          JOIN store.repair_purchase_order_items repair_item
+            ON repair_item.purchase_order_id = purchase_order.id
           JOIN store.suppliers supplier ON supplier.id = purchase_order.supplier_id
           WHERE purchase_order.organization_id = $1
-            AND purchase_order.repair_asset_id = $2
+            AND repair_item.asset_id = $2
             AND purchase_order.order_type = 'REPAIR'
             AND purchase_order.issuance_state = 'issued'
             AND NOT EXISTS (

@@ -36,7 +36,10 @@ import { istDateValue } from "@/lib/date-time"
 import { storeAssetWorkspaceHref } from "@/lib/store-asset-workspace"
 import { storeStockRows } from "@/lib/store-stock-rows"
 
-import { createStorePurchaseOrdersAction } from "../actions"
+import {
+  createStorePurchaseOrdersAction,
+  createStoreRepairPurchaseOrderAction,
+} from "../actions"
 
 function firstValue(value: string | string[] | undefined) {
   return (Array.isArray(value) ? value[0] : value) ?? ""
@@ -50,6 +53,7 @@ export default async function StoreStockPage({
     orderItemId?: string | string[]
     orderQuantity?: string | string[]
     ordersSaved?: string | string[]
+    repairOrderSaved?: string | string[]
     requestNumber?: string | string[]
   }>
 }) {
@@ -67,9 +71,13 @@ export default async function StoreStockPage({
     requestedMode === "order" &&
     storeActions.has("store.purchase_orders.create")
       ? "order"
-      : requestedMode === "request" && storeActions.has("store.requests.submit")
-        ? "request"
-        : "view"
+      : requestedMode === "repair" &&
+          storeActions.has("store.asset_repair.write")
+        ? "repair"
+        : requestedMode === "request" &&
+            storeActions.has("store.requests.submit")
+          ? "request"
+          : "view"
   const orderItemId = firstValue(params.orderItemId)
   const orderQuantity = firstValue(params.orderQuantity)
   const requestNumber = firstValue(params.requestNumber)
@@ -79,17 +87,23 @@ export default async function StoreStockPage({
   })
   const data = await (async () => {
     const organizationId = await repository.organizationIdForCode("MRMPL")
-    const [items, supplierPrices, physicalUnits] = await Promise.all([
-      repository.listItemTypes(organizationId),
-      repository.listSupplierPrices(organizationId),
-      repository.listStockPhysicalUnits(organizationId),
-    ])
-    return { items, supplierPrices, physicalUnits }
+    const [items, supplierPrices, physicalUnits, suppliers] = await Promise.all(
+      [
+        repository.listItemTypes(organizationId),
+        repository.listSupplierPrices(organizationId),
+        repository.listStockPhysicalUnits(organizationId),
+        mode === "repair"
+          ? repository.listSuppliers(organizationId)
+          : Promise.resolve([]),
+      ]
+    )
+    return { items, supplierPrices, physicalUnits, suppliers }
   })().finally(() => repository.close())
   const stockRows = storeStockRows(data.items, data.physicalUnits)
   const today = istDateValue()
   const actionFormId = "stock-row-action"
-  const columnCount = mode === "view" ? 9 : mode === "request" ? 10 : 11
+  const columnCount =
+    mode === "view" ? 9 : mode === "request" ? 10 : mode === "repair" ? 12 : 11
 
   return (
     <div className="flex flex-col gap-6">
@@ -104,6 +118,19 @@ export default async function StoreStockPage({
               {savedOrderCount} supplier purchase order
               {savedOrderCount === 1 ? " was" : "s were"} saved.
             </span>
+            {capabilities.has("store.purchase_register.read") ? (
+              <Button asChild size="sm" variant="outline">
+                <Link href="/store/orders">Open Purchase Register</Link>
+              </Button>
+            ) : null}
+          </CardContent>
+        </SectionCard>
+      ) : null}
+
+      {firstValue(params.repairOrderSaved) ? (
+        <SectionCard role="status">
+          <CardContent className="flex flex-wrap items-center gap-3 py-4 text-sm">
+            Repair PO {firstValue(params.repairOrderSaved)} was saved.
             {capabilities.has("store.purchase_register.read") ? (
               <Button asChild size="sm" variant="outline">
                 <Link href="/store/orders">Open Purchase Register</Link>
@@ -149,9 +176,9 @@ export default async function StoreStockPage({
             <div>
               <CardTitle>Stock Register</CardTitle>
               <CardDescription>
-                Asset Codes describe an item type; each Non Consumable unit has
-                its own status, supplier and purchase price. The cheapest active
-                quote is selected by default for a new purchase order.
+                {mode === "repair"
+                  ? "Select physical Unit IDs, enter each repair scope and agreed price, then choose one Supplier for the Repair PO."
+                  : "Asset Codes describe an item type; each Non Consumable unit has its own status, supplier and purchase price. The cheapest active quote is selected by default for a new purchase order."}
               </CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -171,6 +198,14 @@ export default async function StoreStockPage({
                   <Link href="/store/stock?mode=order">
                     Make Purchase Order
                   </Link>
+                </Button>
+              ) : null}
+              {storeActions.has("store.asset_repair.write") ? (
+                <Button
+                  asChild
+                  variant={mode === "repair" ? "default" : "outline"}
+                >
+                  <Link href="/store/stock?mode=repair">Make Repair PO</Link>
                 </Button>
               ) : null}
               {mode !== "view" ? (
@@ -202,6 +237,17 @@ export default async function StoreStockPage({
                 type="hidden"
               />
             </form>
+          ) : mode === "repair" ? (
+            <form
+              action={createStoreRepairPurchaseOrderAction}
+              id={actionFormId}
+            >
+              <input
+                defaultValue={randomUUID()}
+                name="issuance_id"
+                type="hidden"
+              />
+            </form>
           ) : null}
 
           <OperationalTable
@@ -211,14 +257,20 @@ export default async function StoreStockPage({
                 ? undefined
                 : {
                     checkboxName:
-                      mode === "request" ? "itemTypeId" : "item_type_id",
+                      mode === "request"
+                        ? "itemTypeId"
+                        : mode === "repair"
+                          ? "asset_code"
+                          : "item_type_id",
                   }
             }
           >
             <TableHeader>
               <TableRow>
                 {mode !== "view" ? <TableHead>Select</TableHead> : null}
-                <TableHead data-filterable="true">Asset Code / Unit ID</TableHead>
+                <TableHead data-filterable="true">
+                  Asset Code / Unit ID
+                </TableHead>
                 <TableHead>Asset Name</TableHead>
                 <TableHead>Asset Category</TableHead>
                 <TableHead>Asset Subcategory</TableHead>
@@ -229,6 +281,12 @@ export default async function StoreStockPage({
                 <TableHead>Quote / Purchase Price</TableHead>
                 {mode === "order" ? (
                   <TableHead>Order Quantity</TableHead>
+                ) : null}
+                {mode === "repair" ? (
+                  <>
+                    <TableHead>Repair Scope</TableHead>
+                    <TableHead>Agreed Repair Price</TableHead>
+                  </>
                 ) : null}
               </TableRow>
             </TableHeader>
@@ -255,7 +313,20 @@ export default async function StoreStockPage({
                   <TableRow key={item.rowKey}>
                     {mode !== "view" ? (
                       <TableCell>
-                        {item.actionItem ? (
+                        {mode === "repair" ? (
+                          item.physicalUnit &&
+                          item.physicalUnit.status !== "SCRAPPED" &&
+                          item.physicalUnit.holderType !== "SUPPLIER" ? (
+                            <input
+                              aria-label={`Select Unit ID ${item.displayedCode} for repair`}
+                              className="size-4 accent-primary"
+                              form={actionFormId}
+                              name="asset_code"
+                              type="checkbox"
+                              value={item.displayedCode}
+                            />
+                          ) : null
+                        ) : item.actionItem ? (
                           <input
                             aria-label={`Select Asset Code ${item.typeCode} ${item.identificationName}`}
                             className="size-4 accent-primary"
@@ -301,7 +372,11 @@ export default async function StoreStockPage({
                     <TableCell>{item.assetCategory}</TableCell>
                     <TableCell>{item.assetSubcategory}</TableCell>
                     <TableCell>{item.displayedQuantity}</TableCell>
-                    <TableCell data-filter-value={item.physicalUnit?.status ?? "Item Type"}>
+                    <TableCell
+                      data-filter-value={
+                        item.physicalUnit?.status ?? "Item Type"
+                      }
+                    >
                       {item.physicalUnit ? (
                         <StatusBadge
                           tone={
@@ -311,9 +386,9 @@ export default async function StoreStockPage({
                                 ? "information"
                                 : item.physicalUnit.status === "BROKEN"
                                   ? "danger"
-                                : item.physicalUnit.status === "SCRAPPED"
-                                  ? "inactive"
-                                  : "warning"
+                                  : item.physicalUnit.status === "SCRAPPED"
+                                    ? "inactive"
+                                    : "warning"
                           }
                           value={item.physicalUnit.status}
                         />
@@ -325,9 +400,9 @@ export default async function StoreStockPage({
                     </TableCell>
                     <TableCell>
                       {item.physicalUnit
-                        ? item.physicalUnit.locationName ??
+                        ? (item.physicalUnit.locationName ??
                           item.physicalUnit.holderName ??
-                          item.physicalUnit.holderType
+                          item.physicalUnit.holderType)
                         : item.storageLocations}
                     </TableCell>
                     <TableCell>
@@ -350,14 +425,16 @@ export default async function StoreStockPage({
                           ))}
                         </NativeSelect>
                       ) : item.physicalUnit ? (
-                        item.physicalUnit.supplierName ?? "Not recorded"
+                        (item.physicalUnit.supplierName ?? "Not recorded")
                       ) : item.currentSupplierName ? (
                         item.currentSupplierName
                       ) : (
                         "No current quote"
                       )}
                       <span className="block text-xs text-muted-foreground">
-                        {item.physicalUnit ? "Purchase supplier" : "Current quote"}
+                        {item.physicalUnit
+                          ? "Purchase supplier"
+                          : "Current quote"}
                       </span>
                     </TableCell>
                     <TableCell>
@@ -385,6 +462,39 @@ export default async function StoreStockPage({
                           />
                         ) : null}
                       </TableCell>
+                    ) : null}
+                    {mode === "repair" ? (
+                      <>
+                        <TableCell>
+                          {item.physicalUnit &&
+                          item.physicalUnit.status !== "SCRAPPED" &&
+                          item.physicalUnit.holderType !== "SUPPLIER" ? (
+                            <Input
+                              aria-label={`Repair scope for ${item.displayedCode}`}
+                              className="min-w-48"
+                              form={actionFormId}
+                              name={`service_description_${item.displayedCode}`}
+                              placeholder="Work to be done"
+                            />
+                          ) : null}
+                        </TableCell>
+                        <TableCell>
+                          {item.physicalUnit &&
+                          item.physicalUnit.status !== "SCRAPPED" &&
+                          item.physicalUnit.holderType !== "SUPPLIER" ? (
+                            <Input
+                              aria-label={`Agreed repair price for ${item.displayedCode}`}
+                              className="min-w-32"
+                              form={actionFormId}
+                              min="0"
+                              name={`service_price_${item.displayedCode}`}
+                              placeholder="₹"
+                              step="0.01"
+                              type="number"
+                            />
+                          ) : null}
+                        </TableCell>
+                      </>
                     ) : null}
                   </TableRow>
                 )
@@ -414,6 +524,61 @@ export default async function StoreStockPage({
               <span className="text-sm text-muted-foreground">
                 Selected items are automatically split into one PO per Supplier.
               </span>
+            </div>
+          ) : mode === "repair" ? (
+            <div className="grid w-full max-w-2xl gap-4 sm:grid-cols-2">
+              <div className="grid gap-1.5">
+                <label
+                  className="text-sm font-medium"
+                  htmlFor="repair-supplier"
+                >
+                  Repair Supplier
+                </label>
+                <NativeSelect
+                  form={actionFormId}
+                  id="repair-supplier"
+                  name="supplier_id"
+                  required
+                >
+                  <NativeSelectOption value="">
+                    Select supplier
+                  </NativeSelectOption>
+                  {data.suppliers.map((supplier) => (
+                    <NativeSelectOption key={supplier.id} value={supplier.id}>
+                      {supplier.code} — {supplier.name}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+              </div>
+              <div className="grid gap-1.5">
+                <label
+                  className="text-sm font-medium"
+                  htmlFor="repair-order-date"
+                >
+                  PO Date
+                </label>
+                <Input
+                  defaultValue={today}
+                  form={actionFormId}
+                  id="repair-order-date"
+                  name="order_date"
+                  type="date"
+                />
+              </div>
+              <div className="grid gap-1.5 sm:col-span-2">
+                <label className="text-sm font-medium" htmlFor="repair-remark">
+                  Remark (optional)
+                </label>
+                <Input form={actionFormId} id="repair-remark" name="remark" />
+              </div>
+              <Button
+                className="w-fit"
+                disabled={!data.suppliers.length}
+                form={actionFormId}
+                type="submit"
+              >
+                Create Repair PO for Selected Units
+              </Button>
             </div>
           ) : null}
 

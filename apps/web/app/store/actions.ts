@@ -1121,8 +1121,14 @@ export async function createStorePurchaseOrdersAction(formData: FormData) {
 }
 
 export async function createStoreRepairPurchaseOrderAction(formData: FormData) {
-  const assetCode = requiredText(formData, "asset_code")
-  await withStore(
+  const assetCodes = formData
+    .getAll("asset_code")
+    .map((value) => value.toString().trim())
+    .filter(Boolean)
+  if (!assetCodes.length) {
+    throw new Error("Select at least one Unit ID for repair.")
+  }
+  const created = await withStore(
     "store.asset_repair.write",
     async (repository, actorUserId, organizationId) => {
       const artifacts = createArtifactService({
@@ -1130,15 +1136,20 @@ export async function createStoreRepairPurchaseOrderAction(formData: FormData) {
         provider: createGoogleCloudArtifactProvider(),
       })
       try {
-        return await repository.createRepairPurchaseOrder({
+        return await repository.createRepairPurchaseOrderFromSelection({
           actorUserId,
-          assetCode,
+          items: assetCodes.map((assetCode) => ({
+            assetCode,
+            serviceDescription: requiredText(
+              formData,
+              `service_description_${assetCode}`
+            ),
+            servicePrice: requiredText(formData, `service_price_${assetCode}`),
+          })),
           issuanceId: requiredText(formData, "issuance_id"),
           orderDate: optionalText(formData, "order_date"),
           organizationId,
           remark: optionalText(formData, "remark"),
-          serviceDescription: requiredText(formData, "service_description"),
-          servicePrice: requiredText(formData, "service_price"),
           storeIssuedPdf: storeIssuedPurchaseOrderPdf(artifacts, actorUserId),
           supplierId: requiredText(formData, "supplier_id"),
         })
@@ -1147,9 +1158,13 @@ export async function createStoreRepairPurchaseOrderAction(formData: FormData) {
       }
     }
   )
-  revalidatePath(`/store/assets/${encodeURIComponent(assetCode)}`)
+  for (const assetCode of assetCodes) {
+    revalidatePath(`/store/assets/${encodeURIComponent(assetCode)}`)
+  }
   revalidateStore()
-  redirect(`/store/assets/${encodeURIComponent(assetCode)}`)
+  redirect(
+    `/store/stock?repairOrderSaved=${encodeURIComponent(created.orderNumber)}`
+  )
 }
 
 export async function completeStoreRepairPurchaseOrderAction(
