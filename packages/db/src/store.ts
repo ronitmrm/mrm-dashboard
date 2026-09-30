@@ -1672,6 +1672,30 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       return result.rows
     },
 
+    async listMovementDepartments(organizationId: string) {
+      const result = await pool.query<{ code: string; name: string }>(
+        `SELECT code, name FROM recruitment.departments
+         WHERE organization_id = $1 AND active
+         ORDER BY name, code`,
+        [organizationId]
+      )
+      return result.rows
+    },
+
+    async listMovementMachines(organizationId: string) {
+      const result = await pool.query<{
+        machineNumber: string
+        name: string | null
+      }>(
+        `SELECT machine_number AS "machineNumber", name
+         FROM catalog.machines
+         WHERE organization_id = $1 AND active
+         ORDER BY machine_number`,
+        [organizationId]
+      )
+      return result.rows
+    },
+
     async createAssetCategory(input: {
       rejectDuplicates?: boolean
       actorUserId?: string | null
@@ -4112,6 +4136,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         assetCode: string
         assetName: string
         holderName: string | null
+        holderReference: string | null
         holderType: StoreHolderType
         id: string
         identificationName: string
@@ -4128,6 +4153,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             asset.identification_name AS "identificationName",
             asset.status, asset.current_holder_type AS "holderType",
             asset.current_holder_name AS "holderName",
+            asset.current_holder_reference AS "holderReference",
             location.name AS "locationName",
             (SELECT min(schedule.next_due_on)::text
               FROM store.asset_maintenance_schedules schedule
@@ -4752,9 +4778,8 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
     async moveAsset(input: {
       actorUserId?: string | null
       assetCode: string
-      holderName?: string | null
       holderReference?: string | null
-      holderType: StoreHolderType
+      holderType: "DEPARTMENT" | "MACHINE" | "STORE" | "VENDOR"
       movedBy?: string | null
       organizationId: string
       remark?: string | null
@@ -4802,21 +4827,53 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           [input.organizationId, asset.rows[0].id]
         )
         if (calibrationHold.rows[0]) {
-          throw new Error("Complete a passing calibration before moving this Unit ID.")
+          throw new Error(
+            "Complete a passing calibration before moving this Unit ID."
+          )
         }
         const openBreakdown = await client.query(
           `SELECT 1 FROM store.asset_breakdowns WHERE organization_id = $1
             AND asset_id = $2 AND status = 'In Progress'`,
           [input.organizationId, asset.rows[0].id]
         )
-        const machineId =
-          input.holderType === "MACHINE"
-            ? await machineIdForReference(
-                client,
-                input.organizationId,
-                input.holderReference
+        const destinationDepartment =
+          input.holderType === "DEPARTMENT"
+            ? await client.query<{ code: string; name: string }>(
+                `SELECT code, name FROM recruitment.departments
+                 WHERE organization_id = $1 AND lower(code) = lower($2)
+                   AND active`,
+                [
+                  input.organizationId,
+                  requiredText(input.holderReference, "Department"),
+                ]
               )
             : null
+        if (
+          input.holderType === "DEPARTMENT" &&
+          !destinationDepartment?.rows[0]
+        ) {
+          throw new Error("Select a Department from Department Master.")
+        }
+        const destinationMachine =
+          input.holderType === "MACHINE"
+            ? await client.query<{
+                id: string
+                machineNumber: string
+                name: string | null
+              }>(
+                `SELECT id, machine_number AS "machineNumber", name
+                 FROM catalog.machines
+                 WHERE organization_id = $1 AND lower(machine_number) = lower($2)
+                   AND active`,
+                [
+                  input.organizationId,
+                  requiredText(input.holderReference, "Machine"),
+                ]
+              )
+            : null
+        if (input.holderType === "MACHINE" && !destinationMachine?.rows[0]) {
+          throw new Error("Select a Machine from Machine Master.")
+        }
         const destinationVendor =
           input.holderType === "VENDOR"
             ? await client.query<{ code: string; id: string; name: string }>(
@@ -4836,6 +4893,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
                 `
                   SELECT id, code, name FROM store.locations
                   WHERE organization_id = $1 AND location_type = 'STORE'
+                    AND active
                     AND (id::text = $2 OR lower(code) = lower($2))
                 `,
                 [input.organizationId, input.holderReference]
@@ -4857,11 +4915,17 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         const destinationReference =
           destinationVendor?.rows[0]?.code ??
           destinationStore?.rows[0]?.code ??
-          requiredText(input.holderReference, "Holder reference")
+          destinationDepartment?.rows[0]?.code ??
+          destinationMachine?.rows[0]?.machineNumber
         const destinationName =
           destinationVendor?.rows[0]?.name ??
           destinationStore?.rows[0]?.name ??
-          requiredText(input.holderName, "Holder name")
+          destinationDepartment?.rows[0]?.name ??
+          (destinationMachine?.rows[0]?.name?.trim() ||
+            destinationMachine?.rows[0]?.machineNumber)
+        if (!destinationReference || !destinationName) {
+          throw new Error("Select a destination from its Master.")
+        }
         await client.query(
           `
             UPDATE store.assets SET status = $1,
@@ -4875,11 +4939,13 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           [
             openBreakdown.rowCount
               ? "BROKEN"
-              : input.holderType === "STORE" ? "AVAILABLE" : "ASSIGNED",
+              : input.holderType === "STORE"
+                ? "AVAILABLE"
+                : "ASSIGNED",
             input.holderType,
             destinationReference,
             destinationName,
-            machineId,
+            destinationMachine?.rows[0]?.id ?? null,
             destinationVendor?.rows[0]?.id ?? null,
             destinationStore?.rows[0]?.id ?? null,
             input.actorUserId ?? null,

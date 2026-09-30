@@ -47,9 +47,7 @@ const storePath = "/store"
 const holderTypes = [
   "DEPARTMENT",
   "MACHINE",
-  "PERSON",
   "STORE",
-  "UNIT",
   "VENDOR",
 ] as const satisfies readonly StoreHolderType[]
 
@@ -84,7 +82,7 @@ function holderType(formData: FormData) {
   if (!holderTypes.includes(value as (typeof holderTypes)[number])) {
     throw new Error("Holder type is invalid.")
   }
-  return value as StoreHolderType
+  return value as (typeof holderTypes)[number]
 }
 
 async function withStore<T>(
@@ -1201,7 +1199,6 @@ export async function moveStoreAssetAction(formData: FormData) {
       return repository.moveAsset({
         actorUserId,
         assetCode,
-        holderName: optionalText(formData, "holder_name"),
         holderReference: optionalText(formData, "holder_reference"),
         holderType: holderType(formData),
         movedBy: [performer.code, performer.name].filter(Boolean).join(" - "),

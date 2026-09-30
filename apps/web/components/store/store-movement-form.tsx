@@ -16,25 +16,42 @@ type MovementUnit = {
   assetCode: string
   assetName: string
   holderName: string | null
+  holderReference: string | null
+  holderType: string
+  locationName: string | null
   status: string
 }
 
 type MovementDestination = "DEPARTMENT" | "MACHINE" | "STORE" | "VENDOR"
 
 export function StoreMovementForm({
+  departments,
   initialUnitId,
   locations,
+  machines,
   performer,
   units,
   vendors,
 }: {
+  departments: { code: string; name: string }[]
   initialUnitId: string
   locations: { code: string; name: string }[]
+  machines: { machineNumber: string; name: string | null }[]
   performer: string
   units: MovementUnit[]
   vendors: { code: string; id: string; name: string }[]
 }) {
   const [destination, setDestination] = useState<MovementDestination>("VENDOR")
+  const [selectedUnitId, setSelectedUnitId] = useState(initialUnitId)
+  const selectedUnit = units.find((unit) => unit.assetCode === selectedUnitId)
+  const currentLocation = selectedUnit
+    ? selectedUnit.holderType === "STORE"
+      ? (selectedUnit.locationName ??
+        selectedUnit.holderName ??
+        selectedUnit.holderReference ??
+        "Store")
+      : `${selectedUnit.holderType.charAt(0)}${selectedUnit.holderType.slice(1).toLowerCase()} — ${selectedUnit.holderName ?? selectedUnit.holderReference ?? "Unknown"}`
+    : null
 
   return (
     <form action={moveStoreAssetAction} className="grid gap-4">
@@ -42,19 +59,44 @@ export function StoreMovementForm({
         <Field>
           <FieldLabel htmlFor="movement-unit">Unit ID</FieldLabel>
           <NativeSelect
-            defaultValue={initialUnitId}
             id="movement-unit"
             name="asset_code"
+            onValueChange={setSelectedUnitId}
             required
+            value={selectedUnitId}
           >
             <NativeSelectOption value="">Select Unit ID</NativeSelectOption>
             {units.map((unit) => (
               <NativeSelectOption key={unit.assetCode} value={unit.assetCode}>
-                {unit.assetCode} — {unit.assetName} · {unit.holderName ?? unit.status}
+                {unit.assetCode} — {unit.assetName} ·{" "}
+                {unit.holderName ?? unit.status}
               </NativeSelectOption>
             ))}
           </NativeSelect>
         </Field>
+        {selectedUnit ? (
+          <dl className="grid gap-3 rounded-md border bg-muted/30 p-3 text-sm sm:grid-cols-3">
+            <div>
+              <dt className="text-muted-foreground">Available Quantity</dt>
+              <dd className="font-medium">
+                {selectedUnit.status === "AVAILABLE" &&
+                selectedUnit.holderType === "STORE"
+                  ? 1
+                  : 0}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Allocated Quantity</dt>
+              <dd className="font-medium">
+                {selectedUnit.status === "ASSIGNED" ? 1 : 0}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Current Location</dt>
+              <dd className="font-medium">{currentLocation}</dd>
+            </div>
+          </dl>
+        ) : null}
         <Field>
           <FieldLabel htmlFor="movement-destination">Move To</FieldLabel>
           <NativeSelect
@@ -67,7 +109,9 @@ export function StoreMovementForm({
           >
             <NativeSelectOption value="VENDOR">Vendor</NativeSelectOption>
             <NativeSelectOption value="MACHINE">Machine</NativeSelectOption>
-            <NativeSelectOption value="DEPARTMENT">Department</NativeSelectOption>
+            <NativeSelectOption value="DEPARTMENT">
+              Department
+            </NativeSelectOption>
             <NativeSelectOption value="STORE">Store Return</NativeSelectOption>
           </NativeSelect>
         </Field>
@@ -87,7 +131,9 @@ export function StoreMovementForm({
           <Field>
             <FieldLabel htmlFor="movement-store">Store Location</FieldLabel>
             <NativeSelect id="movement-store" name="holder_reference" required>
-              <NativeSelectOption value="">Select Store Location</NativeSelectOption>
+              <NativeSelectOption value="">
+                Select Store Location
+              </NativeSelectOption>
               {locations.map((location) => (
                 <NativeSelectOption key={location.code} value={location.code}>
                   {location.code} — {location.name}
@@ -96,20 +142,40 @@ export function StoreMovementForm({
             </NativeSelect>
           </Field>
         ) : (
-          <>
-            <Field>
-              <FieldLabel htmlFor="movement-reference">
-                {destination === "MACHINE" ? "Machine Number" : "Department Code"}
-              </FieldLabel>
-              <Input id="movement-reference" name="holder_reference" required />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="movement-name">
-                {destination === "MACHINE" ? "Machine Name" : "Department Name"}
-              </FieldLabel>
-              <Input id="movement-name" name="holder_name" required />
-            </Field>
-          </>
+          <Field>
+            <FieldLabel htmlFor="movement-reference">
+              {destination === "MACHINE" ? "Machine" : "Department"}
+            </FieldLabel>
+            <NativeSelect
+              id="movement-reference"
+              name="holder_reference"
+              required
+            >
+              <NativeSelectOption value="">
+                {destination === "MACHINE"
+                  ? "Select Machine"
+                  : "Select Department"}
+              </NativeSelectOption>
+              {destination === "MACHINE"
+                ? machines.map((machine) => (
+                    <NativeSelectOption
+                      key={machine.machineNumber}
+                      value={machine.machineNumber}
+                    >
+                      {machine.machineNumber}
+                      {machine.name ? ` — ${machine.name}` : ""}
+                    </NativeSelectOption>
+                  ))
+                : departments.map((department) => (
+                    <NativeSelectOption
+                      key={department.code}
+                      value={department.code}
+                    >
+                      {department.code} — {department.name}
+                    </NativeSelectOption>
+                  ))}
+            </NativeSelect>
+          </Field>
         )}
         <Field>
           <FieldLabel htmlFor="movement-performer">Moved By</FieldLabel>
