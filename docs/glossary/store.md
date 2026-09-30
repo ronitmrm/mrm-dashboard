@@ -136,16 +136,16 @@ Each unit's line remains visible in the Purchase Register and its Asset
 Workspace. When an assigned unit's order is issued, Store records its return
 from the previous holder and its dispatch from Store to the repair Supplier.
 For each Unit ID, Store may request reassignment to a selected Department as
-part of the order. This creates a pending Store Request for that exact Unit ID;
-Store issues the request only after the repaired unit returns and is available.
+part of the order. This creates a pending Store Request for one unit of the same
+Asset Code, without reserving the Unit ID sent for repair. Store may issue any
+available Unit ID of that Asset Code, including before the repaired unit returns.
 Store completes each line in the Purchase Register; the order is
 complete when every unit is complete. Completing a repair line requires the
 receiving Store location and records that Unit ID's physical return there as
-Asset Movement. Allocating it to the required Department is a separate Store
-issue against the reassignment request, or a direct Store Movement when no
-request was made. Repair completion creates no goods receipt quantity. Calibration
-service orders also use this order type for a single unit and retain their visit
-workflow.
+Asset Movement. The Department request is issued separately from available
+stock; a returned unit can also be assigned by direct Store Movement. Repair
+completion creates no goods receipt quantity. Calibration service orders also
+use this order type for a single unit and retain their visit workflow.
 
 **Store Purchase Register**: The single table containing every Store Purchase
 Order and its received quantity. Goods are received against the same order row;
@@ -175,10 +175,10 @@ require a choice. System Administrators without an assignment may choose an
 active Department.
 
 A Repair Purchase Order may create a pending Store Request on behalf of a
-selected Department for one exact Unit ID when reassignment is requested. The
-request remains
-open while the Unit ID is with the repair Supplier; Store issues it only after
-the repaired Unit ID is back in the receiving Store and available.
+selected Department for one unit of the same Asset Code when reassignment is
+requested. The request does not reserve the unit sent for repair and can be
+issued with any available Unit ID of that Asset Code. Its Requested By field
+shows the selected Department; the PO creator remains the audited actor.
 
 **Coded Item Request Line**: One Store Item Type and requested quantity within
 a Store Request. Store allocates and saves each line independently; its live

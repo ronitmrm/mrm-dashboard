@@ -963,6 +963,7 @@ async function issueRequisitionWithClient(
           AND lower(asset.asset_code) = ANY($2::text[])
           AND asset.item_type_id = $3
           AND asset.current_location_id = $4
+          AND asset.current_holder_type = 'STORE'
           AND asset.status = 'AVAILABLE'
           AND NOT EXISTS (
             SELECT 1 FROM store.repair_purchase_order_items repair_item
@@ -1177,16 +1178,19 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             reassignment_requisition_id: string | null
             repair_item_id: string
             status: string
+            type_code: string
           }>(
             `
               SELECT asset.id, asset.asset_code, asset.item_type_id,
                 asset.current_location_id, asset.current_holder_type,
                 asset.current_holder_reference, asset.current_holder_name,
-                asset.status, repair_item.id AS repair_item_id,
+                asset.status, item.type_code,
+                repair_item.id AS repair_item_id,
                 repair_item.reassignment_department_id,
                 repair_item.reassignment_requisition_id
               FROM store.repair_purchase_order_items repair_item
               JOIN store.assets asset ON asset.id = repair_item.asset_id
+              JOIN store.item_types item ON item.id = asset.item_type_id
               WHERE repair_item.purchase_order_id = $1
                 AND repair_item.organization_id = $2
               ORDER BY asset.id
@@ -1316,15 +1320,40 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
                 organizationId: input.organizationId,
                 prefix: "STR-REQ",
               })
+              const availableStore = await client.query<{ id: string }>(
+                `SELECT location.id FROM store.locations location
+                 JOIN store.assets candidate
+                   ON candidate.current_location_id = location.id
+                 WHERE location.organization_id = $1
+                   AND location.location_type = 'STORE' AND location.active
+                   AND candidate.organization_id = $1
+                   AND candidate.item_type_id = $2
+                   AND candidate.status = 'AVAILABLE'
+                   AND candidate.current_holder_type = 'STORE'
+                   AND NOT EXISTS (
+                     SELECT 1 FROM store.repair_purchase_order_items repair_item
+                     JOIN store.purchase_orders repair_order
+                       ON repair_order.id = repair_item.purchase_order_id
+                     WHERE repair_item.asset_id = candidate.id
+                       AND repair_item.organization_id = $1
+                       AND repair_item.status = 'Open'
+                       AND repair_order.issuance_state IN ('pending', 'issued')
+                       AND repair_order.status = 'Open'
+                   )
+                 ORDER BY location.code, location.id
+                 LIMIT 1`,
+                [input.organizationId, asset.item_type_id]
+              )
+              const requestLocationId = availableStore.rows[0]?.id ?? location.id
               const purpose =
-                `Automatically requested after repair PO ${order.rows[0].order_number} for ${asset.asset_code}.`
+                `Automatically requested after repair PO ${order.rows[0].order_number} for Asset Code ${asset.type_code} (repairing Unit ID ${asset.asset_code}).`
               const header = await client.query<{ id: string }>(
                 `INSERT INTO store.requisition_headers (
                    organization_id, request_number, location_id, department,
                    requested_by, purpose, created_by_user_id, updated_by_user_id
                  ) VALUES ($1, $2, $3, $4, $4, $5, $6, $6)
                  RETURNING id`,
-                [input.organizationId, requestNumber, location.id,
+                [input.organizationId, requestNumber, requestLocationId,
                   department.rows[0].name, purpose,
                   order.rows[0].created_by_user_id]
               )
@@ -1334,11 +1363,11 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
                    item_type_id, requested_asset_id, location_id,
                    department, requested_by, requested_quantity, purpose,
                    created_by_user_id, updated_by_user_id
-                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $7, 1, $8, $9, $9)
+                 ) VALUES ($1, $2, $3, $4, NULL, $5, $6, $6, 1, $7, $8, $8)
                  RETURNING id`,
                 [input.organizationId, header.rows[0]!.id,
-                  `${requestNumber}-01`, asset.item_type_id, asset.id,
-                  location.id, department.rows[0].name, purpose,
+                  `${requestNumber}-01`, asset.item_type_id,
+                  requestLocationId, department.rows[0].name, purpose,
                   order.rows[0].created_by_user_id]
               )
               await client.query(
@@ -2932,10 +2961,14 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         if (unit.reassignmentRequisitionId) {
           const request = await client.query<{
             headerId: string
+            itemTypeId: string
+            locationId: string
             requestedAssetId: string | null
             status: string
           }>(
             `SELECT request.request_header_id AS "headerId",
+               request.item_type_id AS "itemTypeId",
+               request.location_id AS "locationId",
                request.requested_asset_id AS "requestedAssetId",
                request.status
              FROM store.requisitions request
@@ -2946,25 +2979,55 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
              FOR UPDATE OF request, header`,
             [unit.reassignmentRequisitionId, input.organizationId]
           )
-          if (!request.rows[0] ||
-            request.rows[0].requestedAssetId !== unit.assetId) {
+          const linkedRequest = request.rows[0]
+          if (!linkedRequest || linkedRequest.itemTypeId !== unit.itemTypeId ||
+            linkedRequest.requestedAssetId !== null) {
             throw new Error("Linked repair reassignment request is invalid.")
           }
-          if (request.rows[0].status === "Pending") {
-            await client.query(
-              `UPDATE store.requisition_headers
-               SET location_id = $1, updated_at = now(),
-                 updated_by_user_id = $2 WHERE id = $3`,
-              [location.rows[0].id, input.actorUserId ?? null,
-                request.rows[0].headerId]
+          if (linkedRequest.status === "Pending" &&
+            linkedRequest.locationId !== location.rows[0].id) {
+            const availableAtRequestStore = await client.query<{ id: string }>(
+              `SELECT asset.id FROM store.assets asset
+               JOIN store.locations request_location
+                 ON request_location.id = asset.current_location_id
+               WHERE asset.organization_id = $1
+                 AND asset.item_type_id = $2
+                 AND asset.current_location_id = $3
+                 AND asset.current_holder_type = 'STORE'
+                 AND asset.status = 'AVAILABLE'
+                 AND request_location.organization_id = $1
+                 AND request_location.location_type = 'STORE'
+                 AND request_location.active
+                 AND NOT EXISTS (
+                   SELECT 1 FROM store.repair_purchase_order_items repair_item
+                   JOIN store.purchase_orders repair_order
+                     ON repair_order.id = repair_item.purchase_order_id
+                   WHERE repair_item.asset_id = asset.id
+                     AND repair_item.organization_id = $1
+                     AND repair_item.status = 'Open'
+                     AND repair_order.issuance_state IN ('pending', 'issued')
+                     AND repair_order.status = 'Open'
+                 )
+               LIMIT 1`,
+              [input.organizationId, unit.itemTypeId,
+                linkedRequest.locationId]
             )
-            await client.query(
-              `UPDATE store.requisitions
-               SET location_id = $1, updated_at = now(),
-                 updated_by_user_id = $2 WHERE id = $3`,
-              [location.rows[0].id, input.actorUserId ?? null,
-                unit.reassignmentRequisitionId]
-            )
+            if (!availableAtRequestStore.rows[0]) {
+              await client.query(
+                `UPDATE store.requisition_headers
+                 SET location_id = $1, updated_at = now(),
+                   updated_by_user_id = $2 WHERE id = $3`,
+                [location.rows[0].id, input.actorUserId ?? null,
+                  linkedRequest.headerId]
+              )
+              await client.query(
+                `UPDATE store.requisitions
+                 SET location_id = $1, updated_at = now(),
+                   updated_by_user_id = $2 WHERE id = $3`,
+                [location.rows[0].id, input.actorUserId ?? null,
+                  unit.reassignmentRequisitionId]
+              )
+            }
           }
         }
         await client.query(
@@ -4293,11 +4356,23 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             location.name AS "locationName",
             trim_scale((CASE WHEN item.tracking_mode = 'SERIALIZED'
               THEN (SELECT count(*)::numeric FROM store.assets asset
-                WHERE asset.item_type_id = request.item_type_id
+                WHERE asset.organization_id = request.organization_id
+                  AND asset.item_type_id = request.item_type_id
                   AND asset.current_location_id = request.location_id
+                  AND asset.current_holder_type = 'STORE'
                   AND asset.status = 'AVAILABLE'
                   AND (request.requested_asset_id IS NULL
-                    OR asset.id = request.requested_asset_id))
+                    OR asset.id = request.requested_asset_id)
+                  AND NOT EXISTS (
+                    SELECT 1 FROM store.repair_purchase_order_items repair_item
+                    JOIN store.purchase_orders repair_order
+                      ON repair_order.id = repair_item.purchase_order_id
+                    WHERE repair_item.asset_id = asset.id
+                      AND repair_item.organization_id = request.organization_id
+                      AND repair_item.status = 'Open'
+                      AND repair_order.issuance_state IN ('pending', 'issued')
+                      AND repair_order.status = 'Open'
+                  ))
               ELSE (SELECT COALESCE(sum(movement.quantity), 0)
                 FROM store.stock_movements movement
                 WHERE movement.item_type_id = request.item_type_id
@@ -4306,11 +4381,23 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             CASE WHEN item.tracking_mode = 'SERIALIZED' THEN ARRAY(
               SELECT asset.asset_code
               FROM store.assets asset
-              WHERE asset.item_type_id = request.item_type_id
+              WHERE asset.organization_id = request.organization_id
+                AND asset.item_type_id = request.item_type_id
                 AND asset.current_location_id = request.location_id
+                AND asset.current_holder_type = 'STORE'
                 AND asset.status = 'AVAILABLE'
                 AND (request.requested_asset_id IS NULL
                   OR asset.id = request.requested_asset_id)
+                AND NOT EXISTS (
+                  SELECT 1 FROM store.repair_purchase_order_items repair_item
+                  JOIN store.purchase_orders repair_order
+                    ON repair_order.id = repair_item.purchase_order_id
+                  WHERE repair_item.asset_id = asset.id
+                    AND repair_item.organization_id = request.organization_id
+                    AND repair_item.status = 'Open'
+                    AND repair_order.issuance_state IN ('pending', 'issued')
+                    AND repair_order.status = 'Open'
+                )
               ORDER BY asset.asset_code
             ) ELSE ARRAY[]::text[] END AS "availableUnitIds"
           FROM store.requisitions request
