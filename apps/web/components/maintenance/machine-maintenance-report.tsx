@@ -29,22 +29,30 @@ async function readReportRows(isPlan: boolean, month: string) {
   return (async () => {
     const organizationId = await repository.organizationIdForCode("MRMPL")
     if (isPlan) {
-      return (
-        await repository.listMachineMaintenancePlan(organizationId, month)
-      ).map((row) => ({
-        ...row,
-        taskType: "Planned",
-        completedBy: null,
-        workDone: null,
-        legacyHistory: false,
-      }))
+      const [machines, assets] = await Promise.all([
+        repository.listMachineMaintenancePlan(organizationId, month),
+        repository.listAssetMaintenancePlan(organizationId, month),
+      ])
+      return [
+        ...machines.map((row) => ({ ...row, assetCode: null as string | null,
+          assetName: null as string | null, taskType: "Planned",
+          completedBy: null, workDone: null, legacyHistory: false })),
+        ...assets.map((row) => ({ ...row, machineNumber: null as string | null,
+          assetCode: row.assetCode, taskType: "Planned",
+          completedBy: null, workDone: null, legacyHistory: false })),
+      ].sort((left, right) => left.dueOn.localeCompare(right.dueOn) ||
+        (left.machineNumber ?? left.assetCode ?? "").localeCompare(right.machineNumber ?? right.assetCode ?? ""))
     }
-    return (
-      await repository.listCompletedMachineMaintenance(organizationId)
-    ).map((row) => ({
-      ...row,
-      status: "Completed",
-    }))
+    const [machines, assets] = await Promise.all([
+      repository.listCompletedMachineMaintenance(organizationId),
+      repository.listCompletedAssetMaintenance(organizationId),
+    ])
+    return [
+      ...machines.map((row) => ({ ...row, assetCode: null as string | null,
+        assetName: null as string | null, status: "Completed" })),
+      ...assets.map((row) => ({ ...row, machineNumber: null as string | null,
+        status: "Completed" })),
+    ].sort((left, right) => right.completedAt.localeCompare(left.completedAt))
   })().finally(() => repository.close())
 }
 
@@ -77,8 +85,8 @@ export function MachineMaintenanceReportView({
 }) {
   const isPlan = mode === "plan"
   const document = isPlan ? machineMaintenancePlan : machineMaintenanceRegister
-  const machines = new Set(
-    rows.map((row) => `${row.productionUnit}|${row.machineNumber}`)
+  const equipment = new Set(
+    rows.map((row) => row.machineNumber ?? row.assetCode)
   ).size
 
   return (
@@ -87,8 +95,8 @@ export function MachineMaintenanceReportView({
         title={document.title}
         description={
           isPlan
-            ? "Saved maintenance due dates for the whole month, across all production units. Completed planned work stays in its due month."
-            : "Completed planned maintenance and breakdown repairs across all production units. One row per completed job."
+            ? "Saved machine and asset maintenance due dates for the month. Completed planned work stays in its due month."
+            : "Completed machine and asset planned maintenance and breakdown repairs. One row per completed job."
         }
       />
       {isPlan ? (
@@ -114,11 +122,11 @@ export function MachineMaintenanceReportView({
             value: rows.length,
             tone: "information",
           },
-          { label: "Machines", value: machines, tone: "information" },
+          { label: "Machines / Assets", value: equipment, tone: "information" },
         ]}
       />
       <OperationalTable
-        filterStorageKey={`iso-machine-maintenance-${mode}`}
+        filterStorageKey={`iso-maintenance-${mode}`}
         containerClassName="rounded-md border"
         toolbarStart={
           <span className="font-medium">
@@ -129,8 +137,8 @@ export function MachineMaintenanceReportView({
         <TableHeader>
           <TableRow>
             <TableHead>{isPlan ? "Planned Date" : "Completed At"}</TableHead>
-            <TableHead>Machine</TableHead>
-            <TableHead>Production Unit</TableHead>
+            <TableHead>Machine No. / Asset Code</TableHead>
+            <TableHead>Production Unit / Location</TableHead>
             <TableHead>Maintenance</TableHead>
             {isPlan ? (
               <>
@@ -156,7 +164,7 @@ export function MachineMaintenanceReportView({
                     ? formatIstDate(row.completedAt)
                     : formatIstDateTime(row.completedAt)}
               </TableCell>
-              <TableCell>{row.machineNumber}</TableCell>
+              <TableCell>{row.machineNumber ?? row.assetCode}</TableCell>
               <TableCell>{row.productionUnit}</TableCell>
               <TableCell>{row.maintenance}</TableCell>
               {isPlan ? (
@@ -184,7 +192,7 @@ export function MachineMaintenanceReportView({
                   title={
                     isPlan
                       ? "No maintenance planned for this month"
-                      : "No completed machine maintenance"
+                      : "No completed maintenance"
                   }
                   description={
                     isPlan

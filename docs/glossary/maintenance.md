@@ -33,7 +33,7 @@ The lifecycle is Pending Approval, Approved, In Progress, Completed, Closed, Ret
 
 ## Mechanical Work List
 
-The unified Mechanical table containing existing scheduled machine-maintenance rows and approved Mechanical Request rows. Work Type distinguishes Scheduled from Request. Scheduled generation, due calculation, checklists, and completion remain unchanged. Breakdown work follows the Machine Breakdown lifecycle below.
+The unified Mechanical table containing scheduled machine and physical Unit ID maintenance, plus approved Mechanical Request rows. Work Type distinguishes Scheduled from Request. Each scheduled Unit ID appears with its Asset Code, due date and Maintenance Master. Mechanical users open its checklist and save progress or complete the work there. Completion advances only that Unit ID's schedule. Breakdown work follows the Machine or Physical Asset Breakdown lifecycle below.
 
 _Avoid_: separate Scheduled and Request tables, converting scheduled rows into requests.
 
@@ -42,6 +42,8 @@ _Avoid_: separate Scheduled and Request tables, converting scheduled rows into r
 The checklist assigned to one machine maintenance schedule is completed for each due occurrence. An authorized user may save an In Progress task with partial step responses and reopen it later. Completing the task requires every active required checklist point and advances the schedule's next due date. A draft does not advance the schedule or appear as completed maintenance history.
 
 The task records a start date and time when work begins and an end date and time when it finishes. Actual minutes are calculated from those timestamps. The performer is the signed-in user authorized to record maintenance work. An active linked Employee ID supplies the code and name regardless of department; without one, the signed-in account name is recorded without an employee code. Each changed part is recorded separately so maintenance history can be searched and filtered by part.
+
+The same checklist workflow applies to physical Unit ID schedules. Its saved due occurrence, draft answers, performer, changed items, and completion belong to that Unit ID. Existing direct Unit ID timetables without checklist points remain completable from Mechanical with work notes.
 
 _Avoid_: browser prompts for checklist points, treating a partial draft as completed work, repeating the same checklist point across production units.
 

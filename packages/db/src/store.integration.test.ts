@@ -9,6 +9,7 @@ import {
   type ArtifactStorageProvider,
 } from "./artifacts"
 import { migrateDatabase } from "./migrate"
+import { createMaintenanceRepository } from "./maintenance"
 import {
   authorizeStoreItemTypeArtifactTarget,
   authorizeStorePurchaseOrderArtifactTarget,
@@ -1834,6 +1835,42 @@ describe("Store requests", () => {
     )?.schedules.find((entry) => entry.code === maintenanceCode)
     expect(updatedFirstSchedule?.nextDueOn).toBe("2026-11-20")
     expect(unchangedSecondSchedule?.nextDueOn).toBe(secondMasterSchedule?.nextDueOn)
+
+    const maintenance = createMaintenanceRepository({ connectionString })
+    try {
+      const planned = {
+        changedItems: ["Bearing"],
+        checklistSteps: [],
+        completedBy: "Maintenance Technician",
+        completedByEmployeeCode: null,
+        dueOn: "2026-11-20",
+        organizationId,
+        scheduleId: firstMasterSchedule!.id,
+        startedAt: "2026-11-20T09:00:00+05:30",
+        workDone: "Serviced",
+      }
+      const draft = await store.saveAssetMaintenanceTask({
+        ...planned,
+        status: "In Progress",
+      })
+      expect((await store.listAssetMaintenanceWork(organizationId))
+        .find((row) => row.scheduleId === firstMasterSchedule!.id)?.taskStatus)
+        .toBe("In Progress")
+      await store.saveAssetMaintenanceTask({
+        ...planned,
+        endedAt: "2026-11-20T10:00:00+05:30",
+        status: "Completed",
+      })
+      expect((await maintenance.listAssetMaintenancePlan(organizationId, "2026-11"))
+        .find((row) => row.id === draft.id)).toMatchObject({
+          assetCode: assetCodes[0], dueOn: "2026-11-20", status: "Completed",
+        })
+      expect((await maintenance.listCompletedAssetMaintenance(organizationId))
+        .some((row) => row.assetCode === assetCodes[0] && row.workDone === "Serviced"))
+        .toBe(true)
+    } finally {
+      await maintenance.close()
+    }
 
     await store.setAssetLifecycleStatus({
       assetCode: assetCodes[0],

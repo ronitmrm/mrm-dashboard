@@ -43,14 +43,25 @@ Resaving a draft clears its old answer rows through `maintenance.clear_draft_tas
 
 ## Invariants
 
-ISO Document exposes read-only Machine Maintenance Register and Machine
-Maintenance Plan routes under `/iso-document/machine-maintenance-*`. Both require
+ISO Document exposes read-only Maintenance Register and Maintenance Plan routes
+under `/iso-document/machine-maintenance-*`. Both require
 `maintenance.workspace.read` and use organization-scoped queries in
 `packages/db/src/maintenance.ts`. The register reads completed physical tasks;
 the monthly plan combines saved task due dates with active schedule due dates,
-deduplicating the same schedule/date. It excludes breakdowns and retains completed
-planned tasks after next-due advancement. These views do not create tasks or copy
-records. Facility requests remain in their existing request work lists.
+deduplicating the same schedule/date. Asset rows use the physical Unit ID as
+Asset Code. The asset projection reads Store schedules, planned tasks, and
+completed Store maintenance records; calibration stays separate. It excludes
+breakdowns from the plan and retains completed planned tasks after next-due
+advancement. These views do not create tasks or copy records. Facility requests
+remain in their existing request work lists.
+
+Mechanical loads active Store Unit ID maintenance schedules through
+`/api/maintenance/assets` alongside machine schedules. The same checklist view
+saves asset drafts and completions to `store.asset_maintenance_tasks` (migration
+0193), retaining one task per schedule/due date. Completion also writes the
+existing `store.asset_maintenance_records` history and advances only that
+schedule. The Unit ID Store workspace still assigns timetables and reads
+history, but completion is performed in Mechanical.
 
 - One request row equals one task.
 - Final Category and Priority are required before Approved or later statuses.

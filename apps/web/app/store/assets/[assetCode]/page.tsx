@@ -26,7 +26,6 @@ import {
   TableHeader,
   TableRow,
 } from "@workspace/ui/components/table"
-import { Textarea } from "@workspace/ui/components/textarea"
 
 import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
 import {
@@ -54,7 +53,6 @@ import { listGrantedStoreActions } from "@/lib/auth/store-action-access"
 import { masterCapability } from "@/lib/auth/master-capabilities"
 
 import {
-  completeStoreAssetMaintenanceAction,
   recordStoreAssetAcquisitionAction,
   scheduleStoreAssetMaintenanceAction,
   scheduleStoreAssetMaintenanceMasterAction,
@@ -177,35 +175,6 @@ export default async function StoreAssetWorkspacePage({
       <Button className="w-fit" type="submit">Assign Schedule</Button>
     </form>
   ) : null
-  const completionForm = canMaintain ? (
-    <form action={completeStoreAssetMaintenanceAction} className="grid gap-4">
-      <input name="asset_code" type="hidden" value={asset.assetCode} />
-      <input name="maintenance_type" type="hidden" value="MAINTENANCE" />
-      <Field>
-        <FieldLabel htmlFor="schedule-id">Timetable</FieldLabel>
-        <NativeSelect id="schedule-id" name="schedule_id">
-          <NativeSelectOption value="">Unscheduled Maintenance</NativeSelectOption>
-          {maintenanceSchedules.filter((schedule) => schedule.active).map((schedule) => (
-            <NativeSelectOption key={schedule.id} value={schedule.id}>
-              {schedule.name} — due {schedule.nextDueOn}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
-      </Field>
-      <TextField defaultValue={istDateValue()} label="Completed On" name="completed_on" required type="date" />
-      <TextField label="Completed By" name="completed_by" readOnly required value={performerDisplay} />
-      <TextField label="Supplier / Lab" name="supplier_name" />
-      <TextField label="Certificate Number" name="certificate_number" />
-      <TextField label="Cost" name="cost" step="0.01" type="number" />
-      <TextField label="Result" name="result" />
-      <Field>
-        <FieldLabel htmlFor="work-done">Work Done</FieldLabel>
-        <Textarea id="work-done" name="work_done" />
-      </Field>
-      <Button className="w-fit" type="submit">Complete & Calculate Next Due</Button>
-    </form>
-  ) : null
-
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -453,7 +422,6 @@ export default async function StoreAssetWorkspacePage({
         <StoreAssetWorkspacePane tab="maintenance">
           <StoreAssetMaintenanceSection
             maintenanceForm={maintenanceForm}
-            completionForm={completionForm}
           >
  <OperationalTable>
             <TableHeader>

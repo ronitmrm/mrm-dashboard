@@ -12703,10 +12703,29 @@ function MaintenancePanel({
   const [selectedAssetBreakdownId, setSelectedAssetBreakdownId] = useState("")
   const [assetBreakdownReloadKey, setAssetBreakdownReloadKey] = useState(0)
   const [assetBreakdownStatus, setAssetBreakdownStatus] = useState<ActionStatus>(null)
+  const [assetLoadError, setAssetLoadError] = useState("")
   const [assetBreakdownData, setAssetBreakdownData] = useState<{
     assets: Array<{ assetCode: string; assetName: string; holderName: string | null; itemCode: string; status: string }>
     breakdowns: Array<{ assetCode: string; id: string; reasonName: string; startedAt: string }>
-  }>({ assets: [], breakdowns: [] })
+    schedules: Array<{
+      assetCode: string
+      assetName: string
+      changedItems: string[]
+      checklistCode: string | null
+      checklistSteps: Array<{ sequence: number; value: string; remark: string }>
+      endedAt: string | null
+      frequencyDays: number
+      holderName: string | null
+      itemCode: string
+      maintenanceCode: string
+      maintenanceTitle: string
+      nextDueOn: string
+      scheduleId: string
+      startedAt: string | null
+      taskStatus: string | null
+      workDone: string | null
+    }>
+  }>({ assets: [], breakdowns: [], schedules: [] })
   const [changedItems, setChangedItems] = useState([""])
   const [selectedSchedule, setSelectedSchedule] =
     useState<DashboardPayload | null>(null)
@@ -12772,10 +12791,31 @@ function MaintenancePanel({
       productionRunRows,
     ]
   )
-  const dueNowRows = dueRows.filter((row) => row.status !== "Upcoming")
+  const assetDueRows = useMemo(() => assetBreakdownData.schedules.map((schedule) => ({
+    assetCode: schedule.assetCode,
+    assetScheduleId: schedule.scheduleId,
+    machineType: schedule.assetName,
+    location: schedule.holderName,
+    maintenanceCode: schedule.maintenanceCode,
+    maintenanceTitle: schedule.maintenanceTitle,
+    checklistCode: schedule.checklistCode,
+    checklistTitle: maintenanceChecklistTitle(activeChecklistRows, schedule.checklistCode),
+    checklistSteps: maintenanceChecklistRowsForCode(activeChecklistRows, schedule.checklistCode),
+    savedChecklistSteps: schedule.checklistSteps,
+    changedItems: schedule.changedItems,
+    startedAt: schedule.startedAt,
+    endedAt: schedule.endedAt,
+    workDone: schedule.workDone,
+    taskStatus: schedule.taskStatus,
+    frequencyDays: schedule.frequencyDays,
+    nextDueDate: schedule.nextDueOn,
+    status: schedule.nextDueOn < todayIsoDate() ? "Overdue"
+      : schedule.nextDueOn === todayIsoDate() ? "Due" : "Upcoming",
+  } as DashboardPayload)), [assetBreakdownData.schedules, activeChecklistRows])
+  const dueNowRows = [...dueRows, ...assetDueRows].filter((row) => row.status !== "Upcoming")
   const workRows = useMemo(
-    () => unifiedMechanicalWorkRows(dueRows, requestRows),
-    [dueRows, requestRows]
+    () => unifiedMechanicalWorkRows([...dueRows, ...assetDueRows], requestRows),
+    [dueRows, assetDueRows, requestRows]
   )
   const breakdownRows = completionRows.filter(
     (row) => str(row.maintenanceType).toLowerCase() === "breakdown"
@@ -12826,27 +12866,27 @@ function MaintenancePanel({
     let active = true
     void fetch("/api/maintenance/assets", { cache: "no-store" })
       .then(async (response) => {
-        if (!response.ok) throw new Error("Asset breakdowns could not be loaded.")
+        if (!response.ok) throw new Error("Asset maintenance could not be loaded.")
         return (await response.json()) as typeof assetBreakdownData
       })
-      .then((data) => { if (active) setAssetBreakdownData(data) })
+      .then((data) => { if (active) { setAssetBreakdownData(data); setAssetLoadError("") } })
       .catch((error: unknown) => {
-        if (active) setAssetBreakdownStatus({
-          tone: "destructive",
-          message: error instanceof Error ? error.message : "Asset breakdowns could not be loaded.",
-        })
+        if (active) {
+          const message = error instanceof Error ? error.message : "Asset maintenance could not be loaded."
+          setAssetLoadError(message)
+        }
       })
     return () => { active = false }
   }, [assetBreakdownReloadKey])
 
-  async function submitAssetBreakdown(body: Record<string, unknown>) {
+  async function submitAssetMaintenance(body: Record<string, unknown>) {
     const response = await fetch("/api/maintenance/assets", {
       body: JSON.stringify(body),
       headers: { "Content-Type": "application/json" },
       method: "POST",
     })
     const result = (await response.json()) as { error?: string }
-    if (!response.ok) throw new Error(result.error || "Asset breakdown update failed.")
+    if (!response.ok) throw new Error(result.error || "Asset maintenance update failed.")
     setAssetBreakdownReloadKey((current) => current + 1)
   }
 
@@ -12864,6 +12904,7 @@ function MaintenancePanel({
   }
 
   function taskKeyForSchedule(row: DashboardPayload) {
+    if (row.assetScheduleId) return `asset|${row.assetScheduleId}|${row.nextDueDate}`
     const occurrence =
       maintenanceFrequencyBasis(row) === "running"
         ? isoDateValue(row.lastCompletedDate || row.firstDueDate) || "initial"
@@ -12873,9 +12914,8 @@ function MaintenancePanel({
 
   function openMaintenanceChecklist(row: DashboardPayload) {
     const taskKey = taskKeyForSchedule(row)
-    const draft =
-      savedProgress[taskKey] ??
-      completionRows.find(
+    const draft = row.assetScheduleId ? row :
+      savedProgress[taskKey] ?? completionRows.find(
         (task) =>
           str(task.taskId) === taskKey && str(task.status) === "In Progress"
       )
@@ -12883,7 +12923,7 @@ function MaintenancePanel({
       maintenanceChecklistStepsForSchedule(
         activeChecklistRows,
         str(row.checklistCode),
-        draft?.checklistSteps
+        row.assetScheduleId ? row.savedChecklistSteps : draft?.checklistSteps
       )
     )
     setStartedAt(
@@ -12957,7 +12997,7 @@ function MaintenancePanel({
     }
     if (
       complete &&
-      (!checklistSteps.length ||
+      ((!row.assetScheduleId && !checklistSteps.length) ||
         checklistSteps.some((step) => step.required && !step.value.trim()))
     ) {
       setChecklistStatus({
@@ -13017,6 +13057,22 @@ function MaintenancePanel({
     setIsSavingChecklist(true)
     setChecklistStatus(null)
     try {
+      if (row.assetScheduleId) {
+        await submitAssetMaintenance({
+          action: "save-planned",
+          scheduleId: row.assetScheduleId,
+          dueOn: row.nextDueDate,
+          startedAt: startIso,
+          endedAt: endIso || null,
+          status: complete ? "Completed" : "In Progress",
+          checklistSteps: checklistSteps.map(({ sequence, value, remark }) => ({ sequence, value, remark })),
+          changedItems,
+          workDone,
+        })
+        setChecklistStatus({ tone: "default", message: complete ? "Maintenance completed." : "Checklist progress saved." })
+        setSelectedSchedule(null)
+        return
+      }
       await submitAction("data-entry", {
         entryType: "maintenance_task",
         key: dataEntryKey("maintenance_task", payload),
@@ -13051,7 +13107,7 @@ function MaintenancePanel({
       const reason = downtimeReasons.find((candidate) => candidate.code === reasonCode)
       try {
         if (!startedAt || !reason) throw new Error("Select a valid start time and reason.")
-        await submitAssetBreakdown({
+        await submitAssetMaintenance({
           action: "start",
           assetCode: str(formData.get("assetCode")),
           reasonCode,
@@ -13154,7 +13210,7 @@ function MaintenancePanel({
     try {
       const completedAt = istDateTimeInputToIso(str(formData.get("completedAt")))
       if (!completedAt) throw new Error("Select a valid completion time.")
-      await submitAssetBreakdown({
+      await submitAssetMaintenance({
         action: "complete",
         breakdownId: selectedAssetBreakdown.id,
         changedItems: changedItems.map(str).filter(Boolean),
@@ -13187,7 +13243,7 @@ function MaintenancePanel({
           <div>
             <h1 className="text-2xl font-semibold">Maintenance Checklist</h1>
             <p className="text-sm text-muted-foreground">
-              {displayValue(selectedSchedule.machineNo)} /{" "}
+              {displayValue(selectedSchedule.assetCode || selectedSchedule.machineNo)} /{" "}
               {displayValue(selectedSchedule.maintenanceCode)} -{" "}
               {displayValue(selectedSchedule.maintenanceTitle)}
             </p>
@@ -13203,8 +13259,9 @@ function MaintenancePanel({
         <SectionCard>
           <CardHeader>
             <CardTitle>
-              {displayValue(selectedSchedule.checklistCode)} -{" "}
-              {displayValue(selectedSchedule.checklistTitle)}
+              {checklistSteps.length
+                ? `${displayValue(selectedSchedule.checklistCode)} - ${displayValue(selectedSchedule.checklistTitle)}`
+                : "Maintenance work"}
             </CardTitle>
             <CardDescription>
               {answeredCount} of {checklistSteps.length} points answered. Save
@@ -13407,7 +13464,7 @@ function MaintenancePanel({
               </Button>
               <Button
                 type="button"
-                disabled={isSavingChecklist || !signedInPerformer || !checklistSteps.length}
+                disabled={isSavingChecklist || !signedInPerformer || (!selectedSchedule.assetScheduleId && !checklistSteps.length)}
                 onClick={() => void saveMaintenanceChecklist(true)}
               >
                 <CheckCircle2 className="size-4" /> Complete Maintenance
@@ -13422,13 +13479,14 @@ function MaintenancePanel({
   return (
     <section className="grid gap-4">
       <MetricSummary
-        scope="Machine maintenance and Mechanical request records across every production unit."
+        scope="Machine and asset maintenance with Mechanical requests across every production unit."
         items={[
           { label: "Machines", tone: "brand", value: machineRows.length },
+          { label: "Assets", tone: "brand", value: new Set(assetBreakdownData.schedules.map((row) => row.assetCode)).size },
           {
             label: "Saved schedules",
             tone: "positive",
-            value: scheduleRows.length,
+            value: scheduleRows.length + assetDueRows.length,
           },
           { label: "Due now", tone: "warning", value: dueNowRows.length },
           {
@@ -13450,6 +13508,9 @@ function MaintenancePanel({
           <CardTitle>Maintenance Pending Tasks</CardTitle>
         </CardHeader>
         <CardContent>
+          {assetLoadError ? (
+            <AlertMessage tone="destructive">{assetLoadError}</AlertMessage>
+          ) : null}
           {checklistStatus ? (
             <AlertMessage tone={checklistStatus.tone}>
               {checklistStatus.message}
@@ -13462,7 +13523,7 @@ function MaintenancePanel({
                   <TableRow>
                     <TableHead>Work Type</TableHead>
                     <TableHead>Priority</TableHead>
-                    <TableHead>Machine / Location</TableHead>
+                    <TableHead>Machine / Asset / Location</TableHead>
                     <TableHead>Description</TableHead>
                     <TableHead>Relevant Date</TableHead>
                     <TableHead>Status</TableHead>
@@ -13476,7 +13537,9 @@ function MaintenancePanel({
                       work.workType === "Scheduled"
                         ? (work.scheduled as DashboardPayload)
                         : null
-                    const taskState = scheduled
+                    const taskState = scheduled?.assetScheduleId
+                      ? { status: scheduled.taskStatus }
+                      : scheduled
                       ? savedProgress[taskKeyForSchedule(scheduled)] ??
                         completionRows.find(
                           (task) =>
@@ -19887,6 +19950,7 @@ function machineProductionUnitLabel(row: DashboardPayload) {
 }
 
 function maintenanceScheduleKey(row: DashboardPayload) {
+  if (row.assetScheduleId) return `asset|${str(row.assetScheduleId)}`
   return [row.machineNo || row.machine, row.maintenanceCode]
     .map((value) => str(value).toLowerCase())
     .join("|")
