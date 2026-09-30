@@ -5,12 +5,12 @@ export const measuringInstrumentRegister = {
 } as const
 
 export const machineMaintenanceRegister = {
-  title: "Machine Maintenance Register",
+  title: "Maintenance Register",
   href: "/iso-document/machine-maintenance-register",
 } as const
 
 export const machineMaintenancePlan = {
-  title: "Machine Maintenance Plan",
+  title: "Maintenance Plan",
   href: "/iso-document/machine-maintenance-plan",
 } as const
 

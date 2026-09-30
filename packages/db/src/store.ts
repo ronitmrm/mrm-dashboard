@@ -5781,6 +5781,194 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       })
     },
 
+    async listAssetMaintenanceWork(organizationId: string) {
+      const result = await pool.query<{
+        assetCode: string
+        assetName: string
+        changedItems: string[]
+        checklistCode: string | null
+        checklistSteps: Array<{ sequence: number; value: string; remark: string }>
+        completedBy: string | null
+        endedAt: string | null
+        frequencyDays: number
+        holderName: string | null
+        itemCode: string
+        maintenanceCode: string
+        maintenanceTitle: string
+        nextDueOn: string
+        scheduleId: string
+        startedAt: string | null
+        taskStatus: string | null
+        workDone: string | null
+      }>(
+        `SELECT schedule.id AS "scheduleId", asset.asset_code AS "assetCode",
+            item.type_code AS "itemCode", item.asset_name AS "assetName",
+            asset.current_holder_name AS "holderName",
+            COALESCE(definition.code, 'MAINTENANCE') AS "maintenanceCode",
+            COALESCE(definition.name, schedule.name) AS "maintenanceTitle",
+            definition.checklist_code AS "checklistCode",
+            COALESCE(definition.frequency_value, schedule.frequency_days) AS "frequencyDays",
+            schedule.next_due_on::text AS "nextDueOn",
+            task.status AS "taskStatus", task.started_at::text AS "startedAt",
+            task.ended_at::text AS "endedAt", task.completed_by AS "completedBy",
+            COALESCE(task.checklist_steps, '[]'::jsonb) AS "checklistSteps",
+            COALESCE(task.changed_items, '[]'::jsonb) AS "changedItems",
+            task.work_done AS "workDone"
+          FROM store.asset_maintenance_schedules schedule
+          JOIN store.assets asset ON asset.id = schedule.asset_id
+            AND asset.organization_id = schedule.organization_id
+          JOIN store.item_types item ON item.id = asset.item_type_id
+          LEFT JOIN maintenance.definitions definition ON definition.id = schedule.definition_id
+          LEFT JOIN store.asset_maintenance_tasks task ON task.schedule_id = schedule.id
+            AND task.due_on = schedule.next_due_on AND task.status = 'In Progress'
+          WHERE schedule.organization_id = $1 AND schedule.active
+            AND schedule.schedule_type = 'MAINTENANCE' AND asset.status <> 'SCRAPPED'
+          ORDER BY schedule.next_due_on, asset.asset_code, schedule.id`,
+        [organizationId]
+      )
+      return result.rows
+    },
+
+    async saveAssetMaintenanceTask(input: {
+      actorUserId?: string | null
+      changedItems: string[]
+      checklistSteps: Array<{ sequence: number; value: string; remark: string }>
+      completedBy: string
+      completedByEmployeeCode: string | null
+      dueOn: string
+      endedAt?: string | null
+      organizationId: string
+      scheduleId: string
+      startedAt: string
+      status: "In Progress" | "Completed"
+      workDone: string
+    }) {
+      return withTransaction(pool, async (client) => {
+        const schedule = await client.query<{
+          assetId: string
+          definitionId: string | null
+          dueOn: string
+          frequencyDays: number
+        }>(
+          `SELECT schedule.asset_id AS "assetId", schedule.definition_id AS "definitionId",
+              schedule.next_due_on::text AS "dueOn",
+              COALESCE(definition.frequency_value, schedule.frequency_days) AS "frequencyDays"
+            FROM store.asset_maintenance_schedules schedule
+            JOIN store.assets asset ON asset.id = schedule.asset_id
+            LEFT JOIN maintenance.definitions definition ON definition.id = schedule.definition_id
+            WHERE schedule.id = $1 AND schedule.organization_id = $2 AND schedule.active
+              AND schedule.schedule_type = 'MAINTENANCE' AND asset.status <> 'SCRAPPED'
+            FOR UPDATE OF schedule`,
+          [input.scheduleId, input.organizationId]
+        )
+        const current = schedule.rows[0]
+        if (!current) throw new Error("Active asset maintenance schedule was not found.")
+        if (current.dueOn !== input.dueOn) {
+          throw new Error("This due occurrence has changed. Reload Mechanical and open it again.")
+        }
+        const startedAt = new Date(input.startedAt)
+        const endedAt = input.endedAt ? new Date(input.endedAt) : null
+        if (Number.isNaN(startedAt.getTime()) ||
+          (endedAt && (Number.isNaN(endedAt.getTime()) || endedAt < startedAt)) ||
+          (input.status === "Completed" && !endedAt)) {
+          throw new Error("Enter valid maintenance start and end times.")
+        }
+        const checklist = await client.query<{
+          required: boolean
+          sequence: number
+        }>(
+          `SELECT item.sequence, item.required
+            FROM maintenance.checklist_items item
+            JOIN maintenance.definitions checklist ON checklist.id = item.definition_id
+            JOIN maintenance.definitions definition ON definition.id = $1
+              AND definition.organization_id = checklist.organization_id
+            WHERE checklist.organization_id = $2 AND item.active
+              AND lower(checklist.code) = lower(COALESCE(definition.checklist_code, definition.code))`,
+          [current.definitionId, input.organizationId]
+        )
+        const permitted = new Set(checklist.rows.map((item) => item.sequence))
+        const answers = new Map<number, { sequence: number; value: string; remark: string }>()
+        for (const step of input.checklistSteps) {
+          if (!permitted.has(step.sequence) || answers.has(step.sequence)) {
+            throw new Error("Maintenance checklist points are invalid.")
+          }
+          answers.set(step.sequence, {
+            sequence: step.sequence,
+            value: step.value.trim(),
+            remark: step.remark.trim(),
+          })
+        }
+        if (input.status === "Completed" && checklist.rows.some((item) =>
+          item.required && !answers.get(item.sequence)?.value)) {
+          throw new Error("Complete every required maintenance checklist point.")
+        }
+        if (input.status === "Completed" && !checklist.rows.length && !input.workDone.trim()) {
+          throw new Error("Enter the maintenance work done.")
+        }
+        const existing = await client.query<{ id: string; status: string }>(
+          `SELECT id, status FROM store.asset_maintenance_tasks
+            WHERE schedule_id = $1 AND due_on = $2::date FOR UPDATE`,
+          [input.scheduleId, current.dueOn]
+        )
+        if (existing.rows[0]?.status === "Completed") {
+          throw new Error("This asset maintenance task is already complete.")
+        }
+        const task = await client.query<{ id: string }>(
+          `INSERT INTO store.asset_maintenance_tasks (
+              organization_id, schedule_id, due_on, status, started_at, ended_at,
+              completed_by, completed_by_employee_code, checklist_steps,
+              changed_items, work_done, created_by_user_id, updated_by_user_id
+            ) VALUES ($1, $2, $3::date, 'In Progress', $4::timestamptz,
+              $5::timestamptz, $6, $7, $8::jsonb, $9::jsonb, $10, $11, $11)
+            ON CONFLICT (schedule_id, due_on) DO UPDATE SET
+              started_at = EXCLUDED.started_at, ended_at = EXCLUDED.ended_at,
+              completed_by = EXCLUDED.completed_by,
+              completed_by_employee_code = EXCLUDED.completed_by_employee_code,
+              checklist_steps = EXCLUDED.checklist_steps,
+              changed_items = EXCLUDED.changed_items, work_done = EXCLUDED.work_done,
+              updated_by_user_id = EXCLUDED.updated_by_user_id, updated_at = now()
+            RETURNING id`,
+          [input.organizationId, input.scheduleId, current.dueOn,
+            startedAt.toISOString(), endedAt?.toISOString() ?? null,
+            input.completedBy.trim(), input.completedByEmployeeCode,
+            JSON.stringify([...answers.values()]),
+            JSON.stringify(input.changedItems.map((item) => item.trim()).filter(Boolean)),
+            input.workDone.trim(), input.actorUserId ?? null]
+        )
+        if (input.status === "In Progress") return { id: task.rows[0]!.id }
+        const completedOn = await client.query<{ date: string }>(
+          `SELECT ($1::timestamptz AT TIME ZONE 'Asia/Kolkata')::date::text AS date`,
+          [endedAt!.toISOString()]
+        )
+        const record = await client.query<{ id: string }>(
+          `INSERT INTO store.asset_maintenance_records (
+              organization_id, asset_id, schedule_id, maintenance_type,
+              completed_on, completed_by, work_done, result, next_due_on,
+              created_by_user_id
+            ) VALUES ($1, $2, $3, 'MAINTENANCE', $4::date, $5, $6,
+              'Completed', $4::date + $7::integer, $8) RETURNING id`,
+          [input.organizationId, current.assetId, input.scheduleId,
+            completedOn.rows[0]!.date, input.completedBy.trim(),
+            input.workDone.trim() || null, current.frequencyDays, input.actorUserId ?? null]
+        )
+        await client.query(
+          `UPDATE store.asset_maintenance_tasks SET status = 'Completed',
+              completed_at = $1::timestamptz, maintenance_record_id = $2,
+              updated_at = now() WHERE id = $3`,
+          [endedAt!.toISOString(), record.rows[0]!.id, task.rows[0]!.id]
+        )
+        await client.query(
+          `UPDATE store.asset_maintenance_schedules
+            SET last_completed_on = $1::date,
+              next_due_on = $1::date + $2::integer,
+              updated_at = now(), updated_by_user_id = $3 WHERE id = $4`,
+          [completedOn.rows[0]!.date, current.frequencyDays,
+            input.actorUserId ?? null, input.scheduleId]
+        )
+        return { id: task.rows[0]!.id }
+      })
+    },
+
     async completeAssetMaintenance(input: {
       actorUserId?: string | null
       assetCode: string

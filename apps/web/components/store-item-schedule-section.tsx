@@ -11,26 +11,22 @@ import {
   SectionCard,
 } from "@workspace/ui/components/card"
 
-type FormType = "MAINTENANCE" | "COMPLETE"
+type FormType = "MAINTENANCE"
 
 export function StoreAssetMaintenanceSection({
   children,
-  completionForm,
   maintenanceForm,
 }: {
   children: ReactNode
-  completionForm: ReactNode
   maintenanceForm: ReactNode
 }) {
   const [activeForm, setActiveForm] = useState<FormType | null>(null)
   const availableForms = ([
     ["MAINTENANCE", maintenanceForm],
-    ["COMPLETE", completionForm],
   ] as const).filter(([, form]) => form !== null)
 
   function formLabel(type: FormType) {
     if (type === "MAINTENANCE") return "Assign Maintenance Schedule"
-    return "Complete Maintenance"
   }
 
   return (
@@ -63,9 +59,7 @@ export function StoreAssetMaintenanceSection({
             id="asset-maintenance-form"
           >
             <h3 className="font-semibold">{formLabel(activeForm)}</h3>
-            {activeForm === "MAINTENANCE"
-              ? maintenanceForm
-              : completionForm}
+            {maintenanceForm}
           </section>
         ) : null}
         {children}

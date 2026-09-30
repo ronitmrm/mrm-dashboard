@@ -289,7 +289,9 @@ and completion history remain intact.
 
 **Asset Maintenance Timetable**: The due and completion state for one physical
 Unit ID. A Maintenance Master can supply its maintenance name and frequency;
-existing direct timetables remain readable and completable. Calibration
+existing direct timetables remain readable and completable from Mechanical.
+Planned maintenance completion is recorded in Mechanical, not on the Unit ID
+workspace. Calibration
 scheduling and service evidence also belong to the individual Unit ID.
 Moved By, Completed By, and asset-status Changed By identify the authorized signed-in
 performer: active linked Employee ID and name when available, or account name

@@ -50,4 +50,15 @@ describe("unified Mechanical work list", () => {
       workType: "Scheduled",
     })
   })
+
+  test("identifies a scheduled physical asset by Unit ID", () => {
+    expect(unifiedMechanicalWorkRows([{
+      assetCode: "NC285-0001",
+      maintenanceTitle: "Monthly inspection",
+      nextDueDate: "2026-10-03",
+    }], [])[0]).toMatchObject({
+      machineOrLocation: "NC285-0001",
+      workType: "Scheduled",
+    })
+  })
 })

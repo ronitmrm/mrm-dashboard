@@ -1308,42 +1308,6 @@ export async function recordStoreAssetAcquisitionAction(formData: FormData) {
   revalidateStore()
 }
 
-export async function completeStoreAssetMaintenanceAction(formData: FormData) {
-  const assetCode = requiredText(formData, "asset_code")
-  const type = requiredText(formData, "maintenance_type")
-  if (type !== "MAINTENANCE") {
-    throw new Error("Record calibration through a Calibration Visit.")
-  }
-  await withStore(
-    "store.asset_maintenance.write",
-    async (repository, actorUserId, organizationId, _actorEmail, actorUserName) => {
-      const performer = await signedInPerformer({
-        connectionString: readAuthEnvironment().connectionString,
-        organizationId,
-        userId: actorUserId,
-        userName: actorUserName,
-      })
-      if (!performer) throw new Error("Your account needs a name to complete maintenance.")
-      return repository.completeAssetMaintenance({
-        actorUserId,
-        assetCode,
-        certificateNumber: optionalText(formData, "certificate_number"),
-        completedBy: [performer.code, performer.name].filter(Boolean).join(" - "),
-        completedOn: requiredText(formData, "completed_on"),
-        cost: optionalText(formData, "cost"),
-        maintenanceType: "MAINTENANCE",
-        organizationId,
-        result: optionalText(formData, "result"),
-        scheduleId: optionalText(formData, "schedule_id"),
-        supplierName: optionalText(formData, "supplier_name"),
-        workDone: optionalText(formData, "work_done"),
-      })
-    }
-  )
-  revalidatePath(`/store/assets/${encodeURIComponent(assetCode)}`)
-  revalidateStore()
-}
-
 export async function openStoreCalibrationVisitAction(formData: FormData) {
   const assetCode = requiredText(formData, "asset_code")
   await withStore(

@@ -555,6 +555,103 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
       return result.rows
     },
 
+    async listCompletedAssetMaintenance(organizationId: string) {
+      const result = await pool.query<{
+        assetCode: string
+        assetName: string
+        completedAt: string
+        completedBy: string
+        dueOn: string | null
+        id: string
+        legacyHistory: boolean
+        maintenance: string
+        productionUnit: string
+        taskType: string
+        workDone: string | null
+      }>(
+        `SELECT record.id, asset.asset_code AS "assetCode",
+            item.asset_name AS "assetName",
+            COALESCE(asset.current_holder_name, location.name, 'Store') AS "productionUnit",
+            COALESCE(definition.name, schedule.name,
+              CASE WHEN record.maintenance_type = 'BREAKDOWN'
+                THEN 'Breakdown maintenance' ELSE 'Asset maintenance' END) AS maintenance,
+            CASE WHEN record.maintenance_type = 'BREAKDOWN'
+              THEN 'Breakdown' ELSE 'Planned' END AS "taskType",
+            task.due_on::text AS "dueOn",
+            COALESCE(task.completed_at, breakdown.completed_at,
+              record.completed_on::timestamptz)::text AS "completedAt",
+            record.completed_by AS "completedBy", record.work_done AS "workDone",
+            (task.id IS NULL AND breakdown.id IS NULL) AS "legacyHistory"
+          FROM store.asset_maintenance_records record
+          JOIN store.assets asset ON asset.id = record.asset_id
+          JOIN store.item_types item ON item.id = asset.item_type_id
+          LEFT JOIN store.locations location ON location.id = asset.current_location_id
+          LEFT JOIN store.asset_maintenance_schedules schedule ON schedule.id = record.schedule_id
+          LEFT JOIN maintenance.definitions definition ON definition.id = schedule.definition_id
+          LEFT JOIN store.asset_maintenance_tasks task ON task.maintenance_record_id = record.id
+          LEFT JOIN store.asset_breakdowns breakdown ON breakdown.maintenance_record_id = record.id
+          WHERE record.organization_id = $1
+            AND record.maintenance_type IN ('MAINTENANCE', 'BREAKDOWN')
+          ORDER BY record.completed_on DESC, record.id`,
+        [organizationId]
+      )
+      return result.rows
+    },
+
+    async listAssetMaintenancePlan(organizationId: string, month: string) {
+      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month))
+        throw new Error("Select a valid month.")
+      const result = await pool.query<{
+        assetCode: string
+        assetName: string
+        completedAt: string | null
+        dueOn: string
+        id: string
+        maintenance: string
+        productionUnit: string
+        status: string
+      }>(
+        `WITH planned AS (
+          SELECT task.id::text, task.schedule_id, task.due_on,
+            task.status, task.completed_at
+          FROM store.asset_maintenance_tasks task
+          WHERE task.organization_id = $1
+            AND task.due_on >= $2::date
+            AND task.due_on < $2::date + interval '1 month'
+          UNION ALL
+          SELECT 'schedule-' || schedule.id::text, schedule.id,
+            schedule.next_due_on, 'Planned', NULL::timestamptz
+          FROM store.asset_maintenance_schedules schedule
+          JOIN store.assets active_asset ON active_asset.id = schedule.asset_id
+          WHERE schedule.organization_id = $1 AND schedule.active
+            AND schedule.schedule_type = 'MAINTENANCE'
+            AND active_asset.status <> 'SCRAPPED'
+            AND schedule.next_due_on >= $2::date
+            AND schedule.next_due_on < $2::date + interval '1 month'
+            AND NOT EXISTS (
+              SELECT 1 FROM store.asset_maintenance_tasks task
+              WHERE task.schedule_id = schedule.id
+                AND task.due_on = schedule.next_due_on
+            )
+        )
+        SELECT planned.id, asset.asset_code AS "assetCode",
+          item.asset_name AS "assetName",
+          COALESCE(asset.current_holder_name, location.name, 'Store') AS "productionUnit",
+          COALESCE(definition.name, schedule.name) AS maintenance,
+          planned.due_on::text AS "dueOn", planned.status,
+          planned.completed_at::text AS "completedAt"
+        FROM planned
+        JOIN store.asset_maintenance_schedules schedule ON schedule.id = planned.schedule_id
+        JOIN store.assets asset ON asset.id = schedule.asset_id
+        JOIN store.item_types item ON item.id = asset.item_type_id
+        LEFT JOIN store.locations location ON location.id = asset.current_location_id
+        LEFT JOIN maintenance.definitions definition ON definition.id = schedule.definition_id
+        ORDER BY planned.due_on, asset.asset_code, planned.id`,
+        [organizationId, `${month}-01`]
+      )
+      return result.rows
+    },
+
     async listBreakdowns(input: {
       organizationId: string
       status?: "Completed" | "In Progress"
