@@ -18,12 +18,14 @@ const assetWorkspaceTabContext = createContext<AssetWorkspaceTabKey>("overview")
 
 export function StoreAssetWorkspaceTabs({
   children,
+  initialTab = "overview",
   showLifecycle = false,
 }: {
   children?: ReactNode
+  initialTab?: AssetWorkspaceTabKey
   showLifecycle?: boolean
 }) {
-  const [activeTab, setActiveTab] = useState<AssetWorkspaceTabKey>("overview")
+  const [activeTab, setActiveTab] = useState<AssetWorkspaceTabKey>(initialTab)
   const tabs: Array<{ key: AssetWorkspaceTabKey; label: string }> = [
     { key: "overview", label: "Overview" },
     { key: "movement", label: "Movement" },

@@ -117,3 +117,20 @@ planned work. Counts distinguish maintenance jobs from distinct machines.
 Dates are saved commitments, not recurrence forecasts; completing a task and
 advancing its next due date preserves the completed task in the original month.
 Access uses `maintenance.workspace.read`.
+
+## Calibration Plan
+
+The selected calendar month shows saved calibration due dates for every physical
+Store Unit ID with a Calibration Timetable, across all Store categories. Each
+non-cancelled Calibration Visit appears in its original due month, including
+completed and failed visits after the timetable advances or remains due. An
+active timetable with no non-cancelled visit on its next due date appears as a
+planned row. Dates are saved obligations, not recurrence forecasts. Counts
+distinguish calibration rows from distinct Unit IDs.
+
+The plan links a Unit ID to its existing Store Calibration workspace to assign
+its timetable, open a visit, compare Supplier offers, issue the service order,
+send it out, record its return and certificate, and record the result. ISO does
+not create separate calibration or movement records. Plan access uses
+`store.stock.read`; opening the Store workspace and its actions retain their
+existing Store permissions.

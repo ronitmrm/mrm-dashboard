@@ -57,6 +57,67 @@ async function linkedFile(
 
 export function createStoreCalibrationRepository(pool: Pool) {
   return {
+    async listCalibrationPlan(organizationId: string, month: string) {
+      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
+        throw new Error("Select a valid month.")
+      }
+      const result = await pool.query<{
+        assetName: string
+        completedOn: string | null
+        dueOn: string
+        id: string
+        scheduleName: string
+        status: VisitStatus | "Planned"
+        supplierName: string | null
+        typeCode: string
+        unitId: string
+      }>(
+        `WITH planned AS (
+           SELECT 'schedule-' || schedule.id::text AS id,
+             schedule.id AS schedule_id, schedule.next_due_on AS due_on,
+             'Planned'::text AS status, NULL::uuid AS visit_id
+           FROM store.asset_maintenance_schedules schedule
+           WHERE schedule.organization_id = $1
+             AND schedule.schedule_type = 'CALIBRATION' AND schedule.active
+             AND schedule.next_due_on >= $2::date
+             AND schedule.next_due_on < $2::date + interval '1 month'
+             AND NOT EXISTS (
+               SELECT 1 FROM store.calibration_visits visit
+               WHERE visit.organization_id = $1 AND visit.schedule_id = schedule.id
+                 AND visit.due_on = schedule.next_due_on
+                 AND visit.status <> 'CANCELLED'
+             )
+           UNION ALL
+           SELECT visit.id::text, visit.schedule_id, visit.due_on,
+             visit.status, visit.id
+           FROM store.calibration_visits visit
+           WHERE visit.organization_id = $1 AND visit.status <> 'CANCELLED'
+             AND visit.due_on >= $2::date
+             AND visit.due_on < $2::date + interval '1 month'
+         )
+         SELECT planned.id, planned.due_on::text AS "dueOn", planned.status,
+           asset.asset_code AS "unitId",
+           item.type_code AS "typeCode", item.asset_name AS "assetName",
+           COALESCE(definition.name, schedule.name) AS "scheduleName",
+           record.completed_on::text AS "completedOn",
+           supplier.name AS "supplierName"
+         FROM planned
+         JOIN store.asset_maintenance_schedules schedule
+           ON schedule.id = planned.schedule_id AND schedule.organization_id = $1
+         LEFT JOIN maintenance.definitions definition ON definition.id = schedule.definition_id
+         JOIN store.assets asset ON asset.id = schedule.asset_id
+           AND asset.organization_id = $1
+         JOIN store.item_types item ON item.id = asset.item_type_id
+         LEFT JOIN store.calibration_visits visit ON visit.id = planned.visit_id
+         LEFT JOIN store.calibration_offers offer ON offer.id = visit.selected_offer_id
+         LEFT JOIN store.suppliers supplier ON supplier.id = offer.supplier_id
+         LEFT JOIN store.asset_maintenance_records record ON record.id = visit.maintenance_record_id
+         ORDER BY planned.due_on, asset.asset_code, planned.id`,
+        [organizationId, `${month}-01`]
+      )
+      return result.rows
+    },
+
     async listCalibrationVisits(input: { assetId: string; organizationId: string }) {
       const visits = await pool.query<{
         agreedPrice: string | null
