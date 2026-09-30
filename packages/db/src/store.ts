@@ -2384,6 +2384,30 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       storeIssuedPdf: StoreIssuedPdfWriter
       supplierId: string
     }) {
+      const result = await this.createRepairPurchaseOrdersFromSelection({
+        ...input,
+        items: input.items.map((item) => ({
+          ...item,
+          supplierId: input.supplierId,
+        })),
+      })
+      return result.orders[0]!
+    },
+
+    async createRepairPurchaseOrdersFromSelection(input: {
+      actorUserId?: string | null
+      issuanceId: string
+      items: Array<{
+        assetCode: string
+        serviceDescription: string
+        servicePrice: string
+        supplierId: string
+      }>
+      orderDate?: string | null
+      organizationId: string
+      remark?: string | null
+      storeIssuedPdf: StoreIssuedPdfWriter
+    }) {
       if (!input.items.length) {
         throw new Error("Select at least one Unit ID for repair.")
       }
@@ -2395,6 +2419,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             "Repair scope"
           ),
           servicePrice: requiredText(item.servicePrice, "Repair price"),
+          supplierId: requiredText(item.supplierId, "Repair Supplier"),
         }))
         .sort((left, right) => left.assetCode.localeCompare(right.assetCode))
       if (new Set(items.map((item) => item.assetCode)).size !== items.length) {
@@ -2407,14 +2432,29 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           "Repair price must be zero or greater, with up to two decimals."
         )
       }
+      const supplierIds = [...new Set(items.map((item) => item.supplierId))]
+        .sort()
       const issuanceId = requiredText(input.issuanceId, "Issuance ID")
-      const fingerprint = issuanceFingerprint({
-        items,
-        orderDate: input.orderDate?.trim() || null,
-        orderType: "REPAIR",
-        remark: input.remark?.trim() || null,
-        supplierId: input.supplierId,
-      })
+      const fingerprint = issuanceFingerprint(
+        supplierIds.length === 1
+          ? {
+              items: items.map((item) => ({
+                assetCode: item.assetCode,
+                serviceDescription: item.serviceDescription,
+                servicePrice: item.servicePrice,
+              })),
+              orderDate: input.orderDate?.trim() || null,
+              orderType: "REPAIR",
+              remark: input.remark?.trim() || null,
+              supplierId: supplierIds[0],
+            }
+          : {
+              items,
+              orderDate: input.orderDate?.trim() || null,
+              orderType: "REPAIR",
+              remark: input.remark?.trim() || null,
+            }
+      )
       try {
         const prepared = await withTransaction(pool, async (client) => {
           await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
@@ -2427,26 +2467,33 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           }>(
             `SELECT id, issuance_fingerprint, order_number
              FROM store.purchase_orders
-             WHERE organization_id = $1 AND issuance_id = $2::uuid`,
+             WHERE organization_id = $1 AND issuance_id = $2::uuid
+             ORDER BY order_number`,
             [input.organizationId, issuanceId]
           )
-          if (existing.rows[0]) {
-            if (existing.rows[0].issuance_fingerprint !== fingerprint) {
+          if (existing.rows.length) {
+            if (
+              existing.rows.some(
+                (order) => order.issuance_fingerprint !== fingerprint
+              )
+            ) {
               throw new Error(
                 "Issuance ID was already used for another Store PO."
               )
             }
             return {
-              id: existing.rows[0].id,
-              orderNumber: existing.rows[0].order_number,
+              orders: existing.rows.map((order) => ({
+                id: order.id,
+                orderNumber: order.order_number,
+              })),
             }
           }
-          const supplier = await client.query<{ id: string }>(
+          const suppliers = await client.query<{ id: string }>(
             `SELECT id FROM store.suppliers
-             WHERE organization_id = $1 AND id = $2 AND active`,
-            [input.organizationId, input.supplierId]
+             WHERE organization_id = $1 AND id = ANY($2::uuid[]) AND active`,
+            [input.organizationId, supplierIds]
           )
-          if (!supplier.rows[0])
+          if (suppliers.rows.length !== supplierIds.length)
             throw new Error("Select an active repair Supplier.")
           const assets = await client.query<{
             asset_code: string
@@ -2476,58 +2523,66 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
               "Select valid Unit IDs that are not scrapped or with a Supplier."
             )
           }
-          const orderNumber = await nextDocumentNumber(client, {
-            counterKey: "PURCHASE_ORDER",
-            organizationId: input.organizationId,
-            prefix: "STR-PO",
-          })
-          const order = await client.query<{ id: string }>(
-            `INSERT INTO store.purchase_orders (
-               organization_id, order_number, supplier_id, order_date,
-               order_type, remark, issuance_id, issuance_fingerprint,
-               issuance_state, created_by_user_id, updated_by_user_id
-             ) VALUES ($1, $2, $3,
-               COALESCE(NULLIF($4, '')::date, current_date),
-               'REPAIR', $5, $6::uuid, $7, 'pending', $8, $8)
-             RETURNING id`,
-            [
-              input.organizationId,
-              orderNumber,
-              supplier.rows[0].id,
-              input.orderDate ?? null,
-              input.remark?.trim() || null,
-              issuanceId,
-              fingerprint,
-              input.actorUserId ?? null,
-            ]
-          )
           const assetsByCode = new Map(
             assets.rows.map(
               (asset) => [asset.asset_code.toLowerCase(), asset] as const
             )
           )
-          for (const item of items) {
-            await client.query(
-              `INSERT INTO store.repair_purchase_order_items (
-                 organization_id, purchase_order_id, asset_id,
-                 service_description, service_price
-               ) VALUES ($1, $2, $3, $4, $5)`,
+          const orders: Array<{ id: string; orderNumber: string }> = []
+          for (const supplierId of supplierIds) {
+            const orderNumber = await nextDocumentNumber(client, {
+              counterKey: "PURCHASE_ORDER",
+              organizationId: input.organizationId,
+              prefix: "STR-PO",
+            })
+            const order = await client.query<{ id: string }>(
+              `INSERT INTO store.purchase_orders (
+                 organization_id, order_number, supplier_id, order_date,
+                 order_type, remark, issuance_id, issuance_fingerprint,
+                 issuance_state, created_by_user_id, updated_by_user_id
+               ) VALUES ($1, $2, $3,
+                 COALESCE(NULLIF($4, '')::date, current_date),
+                 'REPAIR', $5, $6::uuid, $7, 'pending', $8, $8)
+               RETURNING id`,
               [
                 input.organizationId,
-                order.rows[0]!.id,
-                assetsByCode.get(item.assetCode)!.id,
-                item.serviceDescription,
-                item.servicePrice,
+                orderNumber,
+                supplierId,
+                input.orderDate ?? null,
+                input.remark?.trim() || null,
+                issuanceId,
+                fingerprint,
+                input.actorUserId ?? null,
               ]
             )
+            for (const item of items.filter(
+              (item) => item.supplierId === supplierId
+            )) {
+              await client.query(
+                `INSERT INTO store.repair_purchase_order_items (
+                   organization_id, purchase_order_id, asset_id,
+                   service_description, service_price
+                 ) VALUES ($1, $2, $3, $4, $5)`,
+                [
+                  input.organizationId,
+                  order.rows[0]!.id,
+                  assetsByCode.get(item.assetCode)!.id,
+                  item.serviceDescription,
+                  item.servicePrice,
+                ]
+              )
+            }
+            orders.push({ id: order.rows[0]!.id, orderNumber })
           }
-          return { id: order.rows[0]!.id, orderNumber }
+          return { orders }
         })
-        await issuePurchaseOrder({
-          organizationId: input.organizationId,
-          purchaseOrderId: prepared.id,
-          storeIssuedPdf: input.storeIssuedPdf,
-        })
+        for (const order of prepared.orders) {
+          await issuePurchaseOrder({
+            organizationId: input.organizationId,
+            purchaseOrderId: order.id,
+            storeIssuedPdf: input.storeIssuedPdf,
+          })
+        }
         return prepared
       } catch (error) {
         if (

@@ -1978,6 +1978,88 @@ describe("Store requests", () => {
     ).toBe("Completed")
   })
 
+  test("creates separate Repair POs for selected Units with different Suppliers", async () => {
+    const location = await store.createLocation({
+      code: `SPLIT-REPAIR-${suffix}`,
+      name: `Split Repair Store ${suffix}`,
+      organizationId,
+    })
+    const item = await store.createItemType({
+      ...(await createClassification("Split Repair PO")),
+      assetType: "NON_CONSUMABLE",
+      identificationName: `Split Repair Tool ${suffix}`,
+      organizationId,
+      unit: "Nos",
+    })
+    const receipt = await store.receiveStock({
+      locationId: location.id,
+      organizationId,
+      purchaseOrderLineId: (await createPurchaseOrder(item.id, 2, "5000.00"))
+        .id,
+      quantity: 2,
+    })
+    const supplierNames = [
+      `First Repair Supplier ${suffix}`,
+      `Second Repair Supplier ${suffix}`,
+    ]
+    const suppliers = await Promise.all([
+      store.createSupplier({
+        name: supplierNames[0]!,
+        organizationId,
+      }),
+      store.createSupplier({
+        name: supplierNames[1]!,
+        organizationId,
+      }),
+    ])
+    const selection = {
+      issuanceId: randomUUID(),
+      items: receipt.assetCodes.map((assetCode, index) => ({
+        assetCode,
+        serviceDescription: `Repair task ${index + 1}`,
+        servicePrice: index === 0 ? "100.00" : "200.00",
+        supplierId: suppliers[index]!.id,
+      })),
+      organizationId,
+      storeIssuedPdf,
+    }
+    const created = await store.createRepairPurchaseOrdersFromSelection(
+      selection
+    )
+    expect(created.orders).toHaveLength(2)
+    const documents = await Promise.all(
+      created.orders.map((order) =>
+        store.getPurchaseOrder({ organizationId, purchaseOrderId: order.id })
+      )
+    )
+    expect(
+      documents.map((document) => ({
+        supplier: document?.order.supplierName,
+        scope: document?.lines[0]?.itemName,
+        price: document?.lines[0]?.unitPrice,
+        lines: document?.lines.length,
+      }))
+    ).toEqual(
+      expect.arrayContaining([
+        {
+          supplier: supplierNames[0],
+          scope: "Repair task 1",
+          price: "100.00",
+          lines: 1,
+        },
+        {
+          supplier: supplierNames[1],
+          scope: "Repair task 2",
+          price: "200.00",
+          lines: 1,
+        },
+      ])
+    )
+    expect(
+      await store.createRepairPurchaseOrdersFromSelection(selection)
+    ).toEqual(created)
+  })
+
   test("returns overview metrics equivalent to the existing Store lists", async () => {
     const istToday = "9999-12-31"
     const [items, requests, assets, locations, metrics] = await Promise.all([
