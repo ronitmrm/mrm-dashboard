@@ -14,6 +14,11 @@ export const machineMaintenancePlan = {
   href: "/iso-document/machine-maintenance-plan",
 } as const
 
+export const calibrationPlan = {
+  title: "Calibration Plan",
+  href: "/iso-document/calibration-plan",
+} as const
+
 export function isMeasuringInstrumentCategory(category: string) {
   return /^measuring instruments?$/i.test(category.trim().replace(/\s+/g, " "))
 }

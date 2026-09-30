@@ -31,7 +31,7 @@ import {
   type LucideIcon,
 } from "lucide-react"
 import type { ProductionFloorCode } from "@workspace/db/production-floors"
-import { machineMaintenancePlan, machineMaintenanceRegister, measuringInstrumentRegister } from "./iso-documents"
+import { calibrationPlan, machineMaintenancePlan, machineMaintenanceRegister, measuringInstrumentRegister } from "./iso-documents"
 
 export type DashboardTabId =
   | "productionDashboardTab"
@@ -125,6 +125,7 @@ export const isoDocumentNavigation = [
   ...publishedRegisterNavigation,
   { href: machineMaintenanceRegister.href, icon: Wrench, label: machineMaintenanceRegister.title },
   { href: machineMaintenancePlan.href, icon: CalendarDays, label: machineMaintenancePlan.title },
+  { href: calibrationPlan.href, icon: Gauge, label: calibrationPlan.title },
 ] as const
 
 export const qualityControlNavigation = [

@@ -72,10 +72,13 @@ import {
 
 export default async function StoreAssetWorkspacePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ assetCode: string }>
+  searchParams: Promise<{ tab?: string }>
 }) {
   const { assetCode } = await params
+  const { tab } = await searchParams
   const session = await requireCapability(
     "store.asset_history.read",
     `/store/assets/${encodeURIComponent(assetCode)}`
@@ -227,7 +230,10 @@ export default async function StoreAssetWorkspacePage({
         </div>
       </div>
 
-      <StoreAssetWorkspaceTabs showLifecycle={canManageLifecycle}>
+      <StoreAssetWorkspaceTabs
+        initialTab={tab === "calibration" ? "calibration" : "overview"}
+        showLifecycle={canManageLifecycle}
+      >
         <StoreAssetWorkspacePane tab="overview">
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             <Info label="Asset Code" value={asset.typeCode} />
