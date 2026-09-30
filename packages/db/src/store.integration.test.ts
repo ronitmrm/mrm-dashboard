@@ -1693,6 +1693,90 @@ describe("Store requests", () => {
       fromHolder: "STORE / Asset Store",
       toHolder: "DEPARTMENT / Production",
     }))
+    const departmentCode = `MOVE-${suffix}`
+    const departmentName = `Movement Department ${suffix}`
+    await pool.query(
+      `INSERT INTO recruitment.departments
+        (organization_id, code, name, source_system, source_table, source_id)
+       VALUES ($1, $2, $3, 'test', 'store_movement', $4)`,
+      [organizationId, departmentCode, departmentName, randomUUID()]
+    )
+    expect(await store.listMovementDepartments(organizationId)).toContainEqual({
+      code: departmentCode,
+      name: departmentName,
+    })
+    await store.moveAsset({
+      assetCode: assetCodes[0],
+      holderReference: departmentCode.toLowerCase(),
+      holderType: "DEPARTMENT",
+      organizationId,
+    })
+    expect(
+      (
+        await store.getAssetWorkspace({
+          assetCode: assetCodes[0],
+          organizationId,
+        })
+      )?.asset
+    ).toEqual(
+      expect.objectContaining({
+        holderName: departmentName,
+        holderReference: departmentCode,
+      })
+    )
+    await expect(
+      store.moveAsset({
+        assetCode: assetCodes[0],
+        holderReference: `MISSING-${suffix}`,
+        holderType: "DEPARTMENT",
+        organizationId,
+      })
+    ).rejects.toThrow("Select a Department from Department Master.")
+    const floor = await pool.query<{ id: string }>(
+      `INSERT INTO manufacturing.production_floors (organization_id, code, name)
+       VALUES ($1, 'cnc', 'CNC Production Floor')
+       ON CONFLICT (organization_id, code) DO UPDATE SET name = EXCLUDED.name
+       RETURNING id`,
+      [organizationId]
+    )
+    const machineNumber = `CNC-${suffix}`
+    const machineName = `Movement Machine ${suffix}`
+    await pool.query(
+      `INSERT INTO catalog.machines
+        (organization_id, production_floor_id, machine_number, name,
+         source_system, source_table, source_id)
+       VALUES ($1, $2, $3, $4, 'test', 'store_movement', $5)`,
+      [
+        organizationId,
+        floor.rows[0]!.id,
+        machineNumber,
+        machineName,
+        randomUUID(),
+      ]
+    )
+    expect(await store.listMovementMachines(organizationId)).toContainEqual({
+      machineNumber,
+      name: machineName,
+    })
+    await store.moveAsset({
+      assetCode: assetCodes[0],
+      holderReference: machineNumber.toLowerCase(),
+      holderType: "MACHINE",
+      organizationId,
+    })
+    expect(
+      (
+        await store.getAssetWorkspace({
+          assetCode: assetCodes[0],
+          organizationId,
+        })
+      )?.asset
+    ).toEqual(
+      expect.objectContaining({
+        holderName: machineName,
+        holderReference: machineNumber,
+      })
+    )
     const vendor = await store.createVendor({
       code: `REPAIR-${suffix}`,
       name: "Approved Repair Vendor",

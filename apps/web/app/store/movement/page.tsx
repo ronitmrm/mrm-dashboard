@@ -33,10 +33,12 @@ export default async function StoreMovementPage({
   })
   const data = await (async () => {
     const organizationId = await repository.organizationIdForCode("MRMPL")
-    const [units, vendors, locations, movements, performer] = await Promise.all([
+    const [units, vendors, locations, departments, machines, movements, performer] = await Promise.all([
       repository.listAssets({ organizationId }),
       canMove ? repository.listVendors(organizationId) : Promise.resolve([]),
       canMove ? repository.listLocations(organizationId) : Promise.resolve([]),
+      canMove ? repository.listMovementDepartments(organizationId) : Promise.resolve([]),
+      canMove ? repository.listMovementMachines(organizationId) : Promise.resolve([]),
       repository.listRecentAssetMovements(organizationId),
       canMove
         ? signedInPerformer({
@@ -47,7 +49,7 @@ export default async function StoreMovementPage({
           })
         : Promise.resolve(null),
     ])
-    return { units, vendors, locations, movements, performer }
+    return { units, vendors, locations, departments, machines, movements, performer }
   })().finally(() => repository.close())
   const movableUnits = data.units.filter((unit) => unit.status !== "SCRAPPED")
   const performer = data.performer
@@ -77,6 +79,8 @@ export default async function StoreMovementPage({
           width="standard"
         >
           <StoreMovementForm
+            departments={data.departments}
+            key={requestedUnitId}
             initialUnitId={
               movableUnits.some((unit) => unit.assetCode === requestedUnitId)
                 ? requestedUnitId
@@ -85,6 +89,7 @@ export default async function StoreMovementPage({
             locations={data.locations.filter(
               (location) => location.locationType === "STORE"
             )}
+            machines={data.machines}
             performer={performer}
             units={movableUnits}
             vendors={data.vendors}
