@@ -1,5 +1,4 @@
 import { PendingRetainedUploadForm } from "@/components/pending-retained-upload-form"
-import { randomUUID } from "node:crypto"
 
 import { createStoreRepository, storeUnitId } from "@workspace/db"
 import Link from "next/link"
@@ -13,7 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
-import { Field, FieldGroup, FieldLabel } from "@workspace/ui/components/field"
+import { Field, FieldLabel } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
 import {
   NativeSelect,
@@ -57,7 +56,6 @@ import { masterCapability } from "@/lib/auth/master-capabilities"
 import {
   completeStoreAssetMaintenanceAction,
   completeStoreRepairPurchaseOrderAction,
-  createStoreRepairPurchaseOrderAction,
   recordStoreAssetAcquisitionAction,
   scheduleStoreAssetMaintenanceAction,
   scheduleStoreAssetMaintenanceMasterAction,
@@ -89,7 +87,6 @@ export default async function StoreAssetWorkspacePage({
   const canRepair = capabilities.has("store.asset_repair.write")
   const canRecordAcquisition = capabilities.has("store.receipts.receive")
   const canManageLifecycle = capabilities.has("store.asset_lifecycle.write")
-  const canManage = canMove || canMaintain || canRepair
   const masterGrants = await listGrantedCapabilities(session.user.id, [
     masterCapability("ITEM_TYPE", "save"),
     masterCapability("SUPPLIER_PRICE", "save"),
@@ -307,92 +304,6 @@ export default async function StoreAssetWorkspacePage({
             />
           </div>
         </StoreAssetWorkspacePane>
-
-        {canManage ? (
-          <>
-            <StoreAssetWorkspacePane tab="repairs">
-              {canRepair ? (
- <SectionCard width="standard">
-            <CardHeader>
-              <CardTitle>Create Repair PO</CardTitle>
-              <CardDescription>
-                      Creates a service PO and moves this Unit ID to the
-                      selected Supplier without duplicating a repair Vendor.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form action={createStoreRepairPurchaseOrderAction}>
-                      <input
-                        name="issuance_id"
-                        type="hidden"
-                        value={randomUUID()}
-                      />
-                <input
-                  name="asset_code"
-                  type="hidden"
-                  value={asset.assetCode}
-                />
-                <FieldGroup className="gap-4">
-                  <Field>
-                          <FieldLabel htmlFor="repair-supplier">
-                            Supplier
-                          </FieldLabel>
-                    <NativeSelect
-                      id="repair-supplier"
-                      name="supplier_id"
-                      required
-                    >
-                      {data.suppliers.map((supplier) => (
-                        <NativeSelectOption
-                          key={supplier.id}
-                          value={supplier.id}
-                        >
-                          {supplier.code} — {supplier.name}
-                        </NativeSelectOption>
-                      ))}
-                    </NativeSelect>
-                  </Field>
-                  <TextField
-                    defaultValue={istDateValue()}
-                    label="PO Date"
-                    name="order_date"
-                    type="date"
-                  />
-                  <TextField
-                    label="Agreed Repair Price"
-                    min="0"
-                    name="service_price"
-                    required
-                    step="0.01"
-                    type="number"
-                  />
-                  <Field>
-                    <FieldLabel htmlFor="repair-description">
-                      Repair / Calibration Scope
-                    </FieldLabel>
-                    <Textarea
-                      id="repair-description"
-                      name="service_description"
-                      required
-                    />
-                  </Field>
-                  <TextField label="Remark" name="remark" />
-                </FieldGroup>
-                <Button
-                  className="mt-5"
-                  disabled={!data.suppliers.length}
-                  type="submit"
-                >
-                  Create Repair PO
-                </Button>
-              </form>
-            </CardContent>
- </SectionCard>
-              ) : null}
-            </StoreAssetWorkspacePane>
-
-          </>
-        ) : null}
 
         {canManageLifecycle ? (
           <StoreAssetWorkspacePane tab="lifecycle">

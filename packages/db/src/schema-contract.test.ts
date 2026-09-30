@@ -187,6 +187,7 @@ const expectedCanonicalTables = [
   "store.purchase_orders",
   "store.receipt_lines",
   "store.receipts",
+  "store.repair_purchase_order_items",
   "store.requisition_headers",
   "store.requisitions",
   "store.stock_movements",

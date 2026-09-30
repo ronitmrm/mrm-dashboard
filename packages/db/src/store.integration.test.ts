@@ -1848,6 +1848,101 @@ describe("Store requests", () => {
     })
   })
 
+  test("issues one Repair PO for selected Unit IDs and tracks each completion", async () => {
+    const location = await store.createLocation({
+      code: `MULTI-REPAIR-${suffix}`,
+      name: `Multi Repair Store ${suffix}`,
+      organizationId,
+    })
+    const item = await store.createItemType({
+      ...(await createClassification("Multi Repair PO")),
+      assetType: "NON_CONSUMABLE",
+      identificationName: `Repairable Tool ${suffix}`,
+      organizationId,
+      unit: "Nos",
+    })
+    const receipt = await store.receiveStock({
+      locationId: location.id,
+      organizationId,
+      purchaseOrderLineId: (await createPurchaseOrder(item.id, 2, "5000.00"))
+        .id,
+      quantity: 2,
+    })
+    const supplier = await store.createSupplier({
+      name: `Multi Repair Supplier ${suffix}`,
+      organizationId,
+    })
+    const order = await store.createRepairPurchaseOrderFromSelection({
+      issuanceId: randomUUID(),
+      items: receipt.assetCodes.map((assetCode, index) => ({
+        assetCode,
+        serviceDescription: `Repair task ${index + 1}`,
+        servicePrice: index === 0 ? "100.00" : "200.00",
+      })),
+      organizationId,
+      storeIssuedPdf,
+      supplierId: supplier.id,
+    })
+    const document = await store.getPurchaseOrder({
+      organizationId,
+      purchaseOrderId: order.id,
+    })
+    expect(document?.lines).toHaveLength(2)
+    expect(document?.lines.map((line) => line.unitPrice).sort()).toEqual([
+      "100.00",
+      "200.00",
+    ])
+    await expect(
+      store.createRepairPurchaseOrderFromSelection({
+        issuanceId: randomUUID(),
+        items: [{
+          assetCode: receipt.assetCodes[0]!,
+          serviceDescription: "Overlapping repair",
+          servicePrice: "50.00",
+        }],
+        organizationId,
+        storeIssuedPdf,
+        supplierId: supplier.id,
+      })
+    ).rejects.toThrow("already has an open Repair PO")
+    for (const assetCode of receipt.assetCodes) {
+      const workspace = await store.getAssetWorkspace({
+        assetCode,
+        organizationId,
+      })
+      expect(workspace?.asset.holderType).toBe("SUPPLIER")
+      expect(workspace?.repairOrders).toContainEqual(
+        expect.objectContaining({ id: order.id })
+      )
+    }
+    await store.completeRepairPurchaseOrder({
+      assetCode: receipt.assetCodes[0]!,
+      organizationId,
+      purchaseOrderId: order.id,
+    })
+    expect(
+      (
+        await store.getPurchaseOrder({
+          organizationId,
+          purchaseOrderId: order.id,
+        })
+      )?.order.status
+    ).toBe("Open")
+    await store.completeRepairPurchaseOrder({
+      assetCode: receipt.assetCodes[1]!,
+      organizationId,
+      purchaseOrderId: order.id,
+    })
+    expect(
+      (
+        await store.getPurchaseOrder({
+          organizationId,
+          purchaseOrderId: order.id,
+        })
+      )?.order.status
+    ).toBe("Completed")
+  })
+
   test("returns overview metrics equivalent to the existing Store lists", async () => {
     const istToday = "9999-12-31"
     const [items, requests, assets, locations, metrics] = await Promise.all([
