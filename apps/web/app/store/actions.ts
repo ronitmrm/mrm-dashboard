@@ -1145,6 +1145,11 @@ export async function createStoreRepairPurchaseOrderAction(formData: FormData) {
             ),
             servicePrice: requiredText(formData, `service_price_${assetCode}`),
             supplierId: requiredText(formData, `supplier_${assetCode}`),
+            reassignmentDepartmentId: formData.get(
+              `reassignment_requested_${assetCode}`
+            )
+              ? requiredText(formData, `reassignment_department_${assetCode}`)
+              : null,
           })),
           issuanceId: requiredText(formData, "issuance_id"),
           orderDate: optionalText(formData, "order_date"),
@@ -1178,6 +1183,7 @@ export async function completeStoreRepairPurchaseOrderAction(
         assetCode,
         organizationId,
         purchaseOrderId: requiredText(formData, "purchase_order_id"),
+        storeLocationId: requiredText(formData, "store_location_id"),
       })
   )
   revalidatePath(`/store/assets/${encodeURIComponent(assetCode)}`)

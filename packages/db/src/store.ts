@@ -855,6 +855,10 @@ async function issueRequisitionWithClient(
     issued_quantity: string
     item_type_id: string
     location_id: string
+    reassignment_department_active: boolean | null
+    reassignment_department_code: string | null
+    reassignment_department_id: string | null
+    reassignment_department_name: string | null
     requested_quantity: string
     requested_asset_id: string | null
     status: string
@@ -864,11 +868,20 @@ async function issueRequisitionWithClient(
       SELECT request.item_type_id, request.location_id,
         request.requested_asset_id,
         request.requested_quantity::text, request.issued_quantity::text,
-        request.status, header.department, item.tracking_mode
+        request.status, header.department, item.tracking_mode,
+        repair_item.reassignment_department_id,
+        destination.active AS reassignment_department_active,
+        destination.code AS reassignment_department_code,
+        destination.name AS reassignment_department_name
       FROM store.requisitions request
       JOIN store.requisition_headers header
         ON header.id = request.request_header_id
       JOIN store.item_types item ON item.id = request.item_type_id
+      LEFT JOIN store.repair_purchase_order_items repair_item
+        ON repair_item.reassignment_requisition_id = request.id
+      LEFT JOIN recruitment.departments destination
+        ON destination.id = repair_item.reassignment_department_id
+          AND destination.organization_id = request.organization_id
       WHERE request.id = $1 AND request.organization_id = $2
       FOR UPDATE OF request, item
     `,
@@ -887,8 +900,16 @@ async function issueRequisitionWithClient(
     throw new Error(`Only ${remaining} remains to be issued.`)
   }
   const holderType = input.holderType ?? "DEPARTMENT"
-  const holderReference = input.holderReference?.trim() || row.department
-  const holderName = input.holderName?.trim() || row.department
+  if (row.reassignment_department_id &&
+    (holderType !== "DEPARTMENT" || !row.reassignment_department_active)) {
+    throw new Error("Select an active reassignment Department.")
+  }
+  const holderReference = row.reassignment_department_id
+    ? row.reassignment_department_code!
+    : input.holderReference?.trim() || row.department
+  const holderName = row.reassignment_department_id
+    ? row.reassignment_department_name!
+    : input.holderName?.trim() || row.department
   if (row.tracking_mode === "SERIALIZED") {
     if (!Number.isInteger(quantity)) {
       throw new Error("Non Consumable quantity must be a whole number.")
@@ -936,15 +957,25 @@ async function issueRequisitionWithClient(
         : null
     const selectedAssets = await client.query<{ id: string }>(
       `
-        SELECT id
-        FROM store.assets
-        WHERE organization_id = $1
-          AND lower(asset_code) = ANY($2::text[])
-          AND item_type_id = $3
-          AND current_location_id = $4
-          AND status = 'AVAILABLE'
-        ORDER BY asset_code
-        FOR UPDATE
+        SELECT asset.id
+        FROM store.assets asset
+        WHERE asset.organization_id = $1
+          AND lower(asset.asset_code) = ANY($2::text[])
+          AND asset.item_type_id = $3
+          AND asset.current_location_id = $4
+          AND asset.status = 'AVAILABLE'
+          AND NOT EXISTS (
+            SELECT 1 FROM store.repair_purchase_order_items repair_item
+            JOIN store.purchase_orders purchase_order
+              ON purchase_order.id = repair_item.purchase_order_id
+            WHERE repair_item.asset_id = asset.id
+              AND repair_item.organization_id = $1
+              AND repair_item.status = 'Open'
+              AND purchase_order.issuance_state IN ('pending', 'issued')
+              AND purchase_order.status = 'Open'
+          )
+        ORDER BY asset.asset_code
+        FOR UPDATE OF asset
       `,
       [
         input.organizationId,
@@ -1142,11 +1173,18 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             current_location_id: string | null
             id: string
             item_type_id: string
+            reassignment_department_id: string | null
+            reassignment_requisition_id: string | null
+            repair_item_id: string
+            status: string
           }>(
             `
               SELECT asset.id, asset.asset_code, asset.item_type_id,
                 asset.current_location_id, asset.current_holder_type,
-                asset.current_holder_reference, asset.current_holder_name
+                asset.current_holder_reference, asset.current_holder_name,
+                asset.status, repair_item.id AS repair_item_id,
+                repair_item.reassignment_department_id,
+                repair_item.reassignment_requisition_id
               FROM store.repair_purchase_order_items repair_item
               JOIN store.assets asset ON asset.id = repair_item.asset_id
               WHERE repair_item.purchase_order_id = $1
@@ -1158,15 +1196,63 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           )
           if (!assets.rows.length)
             throw new Error("Repair asset was not found.")
-          const fallbackLocation = await client.query<{ id: string }>(
-            `SELECT id FROM store.locations
-             WHERE organization_id = $1 AND active ORDER BY created_at LIMIT 1`,
-            [input.organizationId]
-          )
           for (const asset of assets.rows) {
-            const locationId =
-              asset.current_location_id ?? fallbackLocation.rows[0]?.id
-            if (!locationId) throw new Error("A Store location is required.")
+            if (asset.status === "SCRAPPED" ||
+              asset.current_holder_type === "SUPPLIER") {
+              throw new Error("Unit ID is no longer available for this Repair PO.")
+            }
+            const storeLocation = await client.query<{
+              code: string
+              id: string
+              name: string
+            }>(
+              `SELECT location.id, location.code, location.name
+               FROM store.locations location
+               WHERE location.organization_id = $1
+                 AND location.location_type = 'STORE' AND location.active
+               ORDER BY CASE
+                 WHEN $2::text = 'STORE' AND location.id = $3::uuid THEN 0
+                 WHEN location.id = (
+                   SELECT movement.location_id
+                   FROM store.stock_movements movement
+                   JOIN store.locations prior
+                     ON prior.id = movement.location_id
+                   WHERE movement.organization_id = $1
+                     AND movement.asset_id = $4
+                     AND prior.location_type = 'STORE' AND prior.active
+                   ORDER BY movement.moved_at DESC, movement.id DESC
+                   LIMIT 1
+                 ) THEN 1
+                 WHEN upper(btrim(location.code)) = 'MAIN' THEN 2
+                 ELSE 3 END, location.created_at, location.id
+               LIMIT 1`,
+              [input.organizationId, asset.current_holder_type,
+                asset.current_location_id, asset.id]
+            )
+            const location = storeLocation.rows[0]
+            if (!location) throw new Error("An active Store location is required.")
+            if (asset.current_holder_type === "STORE" &&
+              asset.current_location_id !== location.id) {
+              throw new Error("Unit ID's current Store location must be active.")
+            }
+            if (asset.current_holder_type !== "STORE") {
+              await client.query(
+                `INSERT INTO store.stock_movements (
+                   organization_id, item_type_id, asset_id, location_id,
+                   movement_type, quantity, from_holder_type,
+                   from_holder_reference, from_holder_name,
+                   to_holder_type, to_holder_reference, to_holder_name,
+                   remark, created_by_user_id
+                 ) VALUES ($1, $2, $3, $4, 'RETURN', 1,
+                   $5, $6, $7, 'STORE', $8, $9, $10, $11)`,
+                [input.organizationId, asset.item_type_id, asset.id,
+                  location.id, asset.current_holder_type,
+                  asset.current_holder_reference, asset.current_holder_name,
+                  location.code, location.name,
+                  `Returned to Store for repair under ${order.rows[0].order_number}.`,
+                  order.rows[0].created_by_user_id]
+              )
+            }
             await client.query(
               `
               UPDATE store.assets
@@ -1204,10 +1290,10 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
                 input.organizationId,
                 asset.item_type_id,
                 asset.id,
-                locationId,
-                asset.current_holder_type,
-                asset.current_holder_reference,
-                asset.current_holder_name,
+                location.id,
+                "STORE",
+                location.code,
+                location.name,
                 order.rows[0].supplier_code,
                 order.rows[0].supplier_name,
                 order.rows[0].remark ??
@@ -1215,6 +1301,52 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
                 order.rows[0].created_by_user_id,
               ]
             )
+            if (asset.reassignment_department_id &&
+              !asset.reassignment_requisition_id) {
+              const department = await client.query<{ name: string }>(
+                `SELECT name FROM recruitment.departments
+                 WHERE id = $1 AND organization_id = $2 AND active`,
+                [asset.reassignment_department_id, input.organizationId]
+              )
+              if (!department.rows[0]) {
+                throw new Error("Reassignment Department is no longer active.")
+              }
+              const requestNumber = await nextDocumentNumber(client, {
+                counterKey: "REQUISITION",
+                organizationId: input.organizationId,
+                prefix: "STR-REQ",
+              })
+              const purpose =
+                `Automatically requested after repair PO ${order.rows[0].order_number} for ${asset.asset_code}.`
+              const header = await client.query<{ id: string }>(
+                `INSERT INTO store.requisition_headers (
+                   organization_id, request_number, location_id, department,
+                   requested_by, purpose, created_by_user_id, updated_by_user_id
+                 ) VALUES ($1, $2, $3, $4, $4, $5, $6, $6)
+                 RETURNING id`,
+                [input.organizationId, requestNumber, location.id,
+                  department.rows[0].name, purpose,
+                  order.rows[0].created_by_user_id]
+              )
+              const request = await client.query<{ id: string }>(
+                `INSERT INTO store.requisitions (
+                   organization_id, request_header_id, request_number,
+                   item_type_id, requested_asset_id, location_id,
+                   department, requested_by, requested_quantity, purpose,
+                   created_by_user_id, updated_by_user_id
+                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $7, 1, $8, $9, $9)
+                 RETURNING id`,
+                [input.organizationId, header.rows[0]!.id,
+                  `${requestNumber}-01`, asset.item_type_id, asset.id,
+                  location.id, department.rows[0].name, purpose,
+                  order.rows[0].created_by_user_id]
+              )
+              await client.query(
+                `UPDATE store.repair_purchase_order_items
+                 SET reassignment_requisition_id = $1 WHERE id = $2`,
+                [request.rows[0]!.id, asset.repair_item_id]
+              )
+            }
           }
         }
         await client.query(
@@ -1673,8 +1805,8 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
     },
 
     async listMovementDepartments(organizationId: string) {
-      const result = await pool.query<{ code: string; name: string }>(
-        `SELECT code, name FROM recruitment.departments
+      const result = await pool.query<{ code: string; id: string; name: string }>(
+        `SELECT id, code, name FROM recruitment.departments
          WHERE organization_id = $1 AND active
          ORDER BY name, code`,
         [organizationId]
@@ -2270,6 +2402,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       })
       try {
         const prepared = await withTransaction(pool, async (client) => {
+          await lockToolingAllocation(client, input.organizationId)
           await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
             `${input.organizationId}:store-po:${issuanceId}`,
           ])
@@ -2399,6 +2532,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       issuanceId: string
       items: Array<{
         assetCode: string
+        reassignmentDepartmentId?: string | null
         serviceDescription: string
         servicePrice: string
       }>
@@ -2423,6 +2557,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       issuanceId: string
       items: Array<{
         assetCode: string
+        reassignmentDepartmentId?: string | null
         serviceDescription: string
         servicePrice: string
         supplierId: string
@@ -2438,6 +2573,9 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       const items = input.items
         .map((item) => ({
           assetCode: requiredText(item.assetCode, "Unit ID").toLowerCase(),
+          ...(item.reassignmentDepartmentId?.trim()
+            ? { reassignmentDepartmentId: item.reassignmentDepartmentId.trim() }
+            : {}),
           serviceDescription: requiredText(
             item.serviceDescription,
             "Repair scope"
@@ -2464,6 +2602,9 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           ? {
               items: items.map((item) => ({
                 assetCode: item.assetCode,
+                ...(item.reassignmentDepartmentId
+                  ? { reassignmentDepartmentId: item.reassignmentDepartmentId }
+                  : {}),
                 serviceDescription: item.serviceDescription,
                 servicePrice: item.servicePrice,
               })),
@@ -2481,6 +2622,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       )
       try {
         const prepared = await withTransaction(pool, async (client) => {
+          await lockToolingAllocation(client, input.organizationId)
           await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
             `${input.organizationId}:store-po:${issuanceId}`,
           ])
@@ -2519,6 +2661,20 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           )
           if (suppliers.rows.length !== supplierIds.length)
             throw new Error("Select an active repair Supplier.")
+          const departmentIds = [...new Set(items
+            .map((item) => item.reassignmentDepartmentId)
+            .filter((id): id is string => Boolean(id)))]
+          if (departmentIds.length) {
+            const departments = await client.query<{ id: string }>(
+              `SELECT id FROM recruitment.departments
+               WHERE organization_id = $1 AND id::text = ANY($2::text[])
+                 AND active`,
+              [input.organizationId, departmentIds]
+            )
+            if (departments.rows.length !== departmentIds.length) {
+              throw new Error("Select an active reassignment Department.")
+            }
+          }
           const assets = await client.query<{
             asset_code: string
             current_holder_type: StoreHolderType
@@ -2585,14 +2741,16 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
               await client.query(
                 `INSERT INTO store.repair_purchase_order_items (
                    organization_id, purchase_order_id, asset_id,
-                   service_description, service_price
-                 ) VALUES ($1, $2, $3, $4, $5)`,
+                   service_description, service_price,
+                   reassignment_department_id
+                 ) VALUES ($1, $2, $3, $4, $5, $6)`,
                 [
                   input.organizationId,
                   order.rows[0]!.id,
                   assetsByCode.get(item.assetCode)!.id,
                   item.serviceDescription,
                   item.servicePrice,
+                  item.reassignmentDepartmentId ?? null,
                 ]
               )
             }
@@ -2624,10 +2782,19 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       assetCode: string
       organizationId: string
       purchaseOrderId: string
+      storeLocationId: string
     }) {
       return withTransaction(pool, async (client) => {
-        const order = await client.query<{ id: string }>(
-          `SELECT purchase_order.id FROM store.purchase_orders purchase_order
+        await lockToolingAllocation(client, input.organizationId)
+        const order = await client.query<{
+          id: string
+          orderNumber: string
+          supplierId: string
+        }>(
+          `SELECT purchase_order.id,
+             purchase_order.order_number AS "orderNumber",
+             purchase_order.supplier_id AS "supplierId"
+           FROM store.purchase_orders purchase_order
            WHERE purchase_order.id = $1 AND purchase_order.organization_id = $2
              AND purchase_order.order_type = 'REPAIR'
              AND purchase_order.issuance_state = 'issued'
@@ -2642,26 +2809,169 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         if (!order.rows[0]) {
           throw new Error("Open Repair PO was not found for this Unit ID.")
         }
-        const item = await client.query<{ id: string }>(
-          `UPDATE store.repair_purchase_order_items repair_item
-           SET status = 'Completed'
-           FROM store.assets asset
+        const item = await client.query<{
+          assetId: string
+          currentHolderName: string | null
+          currentHolderReference: string | null
+          currentHolderType: StoreHolderType
+          currentLocationId: string | null
+          currentSupplierId: string | null
+          id: string
+          itemTypeId: string
+          reassignmentRequisitionId: string | null
+          status: string
+        }>(
+          `SELECT repair_item.id, asset.id AS "assetId",
+             asset.item_type_id AS "itemTypeId", asset.status,
+             asset.current_holder_type AS "currentHolderType",
+             asset.current_holder_reference AS "currentHolderReference",
+             asset.current_holder_name AS "currentHolderName",
+             asset.current_supplier_id AS "currentSupplierId",
+             asset.current_location_id AS "currentLocationId",
+             repair_item.reassignment_requisition_id
+               AS "reassignmentRequisitionId"
+           FROM store.repair_purchase_order_items repair_item
+           JOIN store.assets asset ON asset.id = repair_item.asset_id
            WHERE repair_item.purchase_order_id = $1
              AND repair_item.organization_id = $2
-             AND repair_item.asset_id = asset.id
              AND asset.organization_id = $2
              AND lower(asset.asset_code) = lower($3)
              AND repair_item.status = 'Open'
-           RETURNING repair_item.id`,
+           FOR UPDATE OF repair_item, asset`,
           [
             input.purchaseOrderId,
             input.organizationId,
             requiredText(input.assetCode, "Unit ID"),
           ]
         )
-        if (!item.rows[0]) {
+        const unit = item.rows[0]
+        if (!unit) {
           throw new Error("Open Repair PO was not found for this Unit ID.")
         }
+        if (unit.status === "SCRAPPED") {
+          throw new Error("A scrapped Unit ID cannot be returned from repair.")
+        }
+        const location = await client.query<{
+          code: string
+          id: string
+          name: string
+        }>(
+          `SELECT id, code, name FROM store.locations
+           WHERE organization_id = $1 AND id::text = $2
+             AND location_type = 'STORE' AND active`,
+          [input.organizationId, requiredText(input.storeLocationId, "Store location")]
+        )
+        if (!location.rows[0]) throw new Error("Select an active Store location.")
+        if (unit.currentHolderType === "SUPPLIER" &&
+          unit.currentSupplierId === order.rows[0].supplierId) {
+          const openBreakdown = await client.query(
+            `SELECT 1 FROM store.asset_breakdowns
+             WHERE organization_id = $1 AND asset_id = $2
+               AND status = 'In Progress'`,
+            [input.organizationId, unit.assetId]
+          )
+          const calibrationHold = await client.query(
+            `SELECT 1 FROM store.calibration_visits visit
+             WHERE visit.organization_id = $1 AND visit.asset_id = $2
+               AND (visit.status IN ('DISPATCHED', 'RETURNED')
+                 OR (visit.status = 'FAILED' AND NOT EXISTS (
+                   SELECT 1 FROM store.calibration_visits later
+                   WHERE later.schedule_id = visit.schedule_id
+                     AND later.asset_id = visit.asset_id
+                     AND later.status = 'PASSED'
+                     AND (later.created_at, later.id) >
+                       (visit.created_at, visit.id)
+                 )))
+             LIMIT 1`,
+            [input.organizationId, unit.assetId]
+          )
+          await client.query(
+            `UPDATE store.assets SET status = $1,
+               current_holder_type = 'STORE', current_holder_reference = $2,
+               current_holder_name = $3, current_location_id = $4,
+               current_supplier_id = NULL, current_vendor_id = NULL,
+               current_machine_id = NULL,
+               updated_at = now(), updated_by_user_id = $5
+             WHERE id = $6`,
+            [openBreakdown.rowCount ? "BROKEN" : calibrationHold.rowCount
+              ? "UNDER_MAINTENANCE" : "AVAILABLE",
+            location.rows[0].code, location.rows[0].name,
+            location.rows[0].id, input.actorUserId ?? null, unit.assetId]
+          )
+          await client.query(
+            `INSERT INTO store.stock_movements (
+               organization_id, item_type_id, asset_id, location_id,
+               movement_type, quantity, from_holder_type,
+               from_holder_reference, from_holder_name, to_holder_type,
+               to_holder_reference, to_holder_name, remark,
+               created_by_user_id
+             ) VALUES ($1, $2, $3, $4, 'RETURN', 1,
+               $5, $6, $7, 'STORE', $8, $9, $10, $11)`,
+            [input.organizationId, unit.itemTypeId, unit.assetId,
+              location.rows[0].id, unit.currentHolderType,
+              unit.currentHolderReference, unit.currentHolderName,
+              location.rows[0].code, location.rows[0].name,
+              `Returned from repair under ${order.rows[0].orderNumber}.`,
+              input.actorUserId ?? null]
+          )
+        } else if (unit.currentHolderType === "STORE" && unit.currentLocationId) {
+          if (unit.currentLocationId !== location.rows[0].id) {
+            throw new Error("Select the Unit ID's current Store location.")
+          }
+          const currentLocation = await client.query<{ id: string }>(
+            `SELECT id FROM store.locations WHERE id = $1
+               AND organization_id = $2 AND location_type = 'STORE' AND active`,
+            [unit.currentLocationId, input.organizationId]
+          )
+          if (!currentLocation.rows[0]) {
+            throw new Error("Unit ID is not at an active Store location.")
+          }
+        } else {
+          throw new Error("Unit ID is not held by this repair Supplier or Store.")
+        }
+        if (unit.reassignmentRequisitionId) {
+          const request = await client.query<{
+            headerId: string
+            requestedAssetId: string | null
+            status: string
+          }>(
+            `SELECT request.request_header_id AS "headerId",
+               request.requested_asset_id AS "requestedAssetId",
+               request.status
+             FROM store.requisitions request
+             JOIN store.requisition_headers header
+               ON header.id = request.request_header_id
+             WHERE request.id = $1 AND request.organization_id = $2
+               AND header.organization_id = $2
+             FOR UPDATE OF request, header`,
+            [unit.reassignmentRequisitionId, input.organizationId]
+          )
+          if (!request.rows[0] ||
+            request.rows[0].requestedAssetId !== unit.assetId) {
+            throw new Error("Linked repair reassignment request is invalid.")
+          }
+          if (request.rows[0].status === "Pending") {
+            await client.query(
+              `UPDATE store.requisition_headers
+               SET location_id = $1, updated_at = now(),
+                 updated_by_user_id = $2 WHERE id = $3`,
+              [location.rows[0].id, input.actorUserId ?? null,
+                request.rows[0].headerId]
+            )
+            await client.query(
+              `UPDATE store.requisitions
+               SET location_id = $1, updated_at = now(),
+                 updated_by_user_id = $2 WHERE id = $3`,
+              [location.rows[0].id, input.actorUserId ?? null,
+                unit.reassignmentRequisitionId]
+            )
+          }
+        }
+        await client.query(
+          `UPDATE store.repair_purchase_order_items
+           SET status = 'Completed' WHERE id = $1`,
+          [unit.id]
+        )
         const remaining = await client.query<{ id: string }>(
           `SELECT id FROM store.repair_purchase_order_items
            WHERE purchase_order_id = $1 AND status = 'Open' LIMIT 1`,
@@ -2675,6 +2985,10 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             [input.actorUserId ?? null, input.purchaseOrderId]
           )
         }
+        await assertToolingTransferAvailable(
+          client, input.organizationId, input.assetCode
+        )
+        await queueDashboardRefresh(client, input.organizationId)
         return order.rows[0]
       })
     },
@@ -2890,7 +3204,10 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       return prepared
     },
 
-    async listPurchaseOrders(organizationId: string) {
+    async listPurchaseOrders(
+      organizationId: string,
+      options: { repairOnly?: boolean } = {}
+    ) {
       const result = await pool.query<{
         calibrationVisitId: string | null
         id: string
@@ -2969,10 +3286,20 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             ON repair_asset.id = repair_item.asset_id
           WHERE purchase_order.organization_id = $1
             AND purchase_order.issuance_state = 'issued'
-          ORDER BY purchase_order.order_date DESC, purchase_order.created_at DESC
+            AND ($2::boolean = false OR
+              (purchase_order.order_type = 'REPAIR'
+                AND calibration_visit.id IS NULL))
+          ORDER BY CASE
+            WHEN purchase_order.order_type = 'REPAIR'
+              AND calibration_visit.id IS NULL
+              AND repair_item.status = 'Open' THEN 0
+            WHEN purchase_order.order_type = 'GOODS'
+              AND purchase_order.status IN ('Open', 'Partially Received') THEN 1
+            ELSE 2 END,
+            purchase_order.order_date DESC, purchase_order.created_at DESC
           LIMIT 500
         `,
-        [organizationId]
+        [organizationId, options.repairOnly ?? false]
       )
       return result.rows
     },
@@ -3529,6 +3856,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       const result = await pool.query<{
         assetCode: string
         holderName: string | null
+        holderReference: string | null
         holderType: StoreHolderType
         id: string
         itemTypeId: string
@@ -3541,6 +3869,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             asset.asset_code AS "assetCode", asset.status,
             asset.current_holder_type AS "holderType",
             asset.current_holder_name AS "holderName",
+            asset.current_holder_reference AS "holderReference",
             location.name AS "locationName",
             COALESCE(supplier.name, legacy_supplier.name) AS "supplierName",
             COALESCE(receipt_line.unit_price,
@@ -4808,6 +5137,28 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         if (!asset.rows[0]) throw new Error("Asset was not found.")
         if (asset.rows[0].status === "SCRAPPED") {
           throw new Error("A scrapped asset cannot be moved or reassigned.")
+        }
+        const openRepair = await client.query(
+          `SELECT 1 FROM store.repair_purchase_order_items repair_item
+           JOIN store.purchase_orders purchase_order
+             ON purchase_order.id = repair_item.purchase_order_id
+           WHERE repair_item.organization_id = $1
+             AND repair_item.asset_id = $2 AND repair_item.status = 'Open'
+             AND purchase_order.organization_id = $1
+             AND purchase_order.order_type = 'REPAIR'
+             AND purchase_order.issuance_state IN ('pending', 'issued')
+             AND purchase_order.status = 'Open'
+             AND NOT EXISTS (
+               SELECT 1 FROM store.calibration_visits visit
+               WHERE visit.purchase_order_id = purchase_order.id
+             )
+           LIMIT 1`,
+          [input.organizationId, asset.rows[0].id]
+        )
+        if (openRepair.rows[0]) {
+          throw new Error(
+            "Finish issuing or complete the Repair PO line before moving this Unit ID."
+          )
         }
         const calibrationHold = await client.query<{ id: string }>(
           `SELECT visit.id FROM store.calibration_visits visit

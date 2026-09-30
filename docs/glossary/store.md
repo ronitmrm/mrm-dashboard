@@ -133,14 +133,25 @@ repair Supplier on a separate page. One Supplier may be applied to all selected
 units; when Suppliers differ, Store issues one order per Supplier. Issuance
 temporarily assigns every selected Physical Asset to its order's Supplier.
 Each unit's line remains visible in the Purchase Register and its Asset
-Workspace and may be marked completed separately; the order is
-complete when every unit is complete. Return uses Asset Movement and Maintenance
-History flows and creates no stock receipt quantity. Calibration service orders
-also use this order type for a single unit and retain their visit workflow.
+Workspace. When an assigned unit's order is issued, Store records its return
+from the previous holder and its dispatch from Store to the repair Supplier.
+For each Unit ID, Store may request reassignment to a selected Department as
+part of the order. This creates a pending Store Request for that exact Unit ID;
+Store issues the request only after the repaired unit returns and is available.
+Store completes each line in the Purchase Register; the order is
+complete when every unit is complete. Completing a repair line requires the
+receiving Store location and records that Unit ID's physical return there as
+Asset Movement. Allocating it to the required Department is a separate Store
+issue against the reassignment request, or a direct Store Movement when no
+request was made. Repair completion creates no goods receipt quantity. Calibration
+service orders also use this order type for a single unit and retain their visit
+workflow.
 
 **Store Purchase Register**: The single table containing every Store Purchase
 Order and its received quantity. Goods are received against the same order row;
-Purchase Order entry and receipt are not separate workspaces.
+each Repair Purchase Order line is completed there when its Unit ID physically
+returns to a selected Store location. Purchase Order entry and receipt are not
+separate workspaces.
 
 **Store Receipt**: One Goods Receipt Note recorded against exactly one Store
 Purchase Order. It may contain one or more selected open goods lines from that
@@ -162,6 +173,12 @@ linked Employee ID and name, or their account name when no active link exists.
 An assigned single Department is automatic; multiple assigned Departments
 require a choice. System Administrators without an assignment may choose an
 active Department.
+
+A Repair Purchase Order may create a pending Store Request on behalf of a
+selected Department for one exact Unit ID when reassignment is requested. The
+request remains
+open while the Unit ID is with the repair Supplier; Store issues it only after
+the repaired Unit ID is back in the receiving Store and available.
 
 **Coded Item Request Line**: One Store Item Type and requested quantity within
 a Store Request. Store allocates and saves each line independently; its live
@@ -226,7 +243,10 @@ the page changes data, independent Full Access. Stock Read Only reveals product
 rows, quantities, and available Unit IDs but does not grant access to a Store
 Item Workspace or Asset Workspace. Asset Movement & Maintenance History has its
 own Read Only and Full Access levels covering item/unit details, movements,
-maintenance, calibration, repair, Supplier, and price history.
+maintenance, calibration, repair, Supplier, and price history. A user allowed
+to complete Repair POs may access the Purchase Register's non-calibration
+Repair lines without Purchase Register Read Only; Goods lines and PO documents
+remain restricted to Purchase Register readers.
 
 **Current Available Stock**: A live derived value, never a request snapshot.
 For Consumables it is the signed movement-ledger balance at the requested
