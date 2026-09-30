@@ -1988,10 +1988,11 @@ describe("Store requests", () => {
     const receipt = await store.receiveStock({
       locationId: location.id,
       organizationId,
-      purchaseOrderLineId: (await createPurchaseOrder(item.id, 2, "5000.00"))
+      purchaseOrderLineId: (await createPurchaseOrder(item.id, 3, "5000.00"))
         .id,
-      quantity: 2,
+      quantity: 3,
     })
+    const repairAssetCodes = receipt.assetCodes.slice(0, 2)
     const departmentCode = `REPAIR-DEPT-${suffix}`
     const departmentName = `Repair Department ${suffix}`
     const department = await pool.query<{ id: string }>(
@@ -2002,7 +2003,7 @@ describe("Store requests", () => {
       [organizationId, departmentCode, departmentName, randomUUID()]
     )
     await store.moveAsset({
-      assetCode: receipt.assetCodes[0]!,
+      assetCode: repairAssetCodes[0]!,
       holderReference: departmentCode,
       holderType: "DEPARTMENT",
       organizationId,
@@ -2013,9 +2014,9 @@ describe("Store requests", () => {
     })
     const order = await store.createRepairPurchaseOrderFromSelection({
       issuanceId: randomUUID(),
-      items: receipt.assetCodes.map((assetCode, index) => ({
+      items: repairAssetCodes.map((assetCode, index) => ({
         assetCode,
-        reassignmentDepartmentId: index === 0 ? department.rows[0]!.id : null,
+        reassignmentDepartmentId: department.rows[0]!.id,
         serviceDescription: `Repair task ${index + 1}`,
         servicePrice: index === 0 ? "100.00" : "200.00",
       })),
@@ -2045,7 +2046,7 @@ describe("Store requests", () => {
         supplierId: supplier.id,
       })
     ).rejects.toThrow("already has an open Repair PO")
-    for (const assetCode of receipt.assetCodes) {
+    for (const assetCode of repairAssetCodes) {
       const workspace = await store.getAssetWorkspace({
         assetCode,
         organizationId,
@@ -2070,14 +2071,18 @@ describe("Store requests", () => {
         fromHolder: `STORE / Multi Repair Store ${suffix}`,
       }),
     ]))
-    const linkedRequest = async () => (await pool.query<{
+    const linkedRequest = async (assetCode: string) => (await pool.query<{
       department: string
+      headerLocationId: string
       id: string
       locationId: string
       purpose: string | null
+      requestedAssetId: string | null
       status: string
     }>(
       `SELECT request.id, request.location_id AS "locationId",
+         header.location_id AS "headerLocationId",
+         request.requested_asset_id AS "requestedAssetId",
          request.status, header.department, header.purpose
        FROM store.repair_purchase_order_items repair_item
        JOIN store.assets asset ON asset.id = repair_item.asset_id
@@ -2087,14 +2092,18 @@ describe("Store requests", () => {
          ON header.id = request.request_header_id
        WHERE repair_item.purchase_order_id = $1
          AND asset.asset_code = $2`,
-      [order.id, receipt.assetCodes[0]!]
+      [order.id, assetCode]
     )).rows[0]
-    expect(await linkedRequest()).toEqual(expect.objectContaining({
+    expect(await linkedRequest(repairAssetCodes[0]!)).toEqual(expect.objectContaining({
       department: departmentName,
       locationId: location.id,
       purpose: expect.stringContaining(order.orderNumber),
+      requestedAssetId: null,
       status: "Pending",
     }))
+    expect(await linkedRequest(repairAssetCodes[1]!)).toEqual(
+      expect.objectContaining({ locationId: location.id, requestedAssetId: null })
+    )
     await expect(
       store.moveAsset({
         assetCode: receipt.assetCodes[0]!,
@@ -2103,14 +2112,31 @@ describe("Store requests", () => {
         organizationId,
       })
     ).rejects.toThrow("Repair PO line")
+    await store.issueRequisition({
+      assetCode: receipt.assetCodes[2]!,
+      organizationId,
+      quantity: 1,
+      requisitionId: (await linkedRequest(repairAssetCodes[0]!))!.id,
+    })
+    expect((await store.getAssetWorkspace({
+      assetCode: receipt.assetCodes[2]!,
+      organizationId,
+    }))?.asset).toEqual(expect.objectContaining({
+      holderReference: departmentCode,
+      holderType: "DEPARTMENT",
+      status: "ASSIGNED",
+    }))
+    expect(await linkedRequest(repairAssetCodes[0]!)).toEqual(
+      expect.objectContaining({ status: "Fulfilled" })
+    )
     await store.completeRepairPurchaseOrder({
-      assetCode: receipt.assetCodes[0]!,
+      assetCode: repairAssetCodes[0]!,
       organizationId,
       purchaseOrderId: order.id,
       storeLocationId: receivingLocation.id,
     })
     const returned = await store.getAssetWorkspace({
-      assetCode: receipt.assetCodes[0]!,
+      assetCode: repairAssetCodes[0]!,
       organizationId,
     })
     expect(returned?.asset).toEqual(
@@ -2123,24 +2149,9 @@ describe("Store requests", () => {
     expect(
       returned?.movements.filter((movement) => movement.movementType === "RETURN")
     ).toHaveLength(2)
-    expect(await linkedRequest()).toEqual(expect.objectContaining({
-      locationId: receivingLocation.id,
-      status: "Pending",
-    }))
-    await store.issueRequisition({
-      assetCode: receipt.assetCodes[0]!,
-      organizationId,
-      quantity: 1,
-      requisitionId: (await linkedRequest())!.id,
-    })
-    expect((await store.getAssetWorkspace({
-      assetCode: receipt.assetCodes[0]!,
-      organizationId,
-    }))?.asset).toEqual(expect.objectContaining({
-      holderReference: departmentCode,
-      holderType: "DEPARTMENT",
-      status: "ASSIGNED",
-    }))
+    expect(await linkedRequest(repairAssetCodes[0]!)).toEqual(
+      expect.objectContaining({ locationId: location.id, status: "Fulfilled" })
+    )
     expect(
       (await store.getAssetWorkspace({
         assetCode: receipt.assetCodes[1]!,
@@ -2156,11 +2167,22 @@ describe("Store requests", () => {
       )?.order.status
     ).toBe("Open")
     await store.completeRepairPurchaseOrder({
-      assetCode: receipt.assetCodes[1]!,
+      assetCode: repairAssetCodes[1]!,
       organizationId,
       purchaseOrderId: order.id,
-      storeLocationId: location.id,
+      storeLocationId: receivingLocation.id,
     })
+    const pendingRequest = await linkedRequest(repairAssetCodes[1]!)
+    expect(pendingRequest).toEqual(
+      expect.objectContaining({
+        headerLocationId: receivingLocation.id,
+        locationId: receivingLocation.id,
+        status: "Pending",
+      })
+    )
+    expect((await store.listRequisitions({ organizationId })).rows.find(
+      (request) => request.id === pendingRequest?.id
+    )?.availableUnitIds).toEqual(expect.arrayContaining(repairAssetCodes))
     expect(
       (
         await store.getPurchaseOrder({

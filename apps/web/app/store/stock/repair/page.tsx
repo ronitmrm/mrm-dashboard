@@ -113,7 +113,7 @@ export default async function StoreRepairPoPage({
             value={`${requestedCodes.length} selected Unit ID${requestedCodes.length === 1 ? "" : "s"}`}
           />
         }
-        description="Apply shared repair details, then review each unit's Supplier, scope, price and optional reassignment request."
+        description="Apply shared repair details, then review each unit's Supplier, scope, price and optional Department request for the same Asset Code."
         icon={Wrench}
         title="Make Repair Purchase Order"
       />
@@ -158,7 +158,7 @@ export default async function StoreRepairPoPage({
         />
       ) : (
         <FormSection
-          description={`Enter the repair details for all ${units.length} selected Unit ID${units.length === 1 ? "" : "s"}. Units assigned to different Suppliers will be placed on separate POs. A reassignment request names the exact Unit ID and waits until it returns to Store.`}
+          description={`Enter the repair details for all ${units.length} selected Unit ID${units.length === 1 ? "" : "s"}. Units assigned to different Suppliers will be placed on separate POs. A Department request can be fulfilled with any available Unit ID of the same Asset Code.`}
           title="Repair PO details"
           width="full"
         >

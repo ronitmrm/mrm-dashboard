@@ -103,8 +103,9 @@ export default async function StoreOrdersPage() {
         <p className="text-sm text-muted-foreground">
           Purchase Orders are started from Stock. Receive goods or complete a
           returned repair Unit ID against its order line. Allocate a returned
-          unit through Requests &amp; Issues if a reassignment request exists, or
-          through Store Movement otherwise.
+          unit through Store Movement. A Department request for the same Asset
+          Code can be issued with any available Unit ID through Requests &amp;
+          Issues.
         </p>
       </div>
 
@@ -404,7 +405,7 @@ export default async function StoreOrdersPage() {
                               <Button size="sm">Complete &amp; Return</Button>
                             </DialogTrigger>
                             <StandardDialogContent
-                              description={`${order.orderNumber} · ${order.typeCode}. Confirm the unit has physically returned from ${order.supplierName}, then select the receiving Store. Allocate it through Requests & Issues if a reassignment request exists, or through Store Movement otherwise.`}
+                              description={`${order.orderNumber} · ${order.typeCode}. Confirm the unit has physically returned from ${order.supplierName}, then select the receiving Store. A linked Department request can be issued with any available Unit ID of the same Asset Code.`}
                               title="Complete repair and return to Store"
                             >
                               <form

@@ -308,33 +308,38 @@ export function RepairPoDetailsForm({
                         type="checkbox"
                         value="yes"
                       />
-                      Request reassignment after repair?
+                      Request this Asset Code for a Department?
                     </label>
                     {requestedDepartmentId !== null ? (
-                      <NativeSelect
-                        aria-label={`Department for reassignment of ${unit.assetCode}`}
-                        name={`reassignment_department_${unit.assetCode}`}
-                        onValueChange={(departmentId) =>
-                          setReassignment((current) => ({
-                            ...current,
-                            [unit.assetCode]: departmentId,
-                          }))
-                        }
-                        required
-                        value={requestedDepartmentId}
-                      >
-                        <NativeSelectOption value="">
-                          Select Department
-                        </NativeSelectOption>
-                        {departments.map((department) => (
-                          <NativeSelectOption
-                            key={department.id}
-                            value={department.id}
-                          >
-                            {department.code} — {department.name}
+                      <div className="grid gap-1">
+                        <NativeSelect
+                          aria-label={`Department for reassignment of ${unit.assetCode}`}
+                          name={`reassignment_department_${unit.assetCode}`}
+                          onValueChange={(departmentId) =>
+                            setReassignment((current) => ({
+                              ...current,
+                              [unit.assetCode]: departmentId,
+                            }))
+                          }
+                          required
+                          value={requestedDepartmentId}
+                        >
+                          <NativeSelectOption value="">
+                            Select Department
                           </NativeSelectOption>
-                        ))}
-                      </NativeSelect>
+                          {departments.map((department) => (
+                            <NativeSelectOption
+                              key={department.id}
+                              value={department.id}
+                            >
+                              {department.code} — {department.name}
+                            </NativeSelectOption>
+                          ))}
+                        </NativeSelect>
+                        <span className="text-xs text-muted-foreground">
+                          Store may issue any available Unit ID of this Asset Code.
+                        </span>
+                      </div>
                     ) : null}
                     {!departments.length ? (
                       <span className="text-xs text-muted-foreground">

@@ -373,8 +373,9 @@ export default async function StoreAssetWorkspacePage({
             ) : (
               "Purchase Register"
             )}{" "}
-            when this Unit ID returns to Store. If a reassignment request exists,
-            allocate it through Requests &amp; Issues. Otherwise use{" "}
+            when this Unit ID returns to Store. A Department request for the
+            same Asset Code can use any available Unit ID through Requests &amp;
+            Issues. To assign this returned unit directly, use{" "}
             {canMove ? (
               <Link
                 className="font-medium text-primary underline-offset-4 hover:underline"
