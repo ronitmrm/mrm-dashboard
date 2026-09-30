@@ -142,7 +142,8 @@ export default async function StoreStockPage({
           <CardContent className="flex flex-wrap items-center gap-3 py-4 text-sm">
             {firstValue(params.repairOrdersSaved)} Repair PO
             {Number(firstValue(params.repairOrdersSaved)) === 1 ? " was" : "s were"} saved.
-            {capabilities.has("store.purchase_register.read") ? (
+            {capabilities.has("store.purchase_register.read") ||
+            storeActions.has("store.asset_repair.write") ? (
               <Button asChild size="sm" variant="outline">
                 <Link href="/store/orders">Open Purchase Register</Link>
               </Button>
@@ -217,6 +218,12 @@ export default async function StoreStockPage({
                   variant={mode === "repair" ? "default" : "outline"}
                 >
                   <Link href="/store/stock?mode=repair">Make Repair PO</Link>
+                </Button>
+              ) : null}
+              {storeActions.has("store.asset_repair.write") &&
+              !capabilities.has("store.purchase_register.read") ? (
+                <Button asChild variant="outline">
+                  <Link href="/store/orders">Repair Returns</Link>
                 </Button>
               ) : null}
               {mode !== "view" ? (

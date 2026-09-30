@@ -1701,10 +1701,9 @@ describe("Store requests", () => {
        VALUES ($1, $2, $3, 'test', 'store_movement', $4)`,
       [organizationId, departmentCode, departmentName, randomUUID()]
     )
-    expect(await store.listMovementDepartments(organizationId)).toContainEqual({
-      code: departmentCode,
-      name: departmentName,
-    })
+    expect(await store.listMovementDepartments(organizationId)).toContainEqual(
+      expect.objectContaining({ code: departmentCode, name: departmentName })
+    )
     await store.moveAsset({
       assetCode: assetCodes[0],
       holderReference: departmentCode.toLowerCase(),
@@ -1948,6 +1947,7 @@ describe("Store requests", () => {
       assetCode: receipt.assetCodes[0]!,
       organizationId,
       purchaseOrderId: repairOrder.id,
+      storeLocationId: location.id,
     })
     expect(
       await store.getItemTypeDrawing({
@@ -1973,6 +1973,11 @@ describe("Store requests", () => {
       name: `Multi Repair Store ${suffix}`,
       organizationId,
     })
+    const receivingLocation = await store.createLocation({
+      code: `REPAIRED-${suffix}`,
+      name: `Repaired Store ${suffix}`,
+      organizationId,
+    })
     const item = await store.createItemType({
       ...(await createClassification("Multi Repair PO")),
       assetType: "NON_CONSUMABLE",
@@ -1987,6 +1992,21 @@ describe("Store requests", () => {
         .id,
       quantity: 2,
     })
+    const departmentCode = `REPAIR-DEPT-${suffix}`
+    const departmentName = `Repair Department ${suffix}`
+    const department = await pool.query<{ id: string }>(
+      `INSERT INTO recruitment.departments
+         (organization_id, code, name, source_system, source_table, source_id)
+       VALUES ($1, $2, $3, 'test', 'repair_reassignment', $4)
+       RETURNING id`,
+      [organizationId, departmentCode, departmentName, randomUUID()]
+    )
+    await store.moveAsset({
+      assetCode: receipt.assetCodes[0]!,
+      holderReference: departmentCode,
+      holderType: "DEPARTMENT",
+      organizationId,
+    })
     const supplier = await store.createSupplier({
       name: `Multi Repair Supplier ${suffix}`,
       organizationId,
@@ -1995,6 +2015,7 @@ describe("Store requests", () => {
       issuanceId: randomUUID(),
       items: receipt.assetCodes.map((assetCode, index) => ({
         assetCode,
+        reassignmentDepartmentId: index === 0 ? department.rows[0]!.id : null,
         serviceDescription: `Repair task ${index + 1}`,
         servicePrice: index === 0 ? "100.00" : "200.00",
       })),
@@ -2034,11 +2055,98 @@ describe("Store requests", () => {
         expect.objectContaining({ id: order.id })
       )
     }
+    const dispatched = await store.getAssetWorkspace({
+      assetCode: receipt.assetCodes[0]!,
+      organizationId,
+    })
+    expect(dispatched?.movements).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        movementType: "RETURN",
+        fromHolder: expect.stringContaining(departmentName),
+        toHolder: `STORE / Multi Repair Store ${suffix}`,
+      }),
+      expect.objectContaining({
+        movementType: "TRANSFER_OUT",
+        fromHolder: `STORE / Multi Repair Store ${suffix}`,
+      }),
+    ]))
+    const linkedRequest = async () => (await pool.query<{
+      department: string
+      id: string
+      locationId: string
+      purpose: string | null
+      status: string
+    }>(
+      `SELECT request.id, request.location_id AS "locationId",
+         request.status, header.department, header.purpose
+       FROM store.repair_purchase_order_items repair_item
+       JOIN store.assets asset ON asset.id = repair_item.asset_id
+       JOIN store.requisitions request
+         ON request.id = repair_item.reassignment_requisition_id
+       JOIN store.requisition_headers header
+         ON header.id = request.request_header_id
+       WHERE repair_item.purchase_order_id = $1
+         AND asset.asset_code = $2`,
+      [order.id, receipt.assetCodes[0]!]
+    )).rows[0]
+    expect(await linkedRequest()).toEqual(expect.objectContaining({
+      department: departmentName,
+      locationId: location.id,
+      purpose: expect.stringContaining(order.orderNumber),
+      status: "Pending",
+    }))
+    await expect(
+      store.moveAsset({
+        assetCode: receipt.assetCodes[0]!,
+        holderReference: `MULTI-REPAIR-${suffix}`,
+        holderType: "STORE",
+        organizationId,
+      })
+    ).rejects.toThrow("Repair PO line")
     await store.completeRepairPurchaseOrder({
       assetCode: receipt.assetCodes[0]!,
       organizationId,
       purchaseOrderId: order.id,
+      storeLocationId: receivingLocation.id,
     })
+    const returned = await store.getAssetWorkspace({
+      assetCode: receipt.assetCodes[0]!,
+      organizationId,
+    })
+    expect(returned?.asset).toEqual(
+      expect.objectContaining({
+        holderType: "STORE",
+        locationName: `Repaired Store ${suffix}`,
+        status: "AVAILABLE",
+      })
+    )
+    expect(
+      returned?.movements.filter((movement) => movement.movementType === "RETURN")
+    ).toHaveLength(2)
+    expect(await linkedRequest()).toEqual(expect.objectContaining({
+      locationId: receivingLocation.id,
+      status: "Pending",
+    }))
+    await store.issueRequisition({
+      assetCode: receipt.assetCodes[0]!,
+      organizationId,
+      quantity: 1,
+      requisitionId: (await linkedRequest())!.id,
+    })
+    expect((await store.getAssetWorkspace({
+      assetCode: receipt.assetCodes[0]!,
+      organizationId,
+    }))?.asset).toEqual(expect.objectContaining({
+      holderReference: departmentCode,
+      holderType: "DEPARTMENT",
+      status: "ASSIGNED",
+    }))
+    expect(
+      (await store.getAssetWorkspace({
+        assetCode: receipt.assetCodes[1]!,
+        organizationId,
+      }))?.asset.holderType
+    ).toBe("SUPPLIER")
     expect(
       (
         await store.getPurchaseOrder({
@@ -2051,6 +2159,7 @@ describe("Store requests", () => {
       assetCode: receipt.assetCodes[1]!,
       organizationId,
       purchaseOrderId: order.id,
+      storeLocationId: location.id,
     })
     expect(
       (

@@ -55,7 +55,6 @@ import { masterCapability } from "@/lib/auth/master-capabilities"
 
 import {
   completeStoreAssetMaintenanceAction,
-  completeStoreRepairPurchaseOrderAction,
   recordStoreAssetAcquisitionAction,
   scheduleStoreAssetMaintenanceAction,
   scheduleStoreAssetMaintenanceMasterAction,
@@ -87,10 +86,12 @@ export default async function StoreAssetWorkspacePage({
   const canRepair = capabilities.has("store.asset_repair.write")
   const canRecordAcquisition = capabilities.has("store.receipts.receive")
   const canManageLifecycle = capabilities.has("store.asset_lifecycle.write")
-  const masterGrants = await listGrantedCapabilities(session.user.id, [
+  const grants = await listGrantedCapabilities(session.user.id, [
     masterCapability("ITEM_TYPE", "save"),
     masterCapability("SUPPLIER_PRICE", "save"),
+    "store.purchase_register.read",
   ])
+  const canOpenPurchaseRegister = canRepair || grants.includes("store.purchase_register.read")
   const repository = createStoreRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
@@ -131,8 +132,8 @@ export default async function StoreAssetWorkspacePage({
   if (data.kind === "item") {
     return (
       <StoreItemWorkspace
-        canUploadDrawing={masterGrants.includes(masterCapability("ITEM_TYPE", "save"))}
-        canUploadQuote={masterGrants.includes(masterCapability("SUPPLIER_PRICE", "save"))}
+        canUploadDrawing={grants.includes(masterCapability("ITEM_TYPE", "save"))}
+        canUploadQuote={grants.includes(masterCapability("SUPPLIER_PRICE", "save"))}
         workspace={data.workspace}
       />
     )
@@ -360,6 +361,32 @@ export default async function StoreAssetWorkspacePage({
  <SectionCard>
         <CardHeader>
           <CardTitle>Repair Purchase Orders</CardTitle>
+          <CardDescription>
+            Complete each repair line in{" "}
+            {canOpenPurchaseRegister ? (
+              <Link
+                className="font-medium text-primary underline-offset-4 hover:underline"
+                href="/store/orders"
+              >
+                Purchase Register
+              </Link>
+            ) : (
+              "Purchase Register"
+            )}{" "}
+            when this Unit ID returns to Store. If a reassignment request exists,
+            allocate it through Requests &amp; Issues. Otherwise use{" "}
+            {canMove ? (
+              <Link
+                className="font-medium text-primary underline-offset-4 hover:underline"
+                href={`/store/movement?unitId=${encodeURIComponent(asset.assetCode)}`}
+              >
+                Store Movement
+              </Link>
+            ) : (
+              "Store Movement"
+            )}{" "}
+            to assign it to a Department.
+          </CardDescription>
         </CardHeader>
         <CardContent className="min-w-0">
  <OperationalTable>
@@ -372,7 +399,6 @@ export default async function StoreAssetWorkspacePage({
                 <TableHead>Price</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>PDF</TableHead>
-                {canRepair ? <TableHead>Completion</TableHead> : null}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -399,38 +425,13 @@ export default async function StoreAssetWorkspacePage({
                       </AttachmentViewerLink>
                     </Button>
                   </TableCell>
-                  {canRepair ? (
-                    <TableCell>
-                      {order.status === "Open" ? (
-                            <form
-                              action={completeStoreRepairPurchaseOrderAction}
-                            >
-                          <input
-                            name="asset_code"
-                            type="hidden"
-                            value={asset.assetCode}
-                          />
-                          <input
-                            name="purchase_order_id"
-                            type="hidden"
-                            value={order.id}
-                          />
-                          <Button size="sm" type="submit" variant="outline">
-                            Mark Completed
-                          </Button>
-                        </form>
-                      ) : (
-                        "Completed"
-                      )}
-                    </TableCell>
-                  ) : null}
                 </TableRow>
               ))}
               {!repairOrders.length ? (
                 <TableRow>
                   <TableCell
                     className="h-24 text-center text-muted-foreground"
-                    colSpan={canRepair ? 8 : 7}
+                    colSpan={7}
                   >
                     No Repair Purchase Orders for this Unit ID.
                   </TableCell>

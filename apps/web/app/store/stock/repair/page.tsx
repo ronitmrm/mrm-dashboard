@@ -62,12 +62,13 @@ export default async function StoreRepairPoPage({
   })
   const data = await (async () => {
     const organizationId = await repository.organizationIdForCode("MRMPL")
-    const [items, physicalUnits, suppliers] = await Promise.all([
+    const [items, physicalUnits, suppliers, departments] = await Promise.all([
       repository.listItemTypes(organizationId),
       repository.listStockPhysicalUnits(organizationId),
       repository.listSuppliers(organizationId),
+      repository.listMovementDepartments(organizationId),
     ])
-    return { items, physicalUnits, suppliers }
+    return { items, physicalUnits, suppliers, departments }
   })().finally(() => repository.close())
   const itemById = new Map(data.items.map((item) => [item.id, item]))
   const unitByCode = new Map(
@@ -91,6 +92,8 @@ export default async function StoreRepairPoPage({
         assetCode: unit.assetCode,
         assetName: item.assetName,
         holder: unit.locationName ?? unit.holderName ?? unit.holderType,
+        holderReference: unit.holderReference,
+        holderType: unit.holderType,
         status: unit.status,
       },
     ]
@@ -110,7 +113,7 @@ export default async function StoreRepairPoPage({
             value={`${requestedCodes.length} selected Unit ID${requestedCodes.length === 1 ? "" : "s"}`}
           />
         }
-        description="Apply shared repair details to all selected units, then adjust each unit's Supplier, scope and price as needed."
+        description="Apply shared repair details, then review each unit's Supplier, scope, price and optional reassignment request."
         icon={Wrench}
         title="Make Repair Purchase Order"
       />
@@ -155,7 +158,7 @@ export default async function StoreRepairPoPage({
         />
       ) : (
         <FormSection
-          description={`Enter the repair details for all ${units.length} selected Unit ID${units.length === 1 ? "" : "s"}. Units assigned to different Suppliers will be placed on separate POs.`}
+          description={`Enter the repair details for all ${units.length} selected Unit ID${units.length === 1 ? "" : "s"}. Units assigned to different Suppliers will be placed on separate POs. A reassignment request names the exact Unit ID and waits until it returns to Store.`}
           title="Repair PO details"
           width="full"
         >
@@ -166,6 +169,7 @@ export default async function StoreRepairPoPage({
             <input name="issuance_id" type="hidden" value={issuanceId} />
             <RepairPoDetailsForm
               key={`${issuanceId}:${units.map((unit) => unit.assetCode).join(",")}`}
+              departments={data.departments}
               suppliers={data.suppliers}
               units={units}
             />

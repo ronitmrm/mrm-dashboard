@@ -1,5 +1,6 @@
 import { PendingRetainedUploadForm } from "@/components/pending-retained-upload-form"
 import { createStoreRepository } from "@workspace/db"
+import { redirect } from "next/navigation"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
@@ -21,6 +22,10 @@ import {
 import { Field, FieldGroup, FieldLabel } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
 import {
+  NativeSelect,
+  NativeSelectOption,
+} from "@workspace/ui/components/native-select"
+import {
   OperationalTable,
   TableBody,
   TableCell,
@@ -32,12 +37,16 @@ import {
 import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
 import { BulkReceiveButton } from "@/components/store/bulk-receive-button"
 import { readAuthEnvironment } from "@/lib/auth/auth"
-import { MetricSummary } from "@/components/ui/golden-patterns"
-import { requireCapability } from "@/lib/auth/require-capability"
+import { MetricSummary, StandardDialogContent } from "@/components/ui/golden-patterns"
+import {
+  listGrantedCapabilities,
+  requireAuthenticatedSession,
+} from "@/lib/auth/require-capability"
 import { listGrantedStoreActions } from "@/lib/auth/store-action-access"
 import { storeRequestFormPolicy } from "@/lib/store-request-policy"
 
 import {
+  completeStoreRepairPurchaseOrderAction,
   receiveRemainingStoreStockBatchAction,
   receiveStoreStockAction,
 } from "../actions"
@@ -45,28 +54,42 @@ import {
 const bulkReceiptFormId = "store-bulk-receipt-form"
 
 export default async function StoreOrdersPage() {
-  const session = await requireCapability(
-    "store.purchase_register.read",
-    "/store/orders"
-  )
-  const canManage = (await listGrantedStoreActions(session.user.id)).has(
-    "store.receipts.receive"
-  )
+  const session = await requireAuthenticatedSession("/store/orders")
+  const [grantedReads, capabilities] = await Promise.all([
+    listGrantedCapabilities(session.user.id, ["store.purchase_register.read"]),
+    listGrantedStoreActions(session.user.id),
+  ])
+  const canReadRegister = grantedReads.includes("store.purchase_register.read")
+  const canRepair = capabilities.has("store.asset_repair.write")
+  if (!canReadRegister && !canRepair) redirect("/unauthorized")
+  const canManage = canReadRegister && capabilities.has("store.receipts.receive")
   const repository = createStoreRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
-  const [data, requestContext] = await (async () => {
+  const [allOrders, requestContext, locations] = await (async () => {
     const organizationId = await repository.organizationIdForCode("MRMPL")
     return Promise.all([
-      repository.listPurchaseOrders(organizationId),
+      repository.listPurchaseOrders(
+        organizationId,
+        canReadRegister ? undefined : { repairOnly: true }
+      ),
       canManage
         ? repository.requisitionRequestContext({
             organizationId,
             userId: session.user.id,
           })
         : Promise.resolve(null),
+      canRepair ? repository.listLocations(organizationId) : Promise.resolve([]),
     ])
   })().finally(() => repository.close())
+  const data = canReadRegister
+    ? allOrders
+    : allOrders.filter(
+        (order) => order.orderType === "REPAIR" && !order.calibrationVisitId
+      )
+  const storeLocations = locations.filter(
+    (location) => location.locationType === "STORE"
+  )
   const receivedBy = requestContext
     ? storeRequestFormPolicy(requestContext).requestedBy
     : ""
@@ -78,8 +101,10 @@ export default async function StoreOrdersPage() {
           Purchase Register
         </h2>
         <p className="text-sm text-muted-foreground">
-          Purchase Orders are started from Stock. Receive goods against the same
-          order row.
+          Purchase Orders are started from Stock. Receive goods or complete a
+          returned repair Unit ID against its order line. Allocate a returned
+          unit through Requests &amp; Issues if a reassignment request exists, or
+          through Store Movement otherwise.
         </p>
       </div>
 
@@ -92,23 +117,30 @@ export default async function StoreOrdersPage() {
             tone: "information",
           },
           { tone: "brand", label: "Order Lines", value: data.length },
-          {
-            label: "Awaiting Receipt",
-            value: data.filter(
-              (row) =>
-                row.orderType === "GOODS" &&
-                row.status !== "Cancelled" &&
-                Number(row.remainingQuantity) > 0
-            ).length,
-            description: "Goods lines with quantity remaining",
-            tone: "warning",
-          },
+          canReadRegister
+            ? {
+                label: "Awaiting Receipt",
+                value: data.filter(
+                  (row) =>
+                    row.orderType === "GOODS" &&
+                    row.status !== "Cancelled" &&
+                    Number(row.remainingQuantity) > 0
+                ).length,
+                description: "Goods lines with quantity remaining",
+                tone: "warning",
+              }
+            : {
+                label: "Awaiting Return",
+                value: data.filter((row) => row.status === "Open").length,
+                description: "Repair Unit IDs awaiting Store return",
+                tone: "warning",
+              },
         ]}
       />
 
       <SectionCard>
         <CardHeader>
-          <CardTitle>Purchase Orders and Receipts</CardTitle>
+          <CardTitle>Purchase Orders, Receipts and Returns</CardTitle>
         </CardHeader>
         <CardContent className="min-w-0">
           <OperationalTable
@@ -144,9 +176,9 @@ export default async function StoreOrdersPage() {
                 <TableHead>Price</TableHead>
                 <TableHead>Order Total</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>PO Document</TableHead>
-                {canManage ? (
-                  <TableHead>Receive Against This Order</TableHead>
+                {canReadRegister ? <TableHead>PO Document</TableHead> : null}
+                {canManage || canRepair ? (
+                  <TableHead>Actions</TableHead>
                 ) : null}
               </TableRow>
             </TableHeader>
@@ -204,7 +236,7 @@ export default async function StoreOrdersPage() {
                     <TableCell>
                       <Badge variant="outline">{order.status}</Badge>
                     </TableCell>
-                    <TableCell>
+                    {canReadRegister ? <TableCell>
                       <div className="grid min-w-32 gap-2">
                         <Button asChild size="sm" variant="outline">
                           <AttachmentViewerLink
@@ -225,10 +257,10 @@ export default async function StoreOrdersPage() {
                           </span>
                         )}
                       </div>
-                    </TableCell>
-                    {canManage ? (
+                    </TableCell> : null}
+                    {canManage || canRepair ? (
                       <TableCell>
-                        {canReceive ? (
+                        {canManage && canReceive ? (
                           <Dialog>
                             <DialogTrigger asChild>
                               <Button size="sm">Receive Items</Button>
@@ -363,10 +395,62 @@ export default async function StoreOrdersPage() {
                               </PendingRetainedUploadForm>
                             </DialogContent>
                           </Dialog>
+                        ) : canRepair &&
+                          order.orderType === "REPAIR" &&
+                          !order.calibrationVisitId &&
+                          order.status === "Open" ? (
+                          <Dialog>
+                            <DialogTrigger asChild>
+                              <Button size="sm">Complete &amp; Return</Button>
+                            </DialogTrigger>
+                            <StandardDialogContent
+                              description={`${order.orderNumber} · ${order.typeCode}. Confirm the unit has physically returned from ${order.supplierName}, then select the receiving Store. Allocate it through Requests & Issues if a reassignment request exists, or through Store Movement otherwise.`}
+                              title="Complete repair and return to Store"
+                            >
+                              <form
+                                action={completeStoreRepairPurchaseOrderAction}
+                                className="grid gap-4"
+                              >
+                                <input name="asset_code" type="hidden" value={order.typeCode} />
+                                <input name="purchase_order_id" type="hidden" value={order.purchaseOrderId} />
+                                <Field>
+                                  <FieldLabel htmlFor={`repair-return-store-${order.id}`}>
+                                    Receiving Store
+                                  </FieldLabel>
+                                  <NativeSelect
+                                    id={`repair-return-store-${order.id}`}
+                                    name="store_location_id"
+                                    required
+                                  >
+                                    <NativeSelectOption value="">
+                                      Select Store location
+                                    </NativeSelectOption>
+                                    {storeLocations.map((location) => (
+                                      <NativeSelectOption key={location.id} value={location.id}>
+                                        {location.code} — {location.name}
+                                      </NativeSelectOption>
+                                    ))}
+                                  </NativeSelect>
+                                </Field>
+                                <DialogFooter>
+                                  <DialogClose asChild>
+                                    <Button type="button" variant="outline">Cancel</Button>
+                                  </DialogClose>
+                                  <Button disabled={!storeLocations.length} type="submit">
+                                    Complete &amp; Return to Store
+                                  </Button>
+                                </DialogFooter>
+                              </form>
+                            </StandardDialogContent>
+                          </Dialog>
                         ) : order.orderType === "REPAIR" ? (
-                          "Service PO — no stock receipt"
+                          order.calibrationVisitId
+                            ? "Use Calibration Visit"
+                            : order.status === "Completed"
+                              ? "Returned to Store"
+                              : "Repair return pending"
                         ) : (
-                          "Fully received"
+                          canReceive ? "Awaiting goods receipt" : "Fully received"
                         )}
                       </TableCell>
                     ) : null}
@@ -377,7 +461,7 @@ export default async function StoreOrdersPage() {
                 <TableRow>
                   <TableCell
                     className="h-24 text-center text-muted-foreground"
-                    colSpan={canManage ? 13 : 11}
+                    colSpan={10 + Number(canReadRegister) + Number(canManage) + Number(canManage || canRepair)}
                   >
                     No Purchase Orders yet. Select an item from Stock to create
                     one.

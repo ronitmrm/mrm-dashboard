@@ -25,7 +25,15 @@ type RepairUnit = {
   assetCode: string
   assetName: string
   holder: string
+  holderReference: string | null
+  holderType: string
   status: string
+}
+
+type RepairDepartment = {
+  code: string
+  id: string
+  name: string
 }
 
 type RepairSupplier = {
@@ -47,9 +55,11 @@ const emptyDetails: RepairDetails = {
 }
 
 export function RepairPoDetailsForm({
+  departments,
   suppliers,
   units,
 }: {
+  departments: readonly RepairDepartment[]
   suppliers: readonly RepairSupplier[]
   units: readonly RepairUnit[]
 }) {
@@ -58,6 +68,9 @@ export function RepairPoDetailsForm({
     Object.fromEntries(units.map((unit) => [unit.assetCode, emptyDetails]))
   )
   const [applied, setApplied] = useState(false)
+  const [reassignment, setReassignment] = useState<
+    Record<string, string | null>
+  >(() => Object.fromEntries(units.map((unit) => [unit.assetCode, null])))
 
   function updateDetail(
     assetCode: string,
@@ -185,11 +198,25 @@ export function RepairPoDetailsForm({
             <TableHead className="min-w-56">Repair Supplier</TableHead>
             <TableHead className="min-w-56">Repair Scope</TableHead>
             <TableHead className="min-w-40">Agreed Repair Price</TableHead>
+            <TableHead className="min-w-64">Reassignment</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {units.map((unit) => {
             const unitDetails = details[unit.assetCode] ?? emptyDetails
+            const requestedDepartmentId = reassignment[unit.assetCode] ?? null
+            const originalDepartmentId =
+              unit.holderType === "DEPARTMENT"
+                ? departments.find((department) => {
+                    const holderValues = [
+                      unit.holderReference?.trim().toLowerCase(),
+                      unit.holder.trim().toLowerCase(),
+                    ]
+                    return [department.code, department.name].some((value) =>
+                      holderValues.includes(value.trim().toLowerCase())
+                    )
+                  })?.id
+                : null
             return (
               <TableRow key={unit.assetCode}>
                 <TableCell className="font-medium">
@@ -261,6 +288,60 @@ export function RepairPoDetailsForm({
                     type="number"
                     value={unitDetails.servicePrice}
                   />
+                </TableCell>
+                <TableCell>
+                  <div className="grid gap-2">
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        checked={requestedDepartmentId !== null}
+                        className="size-4 accent-primary"
+                        disabled={!departments.length}
+                        name={`reassignment_requested_${unit.assetCode}`}
+                        onChange={(event) =>
+                          setReassignment((current) => ({
+                            ...current,
+                            [unit.assetCode]: event.target.checked
+                              ? (originalDepartmentId ?? "")
+                              : null,
+                          }))
+                        }
+                        type="checkbox"
+                        value="yes"
+                      />
+                      Request reassignment after repair?
+                    </label>
+                    {requestedDepartmentId !== null ? (
+                      <NativeSelect
+                        aria-label={`Department for reassignment of ${unit.assetCode}`}
+                        name={`reassignment_department_${unit.assetCode}`}
+                        onValueChange={(departmentId) =>
+                          setReassignment((current) => ({
+                            ...current,
+                            [unit.assetCode]: departmentId,
+                          }))
+                        }
+                        required
+                        value={requestedDepartmentId}
+                      >
+                        <NativeSelectOption value="">
+                          Select Department
+                        </NativeSelectOption>
+                        {departments.map((department) => (
+                          <NativeSelectOption
+                            key={department.id}
+                            value={department.id}
+                          >
+                            {department.code} — {department.name}
+                          </NativeSelectOption>
+                        ))}
+                      </NativeSelect>
+                    ) : null}
+                    {!departments.length ? (
+                      <span className="text-xs text-muted-foreground">
+                        No active Department available.
+                      </span>
+                    ) : null}
+                  </div>
                 </TableCell>
               </TableRow>
             )
