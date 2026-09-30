@@ -205,7 +205,7 @@ import {
   maintenanceDowntimeReasonRows,
   maintenanceMasterRowsForMachineAssignment,
 } from "@/lib/maintenance-schedule-options"
-import { plannedMaintenanceScheduleRows, unifiedMechanicalWorkRows } from "@/lib/maintenance-work-list"
+import { mechanicalWorkRowsForDate, plannedMaintenanceScheduleRows, unifiedMechanicalWorkRows } from "@/lib/maintenance-work-list"
 import { MachineStoreAssets } from "@/components/machine-store-assets"
 import { MetricSummary } from "@/components/ui/golden-patterns"
 import {
@@ -12702,6 +12702,7 @@ function MaintenancePanel({
   productionControl: DashboardPayload
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
 }) {
+  const [taskDate, setTaskDate] = useState(() => todayIsoDate())
   const [requestRows, setRequestRows] = useState<MaintenanceRequestRow[]>([])
   const [requestReloadKey, setRequestReloadKey] = useState(0)
   const [selectedBreakdownTaskKey, setSelectedBreakdownTaskKey] = useState("")
@@ -12825,6 +12826,10 @@ function MaintenancePanel({
   const workRows = useMemo(
     () => unifiedMechanicalWorkRows([...dueRows, ...assetDueRows], requestRows),
     [dueRows, assetDueRows, requestRows]
+  )
+  const visibleWorkRows = useMemo(
+    () => mechanicalWorkRowsForDate(workRows, taskDate),
+    [workRows, taskDate]
   )
   const breakdownRows = completionRows.filter(
     (row) => str(row.maintenanceType).toLowerCase() === "breakdown"
@@ -13565,8 +13570,39 @@ function MaintenancePanel({
       >
         <CardHeader>
           <CardTitle>Maintenance Pending Tasks</CardTitle>
+          <CardDescription>
+            {taskDate
+              ? `${taskDate === todayIsoDate() ? "Today's" : formatIstDate(`${taskDate}T00:00:00+05:30`)} tasks · ${visibleWorkRows.length} pending`
+              : `All dates · ${visibleWorkRows.length} pending`}
+          </CardDescription>
         </CardHeader>
         <CardContent>
+          <div className="mb-3 flex flex-wrap items-end gap-2">
+            <div className="grid gap-1">
+              <Label htmlFor="mechanical-task-date">Task date (IST)</Label>
+              <Input
+                className="w-44"
+                id="mechanical-task-date"
+                onChange={(event) => setTaskDate(event.target.value)}
+                type="date"
+                value={taskDate}
+              />
+            </div>
+            <Button
+              onClick={() => setTaskDate(todayIsoDate())}
+              type="button"
+              variant={taskDate === todayIsoDate() ? "default" : "outline"}
+            >
+              Today
+            </Button>
+            <Button
+              onClick={() => setTaskDate("")}
+              type="button"
+              variant={taskDate ? "outline" : "default"}
+            >
+              All dates
+            </Button>
+          </div>
           {assetLoadError ? (
             <AlertMessage tone="destructive">{assetLoadError}</AlertMessage>
           ) : null}
@@ -13575,9 +13611,9 @@ function MaintenancePanel({
               {checklistStatus.message}
             </AlertMessage>
           ) : null}
-          {workRows.length ? (
+          {visibleWorkRows.length ? (
             <div className="min-w-0 rounded-lg border">
-              <OperationalTable>
+              <OperationalTable filterStorageKey={`mechanical-pending-tasks-${taskDate || "all"}`}>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Work Type</TableHead>
@@ -13591,7 +13627,7 @@ function MaintenancePanel({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {workRows.map((work) => {
+                  {visibleWorkRows.map((work) => {
                     const scheduled =
                       work.workType === "Scheduled"
                         ? (work.scheduled as DashboardPayload)
@@ -13665,9 +13701,13 @@ function MaintenancePanel({
                             </div>
                           )}
                         </TableCell>
-                        <TableCell>
+                        <TableCell data-filter-value={istDateValue(work.date)}>
                           <div>
-                            {work.date ? formatIstDateTime(work.date) : "—"}
+                            {work.date
+                              ? scheduled
+                                ? formatIstDate(work.date)
+                                : formatIstDateTime(work.date)
+                              : "—"}
                           </div>
                           {scheduled &&
                           displayValue(scheduled.dueProgress) !== "-" ? (
@@ -13737,8 +13777,9 @@ function MaintenancePanel({
             </div>
           ) : (
             <EmptyRowsMessage>
-              No Maintenance Schedules Saved Yet. Add Schedules From Machine
-              Master.
+              {taskDate
+                ? `No pending tasks for ${formatIstDate(`${taskDate}T00:00:00+05:30`)}. Choose another date or All dates.`
+                : "No pending maintenance tasks."}
             </EmptyRowsMessage>
           )}
         </CardContent>

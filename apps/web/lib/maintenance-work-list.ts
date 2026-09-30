@@ -1,3 +1,5 @@
+import { istDateValue } from "./date-time"
+
 type ScheduledWork = Record<string, unknown> & {
   assetCode?: unknown
   machineNo?: unknown
@@ -92,4 +94,11 @@ export function unifiedMechanicalWorkRows(
       priorityRank[left.priority] - priorityRank[right.priority] ||
       left.date.localeCompare(right.date)
   )
+}
+
+export function mechanicalWorkRowsForDate(
+  rows: UnifiedMechanicalWorkRow[],
+  date: string
+): UnifiedMechanicalWorkRow[] {
+  return date ? rows.filter((row) => istDateValue(row.date) === date) : rows
 }

@@ -33,7 +33,7 @@ The lifecycle is Pending Approval, Approved, In Progress, Completed, Closed, Ret
 
 ## Mechanical Work List
 
-The unified Mechanical table containing scheduled machine and physical Unit ID maintenance, plus approved Mechanical Request rows. Work Type distinguishes Scheduled from Request. Each scheduled Unit ID appears with its Asset Code, due date and Maintenance Master. Mechanical users open its checklist and save progress or complete the work there. Completion advances only that Unit ID's schedule. Breakdown work follows the Machine or Physical Asset Breakdown lifecycle below.
+The unified Mechanical table containing scheduled machine and physical Unit ID maintenance, plus approved Mechanical Request rows. Work Type distinguishes Scheduled from Request. Each scheduled Unit ID appears with its Asset Code, due date and Maintenance Master. The pending table opens on today's IST calendar date; users can choose another date or All dates. Scheduled due dates are calendar dates, while request dates use the submitted timestamp in IST. Mechanical users open its checklist and save progress or complete the work there. Completion advances only that Unit ID's schedule. Breakdown work follows the Machine or Physical Asset Breakdown lifecycle below.
 
 _Avoid_: separate Scheduled and Request tables, converting scheduled rows into requests.
 
