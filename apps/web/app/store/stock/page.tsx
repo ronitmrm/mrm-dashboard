@@ -27,6 +27,7 @@ import {
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { MetricSummary } from "@/components/ui/golden-patterns"
+import { StorePurchaseOrderForm } from "@/components/store/store-purchase-order-form"
 import {
   listGrantedCapabilities,
   requireCapability,
@@ -237,24 +238,6 @@ export default async function StoreStockPage({
         <CardContent className="grid min-w-0 gap-4">
           {mode === "request" ? (
             <form action="/store/requests/new" id={actionFormId} method="get" />
-          ) : mode === "order" ? (
-            <form action={createStorePurchaseOrdersAction} id={actionFormId}>
-              <input
-                defaultValue={randomUUID()}
-                name="issuance_id"
-                type="hidden"
-              />
-              <input
-                defaultValue={istDateValue()}
-                name="order_date"
-                type="hidden"
-              />
-              <input
-                defaultValue={requestNumber ? `For ${requestNumber}` : ""}
-                name="remark"
-                type="hidden"
-              />
-            </form>
           ) : mode === "repair" ? (
             <form action="/store/stock/repair" id={actionFormId} method="get">
               <input name="issuance_id" type="hidden" value={repairIssuanceId} />
@@ -344,6 +327,7 @@ export default async function StoreStockPage({
                             aria-label={`Select Asset Code ${item.typeCode} ${item.identificationName}`}
                             className="size-4 accent-primary"
                             defaultChecked={item.id === orderItemId}
+                            data-asset-code={item.typeCode}
                             disabled={mode === "order" && !hasPrice}
                             form={actionFormId}
                             name={
@@ -498,14 +482,13 @@ export default async function StoreStockPage({
               Continue with Selected Request Items
             </Button>
           ) : mode === "order" ? (
-            <div className="flex flex-wrap items-center gap-3">
-              <Button className="w-fit" form={actionFormId} type="submit">
-                Save Supplier Purchase Orders
-              </Button>
-              <span className="text-sm text-muted-foreground">
-                Selected items are automatically split into one PO per Supplier.
-              </span>
-            </div>
+            <StorePurchaseOrderForm
+              action={createStorePurchaseOrdersAction}
+              formId={actionFormId}
+              issuanceId={randomUUID()}
+              orderDate={today}
+              remark={requestNumber ? `For ${requestNumber}` : ""}
+            />
           ) : mode === "repair" ? (
             <Button className="w-fit" form={actionFormId} type="submit">
               Continue with Selected Unit IDs
