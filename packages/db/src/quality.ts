@@ -1,10 +1,7 @@
 import { assertMasterAvailable } from "./master-duplicate"
 import { assertSettingChecklistComplete } from "./setup-checklist-validation"
 import { randomUUID } from "node:crypto"
-import {
-  queueDashboardRefresh,
-  queueDashboardRefreshAfterSetChange,
-} from "./dashboard-refresh-queue"
+import { queueDashboardRefresh } from "./dashboard-refresh-queue"
 
 import type { PoolClient } from "pg"
 
@@ -1758,7 +1755,7 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
         for (const definition of definitions) {
           await writeParameterDefinition(client, definition, true)
         }
-        const refresh = await queueDashboardRefreshAfterSetChange(
+        const refresh = await queueDashboardRefresh(
           client,
           first.organizationId
         )

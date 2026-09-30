@@ -1,5 +1,6 @@
 import { createStoreRepository } from "./store"
 import { randomUUID } from "node:crypto"
+import { setTimeout } from "node:timers/promises"
 
 import { Pool } from "pg"
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest"
@@ -1396,7 +1397,7 @@ describe("production and shop-floor workflows", () => {
           (SELECT reversal_reason FROM manufacturing.production_entries
             WHERE id = $2) AS reversal_reason,
           (SELECT count(*) FROM derived.refresh_jobs
-            WHERE organization_id = $3 AND queue_key = 'dashboard'
+            WHERE organization_id = $3 AND (queue_key = 'dashboard' OR queue_key LIKE 'dashboard:%')
               AND status IN ('pending', 'running')) AS refresh_jobs,
           (SELECT count(*) FROM derived.outbox_events
             WHERE organization_id = $3
@@ -1484,4 +1485,75 @@ describe("production and shop-floor workflows", () => {
     await expect(start(jobs[1]!, machines[1]!)).resolves.toBeDefined()
   })
 
+  test("session downtime commits while a dashboard rebuild holds its refresh job", async () => {
+    const machineNumber = `LATENCY-${suffix}`
+    await planning.upsertMachine({
+      machineNumber,
+      organizationId,
+      productionFloorCode: "cnc",
+    })
+    const session = await pool.query<{ id: string }>(
+      `INSERT INTO manufacturing.production_sessions (
+         organization_id, work_order_id, route_option_id, operation_setup_id,
+         machine_id, operator_employee_id, production_date, shift, measurement_method,
+         started_at, piece_weight_grams, session_reference, daily_sequence,
+         machine_number_snapshot, job_card_number_snapshot, part_code_snapshot,
+         option_number_snapshot, setup_number_snapshot, operator_code_snapshot, operator_name_snapshot
+       ) SELECT $1, work_order.id, route.id, setup.id, machine.id, employee.id,
+         '2026-09-30', 'A', 'weight', '2026-09-30T08:00:00+05:30', 1,
+         $2 || '-20260930-01', 1, $2, $3, $4, 'CNC-1', '1', $5, 'Latency test operator'
+       FROM manufacturing.work_orders work_order
+       JOIN manufacturing.route_options route ON route.item_id = work_order.item_id AND route.route_code = 'CNC-1'
+       JOIN manufacturing.operation_setups setup ON setup.route_option_id = route.id AND setup.setup_number = 1
+       JOIN catalog.machines machine ON machine.organization_id = $1 AND machine.machine_number = $2
+       JOIN workforce.employees employee ON employee.organization_id = $1 AND employee.employee_code = $5
+       WHERE work_order.organization_id = $1 AND work_order.job_card_number = $3 RETURNING id`,
+      [organizationId, machineNumber, cncJobCard, itemUid, firstOperator]
+    )
+    const blocker = await pool.connect()
+    let successorIds: string[] = []
+    try {
+      await blocker.query("BEGIN")
+      const original = await blocker.query<{ id: string }>(
+        "SELECT id FROM derived.refresh_jobs WHERE organization_id = $1 AND status = 'pending' FOR UPDATE",
+        [organizationId]
+      )
+      const save = repository.startProductionSessionDowntime({
+        enteredRole: "shop_floor",
+        organizationId,
+        reasonCode: "POWER",
+        reasonName: "Power failure",
+        sessionId: session.rows[0]!.id,
+        startedAt: "2026-09-30T09:00:00+05:30",
+      })
+      const settled = await Promise.race([
+        save.then(() => true),
+        setTimeout(1_000).then(() => false),
+      ])
+      await blocker.query("ROLLBACK")
+      await save
+      const successors = await pool.query<{ id: string }>(
+        "SELECT id FROM derived.refresh_jobs WHERE organization_id = $1 AND status = 'pending' AND NOT (id = ANY($2::uuid[]))",
+        [organizationId, original.rows.map((row) => row.id)]
+      )
+      successorIds = successors.rows.map((row) => row.id)
+      expect(settled).toBe(true)
+      expect(successorIds).toHaveLength(1)
+    } finally {
+      await blocker.query("ROLLBACK")
+      blocker.release()
+      await pool.query(
+        "DELETE FROM derived.outbox_events WHERE aggregate_id = ANY($1::uuid[])",
+        [successorIds]
+      )
+      await pool.query(
+        "DELETE FROM derived.refresh_jobs WHERE id = ANY($1::uuid[])",
+        [successorIds]
+      )
+      await pool.query(
+        "UPDATE manufacturing.production_sessions SET reversed_at = now() WHERE id = $1",
+        [session.rows[0]!.id]
+      )
+    }
+  })
 })

@@ -72,6 +72,27 @@ afterAll(async () => {
 })
 
 describe("PostgreSQL dashboard corrections", () => {
+  it("prevents an older worker snapshot from consuming a coalesced refresh", async () => {
+    const refresh = await repository.requestRefresh(organizationId)
+    const worker = await pool.connect()
+    try {
+      await worker.query("BEGIN ISOLATION LEVEL REPEATABLE READ")
+      await worker.query("SELECT id FROM derived.refresh_jobs WHERE id = $1", [
+        refresh.jobId,
+      ])
+      await repository.requestRefresh(organizationId)
+      await expect(
+        worker.query(
+          "SELECT id FROM derived.refresh_jobs WHERE id = $1 FOR UPDATE SKIP LOCKED",
+          [refresh.jobId]
+        )
+      ).rejects.toMatchObject({ code: "40001" })
+    } finally {
+      await worker.query("ROLLBACK")
+      worker.release()
+    }
+  })
+
   it("selects dashboard versions numerically after version 99", async () => {
     const organization = await pool.query<{ id: string }>(
       `INSERT INTO core.organizations (code, name) VALUES ($1, $2) RETURNING id`,
@@ -150,7 +171,7 @@ describe("PostgreSQL dashboard corrections", () => {
     const refresh = await pool.query<{ jobs: string; outbox_events: string }>(
       `SELECT
          (SELECT count(*)::text FROM derived.refresh_jobs
-          WHERE organization_id = $1 AND queue_key = 'dashboard') AS jobs,
+          WHERE organization_id = $1 AND (queue_key = 'dashboard' OR queue_key LIKE 'dashboard:%')) AS jobs,
          (SELECT count(*)::text FROM derived.outbox_events
           WHERE organization_id = $1
             AND topic = 'dashboard.refresh.requested') AS outbox_events`,

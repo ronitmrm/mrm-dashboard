@@ -165,7 +165,7 @@ describe("durable refresh safety sweep", () => {
         `
           SELECT status
           FROM derived.refresh_jobs
-          WHERE organization_id = $1 AND queue_key = 'dashboard'
+          WHERE organization_id = $1 AND (queue_key = 'dashboard' OR queue_key LIKE 'dashboard:%')
           ORDER BY created_at DESC
           LIMIT 1
         `,

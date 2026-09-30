@@ -924,7 +924,7 @@ describe("dashboard planning writes", () => {
             WHERE event.source_system = 'mrm-dashboard'
               AND event.source_payload->>'jobCardNumber' = $1) AS route_change_setups,
           (SELECT count(*) FROM derived.refresh_jobs
-            WHERE organization_id = $3 AND queue_key = 'dashboard') AS jobs,
+            WHERE organization_id = $3 AND (queue_key = 'dashboard' OR queue_key LIKE 'dashboard:%')) AS jobs,
           (SELECT count(*) FROM derived.outbox_events
             WHERE organization_id = $3
               AND topic = 'dashboard.refresh.requested') AS outbox_events

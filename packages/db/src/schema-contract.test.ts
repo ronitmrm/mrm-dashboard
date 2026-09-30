@@ -557,7 +557,7 @@ test("dashboard floor migration queues one refresh per organization", async () =
     `
       SELECT count(*)::text AS count
       FROM derived.refresh_jobs
-      WHERE organization_id = $1 AND queue_key = 'dashboard'
+      WHERE organization_id = $1 AND (queue_key = 'dashboard' OR queue_key LIKE 'dashboard:%')
     `,
     [organizationId]
   )
@@ -980,7 +980,7 @@ test("refresh-job hints are commit-scoped, coalesced, and bounded", async () => 
       `
         SELECT
           (SELECT count(*)::text FROM derived.refresh_jobs
-            WHERE organization_id = $1 AND queue_key = 'dashboard') AS jobs,
+            WHERE organization_id = $1 AND (queue_key = 'dashboard' OR queue_key LIKE 'dashboard:%')) AS jobs,
           (SELECT count(*)::text FROM derived.outbox_events
             WHERE organization_id = $1
               AND topic = 'dashboard.refresh.requested') AS outbox_events
@@ -1041,6 +1041,11 @@ test("refresh-job hints are commit-scoped, coalesced, and bounded", async () => 
       writer,
       async () => {
         await writer.query("BEGIN")
+        // Exercise the legacy dashboard-key trigger on the existing job.
+        await writer.query(
+          "UPDATE derived.refresh_jobs SET queue_key = 'dashboard' WHERE organization_id = $1 AND status = 'pending'",
+          [committedOrganizationId]
+        )
         await queueDashboardRefreshRow(
           writer,
           committedOrganizationId,
@@ -1072,7 +1077,7 @@ test("refresh-job hints are commit-scoped, coalesced, and bounded", async () => 
       `
         SELECT
           (SELECT count(*)::text FROM derived.refresh_jobs
-            WHERE organization_id = $1 AND queue_key = 'dashboard') AS jobs,
+            WHERE organization_id = $1 AND (queue_key = 'dashboard' OR queue_key LIKE 'dashboard:%')) AS jobs,
           (SELECT count(*)::text FROM derived.outbox_events
             WHERE organization_id = $1
               AND topic = 'dashboard.refresh.requested') AS outbox_events

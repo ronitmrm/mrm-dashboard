@@ -861,7 +861,7 @@ describe("workforce, quality, and maintenance workflows", () => {
     })
     await pool.query(
       `UPDATE derived.refresh_jobs SET status = 'complete'
-       WHERE organization_id = $1 AND queue_key = 'dashboard'
+       WHERE organization_id = $1 AND (queue_key = 'dashboard' OR queue_key LIKE 'dashboard:%')
          AND status = 'pending'`,
       [organizationId]
     )
@@ -875,7 +875,7 @@ describe("workforce, quality, and maintenance workflows", () => {
     })
     const refresh = await pool.query<{ count: number }>(
       `SELECT count(*)::int AS count FROM derived.refresh_jobs
-       WHERE organization_id = $1 AND queue_key = 'dashboard'
+       WHERE organization_id = $1 AND (queue_key = 'dashboard' OR queue_key LIKE 'dashboard:%')
          AND status = 'pending'`,
       [organizationId]
     )
