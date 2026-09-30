@@ -179,6 +179,38 @@ describe("machineConstraintQueueReview", () => {
     expect(review.some((group) => group.kind === "downstream")).toBe(false);
   });
 
+  it("leaves completed destination history out of the current queue", () => {
+    const affected = {
+      jcNo: "P1205",
+      partCode: "M2105B",
+      setupNo: "1",
+      machine: "CNC-14",
+      plannedProductionStartDate: "30-Sept-26",
+    };
+    const completed = ["P1282", "P0885"].map((jcNo) => ({
+      jcNo,
+      partCode: "M2050B",
+      setupNo: "1",
+      machine: "CNC-16",
+      shopFloorStage: "item_complete",
+      runningStatus: "Complete",
+      rawRows: 5,
+      plannedProductionStartDate: "24-Sept-26",
+    }));
+    const review = machineConstraintQueueReview({
+      machineNo: "CNC-14",
+      rescheduleAction: "shift_required",
+      affectedRows: [affected],
+      explicitDestinationMachines: ["CNC-16"],
+      includeSameMachineLater: false,
+      includeDownstream: false,
+      machineRows: [],
+      plannedRows: [affected, ...completed],
+    });
+
+    expect(review[0]?.rows).toEqual([]);
+  });
+
   it("hides the source-machine later queue when reviewing a part switch", () => {
     const affected = {
       jcNo: "JC-014",
