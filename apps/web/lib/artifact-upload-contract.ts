@@ -47,6 +47,7 @@ export type PendingUploadIntent =
   | { kind: "commercial-purchase-order-source"; purchaseOrderId: string }
   | { candidateId?: string; kind: "recruitment-candidate-resume" }
   | { index: number; kind: "maintenance-request-photo" }
+  | { index: number; kind: "maintenance-work-photo" }
   | { kind: "store-calibration-certificate"; visitId: string }
   | { itemTypeId?: string; kind: "store-item-drawing" }
   | {
@@ -161,7 +162,8 @@ export function parsePendingUploadIntent(value: unknown): PendingUploadIntent {
       const candidateId = optionalText(input.candidateId, "candidateId")
       return { ...(candidateId ? { candidateId } : {}), kind }
     }
-    case "maintenance-request-photo": {
+    case "maintenance-request-photo":
+    case "maintenance-work-photo": {
       const index = Number(input.index)
       if (!Number.isSafeInteger(index) || index < 1 || index > 8) {
         throw new Error("Upload intent photo index is invalid.")

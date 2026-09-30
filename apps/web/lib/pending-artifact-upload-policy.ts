@@ -247,6 +247,9 @@ export async function authorizePendingUploadIntent(
     }
     case "maintenance-request-photo":
       return organizationForCode(client, "MRMPL")
+    case "maintenance-work-photo":
+      requireCapability(authorization, "maintenance.tasks.write")
+      return organizationForCode(client, "MRMPL")
     case "store-calibration-certificate": {
       requireCapability(authorization, "store.asset_maintenance.write")
       const organizationId = await organizationForCode(client, "MRMPL")
@@ -368,6 +371,7 @@ export function validatePendingUploadBytes(input: {
       return { fileName, mediaType: "application/pdf" }
     }
     case "maintenance-request-photo":
+    case "maintenance-work-photo":
       return validateUserAttachment({
         bytes,
         fileName,

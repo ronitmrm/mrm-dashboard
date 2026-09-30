@@ -1,4 +1,4 @@
-import { createMaintenanceRepository } from "@workspace/db"
+import { createMaintenanceRepository, type MaintenanceWorkPhotoTarget } from "@workspace/db"
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
@@ -21,6 +21,7 @@ import {
   machineMaintenancePlan,
   machineMaintenanceRegister,
 } from "@/lib/iso-documents"
+import { maintenanceWorkPhotoQuery } from "@/lib/maintenance-work-photo-target"
 
 async function readReportRows(isPlan: boolean, month: string) {
   const repository = createMaintenanceRepository({
@@ -36,10 +37,14 @@ async function readReportRows(isPlan: boolean, month: string) {
       return [
         ...machines.map((row) => ({ ...row, assetCode: null as string | null,
           assetName: null as string | null, taskType: "Planned",
-          completedBy: null, workDone: null, legacyHistory: false })),
+          completedBy: null, workDone: null, legacyHistory: false,
+          photos: [] as Array<{ id: string; fileName: string }>,
+          photoTarget: null as MaintenanceWorkPhotoTarget | null })),
         ...assets.map((row) => ({ ...row, machineNumber: null as string | null,
           assetCode: row.assetCode, taskType: "Planned",
-          completedBy: null, workDone: null, legacyHistory: false })),
+          completedBy: null, workDone: null, legacyHistory: false,
+          photos: [] as Array<{ id: string; fileName: string }>,
+          photoTarget: null as MaintenanceWorkPhotoTarget | null })),
       ].sort((left, right) => left.dueOn.localeCompare(right.dueOn) ||
         (left.machineNumber ?? left.assetCode ?? "").localeCompare(right.machineNumber ?? right.assetCode ?? ""))
     }
@@ -49,9 +54,15 @@ async function readReportRows(isPlan: boolean, month: string) {
     ])
     return [
       ...machines.map((row) => ({ ...row, assetCode: null as string | null,
-        assetName: null as string | null, status: "Completed" })),
+        assetName: null as string | null, status: "Completed",
+        photoTarget: { kind: "machine", taskKey: row.taskKey } as MaintenanceWorkPhotoTarget })),
       ...assets.map((row) => ({ ...row, machineNumber: null as string | null,
-        status: "Completed" })),
+        status: "Completed",
+        photoTarget: (row.breakdownId
+          ? { kind: "asset-breakdown", breakdownId: row.breakdownId }
+          : row.scheduleId && row.dueOn
+            ? { kind: "asset-planned", scheduleId: row.scheduleId, dueOn: row.dueOn }
+            : null) as MaintenanceWorkPhotoTarget | null })),
     ].sort((left, right) => right.completedAt.localeCompare(left.completedAt))
   })().finally(() => repository.close())
 }
@@ -150,6 +161,7 @@ export function MachineMaintenanceReportView({
                 <TableHead>Type</TableHead>
                 <TableHead>Completed By</TableHead>
                 <TableHead>Work Done</TableHead>
+                <TableHead>Photos</TableHead>
               </>
             )}
           </TableRow>
@@ -181,13 +193,23 @@ export function MachineMaintenanceReportView({
                   <TableCell className="whitespace-normal">
                     {row.workDone || "-"}
                   </TableCell>
+                  <TableCell className="whitespace-normal">
+                    {row.photoTarget && row.photos.length
+                      ? row.photos.map((photo, index) => (
+                        <span key={photo.id}>
+                          {index ? ", " : ""}
+                          <a className="underline underline-offset-4" href={`/api/maintenance/work-photos/${photo.id}?${maintenanceWorkPhotoQuery(row.photoTarget!)}`} rel="noopener noreferrer" target="_blank">{photo.fileName}</a>
+                        </span>
+                      ))
+                      : "-"}
+                  </TableCell>
                 </>
               )}
             </TableRow>
           ))}
           {!rows.length ? (
             <TableRow>
-              <TableCell colSpan={isPlan ? 6 : 7}>
+              <TableCell colSpan={isPlan ? 6 : 8}>
                 <StandardState
                   title={
                     isPlan

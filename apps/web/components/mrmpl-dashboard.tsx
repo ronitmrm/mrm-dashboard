@@ -47,6 +47,7 @@ import {
 
 import { Badge, StatusBadge } from "@workspace/ui/components/badge"
 import type { MaintenanceRequestRow } from "@workspace/db"
+import type { MaintenanceWorkPhotoTarget } from "@workspace/db"
 import { rawMaterialRejectionBalance } from "@workspace/db/rejection-domain"
 import { Button } from "@workspace/ui/components/button"
 import {
@@ -61,6 +62,7 @@ import {
 import { Empty } from "@workspace/ui/components/empty"
 import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@workspace/ui/components/tabs"
 import {
   Dialog,
   DialogContent,
@@ -261,6 +263,10 @@ import {
 import { useTheme } from "@/components/theme-provider"
 import { UnifiedSidebarNavigation } from "@/components/unified-sidebar-navigation"
 import { OperationalWorkspaceTabs } from "@/components/operational-workspace-tabs"
+import {
+  MaintenanceWorkPhotos,
+  type MaintenanceWorkPhotosHandle,
+} from "@/components/maintenance/maintenance-work-photos"
 import { UserAccountFooter } from "@/components/user-account-footer"
 import { JobCardRegister } from "@/components/job-card-register"
 import {
@@ -12738,6 +12744,9 @@ function MaintenancePanel({
   const [workDone, setWorkDone] = useState("")
   const [checklistStatus, setChecklistStatus] = useState<ActionStatus>(null)
   const [isSavingChecklist, setIsSavingChecklist] = useState(false)
+  const [isCompletingBreakdown, setIsCompletingBreakdown] = useState(false)
+  const [breakdownCompletionStatus, setBreakdownCompletionStatus] = useState<ActionStatus>(null)
+  const workPhotosRef = useRef<MaintenanceWorkPhotosHandle>(null)
   const [savedProgress, setSavedProgress] = useState<
     Record<string, DashboardPayload>
   >({})
@@ -12912,6 +12921,12 @@ function MaintenancePanel({
     return maintenanceTaskId(row, occurrence)
   }
 
+  function photoTargetForSchedule(row: DashboardPayload): MaintenanceWorkPhotoTarget {
+    return row.assetScheduleId
+      ? { kind: "asset-planned", scheduleId: str(row.assetScheduleId), dueOn: str(row.nextDueDate) }
+      : { kind: "machine", taskKey: taskKeyForSchedule(row) }
+  }
+
   function openMaintenanceChecklist(row: DashboardPayload) {
     const taskKey = taskKeyForSchedule(row)
     const draft = row.assetScheduleId ? row :
@@ -13057,28 +13072,39 @@ function MaintenancePanel({
     setIsSavingChecklist(true)
     setChecklistStatus(null)
     try {
-      if (row.assetScheduleId) {
-        await submitAssetMaintenance({
-          action: "save-planned",
-          scheduleId: row.assetScheduleId,
-          dueOn: row.nextDueDate,
-          startedAt: startIso,
-          endedAt: endIso || null,
-          status: complete ? "Completed" : "In Progress",
-          checklistSteps: checklistSteps.map(({ sequence, value, remark }) => ({ sequence, value, remark })),
-          changedItems,
-          workDone,
+      const save = async (finish: boolean) => {
+        if (row.assetScheduleId) {
+          await submitAssetMaintenance({
+            action: "save-planned",
+            scheduleId: row.assetScheduleId,
+            dueOn: row.nextDueDate,
+            startedAt: startIso,
+            endedAt: endIso || null,
+            status: finish ? "Completed" : "In Progress",
+            checklistSteps: checklistSteps.map(({ sequence, value, remark }) => ({ sequence, value, remark })),
+            changedItems,
+            workDone,
+          })
+          return
+        }
+        const savedPayload = finish ? payload : {
+          ...payload,
+          completedAt: "",
+          completedDate: "",
+          nextDueDate: "",
+          result: "In Progress",
+          status: "In Progress",
+        }
+        await submitAction("data-entry", {
+          entryType: "maintenance_task",
+          key: dataEntryKey("maintenance_task", savedPayload),
+          payload: savedPayload,
         })
-        setChecklistStatus({ tone: "default", message: complete ? "Maintenance completed." : "Checklist progress saved." })
-        setSelectedSchedule(null)
-        return
+        setSavedProgress((current) => ({ ...current, [payload.taskId]: savedPayload }))
       }
-      await submitAction("data-entry", {
-        entryType: "maintenance_task",
-        key: dataEntryKey("maintenance_task", payload),
-        payload,
-      })
-      setSavedProgress((current) => ({ ...current, [payload.taskId]: payload }))
+      if (!complete || workPhotosRef.current?.hasPending()) await save(false)
+      await workPhotosRef.current?.uploadPending()
+      if (complete) await save(true)
       setChecklistStatus({
         tone: "default",
         message: complete
@@ -13175,41 +13201,56 @@ function MaintenancePanel({
     event: FormEvent<HTMLFormElement>
   ) {
     event.preventDefault()
+    if (isCompletingBreakdown) return
     const form = event.currentTarget
     const formData = new FormData(form)
     const taskId = str(formData.get("taskId"))
     const completedAt = istDateTimeInputToIso(str(formData.get("completedAt")))
-    if (!completedAt) throw new Error("Select a valid completion time.")
     const performer = signedInPerformer
-    if (!performer) throw new Error("Your signed-in account needs a name to record maintenance work.")
     const payload = {
       breakdownAction: "complete",
       changedItems: changedItems.map(str).filter(Boolean),
       completedAt,
-      completedBy: performer.name,
-      completedByEmployeeCode: performer.code || null,
+      completedBy: performer?.name ?? "",
+      completedByEmployeeCode: performer?.code || null,
       maintenanceType: "Breakdown",
       result: "Completed",
       taskId,
       workDone: str(formData.get("workDone")),
       remark: str(formData.get("remark")),
     }
-    await submitAction("data-entry", {
-      entryType: "maintenance_task",
-      key: dataEntryKey("maintenance_task", payload),
-      payload,
-    })
-    setSelectedBreakdownTaskKey("")
-    setChangedItems([""])
+    setIsCompletingBreakdown(true)
+    setBreakdownCompletionStatus(null)
+    try {
+      if (!completedAt) throw new Error("Select a valid completion time.")
+      if (!performer) throw new Error("Your signed-in account needs a name to record maintenance work.")
+      if (!payload.workDone) throw new Error("Enter the work done.")
+      await workPhotosRef.current?.uploadPending()
+      await submitAction("data-entry", {
+        entryType: "maintenance_task",
+        key: dataEntryKey("maintenance_task", payload),
+        payload,
+      })
+      setSelectedBreakdownTaskKey("")
+      setChangedItems([""])
+    } catch (error) {
+      setBreakdownCompletionStatus({ tone: "destructive", message: error instanceof Error ? error.message : "Breakdown could not be completed." })
+    } finally {
+      setIsCompletingBreakdown(false)
+    }
   }
 
   async function completeAssetBreakdownMaintenance(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!selectedAssetBreakdown) return
+    if (!selectedAssetBreakdown || isCompletingBreakdown) return
     const formData = new FormData(event.currentTarget)
+    setIsCompletingBreakdown(true)
+    setBreakdownCompletionStatus(null)
     try {
       const completedAt = istDateTimeInputToIso(str(formData.get("completedAt")))
       if (!completedAt) throw new Error("Select a valid completion time.")
+      if (!str(formData.get("workDone"))) throw new Error("Enter the work done.")
+      await workPhotosRef.current?.uploadPending()
       await submitAssetMaintenance({
         action: "complete",
         breakdownId: selectedAssetBreakdown.id,
@@ -13222,10 +13263,12 @@ function MaintenancePanel({
       setChangedItems([""])
       setAssetBreakdownStatus({ tone: "default", message: "Asset breakdown completed." })
     } catch (error) {
-      setAssetBreakdownStatus({
+      setBreakdownCompletionStatus({
         tone: "destructive",
         message: error instanceof Error ? error.message : "Asset breakdown could not be completed.",
       })
+    } finally {
+      setIsCompletingBreakdown(false)
     }
   }
 
@@ -13269,6 +13312,12 @@ function MaintenancePanel({
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
+            <Tabs defaultValue="checklist">
+              <TabsList aria-label="Maintenance entry">
+                <TabsTrigger value="checklist">Checklist and work</TabsTrigger>
+                <TabsTrigger value="photos">Photos</TabsTrigger>
+              </TabsList>
+              <TabsContent className="grid gap-4 data-[state=inactive]:hidden" forceMount value="checklist">
             {checklistSteps.length ? (
               <OperationalTable containerClassName="max-h-[65vh] rounded-lg border">
                 <TableHeader className="sticky top-0 z-10 bg-background">
@@ -13448,6 +13497,16 @@ function MaintenancePanel({
                 />
               </div>
             </div>
+              </TabsContent>
+              <TabsContent className="data-[state=inactive]:hidden" forceMount value="photos">
+                <MaintenanceWorkPhotos
+                  disabled={isSavingChecklist}
+                  key={taskKeyForSchedule(selectedSchedule)}
+                  ref={workPhotosRef}
+                  target={photoTargetForSchedule(selectedSchedule)}
+                />
+              </TabsContent>
+            </Tabs>
             {checklistStatus ? (
               <AlertMessage tone={checklistStatus.tone}>
                 {checklistStatus.message}
@@ -13720,6 +13779,8 @@ function MaintenancePanel({
                       <Button
                         onClick={() => {
                           setSelectedBreakdownTaskKey(str(row.taskId))
+                          setSelectedAssetBreakdownId("")
+                          setBreakdownCompletionStatus(null)
                           setChangedItems([""])
                         }}
                         size="sm"
@@ -13740,7 +13801,7 @@ function MaintenancePanel({
                     <TableCell>{row.reasonName}</TableCell>
                     <TableCell><StatusBadge value="In Progress" /></TableCell>
                     <TableCell>
-                      <Button onClick={() => { setSelectedAssetBreakdownId(row.id); setSelectedBreakdownTaskKey(""); setChangedItems([""]) }} size="sm" type="button">Complete</Button>
+                      <Button onClick={() => { setSelectedAssetBreakdownId(row.id); setSelectedBreakdownTaskKey(""); setBreakdownCompletionStatus(null); setChangedItems([""]) }} size="sm" type="button">Complete</Button>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -13850,6 +13911,7 @@ function MaintenancePanel({
           <CardContent>
             <form
               className="grid gap-4"
+              noValidate
               onSubmit={completeBreakdownMaintenance}
             >
               <input
@@ -13857,6 +13919,12 @@ function MaintenancePanel({
                 type="hidden"
                 value={str(selectedBreakdown.taskId)}
               />
+              <Tabs defaultValue="work">
+                <TabsList aria-label="Breakdown completion entry">
+                  <TabsTrigger value="work">Work details</TabsTrigger>
+                  <TabsTrigger value="photos">Photos</TabsTrigger>
+                </TabsList>
+                <TabsContent className="grid gap-4 data-[state=inactive]:hidden" forceMount value="work">
               <div className="grid gap-3 md:grid-cols-2">
                 <Field label="Completed At">
                   <Input
@@ -13924,8 +13992,19 @@ function MaintenancePanel({
               <Field label="Remark">
                 <Input name="remark" />
               </Field>
+                </TabsContent>
+                <TabsContent className="data-[state=inactive]:hidden" forceMount value="photos">
+                  <MaintenanceWorkPhotos
+                    disabled={isCompletingBreakdown}
+                    key={str(selectedBreakdown.taskId)}
+                    ref={workPhotosRef}
+                    target={{ kind: "machine", taskKey: str(selectedBreakdown.taskId) }}
+                  />
+                </TabsContent>
+              </Tabs>
+              {breakdownCompletionStatus ? <AlertMessage tone={breakdownCompletionStatus.tone}>{breakdownCompletionStatus.message}</AlertMessage> : null}
               <div className="flex flex-wrap gap-2">
-                <Button disabled={!signedInPerformer} type="submit">
+                <Button disabled={!signedInPerformer || isCompletingBreakdown} type="submit">
                   <CheckCircle2 className="size-4" /> Complete Breakdown
                 </Button>
                 <Button
@@ -13952,7 +14031,13 @@ function MaintenancePanel({
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form className="grid gap-4" onSubmit={completeAssetBreakdownMaintenance}>
+            <form className="grid gap-4" noValidate onSubmit={completeAssetBreakdownMaintenance}>
+              <Tabs defaultValue="work">
+                <TabsList aria-label="Asset breakdown completion entry">
+                  <TabsTrigger value="work">Work details</TabsTrigger>
+                  <TabsTrigger value="photos">Photos</TabsTrigger>
+                </TabsList>
+                <TabsContent className="grid gap-4 data-[state=inactive]:hidden" forceMount value="work">
               <div className="grid gap-3 md:grid-cols-2">
                 <Field label="Completed At">
                   <Input defaultValue={istDateTimeInputValue()} name="completedAt" required type="datetime-local" />
@@ -13974,8 +14059,19 @@ function MaintenancePanel({
                 <Button className="w-fit" onClick={() => setChangedItems((current) => [...current, ""])} size="sm" type="button" variant="outline"><Plus className="size-4" /> Add Item</Button>
               </div>
               <Field label="Remark"><Input name="remark" /></Field>
+                </TabsContent>
+                <TabsContent className="data-[state=inactive]:hidden" forceMount value="photos">
+                  <MaintenanceWorkPhotos
+                    disabled={isCompletingBreakdown}
+                    key={selectedAssetBreakdown.id}
+                    ref={workPhotosRef}
+                    target={{ kind: "asset-breakdown", breakdownId: selectedAssetBreakdown.id }}
+                  />
+                </TabsContent>
+              </Tabs>
+              {breakdownCompletionStatus ? <AlertMessage tone={breakdownCompletionStatus.tone}>{breakdownCompletionStatus.message}</AlertMessage> : null}
               <div className="flex flex-wrap gap-2">
-                <Button disabled={!signedInPerformer} type="submit"><CheckCircle2 className="size-4" /> Complete Breakdown</Button>
+                <Button disabled={!signedInPerformer || isCompletingBreakdown} type="submit"><CheckCircle2 className="size-4" /> Complete Breakdown</Button>
                 <Button onClick={() => { setSelectedAssetBreakdownId(""); setChangedItems([""]) }} type="button" variant="outline">Cancel</Button>
               </div>
             </form>

@@ -52,3 +52,24 @@ describe("calibration certificate upload", () => {
     expect(query).not.toHaveBeenCalled()
   })
 })
+
+test("maintenance work photos require task write access and verified image bytes", async () => {
+  const intent = parsePendingUploadIntent({ kind: "maintenance-work-photo", index: 1 })
+  const query = vi.fn().mockResolvedValue({ rows: [{ id: "organization-id" }] })
+  await expect(authorizePendingUploadIntent(
+    { query } as never,
+    intent,
+    { grantedCapabilities: new Set(["maintenance.tasks.write"]), userId: "user-id" }
+  )).resolves.toBe("organization-id")
+  expect(validatePendingUploadBytes({
+    bytes: Buffer.from([0xff, 0xd8, 0xff, 0xe0]),
+    fileName: "repair.jpeg",
+    intent,
+    mediaType: "image/jpeg",
+  })).toEqual({ fileName: "repair.jpeg", mediaType: "image/jpeg" })
+  await expect(authorizePendingUploadIntent(
+    { query } as never,
+    intent,
+    { grantedCapabilities: new Set(), userId: "user-id" }
+  )).rejects.toThrow("Upload operation is not permitted.")
+})
