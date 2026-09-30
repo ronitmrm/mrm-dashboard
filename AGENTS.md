@@ -2,6 +2,7 @@
 
 - DO NOT mutate this file unless explicitly instructued to do so by the user.
 - This repo is meant to be iterated on by non-technical users through AI agents. Keep changes boring, traceable, and easy to verify.
+- If an issue is caused by incorrect data, correct the data at its source. Do not change application code to compensate for the data error.
 - Save the handoff docs in this directory under `./.handoff/`. Create it if not present and add it to .gitignore as well.
 - While running powershell commands, run this for execution policy bypass: `Set-ExecutionPolicy Bypass -Scope Process -Force`.
 - Be extremely concise when responding to me. Sacrifice grammar for the sake of concision.
