@@ -27,7 +27,7 @@ export function machineConstraintAffectedRows(
 
   const machineRows = rows.filter(
     (row) => machineKey(machineValue(row)) === targetMachine
-      && machineKey(rowText(row, "shopFloorStage", "stage")) !== "item_complete"
+      && !rowIsComplete(row)
   );
   if (machineKey(issue.rescheduleAction) === "shift_all") {
     return machineRows.sort(machinePlanSort);
@@ -73,6 +73,7 @@ export function machineConstraintQueueReview({
   if (!targetMachine || !affectedRows.length) return [];
 
   const groups: MachineConstraintQueueReviewGroup[] = [];
+  const currentPlannedRows = plannedRows.filter((row) => !rowIsComplete(row));
   const added = new Set<string>();
   const affectedKeys = new Set(affectedRows.map(setupIdentityKey));
 
@@ -88,7 +89,7 @@ export function machineConstraintQueueReview({
       ? uniqueMachineValues(explicitDestinationMachines).filter((machine) => machineKey(machine) !== targetMachine)
       : compatibleDestinationMachines(affectedRows, machineRows, targetMachine);
     for (const machine of destinationMachines) {
-      const queueRows = queueRowsForMachine(plannedRows, machine, affectedKeys, maxRowsPerQueue);
+      const queueRows = queueRowsForMachine(currentPlannedRows, machine, affectedKeys, maxRowsPerQueue);
       addGroup({
         kind: "destination",
         machine,
@@ -101,7 +102,7 @@ export function machineConstraintQueueReview({
   }
 
   if (includeSameMachineLater) {
-    const laterRows = plannedRows
+    const laterRows = currentPlannedRows
       .filter((row) => machineKey(machineValue(row)) === targetMachine)
       .filter((row) => !affectedKeys.has(setupIdentityKey(row)))
       .filter((row) => rowStartSortValue(row) >= affectedWindowStart(affectedRows))
@@ -119,8 +120,8 @@ export function machineConstraintQueueReview({
   }
 
   if (includeDownstream) {
-    for (const machine of downstreamMachines(affectedRows, plannedRows, targetMachine)) {
-      const rows = downstreamRowsForMachine(affectedRows, plannedRows, machine, maxRowsPerQueue);
+    for (const machine of downstreamMachines(affectedRows, currentPlannedRows, targetMachine)) {
+      const rows = downstreamRowsForMachine(affectedRows, currentPlannedRows, machine, maxRowsPerQueue);
       addGroup({
         kind: "downstream",
         machine,
@@ -339,6 +340,11 @@ function rowText(row: MachineConstraintReviewRow, ...keys: string[]) {
 
 function machineKey(value: unknown) {
   return String(value ?? "").trim().toLowerCase();
+}
+
+function rowIsComplete(row: MachineConstraintReviewRow) {
+  return machineKey(rowText(row, "shopFloorStage", "stage")) === "item_complete"
+    || machineKey(rowText(row, "runningStatus")) === "complete";
 }
 
 function machineTypeCompatible(sourceType: unknown, targetType: unknown) {

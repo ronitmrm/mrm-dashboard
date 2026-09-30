@@ -5098,7 +5098,13 @@ function PartMachineSwitchPlannerForm({
   productionControl: DashboardPayload
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
 }) {
-  const plannedRows = asArray(productionControl.machinePlanDetailRows)
+  const plannedRows = useMemo(
+    () =>
+      asArray(productionControl.machinePlanDetailRows).filter(
+        (row) => !shopFloorItemIsFinished(row)
+      ),
+    [productionControl.machinePlanDetailRows]
+  )
   const machineRows = asArray(productionControl.machinePlanningRows)
   const itemOptions = useMemo(
     () =>
@@ -18110,6 +18116,7 @@ function partMachineSwitchTargetInterruptionRows(
 }
 
 function machineIssueRowNeedsProducedQty(row: DashboardPayload) {
+  if (shopFloorItemIsFinished(row)) return false
   const runningStatus = str(row.runningStatus).toLowerCase()
   const stage = str(row.shopFloorStage)
   return (

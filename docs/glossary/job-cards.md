@@ -110,6 +110,9 @@ A machine-unavailable action affects unfinished work only. A setup already
 marked Item Complete stays complete on its recorded machine, even when its
 good output is below the upstream input quantity. Unprocessed input remains
 physical WIP; the action must not create another planned run for it.
+Planner queue reviews and move choices show unfinished setups only. Completed
+setups remain in production history; their recorded output does not make them
+running blockers.
 
 If an upstream setup is Item Complete below the customer order quantity, its
 recorded good output less downstream pieces already processed is the available
