@@ -632,9 +632,9 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
       return result.rows
     },
 
-    async listAssetMaintenancePlan(organizationId: string, month: string) {
-      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month))
-        throw new Error("Select a valid month.")
+    async listAssetMaintenancePlan(organizationId: string, from: string, to: string) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to)
+        throw new Error("Select a valid date range.")
       const result = await pool.query<{
         assetCode: string
         assetName: string
@@ -651,7 +651,7 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
           FROM store.asset_maintenance_tasks task
           WHERE task.organization_id = $1
             AND task.due_on >= $2::date
-            AND task.due_on < $2::date + interval '1 month'
+            AND task.due_on <= $3::date
           UNION ALL
           SELECT 'schedule-' || schedule.id::text, schedule.id,
             schedule.next_due_on, 'Planned', NULL::timestamptz
@@ -661,7 +661,7 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
             AND schedule.schedule_type = 'MAINTENANCE'
             AND active_asset.status <> 'SCRAPPED'
             AND schedule.next_due_on >= $2::date
-            AND schedule.next_due_on < $2::date + interval '1 month'
+            AND schedule.next_due_on <= $3::date
             AND NOT EXISTS (
               SELECT 1 FROM store.asset_maintenance_tasks task
               WHERE task.schedule_id = schedule.id
@@ -681,7 +681,7 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
         LEFT JOIN store.locations location ON location.id = asset.current_location_id
         LEFT JOIN maintenance.definitions definition ON definition.id = schedule.definition_id
         ORDER BY planned.due_on, asset.asset_code, planned.id`,
-        [organizationId, `${month}-01`]
+        [organizationId, from, to]
       )
       return result.rows
     },
@@ -738,9 +738,9 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
       return result.rows
     },
 
-    async listMachineMaintenancePlan(organizationId: string, month: string) {
-      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month))
-        throw new Error("Select a valid month.")
+    async listMachineMaintenancePlan(organizationId: string, from: string, to: string) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to)
+        throw new Error("Select a valid date range.")
       const result = await pool.query<{
         id: string
         machineId: string
@@ -757,7 +757,7 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
             task.due_on, task.status, task.completed_at
           FROM maintenance.tasks task
           WHERE task.organization_id = $1 AND lower(task.task_type) = 'planned'
-            AND task.due_on >= $2::date AND task.due_on < $2::date + interval '1 month'
+            AND task.due_on >= $2::date AND task.due_on <= $3::date
             AND task.status <> 'Cancelled'
             AND task.source_payload->>'legacyHistory' IS DISTINCT FROM 'true'
           UNION ALL
@@ -769,7 +769,7 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
           WHERE schedule.organization_id = $1 AND schedule.active AND definition.active
             AND lower(definition.code) <> 'breakdown'
             AND schedule.next_due_on >= $2::date
-            AND schedule.next_due_on < $2::date + interval '1 month'
+            AND schedule.next_due_on <= $3::date
             AND NOT EXISTS (
               SELECT 1 FROM maintenance.tasks task
               WHERE task.organization_id = $1 AND task.machine_schedule_id = schedule.id
@@ -790,7 +790,7 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
         JOIN manufacturing.production_floors floor ON floor.id = machine.production_floor_id
         ORDER BY planned.due_on, machine.machine_number, planned.id
       `,
-        [organizationId, `${month}-01`]
+        [organizationId, from, to]
       )
       return result.rows
     },

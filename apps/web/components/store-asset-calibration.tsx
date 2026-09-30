@@ -62,6 +62,7 @@ export type StoreCalibrationVisit = {
   dueOn: string
   scope: string
   status: "OPEN" | "DISPATCHED" | "RETURNED" | "PASSED" | "FAILED" | "CANCELLED"
+  method: "SUPPLIER" | "IN_HOUSE"
   selectedOfferId: string | null
   agreedPrice: string | null
   purchaseOrderId: string | null
@@ -84,6 +85,8 @@ export type StoreCalibrationActions = {
   returnVisit: CalibrationFormAction
   uploadCertificate: CalibrationUploadAction
   completeVisit: CalibrationFormAction
+  completeInHouseVisit: CalibrationFormAction
+  cancelInHouseVisit: CalibrationFormAction
 }
 
 const priceFormat = new Intl.NumberFormat("en-IN", {
@@ -138,7 +141,9 @@ function PdfLink({
 }
 
 function VisitIdentity({ visit }: { visit: StoreCalibrationVisit }) {
-  const status = visitStatus(visit.status)
+  const status = visit.method === "IN_HOUSE" && visit.status === "OPEN"
+    ? { label: "In-house calibration", tone: "warning" as const }
+    : visitStatus(visit.status)
   return (
     <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
       <div className="min-w-0">
@@ -461,9 +466,11 @@ function ReturnedVisit({
 }) {
   return (
     <div className="grid gap-4">
-      <VisitOrder visit={visit} />
+      {visit.method === "SUPPLIER" ? <VisitOrder visit={visit} /> : null}
       <p className="text-sm text-muted-foreground">
-        Returned to Store {visit.returnedOn || "—"}.
+        {visit.method === "IN_HOUSE"
+          ? "Record the in-house result and upload its certificate."
+          : `Returned to Store ${visit.returnedOn || "—"}.`}
       </p>
       {visit.certificateHref ? (
         <PdfLink
@@ -507,7 +514,7 @@ function ReturnedVisit({
         </PendingRetainedUploadForm>
       ) : null}
       {canManage && visit.certificateHref ? (
-        <form action={actions.completeVisit} className="grid max-w-xl gap-3">
+        <form action={visit.method === "IN_HOUSE" ? actions.completeInHouseVisit : actions.completeVisit} className="grid max-w-xl gap-3">
           <h5 className="font-semibold">Record calibration result</h5>
           <input name="asset_code" type="hidden" value={assetCode} />
           <input name="visit_id" type="hidden" value={visit.id} />
@@ -568,6 +575,13 @@ function ReturnedVisit({
           </Button>
         </form>
       ) : null}
+      {canManage && visit.method === "IN_HOUSE" ? (
+        <form action={actions.cancelInHouseVisit}>
+          <input name="asset_code" type="hidden" value={assetCode} />
+          <input name="visit_id" type="hidden" value={visit.id} />
+          <Button type="submit" variant="outline">Cancel In-House Visit</Button>
+        </form>
+      ) : null}
     </div>
   )
 }
@@ -576,6 +590,8 @@ export function StoreAssetCalibration({
   actions,
   assetCode,
   canManage,
+  canDispatch,
+  inHouseScheduleId,
   schedules,
   suppliers,
   visits,
@@ -583,6 +599,8 @@ export function StoreAssetCalibration({
   actions: StoreCalibrationActions
   assetCode: string
   canManage: boolean
+  canDispatch: boolean
+  inHouseScheduleId?: string
   schedules: StoreCalibrationSchedule[]
   suppliers: StoreCalibrationSupplier[]
   visits: StoreCalibrationVisit[]
@@ -611,8 +629,8 @@ export function StoreAssetCalibration({
         <CardHeader>
           <CardTitle>Start Calibration</CardTitle>
           <CardDescription>
-            Select this Unit ID&apos;s calibration timetable. Each visit keeps
-            its own Supplier offers, service order, movement and certificate.
+            Select a timetable and perform calibration in house or through a
+            Supplier. Every visit keeps its own certificate and result.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -624,7 +642,8 @@ export function StoreAssetCalibration({
                   Calibration Schedule
                 </FieldLabel>
                 <NativeSelect
-                  defaultValue=""
+                  defaultValue={availableSchedules.some((schedule) => schedule.id === inHouseScheduleId)
+                    ? inHouseScheduleId : ""}
                   id={`calibration-schedule-${assetCode}`}
                   name="schedule_id"
                   required
@@ -637,6 +656,18 @@ export function StoreAssetCalibration({
                       {schedule.name} — due {schedule.nextDueOn}
                     </NativeSelectOption>
                   ))}
+                </NativeSelect>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor={`calibration-method-${assetCode}`}>Method</FieldLabel>
+                <NativeSelect
+                  defaultValue={inHouseScheduleId ? "IN_HOUSE" : canDispatch ? "SUPPLIER" : "IN_HOUSE"}
+                  id={`calibration-method-${assetCode}`}
+                  name="method"
+                  required
+                >
+                  {canDispatch ? <NativeSelectOption value="SUPPLIER">Supplier</NativeSelectOption> : null}
+                  <NativeSelectOption value="IN_HOUSE">In House</NativeSelectOption>
                 </NativeSelect>
               </Field>
               <Field>
@@ -669,8 +700,8 @@ export function StoreAssetCalibration({
         <CardHeader>
           <CardTitle>Calibration in Progress</CardTitle>
           <CardDescription>
-            The selected supplier and price stay with the visit. Return movement
-            and certificate must be recorded before its result.
+            Supplier visits retain their order and movements. In-house visits
+            require a certificate before recording the result.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid min-w-0 gap-5">
@@ -680,11 +711,11 @@ export function StoreAssetCalibration({
               key={visit.id}
             >
               <VisitIdentity visit={visit} />
-              {visit.status === "OPEN" ? (
+              {visit.status === "OPEN" && visit.method === "SUPPLIER" ? (
                 <OpenVisit
                   actions={actions}
                   assetCode={assetCode}
-                  canManage={canManage}
+                  canManage={canDispatch}
                   suppliers={suppliers}
                   visit={visit}
                 />
@@ -692,14 +723,14 @@ export function StoreAssetCalibration({
                 <DispatchedVisit
                   actions={actions}
                   assetCode={assetCode}
-                  canManage={canManage}
+                  canManage={canDispatch}
                   visit={visit}
                 />
               ) : (
                 <ReturnedVisit
                   actions={actions}
                   assetCode={assetCode}
-                  canManage={canManage}
+                  canManage={visit.method === "IN_HOUSE" ? canManage : canDispatch}
                   visit={visit}
                 />
               )}
@@ -726,6 +757,7 @@ export function StoreAssetCalibration({
               <TableRow>
                 <TableHead>Schedule</TableHead>
                 <TableHead>Due</TableHead>
+                <TableHead>Method</TableHead>
                 <TableHead>Supplier</TableHead>
                 <TableHead>Price</TableHead>
                 <TableHead>Result</TableHead>
@@ -748,6 +780,7 @@ export function StoreAssetCalibration({
                       </span>
                     </TableCell>
                     <TableCell>{visit.dueOn}</TableCell>
+                    <TableCell>{visit.method === "IN_HOUSE" ? "In House" : "Supplier"}</TableCell>
                     <TableCell>{selected?.supplierName || "—"}</TableCell>
                     <TableCell>{price(visit.agreedPrice)}</TableCell>
                     <TableCell>
@@ -777,7 +810,7 @@ export function StoreAssetCalibration({
                 <TableRow>
                   <TableCell
                     className="h-20 text-center text-muted-foreground"
-                    colSpan={7}
+                    colSpan={8}
                   >
                     No completed calibration visits for this Unit ID.
                   </TableCell>

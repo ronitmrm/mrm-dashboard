@@ -3,8 +3,8 @@ import { MachineMaintenanceReport } from "@/components/maintenance/machine-maint
 export default async function MachineMaintenancePlanPage({
   searchParams,
 }: {
-  searchParams: Promise<{ month?: string }>
+  searchParams: Promise<{ from?: string; to?: string; month?: string }>
 }) {
-  const { month } = await searchParams
-  return <MachineMaintenanceReport mode="plan" month={month} />
+  const { from, to, month } = await searchParams
+  return <MachineMaintenanceReport mode="plan" from={from} to={to} month={month} />
 }

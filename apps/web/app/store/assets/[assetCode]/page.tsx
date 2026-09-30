@@ -63,6 +63,8 @@ import {
   returnStoreCalibrationVisitAction,
   uploadStoreCalibrationCertificateAction,
   completeStoreCalibrationVisitAction,
+  completeInHouseCalibrationVisitAction,
+  cancelInHouseCalibrationVisitAction,
   setStoreAssetLifecycleAction,
   uploadStoreItemDrawingAction,
   uploadStoreSupplierQuoteAction,
@@ -73,10 +75,10 @@ export default async function StoreAssetWorkspacePage({
   searchParams,
 }: {
   params: Promise<{ assetCode: string }>
-  searchParams: Promise<{ tab?: string }>
+  searchParams: Promise<{ tab?: string; inHouseScheduleId?: string }>
 }) {
   const { assetCode } = await params
-  const { tab } = await searchParams
+  const { tab, inHouseScheduleId } = await searchParams
   const session = await requireCapability(
     "store.asset_history.read",
     `/store/assets/${encodeURIComponent(assetCode)}`
@@ -525,9 +527,13 @@ export default async function StoreAssetWorkspacePage({
               returnVisit: returnStoreCalibrationVisitAction,
               uploadCertificate: uploadStoreCalibrationCertificateAction,
               completeVisit: completeStoreCalibrationVisitAction,
+              completeInHouseVisit: completeInHouseCalibrationVisitAction,
+              cancelInHouseVisit: cancelInHouseCalibrationVisitAction,
             }}
             assetCode={asset.assetCode}
-            canManage={canMaintain && canMove && canRepair}
+            canManage={canMaintain}
+            canDispatch={canMaintain && canMove && canRepair}
+            inHouseScheduleId={inHouseScheduleId}
             schedules={calibrationSchedules}
             suppliers={calibrationSuppliers}
             visits={calibrationVisits}

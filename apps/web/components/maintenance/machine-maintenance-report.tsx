@@ -22,8 +22,9 @@ import {
   machineMaintenanceRegister,
 } from "@/lib/iso-documents"
 import { maintenanceWorkPhotoQuery } from "@/lib/maintenance-work-photo-target"
+import { planDateRange } from "@/lib/plan-date-range"
 
-async function readReportRows(isPlan: boolean, month: string) {
+async function readReportRows(isPlan: boolean, from: string, to: string) {
   const repository = createMaintenanceRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
@@ -31,8 +32,8 @@ async function readReportRows(isPlan: boolean, month: string) {
     const organizationId = await repository.organizationIdForCode("MRMPL")
     if (isPlan) {
       const [machines, assets] = await Promise.all([
-        repository.listMachineMaintenancePlan(organizationId, month),
-        repository.listAssetMaintenancePlan(organizationId, month),
+        repository.listMachineMaintenancePlan(organizationId, from, to),
+        repository.listAssetMaintenancePlan(organizationId, from, to),
       ])
       return [
         ...machines.map((row) => ({ ...row, assetCode: null as string | null,
@@ -69,29 +70,32 @@ async function readReportRows(isPlan: boolean, month: string) {
 
 export async function MachineMaintenanceReport({
   mode,
+  from: requestedFrom,
+  to: requestedTo,
   month: requestedMonth,
 }: {
   mode: "completed" | "plan"
+  from?: string
+  to?: string
   month?: string
 }) {
   const document =
     mode === "plan" ? machineMaintenancePlan : machineMaintenanceRegister
   await requireCapability("maintenance.workspace.read", document.href)
-  const month =
-    requestedMonth && /^\d{4}-(0[1-9]|1[0-2])$/.test(requestedMonth)
-      ? requestedMonth
-      : istDateValue().slice(0, 7)
-  const rows = await readReportRows(mode === "plan", month)
-  return <MachineMaintenanceReportView mode={mode} month={month} rows={rows} />
+  const { from, to } = planDateRange(requestedFrom, requestedTo, requestedMonth)
+  const rows = await readReportRows(mode === "plan", from, to)
+  return <MachineMaintenanceReportView mode={mode} from={from} to={to} rows={rows} />
 }
 
 export function MachineMaintenanceReportView({
   mode,
-  month,
+  from,
+  to,
   rows,
 }: {
   mode: "completed" | "plan"
-  month: string
+  from: string
+  to: string
   rows: Awaited<ReturnType<typeof readReportRows>>
 }) {
   const isPlan = mode === "plan"
@@ -99,6 +103,12 @@ export function MachineMaintenanceReportView({
   const equipment = new Set(
     rows.map((row) => row.machineNumber ?? row.assetCode)
   ).size
+  const today = istDateValue()
+  const pending = rows.filter((row) => row.status !== "Completed").length
+  const overdue = rows.filter((row) =>
+    row.status !== "Completed" && row.dueOn !== null && row.dueOn < today
+  ).length
+  const completed = rows.filter((row) => row.status === "Completed").length
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
@@ -106,19 +116,30 @@ export function MachineMaintenanceReportView({
         title={document.title}
         description={
           isPlan
-            ? "Saved machine and asset maintenance due dates for the month. Completed planned work stays in its due month."
+            ? "Saved machine and asset maintenance due dates. Completed planned work stays on its original due date."
             : "Completed machine and asset planned maintenance and breakdown repairs. One row per completed job."
         }
       />
       {isPlan ? (
         <form action={document.href} className="flex flex-wrap items-end gap-3">
           <div className="grid gap-2">
-            <Label htmlFor="maintenance-month">Plan month</Label>
+            <Label htmlFor="maintenance-from">From</Label>
             <Input
-              id="maintenance-month"
-              name="month"
-              type="month"
-              defaultValue={month}
+              id="maintenance-from"
+              name="from"
+              type="date"
+              defaultValue={from}
+              required
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="maintenance-to">To</Label>
+            <Input
+              id="maintenance-to"
+              name="to"
+              type="date"
+              min={from}
+              defaultValue={to}
               required
             />
           </div>
@@ -126,10 +147,15 @@ export function MachineMaintenanceReportView({
         </form>
       ) : null}
       <MetricSummary
-        scope={`${isPlan ? month : "All completed work"} · before table filters`}
-        items={[
+        scope={`${isPlan ? `${formatIstDate(from)} – ${formatIstDate(to)}` : "All completed work"} · before table filters`}
+        items={isPlan ? [
+          { label: "Scheduled Jobs", value: rows.length, tone: "information" },
+          { label: "Awaiting Maintenance", value: pending, tone: "warning" },
+          { label: "Overdue", value: overdue, tone: "danger" },
+          { label: "Completed", value: completed, tone: "positive" },
+        ] : [
           {
-            label: isPlan ? "Planned Jobs" : "Completed Jobs",
+            label: "Completed Jobs",
             value: rows.length,
             tone: "information",
           },
@@ -141,7 +167,7 @@ export function MachineMaintenanceReportView({
         containerClassName="rounded-md border"
         toolbarStart={
           <span className="font-medium">
-            {isPlan ? "Monthly Plan" : "Completed Maintenance"}
+            {isPlan ? "Maintenance Plan" : "Completed Maintenance"}
           </span>
         }
       >
@@ -213,12 +239,12 @@ export function MachineMaintenanceReportView({
                 <StandardState
                   title={
                     isPlan
-                      ? "No maintenance planned for this month"
+                      ? "No maintenance planned for this date range"
                       : "No completed maintenance"
                   }
                   description={
                     isPlan
-                      ? "Saved maintenance due dates in the selected month will appear here."
+                      ? "Saved maintenance due dates in the selected date range will appear here."
                       : "Completed planned jobs and breakdown repairs will appear here automatically."
                   }
                 />

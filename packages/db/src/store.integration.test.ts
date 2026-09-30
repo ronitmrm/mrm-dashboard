@@ -1861,7 +1861,7 @@ describe("Store requests", () => {
         endedAt: "2026-11-20T10:00:00+05:30",
         status: "Completed",
       })
-      expect((await maintenance.listAssetMaintenancePlan(organizationId, "2026-11"))
+      expect((await maintenance.listAssetMaintenancePlan(organizationId, "2026-11-01", "2026-11-30"))
         .find((row) => row.id === draft.id)).toMatchObject({
           assetCode: assetCodes[0], dueOn: "2026-11-20", status: "Completed",
         })
