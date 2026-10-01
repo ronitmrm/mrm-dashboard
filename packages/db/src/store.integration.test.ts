@@ -26,6 +26,7 @@ const pool = new Pool({ connectionString })
 const store = createStoreRepository({ connectionString })
 const suffix = randomUUID().slice(0, 8)
 let organizationId: string
+let mainAccountableStoreId: string
 let legacyItemTypeId: string
 let legacyAssetId: string
 let legacyAssetCode: string
@@ -128,6 +129,12 @@ beforeAll(async () => {
   )
   legacyAssetId = legacyAsset.rows[0]!.id
   await migrateDatabase({ connectionString })
+  const mainAccountableStore = await pool.query<{ id: string }>(
+    `SELECT id FROM store.accountable_stores
+     WHERE organization_id = $1 AND kind = 'MAIN'`,
+    [organizationId]
+  )
+  mainAccountableStoreId = mainAccountableStore.rows[0]!.id
   const migratedAsset = await pool.query<{ assetCode: string }>(
     `SELECT asset_code AS "assetCode" FROM store.assets WHERE id = $1`,
     [legacyAssetId]
@@ -1906,6 +1913,88 @@ describe("Store requests", () => {
     expect(workspace?.schedules.find((entry) => entry.id === schedule.id)?.nextDueOn).toBe("2026-09-19")
   })
 
+  test("issues a calibration PO before QC dispatch and returns to its accountable store", async () => {
+    const location = await store.ensurePrimaryStoreLocation({ organizationId })
+    const item = await store.createItemType({
+      ...(await createClassification("Calibration service")),
+      assetType: "NON_CONSUMABLE",
+      identificationName: `Calibration gauge ${suffix}`,
+      organizationId,
+      unit: "Nos",
+    })
+    const receipt = await store.receiveStock({
+      locationId: location.id,
+      organizationId,
+      purchaseOrderLineId: (await createPurchaseOrder(item.id, 1, "1000.00")).id,
+      quantity: 1,
+    })
+    const assetCode = receipt.assetCodes[0]!
+    const schedule = await store.scheduleAssetMaintenance({
+      assetCode,
+      firstDueOn: "2026-10-01",
+      frequencyDays: 365,
+      name: "Yearly calibration",
+      organizationId,
+      scheduleType: "CALIBRATION",
+    })
+    const visit = await store.openCalibrationVisit({
+      assetCode,
+      organizationId,
+      scheduleId: schedule.id,
+      scope: "Gauge calibration",
+    })
+    const supplier = await store.createSupplier({
+      name: `Calibration Supplier ${suffix}`,
+      organizationId,
+    })
+    const offer = await store.addCalibrationOffer({
+      accountableStoreId: mainAccountableStoreId,
+      organizationId,
+      quotedPrice: "250.00",
+      supplierId: supplier.id,
+      visitId: visit.id,
+    })
+    const prepared = await store.prepareCalibrationDispatch({
+      accountableStoreId: mainAccountableStoreId,
+      offerId: offer.id,
+      organizationId,
+      visitId: visit.id,
+    })
+    expect(prepared.alreadyIssued).toBe(false)
+    await storeIssuedPdf({
+      document: prepared.document,
+      organizationId,
+      purchaseOrderId: prepared.purchaseOrderId,
+    })
+    await store.issueCalibrationServiceOrder({
+      accountableStoreId: mainAccountableStoreId,
+      organizationId,
+      visitId: visit.id,
+    })
+    expect((await store.getAssetWorkspace({ assetCode, organizationId }))?.asset.holderType)
+      .toBe("STORE")
+    await store.finalizeCalibrationDispatch({ organizationId, visitId: visit.id })
+    expect((await store.getAssetWorkspace({ assetCode, organizationId }))?.asset.holderType)
+      .toBe("SUPPLIER")
+    const qualityLocation = await pool.query<{ id: string }>(
+      `SELECT default_location_id AS id FROM store.accountable_stores
+       WHERE organization_id = $1 AND code = 'QUALITY'`,
+      [organizationId]
+    )
+    await expect(store.returnCalibrationVisit({
+      locationId: qualityLocation.rows[0]!.id,
+      organizationId,
+      visitId: visit.id,
+    })).rejects.toThrow("originating accountable store")
+    await store.returnCalibrationVisit({ organizationId, visitId: visit.id })
+    const returned = await store.getAssetWorkspace({ assetCode, organizationId })
+    expect(returned?.asset).toMatchObject({
+      accountableStoreCode: "MAIN",
+      holderType: "STORE",
+      status: "UNDER_MAINTENANCE",
+    })
+  })
+
   test("creates a Repair PO against one Physical Asset and keeps its drawing", async () => {
     const location = await store.createLocation({
       code: `REPAIR-STORE-${suffix}`,
@@ -1931,6 +2020,7 @@ describe("Store requests", () => {
       organizationId,
     })
     const repairOrder = await store.createRepairPurchaseOrder({
+      accountableStoreId: mainAccountableStoreId,
       assetCode: receipt.assetCodes[0]!,
       issuanceId: randomUUID(),
       organizationId,
@@ -1942,6 +2032,7 @@ describe("Store requests", () => {
     })
     await expect(
       store.createRepairPurchaseOrder({
+        accountableStoreId: mainAccountableStoreId,
         assetCode: receipt.assetCodes[0]!,
         issuanceId: randomUUID(),
         organizationId,
@@ -1981,6 +2072,7 @@ describe("Store requests", () => {
       expect.objectContaining({ id: repairOrder.id })
     )
     await store.completeRepairPurchaseOrder({
+      accountableStoreId: mainAccountableStoreId,
       assetCode: receipt.assetCodes[0]!,
       organizationId,
       purchaseOrderId: repairOrder.id,
@@ -2050,6 +2142,7 @@ describe("Store requests", () => {
       organizationId,
     })
     const order = await store.createRepairPurchaseOrderFromSelection({
+      accountableStoreId: mainAccountableStoreId,
       issuanceId: randomUUID(),
       items: repairAssetCodes.map((assetCode, index) => ({
         assetCode,
@@ -2072,6 +2165,7 @@ describe("Store requests", () => {
     ])
     await expect(
       store.createRepairPurchaseOrderFromSelection({
+        accountableStoreId: mainAccountableStoreId,
         issuanceId: randomUUID(),
         items: [{
           assetCode: receipt.assetCodes[0]!,
@@ -2167,6 +2261,7 @@ describe("Store requests", () => {
       expect.objectContaining({ status: "Fulfilled" })
     )
     await store.completeRepairPurchaseOrder({
+      accountableStoreId: mainAccountableStoreId,
       assetCode: repairAssetCodes[0]!,
       organizationId,
       purchaseOrderId: order.id,
@@ -2204,6 +2299,7 @@ describe("Store requests", () => {
       )?.order.status
     ).toBe("Open")
     await store.completeRepairPurchaseOrder({
+      accountableStoreId: mainAccountableStoreId,
       assetCode: repairAssetCodes[1]!,
       organizationId,
       purchaseOrderId: order.id,
@@ -2265,6 +2361,7 @@ describe("Store requests", () => {
       }),
     ])
     const selection = {
+      accountableStoreId: mainAccountableStoreId,
       issuanceId: randomUUID(),
       items: receipt.assetCodes.map((assetCode, index) => ({
         assetCode,

@@ -1466,10 +1466,12 @@ describe("production and shop-floor workflows", () => {
       assetCategoryId: category.id, assetSubcategoryId: subcategory.id, assetNameId: name.id })
     await store.close()
     const code = item.typeCode
-    await pool.query(`INSERT INTO store.assets (organization_id,item_type_id,asset_code,identification_name,status,current_holder_type,current_holder_reference,current_holder_name)
+    await pool.query(`INSERT INTO store.assets (organization_id,item_type_id,asset_code,identification_name,status,current_holder_type,current_holder_reference,current_holder_name,accountable_store_id)
       SELECT $1,$2,$3||n::text,'Tool unit',CASE WHEN n=1 THEN 'ASSIGNED' ELSE 'AVAILABLE' END,
-        CASE WHEN n=1 THEN 'DEPARTMENT' ELSE 'STORE' END,'PPAC Conventional-01','PPAC Conventional-01'
-      FROM generate_series(1,5) n`, [organizationId,item.id,code])
+        CASE WHEN n=1 THEN 'DEPARTMENT' ELSE 'STORE' END,'PPAC Conventional-01','PPAC Conventional-01',accountable.id
+      FROM generate_series(1,5) n
+      JOIN store.accountable_stores accountable
+        ON accountable.organization_id = $1 AND accountable.kind = 'MAIN'`, [organizationId,item.id,code])
     await pool.query(`INSERT INTO manufacturing.operation_tooling (organization_id,operation_setup_id,tool_code,source_system,source_table,source_id)
       SELECT $1,setup.id,$2,'test','tooling',setup.id::text FROM manufacturing.operation_setups setup
       JOIN manufacturing.route_options route ON route.id=setup.route_option_id

@@ -64,6 +64,7 @@ export function createStoreCalibrationRepository(pool: Pool) {
       const result = await pool.query<{
         assetName: string
         category: string
+        certificateFileName: string | null
         subcategory: string
         completedOn: string | null
         dueOn: string
@@ -75,6 +76,7 @@ export function createStoreCalibrationRepository(pool: Pool) {
         supplierName: string | null
         typeCode: string
         unitId: string
+        visitId: string | null
       }>(
         `WITH planned AS (
            SELECT 'schedule-' || schedule.id::text AS id,
@@ -100,12 +102,14 @@ export function createStoreCalibrationRepository(pool: Pool) {
              AND visit.due_on <= $3::date
          )
          SELECT planned.id, planned.schedule_id AS "scheduleId", visit.method,
+           visit.id AS "visitId",
            planned.due_on::text AS "dueOn", planned.status,
            asset.asset_code AS "unitId",
            item.type_code AS "typeCode", item.asset_name AS "assetName",
            item.asset_category AS category, item.asset_subcategory AS subcategory,
            COALESCE(definition.name, schedule.name) AS "scheduleName",
            record.completed_on::text AS "completedOn",
+           certificate.file_name AS "certificateFileName",
            supplier.name AS "supplierName"
          FROM planned
          JOIN store.asset_maintenance_schedules schedule
@@ -118,8 +122,156 @@ export function createStoreCalibrationRepository(pool: Pool) {
          LEFT JOIN store.calibration_offers offer ON offer.id = visit.selected_offer_id
          LEFT JOIN store.suppliers supplier ON supplier.id = offer.supplier_id
          LEFT JOIN store.asset_maintenance_records record ON record.id = visit.maintenance_record_id
+         LEFT JOIN core.files certificate ON certificate.id = visit.certificate_file_id
          ORDER BY planned.due_on, asset.asset_code, planned.id`,
         [organizationId, from, to]
+      )
+      return result.rows
+    },
+
+    async listCalibrationWorklist(input: {
+      includeFuture?: boolean
+      organizationId: string
+    }) {
+      const result = await pool.query<{
+        accountableStoreCode: string
+        accountableStoreId: string
+        accountableStoreName: string
+        assetId: string
+        assetName: string
+        category: string
+        certificateFileName: string | null
+        currentHolderName: string | null
+        currentHolderType: string
+        dueOn: string
+        id: string
+        method: "SUPPLIER" | "IN_HOUSE" | null
+        purchaseOrderId: string | null
+        purchaseOrderIssuanceState: string | null
+        purchaseOrderNumber: string | null
+        scheduleId: string
+        scheduleName: string
+        scope: string | null
+        selectedOfferId: string | null
+        status: VisitStatus | "Planned"
+        subcategory: string
+        typeCode: string
+        unitId: string
+        visitId: string | null
+      }>(
+        `WITH work AS (
+           SELECT 'schedule-' || schedule.id::text AS id,
+             schedule.id AS schedule_id, schedule.next_due_on AS due_on,
+             'Planned'::text AS status, NULL::uuid AS visit_id
+           FROM store.asset_maintenance_schedules schedule
+           WHERE schedule.organization_id = $1
+             AND schedule.schedule_type = 'CALIBRATION' AND schedule.active
+             AND ($2::boolean OR schedule.next_due_on <=
+               (now() AT TIME ZONE 'Asia/Kolkata')::date)
+             AND NOT EXISTS (
+               SELECT 1 FROM store.calibration_visits visit
+               WHERE visit.organization_id = $1
+                 AND visit.schedule_id = schedule.id
+                 AND visit.due_on = schedule.next_due_on
+                 AND visit.status <> 'CANCELLED'
+             )
+           UNION ALL
+           SELECT visit.id::text, visit.schedule_id, visit.due_on,
+             visit.status, visit.id
+           FROM store.calibration_visits visit
+           WHERE visit.organization_id = $1
+             AND visit.status IN ('OPEN', 'DISPATCHED', 'RETURNED', 'FAILED')
+             AND ($2::boolean OR visit.due_on <=
+               (now() AT TIME ZONE 'Asia/Kolkata')::date
+               OR visit.status = 'FAILED')
+             AND NOT (visit.status = 'FAILED' AND EXISTS (
+               SELECT 1 FROM store.calibration_visits later
+               WHERE later.organization_id = $1
+                 AND later.schedule_id = visit.schedule_id
+                 AND later.asset_id = visit.asset_id
+                 AND later.due_on = visit.due_on
+                 AND later.status <> 'CANCELLED'
+                 AND (later.created_at, later.id) >
+                   (visit.created_at, visit.id)
+             ))
+         )
+         SELECT work.id, work.schedule_id AS "scheduleId",
+           work.due_on::text AS "dueOn", work.status,
+           visit.id AS "visitId", visit.method, visit.scope,
+           visit.selected_offer_id AS "selectedOfferId",
+           visit.purchase_order_id AS "purchaseOrderId",
+           purchase_order.order_number AS "purchaseOrderNumber",
+           purchase_order.issuance_state AS "purchaseOrderIssuanceState",
+           certificate.file_name AS "certificateFileName",
+           asset.id AS "assetId", asset.asset_code AS "unitId",
+           asset.current_holder_type AS "currentHolderType",
+           asset.current_holder_name AS "currentHolderName",
+           accountable.id AS "accountableStoreId",
+           accountable.code AS "accountableStoreCode",
+           accountable.name AS "accountableStoreName",
+           item.type_code AS "typeCode", item.asset_name AS "assetName",
+           item.asset_category AS category,
+           item.asset_subcategory AS subcategory,
+           COALESCE(definition.name, schedule.name) AS "scheduleName"
+         FROM work
+         JOIN store.asset_maintenance_schedules schedule
+           ON schedule.id = work.schedule_id
+         LEFT JOIN maintenance.definitions definition
+           ON definition.id = schedule.definition_id
+         JOIN store.assets asset ON asset.id = schedule.asset_id
+           AND asset.organization_id = $1
+         JOIN store.accountable_stores accountable
+           ON accountable.id = asset.accountable_store_id
+         JOIN store.item_types item ON item.id = asset.item_type_id
+         LEFT JOIN store.calibration_visits visit ON visit.id = work.visit_id
+         LEFT JOIN store.purchase_orders purchase_order
+           ON purchase_order.id = visit.purchase_order_id
+         LEFT JOIN core.files certificate
+           ON certificate.id = visit.certificate_file_id
+         ORDER BY work.due_on, asset.asset_code, work.id`,
+        [input.organizationId, input.includeFuture ?? false]
+      )
+      return result.rows
+    },
+
+    async listCalibrationAssignmentCandidates(input: {
+      organizationId: string
+      search?: string | null
+    }) {
+      const result = await pool.query<{
+        accountableStoreCode: string
+        accountableStoreId: string
+        accountableStoreName: string
+        assetId: string
+        assetName: string
+        activeScheduleCount: number
+        typeCode: string
+        unitId: string
+      }>(
+        `SELECT asset.id AS "assetId", asset.asset_code AS "unitId",
+           item.type_code AS "typeCode", item.asset_name AS "assetName",
+           accountable.id AS "accountableStoreId",
+           accountable.code AS "accountableStoreCode",
+           accountable.name AS "accountableStoreName",
+           count(schedule.id)::integer AS "activeScheduleCount"
+         FROM store.assets asset
+         JOIN store.item_types item ON item.id = asset.item_type_id
+           AND item.tracking_mode = 'SERIALIZED'
+         JOIN store.accountable_stores accountable
+           ON accountable.id = asset.accountable_store_id
+         LEFT JOIN store.asset_maintenance_schedules schedule
+           ON schedule.asset_id = asset.id
+           AND schedule.organization_id = $1
+           AND schedule.schedule_type = 'CALIBRATION'
+           AND schedule.active
+         WHERE asset.organization_id = $1 AND asset.status <> 'SCRAPPED'
+           AND ($2::text IS NULL OR asset.asset_code ILIKE '%' || $2 || '%'
+             OR item.asset_name ILIKE '%' || $2 || '%'
+             OR item.type_code ILIKE '%' || $2 || '%')
+         GROUP BY asset.id, item.id, accountable.id
+         ORDER BY asset.asset_code
+         LIMIT 100`,
+        [input.organizationId, input.search?.trim() || null]
       )
       return result.rows
     },
@@ -137,6 +289,7 @@ export function createStoreCalibrationRepository(pool: Pool) {
         maintenanceRecordId: string | null
         method: "SUPPLIER" | "IN_HOUSE"
         purchaseOrderNumber: string | null
+        purchaseOrderIssuanceState: string | null
         purchaseOrderId: string | null
         result: string | null
         returnedOn: Date | null
@@ -154,6 +307,7 @@ export function createStoreCalibrationRepository(pool: Pool) {
            visit.agreed_price::text AS "agreedPrice",
            visit.purchase_order_id AS "purchaseOrderId",
            purchase_order.order_number AS "purchaseOrderNumber",
+           purchase_order.issuance_state AS "purchaseOrderIssuanceState",
            outbound.moved_at AS "dispatchedOn", returned.moved_at AS "returnedOn",
            visit.maintenance_record_id AS "maintenanceRecordId",
            visit.certificate_file_id AS "certificateFileId",
@@ -341,6 +495,7 @@ export function createStoreCalibrationRepository(pool: Pool) {
     },
 
     async addCalibrationOffer(input: Actor & {
+      accountableStoreId: string
       notes?: string | null
       quoteReference?: string | null
       quotedOn?: string | null
@@ -350,10 +505,13 @@ export function createStoreCalibrationRepository(pool: Pool) {
     }) {
       return withTransaction(pool, async (client) => {
         const visit = await client.query<{ id: string }>(
-          `SELECT id FROM store.calibration_visits
-           WHERE id = $1 AND organization_id = $2 AND status = 'OPEN'
-           FOR UPDATE`,
-          [input.visitId, input.organizationId]
+          `SELECT visit.id FROM store.calibration_visits visit
+           JOIN store.assets asset ON asset.id = visit.asset_id
+           WHERE visit.id = $1 AND visit.organization_id = $2
+             AND visit.status = 'OPEN' AND visit.method = 'SUPPLIER'
+             AND asset.accountable_store_id = $3
+           FOR UPDATE OF visit`,
+          [input.visitId, input.organizationId, input.accountableStoreId]
         )
         if (!visit.rows[0]) throw new Error("Open calibration visit was not found.")
         const supplier = await client.query<{ id: string }>(
@@ -429,6 +587,7 @@ export function createStoreCalibrationRepository(pool: Pool) {
     },
 
     async prepareCalibrationDispatch(input: Actor & {
+      accountableStoreId: string
       offerId: string
       orderDate?: string | null
       remark?: string | null
@@ -438,19 +597,29 @@ export function createStoreCalibrationRepository(pool: Pool) {
         const visit = await client.query<{
           assetCode: string
           assetId: string
+          accountableStoreId: string
+          purchaseOrderId: string | null
+          selectedOfferId: string | null
           scope: string
           status: VisitStatus
         }>(
           `SELECT visit.asset_id AS "assetId", asset.asset_code AS "assetCode",
+             asset.accountable_store_id AS "accountableStoreId",
+             visit.purchase_order_id AS "purchaseOrderId",
+             visit.selected_offer_id AS "selectedOfferId",
              visit.scope, visit.status
            FROM store.calibration_visits visit
            JOIN store.assets asset ON asset.id = visit.asset_id
            WHERE visit.id = $1 AND visit.organization_id = $2
+             AND visit.method = 'SUPPLIER'
            FOR UPDATE OF visit, asset`,
           [input.visitId, input.organizationId]
         )
         const row = visit.rows[0]
         if (!row || row.status !== "OPEN") throw new Error("Open calibration visit was not found.")
+        if (row.accountableStoreId !== input.accountableStoreId) {
+          throw new Error("This Unit ID belongs to another accountable store.")
+        }
         const offer = await client.query<{
           quotedPrice: string
           supplierId: string
@@ -465,6 +634,76 @@ export function createStoreCalibrationRepository(pool: Pool) {
           [input.offerId, input.visitId, input.organizationId]
         )
         if (!offer.rows[0]) throw new Error("Select a current calibration Supplier offer.")
+        if (row.purchaseOrderId) {
+          if (row.selectedOfferId !== input.offerId) {
+            throw new Error("This visit is already linked to another Supplier offer.")
+          }
+          const linked = await client.query<{
+            id: string
+            issuanceState: string
+            orderNumber: string
+            originStoreId: string
+            supplierId: string
+          }>(
+            `SELECT id, order_number AS "orderNumber",
+               issuance_state AS "issuanceState",
+               origin_store_id AS "originStoreId",
+               supplier_id AS "supplierId"
+             FROM store.purchase_orders
+             WHERE id = $1 AND organization_id = $2 AND status = 'Open'
+             FOR UPDATE`,
+            [row.purchaseOrderId, input.organizationId]
+          )
+          if (!linked.rows[0] ||
+            linked.rows[0].originStoreId !== input.accountableStoreId ||
+            linked.rows[0].supplierId !== offer.rows[0].supplierId) {
+            throw new Error("This visit is already linked to a different service PO.")
+          }
+          return { purchaseOrderId: linked.rows[0].id,
+            orderNumber: linked.rows[0].orderNumber,
+            alreadyIssued: linked.rows[0].issuanceState === "issued" }
+        }
+        const retry = await client.query<{
+          id: string
+          orderNumber: string
+          supplierId: string
+        }>(
+          `SELECT purchase_order.id,
+             purchase_order.order_number AS "orderNumber",
+             purchase_order.supplier_id AS "supplierId"
+           FROM store.purchase_orders purchase_order
+           JOIN store.calibration_visits prior
+             ON prior.purchase_order_id = purchase_order.id
+           WHERE prior.asset_id = $1 AND prior.organization_id = $2
+             AND prior.status = 'FAILED'
+             AND purchase_order.organization_id = $2
+             AND purchase_order.origin_store_id = $3
+             AND purchase_order.order_type = 'REPAIR'
+             AND purchase_order.issuance_state = 'issued'
+             AND purchase_order.status = 'Open'
+           ORDER BY prior.created_at DESC, prior.id DESC
+           LIMIT 1 FOR UPDATE OF purchase_order`,
+          [row.assetId, input.organizationId, input.accountableStoreId]
+        )
+        if (retry.rows[0]) {
+          if (retry.rows[0].supplierId !== offer.rows[0].supplierId) {
+            throw new Error("Corrective calibration must use the Supplier on the open service PO.")
+          }
+          if (Number(offer.rows[0].quotedPrice) !== 0) {
+            throw new Error("Corrective work under an existing service PO must have a zero-price offer.")
+          }
+          await client.query(
+            `UPDATE store.calibration_visits
+             SET selected_offer_id = $1, agreed_price = $2::numeric,
+               purchase_order_id = $3, updated_at = now(),
+               updated_by_user_id = $4
+             WHERE id = $5`,
+            [input.offerId, offer.rows[0].quotedPrice, retry.rows[0].id,
+              input.actorUserId ?? null, input.visitId]
+          )
+          return { purchaseOrderId: retry.rows[0].id,
+            orderNumber: retry.rows[0].orderNumber, alreadyIssued: true }
+        }
         const fingerprint = createHash("sha256").update(JSON.stringify({
           visitId: input.visitId,
           offerId: input.offerId,
@@ -476,9 +715,11 @@ export function createStoreCalibrationRepository(pool: Pool) {
         const existing = await client.query<{
           id: string
           issuanceFingerprint: string
+          issuanceState: string
           orderNumber: string
         }>(
           `SELECT id, issuance_fingerprint AS "issuanceFingerprint",
+             issuance_state AS "issuanceState",
              order_number AS "orderNumber"
            FROM store.purchase_orders
            WHERE organization_id = $1 AND issuance_id = $2::uuid
@@ -489,8 +730,18 @@ export function createStoreCalibrationRepository(pool: Pool) {
           if (existing.rows[0].issuanceFingerprint !== fingerprint) {
             throw new Error("This calibration visit already has a service PO for another offer.")
           }
+          await client.query(
+            `UPDATE store.calibration_visits
+             SET selected_offer_id = $1, agreed_price = $2::numeric,
+               purchase_order_id = $3, updated_at = now(),
+               updated_by_user_id = $4
+             WHERE id = $5`,
+            [input.offerId, offer.rows[0].quotedPrice, existing.rows[0].id,
+              input.actorUserId ?? null, input.visitId]
+          )
           return { purchaseOrderId: existing.rows[0].id,
-            orderNumber: existing.rows[0].orderNumber }
+            orderNumber: existing.rows[0].orderNumber,
+            alreadyIssued: existing.rows[0].issuanceState === "issued" }
         }
         const orderNumber = await nextDocumentNumber(client, {
           counterKey: "PURCHASE_ORDER",
@@ -500,29 +751,31 @@ export function createStoreCalibrationRepository(pool: Pool) {
         const order = await client.query<{ id: string }>(
           `INSERT INTO store.purchase_orders (
              organization_id, order_number, supplier_id, order_date,
-             order_type, repair_asset_id, service_description,
+             order_type, origin_store_id, repair_asset_id, service_description,
              service_price, remark, issuance_id, issuance_fingerprint,
              issuance_state, created_by_user_id, updated_by_user_id
            ) VALUES ($1, $2, $3,
              COALESCE(NULLIF($4, '')::date, current_date),
-             'REPAIR', $5, $6, $7::numeric, $8, $9::uuid, $10,
-             'pending', $11, $11)
+             'REPAIR', $5, $6, $7, $8::numeric, $9, $10::uuid, $11,
+             'pending', $12, $12)
            RETURNING id`,
           [input.organizationId, orderNumber, offer.rows[0].supplierId,
-            input.orderDate ?? null, row.assetId, `Calibration: ${row.scope}`,
-            offer.rows[0].quotedPrice,
+            input.orderDate ?? null, input.accountableStoreId,
+            row.assetId, `Calibration: ${row.scope}`, offer.rows[0].quotedPrice,
             input.remark?.trim() || `Calibration visit ${input.visitId}`,
             input.visitId, fingerprint, input.actorUserId ?? null]
         )
         await client.query(
           `UPDATE store.calibration_visits
            SET selected_offer_id = $1, agreed_price = $2::numeric,
-             updated_at = now(), updated_by_user_id = $3
-           WHERE id = $4`,
-          [input.offerId, offer.rows[0].quotedPrice,
+             purchase_order_id = $3, updated_at = now(),
+             updated_by_user_id = $4
+           WHERE id = $5`,
+          [input.offerId, offer.rows[0].quotedPrice, order.rows[0]!.id,
             input.actorUserId ?? null, input.visitId]
         )
-        return { purchaseOrderId: order.rows[0]!.id, orderNumber }
+        return { purchaseOrderId: order.rows[0]!.id, orderNumber,
+          alreadyIssued: false }
       })
       const document = await withTransaction(pool, (client) =>
         getStorePurchaseOrderWithClient(client, {
@@ -532,6 +785,54 @@ export function createStoreCalibrationRepository(pool: Pool) {
       )
       if (!document) throw new Error("Calibration service PO was not found.")
       return { ...prepared, document }
+    },
+
+    async issueCalibrationServiceOrder(input: Actor & {
+      accountableStoreId: string
+      visitId: string
+    }) {
+      return withTransaction(pool, async (client) => {
+        const order = await client.query<{
+          id: string
+          issuanceState: string
+          originStoreId: string
+          status: string
+        }>(
+          `SELECT purchase_order.id, purchase_order.status,
+             purchase_order.issuance_state AS "issuanceState",
+             purchase_order.origin_store_id AS "originStoreId"
+           FROM store.calibration_visits visit
+           JOIN store.assets asset ON asset.id = visit.asset_id
+           JOIN store.purchase_orders purchase_order
+             ON purchase_order.id = visit.purchase_order_id
+           WHERE visit.id = $1 AND visit.organization_id = $2
+             AND visit.method = 'SUPPLIER' AND visit.status = 'OPEN'
+             AND asset.accountable_store_id = $3
+           FOR UPDATE OF visit, asset, purchase_order`,
+          [input.visitId, input.organizationId, input.accountableStoreId]
+        )
+        const row = order.rows[0]
+        if (!row || row.status !== "Open" ||
+          row.originStoreId !== input.accountableStoreId) {
+          throw new Error("Open calibration service PO was not found in this accountable store.")
+        }
+        if (row.issuanceState === "issued") return { purchaseOrderId: row.id }
+        if (!(await hasIssuedStorePurchaseOrderPdf(client, {
+          organizationId: input.organizationId,
+          purchaseOrderId: row.id,
+        }))) {
+          throw new Error("Store the calibration service PO PDF before issue.")
+        }
+        await client.query(
+          `UPDATE store.purchase_orders
+           SET issuance_state = 'issued', issued_at = now(),
+             updated_at = now(), updated_by_user_id = $2
+           WHERE id = $1`,
+          [row.id, input.actorUserId ?? null]
+        )
+        await queueDashboardRefresh(client, input.organizationId)
+        return { purchaseOrderId: row.id }
+      })
     },
 
     async finalizeCalibrationDispatch(input: Actor & {
@@ -544,24 +845,26 @@ export function createStoreCalibrationRepository(pool: Pool) {
           agreedPrice: string | null
           assetCode: string
           assetId: string
+          accountableStoreId: string
           currentHolderName: string | null
           currentHolderReference: string | null
           currentHolderType: string
-          currentLocationId: string | null
           itemTypeId: string
+          purchaseOrderId: string | null
           selectedOfferId: string | null
           status: VisitStatus
           unitStatus: string
         }>(
           `SELECT visit.asset_id AS "assetId", visit.status,
              visit.selected_offer_id AS "selectedOfferId",
+             visit.purchase_order_id AS "purchaseOrderId",
              visit.agreed_price::text AS "agreedPrice",
              asset.asset_code AS "assetCode", asset.item_type_id AS "itemTypeId",
+             asset.accountable_store_id AS "accountableStoreId",
              asset.status AS "unitStatus",
              asset.current_holder_type AS "currentHolderType",
              asset.current_holder_reference AS "currentHolderReference",
-             asset.current_holder_name AS "currentHolderName",
-             asset.current_location_id AS "currentLocationId"
+             asset.current_holder_name AS "currentHolderName"
            FROM store.calibration_visits visit
            JOIN store.assets asset ON asset.id = visit.asset_id
            WHERE visit.id = $1 AND visit.organization_id = $2
@@ -573,13 +876,14 @@ export function createStoreCalibrationRepository(pool: Pool) {
         if (row.status === "DISPATCHED") {
           const existing = await client.query<{ id: string }>(
             `SELECT id FROM store.purchase_orders
-             WHERE organization_id = $1 AND issuance_id = $2::uuid
+             WHERE organization_id = $1 AND id = $2
                AND issuance_state = 'issued'`,
-            [input.organizationId, input.visitId]
+            [input.organizationId, row.purchaseOrderId]
           )
           if (existing.rows[0]) return { purchaseOrderId: existing.rows[0].id }
         }
-        if (row.status !== "OPEN" || !row.selectedOfferId || !row.agreedPrice) {
+        if (row.status !== "OPEN" || !row.selectedOfferId ||
+          !row.agreedPrice || !row.purchaseOrderId) {
           throw new Error("A selected offer is required before calibration dispatch.")
         }
         if (["BROKEN", "SCRAPPED"].includes(row.unitStatus) ||
@@ -603,6 +907,7 @@ export function createStoreCalibrationRepository(pool: Pool) {
           id: string
           issuanceState: string
           orderNumber: string
+          originStoreId: string
           repairAssetId: string
           remark: string | null
           servicePrice: string
@@ -611,23 +916,25 @@ export function createStoreCalibrationRepository(pool: Pool) {
         }>(
           `SELECT id, issuance_state AS "issuanceState",
              order_number AS "orderNumber", status, remark,
+             origin_store_id AS "originStoreId",
              repair_asset_id AS "repairAssetId",
              supplier_id AS "supplierId", service_price::text AS "servicePrice"
            FROM store.purchase_orders
-           WHERE organization_id = $1 AND issuance_id = $2::uuid
+           WHERE organization_id = $1 AND id = $2
              AND order_type = 'REPAIR'
            FOR UPDATE`,
-          [input.organizationId, input.visitId]
+          [input.organizationId, row.purchaseOrderId]
         )
         const purchaseOrder = order.rows[0]
         if (!purchaseOrder || purchaseOrder.status !== "Open" ||
           purchaseOrder.repairAssetId !== row.assetId ||
+          purchaseOrder.originStoreId !== row.accountableStoreId ||
           purchaseOrder.supplierId !== offer.rows[0].supplierId ||
-          Number(purchaseOrder.servicePrice) !== Number(row.agreedPrice)) {
+          Number(row.agreedPrice) > Number(purchaseOrder.servicePrice)) {
           throw new Error("Calibration service PO does not match the selected offer.")
         }
-        if (purchaseOrder.issuanceState !== "pending") {
-          throw new Error("Calibration service PO was already issued without a visit movement.")
+        if (purchaseOrder.issuanceState !== "issued") {
+          throw new Error("Issue the calibration service PO before dispatch.")
         }
         if (!(await hasIssuedStorePurchaseOrderPdf(client, {
           organizationId: input.organizationId,
@@ -636,13 +943,17 @@ export function createStoreCalibrationRepository(pool: Pool) {
           throw new Error("Store the calibration service PO PDF before dispatch.")
         }
         const location = await client.query<{ id: string }>(
-          `SELECT id FROM store.locations
-           WHERE organization_id = $1 AND active
-           ORDER BY created_at LIMIT 1`,
-          [input.organizationId]
+          `SELECT location.id
+           FROM store.accountable_stores accountable
+           JOIN store.locations location
+             ON location.id = accountable.default_location_id
+           WHERE accountable.id = $1 AND accountable.organization_id = $2
+             AND location.accountable_store_id = accountable.id
+             AND location.active AND location.location_type = 'STORE'`,
+          [purchaseOrder.originStoreId, input.organizationId]
         )
-        const locationId = row.currentLocationId ?? location.rows[0]?.id
-        if (!locationId) throw new Error("A Store location is required.")
+        const locationId = location.rows[0]?.id
+        if (!locationId) throw new Error("The accountable store needs an active location.")
         await client.query(
           `UPDATE store.assets
            SET status = 'UNDER_MAINTENANCE', current_holder_type = 'SUPPLIER',
@@ -671,13 +982,6 @@ export function createStoreCalibrationRepository(pool: Pool) {
             input.actorUserId ?? null]
         )
         await client.query(
-          `UPDATE store.purchase_orders
-           SET issuance_state = 'issued', issued_at = now(), updated_at = now(),
-             updated_by_user_id = $2
-           WHERE id = $1`,
-          [purchaseOrder.id, input.actorUserId ?? null]
-        )
-        await client.query(
           `UPDATE store.calibration_visits
            SET status = 'DISPATCHED', purchase_order_id = $2,
              outbound_movement_id = $3, updated_at = now(),
@@ -693,7 +997,7 @@ export function createStoreCalibrationRepository(pool: Pool) {
     },
 
     async returnCalibrationVisit(input: Actor & {
-      locationId: string
+      locationId?: string | null
       movedBy?: string | null
       remark?: string | null
       returnedOn?: string | null
@@ -709,6 +1013,7 @@ export function createStoreCalibrationRepository(pool: Pool) {
           currentHolderType: string
           currentSupplierId: string | null
           itemTypeId: string
+          accountableStoreId: string
           outboundMovementId: string
           purchaseOrderId: string
           status: VisitStatus
@@ -720,7 +1025,8 @@ export function createStoreCalibrationRepository(pool: Pool) {
              asset.current_holder_type AS "currentHolderType",
              asset.current_holder_reference AS "currentHolderReference",
              asset.current_holder_name AS "currentHolderName",
-             asset.current_supplier_id AS "currentSupplierId"
+             asset.current_supplier_id AS "currentSupplierId",
+             asset.accountable_store_id AS "accountableStoreId"
            FROM store.calibration_visits visit
            JOIN store.assets asset ON asset.id = visit.asset_id
            WHERE visit.id = $1 AND visit.organization_id = $2
@@ -731,24 +1037,35 @@ export function createStoreCalibrationRepository(pool: Pool) {
         if (!row || row.status !== "DISPATCHED") {
           throw new Error("Dispatched calibration visit was not found.")
         }
-        const order = await client.query<{ supplierId: string }>(
-          `SELECT supplier_id AS "supplierId" FROM store.purchase_orders
+        const order = await client.query<{ originStoreId: string; supplierId: string }>(
+          `SELECT supplier_id AS "supplierId",
+             origin_store_id AS "originStoreId" FROM store.purchase_orders
            WHERE id = $1 AND organization_id = $2
              AND repair_asset_id = $3 AND issuance_state = 'issued'
            FOR UPDATE`,
           [row.purchaseOrderId, input.organizationId, row.assetId]
         )
-        if (!order.rows[0] || row.currentHolderType !== "SUPPLIER" ||
+        if (!order.rows[0] ||
+          order.rows[0].originStoreId !== row.accountableStoreId ||
+          row.currentHolderType !== "SUPPLIER" ||
           row.currentSupplierId !== order.rows[0].supplierId) {
           throw new Error("Unit ID is not held by the selected calibration Supplier.")
         }
         const location = await client.query<{ code: string; id: string; name: string }>(
-          `SELECT id, code, name FROM store.locations
-           WHERE id = $1 AND organization_id = $2
-             AND location_type = 'STORE' AND active`,
-          [input.locationId, input.organizationId]
+          `SELECT location.id, location.code, location.name
+           FROM store.accountable_stores accountable
+           JOIN store.locations location ON location.id = COALESCE(
+             $1::uuid, accountable.default_location_id)
+           WHERE accountable.id = $3 AND accountable.organization_id = $2
+             AND location.organization_id = $2
+             AND location.location_type = 'STORE' AND location.active
+             AND location.accountable_store_id = accountable.id`,
+          [input.locationId ?? null, input.organizationId,
+            order.rows[0].originStoreId]
         )
-        if (!location.rows[0]) throw new Error("Select an active Store location.")
+        if (!location.rows[0]) {
+          throw new Error("Select an active location in the originating accountable store.")
+        }
         const returnDate = await client.query<{ returnAt: Date; valid: boolean }>(
           `WITH requested AS (
              SELECT COALESCE(NULLIF($1, '')::date,
@@ -840,15 +1157,21 @@ export function createStoreCalibrationRepository(pool: Pool) {
       })
     },
 
-    async setCalibrationOfferQuote(input: Actor & { fileId: string; offerId: string }) {
+    async setCalibrationOfferQuote(input: Actor & {
+      accountableStoreId: string
+      fileId: string
+      offerId: string
+    }) {
       return withTransaction(pool, async (client) => {
         const offer = await client.query<{ id: string }>(
           `SELECT offer.id FROM store.calibration_offers offer
            JOIN store.calibration_visits visit ON visit.id = offer.visit_id
+           JOIN store.assets asset ON asset.id = visit.asset_id
            WHERE offer.id = $1 AND offer.organization_id = $2
              AND visit.organization_id = $2
+             AND asset.accountable_store_id = $3
            FOR UPDATE OF offer`,
-          [input.offerId, input.organizationId]
+          [input.offerId, input.organizationId, input.accountableStoreId]
         )
         if (!offer.rows[0]) throw new Error("Calibration Supplier offer was not found.")
         await linkedFile(client, {
@@ -870,6 +1193,7 @@ export function createStoreCalibrationRepository(pool: Pool) {
       completedBy: string
       completedOn: string
       passed: boolean
+      scope?: string | null
       visitId: string
       workDone?: string | null
     }) {
@@ -937,6 +1261,27 @@ export function createStoreCalibrationRepository(pool: Pool) {
               [completedOn, schedule.rows[0].frequencyDays]
             )).rows[0]!.nextDueOn
           : null
+        const openRepair = input.passed ? await client.query<{ id: string }>(
+          `SELECT repair_item.id
+           FROM store.repair_purchase_order_items repair_item
+           JOIN store.purchase_orders purchase_order
+             ON purchase_order.id = repair_item.purchase_order_id
+           WHERE repair_item.organization_id = $1
+             AND repair_item.asset_id = $2
+             AND repair_item.status = 'Open'
+             AND purchase_order.status = 'Open'
+           LIMIT 1`,
+          [input.organizationId, row.assetId]
+        ) : null
+        if (openRepair?.rows[0]) {
+          throw new Error("Complete the open service PO before in-house sign-off.")
+        }
+        const openBreakdown = input.passed ? await client.query<{ id: string }>(
+          `SELECT id FROM store.asset_breakdowns
+           WHERE organization_id = $1 AND asset_id = $2
+             AND status = 'In Progress' LIMIT 1`,
+          [input.organizationId, row.assetId]
+        ) : null
         const record = await client.query<{ id: string }>(
           `INSERT INTO store.asset_maintenance_records (
              organization_id, asset_id, schedule_id, maintenance_type,
@@ -961,7 +1306,8 @@ export function createStoreCalibrationRepository(pool: Pool) {
             await client.query(
               `UPDATE store.assets SET status = $2,
                  updated_at = now(), updated_by_user_id = $3 WHERE id = $1`,
-              [row.assetId, row.holderType === "STORE" ? "AVAILABLE" : "ASSIGNED",
+              [row.assetId, openBreakdown?.rows[0] ? "BROKEN" :
+                row.holderType === "STORE" ? "AVAILABLE" : "ASSIGNED",
                 input.actorUserId ?? null]
             )
           }
@@ -975,9 +1321,11 @@ export function createStoreCalibrationRepository(pool: Pool) {
         await client.query(
           `UPDATE store.calibration_visits
            SET status = $2, maintenance_record_id = $3,
+             scope = COALESCE(NULLIF(btrim($5::text), ''), scope),
              updated_at = now(), updated_by_user_id = $4 WHERE id = $1`,
           [input.visitId, input.passed ? "PASSED" : "FAILED",
-            record.rows[0]!.id, input.actorUserId ?? null]
+            record.rows[0]!.id, input.actorUserId ?? null,
+            input.scope ?? null]
         )
         await queueDashboardRefresh(client, input.organizationId)
         return { maintenanceRecordId: record.rows[0]!.id, nextDueOn }
@@ -1093,23 +1441,32 @@ export function createStoreCalibrationRepository(pool: Pool) {
              WHERE id = $4`,
             [completedOn, nextDueOn, input.actorUserId ?? null, row.scheduleId]
           )
+          const openBreakdown = await client.query<{ id: string }>(
+            `SELECT id FROM store.asset_breakdowns
+             WHERE organization_id = $1 AND asset_id = $2
+               AND status = 'In Progress' LIMIT 1`,
+            [input.organizationId, row.assetId]
+          )
           await client.query(
-            `UPDATE store.assets SET status = 'AVAILABLE', updated_at = now(),
-               updated_by_user_id = $2 WHERE id = $1`,
-            [row.assetId, input.actorUserId ?? null]
+            `UPDATE store.assets SET status = $2, updated_at = now(),
+               updated_by_user_id = $3 WHERE id = $1`,
+            [row.assetId, openBreakdown.rows[0] ? "BROKEN" : "AVAILABLE",
+              input.actorUserId ?? null]
           )
         }
-        const completedOrder = await client.query<{ id: string }>(
-          `UPDATE store.purchase_orders
-           SET status = 'Completed', updated_at = now(),
-             updated_by_user_id = $3
-           WHERE id = $1 AND organization_id = $2
-             AND issuance_state = 'issued' AND status = 'Open'
-           RETURNING id`,
-          [row.purchaseOrderId, input.organizationId, input.actorUserId ?? null]
-        )
-        if (!completedOrder.rows[0]) {
-          throw new Error("Open calibration service PO was not found.")
+        if (input.passed) {
+          const completedOrder = await client.query<{ id: string }>(
+            `UPDATE store.purchase_orders
+             SET status = 'Completed', updated_at = now(),
+               updated_by_user_id = $3
+             WHERE id = $1 AND organization_id = $2
+               AND issuance_state = 'issued' AND status = 'Open'
+             RETURNING id`,
+            [row.purchaseOrderId, input.organizationId, input.actorUserId ?? null]
+          )
+          if (!completedOrder.rows[0]) {
+            throw new Error("Open calibration service PO was not found.")
+          }
         }
         await client.query(
           `UPDATE store.calibration_visits
