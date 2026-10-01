@@ -1,13 +1,8 @@
 import { PendingRetainedUploadForm } from "@/components/pending-retained-upload-form"
-import { Camera, Send } from "lucide-react"
+import { Camera, Plus, Send } from "lucide-react"
 
 import { Button } from "@workspace/ui/components/button"
-import {
-  SectionCard,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@workspace/ui/components/card"
+import { Dialog, DialogTrigger } from "@workspace/ui/components/dialog"
 import {
   Field,
   FieldDescription,
@@ -21,6 +16,7 @@ import {
 import { Textarea } from "@workspace/ui/components/textarea"
 
 import { submitMaintenanceRequestAction } from "@/app/maintenance/actions"
+import { StandardDialogContent } from "@/components/ui/golden-patterns"
 
 export function MaintenanceRequestForm({
   departments,
@@ -32,11 +28,15 @@ export function MaintenanceRequestForm({
   requesterName: string
 }) {
   return (
-    <SectionCard width="standard">
-      <CardHeader className="border-b border-border/70 pb-4">
-        <CardTitle>New Maintenance Request</CardTitle>
-      </CardHeader>
-      <CardContent>
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button type="button"><Plus aria-hidden="true" className="size-4" /> New Request</Button>
+      </DialogTrigger>
+      <StandardDialogContent
+        className="sm:max-w-2xl"
+        title="New Maintenance Request"
+        description="Submit one problem per request."
+      >
         <PendingRetainedUploadForm
           action={submitMaintenanceRequestAction}
           uploads={[
@@ -171,7 +171,7 @@ export function MaintenanceRequestForm({
             <Send aria-hidden="true" className="size-4" /> Submit Request
           </Button>
         </PendingRetainedUploadForm>
-      </CardContent>
-    </SectionCard>
+      </StandardDialogContent>
+    </Dialog>
   )
 }
