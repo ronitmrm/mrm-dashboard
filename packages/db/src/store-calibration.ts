@@ -55,6 +55,30 @@ async function linkedFile(
   if (!result.rows[0]) throw new Error("The uploaded file is not attached to this calibration record.")
 }
 
+async function hasUnresolvedCalibrationFailure(
+  client: PoolClient,
+  organizationId: string,
+  assetId: string
+) {
+  const result = await client.query(
+    `SELECT 1 FROM store.calibration_visits failed
+     WHERE failed.organization_id = $1 AND failed.asset_id = $2
+       AND failed.status = 'FAILED'
+       AND NOT EXISTS (
+         SELECT 1 FROM store.calibration_visits passed
+         WHERE passed.organization_id = $1
+           AND passed.asset_id = failed.asset_id
+           AND passed.schedule_id = failed.schedule_id
+           AND passed.status = 'PASSED'
+           AND (passed.created_at, passed.id) >
+             (failed.created_at, failed.id)
+       )
+     LIMIT 1`,
+    [organizationId, assetId]
+  )
+  return Boolean(result.rows[0])
+}
+
 export function createStoreCalibrationRepository(pool: Pool) {
   return {
     async listCalibrationPlan(organizationId: string, from: string, to: string) {
@@ -598,13 +622,16 @@ export function createStoreCalibrationRepository(pool: Pool) {
           assetCode: string
           assetId: string
           accountableStoreId: string
+          dueOn: string
           purchaseOrderId: string | null
+          scheduleId: string
           selectedOfferId: string | null
           scope: string
           status: VisitStatus
         }>(
           `SELECT visit.asset_id AS "assetId", asset.asset_code AS "assetCode",
              asset.accountable_store_id AS "accountableStoreId",
+             visit.schedule_id AS "scheduleId", visit.due_on::text AS "dueOn",
              visit.purchase_order_id AS "purchaseOrderId",
              visit.selected_offer_id AS "selectedOfferId",
              visit.scope, visit.status
@@ -676,6 +703,7 @@ export function createStoreCalibrationRepository(pool: Pool) {
              ON prior.purchase_order_id = purchase_order.id
            WHERE prior.asset_id = $1 AND prior.organization_id = $2
              AND prior.status = 'FAILED'
+             AND prior.schedule_id = $4 AND prior.due_on = $5::date
              AND purchase_order.organization_id = $2
              AND purchase_order.origin_store_id = $3
              AND purchase_order.order_type = 'REPAIR'
@@ -683,7 +711,8 @@ export function createStoreCalibrationRepository(pool: Pool) {
              AND purchase_order.status = 'Open'
            ORDER BY prior.created_at DESC, prior.id DESC
            LIMIT 1 FOR UPDATE OF purchase_order`,
-          [row.assetId, input.organizationId, input.accountableStoreId]
+          [row.assetId, input.organizationId, input.accountableStoreId,
+            row.scheduleId, row.dueOn]
         )
         if (retry.rows[0]) {
           if (retry.rows[0].supplierId !== offer.rows[0].supplierId) {
@@ -1295,29 +1324,6 @@ export function createStoreCalibrationRepository(pool: Pool) {
             input.workDone?.trim() || null, input.passed ? "PASSED" : "FAILED",
             nextDueOn, input.actorUserId ?? null]
         )
-        if (input.passed) {
-          await client.query(
-            `UPDATE store.asset_maintenance_schedules
-             SET last_completed_on = $1::date, next_due_on = $2::date,
-               updated_at = now(), updated_by_user_id = $3 WHERE id = $4`,
-            [completedOn, nextDueOn, input.actorUserId ?? null, row.scheduleId]
-          )
-          if (row.unitStatus === "UNDER_MAINTENANCE") {
-            await client.query(
-              `UPDATE store.assets SET status = $2,
-                 updated_at = now(), updated_by_user_id = $3 WHERE id = $1`,
-              [row.assetId, openBreakdown?.rows[0] ? "BROKEN" :
-                row.holderType === "STORE" ? "AVAILABLE" : "ASSIGNED",
-                input.actorUserId ?? null]
-            )
-          }
-        } else {
-          await client.query(
-            `UPDATE store.assets SET status = 'UNDER_MAINTENANCE',
-               updated_at = now(), updated_by_user_id = $2 WHERE id = $1`,
-            [row.assetId, input.actorUserId ?? null]
-          )
-        }
         await client.query(
           `UPDATE store.calibration_visits
            SET status = $2, maintenance_record_id = $3,
@@ -1327,6 +1333,31 @@ export function createStoreCalibrationRepository(pool: Pool) {
             record.rows[0]!.id, input.actorUserId ?? null,
             input.scope ?? null]
         )
+        if (input.passed) {
+          await client.query(
+            `UPDATE store.asset_maintenance_schedules
+             SET last_completed_on = $1::date, next_due_on = $2::date,
+               updated_at = now(), updated_by_user_id = $3 WHERE id = $4`,
+            [completedOn, nextDueOn, input.actorUserId ?? null, row.scheduleId]
+          )
+          const unresolvedFailure = await hasUnresolvedCalibrationFailure(
+            client, input.organizationId, row.assetId
+          )
+          await client.query(
+            `UPDATE store.assets SET status = $2,
+               updated_at = now(), updated_by_user_id = $3 WHERE id = $1`,
+            [row.assetId, openBreakdown?.rows[0] ? "BROKEN" :
+              unresolvedFailure ? "UNDER_MAINTENANCE" :
+              row.holderType === "STORE" ? "AVAILABLE" : "ASSIGNED",
+              input.actorUserId ?? null]
+          )
+        } else {
+          await client.query(
+            `UPDATE store.assets SET status = 'UNDER_MAINTENANCE',
+               updated_at = now(), updated_by_user_id = $2 WHERE id = $1`,
+            [row.assetId, input.actorUserId ?? null]
+          )
+        }
         await queueDashboardRefresh(client, input.organizationId)
         return { maintenanceRecordId: record.rows[0]!.id, nextDueOn }
       })
@@ -1433,6 +1464,14 @@ export function createStoreCalibrationRepository(pool: Pool) {
             input.workDone?.trim() || null, required(input.result, "Result"),
             row.agreedPrice, nextDueOn, input.actorUserId ?? null]
         )
+        await client.query(
+          `UPDATE store.calibration_visits
+           SET status = $2, maintenance_record_id = $3,
+             updated_at = now(), updated_by_user_id = $4
+           WHERE id = $1`,
+          [input.visitId, input.passed ? "PASSED" : "FAILED",
+            record.rows[0]!.id, input.actorUserId ?? null]
+        )
         if (input.passed) {
           await client.query(
             `UPDATE store.asset_maintenance_schedules
@@ -1447,10 +1486,14 @@ export function createStoreCalibrationRepository(pool: Pool) {
                AND status = 'In Progress' LIMIT 1`,
             [input.organizationId, row.assetId]
           )
+          const unresolvedFailure = await hasUnresolvedCalibrationFailure(
+            client, input.organizationId, row.assetId
+          )
           await client.query(
             `UPDATE store.assets SET status = $2, updated_at = now(),
                updated_by_user_id = $3 WHERE id = $1`,
-            [row.assetId, openBreakdown.rows[0] ? "BROKEN" : "AVAILABLE",
+            [row.assetId, openBreakdown.rows[0] ? "BROKEN" :
+              unresolvedFailure ? "UNDER_MAINTENANCE" : "AVAILABLE",
               input.actorUserId ?? null]
           )
         }
@@ -1468,14 +1511,6 @@ export function createStoreCalibrationRepository(pool: Pool) {
             throw new Error("Open calibration service PO was not found.")
           }
         }
-        await client.query(
-          `UPDATE store.calibration_visits
-           SET status = $2, maintenance_record_id = $3,
-             updated_at = now(), updated_by_user_id = $4
-           WHERE id = $1`,
-          [input.visitId, input.passed ? "PASSED" : "FAILED",
-            record.rows[0]!.id, input.actorUserId ?? null]
-        )
         await queueDashboardRefresh(client, input.organizationId)
         return { maintenanceRecordId: record.rows[0]!.id, nextDueOn }
       })
