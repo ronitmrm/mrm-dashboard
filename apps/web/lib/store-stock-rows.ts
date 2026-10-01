@@ -1,5 +1,6 @@
 type StoreStockItem = {
   availableStock: string
+  companyOnHand: string
   id: string
   trackingMode: "CONSUMABLE" | "SERIALIZED"
   typeCode: string
@@ -7,10 +8,13 @@ type StoreStockItem = {
 }
 
 type StoreStockPhysicalUnit = {
+  accountableStoreName: string
   assetCode: string
   holderName: string | null
   holderType: string
   id: string
+  isAvailableToIssueHere: boolean
+  isMainAccountable: boolean
   itemTypeId: string
   locationName: string | null
   status: string
@@ -36,6 +40,7 @@ export function storeStockRows<T extends StoreStockItem>(
           actionItem: true,
           assignedQuantity: "—",
           availableQuantity: `${item.availableStock} ${item.unit}`,
+          companyQuantity: `${item.companyOnHand} ${item.unit}`,
           displayedCode: item.typeCode,
           physicalUnit: null,
           rowKey: item.id,
@@ -52,7 +57,8 @@ export function storeStockRows<T extends StoreStockItem>(
         assignedQuantity: String(
           units.filter((unit) => unit.status === "ASSIGNED").length
         ),
-        availableQuantity: "—",
+        availableQuantity: item.availableStock,
+        companyQuantity: item.companyOnHand,
         displayedCode: item.typeCode,
         physicalUnit: null,
         rowKey: item.id,
@@ -62,11 +68,8 @@ export function storeStockRows<T extends StoreStockItem>(
         ...item,
         actionItem: false,
         assignedQuantity: physicalUnit.status === "ASSIGNED" ? "1" : "0",
-        availableQuantity:
-          physicalUnit.status === "AVAILABLE" &&
-          physicalUnit.holderType === "STORE"
-            ? "1"
-            : "0",
+        availableQuantity: physicalUnit.isAvailableToIssueHere ? "1" : "0",
+        companyQuantity: physicalUnit.status === "SCRAPPED" ? "0" : "1",
         displayedCode: physicalUnit.assetCode,
         physicalUnit,
         rowKey: physicalUnit.id,

@@ -3977,6 +3977,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         applicableItemCode: string | null
         availableStock: string
         availableUnitIds: string[]
+        companyOnHand: string
         currentPriceValidFrom: string | null
         currentSupplierEmail: string | null
         currentSupplierId: string | null
@@ -4057,6 +4058,17 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
                 WHERE movement.item_type_id = item.id
                   AND accountable.kind = 'MAIN')
             END)::numeric)::text AS "availableStock",
+            trim_scale((CASE WHEN item.tracking_mode = 'SERIALIZED'
+              THEN (SELECT count(*)::numeric FROM store.assets asset
+                WHERE asset.item_type_id = item.id
+                  AND asset.organization_id = item.organization_id
+                  AND asset.status <> 'SCRAPPED')
+              ELSE (SELECT COALESCE(sum(movement.quantity), 0)
+                FROM store.stock_movements movement
+                WHERE movement.organization_id = item.organization_id
+                  AND movement.item_type_id = item.id
+                  AND movement.asset_id IS NULL)
+            END)::numeric)::text AS "companyOnHand",
             CASE WHEN item.tracking_mode = 'SERIALIZED' THEN ARRAY(
                 SELECT asset.asset_code
                 FROM store.assets asset
@@ -4096,13 +4108,20 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       return result.rows
     },
 
-    async listStockPhysicalUnits(organizationId: string) {
+    async listStockPhysicalUnits(
+      organizationId: string,
+      scope: "MAIN" | "COMPANY" = "MAIN"
+    ) {
       const result = await pool.query<{
+        accountableStoreCode: string
+        accountableStoreName: string
         assetCode: string
         holderName: string | null
         holderReference: string | null
         holderType: StoreHolderType
         id: string
+        isAvailableToIssueHere: boolean
+        isMainAccountable: boolean
         itemTypeId: string
         locationName: string | null
         status: string
@@ -4111,6 +4130,14 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       }>(
         `SELECT asset.id, asset.item_type_id AS "itemTypeId",
             asset.asset_code AS "assetCode", asset.status,
+            accountable.code AS "accountableStoreCode",
+            accountable.name AS "accountableStoreName",
+            (accountable.kind = 'MAIN') AS "isMainAccountable",
+            COALESCE((accountable.kind = 'MAIN' AND asset.status = 'AVAILABLE'
+              AND asset.current_holder_type = 'STORE'
+              AND location.accountable_store_id = accountable.id
+              AND location.location_type = 'STORE' AND location.active), false)
+              AS "isAvailableToIssueHere",
             asset.current_holder_type AS "holderType",
             asset.current_holder_name AS "holderName",
             asset.current_holder_reference AS "holderReference",
@@ -4119,6 +4146,8 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             COALESCE(receipt_line.unit_price,
               asset.acquisition_unit_price)::text AS "unitPrice"
           FROM store.assets asset
+          JOIN store.accountable_stores accountable
+            ON accountable.id = asset.accountable_store_id
           LEFT JOIN store.locations location ON location.id = asset.current_location_id
           LEFT JOIN store.receipt_lines receipt_line
             ON receipt_line.id = asset.receipt_line_id
@@ -4127,13 +4156,9 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           LEFT JOIN store.suppliers legacy_supplier
             ON legacy_supplier.id = asset.acquisition_supplier_id
           WHERE asset.organization_id = $1
-            AND EXISTS (
-              SELECT 1 FROM store.accountable_stores accountable
-              WHERE accountable.id = asset.accountable_store_id
-                AND accountable.kind = 'MAIN'
-            )
+            AND ($2 = 'COMPANY' OR accountable.kind = 'MAIN')
           ORDER BY asset.asset_code`,
-        [organizationId]
+        [organizationId, scope]
       )
       return result.rows
     },

@@ -28,6 +28,7 @@ import {
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { MetricSummary } from "@/components/ui/golden-patterns"
 import { StorePurchaseOrderForm } from "@/components/store/store-purchase-order-form"
+import { StoreStockAdjustmentForm } from "@/components/store/store-stock-adjustment-form"
 import {
   listGrantedCapabilities,
   requireCapability,
@@ -55,6 +56,7 @@ export default async function StoreStockPage({
     ordersSaved?: string | string[]
     repairOrdersSaved?: string | string[]
     requestNumber?: string | string[]
+    saved?: string | string[]
   }>
 }) {
   const session = await requireCapability("store.stock.read", "/store/stock")
@@ -77,6 +79,9 @@ export default async function StoreStockPage({
         : requestedMode === "request" &&
             storeActions.has("store.requests.submit")
           ? "request"
+          : requestedMode === "adjust" &&
+              storeActions.has("store.asset_movement.write")
+            ? "adjust"
           : "view"
   const orderItemId = firstValue(params.orderItemId)
   const requestedIssuanceId = firstValue(params.issuance_id)
@@ -106,7 +111,7 @@ export default async function StoreStockPage({
       [
         repository.listItemTypes(organizationId),
         repository.listSupplierPrices(organizationId),
-        repository.listStockPhysicalUnits(organizationId),
+        repository.listStockPhysicalUnits(organizationId, "COMPANY"),
       ]
     )
     return { items, supplierPrices, physicalUnits }
@@ -114,13 +119,21 @@ export default async function StoreStockPage({
   const stockRows = storeStockRows(data.items, data.physicalUnits)
   const today = istDateValue()
   const actionFormId = "stock-row-action"
-  const columnCount = mode === "view" ? 10 : mode === "order" ? 12 : 11
+  const columnCount = mode === "view" || mode === "adjust"
+    ? 12
+    : mode === "order" ? 14 : 13
 
   return (
     <div className="flex flex-col gap-6">
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">Stock</h2>
       </div>
+
+      {firstValue(params.saved) === "1" ? (
+        <SectionCard role="status">
+          <CardContent className="py-4 text-sm">Stock adjustment saved.</CardContent>
+        </SectionCard>
+      ) : null}
 
       {Number.isInteger(savedOrderCount) && savedOrderCount > 0 ? (
         <SectionCard role="status">
@@ -167,7 +180,7 @@ export default async function StoreStockPage({
               (total, item) => total + item.availableUnitIds.length,
               0
             ),
-            description: "Non Consumable physical units",
+            description: "Non Consumable physical units available in Main Store",
             tone: "positive",
           },
           {
@@ -183,6 +196,12 @@ export default async function StoreStockPage({
         ]}
       />
 
+      {mode === "adjust" ? (
+        <StoreStockAdjustmentForm
+          consumables={data.items.filter((item) => item.trackingMode === "CONSUMABLE")}
+        />
+      ) : null}
+
       <SectionCard>
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -191,7 +210,9 @@ export default async function StoreStockPage({
               <CardDescription>
                 {mode === "repair"
                   ? "Select physical Unit IDs, then continue to enter repair details and Suppliers for each unit."
-                  : "Asset Codes describe an item type; each Non Consumable unit has its own status, supplier and purchase price. The cheapest active quote is selected by default for a new purchase order."}
+                  : mode === "order"
+                    ? "Select Asset Codes and quantities. The cheapest active Supplier quote is selected by default."
+                  : "Main available is stock Main Store can issue. Company on hand includes every accountable Store. Each Non Consumable Unit ID shows its responsible Store and physical holder."}
               </CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -227,9 +248,19 @@ export default async function StoreStockPage({
                   <Link href="/store/orders">Repair Returns</Link>
                 </Button>
               ) : null}
+              {storeActions.has("store.asset_movement.write") ? (
+                <Button
+                  asChild
+                  variant={mode === "adjust" ? "default" : "outline"}
+                >
+                  <Link href="/store/stock?mode=adjust">Record Loss/Damage</Link>
+                </Button>
+              ) : null}
               {mode !== "view" ? (
                 <Button asChild variant="ghost">
-                  <Link href="/store/stock">Cancel Selection</Link>
+                  <Link href="/store/stock">
+                    {mode === "adjust" ? "Close Adjustment" : "Cancel Selection"}
+                  </Link>
                 </Button>
               ) : null}
             </div>
@@ -247,7 +278,7 @@ export default async function StoreStockPage({
           <OperationalTable
             filterStorageKey="store-stock-register-unit-ids"
             filteredSelection={
-              mode === "view"
+              mode === "view" || mode === "adjust"
                 ? undefined
                 : {
                     checkboxName:
@@ -268,9 +299,11 @@ export default async function StoreStockPage({
                 <TableHead>Asset Name</TableHead>
                 <TableHead>Asset Category</TableHead>
                 <TableHead>Asset Subcategory</TableHead>
-                <TableHead>Available Quantity</TableHead>
-                <TableHead>Assigned Quantity</TableHead>
+                <TableHead>Main Available</TableHead>
+                <TableHead>Company On Hand</TableHead>
+                <TableHead>Assigned Units</TableHead>
                 <TableHead data-filterable="true">Status</TableHead>
+                <TableHead data-filterable="true">Responsible Store</TableHead>
                 <TableHead>Location / Holder</TableHead>
                 <TableHead>Supplier</TableHead>
                 <TableHead>Quote / Purchase Price</TableHead>
@@ -303,6 +336,7 @@ export default async function StoreStockPage({
                 )
                 const canSelectRepairUnit =
                   item.physicalUnit &&
+                  item.physicalUnit.isMainAccountable &&
                   item.physicalUnit.status !== "SCRAPPED" &&
                   (item.physicalUnit.holderType !== "SUPPLIER" ||
                     (resumingRepairSelection && selectedRepairUnit))
@@ -369,6 +403,7 @@ export default async function StoreStockPage({
                     <TableCell>{item.assetCategory}</TableCell>
                     <TableCell>{item.assetSubcategory}</TableCell>
                     <TableCell>{item.availableQuantity}</TableCell>
+                    <TableCell>{item.companyQuantity}</TableCell>
                     <TableCell>{item.assignedQuantity}</TableCell>
                     <TableCell
                       data-filter-value={
@@ -396,12 +431,18 @@ export default async function StoreStockPage({
                         "Consumable"
                       )}
                     </TableCell>
+                    <TableCell data-filter-value={item.physicalUnit?.accountableStoreName ?? "All Stores"}>
+                      {item.physicalUnit?.accountableStoreName ?? "All Stores"}
+                    </TableCell>
                     <TableCell>
                       {item.physicalUnit
                         ? (item.physicalUnit.locationName ??
                           item.physicalUnit.holderName ??
                           item.physicalUnit.holderType)
-                        : item.storageLocations}
+                        : item.storageLocations === "Not in stock" &&
+                            Number(item.companyOnHand) > 0
+                          ? "Not in Main Store"
+                          : item.storageLocations}
                     </TableCell>
                     <TableCell>
                       {mode === "order" &&
