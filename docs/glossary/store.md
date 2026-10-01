@@ -151,8 +151,9 @@ right aligned on the same header row. Their green Purchase Order title band
 matches the first page's height and title scale.
 
 **Repair Purchase Order**: A Purchase Order for one or more individually tracked
-Non Consumable Unit IDs sent to one Supplier for repair. The accountable store selects the Unit
-IDs from Stock, then reviews each unit's service scope, agreed price, and
+Non Consumable Unit IDs sent to one Supplier for repair. Main Store selects the Unit
+IDs from Stock; other accountable Stores select their units in their own Store
+workspace. Each Store then reviews service scope, agreed price, and
 repair Supplier on a separate page. One Supplier may be applied to all selected
 units; when Suppliers differ, the accountable store issues one order per Supplier. Issuance
 temporarily assigns every selected Physical Asset to its order's Supplier.
@@ -163,7 +164,8 @@ For each Unit ID, Store may request reassignment to a selected Department as
 part of the order. This creates a pending Store Request for one unit of the same
 Asset Code, without reserving the Unit ID sent for repair. Store may issue any
 available Unit ID of that Asset Code, including before the repaired unit returns.
-The accountable store completes each line in its Store workspace; the order is
+Main Store completes each repair line in the Purchase Register; other
+accountable Stores complete their lines in their Store workspace. The order is
 complete when every unit is complete. Completion records that Unit ID's physical
 return to its originating Store location as Asset Movement. The Department request is issued separately from available
 stock; a returned unit can also be assigned by direct Store Movement. Repair
@@ -174,8 +176,9 @@ single unit and retain their Quality Control visit workflow.
 **Store Purchase Register**: The shared record containing every Store Purchase
 Order and its received quantity. Goods are received against the same order row;
 repair lines and calibration service orders keep their originating accountable
-store. Repair completion is recorded in that store's workspace when the Unit ID
-returns. Purchase Order entry and goods receipt are not separate workspaces.
+store. Main Store repair completion is recorded on the repair line in this
+register when the Unit ID returns; other Stores complete repair in their own
+workspace. Purchase Order entry and goods receipt are not separate workspaces.
 
 **Store Receipt**: One Goods Receipt Note recorded against exactly one Store
 Purchase Order. It may contain one or more selected open goods lines from that
@@ -243,16 +246,20 @@ Unit ID, unavailable Unit ID, or stock shortfall leaves every selected line
 unchanged.
 
 **Stock Register**: Main Store's filterable inventory table containing both
-Consumable and Non Consumable items accountable to Main Store. Departmental and
-Quality Store workspaces show their own accountable stock, with shared company
-totals and movement history. A Consumable has one quantity-managed row.
-Each Non Consumable Asset Code has a classification row without a stock quantity.
-Every Main-accountable physical unit has a separate row, including assigned or unavailable units,
-showing its permanent Unit ID, status, holder or location, and its actual purchase
+Consumable and Non Consumable items across accountable Stores. It shows Main
+Store availability alongside company-wide on-hand quantity or Unit ID count;
+company totals include stock accountable to Quality and production Stores.
+Departmental and Quality Store workspaces show their own accountable stock.
+A Consumable has one quantity-managed row. Main Store records a loss or damage
+adjustment against that row, with a reason; this reduces company on-hand.
+Each Non Consumable Asset Code has a classification row with Main available and
+company-wide unit counts.
+Every company physical unit has a separate row, including assigned or unavailable units,
+showing its permanent Unit ID, responsible Store, status, holder or location, and its actual purchase
 Supplier and cost when recorded. Available units have quantity one; other units
 show zero available. Assigned quantity is one only for a unit currently in
-Assigned status and zero for other units. Asset Code rows show no available
-quantity and the total count of assigned units; Consumables show their available
+Assigned status and zero for other units. Asset Code rows show Main available
+quantity and the company-wide count of assigned units; Consumables show their available
 balance and no assigned quantity. Supplier quotes for future purchases remain
 on the Asset Code, distinct from each unit's acquired Supplier and cost.
 Receiptless legacy units may have their verified acquisition Supplier and price
@@ -306,6 +313,14 @@ their active Department, Machine, Vendor, or Store masters. Selecting a Unit ID
 shows its available quantity, allocated (assigned) quantity, and current holder
 or Store location before recording the move. The Unit ID workspace shows the
 movement history. Consumables never participate.
+
+**Movement Register**: Main Store's operational screen for physical Unit ID
+movements and explicit transfers of Unit ID responsibility or Consumable
+quantity to another accountable Store. A physical move leaves the responsible
+Store unchanged. A Store transfer changes the responsible Store or its local
+available quantity while preserving company ownership. The register shows a
+single history of these events and quantity adjustments. Fulfilling a
+Department request remains an Issue, not a transfer into a department Store.
 
 **Gauge Set**: A Quality Store handling group of exactly two physical gauges,
 of any gauge types, under one Set ID and chosen name. It is not a third stock
