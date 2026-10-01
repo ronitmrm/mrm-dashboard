@@ -118,7 +118,8 @@ async function readUnifiedNavigationAccess(
     qualityControlHrefs: qualityControlPageAccess.filter(({ readPermissionKey }) => grantedCapabilities.has(readPermissionKey)).map(({ href }) => href),
     isoCalibrationPlan:
       grantedCapabilities.has(isoCalibrationPlanPageAccess.readPermissionKey) ||
-      grantedCapabilities.has("store.stock.read"),
+      grantedCapabilities.has("store.stock.read") ||
+      grantedCapabilities.has("quality.control.calibration.read"),
     productionStoreFloorCodes,
     brandingHrefs: brandingPageAccess
       .filter(({ readPermissionKey }) =>
