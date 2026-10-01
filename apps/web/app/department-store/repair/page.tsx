@@ -39,9 +39,14 @@ export default async function DepartmentRepairOrderPage({ searchParams }: {
   const store = createStoreRepository({ connectionString: readAuthEnvironment().connectionString })
   const data = await (async () => {
     const organizationId = await store.organizationIdForCode("MRMPL")
+    const [suppliers, departments] = await Promise.all([
+      store.listSuppliers(organizationId),
+      storeCode === "MAIN" ? store.listMovementDepartments(organizationId) : Promise.resolve([]),
+    ])
     return {
       organizationId,
-      suppliers: await store.listSuppliers(organizationId),
+      suppliers,
+      departments,
     }
   })().finally(() => store.close())
   const departmentRepository = createDepartmentStoreRepository({ pool: getWebPostgresPool() })
@@ -70,6 +75,7 @@ export default async function DepartmentRepairOrderPage({ searchParams }: {
     />
     {selected.length ? (
       <DepartmentRepairOrderForm
+        departments={data.departments}
         issuanceId={safeIssuanceId}
         selected={selected}
         storeCode={storeCode}
