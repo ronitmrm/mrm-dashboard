@@ -16,6 +16,7 @@ type RepairOrders = Awaited<ReturnType<ReturnType<typeof createStoreRepository>[
 
 export function DepartmentStoreWorkspace({
   canRepair,
+  canRequest,
   canWrite,
   departments,
   machines,
@@ -25,6 +26,7 @@ export function DepartmentStoreWorkspace({
   workspace,
 }: {
   canRepair: boolean
+  canRequest: boolean
   canWrite: boolean
   departments: Array<{ code: string; id: string; name: string }>
   machines: Array<{ id: string; machineNumber: string; name: string | null }>
@@ -43,6 +45,13 @@ export function DepartmentStoreWorkspace({
         icon={Boxes}
         title={isMain ? "Department Transfers" : store.name}
       />
+      {canRequest ? (
+        <Button asChild className="w-fit" variant="outline">
+          <Link href={`/store/requests/new?fulfillmentKind=STORE_TRANSFER&storeCode=${encodeURIComponent(store.code)}`}>
+            Request stock or responsibility from Main Store
+          </Link>
+        </Button>
+      ) : null}
       {saved ? <p role="status" className="text-sm">Store movement recorded.</p> : null}
       <MetricSummary
         items={[

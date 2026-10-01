@@ -70,6 +70,7 @@ export type StoreIssuedPdfWriter = (input: {
 type StoreRequisitionBatchInput = {
   actorUserId?: string | null
   department: string
+  fulfillmentKind?: "DEPARTMENT_USE" | "PERSON_USE" | "STORE_TRANSFER"
   items: Array<{
     itemTypeId: string
     quantity: number
@@ -78,6 +79,9 @@ type StoreRequisitionBatchInput = {
   locationId: string
   organizationId: string
   purpose?: string | null
+  receivingStoreCode?: string | null
+  recipientName?: string | null
+  recipientReference?: string | null
   requestedBy: string
   requiredOn?: string | null
 }
@@ -909,6 +913,7 @@ async function issueRequisitionWithClient(
   const request = await client.query<{
     accountable_store_id: string
     department: string
+    fulfillment_kind: "DEPARTMENT_USE" | "PERSON_USE" | "STORE_TRANSFER"
     issued_quantity: string
     item_type_id: string
     location_id: string
@@ -917,6 +922,8 @@ async function issueRequisitionWithClient(
     reassignment_department_id: string | null
     reassignment_department_name: string | null
     requested_quantity: string
+    recipient_name: string | null
+    recipient_reference: string | null
     requested_asset_id: string | null
     status: string
     tracking_mode: StoreTrackingMode
@@ -926,7 +933,8 @@ async function issueRequisitionWithClient(
         source_location.accountable_store_id,
         request.requested_asset_id,
         request.requested_quantity::text, request.issued_quantity::text,
-        request.status, header.department, item.tracking_mode,
+        request.status, header.department, header.fulfillment_kind,
+        header.recipient_reference, header.recipient_name, item.tracking_mode,
         repair_item.reassignment_department_id,
         destination.active AS reassignment_department_active,
         destination.code AS reassignment_department_code,
@@ -955,6 +963,9 @@ async function issueRequisitionWithClient(
   )
   const row = request.rows[0]
   if (!row) throw new Error("Store request was not found.")
+  if (row.fulfillment_kind === "STORE_TRANSFER") {
+    throw new Error("Fulfill this request with a Store responsibility transfer.")
+  }
   if (row.status === "Cancelled" || row.status === "Fulfilled") {
     throw new Error("This Store request is already closed.")
   }
@@ -965,17 +976,22 @@ async function issueRequisitionWithClient(
   if (quantity > remaining) {
     throw new Error(`Only ${remaining} remains to be issued.`)
   }
-  const holderType = input.holderType ?? "DEPARTMENT"
+  const holderType = row.fulfillment_kind === "PERSON_USE"
+    ? "PERSON" : input.holderType ?? "DEPARTMENT"
   if (row.reassignment_department_id &&
     (holderType !== "DEPARTMENT" || !row.reassignment_department_active)) {
     throw new Error("Select an active reassignment Department.")
   }
   const holderReference = row.reassignment_department_id
     ? row.reassignment_department_code!
-    : input.holderReference?.trim() || row.department
+    : row.fulfillment_kind === "PERSON_USE"
+      ? requiredText(row.recipient_reference, "Employee ID")
+      : input.holderReference?.trim() || row.department
   const holderName = row.reassignment_department_id
     ? row.reassignment_department_name!
-    : input.holderName?.trim() || row.department
+    : row.fulfillment_kind === "PERSON_USE"
+      ? requiredText(row.recipient_name, "Employee name")
+      : input.holderName?.trim() || row.department
   if (row.tracking_mode === "SERIALIZED") {
     if (!Number.isInteger(quantity)) {
       throw new Error("Non Consumable quantity must be a whole number.")
@@ -1499,6 +1515,28 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       }
       const department = requiredText(input.department, "Department")
       const requestedBy = requiredText(input.requestedBy, "Requested by")
+      const fulfillmentKind = input.fulfillmentKind ?? "DEPARTMENT_USE"
+      if (!["DEPARTMENT_USE", "PERSON_USE", "STORE_TRANSFER"].includes(fulfillmentKind)) {
+        throw new Error("Choose a valid request purpose.")
+      }
+      if (fulfillmentKind === "STORE_TRANSFER" && input.items.length !== 1) {
+        throw new Error("Request one Asset Code at a time for a Store transfer.")
+      }
+      const receivingStore = fulfillmentKind === "STORE_TRANSFER"
+        ? await client.query<{ id: string }>(
+            `SELECT id FROM store.accountable_stores
+             WHERE organization_id = $1 AND lower(code) = lower($2)
+               AND active AND kind <> 'MAIN'`,
+            [input.organizationId, requiredText(input.receivingStoreCode, "Receiving Store")]
+          )
+        : null
+      if (receivingStore && !receivingStore.rows[0]) {
+        throw new Error("Receiving Store was not found.")
+      }
+      const recipientReference = fulfillmentKind === "PERSON_USE"
+        ? requiredText(input.recipientReference, "Employee ID") : null
+      const recipientName = fulfillmentKind === "PERSON_USE"
+        ? requiredText(input.recipientName, "Employee name") : null
       const location = await client.query<{ id: string }>(
         `
           SELECT location.id FROM store.locations location
@@ -1513,15 +1551,20 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       if (!location.rows[0]) {
         throw new Error("Select an active Store location.")
       }
-      const itemTypes = await client.query<{ id: string }>(
+      const itemTypes = await client.query<{ id: string; tracking_mode: StoreTrackingMode }>(
         `
-          SELECT id FROM store.item_types
+          SELECT id, tracking_mode FROM store.item_types
           WHERE organization_id = $1 AND active AND id = ANY($2::uuid[])
         `,
         [input.organizationId, itemTypeIds]
       )
       if (itemTypes.rowCount !== itemTypeIds.length) {
         throw new Error("One or more selected Store items are unavailable.")
+      }
+      if (fulfillmentKind === "STORE_TRANSFER" &&
+        itemTypes.rows[0]?.tracking_mode === "SERIALIZED" &&
+        (input.items[0]?.quantity !== 1 || !input.items[0]?.requestedUnitId)) {
+        throw new Error("A Store responsibility request needs one exact Unit ID.")
       }
       const requestNumber = await nextDocumentNumber(client, {
         counterKey: "REQUISITION",
@@ -1532,9 +1575,11 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         `
           INSERT INTO store.requisition_headers (
             organization_id, request_number, location_id, department,
-            requested_by, required_on, purpose,
+            requested_by, required_on, purpose, fulfillment_kind,
+            receiving_store_id, recipient_reference, recipient_name,
             created_by_user_id, updated_by_user_id
-          ) VALUES ($1, $2, $3, $4, $5, NULLIF($6, '')::date, $7, $8, $8)
+          ) VALUES ($1, $2, $3, $4, $5, NULLIF($6, '')::date, $7,
+            $8, $9, $10, $11, $12, $12)
           RETURNING id
         `,
         [
@@ -1545,6 +1590,10 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           requestedBy,
           input.requiredOn ?? null,
           input.purpose?.trim() || null,
+          fulfillmentKind,
+          receivingStore?.rows[0]?.id ?? null,
+          recipientReference,
+          recipientName,
           input.actorUserId ?? null,
         ]
       )
@@ -1558,8 +1607,14 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           const requestedUnit = await client.query<{ id: string }>(
             `SELECT id FROM store.assets
               WHERE id = $1 AND item_type_id = $2 AND organization_id = $3
-                AND status <> 'SCRAPPED'`,
-            [requestedUnitId, item.itemTypeId, input.organizationId]
+                AND status <> 'SCRAPPED'
+                AND ($4::boolean = false OR EXISTS (
+                  SELECT 1 FROM store.accountable_stores accountable
+                  WHERE accountable.id = store.assets.accountable_store_id
+                    AND accountable.kind = 'MAIN'
+                ))`,
+            [requestedUnitId, item.itemTypeId, input.organizationId,
+              fulfillmentKind === "STORE_TRANSFER"]
           )
           if (!requestedUnit.rows[0]) {
             throw new Error("Selected physical Unit ID was not found.")
@@ -1608,6 +1663,20 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       )
       if (!result.rows[0]) throw new Error("Organization was not found.")
       return result.rows[0].id
+    },
+
+    async listRequestableStores(organizationId: string) {
+      const result = await pool.query<{
+        code: string
+        id: string
+        name: string
+      }>(
+        `SELECT code, id, name FROM store.accountable_stores
+         WHERE organization_id = $1 AND active AND kind <> 'MAIN'
+         ORDER BY name`,
+        [organizationId]
+      )
+      return result.rows
     },
 
     async overviewMetrics(input: { istToday: string; organizationId: string }) {
@@ -4590,6 +4659,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
     async listRequisitions(input: {
       locationId?: string
       organizationId: string
+      requesterUserId?: string
     }) {
       const result = await pool.query<{
         assetCategory: string
@@ -4599,12 +4669,16 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         availableStock: string
         availableUnitIds: string[]
         department: string
+        fulfillmentKind: "DEPARTMENT_USE" | "PERSON_USE" | "STORE_TRANSFER"
         id: string
         identificationName: string
         issuedQuantity: string
         itemTypeId: string
         locationName: string
         remainingQuantity: string
+        receivingStoreCode: string | null
+        receivingStoreName: string | null
+        recipientName: string | null
         requestNumber: string
         requestedUnitCode: string | null
         requestedUnitId: string | null
@@ -4622,6 +4696,10 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             requested_asset.asset_code AS "requestedUnitCode",
             header.request_number AS "requestNumber",
             header.department, header.requested_by AS "requestedBy",
+            header.fulfillment_kind AS "fulfillmentKind",
+            receiving_store.code AS "receivingStoreCode",
+            receiving_store.name AS "receivingStoreName",
+            header.recipient_name AS "recipientName",
             trim_scale(request.requested_quantity)::text AS "requestedQuantity",
             trim_scale(request.issued_quantity)::text AS "issuedQuantity",
             trim_scale(request.requested_quantity - request.issued_quantity)::text AS "remainingQuantity",
@@ -4638,10 +4716,13 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
               THEN (SELECT count(*)::numeric FROM store.assets asset
                 WHERE asset.organization_id = request.organization_id
                   AND asset.item_type_id = request.item_type_id
-                  AND asset.current_location_id = request.location_id
                   AND asset.accountable_store_id = location.accountable_store_id
-                  AND asset.current_holder_type = 'STORE'
-                  AND asset.status = 'AVAILABLE'
+                  AND (header.fulfillment_kind = 'STORE_TRANSFER'
+                    AND asset.status <> 'SCRAPPED'
+                    OR header.fulfillment_kind <> 'STORE_TRANSFER'
+                    AND asset.current_location_id = request.location_id
+                    AND asset.current_holder_type = 'STORE'
+                    AND asset.status = 'AVAILABLE')
                   AND (request.requested_asset_id IS NULL
                     OR asset.id = request.requested_asset_id)
                   AND NOT EXISTS (
@@ -4656,18 +4737,26 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
                   ))
               ELSE (SELECT COALESCE(sum(movement.quantity), 0)
                 FROM store.stock_movements movement
+                JOIN store.locations balance_location
+                  ON balance_location.id = movement.location_id
                 WHERE movement.item_type_id = request.item_type_id
-                  AND movement.location_id = request.location_id)
+                  AND (header.fulfillment_kind = 'STORE_TRANSFER'
+                    AND balance_location.accountable_store_id = location.accountable_store_id
+                    OR header.fulfillment_kind <> 'STORE_TRANSFER'
+                    AND movement.location_id = request.location_id))
             END)::numeric)::text AS "availableStock",
             CASE WHEN item.tracking_mode = 'SERIALIZED' THEN ARRAY(
               SELECT asset.asset_code
               FROM store.assets asset
               WHERE asset.organization_id = request.organization_id
                 AND asset.item_type_id = request.item_type_id
-                AND asset.current_location_id = request.location_id
                 AND asset.accountable_store_id = location.accountable_store_id
-                AND asset.current_holder_type = 'STORE'
-                AND asset.status = 'AVAILABLE'
+                AND (header.fulfillment_kind = 'STORE_TRANSFER'
+                  AND asset.status <> 'SCRAPPED'
+                  OR header.fulfillment_kind <> 'STORE_TRANSFER'
+                  AND asset.current_location_id = request.location_id
+                  AND asset.current_holder_type = 'STORE'
+                  AND asset.status = 'AVAILABLE')
                 AND (request.requested_asset_id IS NULL
                   OR asset.id = request.requested_asset_id)
                 AND NOT EXISTS (
@@ -4685,6 +4774,8 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           FROM store.requisitions request
           JOIN store.requisition_headers header
             ON header.id = request.request_header_id
+          LEFT JOIN store.accountable_stores receiving_store
+            ON receiving_store.id = header.receiving_store_id
           JOIN store.item_types item ON item.id = request.item_type_id
           LEFT JOIN store.assets requested_asset
             ON requested_asset.id = request.requested_asset_id
@@ -4695,11 +4786,13 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             AND accountable.kind = 'MAIN'
           WHERE request.organization_id = $1
             AND ($2::uuid IS NULL OR request.location_id = $2)
+            AND ($3::uuid IS NULL OR header.created_by_user_id = $3)
           ORDER BY
             CASE request.status WHEN 'Pending' THEN 0 WHEN 'Partially Issued' THEN 1 ELSE 2 END,
             header.created_at DESC, request.created_at
         `,
-        [input.organizationId, input.locationId ?? null]
+        [input.organizationId, input.locationId ?? null,
+          input.requesterUserId ?? null]
       )
       return { rows: result.rows }
     },
@@ -4785,10 +4878,11 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         await lockToolingAllocation(client, input.organizationId)
         const selectedRequests = await client.query<{
           department: string
+          fulfillment_kind: string
           id: string
         }>(
           `
-            SELECT request.id, header.department
+            SELECT request.id, header.department, header.fulfillment_kind
             FROM store.requisitions request
             JOIN store.requisition_headers header
               ON header.id = request.request_header_id
@@ -4801,6 +4895,10 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         )
         if (selectedRequests.rows.length !== linesById.size) {
           throw new Error("A selected Store request line was not found.")
+        }
+        if (selectedRequests.rows.some((request) =>
+          request.fulfillment_kind !== "DEPARTMENT_USE")) {
+          throw new Error("Only Department use requests can be allocated together.")
         }
         const departments = new Set(
           selectedRequests.rows.map((request) => request.department)

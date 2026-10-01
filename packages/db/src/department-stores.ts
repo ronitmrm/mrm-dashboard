@@ -27,7 +27,76 @@ type MutationIdentity = {
   actorUserId?: string | null
   movedBy?: string | null
   organizationId: string
+  requisitionId?: string | null
   remark?: string | null
+}
+
+async function storeTransferRequest(
+  client: PoolClient,
+  input: MutationIdentity & { destinationStoreCode: string }
+) {
+  if (!input.requisitionId) return null
+  const result = await client.query<{
+    destinationStoreCode: string
+    issuedQuantity: string
+    itemTypeId: string
+    requestedAssetId: string | null
+    requestedQuantity: string
+    status: string
+    trackingMode: "CONSUMABLE" | "SERIALIZED"
+  }>(
+    `SELECT destination.code AS "destinationStoreCode",
+       request.item_type_id AS "itemTypeId",
+       request.requested_asset_id AS "requestedAssetId",
+       request.requested_quantity::text AS "requestedQuantity",
+       request.issued_quantity::text AS "issuedQuantity",
+       request.status, item.tracking_mode AS "trackingMode"
+     FROM store.requisitions request
+     JOIN store.requisition_headers header
+       ON header.id = request.request_header_id
+     JOIN store.locations source ON source.id = request.location_id
+     JOIN store.accountable_stores source_store
+       ON source_store.id = source.accountable_store_id
+     JOIN store.accountable_stores destination
+       ON destination.id = header.receiving_store_id
+     JOIN store.item_types item ON item.id = request.item_type_id
+     WHERE request.id = $1 AND request.organization_id = $2
+       AND header.fulfillment_kind = 'STORE_TRANSFER'
+       AND source_store.kind = 'MAIN'
+     FOR UPDATE OF request`,
+    [input.requisitionId, input.organizationId]
+  )
+  const request = result.rows[0]
+  if (!request) throw new Error("Store transfer request was not found.")
+  if (request.status !== "Pending" && request.status !== "Partially Issued") {
+    throw new Error("This Store transfer request is closed.")
+  }
+  if (request.destinationStoreCode.toLowerCase() !==
+    input.destinationStoreCode.toLowerCase()) {
+    throw new Error("The receiving Store does not match the request.")
+  }
+  return request
+}
+
+async function completeStoreTransferRequest(
+  client: PoolClient,
+  input: MutationIdentity,
+  quantity: number,
+  request: NonNullable<Awaited<ReturnType<typeof storeTransferRequest>>>
+) {
+  const remaining = Number(request.requestedQuantity) - Number(request.issuedQuantity)
+  if (quantity > remaining + 1e-8) {
+    throw new Error(`Only ${remaining} remains on this Store transfer request.`)
+  }
+  await client.query(
+    `UPDATE store.requisitions
+     SET issued_quantity = issued_quantity + $2,
+       status = CASE WHEN issued_quantity + $2 = requested_quantity
+         THEN 'Fulfilled' ELSE 'Partially Issued' END,
+       updated_at = now(), updated_by_user_id = $3
+     WHERE id = $1`,
+    [input.requisitionId, quantity, input.actorUserId ?? null]
+  )
 }
 
 function requiredText(value: unknown, label: string) {
@@ -128,6 +197,7 @@ async function insertQuantityMovement(
     operationId: string
     organizationId: string
     quantity: number
+    requisitionId?: string | null
     remark?: string | null
     toCode?: string | null
     toName?: string | null
@@ -138,9 +208,10 @@ async function insertQuantityMovement(
        organization_id, item_type_id, location_id, movement_type,
        quantity, from_holder_type, from_holder_reference, from_holder_name,
        to_holder_type, to_holder_reference, to_holder_name, moved_by,
-       remark, created_by_user_id, department_stock_operation_id
+       remark, created_by_user_id, department_stock_operation_id,
+       requisition_id
      ) VALUES ($1, $2, $3, $4, $5,
-       'STORE', $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+       'STORE', $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
     [
       input.organizationId,
       input.itemTypeId,
@@ -156,6 +227,7 @@ async function insertQuantityMovement(
       input.remark?.trim() || null,
       input.actorUserId ?? null,
       input.operationId,
+      input.requisitionId ?? null,
     ]
   )
 }
@@ -222,9 +294,9 @@ async function insertOperation(
        organization_id, operation_type, item_type_id, source_store_id,
        destination_store_id, quantity, machine_reference,
        job_card_reference, operator_name, operated_on, remark,
-       created_by_user_id
+       created_by_user_id, requisition_id
      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9,
-       COALESCE($10::date, current_date), $11, $12)
+       COALESCE($10::date, current_date), $11, $12, $13)
      RETURNING id`,
     [
       input.organizationId, input.operationType, input.itemTypeId,
@@ -233,6 +305,7 @@ async function insertOperation(
       input.jobCardReference?.trim() || null,
       input.operatorName?.trim() || null, input.operatedOn ?? null,
       input.remark?.trim() || null, input.actorUserId ?? null,
+      input.requisitionId ?? null,
     ]
   )
   return result.rows[0]!.id
@@ -769,6 +842,15 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
     }) {
       const quantity = positiveQuantity(input.quantity)
       return withTransaction(pool, async (client) => {
+        const request = await storeTransferRequest(client, input)
+        if (request && (input.sourceStoreCode !== "MAIN" ||
+          request.trackingMode !== "CONSUMABLE" ||
+          request.itemTypeId !== input.itemTypeId)) {
+          throw new Error("This request is not for the selected consumable and source Store.")
+        }
+        if (request && quantity > Number(request.requestedQuantity) - Number(request.issuedQuantity) + 1e-8) {
+          throw new Error("Transfer quantity exceeds the request remainder.")
+        }
         const source = await findStore(client, input.organizationId, input.sourceStoreCode)
         const destination = await findStore(
           client, input.organizationId, input.destinationStoreCode
@@ -801,6 +883,10 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
           toCode: destination.code,
           toName: destination.name,
         })
+        if (request) {
+          await completeStoreTransferRequest(client, input, quantity, request)
+          await queueDashboardRefresh(client, input.organizationId)
+        }
         return { operationId }
       })
     },
@@ -868,6 +954,11 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
       sourceStoreCode: string
     }) {
       return withTransaction(pool, async (client) => {
+        const request = await storeTransferRequest(client, input)
+        if (request && (input.sourceStoreCode !== "MAIN" ||
+          request.trackingMode !== "SERIALIZED")) {
+          throw new Error("This request is not for a Main Store Unit ID.")
+        }
         await lockToolingAllocation(client, input.organizationId)
         const asset = await client.query<{
           accountableStoreId: string
@@ -892,6 +983,11 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
         )
         const unit = asset.rows[0]
         if (!unit) throw new Error("Unit ID was not found.")
+        if (request && (request.requestedAssetId !== unit.id ||
+          request.itemTypeId !== unit.itemTypeId ||
+          Number(request.requestedQuantity) - Number(request.issuedQuantity) !== 1)) {
+          throw new Error("Transfer the exact Unit ID named in the request.")
+        }
         if (unit.status === "SCRAPPED") {
           throw new Error("A scrapped Unit ID cannot change accountable Store.")
         }
@@ -934,11 +1030,12 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
         await client.query(
           `INSERT INTO store.asset_accountability_transfers (
              organization_id, asset_id, source_store_id,
-             destination_store_id, transferred_by, remark, created_by_user_id
-           ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+             destination_store_id, transferred_by, remark, created_by_user_id,
+             requisition_id
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
           [input.organizationId, unit.id, source.id, destination.id,
             input.movedBy?.trim() || null, input.remark?.trim() || null,
-            input.actorUserId ?? null]
+            input.actorUserId ?? null, input.requisitionId ?? null]
         )
         // A machine or department can keep using the unit while custody changes.
         // Only a unit physically in the source Store needs a physical handover.
@@ -991,20 +1088,23 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
                  movement_type, quantity, from_holder_type,
                  from_holder_reference, from_holder_name, to_holder_type,
                  to_holder_reference, to_holder_name, moved_by, remark,
-                 created_by_user_id
+                 created_by_user_id, requisition_id
                ) VALUES ($1, $2, $3, $4, $5, $6, 'STORE', $7, $8,
-                 'STORE', $9, $10, $11, $12, $13)`,
+                 'STORE', $9, $10, $11, $12, $13, $14)`,
               [input.organizationId, unit.itemTypeId, unit.id,
                 movement.locationId, movement.movementType, movement.quantity,
                 unit.currentHolderReference, unit.currentHolderName,
                 destinationLocation?.rows[0]?.code,
                 destinationLocation?.rows[0]?.name,
                 input.movedBy?.trim() || null, input.remark?.trim() || null,
-                input.actorUserId ?? null]
+                input.actorUserId ?? null, input.requisitionId ?? null]
             )
           }
         }
         await assertToolingTransferAvailable(client, input.organizationId, input.assetCode)
+        if (request) {
+          await completeStoreTransferRequest(client, input, 1, request)
+        }
         await queueDashboardRefresh(client, input.organizationId)
         return { assetCode: input.assetCode, destinationStoreCode: destination.code }
       })

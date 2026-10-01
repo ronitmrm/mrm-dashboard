@@ -99,6 +99,8 @@ it("shows the calibration plan for a QC reader", async () => {
 it("maps each accountable Store to its scoped permission", () => {
   expect(accountableStorePermission("MAIN", "write")).toBe("store.asset_movement.write")
   expect(accountableStorePermission("QUALITY", "read")).toBe("quality.store.read")
+  expect(accountableStorePermission("QUALITY", "request")).toBe("quality.store.request")
   expect(accountableStorePermission("cnc", "write")).toBe("operations.floors.cnc.store.write")
+  expect(accountableStorePermission("cnc", "request")).toBe("operations.floors.cnc.store.request")
   expect(() => accountableStorePermission("unknown", "read")).toThrow()
 })

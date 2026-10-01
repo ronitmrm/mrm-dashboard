@@ -4,7 +4,7 @@ import type { PageAccessDefinition } from "./page-access-types"
 
 export function departmentStoreCapability(
   floor: ProductionFloorCode,
-  access: "read" | "write"
+  access: "read" | "write" | "request"
 ) {
   return `operations.floors.${floor}.store.${access}`
 }
@@ -13,9 +13,10 @@ export function departmentStoreHref(floor: ProductionFloorCode) {
   return `/production-store/${floor}`
 }
 
-export function accountableStorePermission(storeCode: string, access: "read" | "write") {
+export function accountableStorePermission(storeCode: string, access: "read" | "write" | "request") {
   if (storeCode === "MAIN") {
-    return access === "read" ? "store.stock.read" : "store.asset_movement.write"
+    return access === "read" ? "store.stock.read"
+      : access === "request" ? "store.requests.submit" : "store.asset_movement.write"
   }
   if (storeCode === "QUALITY") return `quality.store.${access}`
   const floor = productionFloors.find(({ code }) => code === storeCode)
