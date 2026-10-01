@@ -27,6 +27,8 @@ The trade responsible for one approved request: Electrical, Plumbing, or Mechani
 
 Urgent or Regular. The requester asks for a Priority; the Maintenance Manager confirms the final Priority. Trade work lists order the manager-confirmed Urgent work before Regular work.
 
+The request register's Urgent count includes only unfinished requests in Pending Approval, Approved, or In Progress. Completed, Closed, Returned, and Rejected requests retain their recorded priority in history but do not require urgent work. Pending Approval counts requests awaiting the Maintenance Manager's decision.
+
 ## Maintenance Request Status
 
 The lifecycle is Pending Approval, Approved, In Progress, Completed, Closed, Returned, or Rejected. Every request starts Pending Approval. Only the Maintenance Manager may approve, reject, return, classify, prioritize, or close it. The assigned trade moves Approved work to In Progress and then Completed.

@@ -64,23 +64,24 @@ export default async function MaintenanceRequestsPage() {
   return (
     <div className="grid gap-6">
       <PageHeader
+        actions={context ? (
+          <MaintenanceRequestForm
+            departments={context.departments}
+            isSystemAdministrator={context.isSystemAdministrator}
+            requesterName={context.requesterName}
+          />
+        ) : null}
         description="Submit one problem per request and track requests for your assigned departments."
         icon={ClipboardList}
         title="All Requests"
       />
-      {context ? (
-        <MaintenanceRequestForm
-          departments={context.departments}
-          isSystemAdministrator={context.isSystemAdministrator}
-          requesterName={context.requesterName}
-        />
-      ) : (
+      {!context ? (
         <Alert variant="destructive">
           <AlertTriangle aria-hidden="true" />
           <AlertTitle>Requester setup required</AlertTitle>
           <AlertDescription>{contextError}</AlertDescription>
         </Alert>
-      )}
+      ) : null}
       <DashboardSection
         description={
           manager
@@ -91,7 +92,7 @@ export default async function MaintenanceRequestsPage() {
         }
         title="Request Register"
       >
-        <MaintenanceRequestTable managerReview={manager} rows={rows} />
+        <MaintenanceRequestTable managerReview={manager} rows={rows} showPendingCard />
       </DashboardSection>
     </div>
   )
