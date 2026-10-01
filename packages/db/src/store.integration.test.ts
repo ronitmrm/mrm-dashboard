@@ -1618,6 +1618,18 @@ describe("Store requests", () => {
         (item) => item.id === itemType.id
       )?.availableUnitIds
     ).toEqual(assetCodes)
+    const qualityStore = await departmentStore.getStoreByCode(
+      organizationId,
+      "QUALITY"
+    )
+    await expect(
+      store.moveAsset({
+        assetCode: assetCodes[0],
+        holderReference: qualityStore.defaultLocationId,
+        holderType: "STORE",
+        organizationId,
+      })
+    ).rejects.toThrow("Destination Store location was not found.")
 
     const itemWorkspace = await store.getItemTypeWorkspace({
       organizationId,

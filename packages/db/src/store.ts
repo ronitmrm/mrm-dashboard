@@ -5466,6 +5466,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       return withTransaction(pool, async (client) => {
         await lockToolingAllocation(client, input.organizationId)
         const asset = await client.query<{
+          accountable_store_id: string
           accountable_store_code: string
           current_holder_name: string | null
           current_holder_reference: string | null
@@ -5479,6 +5480,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             SELECT asset.id, asset.item_type_id, asset.current_location_id,
               asset.status, asset.current_holder_type,
               asset.current_holder_reference, asset.current_holder_name,
+              asset.accountable_store_id,
               accountable.code AS accountable_store_code
             FROM store.assets asset
             JOIN store.accountable_stores accountable
@@ -5602,10 +5604,11 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
                 `
                   SELECT id, code, name FROM store.locations
                   WHERE organization_id = $1 AND location_type = 'STORE'
-                    AND active
+                    AND active AND accountable_store_id = $3
                     AND (id::text = $2 OR lower(code) = lower($2))
                 `,
-                [input.organizationId, input.holderReference]
+                [input.organizationId, input.holderReference,
+                  asset.rows[0].accountable_store_id]
               )
             : null
         if (input.holderType === "STORE" && !destinationStore?.rows[0]) {
