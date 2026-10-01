@@ -6,7 +6,6 @@ import { createHash } from "node:crypto"
 
 import {
   authorizeStoreItemTypeArtifactTarget,
-  authorizeStorePurchaseOrderArtifactTarget,
   authorizeStoreReceiptArtifactTarget,
   authorizeStoreSupplierPriceArtifactTarget,
   createArtifactService,
@@ -15,7 +14,6 @@ import {
   type MasterDataKind,
   type StoreAssetType,
   type StoreHolderType,
-  storePurchaseOrderPdfArtifactPurpose,
 } from "@workspace/db"
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
@@ -34,7 +32,7 @@ import {
 } from "@/lib/store-request-policy"
 import { storePurchaseOrderIssuanceId } from "@/lib/store-purchase-order-input"
 import { createGoogleCloudArtifactProvider } from "@/lib/google-cloud-artifact-provider"
-import { buildStorePurchaseOrderPdf } from "@/lib/store/purchase-order-pdf"
+import { storeIssuedPurchaseOrderPdf } from "@/lib/store/issued-purchase-order-pdf"
 import type { PendingUploadIntent } from "@/lib/artifact-upload-contract"
 import {
   consumePendingArtifactUpload,
@@ -194,62 +192,6 @@ async function retainStoreReceiptGuaranteeCard(input: {
     })
   } finally {
     await artifacts.close()
-  }
-}
-
-function storeIssuedPurchaseOrderPdf(
-  artifacts: ReturnType<typeof createArtifactService>,
-  actorUserId: string
-) {
-  return async (input: {
-    document: NonNullable<
-      Awaited<
-        ReturnType<ReturnType<typeof createStoreRepository>["getPurchaseOrder"]>
-      >
-    >
-    organizationId: string
-    purchaseOrderId: string
-  }) => {
-    const bytes = Buffer.from(
-      await buildStorePurchaseOrderPdf({
-        lines: input.document.lines,
-        orderDate: input.document.order.orderDate,
-        orderNumber: input.document.order.orderNumber,
-        orderType: input.document.order.orderType,
-        remark: input.document.order.remark,
-        supplierAddress: input.document.order.supplierAddress,
-        supplierCode: input.document.order.supplierCode,
-        supplierGstNumber: input.document.order.supplierGstNumber,
-        supplierName: input.document.order.supplierName,
-      })
-    )
-    const safeNumber = input.document.order.orderNumber
-      .replace(/[^A-Za-z0-9._-]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-    await artifacts.store({
-      actorUserId,
-      authorizeTarget: (client, { isRetry }) =>
-        authorizeStorePurchaseOrderArtifactTarget(
-          client,
-          {
-            organizationId: input.organizationId,
-            purchaseOrderId: input.purchaseOrderId,
-          },
-          { requirePendingState: !isRetry }
-        ),
-      bytes,
-      fileName: `${safeNumber || "store-po"}.pdf`,
-      idempotencyKey: `issued-store-po-pdf:${input.purchaseOrderId}`,
-      mediaType: "application/pdf",
-      organizationId: input.organizationId,
-      origin: "generated",
-      purpose: storePurchaseOrderPdfArtifactPurpose,
-      target: {
-        id: input.purchaseOrderId,
-        schema: "store",
-        table: "purchase_orders",
-      },
-    })
   }
 }
 
@@ -1119,77 +1061,6 @@ export async function createStorePurchaseOrdersAction(formData: FormData) {
   redirect(`/store/stock?ordersSaved=${created.orders.length}`)
 }
 
-export async function createStoreRepairPurchaseOrderAction(formData: FormData) {
-  const assetCodes = formData
-    .getAll("asset_code")
-    .map((value) => value.toString().trim())
-    .filter(Boolean)
-  if (!assetCodes.length) {
-    throw new Error("Select at least one Unit ID for repair.")
-  }
-  const created = await withStore(
-    "store.asset_repair.write",
-    async (repository, actorUserId, organizationId) => {
-      const artifacts = createArtifactService({
-        connectionString: readAuthEnvironment().connectionString,
-        provider: createGoogleCloudArtifactProvider(),
-      })
-      try {
-        return await repository.createRepairPurchaseOrdersFromSelection({
-          actorUserId,
-          items: assetCodes.map((assetCode) => ({
-            assetCode,
-            serviceDescription: requiredText(
-              formData,
-              `service_description_${assetCode}`
-            ),
-            servicePrice: requiredText(formData, `service_price_${assetCode}`),
-            supplierId: requiredText(formData, `supplier_${assetCode}`),
-            reassignmentDepartmentId: formData.get(
-              `reassignment_requested_${assetCode}`
-            )
-              ? requiredText(formData, `reassignment_department_${assetCode}`)
-              : null,
-          })),
-          issuanceId: requiredText(formData, "issuance_id"),
-          orderDate: optionalText(formData, "order_date"),
-          organizationId,
-          remark: optionalText(formData, "remark"),
-          storeIssuedPdf: storeIssuedPurchaseOrderPdf(artifacts, actorUserId),
-        })
-      } finally {
-        await artifacts.close()
-      }
-    }
-  )
-  for (const assetCode of assetCodes) {
-    revalidatePath(`/store/assets/${encodeURIComponent(assetCode)}`)
-  }
-  revalidateStore()
-  redirect(
-    `/store/stock?repairOrdersSaved=${created.orders.length}`
-  )
-}
-
-export async function completeStoreRepairPurchaseOrderAction(
-  formData: FormData
-) {
-  const assetCode = requiredText(formData, "asset_code")
-  await withStore(
-    "store.asset_repair.write",
-    (repository, actorUserId, organizationId) =>
-      repository.completeRepairPurchaseOrder({
-        actorUserId,
-        assetCode,
-        organizationId,
-        purchaseOrderId: requiredText(formData, "purchase_order_id"),
-        storeLocationId: requiredText(formData, "store_location_id"),
-      })
-  )
-  revalidatePath(`/store/assets/${encodeURIComponent(assetCode)}`)
-  revalidateStore()
-}
-
 export async function moveStoreAssetAction(formData: FormData) {
   const assetCode = requiredText(formData, "asset_code")
   await withStore(
@@ -1217,30 +1088,6 @@ export async function moveStoreAssetAction(formData: FormData) {
   revalidatePath(`/store/assets/${encodeURIComponent(assetCode)}`)
   revalidateStore()
   redirect(`/store/movement?moved=${encodeURIComponent(assetCode)}`)
-}
-
-export async function scheduleStoreAssetMaintenanceAction(formData: FormData) {
-  const assetCode = requiredText(formData, "asset_code")
-  const scheduleType = requiredText(formData, "schedule_type")
-  if (scheduleType !== "CALIBRATION") {
-    throw new Error("Assign maintenance from Maintenance Master.")
-  }
-  const schedule = await withStore(
-    "store.asset_maintenance.write",
-    (repository, actorUserId, organizationId) =>
-      repository.scheduleAssetMaintenance({
-        actorUserId,
-        assetCode,
-        firstDueOn: requiredText(formData, "first_due_on"),
-        frequencyDays: positiveNumber(formData, "frequency_days"),
-        name: requiredText(formData, "schedule_name"),
-        organizationId,
-        scheduleType,
-      })
-  )
-  revalidatePath(`/store/assets/${encodeURIComponent(assetCode)}`)
-  revalidatePath(`/store/assets/${encodeURIComponent(schedule.typeCode)}`)
-  revalidateStore()
 }
 
 export async function scheduleStoreAssetMaintenanceMasterAction(formData: FormData) {
@@ -1290,7 +1137,6 @@ export async function setStoreAssetLifecycleAction(formData: FormData) {
   revalidatePath(`/store/assets/${encodeURIComponent(assetCode)}`)
   revalidateStore()
 }
-
 export async function recordStoreAssetAcquisitionAction(formData: FormData) {
   const assetCode = requiredText(formData, "asset_code")
   await withStore(
@@ -1303,308 +1149,6 @@ export async function recordStoreAssetAcquisitionAction(formData: FormData) {
         supplierId: requiredText(formData, "supplier_id"),
         unitPrice: requiredText(formData, "unit_price"),
       })
-  )
-  revalidatePath(`/store/assets/${encodeURIComponent(assetCode)}`)
-  revalidateStore()
-}
-
-export async function openStoreCalibrationVisitAction(formData: FormData) {
-  const assetCode = requiredText(formData, "asset_code")
-  const method = requiredText(formData, "method")
-  if (method !== "SUPPLIER" && method !== "IN_HOUSE") {
-    throw new Error("Choose a calibration method.")
-  }
-  if (method === "SUPPLIER") {
-    await requireStoreAction("store.asset_repair.write", storePath)
-    await requireStoreAction("store.asset_movement.write", storePath)
-  }
-  await withStore(
-    "store.asset_maintenance.write",
-    (repository, actorUserId, organizationId) =>
-      repository.openCalibrationVisit({
-        actorUserId,
-        assetCode,
-        method,
-        organizationId,
-        scheduleId: requiredText(formData, "schedule_id"),
-        scope: requiredText(formData, "scope"),
-      })
-  )
-  revalidatePath(`/store/assets/${encodeURIComponent(assetCode)}`)
-  revalidateStore()
-}
-
-export async function addStoreCalibrationOfferAction(formData: FormData) {
-  const assetCode = requiredText(formData, "asset_code")
-  await withStore(
-    "store.asset_maintenance.write",
-    (repository, actorUserId, organizationId) =>
-      repository.addCalibrationOffer({
-        actorUserId,
-        notes: optionalText(formData, "notes"),
-        organizationId,
-        quoteReference: optionalText(formData, "quote_reference"),
-        quotedOn: requiredText(formData, "quoted_on"),
-        quotedPrice: requiredText(formData, "quoted_price"),
-        supplierId: requiredText(formData, "supplier_id"),
-        visitId: requiredText(formData, "visit_id"),
-      })
-  )
-  revalidatePath(`/store/assets/${encodeURIComponent(assetCode)}`)
-  revalidateStore()
-}
-
-export async function cancelStoreCalibrationVisitAction(formData: FormData) {
-  await requireStoreAction("store.asset_repair.write", storePath)
-  const assetCode = requiredText(formData, "asset_code")
-  await withStore(
-    "store.asset_maintenance.write",
-    (repository, actorUserId, organizationId) =>
-      repository.cancelCalibrationVisit({
-        actorUserId,
-        method: "SUPPLIER",
-        organizationId,
-        visitId: requiredText(formData, "visit_id"),
-      })
-  )
-  revalidatePath(`/store/assets/${encodeURIComponent(assetCode)}`)
-  revalidateStore()
-}
-
-export async function cancelInHouseCalibrationVisitAction(formData: FormData) {
-  const assetCode = requiredText(formData, "asset_code")
-  await withStore(
-    "store.asset_maintenance.write",
-    (repository, actorUserId, organizationId) =>
-      repository.cancelCalibrationVisit({
-        actorUserId,
-        method: "IN_HOUSE",
-        organizationId,
-        visitId: requiredText(formData, "visit_id"),
-      })
-  )
-  revalidatePath(`/store/assets/${encodeURIComponent(assetCode)}`)
-  revalidateStore()
-}
-
-export async function dispatchStoreCalibrationVisitAction(formData: FormData) {
-  await requireStoreAction("store.asset_repair.write", storePath)
-  await requireStoreAction("store.asset_movement.write", storePath)
-  const assetCode = requiredText(formData, "asset_code")
-  await withStore(
-    "store.asset_maintenance.write",
-    async (repository, actorUserId, organizationId, _actorEmail, actorUserName) => {
-      const performer = await signedInPerformer({
-        connectionString: readAuthEnvironment().connectionString,
-        organizationId,
-        userId: actorUserId,
-        userName: actorUserName,
-      })
-      if (!performer) throw new Error("Your account needs a name to dispatch an asset.")
-      const visitId = requiredText(formData, "visit_id")
-      const prepared = await repository.prepareCalibrationDispatch({
-        actorUserId,
-        offerId: requiredText(formData, "offer_id"),
-        orderDate: requiredText(formData, "order_date"),
-        organizationId,
-        remark: optionalText(formData, "remark"),
-        visitId,
-      })
-      const artifacts = createArtifactService({
-        connectionString: readAuthEnvironment().connectionString,
-        provider: createGoogleCloudArtifactProvider(),
-      })
-      try {
-        await storeIssuedPurchaseOrderPdf(artifacts, actorUserId)({
-          document: prepared.document,
-          organizationId,
-          purchaseOrderId: prepared.purchaseOrderId,
-        })
-      } finally {
-        await artifacts.close()
-      }
-      await repository.finalizeCalibrationDispatch({
-        actorUserId,
-        movedBy: [performer.code, performer.name].filter(Boolean).join(" - "),
-        organizationId,
-        visitId,
-      })
-    }
-  )
-  revalidatePath(`/store/assets/${encodeURIComponent(assetCode)}`)
-  revalidateStore()
-}
-
-export async function returnStoreCalibrationVisitAction(formData: FormData) {
-  await requireStoreAction("store.asset_movement.write", storePath)
-  const assetCode = requiredText(formData, "asset_code")
-  await withStore(
-    "store.asset_maintenance.write",
-    async (repository, actorUserId, organizationId, _actorEmail, actorUserName) => {
-      const performer = await signedInPerformer({
-        connectionString: readAuthEnvironment().connectionString,
-        organizationId,
-        userId: actorUserId,
-        userName: actorUserName,
-      })
-      if (!performer) throw new Error("Your account needs a name to return an asset.")
-      const location = await repository.ensurePrimaryStoreLocation({
-        actorUserId,
-        organizationId,
-      })
-      await repository.returnCalibrationVisit({
-        actorUserId,
-        locationId: location.id,
-        movedBy: [performer.code, performer.name].filter(Boolean).join(" - "),
-        organizationId,
-        remark: optionalText(formData, "remark"),
-        returnedOn: requiredText(formData, "returned_on"),
-        visitId: requiredText(formData, "visit_id"),
-      })
-    }
-  )
-  revalidatePath(`/store/assets/${encodeURIComponent(assetCode)}`)
-  revalidateStore()
-}
-
-export async function uploadStoreCalibrationCertificateAction(formData: FormData) {
-  const assetCode = requiredText(formData, "asset_code")
-  const visitId = requiredText(formData, "visit_id")
-  const uploadId = pendingUploadId(formData, "calibration_certificate")
-  if (!uploadId) throw new Error("Select a calibration certificate PDF.")
-  await withStore(
-    "store.asset_maintenance.write",
-    async (repository, actorUserId, organizationId) => {
-      const authorization = await pendingUploadAuthorizationForUser(actorUserId)
-      const expectedIntent = {
-        kind: "store-calibration-certificate" as const,
-        visitId,
-      }
-      const artifacts = createArtifactService({
-        connectionString: readAuthEnvironment().connectionString,
-        provider: createGoogleCloudArtifactProvider(),
-      })
-      try {
-        const fileId = await consumePendingArtifactUpload({
-          authorization,
-          expectedIntent,
-          finalize: async (source) => {
-            const sha256 = createHash("sha256").update(source.bytes).digest("hex")
-            const artifact = await artifacts.store({
-              actorUserId,
-              authorizeTarget: async (client) => {
-                const visit = await client.query<{ id: string }>(
-                  `SELECT id FROM store.calibration_visits
-                    WHERE id = $1 AND organization_id = $2
-                      AND (status = 'RETURNED' OR
-                        (status = 'OPEN' AND method = 'IN_HOUSE'))
-                    FOR KEY SHARE`,
-                  [visitId, organizationId]
-                )
-                if (!visit.rows[0]) {
-                  throw new Error("Calibration visit is not ready for a certificate.")
-                }
-              },
-              bytes: source.bytes,
-              fileName: source.fileName,
-              idempotencyKey: ["calibration-certificate", visitId,
-                source.fileName, sha256].join(":"),
-              mediaType: source.mediaType,
-              organizationId,
-              origin: "uploaded",
-              pendingUploadId: source.pendingUploadId,
-              purpose: "calibration_certificate",
-              target: { id: visitId, schema: "store", table: "calibration_visits" },
-            })
-            return {
-              binding: {
-                artifactId: artifact.id,
-                purpose: "calibration_certificate",
-                target: { id: visitId, schema: "store", table: "calibration_visits" },
-              },
-              value: artifact.id,
-            }
-          },
-          recover: (binding) => binding.artifactId,
-          uploadId,
-        })
-        await repository.setCalibrationCertificate({
-          actorUserId,
-          fileId,
-          organizationId,
-          visitId,
-        })
-      } finally {
-        await artifacts.close()
-      }
-    }
-  )
-  revalidatePath(`/store/assets/${encodeURIComponent(assetCode)}`)
-  revalidateStore()
-}
-
-export async function completeStoreCalibrationVisitAction(formData: FormData) {
-  await requireStoreAction("store.asset_repair.write", storePath)
-  await requireStoreAction("store.asset_movement.write", storePath)
-  const assetCode = requiredText(formData, "asset_code")
-  const result = requiredText(formData, "result")
-  if (result !== "PASSED" && result !== "FAILED") {
-    throw new Error("Choose Passed or Failed.")
-  }
-  await withStore(
-    "store.asset_maintenance.write",
-    async (repository, actorUserId, organizationId, _actorEmail, actorUserName) => {
-      const performer = await signedInPerformer({
-        connectionString: readAuthEnvironment().connectionString,
-        organizationId,
-        userId: actorUserId,
-        userName: actorUserName,
-      })
-      if (!performer) throw new Error("Your account needs a name to record calibration.")
-      await repository.completeCalibrationVisit({
-        actorUserId,
-        certificateNumber: requiredText(formData, "certificate_number"),
-        completedBy: [performer.code, performer.name].filter(Boolean).join(" - "),
-        completedOn: requiredText(formData, "completed_on"),
-        organizationId,
-        passed: result === "PASSED",
-        result,
-        visitId: requiredText(formData, "visit_id"),
-        workDone: optionalText(formData, "work_done"),
-      })
-    }
-  )
-  revalidatePath(`/store/assets/${encodeURIComponent(assetCode)}`)
-  revalidateStore()
-}
-
-export async function completeInHouseCalibrationVisitAction(formData: FormData) {
-  const assetCode = requiredText(formData, "asset_code")
-  const result = requiredText(formData, "result")
-  if (result !== "PASSED" && result !== "FAILED") {
-    throw new Error("Choose Passed or Failed.")
-  }
-  await withStore(
-    "store.asset_maintenance.write",
-    async (repository, actorUserId, organizationId, _actorEmail, actorUserName) => {
-      const performer = await signedInPerformer({
-        connectionString: readAuthEnvironment().connectionString,
-        organizationId,
-        userId: actorUserId,
-        userName: actorUserName,
-      })
-      if (!performer) throw new Error("Your account needs a name to record calibration.")
-      await repository.completeInHouseCalibrationVisit({
-        actorUserId,
-        certificateNumber: requiredText(formData, "certificate_number"),
-        completedBy: [performer.code, performer.name].filter(Boolean).join(" - "),
-        completedOn: requiredText(formData, "completed_on"),
-        organizationId,
-        passed: result === "PASSED",
-        visitId: requiredText(formData, "visit_id"),
-        workDone: optionalText(formData, "work_done"),
-      })
-    }
   )
   revalidatePath(`/store/assets/${encodeURIComponent(assetCode)}`)
   revalidateStore()

@@ -40,7 +40,7 @@ import {
   StoreAssetMaintenanceSection,
 } from "@/components/store-item-schedule-section"
 import { StoreItemMaintenanceMasterForm } from "@/components/store-item-maintenance-master-form"
-import { StoreAssetCalibration } from "@/components/store-asset-calibration"
+import { StoreAssetCalibrationHistory } from "@/components/store-asset-calibration-history"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { signedInPerformer } from "@/lib/auth/signed-in-machinist"
 import { formatIstDateTime, istDateValue } from "@/lib/date-time"
@@ -54,17 +54,7 @@ import { masterCapability } from "@/lib/auth/master-capabilities"
 
 import {
   recordStoreAssetAcquisitionAction,
-  scheduleStoreAssetMaintenanceAction,
   scheduleStoreAssetMaintenanceMasterAction,
-  openStoreCalibrationVisitAction,
-  addStoreCalibrationOfferAction,
-  cancelStoreCalibrationVisitAction,
-  dispatchStoreCalibrationVisitAction,
-  returnStoreCalibrationVisitAction,
-  uploadStoreCalibrationCertificateAction,
-  completeStoreCalibrationVisitAction,
-  completeInHouseCalibrationVisitAction,
-  cancelInHouseCalibrationVisitAction,
   setStoreAssetLifecycleAction,
   uploadStoreItemDrawingAction,
   uploadStoreSupplierQuoteAction,
@@ -75,10 +65,10 @@ export default async function StoreAssetWorkspacePage({
   searchParams,
 }: {
   params: Promise<{ assetCode: string }>
-  searchParams: Promise<{ tab?: string; inHouseScheduleId?: string }>
+  searchParams: Promise<{ tab?: string }>
 }) {
   const { assetCode } = await params
-  const { tab, inHouseScheduleId } = await searchParams
+  const { tab } = await searchParams
   const session = await requireCapability(
     "store.asset_history.read",
     `/store/assets/${encodeURIComponent(assetCode)}`
@@ -143,6 +133,7 @@ export default async function StoreAssetWorkspacePage({
   }
   const {
     asset,
+    accountabilityTransfers,
     calibrationSuppliers,
     calibrationVisits,
     documents,
@@ -166,16 +157,6 @@ export default async function StoreAssetWorkspacePage({
         !maintenanceSchedules.some((schedule) => schedule.code === master.code)
       )}
     />
-  ) : null
-  const calibrationForm = canMaintain ? (
-    <form action={scheduleStoreAssetMaintenanceAction} className="grid gap-4">
-      <input name="asset_code" type="hidden" value={asset.assetCode} />
-      <input name="schedule_type" type="hidden" value="CALIBRATION" />
-      <TextField label="Schedule Name" name="schedule_name" required />
-      <TextField label="Frequency (days)" min="1" name="frequency_days" required step="1" type="number" />
-      <TextField label="First Due Date" name="first_due_on" required type="date" />
-      <Button className="w-fit" type="submit">Assign Schedule</Button>
-    </form>
   ) : null
   return (
     <div className="flex flex-col gap-6">
@@ -218,6 +199,7 @@ export default async function StoreAssetWorkspacePage({
               value={`${asset.assetType} / ${asset.category} / ${asset.subcategory}`}
             />
             <Info label="Asset Name" value={asset.assetName} />
+            <Info label="Accountable Store" value={asset.accountableStoreName} />
             <Info
               label="Current Assignment"
               value={asset.holderName || asset.locationName || asset.holderType}
@@ -478,7 +460,7 @@ export default async function StoreAssetWorkspacePage({
         </StoreAssetWorkspacePane>
 
         <StoreAssetWorkspacePane tab="calibration">
-          <StoreAssetCalibrationScheduleSection canAssign={canMaintain} form={calibrationForm}>
+          <StoreAssetCalibrationScheduleSection canAssign={false} form={null}>
             <OperationalTable>
               <TableHeader>
                 <TableRow>
@@ -518,29 +500,43 @@ export default async function StoreAssetWorkspacePage({
               </TableBody>
             </OperationalTable>
           </StoreAssetCalibrationScheduleSection>
-          <StoreAssetCalibration
-            actions={{
-              openVisit: openStoreCalibrationVisitAction,
-              addOffer: addStoreCalibrationOfferAction,
-              cancelVisit: cancelStoreCalibrationVisitAction,
-              dispatchVisit: dispatchStoreCalibrationVisitAction,
-              returnVisit: returnStoreCalibrationVisitAction,
-              uploadCertificate: uploadStoreCalibrationCertificateAction,
-              completeVisit: completeStoreCalibrationVisitAction,
-              completeInHouseVisit: completeInHouseCalibrationVisitAction,
-              cancelInHouseVisit: cancelInHouseCalibrationVisitAction,
-            }}
-            assetCode={asset.assetCode}
-            canManage={canMaintain}
-            canDispatch={canMaintain && canMove && canRepair}
-            inHouseScheduleId={inHouseScheduleId}
-            schedules={calibrationSchedules}
-            suppliers={calibrationSuppliers}
-            visits={calibrationVisits}
-          />
+          <StoreAssetCalibrationHistory unitId={asset.assetCode} visits={calibrationVisits} />
         </StoreAssetWorkspacePane>
 
         <StoreAssetWorkspacePane tab="movement">
+          <SectionCard>
+            <CardHeader>
+              <CardTitle>Accountability Transfers</CardTitle>
+              <CardDescription>Formal handovers between accountable stores. Physical holder changes appear in Movement Record.</CardDescription>
+            </CardHeader>
+            <CardContent className="min-w-0">
+              <OperationalTable filterStorageKey={`store-accountability-${asset.assetCode}`}>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Transferred</TableHead>
+                    <TableHead>From</TableHead>
+                    <TableHead>To</TableHead>
+                    <TableHead>By</TableHead>
+                    <TableHead>Remark</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {accountabilityTransfers.map((transfer, index) => (
+                    <TableRow key={`${transfer.transferredAt.toISOString()}-${index}`}>
+                      <TableCell>{formatIstDateTime(transfer.transferredAt)}</TableCell>
+                      <TableCell>{transfer.fromStore}</TableCell>
+                      <TableCell>{transfer.toStore}</TableCell>
+                      <TableCell>{transfer.transferredBy || "—"}</TableCell>
+                      <TableCell>{transfer.remark || "—"}</TableCell>
+                    </TableRow>
+                  ))}
+                  {!accountabilityTransfers.length ? (
+                    <TableRow><TableCell colSpan={5}>No accountability transfers.</TableCell></TableRow>
+                  ) : null}
+                </TableBody>
+              </OperationalTable>
+            </CardContent>
+          </SectionCard>
  <SectionCard>
         <CardHeader>
           <CardTitle>Movement Record</CardTitle>

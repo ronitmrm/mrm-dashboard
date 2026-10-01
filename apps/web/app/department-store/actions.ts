@@ -8,6 +8,7 @@ import { redirect } from "next/navigation"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { accountableStoreHref, accountableStorePermission, departmentStoreHref } from "@/lib/auth/department-store-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
+import { requireStoreAction } from "@/lib/auth/store-action-access"
 import { getWebPostgresPool } from "@/lib/postgres-runtime"
 import { createGoogleCloudArtifactProvider } from "@/lib/google-cloud-artifact-provider"
 import { storeIssuedPurchaseOrderPdf } from "@/lib/store/issued-purchase-order-pdf"
@@ -44,11 +45,14 @@ async function withStoreWrite(
   operation: (
     repository: ReturnType<typeof createDepartmentStoreRepository>,
     context: { actorUserId: string; movedBy: string; organizationId: string; storeCode: string }
-  ) => Promise<unknown>
+  ) => Promise<unknown>,
+  mainCapability: "store.asset_movement.write" | "store.asset_repair.write" = "store.asset_movement.write"
 ): Promise<DepartmentStoreActionState> {
   const storeCode = required(formData, "store_code")
   const { capability, path } = permissionForStore(storeCode)
-  const session = await requireCapability(capability, path)
+  const session = storeCode === "MAIN"
+    ? await requireStoreAction(mainCapability, path)
+    : await requireCapability(capability, path)
   const store = createStoreRepository({ connectionString: readAuthEnvironment().connectionString })
   let organizationId: string
   try {
@@ -218,6 +222,21 @@ export async function replaceQualityGaugeSetMemberAction(
   })
 }
 
+export async function disbandQualityGaugeSetAction(
+  _state: DepartmentStoreActionState,
+  formData: FormData
+) {
+  return withStoreWrite(formData, (repository, context) => {
+    if (context.storeCode !== "QUALITY") throw new Error("Gauge sets are managed by Quality Store.")
+    return repository.disbandGaugeSet({
+      actorUserId: context.actorUserId,
+      organizationId: context.organizationId,
+      setId: required(formData, "set_id"),
+      storeCode: context.storeCode,
+    })
+  })
+}
+
 export async function createDepartmentRepairOrderAction(
   _state: DepartmentStoreActionState,
   formData: FormData
@@ -245,6 +264,10 @@ export async function createDepartmentRepairOrderAction(
           serviceDescription: required(formData, `service_description_${assetCode}`),
           servicePrice: required(formData, `service_price_${assetCode}`),
           supplierId: required(formData, `supplier_${assetCode}`),
+          reassignmentDepartmentId: context.storeCode === "MAIN" &&
+            formData.get(`reassignment_requested_${assetCode}`)
+            ? required(formData, `reassignment_department_${assetCode}`)
+            : null,
         })),
         orderDate: optional(formData, "order_date"),
         organizationId: context.organizationId,
@@ -255,7 +278,7 @@ export async function createDepartmentRepairOrderAction(
       await artifacts.close()
       await store.close()
     }
-  })
+  }, "store.asset_repair.write")
 }
 
 export async function completeDepartmentRepairOrderAction(
@@ -278,5 +301,5 @@ export async function completeDepartmentRepairOrderAction(
     } finally {
       await store.close()
     }
-  })
+  }, "store.asset_repair.write")
 }
