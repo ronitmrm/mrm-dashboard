@@ -574,6 +574,7 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
           assetName: string
           holderName: string | null
           holderType: string
+          inGaugeSet: boolean
           isGauge: boolean
           itemTypeId: string
           manufacturerSerialNumber: string | null
@@ -587,6 +588,10 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
             asset.manufacturer_serial_number AS "manufacturerSerialNumber",
             (lower(concat_ws(' ', item.asset_category,
               item.asset_subcategory, item.asset_name)) LIKE '%gauge%') AS "isGauge",
+            EXISTS (
+              SELECT 1 FROM store.gauge_set_memberships member
+              WHERE member.asset_id = asset.id AND member.removed_at IS NULL
+            ) AS "inGaugeSet",
             accountable.code AS "accountableStoreCode"
            FROM store.assets asset
            JOIN store.item_types item ON item.id = asset.item_type_id
