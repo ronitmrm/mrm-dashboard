@@ -9,6 +9,7 @@ import {
   authorizeStoreReceiptArtifactTarget,
   authorizeStoreSupplierPriceArtifactTarget,
   createArtifactService,
+  createDepartmentStoreRepository,
   createMasterDataLifecycleRepository,
   createStoreRepository,
   type MasterDataKind,
@@ -21,7 +22,9 @@ import { redirect } from "next/navigation"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { signedInPerformer } from "@/lib/auth/signed-in-machinist"
 import { masterCapability } from "@/lib/auth/master-capabilities"
-import { requireCapability } from "@/lib/auth/require-capability"
+import { listGrantedCapabilities, requireCapability } from "@/lib/auth/require-capability"
+import { accountableStoreHref, accountableStorePermission } from "@/lib/auth/department-store-capabilities"
+import { getWebPostgresPool } from "@/lib/postgres-runtime"
 import {
   isStoreActionCapability,
   requireStoreAction,
@@ -806,16 +809,33 @@ export async function createStoreRequisitionBatchAction(formData: FormData) {
   if (requestedUnitIds.length && requestedUnitIds.length !== itemTypeIds.length) {
     throw new Error("Each request line needs a Unit ID selection or blank value.")
   }
-  await withStore(
+  const result = await withStore(
     "store.requests.submit",
     async (repository, actorUserId, organizationId) => {
-      const policy = storeRequestFormPolicy(
-        await repository.requisitionRequestContext({
-          organizationId,
-          userId: actorUserId,
-        })
-      )
-      const department = resolveStoreRequestDepartment(
+      const context = await repository.requisitionRequestContext({
+        organizationId,
+        userId: actorUserId,
+      })
+      const policy = storeRequestFormPolicy(context)
+      const fulfillmentKind = requiredText(formData, "fulfillment_kind")
+      if (!["DEPARTMENT_USE", "PERSON_USE", "STORE_TRANSFER"].includes(fulfillmentKind)) {
+        throw new Error("Choose a valid request purpose.")
+      }
+      const receivingStoreCode = fulfillmentKind === "STORE_TRANSFER"
+        ? requiredText(formData, "receiving_store_code") : null
+      let receivingStoreName: string | null = null
+      if (receivingStoreCode) {
+        const capability = accountableStorePermission(receivingStoreCode, "request")
+        const granted = await listGrantedCapabilities(actorUserId, [capability])
+        if (!granted.length || receivingStoreCode.toUpperCase() === "MAIN") {
+          throw new Error("Only a designated receiving Store person can request responsibility.")
+        }
+        const receivingStore = (await repository.listRequestableStores(organizationId))
+          .find((store) => store.code.toLowerCase() === receivingStoreCode.toLowerCase())
+        if (!receivingStore) throw new Error("Receiving Store was not found.")
+        receivingStoreName = receivingStore.name
+      }
+      const department = receivingStoreName ?? resolveStoreRequestDepartment(
         policy,
         optionalText(formData, "department")
       )
@@ -826,6 +846,7 @@ export async function createStoreRequisitionBatchAction(formData: FormData) {
       return repository.createRequisitionBatch({
         actorUserId,
         department,
+        fulfillmentKind: fulfillmentKind as "DEPARTMENT_USE" | "PERSON_USE" | "STORE_TRANSFER",
         items: itemTypeIds.map((itemTypeId, index) => ({
           itemTypeId,
           quantity: quantities[index]!,
@@ -834,12 +855,49 @@ export async function createStoreRequisitionBatchAction(formData: FormData) {
         locationId: location.id,
         organizationId,
         purpose: optionalText(formData, "purpose"),
+        receivingStoreCode,
+        recipientReference: fulfillmentKind === "PERSON_USE"
+          ? context.requesterIdentity.code || context.requesterEmail : null,
+        recipientName: fulfillmentKind === "PERSON_USE"
+          ? context.requesterIdentity.name || context.requesterEmail : null,
         requestedBy: policy.requestedBy,
         requiredOn: optionalText(formData, "required_on"),
       })
     }
   )
   revalidateStore()
+  redirect(`/store/requests/new?saved=${encodeURIComponent(result.requestNumber)}`)
+}
+
+export async function fulfillStoreTransferRequestAction(formData: FormData) {
+  const session = await requireStoreAction("store.requests.issue", "/store/requests")
+  const repository = createStoreRepository({
+    connectionString: readAuthEnvironment().connectionString,
+  })
+  const organizationId = await repository.organizationIdForCode("MRMPL")
+    .finally(() => repository.close())
+  const transfers = createDepartmentStoreRepository({ pool: getWebPostgresPool() })
+  const common = {
+    actorUserId: session.user.id,
+    destinationStoreCode: requiredText(formData, "destination_store_code"),
+    movedBy: session.user.name?.trim() || session.user.email,
+    organizationId,
+    requisitionId: requiredText(formData, "requisition_id"),
+    remark: optionalText(formData, "remark"),
+    sourceStoreCode: "MAIN",
+  }
+  const assetCode = optionalText(formData, "asset_code")
+  if (assetCode) {
+    await transfers.transferAssetAccountability({ ...common, assetCode })
+  } else {
+    await transfers.transferQuantity({
+      ...common,
+      itemTypeId: requiredText(formData, "item_type_id"),
+      quantity: positiveNumber(formData, "issue_quantity"),
+    })
+  }
+  revalidateStore()
+  revalidatePath(accountableStoreHref(common.destinationStoreCode))
   redirect("/store/requests")
 }
 

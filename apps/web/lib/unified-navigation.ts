@@ -600,6 +600,11 @@ export const storeNavigation = [
     label: "Store Overview",
   },
   {
+    href: "/store/requests/new",
+    icon: ClipboardList,
+    label: "Request Item",
+  },
+  {
     href: "/store/requests",
     icon: ClipboardList,
     label: "Requests & Issues",

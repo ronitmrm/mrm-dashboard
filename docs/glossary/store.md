@@ -215,6 +215,20 @@ An assigned single Department is automatic; multiple assigned Departments
 require a choice. System Administrators without an assignment may choose an
 active Department.
 
+A request states its fulfillment purpose. Department use issues stock to the
+Department while Main Store remains accountable for a Non Consumable Unit ID.
+Personal use issues it to the requesting employee and records that person as
+the physical holder. A Store stock request asks Main Store to transfer
+accountability to a specified Quality or production Store. Only a person with
+Store request submission permission and request permission for that receiving Store can
+submit this request. A serialized Store stock request names one exact Unit ID;
+a Consumable Store stock request names an Asset Code and quantity. Submission
+does not move stock. Main Store fulfills a Store stock request with a recorded
+accountability or quantity transfer; the receiving Store then controls later
+movement and consumption. Each fulfillment records the request and actor in
+the shared company ledger. A Unit ID can be requested and transferred only
+one at a time; Consumable quantities may be fulfilled in parts.
+
 A Repair Purchase Order may create a pending Store Request on behalf of a
 selected Department for one unit of the same Asset Code when reassignment is
 requested. The request does not reserve the unit sent for repair and can be

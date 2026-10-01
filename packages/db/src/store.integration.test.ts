@@ -2601,4 +2601,66 @@ describe("Store requests", () => {
       storeCode: "QUALITY",
     })).rejects.toThrow("Move this Unit ID with its gauge set.")
   })
+
+  test("fulfills a one-unit Store responsibility request for its exact Unit ID", async () => {
+    await pool.query(
+      `INSERT INTO manufacturing.production_floors (organization_id, code, name)
+       VALUES ($1, 'cnc', 'CNC Production Floor')
+       ON CONFLICT (organization_id, code) DO NOTHING`,
+      [organizationId]
+    )
+    const location = await store.ensurePrimaryStoreLocation({ organizationId })
+    const item = await store.createItemType({
+      ...(await createClassification("Store Responsibility Request")),
+      assetType: "NON_CONSUMABLE",
+      identificationName: `Store Request Gauge ${suffix}`,
+      organizationId,
+      unit: "Nos",
+    })
+    const receipt = await store.receiveStock({
+      locationId: location.id,
+      organizationId,
+      purchaseOrderLineId: (await createPurchaseOrder(item.id, 2, "100.00")).id,
+      quantity: 2,
+    })
+    const units = await store.listStockPhysicalUnits(organizationId, "COMPANY")
+    const requestedUnit = units.find((unit) => unit.assetCode === receipt.assetCodes[0])!
+    const otherUnit = receipt.assetCodes[1]!
+    const request = await store.createRequisitionBatch({
+      department: "CNC Store",
+      fulfillmentKind: "STORE_TRANSFER",
+      items: [{ itemTypeId: item.id, quantity: 1, requestedUnitId: requestedUnit.id }],
+      locationId: location.id,
+      organizationId,
+      receivingStoreCode: "cnc",
+      requestedBy: "CNC Store Representative",
+    })
+    await expect(departmentStore.transferAssetAccountability({
+      assetCode: otherUnit,
+      destinationStoreCode: "cnc",
+      organizationId,
+      requisitionId: request.lineIds[0],
+      sourceStoreCode: "MAIN",
+    })).rejects.toThrow("exact Unit ID")
+    await departmentStore.transferAssetAccountability({
+      assetCode: requestedUnit.assetCode,
+      destinationStoreCode: "cnc",
+      organizationId,
+      requisitionId: request.lineIds[0],
+      sourceStoreCode: "MAIN",
+    })
+    const line = (await store.listRequisitions({ organizationId })).rows.find(
+      (candidate) => candidate.id === request.lineIds[0]
+    )
+    expect(line).toMatchObject({ issuedQuantity: "1", status: "Fulfilled" })
+    const transfer = await pool.query<{ code: string; requisition_id: string }>(
+      `SELECT destination.code, transfer.requisition_id
+       FROM store.asset_accountability_transfers transfer
+       JOIN store.accountable_stores destination
+         ON destination.id = transfer.destination_store_id
+       WHERE transfer.asset_id = $1 AND transfer.requisition_id = $2`,
+      [requestedUnit.id, request.lineIds[0]]
+    )
+    expect(transfer.rows[0]).toEqual({ code: "cnc", requisition_id: request.lineIds[0] })
+  })
 })

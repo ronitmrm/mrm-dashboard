@@ -41,6 +41,7 @@ import { storePurchaseOrderHref } from "@/lib/unified-navigation"
 
 import {
   cancelStoreRequisitionAction,
+  fulfillStoreTransferRequestAction,
   issueRemainingStoreRequisitionBatchAction,
   issueStoreRequisitionAction,
 } from "../actions"
@@ -70,9 +71,9 @@ export default async function StoreRequestsPage() {
           Requests & Issues
         </h2>
         <p className="text-sm text-muted-foreground">
-          Allocate coded item request lines individually, select fully available
-          lines together, or cancel an unneeded request. Saving an allocation
-          immediately updates Current Stock.
+          Issue items for Department or personal use, or transfer stock and
+          responsibility to a receiving Store. Each saved action updates the
+          shared stock ledger.
         </p>
       </div>
 
@@ -130,12 +131,13 @@ export default async function StoreRequestsPage() {
                 {canManage ? <TableHead>Select</TableHead> : null}
                 <TableHead>Request No.</TableHead>
                 <TableHead>Department / Individual</TableHead>
+                <TableHead>Request for</TableHead>
                 <TableHead>Asset Code</TableHead>
                 <TableHead>Asset Category</TableHead>
                 <TableHead>Asset Subcategory</TableHead>
                 <TableHead>Asset Name</TableHead>
                 <TableHead>Requested</TableHead>
-                <TableHead>Issued</TableHead>
+                <TableHead>Issued / Transferred</TableHead>
                 <TableHead>Remaining</TableHead>
                 <TableHead>Current Stock</TableHead>
                 <TableHead>Status</TableHead>
@@ -155,6 +157,7 @@ export default async function StoreRequestsPage() {
                       request.requestedUnitCode?.toLowerCase()
                   )
                 const canAllocateInFull =
+                  request.fulfillmentKind === "DEPARTMENT_USE" &&
                   isOpen &&
                   Number(request.remainingQuantity) > 0 &&
                   Number(request.availableStock) >=
@@ -209,6 +212,13 @@ export default async function StoreRequestsPage() {
                       </span>
                     </TableCell>
                     <TableCell>
+                      {request.fulfillmentKind === "STORE_TRANSFER"
+                        ? `Store stock / responsibility · ${request.receivingStoreName}`
+                        : request.fulfillmentKind === "PERSON_USE"
+                          ? `Personal use · ${request.recipientName}`
+                          : "Department use"}
+                    </TableCell>
+                    <TableCell>
                       {request.typeCode}
                       <span className="block text-xs text-muted-foreground">
                         {request.identificationName}
@@ -257,6 +267,51 @@ export default async function StoreRequestsPage() {
                       <TableCell>
                         {isOpen ? (
                           <div className="flex flex-wrap gap-2">
+                            {request.fulfillmentKind === "STORE_TRANSFER" ? (
+                              <Dialog>
+                                <DialogTrigger asChild>
+                                  <Button size="sm" variant="outline">
+                                    Transfer to Store
+                                  </Button>
+                                </DialogTrigger>
+                                <DialogContent>
+                                  <DialogHeader>
+                                    <DialogTitle>Transfer to {request.receivingStoreName}</DialogTitle>
+                                    <DialogDescription>
+                                      {request.typeCode} · {request.requestedUnitCode ?? `${request.remainingQuantity} ${request.unit}`} remaining
+                                    </DialogDescription>
+                                  </DialogHeader>
+                                  <form action={fulfillStoreTransferRequestAction} className="grid gap-3">
+                                    <input name="requisition_id" type="hidden" value={request.id} />
+                                    <input name="destination_store_code" type="hidden" value={request.receivingStoreCode ?? ""} />
+                                    {request.requestedUnitCode ? (
+                                      <>
+                                        <Input aria-label="Unit ID" readOnly value={request.requestedUnitCode} />
+                                        <input name="asset_code" type="hidden" value={request.requestedUnitCode} />
+                                      </>
+                                    ) : (
+                                      <>
+                                        <input name="item_type_id" type="hidden" value={request.itemTypeId} />
+                                        <Input
+                                          aria-label="Transfer quantity"
+                                          defaultValue={request.remainingQuantity}
+                                          max={request.remainingQuantity}
+                                          min="0.001"
+                                          name="issue_quantity"
+                                          required
+                                          step="0.001"
+                                          type="number"
+                                        />
+                                      </>
+                                    )}
+                                    <Input aria-label="Handover note" name="remark" placeholder="Handover note (optional)" />
+                                    <Button disabled={!exactUnitAvailable || Number(request.availableStock) <= 0} type="submit">
+                                      Record Transfer
+                                    </Button>
+                                  </form>
+                                </DialogContent>
+                              </Dialog>
+                            ) : (
                             <Dialog>
                               <DialogTrigger asChild>
                                 <Button size="sm" variant="outline">
@@ -318,10 +373,12 @@ export default async function StoreRequestsPage() {
                                     type="number"
                                   />
                                   <label className="grid gap-1 text-xs font-medium">
-                                    Department
+                                    {request.fulfillmentKind === "PERSON_USE" ? "Recipient" : "Department"}
                                     <Input
                                       readOnly
-                                      value={issueForm.department}
+                                      value={request.fulfillmentKind === "PERSON_USE"
+                                        ? request.recipientName ?? request.requestedBy
+                                        : issueForm.department}
                                     />
                                   </label>
                                   <label className="grid gap-1 text-xs font-medium">
@@ -389,6 +446,7 @@ export default async function StoreRequestsPage() {
                                 </form>
                               </DialogContent>
                             </Dialog>
+                            )}
                             <Dialog>
                               <DialogTrigger asChild>
                                 <Button size="sm" variant="ghost">
@@ -432,7 +490,7 @@ export default async function StoreRequestsPage() {
                 <TableRow>
                   <TableCell
                     className="h-24 text-center text-muted-foreground"
-                    colSpan={canManage ? 13 : 11}
+                    colSpan={canManage ? 14 : 12}
                   >
                     No coded item request lines available.
                   </TableCell>
