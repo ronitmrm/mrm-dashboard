@@ -1,6 +1,5 @@
-import Link from "next/link"
-
 import { createStoreRepository } from "@workspace/db"
+import { redirect } from "next/navigation"
 import { StatusBadge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
@@ -16,29 +15,30 @@ import {
 } from "@workspace/ui/components/table"
 
 import { MetricSummary, PageHeader } from "@/components/ui/golden-patterns"
+import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import {
   listGrantedCapabilities,
-  requireCapability,
+  requireAuthenticatedSession,
 } from "@/lib/auth/require-capability"
 import { formatIstDate, istDateValue } from "@/lib/date-time"
 import { calibrationPlan } from "@/lib/iso-documents"
 import { planDateRange } from "@/lib/plan-date-range"
-import { storeAssetCalibrationHref } from "@/lib/store-asset-workspace"
 
 export default async function CalibrationPlanPage({
   searchParams,
 }: {
   searchParams: Promise<{ from?: string; to?: string; month?: string }>
 }) {
-  const session = await requireCapability("store.stock.read", calibrationPlan.href)
+  const session = await requireAuthenticatedSession(calibrationPlan.href)
+  const grants = await listGrantedCapabilities(session.user.id, [
+    "iso.calibration_plan.read",
+    "store.stock.read",
+    "quality.control.calibration.read",
+  ])
+  if (!grants.length) redirect("/unauthorized")
   const params = await searchParams
   const { from, to } = planDateRange(params.from, params.to, params.month)
-  const grants = await listGrantedCapabilities(session.user.id, [
-    "store.asset_history.read", "store.asset_maintenance.write",
-  ])
-  const canOpen = grants.includes("store.asset_history.read")
-  const canManage = canOpen && grants.includes("store.asset_maintenance.write")
   const repository = createStoreRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
@@ -47,9 +47,9 @@ export default async function CalibrationPlanPage({
     return repository.listCalibrationPlan(organizationId, from, to)
   })().finally(() => repository.close())
   const today = istDateValue()
-  const due = rows.filter((row) => ["Planned", "OPEN", "DISPATCHED", "RETURNED"].includes(row.status)).length
+  const due = rows.filter((row) => ["Planned", "OPEN", "DISPATCHED", "RETURNED", "FAILED"].includes(row.status)).length
   const overdue = rows.filter((row) =>
-    (row.status === "Planned" || row.status === "OPEN") && row.dueOn < today
+    (row.status === "Planned" || row.status === "OPEN" || row.status === "FAILED") && row.dueOn < today
   ).length
   const passed = rows.filter((row) => row.status === "PASSED").length
 
@@ -57,12 +57,7 @@ export default async function CalibrationPlanPage({
     <div className="flex min-w-0 flex-col gap-6">
       <PageHeader
         title={calibrationPlan.title}
-        description="Saved calibration due dates for Store Unit IDs. Completed visits stay on their original due date."
-        actions={
-          <Button asChild variant="outline">
-            <Link href="/store/stock">Store Stock</Link>
-          </Button>
-        }
+        description="Calibration due dates, completion dates and certificates for each Unit ID. Completed work stays on its original due date."
       />
       <form action={calibrationPlan.href} className="flex flex-wrap items-end gap-3">
         <div className="grid gap-2">
@@ -92,26 +87,18 @@ export default async function CalibrationPlanPage({
         scope={`${formatIstDate(from)} – ${formatIstDate(to)} · before table filters`}
         items={[
           { label: "Scheduled", value: rows.length, tone: "information" },
-          { label: "Open / Planned", value: due, tone: "warning" },
+          { label: "Pending / Corrective", value: due, tone: "warning" },
           { label: "Overdue", value: overdue, tone: "danger" },
           { label: "Passed", value: passed, tone: "positive" },
         ]}
       />
-      <form action="/store/calibration-dispatch" method="get">
       <OperationalTable
         filterStorageKey="iso-calibration-plan"
         containerClassName="rounded-md border"
-        toolbarStart={
-          <div className="flex flex-wrap items-center gap-3">
-            <span className="font-medium">Calibration Plan</span>
-            {canManage ? <Button size="sm" type="submit">Send selected for calibration</Button> : null}
-          </div>
-        }
-        filteredSelection={canManage ? { checkboxName: "unitId" } : undefined}
+        toolbarStart={<span className="font-medium">Calibration Plan</span>}
       >
         <TableHeader>
           <TableRow>
-            {canManage ? <TableHead>Select</TableHead> : null}
             <TableHead>Due Date</TableHead>
             <TableHead>Unit ID</TableHead>
             <TableHead>Category</TableHead>
@@ -121,7 +108,7 @@ export default async function CalibrationPlanPage({
             <TableHead>Status</TableHead>
             <TableHead>Supplier</TableHead>
             <TableHead>Completed On</TableHead>
-            <TableHead>Store Flow</TableHead>
+            <TableHead>Certificate</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -140,14 +127,6 @@ export default async function CalibrationPlanPage({
                     : "warning"
             return (
               <TableRow key={row.id} data-row-id={row.id}>
-                {canManage ? <TableCell><input
-                  aria-label={`Select ${row.unitId}`}
-                  disabled={row.status !== "Planned" &&
-                    !(row.status === "OPEN" && row.method === "SUPPLIER")}
-                  name="unitId"
-                  type="checkbox"
-                  value={row.unitId}
-                /></TableCell> : null}
                 <TableCell className="whitespace-nowrap">
                   {formatIstDate(row.dueOn)}
                 </TableCell>
@@ -160,43 +139,33 @@ export default async function CalibrationPlanPage({
                 <TableCell>{row.supplierName || "-"}</TableCell>
                 <TableCell>{formatIstDate(row.completedOn)}</TableCell>
                 <TableCell>
-                  {canOpen ? (
-                    <div className="flex flex-wrap gap-2">
-                      <Button asChild size="sm" variant="outline">
-                        <Link href={storeAssetCalibrationHref(row.unitId)}>Open Calibration</Link>
-                      </Button>
-                      {canManage && (row.status === "Planned" || row.status === "FAILED" ||
-                        (row.method === "IN_HOUSE" && row.status === "OPEN")) ? (
-                        <Button asChild size="sm" variant="outline">
-                          <Link href={row.status === "Planned" || row.status === "FAILED"
-                            ? `${storeAssetCalibrationHref(row.unitId)}&inHouseScheduleId=${encodeURIComponent(row.scheduleId)}`
-                            : storeAssetCalibrationHref(row.unitId)}>
-                            {row.status === "Planned" ? "Calibrate In House"
-                              : row.status === "FAILED" ? "Retry In House" : "Continue In House"}
-                          </Link>
-                        </Button>
-                      ) : null}
-                    </div>
-                  ) : (
-                    "Store access required"
-                  )}
+                  {row.visitId && row.certificateFileName ? (
+                    <Button asChild size="sm" variant="outline">
+                      <AttachmentViewerLink
+                        fileName={row.certificateFileName}
+                        href={`/store/assets/${encodeURIComponent(row.unitId)}/calibrations/${encodeURIComponent(row.visitId)}/certificate`}
+                        mediaType="application/pdf"
+                      >
+                        View certificate
+                      </AttachmentViewerLink>
+                    </Button>
+                  ) : "—"}
                 </TableCell>
               </TableRow>
             )
           })}
           {!rows.length ? (
             <TableRow>
-              <TableCell colSpan={canManage ? 11 : 10}>
+              <TableCell colSpan={10}>
                 <StandardState
                   title="No calibration planned for this date range"
-                  description="Assign a calibration timetable to a physical Unit ID in Store; saved due dates and visits will appear here."
+                  description="Assigned Unit ID timetables and completed visits will appear here."
                 />
               </TableCell>
             </TableRow>
           ) : null}
         </TableBody>
       </OperationalTable>
-      </form>
     </div>
   )
 }

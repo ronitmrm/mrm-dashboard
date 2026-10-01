@@ -1,26 +1,43 @@
-import { createStoreRepository } from "@workspace/db"
+import { createDepartmentStoreRepository, createStoreRepository } from "@workspace/db"
+import { notFound, redirect } from "next/navigation"
 
 import {
   artifactDeliveryErrorResponse,
   createArtifactDeliveryResponse,
 } from "@/lib/artifact-delivery"
 import { readAuthEnvironment } from "@/lib/auth/auth"
-import { requireCapability } from "@/lib/auth/require-capability"
+import { accountableStorePermission } from "@/lib/auth/department-store-capabilities"
+import {
+  listGrantedCapabilities,
+  requireAuthenticatedSession,
+} from "@/lib/auth/require-capability"
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ assetCode: string; visitId: string }> }
 ) {
   const { assetCode, visitId } = await params
-  await requireCapability(
-    "store.asset_history.read",
+  const session = await requireAuthenticatedSession(
     `/store/assets/${encodeURIComponent(assetCode)}`
   )
+  const connectionString = readAuthEnvironment().connectionString
   const repository = createStoreRepository({
-    connectionString: readAuthEnvironment().connectionString,
+    connectionString,
   })
+  const departmental = createDepartmentStoreRepository({ connectionString })
   try {
     const organizationId = await repository.organizationIdForCode("MRMPL")
+    const accountability = await departmental.getAssetAccountability(organizationId, assetCode)
+    if (!accountability) notFound()
+    const permissions = [
+      "store.asset_history.read",
+      "iso.calibration_plan.read",
+      "store.stock.read",
+      "quality.control.calibration.read",
+      accountableStorePermission(accountability.accountableStoreCode, "read"),
+    ]
+    const granted = await listGrantedCapabilities(session.user.id, permissions)
+    if (!granted.length) redirect("/unauthorized")
     const certificate = await repository.getCalibrationCertificate({
       organizationId,
       assetCode,
@@ -40,6 +57,7 @@ export async function GET(
     if (delivery) return delivery
     throw error
   } finally {
+    await departmental.close()
     await repository.close()
   }
 }

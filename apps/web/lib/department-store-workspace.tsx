@@ -43,6 +43,7 @@ export async function renderDepartmentStoreWorkspace(input: {
     originStoreId: workspace.store.id,
   })
     .finally(() => orders.close())
+  const equipmentRepairOrders = repairOrders.filter((order) => !order.calibrationVisitId)
 
   return (
     <DepartmentStoreWorkspace
@@ -51,7 +52,7 @@ export async function renderDepartmentStoreWorkspace(input: {
       saved={input.saved ?? false}
       departments={options.departments}
       machines={options.machines}
-      repairOrders={repairOrders}
+      repairOrders={equipmentRepairOrders}
       vendors={options.vendors}
       workspace={workspace}
     />

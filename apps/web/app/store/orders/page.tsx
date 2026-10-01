@@ -1,5 +1,6 @@
 import { PendingRetainedUploadForm } from "@/components/pending-retained-upload-form"
-import { createStoreRepository } from "@workspace/db"
+import { createDepartmentStoreRepository, createStoreRepository } from "@workspace/db"
+import Link from "next/link"
 import { redirect } from "next/navigation"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
@@ -22,10 +23,6 @@ import {
 import { Field, FieldGroup, FieldLabel } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
 import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@workspace/ui/components/native-select"
-import {
   OperationalTable,
   TableBody,
   TableCell,
@@ -37,7 +34,7 @@ import {
 import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
 import { BulkReceiveButton } from "@/components/store/bulk-receive-button"
 import { readAuthEnvironment } from "@/lib/auth/auth"
-import { MetricSummary, StandardDialogContent } from "@/components/ui/golden-patterns"
+import { MetricSummary } from "@/components/ui/golden-patterns"
 import {
   listGrantedCapabilities,
   requireAuthenticatedSession,
@@ -46,7 +43,6 @@ import { listGrantedStoreActions } from "@/lib/auth/store-action-access"
 import { storeRequestFormPolicy } from "@/lib/store-request-policy"
 
 import {
-  completeStoreRepairPurchaseOrderAction,
   receiveRemainingStoreStockBatchAction,
   receiveStoreStockAction,
 } from "../actions"
@@ -66,12 +62,16 @@ export default async function StoreOrdersPage() {
   const repository = createStoreRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
-  const [allOrders, requestContext, locations] = await (async () => {
+  const departments = createDepartmentStoreRepository({
+    connectionString: readAuthEnvironment().connectionString,
+  })
+  const [allOrders, requestContext] = await (async () => {
     const organizationId = await repository.organizationIdForCode("MRMPL")
+    const mainStore = await departments.getStoreByCode(organizationId, "MAIN")
     return Promise.all([
       repository.listPurchaseOrders(
         organizationId,
-        canReadRegister ? undefined : { repairOnly: true }
+        canReadRegister ? undefined : { repairOnly: true, originStoreId: mainStore.id }
       ),
       canManage
         ? repository.requisitionRequestContext({
@@ -79,17 +79,16 @@ export default async function StoreOrdersPage() {
             userId: session.user.id,
           })
         : Promise.resolve(null),
-      canRepair ? repository.listLocations(organizationId) : Promise.resolve([]),
     ])
-  })().finally(() => repository.close())
+  })().finally(async () => {
+    await departments.close()
+    await repository.close()
+  })
   const data = canReadRegister
     ? allOrders
     : allOrders.filter(
         (order) => order.orderType === "REPAIR" && !order.calibrationVisitId
       )
-  const storeLocations = locations.filter(
-    (location) => location.locationType === "STORE"
-  )
   const receivedBy = requestContext
     ? storeRequestFormPolicy(requestContext).requestedBy
     : ""
@@ -399,51 +398,11 @@ export default async function StoreOrdersPage() {
                         ) : canRepair &&
                           order.orderType === "REPAIR" &&
                           !order.calibrationVisitId &&
+                          order.originStoreCode === "MAIN" &&
                           order.status === "Open" ? (
-                          <Dialog>
-                            <DialogTrigger asChild>
-                              <Button size="sm">Complete &amp; Return</Button>
-                            </DialogTrigger>
-                            <StandardDialogContent
-                              description={`${order.orderNumber} · ${order.typeCode}. Confirm the unit has physically returned from ${order.supplierName}, then select the receiving Store. A linked Department request can be issued with any available Unit ID of the same Asset Code.`}
-                              title="Complete repair and return to Store"
-                            >
-                              <form
-                                action={completeStoreRepairPurchaseOrderAction}
-                                className="grid gap-4"
-                              >
-                                <input name="asset_code" type="hidden" value={order.typeCode} />
-                                <input name="purchase_order_id" type="hidden" value={order.purchaseOrderId} />
-                                <Field>
-                                  <FieldLabel htmlFor={`repair-return-store-${order.id}`}>
-                                    Receiving Store
-                                  </FieldLabel>
-                                  <NativeSelect
-                                    id={`repair-return-store-${order.id}`}
-                                    name="store_location_id"
-                                    required
-                                  >
-                                    <NativeSelectOption value="">
-                                      Select Store location
-                                    </NativeSelectOption>
-                                    {storeLocations.map((location) => (
-                                      <NativeSelectOption key={location.id} value={location.id}>
-                                        {location.code} — {location.name}
-                                      </NativeSelectOption>
-                                    ))}
-                                  </NativeSelect>
-                                </Field>
-                                <DialogFooter>
-                                  <DialogClose asChild>
-                                    <Button type="button" variant="outline">Cancel</Button>
-                                  </DialogClose>
-                                  <Button disabled={!storeLocations.length} type="submit">
-                                    Complete &amp; Return to Store
-                                  </Button>
-                                </DialogFooter>
-                              </form>
-                            </StandardDialogContent>
-                          </Dialog>
+                          <Button asChild size="sm">
+                            <Link href="/department-store/repair?store=MAIN">Complete &amp; Return</Link>
+                          </Button>
                         ) : order.orderType === "REPAIR" ? (
                           order.calibrationVisitId
                             ? "Use Calibration Visit"

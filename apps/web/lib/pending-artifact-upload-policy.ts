@@ -251,12 +251,13 @@ export async function authorizePendingUploadIntent(
       requireCapability(authorization, "maintenance.tasks.write")
       return organizationForCode(client, "MRMPL")
     case "store-calibration-certificate": {
-      requireCapability(authorization, "store.asset_maintenance.write")
+      requireCapability(authorization, "quality.control.calibration.write")
       const organizationId = await organizationForCode(client, "MRMPL")
       await organizationForTarget(
         client,
         `SELECT organization_id FROM store.calibration_visits
-         WHERE id = $1 AND organization_id = $2 AND status = 'RETURNED'
+         WHERE id = $1 AND organization_id = $2
+           AND (status = 'RETURNED' OR (status = 'OPEN' AND method = 'IN_HOUSE'))
          FOR KEY SHARE`,
         [intent.visitId, organizationId]
       )

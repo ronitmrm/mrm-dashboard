@@ -9,7 +9,7 @@ import {
 } from "./pending-artifact-upload-policy"
 
 describe("calibration certificate upload", () => {
-  test("accepts a returned visit with maintenance permission and a PDF", async () => {
+  test("accepts a returned visit with QC calibration permission and a PDF", async () => {
     const intent = parsePendingUploadIntent({
       kind: "store-calibration-certificate",
       visitId: "visit-id",
@@ -24,12 +24,13 @@ describe("calibration certificate upload", () => {
         { query } as never,
         intent,
         {
-          grantedCapabilities: new Set(["store.asset_maintenance.write"]),
+          grantedCapabilities: new Set(["quality.control.calibration.write"]),
           userId: "user-id",
         }
       )
     ).resolves.toBe("organization-id")
     expect(query.mock.calls[1]?.[0]).toContain("status = 'RETURNED'")
+    expect(query.mock.calls[1]?.[0]).toContain("method = 'IN_HOUSE'")
     expect(
       validatePendingUploadBytes({
         bytes: Buffer.from("%PDF-1.7\ncertificate"),
@@ -40,13 +41,13 @@ describe("calibration certificate upload", () => {
     ).toEqual({ fileName: "certificate.pdf", mediaType: "application/pdf" })
   })
 
-  test("rejects a certificate upload without maintenance permission", async () => {
+  test("rejects a certificate upload without QC calibration permission", async () => {
     const query = vi.fn()
     await expect(
       authorizePendingUploadIntent(
         { query } as never,
         { kind: "store-calibration-certificate", visitId: "visit-id" },
-        { grantedCapabilities: new Set(), userId: "user-id" }
+        { grantedCapabilities: new Set(["store.asset_maintenance.write"]), userId: "user-id" }
       )
     ).rejects.toThrow("Upload operation is not permitted.")
     expect(query).not.toHaveBeenCalled()
