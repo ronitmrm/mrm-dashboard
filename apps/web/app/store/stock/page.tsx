@@ -292,7 +292,7 @@ export default async function StoreStockPage({
           >
             <TableHeader>
               <TableRow>
-                {mode !== "view" ? <TableHead>Select</TableHead> : null}
+                {mode !== "view" && mode !== "adjust" ? <TableHead>Select</TableHead> : null}
                 <TableHead data-filterable="true">
                   Asset Code / Unit ID
                 </TableHead>
@@ -342,7 +342,7 @@ export default async function StoreStockPage({
                     (resumingRepairSelection && selectedRepairUnit))
                 return (
                   <TableRow key={item.rowKey}>
-                    {mode !== "view" ? (
+                    {mode !== "view" && mode !== "adjust" ? (
                       <TableCell>
                         {mode === "repair" ? (
                           canSelectRepairUnit ? (
