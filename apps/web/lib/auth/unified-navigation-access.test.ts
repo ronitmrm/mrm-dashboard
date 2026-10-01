@@ -10,6 +10,7 @@ vi.mock("../production-module", () => ({
 }))
 
 import { getUnifiedNavigationAccess } from "./unified-navigation-access"
+import { accountableStorePermission } from "./department-store-capabilities"
 
 beforeEach(() => {
   authorization.granted = []
@@ -74,4 +75,24 @@ it("opens operational navigation only for independent scoped entry reads", async
   expect(scoped.operationalEntryReadKeys).toEqual([
     "entries.cnc.work_order.read",
   ])
+})
+
+it("shows departmental Store only for its own floor grant", async () => {
+  authorization.granted = [
+    "operations.floors.cnc.store.read",
+    "quality.store.read",
+    "iso.calibration_plan.read",
+  ]
+  const access = await getUnifiedNavigationAccess("department-store-user")
+  expect(access.productionStoreFloorCodes).toEqual(["cnc"])
+  expect(access.operations).toBe(true)
+  expect(access.qualityControlHrefs).toContain("/quality-control/store")
+  expect(access.isoCalibrationPlan).toBe(true)
+})
+
+it("maps each accountable Store to its scoped permission", () => {
+  expect(accountableStorePermission("MAIN", "write")).toBe("store.asset_movement.write")
+  expect(accountableStorePermission("QUALITY", "read")).toBe("quality.store.read")
+  expect(accountableStorePermission("cnc", "write")).toBe("operations.floors.cnc.store.write")
+  expect(() => accountableStorePermission("unknown", "read")).toThrow()
 })

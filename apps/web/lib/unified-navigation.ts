@@ -130,6 +130,8 @@ export const isoDocumentNavigation = [
 
 export const qualityControlNavigation = [
   { href: "/quality-control", icon: ShieldCheck, label: "Rejection Entry" },
+  { href: "/quality-control/calibration", icon: Gauge, label: "Calibration" },
+  { href: "/quality-control/store", icon: Boxes, label: "Quality Store" },
 ] as const
 
 export function dashboardTabHref(
@@ -621,6 +623,11 @@ export const storeNavigation = [
     href: "/store/movement",
     icon: Route,
     label: "Movement",
+  },
+  {
+    href: "/store/department-transfers",
+    icon: Boxes,
+    label: "Department Transfers",
   },
 ] as const
 

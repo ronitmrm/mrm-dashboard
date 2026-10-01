@@ -1,6 +1,8 @@
 import { administrationPageAccess } from "./administration-capabilities"
 import { brandingPageAccess } from "./branding-capabilities"
 import { qualityControlPageAccess } from "./quality-control-capabilities"
+import { departmentStorePageAccess } from "./department-store-capabilities"
+import { isoCalibrationPlanPageAccess } from "./iso-calibration-plan-capabilities"
 import { commercialPageAccess } from "./commercial-capabilities"
 import { storePageAccess } from "./store-capabilities"
 import { hrPageAccess } from "./hr-capabilities"
@@ -14,6 +16,8 @@ import type { PageAccessDefinition } from "./page-access-types"
 export const pageAccessCatalog: readonly PageAccessDefinition[] = [
   ...brandingPageAccess,
   ...qualityControlPageAccess,
+  ...departmentStorePageAccess,
+  isoCalibrationPlanPageAccess,
   ...administrationPageAccess,
   ...commercialPageAccess,
   ...storePageAccess,

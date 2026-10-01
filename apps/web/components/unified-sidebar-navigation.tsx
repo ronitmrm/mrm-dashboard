@@ -48,6 +48,7 @@ import {
 import { Input } from "@workspace/ui/components/input"
 
 import type { UnifiedNavigationAccess } from "@/lib/auth/unified-navigation-access"
+import { departmentStoreHref } from "@/lib/auth/department-store-capabilities"
 import { masterDataNavigationLinks } from "@/lib/master-data-navigation"
 import { sidebarModuleLabels } from "@/lib/sidebar-module-labels"
 import {
@@ -99,6 +100,9 @@ function defaultExpandedSections(
   activeDashboardTab?: DashboardTabId
 ): ExpandedSections {
   const onProduction = pathname === "/" || pathname.startsWith("/dashboard")
+  const productionStoreFloor = productionFloors.find(
+    (floor) => pathname === departmentStoreHref(floor.code)
+  )?.code
   const onCommercialMasterData = commercialMasterDataWorkspaceNavigation.some(
     ({ href }) => pathname === href || pathname.startsWith(`${href}/`)
   )
@@ -130,11 +134,17 @@ function defaultExpandedSections(
     store: pathname.startsWith("/store"),
     isoDocument: isoDocumentNavigation.some((item) => pathname.startsWith(item.href)),
     productionConventional:
-      onProduction && activeProductionFloor === "conventional",
+      (onProduction && activeProductionFloor === "conventional") ||
+      productionStoreFloor === "conventional",
     productionConventional02:
-      onProduction && activeProductionFloor === "conventional-02",
-    productionCnc: onProduction && activeProductionFloor === "cnc",
-    productionForging: onProduction && activeProductionFloor === "forging",
+      (onProduction && activeProductionFloor === "conventional-02") ||
+      productionStoreFloor === "conventional-02",
+    productionCnc:
+      (onProduction && activeProductionFloor === "cnc") ||
+      productionStoreFloor === "cnc",
+    productionForging:
+      (onProduction && activeProductionFloor === "forging") ||
+      productionStoreFloor === "forging",
   }
 }
 
@@ -247,6 +257,8 @@ export function UnifiedSidebarNavigation({
         ? true
         : item.href === "/iso-document/rejections"
           ? navigationAccess.qualityControlHrefs?.includes(item.href)
+          : item.href === "/iso-document/calibration-plan"
+            ? navigationAccess.isoCalibrationPlan
           : item.href.startsWith("/iso-document/machine-maintenance")
             ? navigationAccess.maintenanceHrefs?.includes(
                 "/?tab=maintenanceTab"
@@ -277,6 +289,10 @@ export function UnifiedSidebarNavigation({
     ? productionFloors
         .map((floor) => ({
           floor,
+          showStore:
+            (navigationAccess.productionStoreFloorCodes?.includes(floor.code) ?? false) &&
+            (!normalizedMenuSearch ||
+              `${floor.label} ${floor.shortLabel} production store stock inventory`.toLowerCase().includes(normalizedMenuSearch)),
           items: filterProductionItems(
             productionFloorNavigation.filter(
               (item) =>
@@ -289,7 +305,7 @@ export function UnifiedSidebarNavigation({
             `${floor.label} ${floor.shortLabel} production`.toLowerCase()
           ),
         }))
-        .filter(({ items }) => items.length)
+        .filter(({ items, showStore }) => items.length || showStore)
     : []
   const filteredUniversalProductionNavigation = navigationAccess.operations
     ? filterProductionItems(
@@ -739,15 +755,17 @@ export function UnifiedSidebarNavigation({
         </NavigationSection>
       ) : null}
 
-      {filteredProductionNavigation.map(({ floor, items }) => {
+      {filteredProductionNavigation.map(({ floor, items, showStore }) => {
         const sectionId = productionSectionIds[floor.code]
+        const storeHref = departmentStoreHref(floor.code)
         return (
           <NavigationSection
             icon={Factory}
             isActive={
-              productionFloorNavigation.some(
+              pathname === storeHref ||
+              (productionFloorNavigation.some(
                 (item) => item.id === activeDashboardTab
-              ) && floor.code === activeProductionFloor
+              ) && floor.code === activeProductionFloor)
             }
             key={floor.code}
             label={floor.label}
@@ -783,6 +801,20 @@ export function UnifiedSidebarNavigation({
                 </SidebarMenuSubButton>
               </SidebarMenuSubItem>
             ))}
+            {showStore ? (
+              <SidebarMenuSubItem key={`${floor.code}:store`}>
+                <SidebarMenuSubButton
+                  asChild
+                  className={submoduleButtonClassName}
+                  isActive={pathname === storeHref}
+                >
+                  <a href={storeHref}>
+                    <Boxes aria-hidden="true" />
+                    <span>Store</span>
+                  </a>
+                </SidebarMenuSubButton>
+              </SidebarMenuSubItem>
+            ) : null}
           </NavigationSection>
         )
       })}

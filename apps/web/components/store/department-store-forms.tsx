@@ -1,0 +1,295 @@
+"use client"
+
+import { useActionState, useState, type ReactNode } from "react"
+import type { createDepartmentStoreRepository } from "@workspace/db"
+import { Button } from "@workspace/ui/components/button"
+import { Input } from "@workspace/ui/components/input"
+import { NativeSelect, NativeSelectOption } from "@workspace/ui/components/native-select"
+
+import {
+  adjustDepartmentQuantityAction,
+  consumeDepartmentQuantityAction,
+  createQualityGaugeSetAction,
+  moveDepartmentAssetAction,
+  moveQualityGaugeSetAction,
+  replaceQualityGaugeSetMemberAction,
+  transferDepartmentAssetAction,
+  transferDepartmentQuantityAction,
+  type DepartmentStoreActionState,
+} from "@/app/department-store/actions"
+import { FormGrid, FormSection } from "@/components/ui/golden-patterns"
+
+type Workspace = Awaited<ReturnType<ReturnType<typeof createDepartmentStoreRepository>["listStoreWorkspace"]>>
+type StoreAction = (
+  state: DepartmentStoreActionState,
+  formData: FormData
+) => Promise<DepartmentStoreActionState>
+
+function ActionForm({ action, children, storeCode, submitLabel }: {
+  action: StoreAction
+  children: ReactNode
+  storeCode: string
+  submitLabel: string
+}) {
+  const [state, dispatch, pending] = useActionState(action, { error: null })
+  return (
+    <form action={dispatch} className="grid gap-4">
+      <input type="hidden" name="store_code" value={storeCode} />
+      {children}
+      {state.error ? <p role="alert" className="text-sm text-destructive">{state.error}</p> : null}
+      <Button className="w-fit" disabled={pending} type="submit">
+        {pending ? "Saving…" : submitLabel}
+      </Button>
+    </form>
+  )
+}
+
+function TextField({ label, name, ...props }: React.ComponentProps<typeof Input> & {
+  label: string
+  name: string
+}) {
+  return <label className="grid gap-1.5 text-sm font-medium">
+    <span>{label}</span><Input name={name} {...props} />
+  </label>
+}
+
+function SelectField({ children, label, name, ...props }: React.ComponentProps<typeof NativeSelect> & {
+  label: string
+  name: string
+}) {
+  return <label className="grid gap-1.5 text-sm font-medium">
+    <span>{label}</span><NativeSelect className="w-full" name={name} {...props}>{children}</NativeSelect>
+  </label>
+}
+
+function DestinationFields({
+  departments,
+  machines,
+  store,
+  vendors,
+}: {
+  departments: Array<{ code: string; id: string; name: string }>
+  machines: Array<{ id: string; machineNumber: string; name: string | null }>
+  store: Workspace["store"]
+  vendors: Array<{ code: string; id: string; name: string }>
+}) {
+  const [holderType, setHolderType] = useState<"STORE" | "DEPARTMENT" | "MACHINE" | "VENDOR">("STORE")
+  const [holderReference, setHolderReference] = useState(store.defaultLocationId)
+  return <>
+    <SelectField label="Physical destination" name="holder_type" required value={holderType}
+      onValueChange={(value) => {
+        setHolderType(value as typeof holderType)
+        setHolderReference(value === "STORE" ? store.defaultLocationId : "")
+      }}>
+      <NativeSelectOption value="STORE">Return to this Store</NativeSelectOption>
+      <NativeSelectOption value="DEPARTMENT">Department use</NativeSelectOption>
+      <NativeSelectOption value="MACHINE">Machine use</NativeSelectOption>
+      <NativeSelectOption value="VENDOR">Vendor</NativeSelectOption>
+    </SelectField>
+    <SelectField label="Destination" name="holder_reference" required value={holderReference}
+      onValueChange={setHolderReference}>
+      {holderType === "STORE" ? <NativeSelectOption value={store.defaultLocationId}>{store.name}</NativeSelectOption> : null}
+      {holderType !== "STORE" ? <NativeSelectOption value="">Select destination</NativeSelectOption> : null}
+      {holderType === "DEPARTMENT" ? departments.map((department) =>
+        <NativeSelectOption key={department.code} value={department.code}>{department.code} · {department.name}</NativeSelectOption>) : null}
+      {holderType === "MACHINE" ? machines.map((machine) =>
+        <NativeSelectOption key={machine.id} value={machine.id}>{machine.machineNumber} · {machine.name || machine.machineNumber}</NativeSelectOption>) : null}
+      {holderType === "VENDOR" ? vendors.map((vendor) =>
+        <NativeSelectOption key={vendor.id} value={vendor.id}>{vendor.code} · {vendor.name}</NativeSelectOption>) : null}
+    </SelectField>
+    <input name="vendor_id" type="hidden" value={holderType === "VENDOR" ? holderReference : ""} />
+  </>
+}
+
+export function DepartmentStoreForms({ assets, consumables, departments, gaugeSets, machines, store, stores, vendors }: {
+  assets: Workspace["assets"]
+  consumables: Workspace["consumables"]
+  departments: Array<{ code: string; id: string; name: string }>
+  gaugeSets: Workspace["gaugeSets"]
+  machines: Array<{ id: string; machineNumber: string; name: string | null }>
+  store: Workspace["store"]
+  stores: Workspace["stores"]
+  vendors: Array<{ code: string; id: string; name: string }>
+}) {
+  const availableConsumables = consumables.filter((item) => Number(item.availableQuantity) > 0)
+  const movableAssets = assets.filter((asset) => asset.status !== "SCRAPPED")
+  const availableGauges = assets.filter((asset) =>
+    asset.isGauge && !asset.inGaugeSet && asset.status === "AVAILABLE" && asset.holderType === "STORE"
+  )
+  const otherStores = stores.filter((destination) => destination.id !== store.id)
+  const [replacementSetId, setReplacementSetId] = useState("")
+  const replacementSet = gaugeSets.find((set) => set.id === replacementSetId)
+  return <div className="grid gap-5">
+    <FormSection title="Transfer quantity to another Store"
+      description="Responsibility and available quantity move to the receiving Store. Company on-hand stays the same."
+      width="wide">
+      <ActionForm action={transferDepartmentQuantityAction} storeCode={store.code} submitLabel="Transfer Quantity">
+        <FormGrid className="xl:grid-cols-2">
+          <SelectField label="Consumable Asset Code" name="item_type_id" required>
+            <NativeSelectOption value="">Select an available item</NativeSelectOption>
+            {availableConsumables.map((item) => <NativeSelectOption key={item.itemTypeId} value={item.itemTypeId}>
+              {item.typeCode} · {item.assetName} · available {item.availableQuantity} {item.unit}
+            </NativeSelectOption>)}
+          </SelectField>
+          <SelectField label="Receiving Store" name="destination_store_code" required>
+            <NativeSelectOption value="">Select Store</NativeSelectOption>
+            {otherStores.map((destination) => <NativeSelectOption key={destination.id} value={destination.code}>
+              {destination.name}
+            </NativeSelectOption>)}
+          </SelectField>
+          <TextField label="Quantity" name="quantity" min="0.001" step="0.001" type="number" required />
+          <TextField label="Remark" name="remark" />
+        </FormGrid>
+      </ActionForm>
+    </FormSection>
+
+    <FormSection title="Transfer Unit ID accountability"
+      description="Use this when another Store takes responsibility. A separate physical move can place equipment at a machine without transferring responsibility."
+      width="wide">
+      <ActionForm action={transferDepartmentAssetAction} storeCode={store.code} submitLabel="Transfer Accountability">
+        <FormGrid className="xl:grid-cols-2">
+          <SelectField label="Unit ID" name="asset_code" required>
+            <NativeSelectOption value="">Select Unit ID</NativeSelectOption>
+            {movableAssets.map((asset) => <NativeSelectOption key={asset.assetCode} value={asset.assetCode}>
+              {asset.assetCode} · {asset.assetName}
+            </NativeSelectOption>)}
+          </SelectField>
+          <SelectField label="Receiving Store" name="destination_store_code" required>
+            <NativeSelectOption value="">Select Store</NativeSelectOption>
+            {otherStores.map((destination) => <NativeSelectOption key={destination.id} value={destination.code}>
+              {destination.name}
+            </NativeSelectOption>)}
+          </SelectField>
+          <TextField label="Reason / handover note" name="remark" />
+        </FormGrid>
+      </ActionForm>
+    </FormSection>
+
+    <FormSection title="Record physical movement"
+      description="Move a Unit ID to a department, machine, vendor, or back to this Store. Accountability stays here."
+      width="wide">
+      <ActionForm action={moveDepartmentAssetAction} storeCode={store.code} submitLabel="Record Movement">
+        <FormGrid className="xl:grid-cols-2">
+          <SelectField label="Unit ID" name="asset_code" required>
+            <NativeSelectOption value="">Select Unit ID</NativeSelectOption>
+            {movableAssets.map((asset) => <NativeSelectOption key={asset.assetCode} value={asset.assetCode}>
+              {asset.assetCode} · {asset.assetName} · {asset.holderName || asset.holderType}
+            </NativeSelectOption>)}
+          </SelectField>
+          <DestinationFields departments={departments} machines={machines} store={store} vendors={vendors} />
+          <TextField label="Movement note" name="remark" />
+        </FormGrid>
+      </ActionForm>
+    </FormSection>
+
+    {store.kind !== "MAIN" ? <FormSection title="Record consumable use"
+      description="Record only the quantity actually used, with the machine or Job Card and operator. Unused stock stays available here."
+      width="wide">
+      <ActionForm action={consumeDepartmentQuantityAction} storeCode={store.code} submitLabel="Record Consumption">
+        <FormGrid className="xl:grid-cols-2">
+          <SelectField label="Consumable Asset Code" name="item_type_id" required>
+            <NativeSelectOption value="">Select an available item</NativeSelectOption>
+            {availableConsumables.map((item) => <NativeSelectOption key={item.itemTypeId} value={item.itemTypeId}>
+              {item.typeCode} · {item.assetName} · available {item.availableQuantity} {item.unit}
+            </NativeSelectOption>)}
+          </SelectField>
+          <TextField label="Quantity used" name="quantity" min="0.001" step="0.001" type="number" required />
+          <SelectField label="Machine" name="machine_reference">
+            <NativeSelectOption value="">No machine selected</NativeSelectOption>
+            {machines.map((machine) => <NativeSelectOption key={machine.id} value={machine.machineNumber}>
+              {machine.machineNumber} · {machine.name || machine.machineNumber}
+            </NativeSelectOption>)}
+          </SelectField>
+          <TextField label="Job Card" name="job_card_reference" />
+          <TextField label="Operator" name="operator_name" required />
+          <TextField label="Used on" name="consumed_on" type="date" required />
+          <TextField label="Remark" name="remark" />
+        </FormGrid>
+      </ActionForm>
+    </FormSection> : null}
+
+    <FormSection title="Record loss or damage"
+      description="Adjustment reduces company on-hand and retains an auditable reason."
+      width="wide">
+      <ActionForm action={adjustDepartmentQuantityAction} storeCode={store.code} submitLabel="Record Adjustment">
+        <FormGrid className="xl:grid-cols-2">
+          <SelectField label="Consumable Asset Code" name="item_type_id" required>
+            <NativeSelectOption value="">Select an available item</NativeSelectOption>
+            {availableConsumables.map((item) => <NativeSelectOption key={item.itemTypeId} value={item.itemTypeId}>
+              {item.typeCode} · {item.assetName} · available {item.availableQuantity} {item.unit}
+            </NativeSelectOption>)}
+          </SelectField>
+          <SelectField label="Reason" name="reason" required>
+            <NativeSelectOption value="">Select reason</NativeSelectOption>
+            <NativeSelectOption value="LOSS">Loss</NativeSelectOption>
+            <NativeSelectOption value="DAMAGE">Damage</NativeSelectOption>
+          </SelectField>
+          <TextField label="Quantity" name="quantity" min="0.001" step="0.001" type="number" required />
+          <TextField label="Details" name="remark" required />
+        </FormGrid>
+      </ActionForm>
+    </FormSection>
+
+    {store.kind === "QUALITY" ? <>
+      <FormSection title="Combine two gauges"
+        description="Give two individually identified gauges one Set ID for joint movement. Each Unit ID keeps its own calibration record."
+        width="wide">
+        <ActionForm action={createQualityGaugeSetAction} storeCode={store.code} submitLabel="Create Gauge Set">
+          <FormGrid className="xl:grid-cols-2">
+            <TextField label="Set name" name="set_name" required />
+            <SelectField label="First gauge Unit ID" name="first_asset_code" required>
+              <NativeSelectOption value="">Select first gauge</NativeSelectOption>
+              {availableGauges.map((asset) => <NativeSelectOption key={asset.assetCode} value={asset.assetCode}>{asset.assetCode} · {asset.assetName}</NativeSelectOption>)}
+            </SelectField>
+            <SelectField label="Second gauge Unit ID" name="second_asset_code" required>
+              <NativeSelectOption value="">Select second gauge</NativeSelectOption>
+              {availableGauges.map((asset) => <NativeSelectOption key={asset.assetCode} value={asset.assetCode}>{asset.assetCode} · {asset.assetName}</NativeSelectOption>)}
+            </SelectField>
+          </FormGrid>
+        </ActionForm>
+      </FormSection>
+      <FormSection title="Move a gauge set"
+        description="Both member Unit IDs move together. An incomplete set cannot be moved as a set."
+        width="wide">
+        <ActionForm action={moveQualityGaugeSetAction} storeCode={store.code} submitLabel="Move Set">
+          <FormGrid className="xl:grid-cols-2">
+            <SelectField label="Set ID" name="set_id" required>
+              <NativeSelectOption value="">Select complete set</NativeSelectOption>
+              {gaugeSets.filter((set) => set.status === "COMPLETE").map((set) =>
+                <NativeSelectOption key={set.id} value={set.id}>{set.setCode} · {set.name} · {set.assetCodes.join(" + ")}</NativeSelectOption>)}
+            </SelectField>
+            <DestinationFields departments={departments} machines={machines} store={store} vendors={vendors} />
+            <TextField label="Movement note" name="remark" />
+          </FormGrid>
+        </ActionForm>
+      </FormSection>
+      <FormSection title="Replace a gauge in a set"
+        description="Keep the Set ID while replacing one member. The old and new Unit IDs retain their separate history."
+        width="wide">
+        <ActionForm action={replaceQualityGaugeSetMemberAction} storeCode={store.code} submitLabel="Replace Member">
+          <FormGrid className="xl:grid-cols-2">
+            <SelectField label="Set ID" name="set_id" required value={replacementSetId}
+              onValueChange={setReplacementSetId}>
+              <NativeSelectOption value="">Select set</NativeSelectOption>
+              {gaugeSets.map((set) => <NativeSelectOption key={set.id} value={set.id}>
+                {set.setCode} · {set.name} · {set.assetCodes.join(" + ")}
+              </NativeSelectOption>)}
+            </SelectField>
+            <SelectField key={replacementSetId} label="Member to replace" name="old_asset_code" required>
+              <NativeSelectOption value="">Select member Unit ID</NativeSelectOption>
+              {(replacementSet?.assetCodes ?? []).map((assetCode) =>
+                <NativeSelectOption key={assetCode} value={assetCode}>{assetCode}</NativeSelectOption>)}
+            </SelectField>
+            <SelectField label="New gauge Unit ID" name="new_asset_code" required>
+              <NativeSelectOption value="">Select replacement</NativeSelectOption>
+              {availableGauges.map((asset) =>
+                <NativeSelectOption key={asset.assetCode} value={asset.assetCode}>
+                  {asset.assetCode} · {asset.assetName}
+                </NativeSelectOption>)}
+            </SelectField>
+          </FormGrid>
+        </ActionForm>
+      </FormSection>
+    </> : null}
+  </div>
+}

@@ -1,3 +1,5 @@
+import { productionFloors } from "@workspace/db/production-floors"
+
 export const sidebarModuleLabels = {
   branding: "Document Templates",
   qualityControl: "Quality Control",
@@ -49,6 +51,14 @@ export function sidebarModuleForPermission(
 ) {
   if (permissionKey.startsWith("iso.documents."))
     return sidebarModuleLabels.isoDocument
+  if (permissionKey.startsWith("iso.calibration_plan."))
+    return sidebarModuleLabels.isoDocument
+  if (permissionKey.startsWith("quality.store."))
+    return sidebarModuleLabels.qualityControl
+  const floorStore = productionFloors.find((floor) =>
+    permissionKey.startsWith(`operations.floors.${floor.code}.store.`)
+  )
+  if (floorStore) return floorStore.label
   if (permissionKey.startsWith("quality.control.")) return sidebarModuleLabels.qualityControl
   if (permissionKey.startsWith("quality.rejection_register.")) return sidebarModuleLabels.isoDocument
   if (startsWithAny(permissionKey, masterDataPermissionPrefixes)) {
@@ -94,6 +104,9 @@ export function sidebarSubmoduleForPermission(
   }
 
   const mappings = [
+    ["iso.calibration_plan.", "Calibration Plan"],
+    ["quality.control.calibration.", "Calibration"],
+    ["quality.store.", "Quality Store"],
     ["iso.documents.", "Master Document List"],
     ["quality.control.", "Rejection Entry"],
     ["quality.rejection_register.", "Rejection Register"],
@@ -150,6 +163,9 @@ export function sidebarSubmoduleForPermission(
     ["planning.", "Production Dashboard"],
     ["quality.", "Production Dashboard"],
   ] as const
+  if (productionFloors.some((floor) =>
+    permissionKey.startsWith(`operations.floors.${floor.code}.store.`)
+  )) return "Store"
   return (
     mappings.find(([prefix]) => permissionKey.startsWith(prefix))?.[1] ??
     fallbackLabel
