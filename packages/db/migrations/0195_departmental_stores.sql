@@ -22,10 +22,10 @@ SELECT id, 'MAIN', 'Main Store', 'MAIN' FROM core.organizations;
 INSERT INTO store.accountable_stores (organization_id, code, name, kind)
 SELECT id, 'QUALITY', 'Quality Store', 'QUALITY' FROM core.organizations;
 INSERT INTO store.accountable_stores (
-  organization_id, code, name, kind, production_floor_code
+  organization_id, code, name, kind, production_floor_code, active
 )
 SELECT floor.organization_id, floor.code, floor.name || ' Store',
-  'PRODUCTION', floor.code
+  'PRODUCTION', floor.code, floor.active
 FROM manufacturing.production_floors floor;
 
 ALTER TABLE store.locations
