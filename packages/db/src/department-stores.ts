@@ -687,31 +687,58 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
           occurredAt: string
           performedBy: string | null
           quantity: string
+          remark: string | null
           subjectCode: string
           to: string | null
+          typeCode: string
+          unitId: string | null
         }>(
           `SELECT movement.moved_at::text AS "occurredAt",
             COALESCE(asset.asset_code, item.type_code) AS "subjectCode",
+            item.type_code AS "typeCode", asset.asset_code AS "unitId",
             trim_scale(movement.quantity)::text AS quantity,
             concat_ws(' / ', movement.from_holder_type,
               movement.from_holder_name) AS "from",
             concat_ws(' / ', movement.to_holder_type,
               movement.to_holder_name) AS "to",
             movement.movement_type AS kind,
-            movement.moved_by AS "performedBy"
+            movement.moved_by AS "performedBy", movement.remark
            FROM store.stock_movements movement
            JOIN store.locations location ON location.id = movement.location_id
            JOIN store.item_types item ON item.id = movement.item_type_id
            LEFT JOIN store.assets asset ON asset.id = movement.asset_id
            WHERE movement.organization_id = $1
+             AND movement.department_stock_operation_id IS NULL
              AND (location.accountable_store_id = $2
                OR asset.accountable_store_id = $2)
            UNION ALL
-           SELECT transfer.transferred_at::text, asset.asset_code, '1',
+           SELECT operation.created_at::text, item.type_code,
+             item.type_code, NULL::text,
+             trim_scale(operation.quantity)::text,
+             source.name, destination.name, operation.operation_type,
+             movement.moved_by, operation.remark
+           FROM store.department_stock_operations operation
+           JOIN store.item_types item ON item.id = operation.item_type_id
+           JOIN store.accountable_stores source
+             ON source.id = operation.source_store_id
+           LEFT JOIN store.accountable_stores destination
+             ON destination.id = operation.destination_store_id
+           LEFT JOIN LATERAL (
+             SELECT moved_by FROM store.stock_movements
+             WHERE department_stock_operation_id = operation.id
+             ORDER BY moved_at LIMIT 1
+           ) movement ON true
+           WHERE operation.organization_id = $1
+             AND (operation.source_store_id = $2
+               OR operation.destination_store_id = $2)
+           UNION ALL
+           SELECT transfer.transferred_at::text, asset.asset_code,
+             item.type_code, asset.asset_code, '1',
              source.name, destination.name, 'ACCOUNTABILITY_TRANSFER',
-             transfer.transferred_by
+             transfer.transferred_by, transfer.remark
            FROM store.asset_accountability_transfers transfer
            JOIN store.assets asset ON asset.id = transfer.asset_id
+           JOIN store.item_types item ON item.id = asset.item_type_id
            JOIN store.accountable_stores source
              ON source.id = transfer.source_store_id
            JOIN store.accountable_stores destination
@@ -719,7 +746,7 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
            WHERE transfer.organization_id = $1
              AND (transfer.source_store_id = $2
                OR transfer.destination_store_id = $2)
-           ORDER BY "occurredAt" DESC LIMIT 100`,
+           ORDER BY "occurredAt" DESC LIMIT 300`,
           [input.organizationId, store.id]
         ),
       ])

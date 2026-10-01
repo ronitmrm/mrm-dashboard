@@ -46,13 +46,19 @@ async function withStoreWrite(
     repository: ReturnType<typeof createDepartmentStoreRepository>,
     context: { actorUserId: string; movedBy: string; organizationId: string; storeCode: string }
   ) => Promise<unknown>,
-  mainCapability: "store.asset_movement.write" | "store.asset_repair.write" = "store.asset_movement.write"
+  mainCapability: "store.asset_movement.write" | "store.asset_repair.write" = "store.asset_movement.write",
+  mainReturnPath?: "/store/movement" | "/store/stock" | "/store/orders",
+  requireMainStockRead = false
 ): Promise<DepartmentStoreActionState> {
   const storeCode = required(formData, "store_code")
-  const { capability, path } = permissionForStore(storeCode)
+  const { capability, path: storePath } = permissionForStore(storeCode)
+  const path = storeCode === "MAIN" && mainReturnPath ? mainReturnPath : storePath
   const session = storeCode === "MAIN"
     ? await requireStoreAction(mainCapability, path)
     : await requireCapability(capability, path)
+  if (storeCode === "MAIN" && requireMainStockRead) {
+    await requireCapability("store.stock.read", path)
+  }
   const store = createStoreRepository({ connectionString: readAuthEnvironment().connectionString })
   let organizationId: string
   try {
@@ -72,9 +78,9 @@ async function withStoreWrite(
     return { error: error instanceof Error ? error.message : "The Store operation could not be saved." }
   }
   for (const destination of [
-    "/store/department-transfers",
     "/store/stock",
     "/store/movement",
+    "/store/orders",
     "/quality-control/store",
     ...productionFloors.map(({ code }) => departmentStoreHref(code)),
   ]) revalidatePath(destination)
@@ -93,7 +99,7 @@ export async function transferDepartmentQuantityAction(
       itemTypeId: required(formData, "item_type_id"),
       quantity: quantity(formData),
       remark: optional(formData, "remark"),
-    })
+    }), "store.asset_movement.write", "/store/movement", true
   )
 }
 
@@ -130,7 +136,7 @@ export async function adjustDepartmentQuantityAction(
       reason,
       remark: optional(formData, "remark"),
     })
-  })
+  }, "store.asset_movement.write", "/store/stock", true)
 }
 
 export async function transferDepartmentAssetAction(
@@ -144,7 +150,7 @@ export async function transferDepartmentAssetAction(
       destinationStoreCode: required(formData, "destination_store_code"),
       assetCode: required(formData, "asset_code"),
       remark: optional(formData, "remark"),
-    })
+    }), "store.asset_movement.write", "/store/movement", true
   )
 }
 
@@ -170,7 +176,7 @@ export async function moveDepartmentAssetAction(
       assetCode: required(formData, "asset_code"),
       ...movementDestination(formData),
       remark: optional(formData, "remark"),
-    })
+    }), "store.asset_movement.write", "/store/movement"
   )
 }
 
@@ -278,7 +284,7 @@ export async function createDepartmentRepairOrderAction(
       await artifacts.close()
       await store.close()
     }
-  }, "store.asset_repair.write")
+  }, "store.asset_repair.write", "/store/orders")
 }
 
 export async function completeDepartmentRepairOrderAction(
@@ -301,5 +307,5 @@ export async function completeDepartmentRepairOrderAction(
     } finally {
       await store.close()
     }
-  }, "store.asset_repair.write")
+  }, "store.asset_repair.write", "/store/orders")
 }
