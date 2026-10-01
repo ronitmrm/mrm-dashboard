@@ -51,11 +51,18 @@ async function findStore(
   lock = false
 ) {
   const result = await client.query<AccountableStore>(
-    `SELECT id, code, name, kind,
-      production_floor_code AS "productionFloorCode",
-      default_location_id AS "defaultLocationId"
-     FROM store.accountable_stores
-     WHERE organization_id = $1 AND lower(code) = lower($2) AND active
+    `SELECT accountable.id, accountable.code, accountable.name,
+      accountable.kind,
+      accountable.production_floor_code AS "productionFloorCode",
+      accountable.default_location_id AS "defaultLocationId"
+     FROM store.accountable_stores accountable
+     JOIN store.locations location
+       ON location.id = accountable.default_location_id
+       AND location.organization_id = accountable.organization_id
+       AND location.accountable_store_id = accountable.id
+       AND location.location_type = 'STORE' AND location.active
+     WHERE accountable.organization_id = $1
+       AND lower(accountable.code) = lower($2) AND accountable.active
      ${lock ? "FOR UPDATE" : ""}`,
     [organizationId, requiredText(code, "Store")]
   )
@@ -513,11 +520,18 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
       storeCode: string
     }) {
       const storeResult = await pool.query<AccountableStore>(
-        `SELECT id, code, name, kind,
-          production_floor_code AS "productionFloorCode",
-          default_location_id AS "defaultLocationId"
-         FROM store.accountable_stores
-         WHERE organization_id = $1 AND lower(code) = lower($2) AND active`,
+        `SELECT accountable.id, accountable.code, accountable.name,
+          accountable.kind,
+          accountable.production_floor_code AS "productionFloorCode",
+          accountable.default_location_id AS "defaultLocationId"
+         FROM store.accountable_stores accountable
+         JOIN store.locations location
+           ON location.id = accountable.default_location_id
+           AND location.organization_id = accountable.organization_id
+           AND location.accountable_store_id = accountable.id
+           AND location.location_type = 'STORE' AND location.active
+         WHERE accountable.organization_id = $1
+           AND lower(accountable.code) = lower($2) AND accountable.active`,
         [input.organizationId, input.storeCode]
       )
       const store = storeResult.rows[0]
@@ -525,11 +539,18 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
       const [stores, consumables, serializedTotals, assets, gaugeSets, movements] =
         await Promise.all([
         pool.query<AccountableStore>(
-          `SELECT id, code, name, kind,
-            production_floor_code AS "productionFloorCode",
-            default_location_id AS "defaultLocationId"
-           FROM store.accountable_stores
-           WHERE organization_id = $1 AND active ORDER BY kind, name`,
+          `SELECT accountable.id, accountable.code, accountable.name,
+            accountable.kind,
+            accountable.production_floor_code AS "productionFloorCode",
+            accountable.default_location_id AS "defaultLocationId"
+           FROM store.accountable_stores accountable
+           JOIN store.locations location
+             ON location.id = accountable.default_location_id
+             AND location.organization_id = accountable.organization_id
+             AND location.accountable_store_id = accountable.id
+             AND location.location_type = 'STORE' AND location.active
+           WHERE accountable.organization_id = $1 AND accountable.active
+           ORDER BY accountable.kind, accountable.name`,
           [input.organizationId]
         ),
         pool.query<{
@@ -578,7 +599,8 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
               WHERE asset.accountable_store_id = $2
                 AND asset.status = 'AVAILABLE'
                 AND asset.current_holder_type = 'STORE'
-                AND location.accountable_store_id = $2)::text
+                AND location.accountable_store_id = $2
+                AND location.location_type = 'STORE' AND location.active)::text
               AS "availableQuantity"
            FROM store.item_types item
            LEFT JOIN store.assets asset ON asset.item_type_id = item.id
