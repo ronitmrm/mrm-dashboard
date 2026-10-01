@@ -2477,4 +2477,54 @@ describe("Store requests", () => {
       status: "UNDER_MAINTENANCE",
     })
   })
+
+  test("requires an active gauge set to move together", async () => {
+    const location = await store.createLocation({
+      code: `SET-SOURCE-${suffix}`,
+      name: `Gauge Source Store ${suffix}`,
+      organizationId,
+    })
+    const item = await store.createItemType({
+      ...(await createClassification("Gauge Set Movement")),
+      assetType: "NON_CONSUMABLE",
+      identificationName: `Gauge Set Movement ${suffix}`,
+      organizationId,
+      unit: "Nos",
+    })
+    const receipt = await store.receiveStock({
+      locationId: location.id,
+      organizationId,
+      purchaseOrderLineId: (await createPurchaseOrder(item.id, 2, "100.00")).id,
+      quantity: 2,
+    })
+    for (const assetCode of receipt.assetCodes) {
+      await departmentStore.transferAssetAccountability({
+        assetCode,
+        destinationStoreCode: "QUALITY",
+        organizationId,
+        sourceStoreCode: "MAIN",
+      })
+    }
+    await departmentStore.createGaugeSet({
+      assetCodes: [receipt.assetCodes[0]!, receipt.assetCodes[1]!],
+      name: `Gauge Set ${suffix}`,
+      organizationId,
+      storeCode: "QUALITY",
+    })
+    const quality = await departmentStore.getStoreByCode(organizationId, "QUALITY")
+    const destination = await pool.query<{ id: string }>(
+      `INSERT INTO store.locations (
+         organization_id, code, name, location_type, accountable_store_id
+       ) VALUES ($1, $2, $3, 'STORE', $4) RETURNING id`,
+      [organizationId, `QUALITY-TEST-${suffix}`, "Quality Test Location", quality.id]
+    )
+
+    await expect(departmentStore.moveAsset({
+      assetCode: receipt.assetCodes[0]!,
+      holderReference: destination.rows[0]!.id,
+      holderType: "STORE",
+      organizationId,
+      storeCode: "QUALITY",
+    })).rejects.toThrow("Move this Unit ID with its gauge set.")
+  })
 })
