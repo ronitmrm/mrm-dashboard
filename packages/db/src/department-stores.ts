@@ -354,6 +354,18 @@ async function moveOwnedAsset(
   if (asset.status === "SCRAPPED") {
     throw new Error("A scrapped Unit ID cannot be moved.")
   }
+  if (!input.gaugeSetMovementId) {
+    const grouped = await client.query(
+      `SELECT 1 FROM store.gauge_set_memberships member
+       JOIN store.gauge_sets gauge_set ON gauge_set.id = member.gauge_set_id
+       WHERE member.organization_id = $1 AND member.asset_id = $2
+         AND member.removed_at IS NULL AND gauge_set.active LIMIT 1`,
+      [input.organizationId, asset.id]
+    )
+    if (grouped.rows[0]) {
+      throw new Error("Move this Unit ID with its gauge set.")
+    }
+  }
   const hold = await client.query(
     `SELECT 1 FROM store.repair_purchase_order_items repair
      JOIN store.purchase_orders purchase_order
@@ -363,7 +375,15 @@ async function moveOwnedAsset(
      UNION ALL
      SELECT 1 FROM store.calibration_visits visit
      WHERE visit.organization_id = $1 AND visit.asset_id = $2
-       AND visit.status IN ('DISPATCHED', 'RETURNED')
+       AND (visit.status IN ('DISPATCHED', 'RETURNED')
+         OR (visit.status = 'FAILED' AND NOT EXISTS (
+           SELECT 1 FROM store.calibration_visits later
+           WHERE later.schedule_id = visit.schedule_id
+             AND later.asset_id = visit.asset_id
+             AND later.status = 'PASSED'
+             AND (later.created_at, later.id) >
+               (visit.created_at, visit.id)
+         )))
      LIMIT 1`,
     [input.organizationId, asset.id]
   )
@@ -621,7 +641,8 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
                 WHERE visit.asset_id = asset.id AND visit.status = 'FAILED'
                   AND NOT EXISTS (
                     SELECT 1 FROM store.calibration_visits later
-                    WHERE later.asset_id = asset.id AND later.status = 'PASSED'
+                    WHERE later.schedule_id = visit.schedule_id
+                      AND later.asset_id = asset.id AND later.status = 'PASSED'
                       AND (later.created_at, later.id) >
                         (visit.created_at, visit.id)
                   )
@@ -834,6 +855,16 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
         }
         if (source.id === destination.id) {
           throw new Error("Choose a different destination Store.")
+        }
+        const grouped = await client.query(
+          `SELECT 1 FROM store.gauge_set_memberships member
+           JOIN store.gauge_sets gauge_set ON gauge_set.id = member.gauge_set_id
+           WHERE member.organization_id = $1 AND member.asset_id = $2
+             AND member.removed_at IS NULL AND gauge_set.active LIMIT 1`,
+          [input.organizationId, unit.id]
+        )
+        if (grouped.rows[0]) {
+          throw new Error("Remove this Unit ID from its gauge set before transferring accountability.")
         }
         const openService = await client.query(
           `SELECT 1 FROM store.repair_purchase_order_items repair
@@ -1101,7 +1132,8 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
            WHERE visit.organization_id = $1 AND visit.status = 'FAILED'
              AND NOT EXISTS (
                SELECT 1 FROM store.calibration_visits later
-               WHERE later.asset_id = visit.asset_id
+               WHERE later.schedule_id = visit.schedule_id
+                 AND later.asset_id = visit.asset_id
                  AND later.status = 'PASSED'
                  AND (later.created_at, later.id) > (visit.created_at, visit.id)
              ) LIMIT 1`,
