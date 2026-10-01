@@ -5874,10 +5874,11 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           throw new Error("Enter valid maintenance start and end times.")
         }
         const checklist = await client.query<{
+          prompt: string
           required: boolean
           sequence: number
         }>(
-          `SELECT item.sequence, item.required
+          `SELECT item.sequence, item.prompt, item.required
             FROM maintenance.checklist_items item
             JOIN maintenance.definitions checklist ON checklist.id = item.definition_id
             JOIN maintenance.definitions definition ON definition.id = $1
@@ -5886,14 +5887,16 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
               AND lower(checklist.code) = lower(COALESCE(definition.checklist_code, definition.code))`,
           [current.definitionId, input.organizationId]
         )
-        const permitted = new Set(checklist.rows.map((item) => item.sequence))
-        const answers = new Map<number, { sequence: number; value: string; remark: string }>()
+        const permitted = new Map(checklist.rows.map((item) => [item.sequence, item.prompt]))
+        const answers = new Map<number, { sequence: number; prompt: string; value: string; remark: string }>()
         for (const step of input.checklistSteps) {
-          if (!permitted.has(step.sequence) || answers.has(step.sequence)) {
+          const prompt = permitted.get(step.sequence)
+          if (prompt === undefined || answers.has(step.sequence)) {
             throw new Error("Maintenance checklist points are invalid.")
           }
           answers.set(step.sequence, {
             sequence: step.sequence,
+            prompt,
             value: step.value.trim(),
             remark: step.remark.trim(),
           })
