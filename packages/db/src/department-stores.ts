@@ -102,7 +102,7 @@ async function availableLocations(
        AND location.accountable_store_id = $2
        AND location.location_type = 'STORE' AND location.active
      GROUP BY location.id, location.code, location.name
-     ORDER BY available DESC, location.code`,
+     ORDER BY COALESCE(sum(movement.quantity), 0) DESC, location.code`,
     [organizationId, storeId, itemTypeId]
   )
   return result.rows
@@ -577,6 +577,16 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
             CASE WHEN count(*) = 2
               AND bool_and(asset.accountable_store_id = gauge_set.accountable_store_id)
               AND bool_and(asset.status IN ('AVAILABLE', 'ASSIGNED'))
+              AND bool_and(NOT EXISTS (
+                SELECT 1 FROM store.calibration_visits visit
+                WHERE visit.asset_id = asset.id AND visit.status = 'FAILED'
+                  AND NOT EXISTS (
+                    SELECT 1 FROM store.calibration_visits later
+                    WHERE later.asset_id = asset.id AND later.status = 'PASSED'
+                      AND (later.created_at, later.id) >
+                        (visit.created_at, visit.id)
+                  )
+              ))
               AND count(DISTINCT (asset.current_holder_type,
                 asset.current_holder_reference, asset.current_location_id)) = 1
               THEN 'COMPLETE' ELSE 'INCOMPLETE' END AS status
@@ -813,6 +823,27 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
         // A machine or department can keep using the unit while custody changes.
         // Only a unit physically in the source Store needs a physical handover.
         const physicalHandover = unit.currentHolderType === "STORE"
+        if (physicalHandover && unit.currentLocationId) {
+          const sourceLocation = await client.query(
+            `SELECT 1 FROM store.locations WHERE organization_id = $1
+               AND id = $2 AND accountable_store_id = $3`,
+            [input.organizationId, unit.currentLocationId, source.id]
+          )
+          if (!sourceLocation.rows[0]) {
+            throw new Error("Unit ID is not physically in its accountable Store.")
+          }
+        }
+        const destinationLocation = physicalHandover
+          ? await client.query<{ code: string; name: string }>(
+            `SELECT code, name FROM store.locations
+             WHERE organization_id = $1 AND id = $2
+               AND accountable_store_id = $3 AND active`,
+            [input.organizationId, destination.defaultLocationId, destination.id]
+          )
+          : null
+        if (physicalHandover && !destinationLocation?.rows[0]) {
+          throw new Error("Destination Store location was not found.")
+        }
         await client.query(
           `UPDATE store.assets SET accountable_store_id = $1,
             current_location_id = CASE WHEN $2 THEN $3 ELSE current_location_id END,
@@ -822,7 +853,9 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
             updated_at = now(), updated_by_user_id = $6
            WHERE id = $7`,
           [destination.id, physicalHandover, destination.defaultLocationId,
-            destination.code, destination.name, input.actorUserId ?? null,
+            destinationLocation?.rows[0]?.code ?? null,
+            destinationLocation?.rows[0]?.name ?? null,
+            input.actorUserId ?? null,
             unit.id]
         )
         if (physicalHandover) {
@@ -843,7 +876,9 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
                  'STORE', $9, $10, $11, $12, $13)`,
               [input.organizationId, unit.itemTypeId, unit.id,
                 movement.locationId, movement.movementType, movement.quantity,
-                source.code, source.name, destination.code, destination.name,
+                unit.currentHolderReference, unit.currentHolderName,
+                destinationLocation?.rows[0]?.code,
+                destinationLocation?.rows[0]?.name,
                 input.movedBy?.trim() || null, input.remark?.trim() || null,
                 input.actorUserId ?? null]
             )
