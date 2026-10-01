@@ -301,7 +301,7 @@ export default async function StoreStockPage({
                 <TableHead>Asset Subcategory</TableHead>
                 <TableHead>Main Available</TableHead>
                 <TableHead>Company On Hand</TableHead>
-                <TableHead>Assigned Units</TableHead>
+                <TableHead>Company Assigned</TableHead>
                 <TableHead data-filterable="true">Status</TableHead>
                 <TableHead data-filterable="true">Responsible Store</TableHead>
                 <TableHead>Location / Holder</TableHead>
