@@ -26,6 +26,9 @@ export function selectedStoreMasterData(
               assetSubcategory: "",
               assetSubcategoryId: "",
               assetType: "",
+              manufacturerMake: null,
+              modelNumber: null,
+              ratedLoad: null,
             }))
           : [],
     itemDrawings: master === "ITEM_TYPE" ? data.itemDrawings : [],

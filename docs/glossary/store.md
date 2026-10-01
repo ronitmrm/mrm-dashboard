@@ -14,6 +14,11 @@ Store Classification Master path. It owns one permanent Asset Code and one
 optional Identification. Identification records the distinguishing make, model,
 size, grade, or specification when useful. It may be left blank in Data Entry
 and CSV imports; received Physical Assets may also have blank Identification.
+Optional Make, Model, and Rated Load / Capacity fields describe specifications
+shared by every physical unit of that Asset Code. The load value includes its
+unit (for example, `15 kW` or `1000 kg`). Different specifications do not by
+themselves generate another Asset Code; a distinct classification path is
+required for a distinct Store Item Type.
 Data Entry controls its Drawing Number: new and edited Store Item Types use
 their Asset Code as their Drawing Number. During Data Entry, the exact Asset
 Type, Asset Category,
@@ -59,6 +64,11 @@ Its Unit ID owns due dates, completed maintenance and calibration history, and
 any open breakdown. Maintenance Masters and calibration appointments are assigned
 to a physical Unit ID. The shared Asset Code describes the item type and never
 receives a maintenance schedule.
+Manufacturer Serial Number, Warranty Period, Warranty Until, actual Installation
+Date, connected Stabiliser Unit ID, and MCB Number belong to the physical Unit
+ID. These optional fields may be supplied when one unit is received or updated
+later in its workspace. Installation details are recorded when known and can be
+revised if the connection changes; they do not change the shared Asset Code.
 
 **Unit ID / Serial ID**: The permanent identity of one Physical Asset, separate
 from its shared Asset Code. It may use the manufacturer's serial number and has
@@ -191,6 +201,10 @@ to every selected receipt line and its Physical Assets. A receipt selection can
 never mix lines from different Purchase Orders. Received By is the authorized
 signed-in person's active linked Employee ID and name, or account name when no
 active link exists.
+An optional Warranty Period is likewise copied to received Physical Assets.
+When a receipt creates exactly one physical Unit ID, its serial and known
+installation details can be recorded there. Multi-unit receipts use the Unit ID
+workspace to complete details individually after receipt.
 
 **Store Request**: One numbered demand submitted by a Department and an
 individual to one Store location. It contains one or more Coded Item Request
