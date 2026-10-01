@@ -90,6 +90,12 @@ it("shows departmental Store only for its own floor grant", async () => {
   expect(access.isoCalibrationPlan).toBe(true)
 })
 
+it("shows the calibration plan for a QC reader", async () => {
+  authorization.granted = ["quality.control.calibration.read"]
+  const access = await getUnifiedNavigationAccess("qc-calibration-reader")
+  expect(access.isoCalibrationPlan).toBe(true)
+})
+
 it("maps each accountable Store to its scoped permission", () => {
   expect(accountableStorePermission("MAIN", "write")).toBe("store.asset_movement.write")
   expect(accountableStorePermission("QUALITY", "read")).toBe("quality.store.read")
