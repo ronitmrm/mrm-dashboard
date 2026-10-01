@@ -384,10 +384,12 @@ async function moveOwnedAsset(
   ) {
     throw new Error("The Unit ID is already at that destination.")
   }
-  const broken = asset.status === "BROKEN"
+  const unavailableStatus = ["BROKEN", "UNDER_MAINTENANCE"].includes(asset.status)
+    ? asset.status
+    : null
   await client.query(
     `UPDATE store.assets SET
-       status = CASE WHEN $1 THEN 'BROKEN'
+       status = CASE WHEN $1::text IS NOT NULL THEN $1
          WHEN $2 = 'STORE' THEN 'AVAILABLE' ELSE 'ASSIGNED' END,
        current_holder_type = $2, current_holder_reference = $3,
        current_holder_name = $4, current_location_id = $5,
@@ -395,7 +397,7 @@ async function moveOwnedAsset(
        current_supplier_id = NULL,
        updated_at = now(), updated_by_user_id = $8
      WHERE id = $9`,
-    [broken, input.holderType, destination.holderReference,
+    [unavailableStatus, input.holderType, destination.holderReference,
       destination.holderName, destination.locationId,
       destination.machineId, destination.vendorId,
       input.actorUserId ?? null, asset.id]

@@ -8,6 +8,7 @@ import {
   createArtifactService,
   type ArtifactStorageProvider,
 } from "./artifacts"
+import { createDepartmentStoreRepository } from "./department-stores"
 import { migrateDatabase } from "./migrate"
 import { createMaintenanceRepository } from "./maintenance"
 import {
@@ -24,6 +25,7 @@ const connectionString =
 
 const pool = new Pool({ connectionString })
 const store = createStoreRepository({ connectionString })
+const departmentStore = createDepartmentStoreRepository({ pool })
 const suffix = randomUUID().slice(0, 8)
 let organizationId: string
 let mainAccountableStoreId: string
@@ -144,6 +146,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await issuanceArtifacts.close()
+  await departmentStore.close()
   await store.close()
   await pool.end()
 })
@@ -2432,6 +2435,46 @@ describe("Store requests", () => {
         ["Pending", "Partially Issued"].includes(status)
       ).length,
       physicalAssets: assets.length,
+    })
+  })
+
+  test("keeps an unavailable Unit ID unavailable when returned to Store", async () => {
+    const location = await store.createLocation({
+      code: `SERVICE-RETURN-${suffix}`,
+      name: `Service Return Store ${suffix}`,
+      organizationId,
+    })
+    await pool.query(
+      `UPDATE store.assets SET status = 'UNDER_MAINTENANCE',
+         current_holder_type = 'DEPARTMENT',
+         current_holder_reference = 'QUALITY',
+         current_holder_name = 'Quality', current_location_id = NULL
+       WHERE id = $1`,
+      [legacyAssetId]
+    )
+
+    await departmentStore.moveAsset({
+      assetCode: legacyAssetCode,
+      holderReference: location.id,
+      holderType: "STORE",
+      organizationId,
+      storeCode: "MAIN",
+    })
+
+    const asset = await pool.query<{
+      holderType: string
+      locationId: string | null
+      status: string
+    }>(
+      `SELECT status, current_holder_type AS "holderType",
+         current_location_id AS "locationId"
+       FROM store.assets WHERE id = $1`,
+      [legacyAssetId]
+    )
+    expect(asset.rows[0]).toEqual({
+      holderType: "STORE",
+      locationId: location.id,
+      status: "UNDER_MAINTENANCE",
     })
   })
 })
