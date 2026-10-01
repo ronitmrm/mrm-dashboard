@@ -15,6 +15,7 @@ type Workspace = Awaited<ReturnType<ReturnType<typeof createDepartmentStoreRepos
 type RepairOrders = Awaited<ReturnType<ReturnType<typeof createStoreRepository>["listPurchaseOrders"]>>
 
 export function DepartmentStoreWorkspace({
+  canRepair,
   canWrite,
   departments,
   machines,
@@ -23,6 +24,7 @@ export function DepartmentStoreWorkspace({
   vendors,
   workspace,
 }: {
+  canRepair: boolean
   canWrite: boolean
   departments: Array<{ code: string; id: string; name: string }>
   machines: Array<{ id: string; machineNumber: string; name: string | null }>
@@ -120,13 +122,11 @@ export function DepartmentStoreWorkspace({
                   <TableCell className="whitespace-nowrap">
                     <div className="flex flex-wrap gap-2">
                       <Button asChild size="sm" variant="outline">
-                        <Link href={isMain
-                          ? `/store/assets/${encodeURIComponent(asset.assetCode)}`
-                          : `/department-store/assets/${encodeURIComponent(asset.assetCode)}?store=${encodeURIComponent(store.code)}`}>
+                        <Link href={`/department-store/assets/${encodeURIComponent(asset.assetCode)}?store=${encodeURIComponent(store.code)}`}>
                           History
                         </Link>
                       </Button>
-                      {canWrite && asset.status !== "SCRAPPED" ? (
+                      {canRepair && asset.status !== "SCRAPPED" ? (
                         <>
                           <Button asChild size="sm" variant="outline">
                             <Link href={`/department-store/repair?store=${encodeURIComponent(store.code)}&asset_code=${encodeURIComponent(asset.assetCode)}`}>
@@ -171,7 +171,7 @@ export function DepartmentStoreWorkspace({
                 <TableCell>{order.supplierName}</TableCell>
                 <TableCell>{order.unitPrice}</TableCell>
                 <TableCell><StatusBadge value={order.status} /></TableCell>
-                <TableCell>{canWrite && order.status === "Open" ? (
+                <TableCell>{canRepair && order.status === "Open" ? (
                   <DepartmentRepairCompletion
                     assetCode={order.typeCode}
                     purchaseOrderId={order.purchaseOrderId}

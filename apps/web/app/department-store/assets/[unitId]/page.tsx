@@ -21,7 +21,6 @@ export default async function DepartmentStoreAssetHistoryPage({ params, searchPa
 }) {
   const { unitId } = await params
   const storeCode = (await searchParams).store || ""
-  if (storeCode === "MAIN") notFound()
   let backPath: string
   try {
     backPath = accountableStoreHref(storeCode)
