@@ -10,6 +10,7 @@ import {
   adjustDepartmentQuantityAction,
   consumeDepartmentQuantityAction,
   createQualityGaugeSetAction,
+  disbandQualityGaugeSetAction,
   moveDepartmentAssetAction,
   moveQualityGaugeSetAction,
   replaceQualityGaugeSetMemberAction,
@@ -288,6 +289,22 @@ export function DepartmentStoreForms({ assets, consumables, departments, gaugeSe
                 </NativeSelectOption>)}
             </SelectField>
           </FormGrid>
+        </ActionForm>
+      </FormSection>
+      <FormSection title="Disband a gauge set"
+        description="End joint movement for this set. Each gauge keeps its Unit ID and history, and can then move separately."
+        width="wide">
+        <ActionForm action={disbandQualityGaugeSetAction} storeCode={store.code} submitLabel="Disband Set">
+          <SelectField label="Set ID" name="set_id" required>
+            <NativeSelectOption value="">Select set</NativeSelectOption>
+            {gaugeSets.map((set) => <NativeSelectOption key={set.id} value={set.id}>
+              {set.setCode} · {set.name} · {set.assetCodes.join(" + ")}
+            </NativeSelectOption>)}
+          </SelectField>
+          <label className="flex items-center gap-2 text-sm">
+            <input className="size-4 accent-primary" required type="checkbox" />
+            I understand these gauges will no longer move as one set.
+          </label>
         </ActionForm>
       </FormSection>
     </> : null}
