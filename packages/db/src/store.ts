@@ -512,6 +512,12 @@ type StoreReceiptLineInput = {
   manufacturerSerialNumbers?: string[]
   purchaseOrderLineId: string
   quantity: number | "remaining"
+  unitDetails?: {
+    installedOn?: string | null
+    manufacturerSerialNumber?: string | null
+    mcbNumber?: string | null
+    stabilizerUnitId?: string | null
+  }
 }
 
 type StoreReceiptInput = {
@@ -523,7 +529,24 @@ type StoreReceiptInput = {
   locationId: string
   organizationId: string
   receivedBy?: string | null
+  warrantyPeriod?: string | null
   warrantyUntil?: string | null
+}
+
+async function stabilizerAssetId(
+  client: PoolClient,
+  organizationId: string,
+  unitId?: string | null
+) {
+  const code = unitId?.trim()
+  if (!code) return null
+  const result = await client.query<{ id: string }>(
+    `SELECT id FROM store.assets
+     WHERE organization_id = $1 AND lower(asset_code) = lower($2)`,
+    [organizationId, code]
+  )
+  if (!result.rows[0]) throw new Error(`Stabiliser Unit ID ${code} was not found.`)
+  return result.rows[0].id
 }
 
 async function receiveStockWithClient(
@@ -640,6 +663,9 @@ async function receiveStockWithClient(
     if (row.tracking_mode === "SERIALIZED" && !Number.isInteger(quantity)) {
       throw new Error("Non Consumable quantity must be a whole number.")
     }
+    if (lineInput.unitDetails && (row.tracking_mode !== "SERIALIZED" || quantity !== 1)) {
+      throw new Error("Individual Unit ID details require a single Non Consumable unit.")
+    }
     return { ...row, lineInput, quantity }
   })
   const receiptNumber = await nextDocumentNumber(client, {
@@ -690,12 +716,18 @@ async function receiveStockWithClient(
   const receivedLines = []
   const nextAssetNumberByItem = new Map<string, number>()
   for (const orderLine of preparedLines) {
+    const unitDetails = orderLine.lineInput.unitDetails
+    const connectedStabilizerId = await stabilizerAssetId(
+      client,
+      input.organizationId,
+      unitDetails?.stabilizerUnitId
+    )
     const receiptLine = await client.query<{ id: string }>(
       `
         INSERT INTO store.receipt_lines (
           organization_id, receipt_id, purchase_order_line_id, item_type_id,
-          quantity, unit_price, warranty_until
-        ) VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, '')::date)
+          quantity, unit_price, warranty_until, warranty_period
+        ) VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, '')::date, $8)
         RETURNING id
       `,
       [
@@ -706,6 +738,7 @@ async function receiveStockWithClient(
         orderLine.quantity,
         orderLine.unit_price,
         input.warrantyUntil ?? null,
+        input.warrantyPeriod?.trim() || null,
       ]
     )
     const lineAssetCodes: string[] = []
@@ -724,10 +757,13 @@ async function receiveStockWithClient(
             organization_id, item_type_id, receipt_line_id, asset_code,
             identification_name, manufacturer_serial_number,
             current_location_id, accountable_store_id,
-            warranty_until, acquired_on,
+            warranty_until, warranty_period, acquired_on,
+            installed_on, stabilizer_asset_id, mcb_number,
             created_by_user_id, updated_by_user_id
           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
-            NULLIF($9, '')::date, COALESCE(NULLIF($10, '')::date, current_date), $11, $11)
+            NULLIF($9, '')::date, $10,
+            COALESCE(NULLIF($11, '')::date, current_date),
+            NULLIF($12, '')::date, $13, $14, $15, $15)
           RETURNING id
         `,
           [
@@ -736,12 +772,17 @@ async function receiveStockWithClient(
             receiptLine.rows[0]!.id,
             assetCode,
             orderLine.identification_name,
-            orderLine.lineInput.manufacturerSerialNumbers?.[index]?.trim() ||
+            unitDetails?.manufacturerSerialNumber?.trim() ||
+              orderLine.lineInput.manufacturerSerialNumbers?.[index]?.trim() ||
               null,
             input.locationId,
             destination.rows[0].accountableStoreId,
             input.warrantyUntil ?? null,
+            input.warrantyPeriod?.trim() || null,
             input.billDate ?? null,
+            unitDetails?.installedOn ?? null,
+            connectedStabilizerId,
+            unitDetails?.mcbNumber?.trim() || null,
             input.actorUserId ?? null,
           ]
         )
@@ -3410,6 +3451,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         supplierId: string
         supplierEmail: string | null
         supplierName: string
+        trackingMode: StoreTrackingMode | null
         typeCode: string
         unit: string
         unitPrice: string
@@ -3428,6 +3470,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             supplier.email AS "supplierEmail",
             line.item_type_id AS "itemTypeId",
             COALESCE(item.type_code, repair_asset.asset_code) AS "typeCode",
+            item.tracking_mode AS "trackingMode",
             COALESCE(
               item.identification_name,
               repair_item.service_description
@@ -3830,8 +3873,11 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       assetType: StoreAssetType
       applicableItemCode?: string | null
       identificationName?: string
+      manufacturerMake?: string | null
       minimumStock?: number
+      modelNumber?: string | null
       organizationId: string
+      ratedLoad?: string | null
       unit: string
     }) {
       return withTransaction(pool, async (client) => {
@@ -3883,10 +3929,11 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
               asset_subcategory, asset_name, asset_category_id,
               asset_subcategory_id, asset_name_id, identification_name,
               applicable_item_code, drawing_number, tracking_mode, unit,
-              minimum_stock, created_by_user_id, updated_by_user_id
+              minimum_stock, manufacturer_make, model_number, rated_load,
+              created_by_user_id, updated_by_user_id
             ) VALUES (
               $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
-              $13, $14, $15, $16, $16
+              $13, $14, $15, $16, $17, $18, $19, $19
             )
             RETURNING id
           `,
@@ -3906,6 +3953,9 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             trackingMode,
             requiredText(input.unit, "Unit"),
             input.minimumStock ?? 0,
+            input.manufacturerMake?.trim() || null,
+            input.modelNumber?.trim() || null,
+            input.ratedLoad?.trim() || null,
             input.actorUserId ?? null,
           ]
         )
@@ -3922,8 +3972,11 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       applicableItemCode?: string | null
       id: string
       identificationName?: string
+      manufacturerMake?: string | null
       minimumStock?: number
+      modelNumber?: string | null
       organizationId: string
+      ratedLoad?: string | null
       unit: string
     }) {
       return withTransaction(pool, async (client) => {
@@ -3938,6 +3991,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
              identification_name = $8, applicable_item_code = $9,
              drawing_number = type_code, tracking_mode = $10, unit = $11,
              minimum_stock = $12, updated_by_user_id = $13,
+             manufacturer_make = $16, model_number = $17, rated_load = $18,
              updated_at = now()
            WHERE id = $14 AND organization_id = $15
            RETURNING id`,
@@ -3957,6 +4011,9 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             input.actorUserId ?? null,
             input.id,
             input.organizationId,
+            input.manufacturerMake?.trim() || null,
+            input.modelNumber?.trim() || null,
+            input.ratedLoad?.trim() || null,
           ]
         )
         if (!result.rows[0]) throw new Error("Store Item Type was not found.")
@@ -3986,7 +4043,10 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         drawingNumber: string | null
         id: string
         identificationName: string
+        manufacturerMake: string | null
         minimumStock: string
+        modelNumber: string | null
+        ratedLoad: string | null
         storageLocations: string
         trackingMode: StoreTrackingMode
         typeCode: string
@@ -4003,6 +4063,9 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             item.asset_name AS "assetName",
             item.asset_name_id AS "assetNameId",
             item.identification_name AS "identificationName",
+            item.manufacturer_make AS "manufacturerMake",
+            item.model_number AS "modelNumber",
+            item.rated_load AS "ratedLoad",
             item.applicable_item_code AS "applicableItemCode",
             item.type_code AS "drawingNumber",
             item.tracking_mode AS "trackingMode", item.unit,
@@ -4430,6 +4493,8 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       purchaseOrderLineId: string
       quantity: number
       receivedBy?: string | null
+      unitDetails?: StoreReceiptLineInput["unitDetails"]
+      warrantyPeriod?: string | null
       warrantyUntil?: string | null
     }) {
       return withTransaction(pool, async (client) => {
@@ -4442,11 +4507,13 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
               manufacturerSerialNumbers: input.manufacturerSerialNumbers,
               purchaseOrderLineId: input.purchaseOrderLineId,
               quantity: input.quantity,
+              unitDetails: input.unitDetails,
             },
           ],
           locationId: input.locationId,
           organizationId: input.organizationId,
           receivedBy: input.receivedBy,
+          warrantyPeriod: input.warrantyPeriod,
           warrantyUntil: input.warrantyUntil,
         })
         await queueDashboardRefresh(client, input.organizationId)
@@ -4463,6 +4530,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       purchaseOrderId: string
       purchaseOrderLineIds: string[]
       receivedBy?: string | null
+      warrantyPeriod?: string | null
       warrantyUntil?: string | null
     }) {
       const purchaseOrderLineIds = [
@@ -4491,6 +4559,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           locationId: input.locationId,
           organizationId: input.organizationId,
           receivedBy: input.receivedBy,
+          warrantyPeriod: input.warrantyPeriod,
           warrantyUntil: input.warrantyUntil,
         })
         await queueDashboardRefresh(client, input.organizationId)
@@ -4817,7 +4886,10 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         availableStock: string
         id: string
         identificationName: string
+        manufacturerMake: string | null
         minimumStock: string
+        modelNumber: string | null
+        ratedLoad: string | null
         storageLocations: string
         typeCode: string
         unit: string
@@ -4830,6 +4902,9 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             item.asset_subcategory AS "assetSubcategory",
             item.asset_name AS "assetName",
             item.identification_name AS "identificationName", item.unit,
+            item.manufacturer_make AS "manufacturerMake",
+            item.model_number AS "modelNumber",
+            item.rated_load AS "ratedLoad",
             trim_scale(item.minimum_stock)::text AS "minimumStock",
             trim_scale((CASE WHEN item.tracking_mode = 'SERIALIZED'
               THEN (SELECT count(*)::numeric FROM store.assets asset
@@ -5104,6 +5179,55 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       }
     },
 
+    async updateAssetEquipmentDetails(input: {
+      actorUserId?: string | null
+      assetCode: string
+      installedOn?: string | null
+      manufacturerSerialNumber?: string | null
+      mcbNumber?: string | null
+      organizationId: string
+      stabilizerUnitId?: string | null
+      warrantyPeriod?: string | null
+      warrantyUntil?: string | null
+    }) {
+      return withTransaction(pool, async (client) => {
+        const asset = await client.query<{ id: string }>(
+          `SELECT id FROM store.assets
+           WHERE organization_id = $1 AND lower(asset_code) = lower($2)
+           FOR UPDATE`,
+          [input.organizationId, requiredText(input.assetCode, "Unit ID")]
+        )
+        if (!asset.rows[0]) throw new Error("Unit ID was not found.")
+        const connectedStabilizerId = await stabilizerAssetId(
+          client,
+          input.organizationId,
+          input.stabilizerUnitId
+        )
+        if (connectedStabilizerId === asset.rows[0].id) {
+          throw new Error("A Unit ID cannot be its own stabiliser.")
+        }
+        await client.query(
+          `UPDATE store.assets
+           SET manufacturer_serial_number = $1,
+             warranty_period = $2, warranty_until = NULLIF($3, '')::date,
+             installed_on = NULLIF($4, '')::date,
+             stabilizer_asset_id = $5, mcb_number = $6,
+             updated_by_user_id = $7, updated_at = now()
+           WHERE id = $8`,
+          [
+            input.manufacturerSerialNumber?.trim() || null,
+            input.warrantyPeriod?.trim() || null,
+            input.warrantyUntil ?? null,
+            input.installedOn ?? null,
+            connectedStabilizerId,
+            input.mcbNumber?.trim() || null,
+            input.actorUserId ?? null,
+            asset.rows[0].id,
+          ]
+        )
+      })
+    },
+
     async getAssetWorkspace(input: {
       assetCode: string
       organizationId: string
@@ -5121,17 +5245,24 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         holderType: StoreHolderType
         id: string
         identificationName: string
+        installedOn: string | null
         itemTypeId: string
         locationName: string | null
         manufacturerSerialNumber: string | null
+        manufacturerMake: string | null
+        mcbNumber: string | null
+        modelNumber: string | null
         orderNumber: string | null
+        ratedLoad: string | null
         receiptLineId: string | null
+        stabilizerUnitId: string | null
         status: string
         subcategory: string
         supplierName: string | null
         typeCode: string
         unitPrice: string | null
         warrantyUntil: string | null
+        warrantyPeriod: string | null
       }>(
         `
           SELECT asset.id, asset.item_type_id AS "itemTypeId",
@@ -5146,6 +5277,13 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             item.asset_name AS "assetName",
             asset.identification_name AS "identificationName",
             asset.manufacturer_serial_number AS "manufacturerSerialNumber",
+            item.manufacturer_make AS "manufacturerMake",
+            item.model_number AS "modelNumber",
+            item.rated_load AS "ratedLoad",
+            asset.warranty_period AS "warrantyPeriod",
+            asset.installed_on::text AS "installedOn",
+            stabilizer.asset_code AS "stabilizerUnitId",
+            asset.mcb_number AS "mcbNumber",
             asset.status, asset.current_holder_type AS "holderType",
             asset.current_holder_reference AS "holderReference",
             asset.current_holder_name AS "holderName",
@@ -5159,6 +5297,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
               asset.acquisition_unit_price)::text AS "unitPrice"
           FROM store.assets asset
           JOIN store.item_types item ON item.id = asset.item_type_id
+          LEFT JOIN store.assets stabilizer ON stabilizer.id = asset.stabilizer_asset_id
           JOIN store.accountable_stores accountable
             ON accountable.id = asset.accountable_store_id
           LEFT JOIN store.locations location ON location.id = asset.current_location_id

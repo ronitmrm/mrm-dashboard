@@ -32,6 +32,7 @@ import {
 
 import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
 import { BulkReceiveButton } from "@/components/store/bulk-receive-button"
+import { StoreReceiptUnitFields } from "@/components/store/store-receipt-unit-fields"
 import { DepartmentRepairCompletion } from "@/components/store/department-repair-completion"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { MetricSummary } from "@/components/ui/golden-patterns"
@@ -307,23 +308,12 @@ export default async function StoreOrdersPage() {
                                       value={receivedBy}
                                     />
                                   </Field>
-                                  <Field>
-                                    <FieldLabel
-                                      htmlFor={`receipt-quantity-${order.id}`}
-                                    >
-                                      Quantity Received
-                                    </FieldLabel>
-                                    <Input
-                                      defaultValue={order.remainingQuantity}
-                                      id={`receipt-quantity-${order.id}`}
-                                      max={order.remainingQuantity}
-                                      min="0.001"
-                                      name="quantity"
-                                      required
-                                      step="0.001"
-                                      type="number"
-                                    />
-                                  </Field>
+                                  <StoreReceiptUnitFields
+                                    key={`${order.id}-${order.remainingQuantity}`}
+                                    orderId={order.id}
+                                    remainingQuantity={order.remainingQuantity}
+                                    serialized={order.trackingMode === "SERIALIZED"}
+                                  />
                                   <Field>
                                     <FieldLabel
                                       htmlFor={`receipt-bill-number-${order.id}`}
@@ -354,6 +344,18 @@ export default async function StoreOrdersPage() {
                                     Warranty &amp; document (optional)
                                   </summary>
                                   <div className="mt-4 grid gap-4">
+                                    <Field>
+                                      <FieldLabel
+                                        htmlFor={`receipt-warranty-period-${order.id}`}
+                                      >
+                                        Warranty Period
+                                      </FieldLabel>
+                                      <Input
+                                        id={`receipt-warranty-period-${order.id}`}
+                                        name="warranty_period"
+                                        placeholder="e.g. 12 months from installation"
+                                      />
+                                    </Field>
                                     <Field>
                                       <FieldLabel
                                         htmlFor={`receipt-warranty-${order.id}`}

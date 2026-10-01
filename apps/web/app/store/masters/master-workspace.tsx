@@ -97,7 +97,10 @@ export type StoreMasterData = {
     drawingNumber?: string | null
     id: string
     identificationName: string
+    manufacturerMake: string | null
     minimumStock?: string
+    modelNumber: string | null
+    ratedLoad: string | null
     typeCode: string
     unit: string
   }>
@@ -253,6 +256,9 @@ export function StoreMasterWorkspace({
                     <TableHead>Asset Name</TableHead>
                     <TableHead>Asset Type</TableHead>
                     <TableHead>Identification</TableHead>
+                    <TableHead>Make</TableHead>
+                    <TableHead>Model</TableHead>
+                    <TableHead>Rated Load / Capacity</TableHead>
                     <TableHead>Drawing</TableHead>
                     <TableHead>Unit</TableHead>
                     {canManage || canDelete ? (
@@ -287,6 +293,9 @@ export function StoreMasterWorkspace({
                             : "Consumable"}
                         </TableCell>
                         <TableCell>{item.identificationName}</TableCell>
+                        <TableCell>{item.manufacturerMake || "—"}</TableCell>
+                        <TableCell>{item.modelNumber || "—"}</TableCell>
+                        <TableCell>{item.ratedLoad || "—"}</TableCell>
                         <TableCell>
                           {drawing ? (
                             <Button asChild size="sm" variant="outline">
@@ -493,8 +502,11 @@ function masterRows(
           asset_type: item.assetType,
           drawing_number: item.drawingNumber ?? "",
           identification_name: item.identificationName,
+          manufacturer_make: item.manufacturerMake ?? "",
           master_id: item.id,
           minimum_stock: item.minimumStock ?? "0",
+          model_number: item.modelNumber ?? "",
+          rated_load: item.ratedLoad ?? "",
           type_code: item.typeCode,
           unit: item.unit,
         },
@@ -988,10 +1000,25 @@ function StoreItemTypeForm({
             placeholder="e.g. Bosch GWS 600, 100 mm"
           />
           <FieldDescription>
-            Enter the make, model, size, grade, or specification that identifies
-            this item.
+            Enter any other distinguishing specification for this item.
           </FieldDescription>
         </Field>
+        <TextField
+          defaultValue={defaults.manufacturer_make}
+          label="Make (optional)"
+          name="manufacturer_make"
+        />
+        <TextField
+          defaultValue={defaults.model_number}
+          label="Model (optional)"
+          name="model_number"
+        />
+        <TextField
+          defaultValue={defaults.rated_load}
+          label="Rated Load / Capacity (optional, include unit)"
+          name="rated_load"
+          placeholder="e.g. 15 kW or 1000 kg"
+        />
         {editing ? (
           <input name="asset_type" type="hidden" value={defaults.asset_type} />
         ) : null}
@@ -1080,6 +1107,11 @@ function StoreItemTypeForm({
           />
         </Field>
       </FieldGroup>
+      {!editing ? (
+        <p className="mt-4 text-sm text-muted-foreground">
+          For a different model or capacity, select a distinct Asset Name to generate a separate Asset Code.
+        </p>
+      ) : null}
       {saved ? (
         <p className="mt-5" role="status">
           <StatusBadge value="Asset saved" tone="positive" />

@@ -28,6 +28,7 @@ import {
 } from "@workspace/ui/components/table"
 
 import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
+import { MasterEntryForm } from "@/components/master-entry-form"
 import {
   StoreAssetWorkspacePane,
   StoreAssetWorkspaceTabs,
@@ -56,6 +57,7 @@ import {
   recordStoreAssetAcquisitionAction,
   scheduleStoreAssetMaintenanceMasterAction,
   setStoreAssetLifecycleAction,
+  updateStoreAssetEquipmentDetailsAction,
   uploadStoreItemDrawingAction,
   uploadStoreSupplierQuoteAction,
 } from "../../actions"
@@ -200,12 +202,43 @@ export default async function StoreAssetWorkspacePage({
               value={`${asset.assetType} / ${asset.category} / ${asset.subcategory}`}
             />
             <Info label="Asset Name" value={asset.assetName} />
+            <Info label="Make" value={asset.manufacturerMake || "Not recorded"} />
+            <Info label="Model" value={asset.modelNumber || "Not recorded"} />
+            <Info label="Rated Load / Capacity" value={asset.ratedLoad || "Not recorded"} />
             <Info label="Accountable Store" value={asset.accountableStoreName} />
             <Info
               label="Current Assignment"
               value={asset.holderName || asset.locationName || asset.holderType}
             />
+            <Info label="Installed On" value={asset.installedOn || "Not recorded"} />
+            <Info label="Connected Stabiliser Unit ID" value={asset.stabilizerUnitId || "Not recorded"} />
+            <Info label="MCB Number" value={asset.mcbNumber || "Not recorded"} />
           </div>
+          {canRecordAcquisition ? (
+            <SectionCard width="wide">
+              <CardHeader>
+                <CardTitle>Unit Details</CardTitle>
+                <CardDescription>
+                  Record the actual installation date and connected equipment when known.
+                  These details belong to this Unit ID only.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <MasterEntryForm action={updateStoreAssetEquipmentDetailsAction} className="grid gap-4 sm:grid-cols-2">
+                  <input name="asset_code" type="hidden" value={asset.assetCode} />
+                  <TextField defaultValue={asset.manufacturerSerialNumber ?? ""} label="Manufacturer Serial Number" name="manufacturer_serial_number" />
+                  <TextField defaultValue={asset.warrantyPeriod ?? ""} label="Warranty Period" name="warranty_period" placeholder="e.g. 12 months from installation" />
+                  <TextField defaultValue={asset.warrantyUntil ?? ""} label="Warranty End" name="warranty_until" type="date" />
+                  <TextField defaultValue={asset.installedOn ?? ""} label="Installation Date" name="installed_on" type="date" />
+                  <TextField defaultValue={asset.stabilizerUnitId ?? ""} label="Connected Stabiliser Unit ID" name="stabilizer_unit_id" placeholder="Existing Unit ID" />
+                  <TextField defaultValue={asset.mcbNumber ?? ""} label="MCB Number" name="mcb_number" />
+                  <div className="sm:col-span-2">
+                    <Button type="submit">Save Unit Details</Button>
+                  </div>
+                </MasterEntryForm>
+              </CardContent>
+            </SectionCard>
+          ) : null}
         </StoreAssetWorkspacePane>
 
         <StoreAssetWorkspacePane tab="suppliers">
@@ -268,6 +301,7 @@ export default async function StoreAssetWorkspacePage({
               label="Warranty Until"
               value={asset.warrantyUntil || "Not recorded"}
             />
+            <Info label="Warranty Period" value={asset.warrantyPeriod || "Not recorded"} />
           </div>
         </StoreAssetWorkspacePane>
 
@@ -783,6 +817,9 @@ function StoreItemWorkspace({
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Info label="Asset Name" value={item.assetName} />
         <Info label="Identification" value={item.identificationName} />
+        <Info label="Make" value={item.manufacturerMake || "Not recorded"} />
+        <Info label="Model" value={item.modelNumber || "Not recorded"} />
+        <Info label="Rated Load / Capacity" value={item.ratedLoad || "Not recorded"} />
         <Info
           label="Classification"
           value={`${item.assetCategory} / ${item.assetSubcategory}`}

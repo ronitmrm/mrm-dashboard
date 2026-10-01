@@ -569,8 +569,11 @@ export async function createStoreItemTypeAction(formData: FormData) {
           applicableItemCode: optionalText(formData, "applicable_item_code"),
           identificationName:
             optionalText(formData, "identification_name") ?? "",
+          manufacturerMake: optionalText(formData, "manufacturer_make"),
           minimumStock: Number(optionalText(formData, "minimum_stock") ?? 0),
+          modelNumber: optionalText(formData, "model_number"),
           organizationId,
+          ratedLoad: optionalText(formData, "rated_load"),
           unit: requiredText(formData, "unit"),
         }
         const item = masterId
@@ -908,6 +911,12 @@ export async function receiveStoreStockAction(formData: FormData) {
     kind: "store-guarantee-card" as const,
     purchaseOrderLineId,
   }
+  const unitDetails = {
+    manufacturerSerialNumber: optionalText(formData, "manufacturer_serial_number"),
+    installedOn: optionalText(formData, "installed_on"),
+    stabilizerUnitId: optionalText(formData, "stabilizer_unit_id"),
+    mcbNumber: optionalText(formData, "mcb_number"),
+  }
   await withStore(
     "store.receipts.receive",
     async (repository, actorUserId, organizationId) => {
@@ -940,6 +949,8 @@ export async function receiveStoreStockAction(formData: FormData) {
         purchaseOrderLineId,
         quantity: positiveNumber(formData, "quantity"),
         receivedBy: storeRequestFormPolicy(requestContext).requestedBy,
+        unitDetails: Object.values(unitDetails).some(Boolean) ? unitDetails : undefined,
+        warrantyPeriod: optionalText(formData, "warranty_period"),
         warrantyUntil: optionalText(formData, "warranty_until"),
       })
       if (guaranteeUploadId && pendingAuthorization) {
@@ -1006,6 +1017,7 @@ export async function receiveRemainingStoreStockBatchAction(
         purchaseOrderId,
         purchaseOrderLineIds,
         receivedBy: storeRequestFormPolicy(requestContext).requestedBy,
+        warrantyPeriod: optionalText(formData, "warranty_period"),
         warrantyUntil: optionalText(formData, "warranty_until"),
       })
       if (guaranteeUploadId && pendingAuthorization) {
@@ -1022,6 +1034,32 @@ export async function receiveRemainingStoreStockBatchAction(
     }
   )
   revalidateStore()
+}
+
+export async function updateStoreAssetEquipmentDetailsAction(formData: FormData) {
+  const assetCode = requiredText(formData, "asset_code")
+  try {
+    await withStore("store.receipts.receive", async (repository, actorUserId, organizationId) =>
+      repository.updateAssetEquipmentDetails({
+        actorUserId,
+        assetCode,
+        installedOn: optionalText(formData, "installed_on"),
+        manufacturerSerialNumber: optionalText(formData, "manufacturer_serial_number"),
+        mcbNumber: optionalText(formData, "mcb_number"),
+        organizationId,
+        stabilizerUnitId: optionalText(formData, "stabilizer_unit_id"),
+        warrantyPeriod: optionalText(formData, "warranty_period"),
+        warrantyUntil: optionalText(formData, "warranty_until"),
+      })
+    )
+  } catch (error) {
+    if (error instanceof Error && /Stabiliser Unit ID|own stabiliser/.test(error.message)) {
+      return { error: error.message }
+    }
+    throw error
+  }
+  revalidateStore()
+  revalidatePath(`/store/assets/${encodeURIComponent(assetCode)}`)
 }
 
 export async function createStorePurchaseOrdersAction(formData: FormData) {

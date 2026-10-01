@@ -291,6 +291,9 @@ describe("Store requests", () => {
       ...input,
       id: item.id,
       identificationName: " ",
+      manufacturerMake: "Kaishan",
+      modelNumber: "APPM 15",
+      ratedLoad: "15 kW",
     })
     const order = await createPurchaseOrder(item.id, 1, "100.00")
     const location = await store.ensurePrimaryStoreLocation({ organizationId })
@@ -300,12 +303,71 @@ describe("Store requests", () => {
       purchaseOrderLineId: order.id,
       quantity: 1,
       receivedBy: "store.integration@example.com",
+      unitDetails: {
+        installedOn: "2026-09-20",
+        manufacturerSerialNumber: "COMP-001",
+        mcbNumber: "M13",
+      },
+      warrantyPeriod: "12 months from installation",
+      warrantyUntil: "2027-09-20",
     })
     const result = await pool.query<{ identification_name: string }>(
       "SELECT identification_name FROM store.assets WHERE asset_code = $1 AND organization_id = $2",
       [receipt.assetCodes[0], organizationId]
     )
     expect(result.rows[0]?.identification_name).toBe("")
+    expect((await store.listItemTypes(organizationId)).find((row) => row.id === item.id)).toMatchObject({
+      manufacturerMake: "Kaishan",
+      modelNumber: "APPM 15",
+      ratedLoad: "15 kW",
+    })
+    expect((await store.getAssetWorkspace({
+      assetCode: receipt.assetCodes[0]!, organizationId,
+    }))?.asset).toMatchObject({
+      installedOn: "2026-09-20",
+      manufacturerSerialNumber: "COMP-001",
+      mcbNumber: "M13",
+      warrantyPeriod: "12 months from installation",
+      warrantyUntil: "2027-09-20",
+    })
+
+    await expect(store.updateAssetEquipmentDetails({
+      assetCode: receipt.assetCodes[0]!,
+      organizationId,
+      stabilizerUnitId: "MISSING-STABILIZER",
+    })).rejects.toThrow("Stabiliser Unit ID MISSING-STABILIZER was not found")
+
+    const stabilizer = await store.createItemType({
+      ...(await createClassification("Connected Stabilizer")),
+      assetType: "NON_CONSUMABLE",
+      organizationId,
+      unit: "Nos",
+    })
+    const stabilizerOrder = await createPurchaseOrder(stabilizer.id, 1, "50.00")
+    const stabilizerReceipt = await store.receiveStock({
+      locationId: location.id,
+      organizationId,
+      purchaseOrderLineId: stabilizerOrder.id,
+      quantity: 1,
+    })
+    await store.updateAssetEquipmentDetails({
+      assetCode: receipt.assetCodes[0]!,
+      installedOn: "2026-09-21",
+      manufacturerSerialNumber: "COMP-001",
+      mcbNumber: "M14",
+      organizationId,
+      stabilizerUnitId: stabilizerReceipt.assetCodes[0]!,
+      warrantyPeriod: "12 months from installation",
+      warrantyUntil: "2027-09-21",
+    })
+    expect((await store.getAssetWorkspace({
+      assetCode: receipt.assetCodes[0]!, organizationId,
+    }))?.asset).toMatchObject({
+      installedOn: "2026-09-21",
+      mcbNumber: "M14",
+      stabilizerUnitId: stabilizerReceipt.assetCodes[0],
+      warrantyUntil: "2027-09-21",
+    })
   })
 
   test("keeps current and superseded Item drawings while reusing Organization bytes", async () => {
