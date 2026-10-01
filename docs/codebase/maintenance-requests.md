@@ -47,13 +47,23 @@ ISO Document exposes read-only Maintenance Register and Maintenance Plan routes
 under `/iso-document/machine-maintenance-*`. Both require
 `maintenance.workspace.read` and use organization-scoped queries in
 `packages/db/src/maintenance.ts`. The register reads completed physical tasks;
-the monthly plan combines saved task due dates with active schedule due dates,
+the date-range plan combines saved task due dates with active schedule due dates,
 deduplicating the same schedule/date. Asset rows use the physical Unit ID as
 Asset Code. The asset projection reads Store schedules, planned tasks, and
 completed Store maintenance records; calibration stays separate. It excludes
 breakdowns from the plan and retains completed planned tasks after next-due
 advancement. These views do not create tasks or copy records. Facility requests
 remain in their existing request work lists.
+
+Completed rows in both ISO tables link to the organization-scoped, read-only
+`/iso-document/machine-maintenance-report/[kind]/[id]` detail. Machine reports
+read `maintenance.tasks` and `maintenance.task_results`; physical Unit ID reports
+read `store.asset_maintenance_records` with their planned task or breakdown.
+The detail shows saved start/end times, work, changed items, checklist answers,
+and existing work photos. New physical Unit ID task writes snapshot checklist
+prompts with answers; older records fall back to the current checklist master
+prompt or show the details actually retained. The register and plan tables show
+completion dates without times.
 
 Mechanical loads active Store Unit ID maintenance schedules through
 `/api/maintenance/assets` alongside machine schedules. The same checklist view

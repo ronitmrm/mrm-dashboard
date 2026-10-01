@@ -108,14 +108,21 @@ do not hide history. Calibration has its own record and is excluded. Facility
 requests without an equipment link are excluded.
 Access uses `maintenance.workspace.read`.
 
+Each completed row opens a read-only maintenance report with the recorded
+checklist answers, work details, timing, and photos. Older records show the
+details actually retained; missing checklist answers or times remain explicitly
+not recorded. The register table shows only the completion date.
+
 ## Maintenance Plan
 
-The selected calendar month shows saved machine and physical Unit ID maintenance
-due dates. Completed planned tasks remain in their original due month, alongside
-active schedules still due that month. Breakdown work is not planned work. Counts
+The selected inclusive date range shows saved machine and physical Unit ID maintenance
+due dates. Completed planned tasks remain on their original due date, alongside
+active schedules still due in the range. Breakdown work is not planned work. Counts
 distinguish maintenance jobs from distinct machines and Unit IDs.
 Dates are saved commitments, not recurrence forecasts; completing a task and
-advancing its next due date preserves the completed task in the original month.
+advancing its next due date preserves the completed task on its original date.
+Completed rows open the same report as the Maintenance Register. The plan table
+shows only the completion date; start and finish times belong in the report.
 Access uses `maintenance.workspace.read`.
 
 ## Calibration Plan

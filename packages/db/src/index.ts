@@ -96,7 +96,7 @@ export {
   readCanonicalDashboardSource,
 } from "./dashboard-read-model"
 export { createDashboardReadModelRepository } from "./dashboard-read-model-repository"
-export { createMaintenanceRepository } from "./maintenance"
+export { createMaintenanceRepository, type CompletedMaintenanceReport } from "./maintenance"
 export {
   authorizeMaintenanceWorkPhotoTarget,
   createMaintenanceWorkPhotoRepository,

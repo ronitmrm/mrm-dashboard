@@ -1,3 +1,5 @@
+import Link from "next/link"
+
 import { createMaintenanceRepository, type MaintenanceWorkPhotoTarget } from "@workspace/db"
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
@@ -16,7 +18,7 @@ import { StandardState } from "@workspace/ui/components/standard-state"
 import { MetricSummary, PageHeader } from "@/components/ui/golden-patterns"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
-import { formatIstDate, formatIstDateTime, istDateValue } from "@/lib/date-time"
+import { formatIstDate, istDateValue } from "@/lib/date-time"
 import {
   machineMaintenancePlan,
   machineMaintenanceRegister,
@@ -38,11 +40,14 @@ async function readReportRows(isPlan: boolean, from: string, to: string) {
       return [
         ...machines.map((row) => ({ ...row, assetCode: null as string | null,
           assetName: null as string | null, taskType: "Planned",
+          reportKind: "machine" as const,
+          reportId: row.status === "Completed" ? row.id : null,
           completedBy: null, workDone: null, legacyHistory: false,
           photos: [] as Array<{ id: string; fileName: string }>,
           photoTarget: null as MaintenanceWorkPhotoTarget | null })),
         ...assets.map((row) => ({ ...row, machineNumber: null as string | null,
           assetCode: row.assetCode, taskType: "Planned",
+          reportKind: "asset" as const, reportId: row.reportId,
           completedBy: null, workDone: null, legacyHistory: false,
           photos: [] as Array<{ id: string; fileName: string }>,
           photoTarget: null as MaintenanceWorkPhotoTarget | null })),
@@ -56,9 +61,11 @@ async function readReportRows(isPlan: boolean, from: string, to: string) {
     return [
       ...machines.map((row) => ({ ...row, assetCode: null as string | null,
         assetName: null as string | null, status: "Completed",
+        reportKind: "machine" as const, reportId: row.id,
         photoTarget: { kind: "machine", taskKey: row.taskKey } as MaintenanceWorkPhotoTarget })),
       ...assets.map((row) => ({ ...row, machineNumber: null as string | null,
         status: "Completed",
+        reportKind: "asset" as const, reportId: row.id,
         photoTarget: (row.breakdownId
           ? { kind: "asset-breakdown", breakdownId: row.breakdownId }
           : row.scheduleId && row.dueOn
@@ -173,14 +180,14 @@ export function MachineMaintenanceReportView({
       >
         <TableHeader>
           <TableRow>
-            <TableHead>{isPlan ? "Planned Date" : "Completed At"}</TableHead>
+            <TableHead>{isPlan ? "Planned Date" : "Completed On"}</TableHead>
             <TableHead>Machine No. / Asset Code</TableHead>
             <TableHead>Production Unit / Location</TableHead>
             <TableHead>Maintenance</TableHead>
             {isPlan ? (
               <>
                 <TableHead>Status</TableHead>
-                <TableHead>Completed At</TableHead>
+                <TableHead>Completed On</TableHead>
               </>
             ) : (
               <>
@@ -190,17 +197,14 @@ export function MachineMaintenanceReportView({
                 <TableHead>Photos</TableHead>
               </>
             )}
+            <TableHead>Report / Checklist</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {rows.map((row) => (
-            <TableRow key={row.id}>
+            <TableRow key={`${row.reportKind}-${row.id}`}>
               <TableCell className="whitespace-nowrap">
-                {isPlan
-                  ? formatIstDate(row.dueOn)
-                  : row.legacyHistory
-                    ? formatIstDate(row.completedAt)
-                    : formatIstDateTime(row.completedAt)}
+                {formatIstDate(isPlan ? row.dueOn : row.completedAt)}
               </TableCell>
               <TableCell>{row.machineNumber ?? row.assetCode}</TableCell>
               <TableCell>{row.productionUnit}</TableCell>
@@ -210,7 +214,7 @@ export function MachineMaintenanceReportView({
                   <TableCell>
                     <StatusBadge value={row.status} />
                   </TableCell>
-                  <TableCell>{formatIstDateTime(row.completedAt)}</TableCell>
+                  <TableCell>{formatIstDate(row.completedAt)}</TableCell>
                 </>
               ) : (
                 <>
@@ -231,11 +235,18 @@ export function MachineMaintenanceReportView({
                   </TableCell>
                 </>
               )}
+              <TableCell>
+                {row.reportId ? (
+                  <Link className="text-primary underline underline-offset-4" href={`/iso-document/machine-maintenance-report/${row.reportKind}/${row.reportId}`}>
+                    Open report
+                  </Link>
+                ) : "-"}
+              </TableCell>
             </TableRow>
           ))}
           {!rows.length ? (
             <TableRow>
-              <TableCell colSpan={isPlan ? 6 : 8}>
+              <TableCell colSpan={isPlan ? 7 : 9}>
                 <StandardState
                   title={
                     isPlan
