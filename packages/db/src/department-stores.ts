@@ -500,7 +500,8 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
       )
       const store = storeResult.rows[0]
       if (!store) throw new Error("Accountable Store was not found.")
-      const [stores, consumables, assets, gaugeSets, movements] = await Promise.all([
+      const [stores, consumables, serializedTotals, assets, gaugeSets, movements] =
+        await Promise.all([
         pool.query<AccountableStore>(
           `SELECT id, code, name, kind,
             production_floor_code AS "productionFloorCode",
@@ -534,6 +535,37 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
              AND item.tracking_mode = 'CONSUMABLE' AND item.active
            GROUP BY item.id
            ORDER BY item.type_code`,
+          [input.organizationId, store.id]
+        ),
+        pool.query<{
+          accountableQuantity: string
+          assetName: string
+          availableQuantity: string
+          companyQuantity: string
+          itemTypeId: string
+          typeCode: string
+        }>(
+          `SELECT item.id AS "itemTypeId", item.type_code AS "typeCode",
+            item.asset_name AS "assetName",
+            count(asset.id) FILTER (
+              WHERE asset.status <> 'SCRAPPED')::text AS "companyQuantity",
+            count(asset.id) FILTER (
+              WHERE asset.accountable_store_id = $2
+                AND asset.status <> 'SCRAPPED')::text AS "accountableQuantity",
+            count(asset.id) FILTER (
+              WHERE asset.accountable_store_id = $2
+                AND asset.status = 'AVAILABLE'
+                AND asset.current_holder_type = 'STORE'
+                AND location.accountable_store_id = $2)::text
+              AS "availableQuantity"
+           FROM store.item_types item
+           LEFT JOIN store.assets asset ON asset.item_type_id = item.id
+             AND asset.organization_id = item.organization_id
+           LEFT JOIN store.locations location
+             ON location.id = asset.current_location_id
+           WHERE item.organization_id = $1
+             AND item.tracking_mode = 'SERIALIZED' AND item.active
+           GROUP BY item.id ORDER BY item.type_code`,
           [input.organizationId, store.id]
         ),
         pool.query<{
@@ -645,6 +677,7 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
         store,
         stores: stores.rows,
         consumables: consumables.rows,
+        serializedTotals: serializedTotals.rows,
         assets: assets.rows,
         gaugeSets: gaugeSets.rows,
         movements: movements.rows,
