@@ -10,6 +10,7 @@ import { PageHeader } from "@/components/ui/golden-patterns"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { accountableStoreHref, accountableStorePermission } from "@/lib/auth/department-store-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
+import { requireStoreAction } from "@/lib/auth/store-action-access"
 import { getWebPostgresPool } from "@/lib/postgres-runtime"
 
 function first(value: string | string[] | undefined) {
@@ -31,10 +32,10 @@ export default async function DepartmentRepairOrderPage({ searchParams }: {
   } catch {
     notFound()
   }
-  const session = await requireCapability(
-    accountableStorePermission(storeCode, "write"),
-    `/department-store/repair?store=${encodeURIComponent(storeCode)}`
-  )
+  const path = `/department-store/repair?store=${encodeURIComponent(storeCode)}`
+  const session = storeCode === "MAIN"
+    ? await requireStoreAction("store.asset_repair.write", path)
+    : await requireCapability(accountableStorePermission(storeCode, "write"), path)
   const store = createStoreRepository({ connectionString: readAuthEnvironment().connectionString })
   const data = await (async () => {
     const organizationId = await store.organizationIdForCode("MRMPL")
