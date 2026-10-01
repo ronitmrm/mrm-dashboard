@@ -24,7 +24,7 @@ export function accountableStorePermission(storeCode: string, access: "read" | "
 }
 
 export function accountableStoreHref(storeCode: string) {
-  if (storeCode === "MAIN") return "/store/department-transfers"
+  if (storeCode === "MAIN") return "/store/movement"
   if (storeCode === "QUALITY") return "/quality-control/store"
   const floor = productionFloors.find(({ code }) => code === storeCode)
   if (!floor) throw new Error("Accountable Store is invalid.")

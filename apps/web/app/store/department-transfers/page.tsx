@@ -1,13 +1,5 @@
-import { renderDepartmentStoreWorkspace } from "@/lib/department-store-workspace"
+import { redirect } from "next/navigation"
 
-export default async function StoreDepartmentTransfersPage({ searchParams }: {
-  searchParams: Promise<{ saved?: string }>
-}) {
-  return renderDepartmentStoreWorkspace({
-    basePath: "/store/department-transfers",
-    readCapability: "store.stock.read",
-    saved: (await searchParams).saved === "1",
-    storeCode: "MAIN",
-    writeCapability: "store.asset_movement.write",
-  })
+export default function StoreDepartmentTransfersPage() {
+  redirect("/store/movement")
 }
