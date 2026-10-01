@@ -83,6 +83,7 @@ export {
   type CommercialAttachmentAuthorization,
 } from "./commercial-workflow"
 export { createCustomerRepository } from "./customers"
+export { createDepartmentStoreRepository } from "./department-stores"
 export { createDashboardPlanningRepository } from "./dashboard-planning"
 export {
   normalizeSourceCoverage,
