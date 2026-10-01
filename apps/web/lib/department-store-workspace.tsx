@@ -3,6 +3,7 @@ import { createDepartmentStoreRepository, createStoreRepository } from "@workspa
 import { DepartmentStoreWorkspace } from "@/components/store/department-store-workspace"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { listGrantedCapabilities, requireCapability } from "@/lib/auth/require-capability"
+import { listGrantedStoreActions } from "@/lib/auth/store-action-access"
 import { getWebPostgresPool } from "@/lib/postgres-runtime"
 
 export async function renderDepartmentStoreWorkspace(input: {
@@ -14,6 +15,9 @@ export async function renderDepartmentStoreWorkspace(input: {
 }) {
   const session = await requireCapability(input.readCapability, input.basePath)
   const canWrite = (await listGrantedCapabilities(session.user.id, [input.writeCapability])).length > 0
+  const canRepair = input.storeCode === "MAIN"
+    ? (await listGrantedStoreActions(session.user.id)).has("store.asset_repair.write")
+    : canWrite
   const store = createStoreRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
@@ -43,6 +47,7 @@ export async function renderDepartmentStoreWorkspace(input: {
   return (
     <DepartmentStoreWorkspace
       canWrite={canWrite}
+      canRepair={canRepair}
       saved={input.saved ?? false}
       departments={options.departments}
       machines={options.machines}
