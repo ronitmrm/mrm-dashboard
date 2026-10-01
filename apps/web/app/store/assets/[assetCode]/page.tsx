@@ -144,6 +144,7 @@ export default async function StoreAssetWorkspacePage({
     schedules,
     supplierPrices,
   } = data.workspace
+  const isMainAccountable = asset.accountableStoreCode === "MAIN"
   const performerDisplay = data.performer
     ? [data.performer.code, data.performer.name].filter(Boolean).join(" - ")
     : "Signed-in account name required"
@@ -184,7 +185,7 @@ export default async function StoreAssetWorkspacePage({
 
       <StoreAssetWorkspaceTabs
         initialTab={tab === "calibration" ? "calibration" : "overview"}
-        showLifecycle={canManageLifecycle}
+        showLifecycle={canManageLifecycle && isMainAccountable}
       >
         <StoreAssetWorkspacePane tab="overview">
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -270,7 +271,7 @@ export default async function StoreAssetWorkspacePage({
           </div>
         </StoreAssetWorkspacePane>
 
-        {canManageLifecycle ? (
+        {canManageLifecycle && isMainAccountable ? (
           <StoreAssetWorkspacePane tab="lifecycle">
  <SectionCard width="standard">
           <CardHeader>
@@ -321,31 +322,37 @@ export default async function StoreAssetWorkspacePage({
         <CardHeader>
           <CardTitle>Repair Purchase Orders</CardTitle>
           <CardDescription>
-            Complete each repair line in{" "}
-            {canOpenPurchaseRegister ? (
-              <Link
-                className="font-medium text-primary underline-offset-4 hover:underline"
-                href="/store/orders"
-              >
-                Purchase Register
-              </Link>
+            {isMainAccountable ? (
+              <>
+                Complete each repair line in{" "}
+                {canOpenPurchaseRegister ? (
+                  <Link
+                    className="font-medium text-primary underline-offset-4 hover:underline"
+                    href="/store/orders"
+                  >
+                    Purchase Register
+                  </Link>
+                ) : (
+                  "Purchase Register"
+                )}{" "}
+                when this Unit ID returns to Store. A Department request for the
+                same Asset Code can use any available Unit ID through Requests &amp;
+                Issues. To assign this returned unit directly, use{" "}
+                {canMove ? (
+                  <Link
+                    className="font-medium text-primary underline-offset-4 hover:underline"
+                    href={`/store/movement?unitId=${encodeURIComponent(asset.assetCode)}`}
+                  >
+                    Store Movement
+                  </Link>
+                ) : (
+                  "Store Movement"
+                )}{" "}
+                to assign it to a Department.
+              </>
             ) : (
-              "Purchase Register"
-            )}{" "}
-            when this Unit ID returns to Store. A Department request for the
-            same Asset Code can use any available Unit ID through Requests &amp;
-            Issues. To assign this returned unit directly, use{" "}
-            {canMove ? (
-              <Link
-                className="font-medium text-primary underline-offset-4 hover:underline"
-                href={`/store/movement?unitId=${encodeURIComponent(asset.assetCode)}`}
-              >
-                Store Movement
-              </Link>
-            ) : (
-              "Store Movement"
-            )}{" "}
-            to assign it to a Department.
+              <>This Unit ID is accountable to {asset.accountableStoreName}. That Store records its repair return and movements.</>
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent className="min-w-0">
