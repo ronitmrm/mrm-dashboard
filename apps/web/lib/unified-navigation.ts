@@ -624,11 +624,6 @@ export const storeNavigation = [
     icon: Route,
     label: "Movement",
   },
-  {
-    href: "/store/department-transfers",
-    icon: Boxes,
-    label: "Department Transfers",
-  },
 ] as const
 
 export const maintenanceNavigation = [

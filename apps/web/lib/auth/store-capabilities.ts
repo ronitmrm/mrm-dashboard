@@ -66,15 +66,6 @@ export const storePageAccess = [
     "/store/movement",
     storeCapabilities.assetHistory
   ),
-  {
-    href: "/store/department-transfers",
-    id: "store.department_transfers",
-    label: "Department Transfers",
-    module: sidebarModuleLabels.store,
-    navigation: true,
-    readPermissionKey: storeCapabilities.stock.read,
-    writePermissionKey: storeCapabilities.assetMovement.write,
-  },
   page(
     "store.asset_history",
     "Asset Movement & Maintenance History",

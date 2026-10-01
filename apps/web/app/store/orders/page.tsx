@@ -1,6 +1,5 @@
 import { PendingRetainedUploadForm } from "@/components/pending-retained-upload-form"
 import { createDepartmentStoreRepository, createStoreRepository } from "@workspace/db"
-import Link from "next/link"
 import { redirect } from "next/navigation"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
@@ -33,6 +32,7 @@ import {
 
 import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
 import { BulkReceiveButton } from "@/components/store/bulk-receive-button"
+import { DepartmentRepairCompletion } from "@/components/store/department-repair-completion"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { MetricSummary } from "@/components/ui/golden-patterns"
 import {
@@ -400,9 +400,11 @@ export default async function StoreOrdersPage() {
                           !order.calibrationVisitId &&
                           order.originStoreCode === "MAIN" &&
                           order.status === "Open" ? (
-                          <Button asChild size="sm">
-                            <Link href="/department-store/repair?store=MAIN">Complete &amp; Return</Link>
-                          </Button>
+                          <DepartmentRepairCompletion
+                            assetCode={order.typeCode}
+                            purchaseOrderId={order.purchaseOrderId}
+                            storeCode="MAIN"
+                          />
                         ) : order.orderType === "REPAIR" ? (
                           order.calibrationVisitId
                             ? "Use Calibration Visit"
