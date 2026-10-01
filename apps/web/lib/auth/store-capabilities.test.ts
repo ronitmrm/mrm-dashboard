@@ -71,6 +71,7 @@ describe("store page capability contract", () => {
       ["/store/orders", "store.purchase_register.read"],
       ["/store/stock", "store.stock.read"],
       ["/store/movement", "store.asset_history.read"],
+      ["/store/department-transfers", "store.stock.read"],
     ])
   })
 })
