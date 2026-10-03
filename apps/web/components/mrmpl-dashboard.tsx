@@ -21,6 +21,7 @@ import {
   Activity,
   ArrowDown,
   ArrowLeft,
+  ArrowRight,
   ArrowUp,
   Ban,
   CalendarDays,
@@ -4049,6 +4050,12 @@ function PlannerDecisionConsole({
             submitAction={submitAction}
           />
         ),
+        earlyDownstream: (
+          <EarlyDownstreamPlannerForm
+            productionControl={productionControl}
+            submitAction={submitAction}
+          />
+        ),
         rawMaterialRejection: (
           <RawMaterialRejectionPlannerForm
             productionControl={productionControl}
@@ -5116,6 +5123,139 @@ function ParallelMachinePlannerForm({
     </form>
   )
 }
+function EarlyDownstreamPlannerForm({
+  productionControl,
+  submitAction,
+}: {
+  productionControl: DashboardPayload
+  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
+}) {
+  const plannedRows = asArray(productionControl.machinePlanDetailRows)
+  const machineRows = asArray(productionControl.machinePlanningRows)
+  const routeRows = asArray(productionControl.routeMasterRows)
+  const setupNumber = (value: unknown) => Number(str(value).match(/^(?:setup\s*|p)?(\d+)$/i)?.[1])
+  const setupOneRows = plannedRows.filter((row) =>
+    setupNumber(row.setupNo) === 1 && !shopFloorItemIsFinished(row) &&
+    !plannedRows.some((other) => jobCardNumber(other) === jobCardNumber(row) && setupNumber(other.setupNo) === 2)
+  )
+  const [target, setTarget] = useState("")
+  const [toMachine, setToMachine] = useState("")
+  const [reason, setReason] = useState("")
+  const [reviewReady, setReviewReady] = useState(false)
+  const [queueReviewed, setQueueReviewed] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const selected = setupOneRows.find((row) => jobCardNumber(row) === target)
+  const setupTwo = routeRows.find((row) =>
+    machineKey(str(row.partNo)) === machineKey(itemCode(selected ?? {})) &&
+    str(row.optionNumber) === str(selected?.optionNumber) &&
+    setupNumber(row.setupNo) === 2
+  )
+  const upstreamMachines = new Set(setupOneRows
+    .filter((row) => jobCardNumber(row) === target)
+    .map((row) => machineKey(machineValue(row, "machine"))))
+  const occupied = new Set(plannedRows
+    .filter((row) => !shopFloorItemIsFinished(row) && machineIssueRowIsLocked(row))
+    .map((row) => machineKey(machineValue(row, "machine"))))
+  const unavailable = new Set(openMachineIssues(asArray(productionControl.machineConstraintRows))
+    .map((row) => machineKey(displayValue(row.machineNo || row.machine))))
+  const machineOptions = setupTwo ? compatibleDestinationMachineOptions({
+    affectedRows: [{ routeMachine: setupTwo.machineUsed || setupTwo.machineFamily, machineType: setupTwo.machineType }],
+    machineRows,
+    sourceMachine: "",
+  }).filter((machine) => !upstreamMachines.has(machineKey(machine)) && !occupied.has(machineKey(machine)) && !unavailable.has(machineKey(machine))) : []
+  const targetQueue = plannedRows
+    .filter((row) => machineKey(machineValue(row, "machine")) === machineKey(toMachine) && !shopFloorItemIsFinished(row))
+    .sort(machinePlanDisplaySort)
+  const canReview = Boolean(target && setupTwo && machineOptions.includes(toMachine))
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!reviewReady) {
+      setReviewReady(true)
+      return
+    }
+    if (!canReview || !queueReviewed || !reason.trim() || isSubmitting) return
+    setIsSubmitting(true)
+    try {
+      await submitAction("plan-override", {
+        assignmentMode: "early_downstream",
+        target,
+        setupNo: "2",
+        toMachine,
+        reason,
+      })
+      setTarget("")
+      setToMachine("")
+      setReason("")
+      setReviewReady(false)
+      setQueueReviewed(false)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  return (
+    <form className="grid gap-3 rounded-xl border bg-background p-3" onSubmit={submit}>
+      <div>
+        <div className="text-sm font-medium">Plan Setup 2 Early</div>
+        <div className="text-xs text-muted-foreground">
+          Reserve a separate compatible machine while Setup 1 is planned. Setup 2 may produce before the normal WIP buffer, limited by recorded Setup 1 good pieces.
+        </div>
+      </div>
+      <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
+        <Field label="Job Card">
+          <SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" value={target} required onChange={(event) => {
+            setTarget(event.target.value)
+            setToMachine("")
+            setReviewReady(false)
+            setQueueReviewed(false)
+          }}>
+            <option value="">Select Job Card</option>
+            {uniqueValues(setupOneRows.map(jobCardNumber)).map((jobCard) => <option key={jobCard} value={jobCard}>{jobCard}</option>)}
+          </SearchableSelect>
+        </Field>
+        <Field label="Setup 2 Machine">
+          <SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" value={toMachine} required onChange={(event) => {
+            setToMachine(event.target.value)
+            setReviewReady(false)
+            setQueueReviewed(false)
+          }}>
+            <option value="">Select Compatible Machine</option>
+            {machineOptions.map((machine) => <option key={machine} value={machine}>{machine}</option>)}
+          </SearchableSelect>
+        </Field>
+        <Field label="Reason">
+          <Input value={reason} required placeholder="Why this Job Card needs early overlap" onChange={(event) => setReason(event.target.value)} />
+        </Field>
+      </div>
+      {target && !setupTwo ? <div className="text-sm text-muted-foreground">This Job Card has no selected Setup 2 route.</div> : null}
+      {target && setupTwo && !machineOptions.length ? <div className="text-sm text-muted-foreground">No idle compatible machine is available.</div> : null}
+      {reviewReady && canReview ? (
+        <div className="grid gap-3 rounded-md border bg-muted/15 p-3 text-sm">
+          <div className="flex flex-wrap gap-2">
+            <StatusBadge value={`${target} · ${itemCode(selected ?? {})} · Setup 2`} />
+            <StatusBadge value={`Reserve ${toMachine}`} tone="information" />
+            <StatusBadge value="WIP pending" tone="warning" />
+          </div>
+          <div>Current {toMachine} queue: {targetQueue.length ? targetQueue.map((row) => `${jobCardNumber(row)} Setup ${displayValue(row.setupNo)} (${displayValue(row.setupPlannedDate || row.plannedDate)})`).join("; ") : "empty"}.</div>
+          <div>Setup preparation may proceed. Machine start waits for recorded Setup 1 WIP; output cannot exceed the remaining WIP.</div>
+          <label className="flex items-start gap-2 rounded-md border bg-background p-2">
+            <input className="mt-1" type="checkbox" checked={queueReviewed} onChange={(event) => setQueueReviewed(event.target.checked)} />
+            <span>I reviewed this machine queue and the early WIP condition.</span>
+          </label>
+        </div>
+      ) : null}
+      <div className="flex flex-wrap gap-2">
+        <Button className="w-fit" type="submit" disabled={!canReview || isSubmitting || (reviewReady && (!queueReviewed || !reason.trim()))}>
+          <ArrowRight className="size-4" />
+          {reviewReady ? "Reserve Setup 2" : "Review Early Plan"}
+        </Button>
+        {reviewReady ? <Button type="button" variant="outline" disabled={isSubmitting} onClick={() => { setReviewReady(false); setQueueReviewed(false) }}>Recheck Inputs</Button> : null}
+      </div>
+    </form>
+  )
+}
+
 function PartMachineSwitchPlannerForm({
   productionControl,
   submitAction,
@@ -17393,6 +17533,9 @@ function MachinePlannedPartsPanel({
                   <div className="flex flex-wrap justify-end gap-1.5">
                     <StatusBadge value={row.runningStatus} />
                     <StatusBadge value={row.rmStatus} />
+                    {row.earlyDownstreamWipException ? (
+                      <StatusBadge value="Early WIP exception" tone="information" />
+                    ) : null}
                     {row.rmReplanRequired ? (
                       <StatusBadge value="Replacement RM replan" />
                     ) : null}

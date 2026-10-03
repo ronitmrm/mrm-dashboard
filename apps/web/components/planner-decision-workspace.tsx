@@ -29,6 +29,7 @@ export type PlannerDecisionAction =
   | "machine-unavailable"
   | "machine-switch"
   | "parallel-machine"
+  | "early-downstream"
   | "raw-material-rejection"
   | "route-change"
 
@@ -40,6 +41,7 @@ type PlannerDecisionPanels = {
   machineUnavailable: ReactNode
   machineSwitch: ReactNode
   parallelMachine: ReactNode
+  earlyDownstream: ReactNode
   pending: ReactNode
   priority: ReactNode
   rawMaterialRejection: ReactNode
@@ -87,6 +89,13 @@ const actionChoices = [
     icon: PlusCircle,
   },
   {
+    key: "early-downstream",
+    title: "Plan Setup 2 Early",
+    description: "Reserve another machine for Setup 2 before the normal WIP buffer is ready.",
+    detail: "Production can begin as recorded Setup 1 WIP becomes available.",
+    icon: ArrowRight,
+  },
+  {
     key: "raw-material-rejection",
     title: "Reject Raw Material",
     description: "Dispatch rejected Raw Material back and recalculate this Job Card.",
@@ -125,6 +134,7 @@ export function PlannerDecisionWorkspace({
         "machine-unavailable": panels.machineUnavailable,
         "machine-switch": panels.machineSwitch,
         "parallel-machine": panels.parallelMachine,
+        "early-downstream": panels.earlyDownstream,
         "raw-material-rejection": panels.rawMaterialRejection,
         "route-change": panels.routeChange,
       }[activeAction]

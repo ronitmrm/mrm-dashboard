@@ -1310,8 +1310,8 @@ async function post(request: NextRequest, context: RouteContext) {
           repository.recordPlanOverride({
             actorUserId,
             assignmentMode:
-              body.assignmentMode === "add_parallel_machine"
-                ? "add_parallel_machine"
+              body.assignmentMode === "add_parallel_machine" || body.assignmentMode === "early_downstream"
+                ? body.assignmentMode
                 : "move",
             fromMachineNumber: body.fromMachine
               ? String(body.fromMachine)
@@ -1334,7 +1334,9 @@ async function post(request: NextRequest, context: RouteContext) {
           message:
             body.assignmentMode === "add_parallel_machine"
               ? "Parallel machine added and planning recalculated."
-              : "Plan override saved.",
+              : body.assignmentMode === "early_downstream"
+                ? "Setup 2 reserved for early production; recorded WIP still limits output."
+                : "Plan override saved.",
         })
       )
     }
