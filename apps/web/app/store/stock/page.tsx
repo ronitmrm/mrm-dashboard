@@ -375,7 +375,7 @@ export default async function StoreStockPage({
                     ) : null}
                     <TableCell
                       className="font-medium"
-                      data-filter-value={item.displayedCode}
+                      data-filter-value={`${item.typeCode} ${item.displayedCode}`}
                     >
                       {capabilities.has("store.asset_history.read") ? (
                         <Link
@@ -388,8 +388,20 @@ export default async function StoreStockPage({
                         item.displayedCode
                       )}
                       <span className="block text-xs font-normal text-muted-foreground">
-                        {item.physicalUnit ? "Physical Unit" : "Asset Code"}
+                        {item.physicalUnit
+                          ? `Asset Code ${item.typeCode}`
+                          : "Asset Code"}
                       </span>
+                      {mode === "view" && item.physicalUnit &&
+                      capabilities.has("store.asset_history.read") &&
+                      storeActions.has("store.receipts.receive") ? (
+                        <Link
+                          className="block w-fit text-xs font-normal text-primary underline underline-offset-4"
+                          href={`${storeAssetWorkspaceHref(item.displayedCode)}#unit-details`}
+                        >
+                          Edit Unit Details
+                        </Link>
+                      ) : null}
                     </TableCell>
                     <TableCell>
                       {item.assetName}

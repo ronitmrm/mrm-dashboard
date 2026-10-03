@@ -127,6 +127,7 @@ export default async function StoreAssetWorkspacePage({
   if (data.kind === "item") {
     return (
       <StoreItemWorkspace
+        canEditUnitDetails={canRecordAcquisition}
         canUploadDrawing={grants.includes(masterCapability("ITEM_TYPE", "save"))}
         canUploadQuote={grants.includes(masterCapability("SUPPLIER_PRICE", "save"))}
         workspace={data.workspace}
@@ -215,12 +216,12 @@ export default async function StoreAssetWorkspacePage({
             <Info label="MCB Number" value={asset.mcbNumber || "Not recorded"} />
           </div>
           {canRecordAcquisition ? (
-            <SectionCard width="wide">
+            <SectionCard id="unit-details" width="wide">
               <CardHeader>
                 <CardTitle>Unit Details</CardTitle>
                 <CardDescription>
                   Record the actual installation date and connected equipment when known.
-                  These details belong to this Unit ID only.
+                  Asset Code {asset.typeCode} · Unit ID {asset.assetCode}.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -780,10 +781,12 @@ type StoreItemWorkspaceData = NonNullable<
 >
 
 function StoreItemWorkspace({
+  canEditUnitDetails,
   canUploadDrawing,
   canUploadQuote,
   workspace,
 }: {
+  canEditUnitDetails: boolean
   canUploadDrawing: boolean
   canUploadQuote: boolean
   workspace: StoreItemWorkspaceData
@@ -860,6 +863,14 @@ function StoreItemWorkspace({
                     >
                       {asset.assetCode}
                     </Link>
+                    {canEditUnitDetails ? (
+                      <Link
+                        className="block w-fit text-xs font-normal text-primary underline underline-offset-4"
+                        href={`${storeAssetWorkspaceHref(asset.assetCode)}#unit-details`}
+                      >
+                        Edit Unit Details
+                      </Link>
+                    ) : null}
                   </TableCell>
                   <TableCell>
                     <Badge
