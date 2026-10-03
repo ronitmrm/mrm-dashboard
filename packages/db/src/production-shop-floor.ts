@@ -4330,7 +4330,9 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         }
         const stateToUpdate = existingOnMachine
           ?? (assignmentMode === "move" ? otherMachineState : undefined)
-        if (active) {
+        const earlierStageOnSameMachine = Boolean(existingOnMachine &&
+          (stageRanks.get(existingOnMachine.stage) ?? -1) > (stageRanks.get(stage) ?? -1))
+        if (active && !earlierStageOnSameMachine) {
           const occupied = await client.query<{
             id: string
             job_card_number: string
@@ -4360,7 +4362,10 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           operationSetupCode: input.operationSetupCode,
           stage,
         }
-        const state = stateToUpdate
+        // Keep later setup progress while retaining this earlier task as an event.
+        const state = earlierStageOnSameMachine && existingOnMachine
+          ? { rows: [{ id: existingOnMachine.id }] }
+          : stateToUpdate
           ? await client.query<{ id: string }>(
               `
                 UPDATE manufacturing.shop_floor_setup_state

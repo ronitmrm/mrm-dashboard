@@ -1026,6 +1026,16 @@ describe("production and shop-floor workflows", () => {
       payload: { doneBy: "Quality", partCode: itemUid },
       stage: "quality_approval",
     })
+    const continuedSetup = await pool.query<{ stage: string; active: boolean }>(
+      `SELECT state.stage, state.active
+       FROM manufacturing.shop_floor_setup_state state
+       JOIN manufacturing.production_sessions session
+         ON session.work_order_id = state.work_order_id
+         AND session.operation_setup_id = state.operation_setup_id
+         AND session.machine_id = state.machine_id
+       WHERE session.id = $1`, [session.id]
+    )
+    expect(continuedSetup.rows[0]).toEqual({ stage: "operator_started", active: true })
 
     await repository.recordProductionSessionDowntime({
       correctionReason: "Operator recorded the stoppage after the shift.",
