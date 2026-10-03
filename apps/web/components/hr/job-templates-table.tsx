@@ -15,7 +15,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
-import { Field, FieldLabel } from "@workspace/ui/components/field"
+import { Field, FieldDescription, FieldLabel } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
 import {
   NativeSelect,
@@ -47,7 +47,7 @@ import {
 } from "@workspace/ui/components/table"
 import { useExcelTable } from "@workspace/ui/hooks/use-excel-table"
 import { Textarea } from "@workspace/ui/components/textarea"
-import { Trash2 } from "lucide-react"
+import { Pencil, Trash2 } from "lucide-react"
 
 import {
   deleteRecruitmentMasterAction,
@@ -86,6 +86,7 @@ function JobTemplateEditor({
         <input name="master_view" type="hidden" value={masterView} />
       ) : null}
       <input name="template_code" type="hidden" value={template.templateCode} />
+      <input name="template_id" type="hidden" value={template.id} />
       <SheetHeader>
         <SheetTitle>{canWrite ? "Edit" : "View"} {template.templateCode}</SheetTitle>
         <SheetDescription>
@@ -177,6 +178,33 @@ function JobTemplateEditor({
             rows={8}
           />
         </Field>
+        {canWrite ? (
+          <Field className="sm:col-span-2">
+            <FieldLabel htmlFor="edit-template-apply-to-posts">
+              Apply Changes To Approved Posts?
+            </FieldLabel>
+            <NativeSelect
+              defaultValue=""
+              id="edit-template-apply-to-posts"
+              name="apply_to_approved_posts"
+              required
+            >
+              <NativeSelectOption disabled value="">
+                Choose Where To Apply Changes
+              </NativeSelectOption>
+              <NativeSelectOption value="no">
+                Template Only
+              </NativeSelectOption>
+              <NativeSelectOption value="yes">
+                Also Update Matching Approved Posts
+              </NativeSelectOption>
+            </NativeSelect>
+            <FieldDescription>
+              Includes occupied and vacant posts. Unlinked matching posts will
+              use this template. Job Posts keep their own requirements.
+            </FieldDescription>
+          </Field>
+        ) : null}
       </fieldset>
       {canWrite ? (
         <SheetFooter>
@@ -269,7 +297,7 @@ export function JobTemplatesTable({
                 {filterKeys.map(({ key, label }) => (
                   <TableHead key={key}>{label}</TableHead>
                 ))}
-                {canDelete ? (
+                {canWrite || canDelete ? (
                   <TableHead className="text-right">Actions</TableHead>
                 ) : null}
               </TableRow>
@@ -282,7 +310,7 @@ export function JobTemplatesTable({
                     />
                   </TableHead>
                 ))}
-                {canDelete ? <TableHead /> : null}
+                {canWrite || canDelete ? <TableHead /> : null}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -307,16 +335,28 @@ export function JobTemplatesTable({
                   <TableCell>{row.designation}</TableCell>
                   <TableCell>{row.education ?? "—"}</TableCell>
                   <TableCell>{row.experienceRequirement ?? "—"}</TableCell>
-                  {canDelete ? (
-                    <TableCell className="text-right">
-                      <Button
-                        onClick={() => setDeletingTemplate(row)}
-                        size="sm"
-                        type="button"
-                        variant="outline"
-                      >
-                        <Trash2 className="size-3.5" /> Delete
-                      </Button>
+                  {canWrite || canDelete ? (
+                    <TableCell className="space-x-2 text-right">
+                      {canWrite ? (
+                        <Button
+                          onClick={() => setEditingTemplate(row)}
+                          size="sm"
+                          type="button"
+                          variant="outline"
+                        >
+                          <Pencil className="size-3.5" /> Edit
+                        </Button>
+                      ) : null}
+                      {canDelete ? (
+                        <Button
+                          onClick={() => setDeletingTemplate(row)}
+                          size="sm"
+                          type="button"
+                          variant="outline"
+                        >
+                          <Trash2 className="size-3.5" /> Delete
+                        </Button>
+                      ) : null}
                     </TableCell>
                   ) : null}
                 </TableRow>
@@ -325,7 +365,7 @@ export function JobTemplatesTable({
                 <TableRow>
                   <TableCell
                     className="py-10 text-center text-muted-foreground"
-                    colSpan={canDelete ? 7 : 6}
+                    colSpan={canWrite || canDelete ? 7 : 6}
                   >
                     No Job Templates Match The Selected Filters.
                   </TableCell>

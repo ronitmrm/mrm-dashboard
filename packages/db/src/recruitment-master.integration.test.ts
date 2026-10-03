@@ -163,3 +163,90 @@ describe("Department Master rename", () => {
     expect((await repository.listJobs(organizationId))[0]?.title).toBe("Inspector")
   })
 })
+
+test("editing a template can update occupied and vacant Approved Posts", async () => {
+  const suffix = randomUUID()
+  const organization = await pool.query<{ id: string }>(
+    `INSERT INTO core.organizations (code, name)
+     VALUES ($1, 'Template Edit Test') RETURNING id`,
+    [`TEMPLATE-EDIT-${suffix}`]
+  )
+  const organizationId = organization.rows[0]!.id
+  const department = await pool.query<{ id: string }>(
+    `INSERT INTO recruitment.departments
+       (organization_id, code, name, source_system, source_table, source_id)
+     VALUES ($1, 'CNC', 'Cnc', 'test', 'departments', $2) RETURNING id`,
+    [organizationId, `department-${suffix}`]
+  )
+  const designation = await pool.query<{ id: string }>(
+    `INSERT INTO recruitment.designations
+       (organization_id, code, name, source_system, source_table, source_id)
+     VALUES ($1, 'OP', 'Operator', 'test', 'designations', $2) RETURNING id`,
+    [organizationId, `designation-${suffix}`]
+  )
+  const repository = createRecruitmentRepository({ pool })
+  const input = {
+    organizationId,
+    templateCode: "JRT-0001",
+    name: "Cnc Operator",
+    departmentCode: "CNC",
+    designationCode: "OP",
+    rejectDuplicates: true,
+  }
+  const template = await repository.upsertTemplate({
+    ...input,
+    experienceRequirement: "One year",
+  })
+  await pool.query(
+    `INSERT INTO recruitment.posts
+       (organization_id, department_id, designation_id, requirement_template_id,
+        vacancy_number, post_code, vacancy_code, status, employee_name,
+        experience_requirement, source_system, source_table, source_id)
+     VALUES ($1, $2, $3, $4, '1', 'CNC-OP-1', 'CNC-OP-1', 'Occupied',
+             'Existing Operator', 'One year', 'test', 'posts', $5),
+            ($1, $2, $3, NULL, '2', 'CNC-OP-2', 'CNC-OP-2', 'Vacant',
+             NULL, 'One year', 'test', 'posts', $6)`,
+    [organizationId, department.rows[0]!.id, designation.rows[0]!.id,
+      template.id, `occupied-${suffix}`, `vacant-${suffix}`]
+  )
+
+  await repository.upsertTemplate({
+    ...input,
+    templateId: template.id,
+    experienceRequirement: "Two years",
+  })
+  expect((await repository.listTemplates(organizationId))[0]?.experienceRequirement).toBe(
+    "Two years"
+  )
+  const beforePosts = await pool.query<{ experience_requirement: string }>(
+    `SELECT experience_requirement FROM recruitment.posts WHERE organization_id = $1`,
+    [organizationId]
+  )
+  expect(beforePosts.rows.map((post) => post.experience_requirement)).toEqual([
+    "One year", "One year",
+  ])
+  await repository.upsertTemplate({
+    ...input,
+    templateId: template.id,
+    experienceRequirement: "Three years",
+    applyToApprovedPosts: true,
+  })
+  const posts = await pool.query<{
+    post_code: string
+    status: string
+    employee_name: string | null
+    experience_requirement: string
+    requirement_template_id: string
+  }>(
+    `SELECT post_code, status, employee_name, experience_requirement,
+            requirement_template_id FROM recruitment.posts
+     WHERE organization_id = $1 ORDER BY post_code`,
+    [organizationId]
+  )
+  expect(posts.rows).toEqual([
+    { post_code: "CNC-OP-1", status: "Occupied", employee_name: "Existing Operator",
+      experience_requirement: "Three years", requirement_template_id: template.id },
+    { post_code: "CNC-OP-2", status: "Vacant", employee_name: null,
+      experience_requirement: "Three years", requirement_template_id: template.id },
+  ])
+})

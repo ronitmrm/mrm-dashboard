@@ -201,6 +201,7 @@ export async function saveTemplateAction(formData: FormData) {
       repository.upsertTemplate({
         rejectDuplicates: true,
         ...context,
+        applyToApprovedPosts: value(formData, "apply_to_approved_posts") === "yes",
         combinedRoleId: value(formData, "combined_role_id"),
         departmentCode: value(formData, "department_code"),
         designationCode: value(formData, "designation_code"),
@@ -212,6 +213,7 @@ export async function saveTemplateAction(formData: FormData) {
         name: value(formData, "name"),
         roleResponsibilities: value(formData, "role_responsibilities"),
         templateCode: value(formData, "template_code"),
+        templateId: value(formData, "template_id"),
       })
   )
 }
