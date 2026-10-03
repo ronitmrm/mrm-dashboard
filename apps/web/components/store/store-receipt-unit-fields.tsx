@@ -4,12 +4,15 @@ import { useState } from "react"
 
 import { Field, FieldLabel } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
+import { SearchableSelect } from "@workspace/ui/components/searchable-select"
 
 export function StoreReceiptUnitFields({
+  equipmentUnits,
   orderId,
   remainingQuantity,
   serialized,
 }: {
+  equipmentUnits: Array<{ assetName: string; status: string; typeCode: string; unitId: string }>
   orderId: string
   remainingQuantity: string
   serialized: boolean
@@ -55,11 +58,25 @@ export function StoreReceiptUnitFields({
             <FieldLabel htmlFor={`receipt-stabilizer-${orderId}`}>
               Connected Stabiliser Unit ID
             </FieldLabel>
-            <Input id={`receipt-stabilizer-${orderId}`} name="stabilizer_unit_id" placeholder="Existing Unit ID" />
+            <SearchableSelect id={`receipt-stabilizer-${orderId}`} name="stabilizer_unit_id" searchPlaceholder="Search Asset Code, name or Unit ID" wrapLabels>
+              <option value="">None</option>
+              {equipmentUnits.map((unit) => (
+                <option key={unit.unitId} value={unit.unitId}>
+                  {unit.typeCode} · {unit.assetName} · {unit.unitId} · {unit.status}
+                </option>
+              ))}
+            </SearchableSelect>
           </Field>
           <Field>
-            <FieldLabel htmlFor={`receipt-mcb-${orderId}`}>MCB Number</FieldLabel>
-            <Input id={`receipt-mcb-${orderId}`} name="mcb_number" />
+            <FieldLabel htmlFor={`receipt-mcb-${orderId}`}>Connected MCB Unit ID</FieldLabel>
+            <SearchableSelect id={`receipt-mcb-${orderId}`} name="mcb_number" searchPlaceholder="Search Asset Code, name or Unit ID" wrapLabels>
+              <option value="">None</option>
+              {equipmentUnits.map((unit) => (
+                <option key={unit.unitId} value={unit.unitId}>
+                  {unit.typeCode} · {unit.assetName} · {unit.unitId} · {unit.status}
+                </option>
+              ))}
+            </SearchableSelect>
           </Field>
         </div>
       ) : null}

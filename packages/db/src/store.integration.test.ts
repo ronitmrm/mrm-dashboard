@@ -306,10 +306,8 @@ describe("Store requests", () => {
       unitDetails: {
         installedOn: "2026-09-20",
         manufacturerSerialNumber: "COMP-001",
-        mcbNumber: "M13",
       },
-      warrantyPeriod: "12 months from installation",
-      warrantyUntil: "2027-09-20",
+      warrantyPeriod: "365",
     })
     const result = await pool.query<{ identification_name: string }>(
       "SELECT identification_name FROM store.assets WHERE asset_code = $1 AND organization_id = $2",
@@ -326,8 +324,8 @@ describe("Store requests", () => {
     }))?.asset).toMatchObject({
       installedOn: "2026-09-20",
       manufacturerSerialNumber: "COMP-001",
-      mcbNumber: "M13",
-      warrantyPeriod: "12 months from installation",
+      mcbNumber: null,
+      warrantyPeriod: "365",
       warrantyUntil: "2027-09-20",
     })
 
@@ -336,6 +334,12 @@ describe("Store requests", () => {
       organizationId,
       stabilizerUnitId: "MISSING-STABILIZER",
     })).rejects.toThrow("Stabiliser Unit ID MISSING-STABILIZER was not found")
+
+    await expect(store.updateAssetEquipmentDetails({
+      assetCode: receipt.assetCodes[0]!,
+      mcbNumber: "MISSING-MCB",
+      organizationId,
+    })).rejects.toThrow("MCB Unit ID MISSING-MCB was not found")
 
     const stabilizer = await store.createItemType({
       ...(await createClassification("Connected Stabilizer")),
@@ -350,21 +354,33 @@ describe("Store requests", () => {
       purchaseOrderLineId: stabilizerOrder.id,
       quantity: 1,
     })
+    const mcb = await store.createItemType({
+      ...(await createClassification("Connected MCB")),
+      assetType: "NON_CONSUMABLE",
+      organizationId,
+      unit: "Nos",
+    })
+    const mcbOrder = await createPurchaseOrder(mcb.id, 1, "20.00")
+    const mcbReceipt = await store.receiveStock({
+      locationId: location.id,
+      organizationId,
+      purchaseOrderLineId: mcbOrder.id,
+      quantity: 1,
+    })
     await store.updateAssetEquipmentDetails({
       assetCode: receipt.assetCodes[0]!,
       installedOn: "2026-09-21",
       manufacturerSerialNumber: "COMP-001",
-      mcbNumber: "M14",
+      mcbNumber: mcbReceipt.assetCodes[0]!,
       organizationId,
       stabilizerUnitId: stabilizerReceipt.assetCodes[0]!,
-      warrantyPeriod: "12 months from installation",
-      warrantyUntil: "2027-09-21",
+      warrantyPeriod: "365",
     })
     expect((await store.getAssetWorkspace({
       assetCode: receipt.assetCodes[0]!, organizationId,
     }))?.asset).toMatchObject({
       installedOn: "2026-09-21",
-      mcbNumber: "M14",
+      mcbNumber: mcbReceipt.assetCodes[0],
       stabilizerUnitId: stabilizerReceipt.assetCodes[0],
       warrantyUntil: "2027-09-21",
     })

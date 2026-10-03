@@ -145,6 +145,9 @@ export function BulkReceiveButton({
             value={selection.purchaseOrderId}
           />
           <FieldGroup className="grid gap-4 sm:grid-cols-2">
+            <p className="text-sm text-muted-foreground sm:col-span-2">
+              Each Unit ID warranty end is calculated after its Installation Date is recorded.
+            </p>
             <Field>
               <FieldLabel htmlFor="bulk-receipt-received-by">Received By</FieldLabel>
               <Input id="bulk-receipt-received-by" readOnly value={receivedBy} />
@@ -163,17 +166,19 @@ export function BulkReceiveButton({
             </Field>
             <Field>
               <FieldLabel htmlFor="bulk-receipt-warranty-period">
-                Warranty Period (optional)
+                Warranty Period in days (optional)
               </FieldLabel>
               <Input
                 id="bulk-receipt-warranty-period"
+                min="1"
                 name="warranty_period"
-                placeholder="e.g. 12 months from installation"
+                step="1"
+                type="number"
               />
             </Field>
             <Field>
               <FieldLabel htmlFor="bulk-receipt-warranty">
-                Warranty / Guarantee Until (optional)
+                Supplier Guarantee Until (optional)
               </FieldLabel>
               <Input
                 id="bulk-receipt-warranty"

@@ -1107,11 +1107,10 @@ export async function updateStoreAssetEquipmentDetailsAction(formData: FormData)
         organizationId,
         stabilizerUnitId: optionalText(formData, "stabilizer_unit_id"),
         warrantyPeriod: optionalText(formData, "warranty_period"),
-        warrantyUntil: optionalText(formData, "warranty_until"),
       })
     )
   } catch (error) {
-    if (error instanceof Error && /Stabiliser Unit ID|own stabiliser/.test(error.message)) {
+    if (error instanceof Error && /Stabiliser Unit ID|own stabiliser|MCB Unit ID|own MCB|Warranty Period|Installation Date/.test(error.message)) {
       return { error: error.message }
     }
     throw error
