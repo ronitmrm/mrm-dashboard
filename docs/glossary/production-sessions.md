@@ -119,6 +119,10 @@ active setup Item Complete in the same transaction, which releases the machine.
 Shop Floor does not perform a second Item Finished or Setup Completion action.
 The other close reasons end only the current session so the setup can continue in
 a later session.
+Shift Ends leaves a started setup at Machine Started. A later entry for an earlier
+Shop Floor stage, such as a delayed Quality Approval, remains in the action
+history but must not move the setup's current stage backward or reopen a
+completed setup.
 When a setup runs on parallel machines, each machine keeps its own Shop Floor
 setup state. Starting or finishing work on one machine does not move or finish
 the other machine's setup state.
