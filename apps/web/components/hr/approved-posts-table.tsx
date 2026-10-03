@@ -52,6 +52,7 @@ import {
 } from "lucide-react"
 import { useRef, useState } from "react"
 import { useFormStatus } from "react-dom"
+import Link from "next/link"
 
 import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
 import {
@@ -302,7 +303,13 @@ export function ApprovedPostsTable({
                         <TableCell>{row.department}</TableCell>
                         <TableCell>{row.designation}</TableCell>
                         <TableCell className="font-mono">
-                          {row.requirementTemplateCode ?? "—"}
+                          {row.requirementTemplateCode ? (
+                            <Button asChild className="h-auto p-0 font-mono" variant="link">
+                              <Link href={`/hr?panel=postMasterPanel&masterView=masterTables&template=${encodeURIComponent(row.requirementTemplateCode)}`}>
+                                {row.requirementTemplateCode}
+                              </Link>
+                            </Button>
+                          ) : "—"}
                         </TableCell>
                         <TableCell>
                           {row.employeeName ?? "—"}

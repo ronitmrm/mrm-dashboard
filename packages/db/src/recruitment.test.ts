@@ -15,6 +15,30 @@ import {
   recruitmentAdvisoryLockKey,
 } from "./recruitment-codes"
 
+test("job register returns the template selected for each job", async () => {
+  const query = vi.fn().mockResolvedValue({ rows: [{
+    applicant_count: 0,
+    id: "job-1",
+    job_number: "POST-1",
+    post_code: "POST-1",
+    post_date: "2026-10-03",
+    requirement_template_code: "JRT-0001",
+    status: "Open",
+    target_date: null,
+    title: "Operator",
+    vacancy_code: "POST-1",
+  }] })
+  const repository = createRecruitmentRepository({ pool: { query } as unknown as Pool })
+
+  await expect(repository.listJobs("org-1")).resolves.toMatchObject([
+    { id: "job-1", requirementTemplateCode: "JRT-0001" },
+  ])
+  expect(query.mock.calls[0]?.[0]).toContain(
+    "template.id = job.requirement_template_id"
+  )
+  expect(query.mock.calls[0]?.[1]).toEqual(["org-1"])
+})
+
 test("pending offer responses are scoped to approved applications without a response", async () => {
   const rows = [{ applicationId: "application-1", candidateName: "Pending Candidate" }]
   const query = vi.fn().mockResolvedValue({ rows })
