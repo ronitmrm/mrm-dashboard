@@ -45,6 +45,14 @@ describe("dashboard delivery client", () => {
         requestId: 2,
       })
     ).toBe("/api/dashboard-state?floor=forging")
+    expect(
+      dashboardCanonicalRequestUrl({
+        floor: "cnc",
+        knownVersion: 42,
+        knownLiveVersion: "2026-10-03 12:01:00+00",
+        requestId: 3,
+      })
+    ).toBe("/api/dashboard-state?floor=cnc&knownVersion=42&knownLiveVersion=2026-10-03+12%3A01%3A00%2B00")
   })
 
   it("normalizes changed responses into delivery state and partial coverage", () => {

@@ -164,7 +164,8 @@ export async function readPostgresDashboardState(
   filters: Record<string, string | undefined>,
   requestedProductionFloor?: string | null,
   knownVersion?: number,
-  scope?: "maintenance"
+  scope?: "maintenance",
+  knownLiveVersion?: string
 ) {
   return withDashboardReadRepository(
     request,
@@ -176,12 +177,14 @@ export async function readPostgresDashboardState(
         organizationId,
         filters,
         productionFloorCode,
-        knownVersion
+        knownVersion,
+        knownLiveVersion
       )
       const envelope = {
         productionFloorCode,
         status: state.status,
         version: state.version,
+        liveVersion: state.liveVersion,
       }
       if (state.notModified) {
         return {
