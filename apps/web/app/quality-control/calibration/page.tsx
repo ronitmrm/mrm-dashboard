@@ -241,11 +241,21 @@ function SelectedWork({ row, workspace, canWrite, includeFuture }: {
 }
 
 export default async function CalibrationWorkPage({ searchParams }: {
-  searchParams: Promise<{ unit?: string; work?: string; show?: string; assetSearch?: string }>
+  searchParams: Promise<{ unit?: string; work?: string; show?: string; assetSearch?: string; assign?: string }>
 }) {
   const session = await requireCapability("quality.control.calibration.read", "/quality-control/calibration")
   const params = await searchParams
   const includeFuture = params.show === "all"
+  const showAssignment = params.assign === "1"
+  const viewParams = new URLSearchParams()
+  if (includeFuture) viewParams.set("show", "all")
+  if (params.work) viewParams.set("work", params.work)
+  if (params.unit) viewParams.set("unit", params.unit)
+  const closeAssignmentHref = viewParams.size
+    ? `/quality-control/calibration?${viewParams.toString()}`
+    : "/quality-control/calibration"
+  const assignmentParams = new URLSearchParams(viewParams)
+  assignmentParams.set("assign", "1")
   const grants = await listGrantedCapabilities(session.user.id, ["quality.control.calibration.write"])
   const canWrite = grants.length > 0
   const repository = createStoreRepository({ connectionString: readAuthEnvironment().connectionString })
@@ -253,7 +263,9 @@ export default async function CalibrationWorkPage({ searchParams }: {
     const organizationId = await repository.organizationIdForCode("MRMPL")
     const [rows, candidates] = await Promise.all([
       repository.listCalibrationWorklist({ organizationId, includeFuture }),
-      canWrite ? repository.listCalibrationAssignmentCandidates({ organizationId, search: params.assetSearch }) : Promise.resolve([]),
+      canWrite && showAssignment
+        ? repository.listCalibrationAssignmentCandidates({ organizationId, search: params.assetSearch })
+        : Promise.resolve([]),
     ])
     const selected = rows.find((row) => row.id === params.work)
       || rows.find((row) => row.unitId === params.unit && ["OPEN", "DISPATCHED", "RETURNED"].includes(row.status))
@@ -270,7 +282,14 @@ export default async function CalibrationWorkPage({ searchParams }: {
         title="Calibration"
         icon={ClipboardCheck}
         description="Quality Control work list for every assigned Unit ID, across all accountable stores."
-        actions={<Button asChild variant="outline"><Link href="/iso-document/calibration-plan">Calibration Plan</Link></Button>}
+        actions={<div className="flex flex-wrap gap-2">
+          {canWrite ? <Button asChild variant={showAssignment ? "outline" : "default"}>
+            <Link href={showAssignment ? closeAssignmentHref : `/quality-control/calibration?${assignmentParams.toString()}`}>
+              {showAssignment ? "Close timetable form" : "Assign calibration timetable"}
+            </Link>
+          </Button> : null}
+          <Button asChild variant="outline"><Link href="/iso-document/calibration-plan">Calibration Plan</Link></Button>
+        </div>}
       />
       <MetricSummary
         scope={`${includeFuture ? "All dates" : "Due and overdue"} · before table filters`}
@@ -320,7 +339,7 @@ export default async function CalibrationWorkPage({ searchParams }: {
           ) : null}
         </TableBody>
       </OperationalTable>
-      {canWrite ? (
+      {canWrite && showAssignment ? (
         <SectionCard width="wide">
           <CardHeader>
             <CardTitle>Assign calibration timetable</CardTitle>
@@ -328,6 +347,10 @@ export default async function CalibrationWorkPage({ searchParams }: {
           </CardHeader>
           <CardContent className="grid gap-4">
             <form action="/quality-control/calibration" className="flex flex-wrap items-end gap-2">
+              <input name="assign" type="hidden" value="1" />
+              {includeFuture ? <input name="show" type="hidden" value="all" /> : null}
+              {params.work ? <input name="work" type="hidden" value={params.work} /> : null}
+              {params.unit ? <input name="unit" type="hidden" value={params.unit} /> : null}
               <Field className="w-full max-w-xs">
                 <FieldLabel htmlFor="candidate-search">Find Unit ID or asset</FieldLabel>
                 <Input defaultValue={params.assetSearch || ""} id="candidate-search" name="assetSearch" />
