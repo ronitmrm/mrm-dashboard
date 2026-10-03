@@ -105,6 +105,10 @@ using the same cycle-based supply and remaining-work calculation. Forecast-only
 downstream work does not reserve a machine or bypass actual-WIP readiness without
 the Planner's early Setup 2 decision. The whole-job finish cannot precede the
 upstream supply needed by that setup.
+An approved route change sets the selected route and the remaining setup
+quantities for future planning. A Move Setup decision uses the target machine
+from its decision date onward; an outage that ended before that decision does
+not block the move.
 The immutable RM-receipt Planned Finish Date remains historical.
 
 A machine-unavailable action affects unfinished work only. A setup already

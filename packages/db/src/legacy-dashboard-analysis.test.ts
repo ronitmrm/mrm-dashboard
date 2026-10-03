@@ -2,6 +2,33 @@ import { describe, expect, test } from "vitest"
 
 import { buildLegacyDashboardSnapshot } from "./legacy-dashboard-analysis"
 
+test("saved route change uses the new route and remaining setup quantities", () => {
+  const createdAt = "2026-10-03T11:21:35Z"
+  const entry = (entryType: string, payload: Record<string, unknown>) => ({ entryType, payload, createdAt })
+  const snapshot = buildLegacyDashboardSnapshot({
+    productionFloorCode: "cnc",
+    workbookName: "PostgreSQL",
+    productionEntries: [],
+    dataEntries: [
+      entry("work_order", { jcNo: "P2205", partCode: "M615", orderPcs: 1450, rmInwardDate: "2026-10-03", rmInwardKg: 1 }),
+      ...["1", "2"].map((optionNumber) => entry("route", { partNo: "M615", optionNumber, setupNo: "1", machineType: "CNC", machineFamily: optionNumber === "1" ? "JL" : "C3" })),
+      entry("cycle", { partNo: "M615", optionNumber: "2", setupNo: "1", cycleTime: 60 }),
+      entry("machine_master", { machineNo: "CNC-7", machineType: "CNC", machineFamily: "JL", status: "Active" }),
+      entry("machine_master", { machineNo: "CNC-21", machineType: "CNC", machineFamily: "C3", status: "Active" }),
+    ],
+    routeSelections: [{ jobCardNumber: "P2205", routeCode: "1", createdAt }],
+    routeChanges: [{ jobCardNumber: "P2205", newRouteCode: "2", remainingSetups: [{ setupNumber: 1, plan: true, quantity: 900 }], createdAt }],
+  })
+
+  expect(snapshot.productionControl?.workOrders.find((row) => row.jcNo === "P2205")).toMatchObject({
+    optionNumber: "2", optionSource: "Route change",
+    routeChangeRemainingSetups: [{ setupNo: "1", plan: true, quantity: 900 }],
+  })
+  expect(snapshot.productionControl?.machinePlanDetailRows.find((row) => row.jcNo === "P2205")).toMatchObject({
+    machine: "CNC-21", optionNumber: "2", orderPcs: 900,
+  })
+})
+
 test("approved dispatch marks the Job Card dispatched", () => {
   const createdAt = "2026-09-29T10:00:00Z"
   const snapshot = buildLegacyDashboardSnapshot({
