@@ -106,9 +106,11 @@ downstream work does not reserve a machine or bypass actual-WIP readiness withou
 the Planner's early Setup 2 decision. The whole-job finish cannot precede the
 upstream supply needed by that setup.
 An approved route change sets the selected route and the remaining setup
-quantities for future planning. A Move Setup decision uses the target machine
-from its decision date onward; an outage that ended before that decision does
-not block the move.
+quantities for future planning. If any selected setup lacks required masters,
+Part Readiness lists the gaps and the changed Job Card receives no new machine
+plan until the selected route is ready. A Move Setup decision uses the target
+machine from its decision date onward; an outage that ended before that decision
+does not block the move.
 The immutable RM-receipt Planned Finish Date remains historical.
 
 A machine-unavailable action affects unfinished work only. A setup already

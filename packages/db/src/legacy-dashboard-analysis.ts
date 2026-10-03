@@ -3032,6 +3032,7 @@ function machinePlanDetails(
     const optionNumber = rowText(row, "optionNumber");
     if (!partCode || !optionNumber || optionNumber === "Not selected") continue;
     if (!isMaterialPlanningReady(row)) continue;
+    if (rowText(row, "optionSource") === "Route change" && rowText(row, "planningBlocker") !== "All checks ready") continue;
     const routeKeyValue = [canonicalKey(partCode), optionNumber].join("|");
     const remainingSetups = routeChangeRemainingPlan(row).filter((setup) => setup.plan && safeNumber(setup.quantity) > 0);
     const remainingQtyBySetup = new Map(remainingSetups.map((setup) => [canonicalKey(setup.setupNo), setup.quantity]));

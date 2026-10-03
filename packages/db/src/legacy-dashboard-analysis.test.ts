@@ -13,6 +13,7 @@ test("saved route change uses the new route and remaining setup quantities", () 
       entry("work_order", { jcNo: "P2205", partCode: "M615", orderPcs: 1450, rmInwardDate: "2026-10-03", rmInwardKg: 1 }),
       ...["1", "2"].map((optionNumber) => entry("route", { partNo: "M615", optionNumber, setupNo: "1", machineType: "CNC", machineFamily: optionNumber === "1" ? "JL" : "C3" })),
       entry("cycle", { partNo: "M615", optionNumber: "2", setupNo: "1", cycleTime: 60 }),
+      entry("tooling", { partNo: "M615", optionNumber: "2", setupNo: "1" }),
       entry("machine_master", { machineNo: "CNC-7", machineType: "CNC", machineFamily: "JL", status: "Active" }),
       entry("machine_master", { machineNo: "CNC-21", machineType: "CNC", machineFamily: "C3", status: "Active" }),
     ],
@@ -27,6 +28,33 @@ test("saved route change uses the new route and remaining setup quantities", () 
   expect(snapshot.productionControl?.machinePlanDetailRows.find((row) => row.jcNo === "P2205")).toMatchObject({
     machine: "CNC-21", optionNumber: "2", orderPcs: 900,
   })
+})
+
+test("incomplete changed route stays in Part Readiness without a machine plan", () => {
+  const createdAt = "2026-10-03T11:21:35Z"
+  const entry = (entryType: string, payload: Record<string, unknown>) => ({ entryType, payload, createdAt })
+  const control = buildLegacyDashboardSnapshot({
+    productionFloorCode: "cnc", workbookName: "PostgreSQL", productionEntries: [],
+    dataEntries: [
+      entry("work_order", { jcNo: "P2205", partCode: "M615", orderPcs: 1450, rmInwardDate: "2026-10-03", rmInwardKg: 1 }),
+      entry("route", { partNo: "M615", optionNumber: "1", setupNo: "1", machineType: "CNC", machineFamily: "JL" }),
+      ...["1", "2"].map((setupNo) => entry("route", { partNo: "M615", optionNumber: "2", setupNo, machineType: "CNC", machineFamily: "C3" })),
+      entry("cycle", { partNo: "M615", optionNumber: "2", setupNo: "1", cycleTime: 60 }),
+      entry("tooling", { partNo: "M615", optionNumber: "2", setupNo: "1" }),
+      entry("machine_master", { machineNo: "CNC-7", machineType: "CNC", machineFamily: "JL", status: "Active" }),
+      entry("machine_master", { machineNo: "HX-01", machineType: "CNC", machineFamily: "C3", status: "Active" }),
+    ],
+    routeSelections: [{ jobCardNumber: "P2205", routeCode: "1", createdAt }],
+    routeChanges: [{ jobCardNumber: "P2205", newRouteCode: "2", remainingSetups: [1, 2].map((setupNumber) => ({ setupNumber, plan: true, quantity: 1450 })), createdAt }],
+    previousMachinePlanDetailRows: [{ jcNo: "P2205", partCode: "M615", optionNumber: "1", setupNo: "1", machine: "CNC-7", routeMachine: "JL" }],
+  }).productionControl
+
+  if (!("masterGaps" in control)) throw new Error("Missing Part Readiness rows")
+  expect(control.workOrders.find((row) => row.jcNo === "P2205")).toMatchObject({ optionNumber: "2", optionSource: "Route change" })
+  expect(control.masterGaps.filter((row) => row.jcNo === "P2205")).toEqual([
+    expect.objectContaining({ missingSetupNo: "2", cycleTimeMissing: true, toolingPlanMissing: true }),
+  ])
+  expect(control.machinePlanDetailRows.some((row) => row.jcNo === "P2205")).toBe(false)
 })
 
 test("approved dispatch marks the Job Card dispatched", () => {
