@@ -280,8 +280,8 @@ function normalizePlanOverrideDecision(row: ActionRow): ActionRow {
 
 function routeChangeDecisionKey(row: ActionRow) {
   return [
-    canonicalKey(rowText(row, "target", "jcNo", "JC NO.", "JC NO", "PART CODE", "PART NO")),
-    canonicalKey(rowText(row, "newOption", "NEW ROUTE OPTION", "NEW OPTION")),
+    canonicalKey(rowText(row, "target", "jobCardNumber", "jcNo", "JC NO.", "JC NO", "PART CODE", "PART NO")),
+    canonicalKey(rowText(row, "newRouteCode", "newOption", "NEW ROUTE OPTION", "NEW OPTION")),
     canonicalKey(rowText(row, "applyFromSetup", "APPLY FROM SETUP")),
   ].join("|");
 }
@@ -1154,7 +1154,7 @@ function buildProductionControl({
     const optionNumber = rowText(row, "OPTION NUMBER", "optionNumber");
     const selectedOptionNumber = rowText(selectedRouteByJc.get(canonicalKey(jcNo)) ?? {}, "optionNumber", "routeCode", "SELECTED ROUTE OPTION", "OPTION NUMBER");
     const routeChange = routeChangeForWorkOrder(routeChangeByTarget, jcNo, partCode);
-    const routeChangeOption = rowText(routeChange ?? {}, "newOption", "NEW ROUTE OPTION", "NEW OPTION");
+    const routeChangeOption = rowText(routeChange ?? {}, "newRouteCode", "newOption", "NEW ROUTE OPTION", "NEW OPTION");
     const routeChangeRemainingSetups = routeChangeRemainingPlan(routeChange);
     const partKey = canonicalKey(partCode);
     const availableOptions = routeOptionsByPart.get(partKey) ?? [];
@@ -2908,7 +2908,7 @@ function latestRouteChangeByTarget(rows: Array<Record<string, unknown>>) {
   const byTarget = new Map<string, Record<string, unknown>>();
   for (const row of rows) {
     if (!isActivePlannerDecision(rowText(row, "status", "STATUS"))) continue;
-    const target = rowText(row, "target", "jcNo", "JC NO.", "JC NO", "partCode", "PART CODE", "PART NO");
+    const target = rowText(row, "target", "jobCardNumber", "jcNo", "JC NO.", "JC NO", "partCode", "PART CODE", "PART NO");
     const key = canonicalKey(target);
     if (!key) continue;
     const current = byTarget.get(key);
@@ -2982,7 +2982,7 @@ function routeChangeRemainingPlan(routeChange: Record<string, unknown> | undefin
   return rows.map((row) => {
     const setup = asRecord(row);
     return {
-      setupNo: rowText(setup, "setupNo", "SETUP NO.", "SETUP NO"),
+      setupNo: rowText(setup, "setupNumber", "setupNo", "SETUP NO.", "SETUP NO"),
       plan: rowValue(setup, "plan") !== false && rowText(setup, "plan").toLowerCase() !== "no",
       quantity: safeNumber(rowValue(setup, "quantity", "qty", "remainingQty")),
       remark: rowText(setup, "remark", "REMARK"),
@@ -3126,9 +3126,15 @@ function machinePlanDetails(
       if (routePlanningBlocked && !(earlyDownstream && upstreamPlans.length) && !productionActualMachines.size && !lockedShopFloorMachines.size) continue;
       const interruptedLockedMachines = new Set([...lockedShopFloorMachines, ...productionActualMachines]);
       const earlyReadyDate = earlyDownstream ? earlyDownstreamWipDate(upstreamPlans, physicalWipQty, planningCalendar) : "";
+      const moveDecisionDate = override && canonicalKey(rowText(override, "assignmentMode")) === "move"
+        ? parseDate(rowText(override, "createdAt"))
+        : "";
       const readyDateForAssignment = earlyDownstream
         ? addDays(plantIsoDate(new Date()), 0, planningCalendar)
-        : operationReadyDate || addDays(parseDate(rmInwardDate) || rmInwardDate, 0, planningCalendar);
+        : maxDateValue(
+            operationReadyDate || addDays(parseDate(rmInwardDate) || rmInwardDate, 0, planningCalendar),
+            moveDecisionDate,
+          );
       const breakdownInterruption = machineUnavailableInterruptionForSetup(machineUnavailableWindows, {
         jcNo: rowText(row, "jcNo"),
         setupNo: displaySetupNo,
@@ -3349,7 +3355,7 @@ function machinePlanDetails(
           ? maxDateValue(operationReadyDate || staticBaseReadyDate, setupInterruption?.window.fromDate ?? "")
           : splitRole === "remaining_delayed_on_same_machine"
             ? maxDateValue(operationReadyDate || staticBaseReadyDate, setupInterruption ? machineUnavailableResumeDate(setupInterruption.window, planningCalendar) : "")
-            : earlyDownstream ? readyDateForAssignment : operationReadyDate || staticBaseReadyDate;
+            : readyDateForAssignment;
         const plannedStartDate = maxDateValue(baseSetupDate, machineNextSetupDate.get(machineKeyValue) ?? "");
         const plannedCompletionDate = plannedStartDate;
         const setupCompletionDate = settingDone ? parseDate(shopFloorCompletedAt) || shopFloorCompletedAt : "";
@@ -3501,7 +3507,7 @@ function machinePlanDetails(
           enumerable: false,
           value: {
             readyDate: baseSetupDate,
-            baseReadyDate: earlyDownstream ? readyDateForAssignment : staticBaseReadyDate,
+            baseReadyDate: earlyDownstream || moveDecisionDate ? readyDateForAssignment : staticBaseReadyDate,
             earlyProductionReadyDate: earlyDownstream ? earlyReadyDate : "",
             canPullForward: operationReadyCanPullForward,
             orderPcs: machineOrderPcs,
