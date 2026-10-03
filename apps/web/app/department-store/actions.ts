@@ -52,7 +52,9 @@ async function withStoreWrite(
 ): Promise<DepartmentStoreActionState> {
   const storeCode = required(formData, "store_code")
   const { capability, path: storePath } = permissionForStore(storeCode)
-  const path = storeCode === "MAIN" && mainReturnPath ? mainReturnPath : storePath
+  const path = storeCode === "MAIN" && mainReturnPath ? mainReturnPath
+    : mainReturnPath === "/store/movement" ? `${storePath}/movement`
+    : mainReturnPath === "/store/orders" ? `${storePath}/repairs` : storePath
   const session = storeCode === "MAIN"
     ? await requireStoreAction(mainCapability, path)
     : await requireCapability(capability, path)
@@ -82,7 +84,11 @@ async function withStoreWrite(
     "/store/movement",
     "/store/orders",
     "/quality-control/store",
+    "/quality-control/store/movement",
+    "/quality-control/store/repairs",
     ...productionFloors.map(({ code }) => departmentStoreHref(code)),
+    ...productionFloors.map(({ code }) => `${departmentStoreHref(code)}/movement`),
+    ...productionFloors.map(({ code }) => `${departmentStoreHref(code)}/repairs`),
   ]) revalidatePath(destination)
   redirect(`${path}?saved=1`)
 }
@@ -109,17 +115,21 @@ export async function consumeDepartmentQuantityAction(
 ) {
   return withStoreWrite(formData, (repository, context) => {
     if (context.storeCode === "MAIN") throw new Error("Consumption must be recorded by the receiving Store.")
-    return repository.consumeQuantity({
+    const itemTypeIds = formData.getAll("item_type_id")
+      .map((value) => value.toString().trim()).filter(Boolean)
+    return repository.consumeQuantities({
       ...context,
-      itemTypeId: required(formData, "item_type_id"),
-      quantity: quantity(formData),
+      items: itemTypeIds.map((itemTypeId) => ({
+        itemTypeId,
+        quantity: Number(required(formData, `quantity_${itemTypeId}`)),
+      })),
       operatorName: required(formData, "operator_name"),
       consumedOn: optional(formData, "consumed_on"),
       machineReference: optional(formData, "machine_reference"),
       jobCardReference: optional(formData, "job_card_reference"),
       remark: optional(formData, "remark"),
     })
-  })
+  }, "store.asset_movement.write", "/store/movement")
 }
 
 export async function adjustDepartmentQuantityAction(
@@ -193,7 +203,7 @@ export async function createQualityGaugeSetAction(
       name: required(formData, "set_name"),
       assetCodes: [required(formData, "first_asset_code"), required(formData, "second_asset_code")],
     })
-  })
+  }, "store.asset_movement.write", "/store/movement")
 }
 
 export async function moveQualityGaugeSetAction(
@@ -208,7 +218,7 @@ export async function moveQualityGaugeSetAction(
       ...movementDestination(formData),
       remark: optional(formData, "remark"),
     })
-  })
+  }, "store.asset_movement.write", "/store/movement")
 }
 
 export async function replaceQualityGaugeSetMemberAction(
@@ -225,7 +235,7 @@ export async function replaceQualityGaugeSetMemberAction(
       oldAssetCode: required(formData, "old_asset_code"),
       newAssetCode: required(formData, "new_asset_code"),
     })
-  })
+  }, "store.asset_movement.write", "/store/movement")
 }
 
 export async function disbandQualityGaugeSetAction(
@@ -240,7 +250,7 @@ export async function disbandQualityGaugeSetAction(
       setId: required(formData, "set_id"),
       storeCode: context.storeCode,
     })
-  })
+  }, "store.asset_movement.write", "/store/movement")
 }
 
 export async function createDepartmentRepairOrderAction(

@@ -1,17 +1,31 @@
 import { createDepartmentStoreRepository, createStoreRepository } from "@workspace/db"
 
-import { DepartmentStoreWorkspace } from "@/components/store/department-store-workspace"
+import { DepartmentStoreRegister } from "@/components/store/department-store-register"
+import type { DepartmentStoreAction } from "@/components/store/department-store-forms"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { accountableStorePermission } from "@/lib/auth/department-store-capabilities"
 import { listGrantedCapabilities, requireCapability } from "@/lib/auth/require-capability"
 import { listGrantedStoreActions } from "@/lib/auth/store-action-access"
 import { getWebPostgresPool } from "@/lib/postgres-runtime"
 
+const departmentStoreActions: DepartmentStoreAction[] = [
+  "quantity", "accountability", "physical", "consume", "adjust",
+  "gauge-create", "gauge-move", "gauge-replace", "gauge-disband",
+]
+
+export function departmentStoreAction(value: string | undefined) {
+  return departmentStoreActions.find((action) => action === value)
+}
+
 export async function renderDepartmentStoreWorkspace(input: {
   basePath: string
   readCapability: string
   saved?: boolean
+  action?: DepartmentStoreAction
+  selectedItemIds?: string[]
+  selectUse?: boolean
   storeCode: string
+  view?: "stock" | "movement" | "repairs"
   writeCapability: string
 }) {
   const session = await requireCapability(input.readCapability, input.basePath)
@@ -44,24 +58,36 @@ export async function renderDepartmentStoreWorkspace(input: {
     organizationId: options.organizationId,
     storeCode: input.storeCode,
   })
-  const orders = createStoreRepository({ connectionString: readAuthEnvironment().connectionString })
-  const repairOrders = await orders.listPurchaseOrders(options.organizationId, {
-    repairOnly: true,
-    originStoreId: workspace.store.id,
-  })
-    .finally(() => orders.close())
+  const repairOrders = input.view === "repairs"
+    ? await (async () => {
+        const orders = createStoreRepository({ connectionString: readAuthEnvironment().connectionString })
+        try {
+          return await orders.listPurchaseOrders(options.organizationId, {
+            repairOnly: true,
+            originStoreId: workspace.store.id,
+          })
+        } finally {
+          await orders.close()
+        }
+      })()
+    : []
   const equipmentRepairOrders = repairOrders.filter((order) => !order.calibrationVisitId)
 
   return (
-    <DepartmentStoreWorkspace
+    <DepartmentStoreRegister
+      action={input.action}
+      basePath={input.basePath}
       canWrite={canWrite}
       canRequest={canRequest}
       canRepair={canRepair}
       saved={input.saved ?? false}
+      selectedItemIds={input.selectedItemIds}
+      selectUse={input.selectUse}
       departments={options.departments}
       machines={options.machines}
       repairOrders={equipmentRepairOrders}
       vendors={options.vendors}
+      view={input.view ?? "stock"}
       workspace={workspace}
     />
   )

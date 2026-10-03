@@ -100,6 +100,9 @@ stock's routine movements and supplier service orders. All stores use one
 company database, Supplier Master, purchase register, and movement history.
 An explicit accountability transfer changes which store controls a Unit ID or
 quantity. A physical issue for use does not.
+Transfers between two non-Main Stores pass through Main Store: the sending
+Store returns quantity or Unit ID accountability to Main, then Main transfers
+it to the receiving Store. Each leg is a separate ledger event.
 
 **Physical Holder / Location**: Where a Unit ID is currently kept or used,
 including a store, production area, machine, or supplier. It may differ from
@@ -355,6 +358,11 @@ Store unchanged. A Store transfer changes the responsible Store or its local
 available quantity while preserving company ownership. The register shows a
 single history of these events and quantity adjustments. Fulfilling a
 Department request remains an Issue, not a transfer into a department Store.
+Each production and Quality Store has its own Movement Register, separate from
+its Stock Register. Its Stock Register combines local Consumable balances with
+accountable Non Consumable Unit IDs; repair orders have a separate register.
+Consumable use starts by selecting one or more available Asset Codes in Stock
+and records their quantities together with the same operator and work context.
 
 **Gauge Set**: A Quality Store handling group of exactly two physical gauges,
 of any gauge types, under one Set ID and chosen name. It is not a third stock

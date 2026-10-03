@@ -9,6 +9,7 @@ import {
 } from "react"
 import { usePathname, useSearchParams } from "next/navigation"
 import {
+  ArrowRightLeft,
   BriefcaseBusiness,
   Palette,
   Boxes,
@@ -101,7 +102,8 @@ function defaultExpandedSections(
 ): ExpandedSections {
   const onProduction = pathname === "/" || pathname.startsWith("/dashboard")
   const productionStoreFloor = productionFloors.find(
-    (floor) => pathname === departmentStoreHref(floor.code)
+    (floor) => pathname === departmentStoreHref(floor.code) ||
+      pathname.startsWith(`${departmentStoreHref(floor.code)}/`)
   )?.code
   const onCommercialMasterData = commercialMasterDataWorkspaceNavigation.some(
     ({ href }) => pathname === href || pathname.startsWith(`${href}/`)
@@ -277,7 +279,9 @@ export function UnifiedSidebarNavigation({
     "store inventory assets requests receipts"
   )
   const filteredQualityControlNavigation = filterNavigationItems(
-    qualityControlNavigation.filter((item) => navigationAccess.qualityControlHrefs?.includes(item.href)),
+    qualityControlNavigation.filter((item) => navigationAccess.qualityControlHrefs?.includes(item.href) ||
+      (item.href.startsWith("/quality-control/store/") &&
+        navigationAccess.qualityControlHrefs?.includes("/quality-control/store"))),
     normalizedMenuSearch, "quality control rejection checking assembly"
   )
   const filteredMaintenanceNavigation = filterNavigationItems(
@@ -292,7 +296,7 @@ export function UnifiedSidebarNavigation({
           showStore:
             (navigationAccess.productionStoreFloorCodes?.includes(floor.code) ?? false) &&
             (!normalizedMenuSearch ||
-              `${floor.label} ${floor.shortLabel} production store stock inventory`.toLowerCase().includes(normalizedMenuSearch)),
+              `${floor.label} ${floor.shortLabel} production store stock inventory movement repairs`.toLowerCase().includes(normalizedMenuSearch)),
           items: filterProductionItems(
             productionFloorNavigation.filter(
               (item) =>
@@ -762,7 +766,7 @@ export function UnifiedSidebarNavigation({
           <NavigationSection
             icon={Factory}
             isActive={
-              pathname === storeHref ||
+              pathname === storeHref || pathname.startsWith(`${storeHref}/`) ||
               (productionFloorNavigation.some(
                 (item) => item.id === activeDashboardTab
               ) && floor.code === activeProductionFloor)
@@ -801,20 +805,24 @@ export function UnifiedSidebarNavigation({
                 </SidebarMenuSubButton>
               </SidebarMenuSubItem>
             ))}
-            {showStore ? (
-              <SidebarMenuSubItem key={`${floor.code}:store`}>
+            {showStore ? ([
+              { href: storeHref, icon: Boxes, label: "Store Stock" },
+              { href: `${storeHref}/movement`, icon: ArrowRightLeft, label: "Store Movement" },
+              { href: `${storeHref}/repairs`, icon: Wrench, label: "Store Repairs" },
+            ] as const).map((storeItem) => (
+              <SidebarMenuSubItem key={`${floor.code}:${storeItem.href}`}>
                 <SidebarMenuSubButton
                   asChild
                   className={submoduleButtonClassName}
-                  isActive={pathname === storeHref}
+                  isActive={pathname === storeItem.href}
                 >
-                  <a href={storeHref}>
-                    <Boxes aria-hidden="true" />
-                    <span>Store</span>
+                  <a href={storeItem.href}>
+                    <storeItem.icon aria-hidden="true" />
+                    <span>{storeItem.label}</span>
                   </a>
                 </SidebarMenuSubButton>
               </SidebarMenuSubItem>
-            ) : null}
+            )) : null}
           </NavigationSection>
         )
       })}

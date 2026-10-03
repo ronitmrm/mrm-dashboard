@@ -689,6 +689,7 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
           accountableStoreCode: string
           assetCode: string
           assetName: string
+          availableHere: boolean
           holderName: string | null
           holderType: string
           inGaugeSet: boolean
@@ -702,6 +703,8 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
             item.type_code AS "typeCode", item.asset_name AS "assetName",
             asset.status, asset.current_holder_type AS "holderType",
             asset.current_holder_name AS "holderName",
+            COALESCE(asset.status = 'AVAILABLE' AND asset.current_holder_type = 'STORE'
+              AND location.accountable_store_id = $2 AND location.active, false) AS "availableHere",
             asset.manufacturer_serial_number AS "manufacturerSerialNumber",
             (lower(concat_ws(' ', item.asset_category,
               item.asset_subcategory, item.asset_name)) LIKE '%gauge%') AS "isGauge",
@@ -714,6 +717,7 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
            JOIN store.item_types item ON item.id = asset.item_type_id
            JOIN store.accountable_stores accountable
              ON accountable.id = asset.accountable_store_id
+           LEFT JOIN store.locations location ON location.id = asset.current_location_id
            WHERE asset.organization_id = $1 AND asset.accountable_store_id = $2
            ORDER BY asset.asset_code`,
           [input.organizationId, store.id]
@@ -858,6 +862,9 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
         if (source.id === destination.id) {
           throw new Error("Choose a different destination Store.")
         }
+        if (source.kind !== "MAIN" && destination.kind !== "MAIN") {
+          throw new Error("Transfer through Main Store before sending stock to another Store.")
+        }
         await lockConsumable(client, input.organizationId, input.itemTypeId)
         const operationId = await insertOperation(client, {
           ...input,
@@ -891,37 +898,44 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
       })
     },
 
-    async consumeQuantity(input: MutationIdentity & {
+    async consumeQuantities(input: MutationIdentity & {
       consumedOn?: string | null
-      itemTypeId: string
+      items: Array<{ itemTypeId: string; quantity: number }>
       jobCardReference?: string | null
       machineReference?: string | null
       operatorName: string
-      quantity: number
       storeCode: string
     }) {
-      const quantity = positiveQuantity(input.quantity)
       const operatorName = requiredText(input.operatorName, "Operator")
+      if (!input.items.length || new Set(input.items.map((item) => item.itemTypeId)).size !== input.items.length) {
+        throw new Error("Select one or more distinct consumable Asset Codes.")
+      }
       if (!input.machineReference?.trim() && !input.jobCardReference?.trim()) {
         throw new Error("Machine or Job Card is required for consumption.")
       }
       return withTransaction(pool, async (client) => {
         const store = await findStore(client, input.organizationId, input.storeCode)
-        await lockConsumable(client, input.organizationId, input.itemTypeId)
-        const operationId = await insertOperation(client, {
-          ...input,
-          operatedOn: input.consumedOn,
-          operationType: "CONSUMPTION",
-          operatorName,
-          quantity,
-          sourceStoreId: store.id,
-        })
-        await writeDebits(client, {
-          ...input, itemTypeId: input.itemTypeId,
-          movementType: "ISSUE", operationId, quantity,
-          sourceStore: store,
-        })
-        return { operationId }
+        const operationIds: string[] = []
+        for (const item of input.items) {
+          const quantity = positiveQuantity(item.quantity)
+          await lockConsumable(client, input.organizationId, item.itemTypeId)
+          const operationId = await insertOperation(client, {
+            ...input,
+            itemTypeId: item.itemTypeId,
+            operatedOn: input.consumedOn,
+            operationType: "CONSUMPTION",
+            operatorName,
+            quantity,
+            sourceStoreId: store.id,
+          })
+          await writeDebits(client, {
+            ...input, itemTypeId: item.itemTypeId,
+            movementType: "ISSUE", operationId, quantity,
+            sourceStore: store,
+          })
+          operationIds.push(operationId)
+        }
+        return { operationIds }
       })
     },
 
@@ -1000,6 +1014,9 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
         }
         if (source.id === destination.id) {
           throw new Error("Choose a different destination Store.")
+        }
+        if (source.kind !== "MAIN" && destination.kind !== "MAIN") {
+          throw new Error("Transfer through Main Store before assigning this Unit ID to another Store.")
         }
         const grouped = await client.query(
           `SELECT 1 FROM store.gauge_set_memberships member
