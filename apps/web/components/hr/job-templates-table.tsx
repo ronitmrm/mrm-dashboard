@@ -181,7 +181,7 @@ function JobTemplateEditor({
         {canWrite ? (
           <Field className="sm:col-span-2">
             <FieldLabel htmlFor="edit-template-apply-to-posts">
-              Apply Changes To Approved Posts?
+              Apply Requirement Changes To Approved Posts?
             </FieldLabel>
             <NativeSelect
               defaultValue=""
@@ -201,7 +201,8 @@ function JobTemplateEditor({
             </NativeSelect>
             <FieldDescription>
               Includes occupied and vacant posts. Unlinked matching posts will
-              use this template. Job Posts keep their own requirements.
+              use this template. Department, designation, employee assignments,
+              and existing Job Posts stay as they are.
             </FieldDescription>
           </Field>
         ) : null}
