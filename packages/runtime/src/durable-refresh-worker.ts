@@ -270,7 +270,7 @@ export function createDurableRefreshWorker({
           try {
             await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ")
             await client.query(
-              "SET LOCAL idle_in_transaction_session_timeout = '15min'"
+              "SET LOCAL idle_in_transaction_session_timeout = '30min'"
             )
             const claim = await client.query<{
               attempts: number

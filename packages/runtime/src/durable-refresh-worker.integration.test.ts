@@ -62,7 +62,7 @@ describe("durable dashboard refresh runtime", () => {
         const timeout = await client.query<{ value: string }>(
           "SELECT current_setting('idle_in_transaction_session_timeout') AS value"
         )
-        expect(timeout.rows[0]?.value).toBe("15min")
+        expect(timeout.rows[0]?.value).toBe("30min")
         return model(1)()
       },
       organizationId,
