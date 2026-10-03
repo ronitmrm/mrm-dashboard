@@ -11,6 +11,7 @@ import {
 } from "./postgres-runtime"
 import {
   machineTypeForFamily,
+  machineFamilyMatches,
   isActivePlannerDecision,
   validConfirmedPrioritySetupNumbers,
   workOrderIdentityMatches,
@@ -56,7 +57,7 @@ type QueuePlacementInput = {
   targetSourceMachineNumber?: string | null
 }
 
-type PlanOverrideAssignmentMode = "move" | "add_parallel_machine"
+type PlanOverrideAssignmentMode = "move" | "add_parallel_machine" | "early_downstream"
 
 type RemainingSetupInput = {
   plan: boolean
@@ -2526,6 +2527,9 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
         if (assignmentMode === "add_parallel_machine" && !input.setupNumber) {
           throw new Error("Setup number is required to add a parallel machine.")
         }
+        if (assignmentMode === "early_downstream" && (input.setupNumber !== 2 || input.fromMachineNumber || input.interruptedSetups?.length)) {
+          throw new Error("Early downstream planning requires Setup 2 without a machine interruption.")
+        }
         const workOrder = await workOrderFor(
           client,
           input.organizationId,
@@ -2584,7 +2588,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           `,
           [targetMachineId]
         )
-        if (assignmentMode === "add_parallel_machine" && targetLock.rows[0]) {
+        if ((assignmentMode === "add_parallel_machine" || assignmentMode === "early_downstream") && targetLock.rows[0]) {
           throw new Error("Target machine is not idle. Finish or move its active setup first.")
         }
         if (
@@ -2608,17 +2612,83 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           `,
           [workOrder.id]
         )
+        let routeOptionId = selectedRoute.rows[0]?.route_option_id
+        if (!routeOptionId && assignmentMode === "early_downstream") {
+          const automaticRoute = await client.query<{ route_option_id: string | null }>(
+            `SELECT CASE WHEN count(*) = 1 THEN (array_agg(route.id))[1] ELSE NULL END AS route_option_id
+             FROM manufacturing.route_options route
+             JOIN manufacturing.production_floors floor ON floor.id = route.production_floor_id
+             WHERE route.organization_id = $1 AND route.item_id = $2
+               AND route.active AND floor.code = $3`,
+            [input.organizationId, workOrder.item_id, normalizeProductionFloorCode(input.productionFloorCode)]
+          )
+          routeOptionId = automaticRoute.rows[0]?.route_option_id ?? undefined
+        }
         let operationSetupId: string | null = null
-        if (input.setupNumber && selectedRoute.rows[0]) {
+        if (input.setupNumber && routeOptionId) {
           const setup = await client.query<{ id: string }>(
             `
               SELECT id FROM manufacturing.operation_setups
               WHERE route_option_id = $1 AND setup_number = $2 AND active
               FOR UPDATE
             `,
-            [selectedRoute.rows[0].route_option_id, input.setupNumber]
+            [routeOptionId, input.setupNumber]
           )
           operationSetupId = setup.rows[0]?.id ?? null
+        }
+        if (assignmentMode === "early_downstream") {
+          if (!operationSetupId) throw new Error("Select a route with Setup 2 before planning it early.")
+          const compatibility = await client.query<{
+            route_family: string | null
+            route_type: string | null
+            machine_family: string | null
+            machine_type: string | null
+            upstream_setup_id: string | null
+          }>(
+            `SELECT COALESCE(setup.source_payload->>'machineFamily', setup.source_payload->'payload'->>'machineFamily',
+                       setup.source_payload->>'machineUsed', setup.source_payload->'payload'->>'machineUsed') AS route_family,
+                    COALESCE(setup.source_payload->>'machineType', setup.source_payload->'payload'->>'machineType') AS route_type,
+                    COALESCE(machine.source_payload->>'machineFamily', machine.source_payload->'payload'->>'machineFamily') AS machine_family,
+                    COALESCE(machine.source_payload->>'machineType', machine.source_payload->'payload'->>'machineType') AS machine_type,
+                    (SELECT prior.id FROM manufacturing.operation_setups prior
+                     WHERE prior.route_option_id = setup.route_option_id AND prior.active
+                       AND prior.sequence < setup.sequence ORDER BY prior.sequence DESC LIMIT 1) AS upstream_setup_id
+             FROM manufacturing.operation_setups setup
+             JOIN catalog.machines machine ON machine.id = $2
+             WHERE setup.id = $1`,
+            [operationSetupId, targetMachineId]
+          )
+          const compatible = compatibility.rows[0]
+          if (!compatible?.upstream_setup_id || !machineFamilyMatches(compatible.route_family, compatible.machine_family)
+            || (compatible.route_type && compatible.machine_type && compatible.route_type.toLowerCase() !== compatible.machine_type.toLowerCase())) {
+            throw new Error("Choose an active machine compatible with Setup 2 and a route with Setup 1.")
+          }
+          const existing = await client.query<{ upstream_on_target: boolean; setup_two_started: boolean; already_reserved: boolean }>(
+            `SELECT EXISTS (
+               SELECT 1 FROM manufacturing.shop_floor_setup_state state
+               WHERE state.work_order_id = $1 AND state.operation_setup_id = $3
+                 AND state.machine_id = $4 AND state.active
+             ) AS upstream_on_target,
+             EXISTS (
+               SELECT 1 FROM manufacturing.production_entries entry
+               WHERE entry.work_order_id = $1 AND entry.operation_setup_id = $2
+                 AND entry.reversed_at IS NULL
+               UNION ALL
+               SELECT 1 FROM manufacturing.shop_floor_setup_state state
+               WHERE state.work_order_id = $1 AND state.operation_setup_id = $2
+                 AND state.active
+             ) AS setup_two_started,
+             EXISTS (
+               SELECT 1 FROM manufacturing.plan_override_events decision
+               WHERE decision.work_order_id = $1 AND decision.operation_setup_id = $2
+                 AND decision.source_payload->>'assignmentMode' = 'early_downstream'
+                 AND decision.reversed_at IS NULL
+             ) AS already_reserved`,
+            [workOrder.id, operationSetupId, compatible.upstream_setup_id, targetMachineId]
+          )
+          if (existing.rows[0]?.upstream_on_target) throw new Error("Choose a different machine from Setup 1.")
+          if (existing.rows[0]?.setup_two_started) throw new Error("Setup 2 has already started; use its existing plan.")
+          if (existing.rows[0]?.already_reserved) throw new Error("Setup 2 already has an early reservation. Reverse it before changing machines.")
         }
         const sourcePayload = { ...input, assignmentMode, interruptedSetups }
         const created = await client.query<{ id: string }>(

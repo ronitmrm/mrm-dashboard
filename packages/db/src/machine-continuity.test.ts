@@ -94,6 +94,42 @@ test("keeps a WIP-ready second setup on another machine when overlap finishes ea
   expect(new Date(String(second.plannedProductionStartDate)).getTime()).toBeLessThan(new Date(String(first.plannedProductionEndDate)).getTime())
 })
 
+test("reserves Setup 2 early and releases machine start on the first recorded WIP", () => {
+  const decision = {
+    target: "A", setupNo: "2", toMachine: "CNC-2",
+    assignmentMode: "early_downstream", reason: "Approved overlap",
+    createdAt: "2026-09-20T05:00:00Z",
+  }
+  const plannedInput = inputFor(0)
+  plannedInput.productionEntries = []
+  plannedInput.dataEntries = plannedInput.dataEntries.filter((row) => row.entryType !== "shop_floor_status")
+  const planned = buildLegacyDashboardSnapshot({ ...plannedInput, planOverrides: [decision] })
+    .productionControl.machinePlanDetailRows.find((row) => row.setupNo === "2")
+  expect(planned).toMatchObject({
+    machine: "CNC-2", earlyDownstreamWipException: true,
+    physicalWipQty: 0, machineAssignment: "Planner-approved early downstream setup",
+    shopFloorTaskReady: true,
+  })
+  plannedInput.dataEntries.push({
+    entryType: "shop_floor_status",
+    payload: { jcNo: "A", partCode: "M5551", optionNumber: "1", setupNo: "2", machine: "CNC-2", stage: "quality_approval" },
+    createdAt: "2026-09-20T06:00:00Z",
+  })
+  const awaitingWip = buildLegacyDashboardSnapshot({ ...plannedInput, planOverrides: [decision] })
+    .productionControl.machinePlanDetailRows.find((row) => row.setupNo === "2")
+  expect(awaitingWip).toMatchObject({ shopFloorTaskReady: false })
+  expect(awaitingWip?.shopFloorTaskBlocker).toContain("No recorded Setup 1 WIP")
+
+  const runningInput = inputFor(100)
+  vi.setSystemTime(new Date("2026-09-21T06:00:00Z"))
+  const running = buildLegacyDashboardSnapshot({ ...runningInput, planOverrides: [decision] })
+    .productionControl.machinePlanDetailRows.find((row) => row.setupNo === "2")
+  expect(running).toMatchObject({
+    machine: "CNC-2", physicalWipQty: 100,
+    earlyDownstreamWipException: true, shopFloorTaskReady: true,
+  })
+})
+
 test("continues the next setup after another Job Card's matching tool work", () => {
   const input = inputFor(1_064)
   vi.setSystemTime(new Date("2026-09-26T06:00:00Z"))

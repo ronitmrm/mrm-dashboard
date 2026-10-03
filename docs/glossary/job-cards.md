@@ -102,8 +102,9 @@ holidays are excluded, and material and WIP availability constraints still apply
 Shop Floor Status shows the recorded lifecycle of each setup on its assigned
 machine. Job Card Current Estimated Finish includes all remaining route setups,
 using the same cycle-based supply and remaining-work calculation. Forecast-only
-downstream work does not reserve a machine or bypass actual-WIP readiness, and
-the whole-job finish cannot precede the upstream supply needed by that setup.
+downstream work does not reserve a machine or bypass actual-WIP readiness without
+the Planner's early Setup 2 decision. The whole-job finish cannot precede the
+upstream supply needed by that setup.
 The immutable RM-receipt Planned Finish Date remains historical.
 
 A machine-unavailable action affects unfinished work only. A setup already
@@ -120,6 +121,15 @@ input for the next setup. The remaining customer shortfall does not block that
 available input. Shop Floor readiness checks this quantity even after the next
 setup has a recorded workflow stage; that stage retains its machine assignment
 but cannot bypass a genuine WIP shortage.
+
+The Planner may approve **Plan Setup 2 Early** for one Job Card with a selected
+route containing Setup 1 and Setup 2, on a separate idle, compatible machine. This reserves Setup 2
+before the normal two/three-day WIP buffer is recorded and retains the decision
+and reason in Planner history. Setup preparation may proceed. Machine start
+requires recorded Setup 1 good pieces, and Setup 2's cumulative good plus
+rejected output may not exceed that recorded supply. If WIP runs out, further
+output waits for more Setup 1 good pieces. Other Job Cards retain the normal
+buffer rule. The early plan's forecast is provisional until output is recorded.
 
 ## Setup Time
 
@@ -147,7 +157,8 @@ Useful overlap means a feasible separate-machine start before the preceding
 setup finishes that improves completion by at least one working day, the
 planner's date resolution. Existing material, pooled actual-WIP, tooling and
 machine-availability gates still apply. Forecast-only downstream work does not
-reserve a physical machine before its actual-WIP gate is satisfied.
+reserve a physical machine before its actual-WIP gate is satisfied unless the
+Planner records the Job Card's early Setup 2 exception above.
 
 Where feasible, the next setup follows its predecessor immediately. Other
 unstarted automatic assignments may rebalance to compatible machines. Actual

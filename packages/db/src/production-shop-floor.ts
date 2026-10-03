@@ -734,6 +734,59 @@ async function plannerAssignmentMode(
   return result.rows[0].assignment_mode === "add_parallel_machine" ? "add_parallel_machine" : "move"
 }
 
+async function assertEarlyDownstreamWip(
+  client: PoolClient,
+  input: {
+    workOrderId: string
+    operationSetupId: string
+    machineId: string
+    requestedTotalPieces?: number
+    excludeProductionEntryId?: string
+  }
+) {
+  const exception = await client.query<{ upstream_setup_id: string; target_machine_id: string }>(
+    `SELECT prior.id AS upstream_setup_id, decision.target_machine_id
+     FROM manufacturing.operation_setups setup
+     JOIN LATERAL (
+       SELECT id FROM manufacturing.operation_setups
+       WHERE route_option_id = setup.route_option_id AND active
+         AND sequence < setup.sequence
+       ORDER BY sequence DESC LIMIT 1
+     ) prior ON true
+     JOIN LATERAL (
+       SELECT target_machine_id FROM manufacturing.plan_override_events
+       WHERE work_order_id = $1 AND operation_setup_id = setup.id
+         AND source_payload->>'assignmentMode' = 'early_downstream'
+         AND reversed_at IS NULL
+       ORDER BY occurred_at DESC LIMIT 1
+     ) decision ON true
+     WHERE setup.id = $2`,
+    [input.workOrderId, input.operationSetupId]
+  )
+  const upstreamSetupId = exception.rows[0]?.upstream_setup_id
+  if (!upstreamSetupId) return
+  if (exception.rows[0]?.target_machine_id !== input.machineId) {
+    throw new ShopFloorConflictError("Use the machine reserved by the Planner's early Setup 2 decision.")
+  }
+  await client.query("SELECT id FROM manufacturing.work_orders WHERE id = $1 FOR UPDATE", [input.workOrderId])
+  const stock = await client.query<{ upstream_good: string; downstream_processed: string }>(
+    `SELECT COALESCE(sum(quantity_good) FILTER (WHERE operation_setup_id = $2), 0)::text AS upstream_good,
+            COALESCE(sum(quantity_good + quantity_rejected) FILTER (
+              WHERE operation_setup_id = $3 AND id IS DISTINCT FROM $4::uuid), 0)::text AS downstream_processed
+     FROM manufacturing.production_entries
+     WHERE work_order_id = $1 AND reversed_at IS NULL
+       AND operation_setup_id IN ($2, $3)`,
+    [input.workOrderId, upstreamSetupId, input.operationSetupId, input.excludeProductionEntryId ?? null]
+  )
+  const available = Number(stock.rows[0]?.upstream_good ?? 0) - Number(stock.rows[0]?.downstream_processed ?? 0)
+  const required = input.requestedTotalPieces ?? 1
+  if (available < required) {
+    throw new ShopFloorConflictError(
+      `Setup 2 has ${Math.max(0, available)} recorded WIP pieces available; ${required} pieces are required. Record more Setup 1 good output first.`
+    )
+  }
+}
+
 async function restoreParallelShopFloorState(
   client: PoolClient,
   input: {
@@ -1181,6 +1234,11 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             "The machinist must finish setup and start the machine before a production session can begin."
           )
         }
+        await assertEarlyDownstreamWip(client, {
+          workOrderId: workOrder.work_order_id,
+          operationSetupId: setupId,
+          machineId,
+        })
         const open = await client.query<{ id: string }>(
           `
             SELECT id FROM manufacturing.production_sessions
@@ -2269,6 +2327,13 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
               pieceWeightGrams: Number(current.piece_weight_grams),
               rejectedPieces,
             })
+        await assertEarlyDownstreamWip(client, {
+          workOrderId: current.work_order_id,
+          operationSetupId: current.operation_setup_id,
+          machineId: current.machine_id,
+          excludeProductionEntryId: current.production_entry_id,
+          requestedTotalPieces: output.totalPieces,
+        })
         const sourcePayload = {
           ...current.source_payload,
           ...input,
@@ -2389,6 +2454,8 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         }
         await lockProductionSessionMachine(client, input)
         const session = await client.query<{
+          work_order_id: string
+          operation_setup_id: string
           crate_weight_kg: string | null
           cycle_time_seconds: string
           end_count: string | null
@@ -2406,7 +2473,8 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           status: "open" | "closed"
         }>(
           `
-            SELECT session.machine_id, session.measurement_method,
+            SELECT session.work_order_id, session.operation_setup_id,
+              session.machine_id, session.measurement_method,
               session.started_at, session.start_count, session.end_count,
               session.piece_weight_grams, session.gross_weight_kg, session.crate_weight_kg,
               session.cycle_time_seconds, session.production_entry_id,
@@ -2611,6 +2679,13 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
               pieceWeightGrams: Number(current.piece_weight_grams),
               rejectedPieces,
             })
+        await assertEarlyDownstreamWip(client, {
+          workOrderId: current.work_order_id,
+          operationSetupId: current.operation_setup_id,
+          machineId: current.machine_id,
+          excludeProductionEntryId: current.production_entry_id,
+          requestedTotalPieces: output.totalPieces,
+        })
         const timing = productionSessionTiming({
           breaks: savedBreaks(current.source_payload) ?? [],
           cycleTimeSeconds: Number(current.cycle_time_seconds),
@@ -4090,6 +4165,14 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           input.machineNumber,
           normalizeProductionFloorCode(input.productionFloorCode)
         )
+        if (setupId && machineId) {
+          await assertEarlyDownstreamWip(client, {
+            workOrderId: workOrder.work_order_id,
+            operationSetupId: setupId,
+            machineId,
+            requestedTotalPieces: input.quantityGood + input.quantityRejected,
+          })
+        }
         const employeeId = await employeeIdFor(
           client,
           input.organizationId,
@@ -4169,6 +4252,13 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         )
         if (!machineId) throw new Error("Shop-floor machine is required.")
         const stage = canonicalStage(input.stage)
+        if (stage === "operator_started") {
+          await assertEarlyDownstreamWip(client, {
+            workOrderId: workOrder.work_order_id,
+            operationSetupId: setupId,
+            machineId,
+          })
+        }
         if (normalizeProductionFloorCode(input.productionFloorCode) === "cnc" && stage === "presetting") {
           throw new Error("CNC uses Setting only. Refresh the task and complete Setting.")
         }
