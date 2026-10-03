@@ -19,6 +19,7 @@ import {
 } from "./postgres-runtime"
 import { storeItemCodeSeries, storeUnitId } from "./store-item-codes"
 import { createStoreCalibrationRepository } from "./store-calibration"
+import { isWarrantyDayCount, warrantyEndDate, warrantyPeriodDays } from "./store-warranty"
 
 export type StoreTrackingMode = "CONSUMABLE" | "SERIALIZED"
 export type StoreAssetType = "CONSUMABLE" | "NON_CONSUMABLE"
@@ -553,10 +554,28 @@ async function stabilizerAssetId(
   return result.rows[0].id
 }
 
+async function mcbUnitCode(
+  client: PoolClient,
+  organizationId: string,
+  unitId?: string | null
+) {
+  const code = unitId?.trim()
+  if (!code) return null
+  const result = await client.query<{ assetCode: string }>(
+    `SELECT asset_code AS "assetCode" FROM store.assets
+     WHERE organization_id = $1 AND lower(asset_code) = lower($2)`,
+    [organizationId, code]
+  )
+  if (!result.rows[0]) throw new Error(`MCB Unit ID ${code} was not found.`)
+  return result.rows[0].assetCode
+}
+
 async function receiveStockWithClient(
   client: PoolClient,
   input: StoreReceiptInput
 ) {
+  const warrantyDays = warrantyPeriodDays(input.warrantyPeriod)
+  const warrantyPeriod = warrantyDays?.toString() ?? null
   const destination = await client.query<{ accountableStoreId: string }>(
     `SELECT location.accountable_store_id AS "accountableStoreId"
      FROM store.locations location
@@ -726,6 +745,11 @@ async function receiveStockWithClient(
       input.organizationId,
       unitDetails?.stabilizerUnitId
     )
+    const connectedMcbUnitId = await mcbUnitCode(
+      client,
+      input.organizationId,
+      unitDetails?.mcbNumber
+    )
     const receiptLine = await client.query<{ id: string }>(
       `
         INSERT INTO store.receipt_lines (
@@ -742,7 +766,7 @@ async function receiveStockWithClient(
         orderLine.quantity,
         orderLine.unit_price,
         input.warrantyUntil ?? null,
-        input.warrantyPeriod?.trim() || null,
+        warrantyPeriod,
       ]
     )
     const lineAssetCodes: string[] = []
@@ -781,12 +805,12 @@ async function receiveStockWithClient(
               null,
             input.locationId,
             destination.rows[0].accountableStoreId,
-            input.warrantyUntil ?? null,
-            input.warrantyPeriod?.trim() || null,
+            warrantyEndDate(unitDetails?.installedOn, warrantyDays),
+            warrantyPeriod,
             input.billDate ?? null,
             unitDetails?.installedOn ?? null,
             connectedStabilizerId,
-            unitDetails?.mcbNumber?.trim() || null,
+            connectedMcbUnitId,
             input.actorUserId ?? null,
           ]
         )
@@ -4295,6 +4319,24 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       return result.rows
     },
 
+    async listConnectedEquipmentUnits(organizationId: string) {
+      const result = await pool.query<{
+        assetName: string
+        status: string
+        typeCode: string
+        unitId: string
+      }>(
+        `SELECT asset.asset_code AS "unitId", item.type_code AS "typeCode",
+            item.asset_name AS "assetName", asset.status
+         FROM store.assets asset
+         JOIN store.item_types item ON item.id = asset.item_type_id
+         WHERE asset.organization_id = $1 AND asset.status <> 'SCRAPPED'
+         ORDER BY item.type_code, asset.asset_code`,
+        [organizationId]
+      )
+      return result.rows
+    },
+
     async recordAssetAcquisition(input: {
       actorUserId?: string | null
       assetCode: string
@@ -5286,11 +5328,21 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       organizationId: string
       stabilizerUnitId?: string | null
       warrantyPeriod?: string | null
-      warrantyUntil?: string | null
     }) {
       return withTransaction(pool, async (client) => {
-        const asset = await client.query<{ id: string }>(
-          `SELECT id FROM store.assets
+        const warrantyDays = warrantyPeriodDays(input.warrantyPeriod)
+        const calculatedWarrantyEnd = warrantyEndDate(input.installedOn, warrantyDays)
+        const asset = await client.query<{
+          id: string
+          installedOn: string | null
+          mcbNumber: string | null
+          warrantyPeriod: string | null
+          warrantyUntil: string | null
+        }>(
+          `SELECT id, installed_on::text AS "installedOn",
+              mcb_number AS "mcbNumber", warranty_period AS "warrantyPeriod",
+              warranty_until::text AS "warrantyUntil"
+           FROM store.assets
            WHERE organization_id = $1 AND lower(asset_code) = lower($2)
            FOR UPDATE`,
           [input.organizationId, requiredText(input.assetCode, "Unit ID")]
@@ -5304,21 +5356,36 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         if (connectedStabilizerId === asset.rows[0].id) {
           throw new Error("A Unit ID cannot be its own stabiliser.")
         }
+        const connectedMcbUnitId = input.mcbNumber?.trim() === asset.rows[0].mcbNumber
+          ? asset.rows[0].mcbNumber
+          : await mcbUnitCode(client, input.organizationId, input.mcbNumber)
+        if (connectedMcbUnitId?.toLowerCase() === input.assetCode.toLowerCase()) {
+          throw new Error("A Unit ID cannot be its own MCB.")
+        }
+        const previous = asset.rows[0]
+        const legacyPeriod = previous.warrantyPeriod &&
+          !isWarrantyDayCount(previous.warrantyPeriod)
+          ? previous.warrantyPeriod
+          : null
+        const historicalEnd = previous.warrantyUntil &&
+          (!previous.installedOn || !isWarrantyDayCount(previous.warrantyPeriod))
+          ? previous.warrantyUntil
+          : null
         await client.query(
           `UPDATE store.assets
            SET manufacturer_serial_number = $1,
-             warranty_period = $2, warranty_until = NULLIF($3, '')::date,
+             warranty_period = $2, warranty_until = $3::date,
              installed_on = NULLIF($4, '')::date,
              stabilizer_asset_id = $5, mcb_number = $6,
              updated_by_user_id = $7, updated_at = now()
            WHERE id = $8`,
           [
             input.manufacturerSerialNumber?.trim() || null,
-            input.warrantyPeriod?.trim() || null,
-            input.warrantyUntil ?? null,
+            warrantyDays?.toString() ?? legacyPeriod,
+            calculatedWarrantyEnd ?? historicalEnd,
             input.installedOn ?? null,
             connectedStabilizerId,
-            input.mcbNumber?.trim() || null,
+            connectedMcbUnitId,
             input.actorUserId ?? null,
             asset.rows[0].id,
           ]

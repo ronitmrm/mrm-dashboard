@@ -66,7 +66,7 @@ export default async function StoreOrdersPage() {
   const departments = createDepartmentStoreRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
-  const [allOrders, requestContext] = await (async () => {
+  const [allOrders, requestContext, equipmentUnits] = await (async () => {
     const organizationId = await repository.organizationIdForCode("MRMPL")
     const mainStore = await departments.getStoreByCode(organizationId, "MAIN")
     return Promise.all([
@@ -80,6 +80,9 @@ export default async function StoreOrdersPage() {
             userId: session.user.id,
           })
         : Promise.resolve(null),
+      canManage
+        ? repository.listConnectedEquipmentUnits(organizationId)
+        : Promise.resolve([]),
     ])
   })().finally(async () => {
     await departments.close()
@@ -309,6 +312,7 @@ export default async function StoreOrdersPage() {
                                     />
                                   </Field>
                                   <StoreReceiptUnitFields
+                                    equipmentUnits={equipmentUnits}
                                     key={`${order.id}-${order.remainingQuantity}`}
                                     orderId={order.id}
                                     remainingQuantity={order.remainingQuantity}
@@ -344,23 +348,29 @@ export default async function StoreOrdersPage() {
                                     Warranty &amp; document (optional)
                                   </summary>
                                   <div className="mt-4 grid gap-4">
+                                    <p className="text-sm text-muted-foreground sm:col-span-2">
+                                      Unit warranty end is calculated from Installation Date plus Warranty Period in days.
+                                      Supplier Guarantee Until is kept with the receipt.
+                                    </p>
                                     <Field>
                                       <FieldLabel
                                         htmlFor={`receipt-warranty-period-${order.id}`}
                                       >
-                                        Warranty Period
+                                        Warranty Period (days)
                                       </FieldLabel>
                                       <Input
                                         id={`receipt-warranty-period-${order.id}`}
+                                        min="1"
                                         name="warranty_period"
-                                        placeholder="e.g. 12 months from installation"
+                                        step="1"
+                                        type="number"
                                       />
                                     </Field>
                                     <Field>
                                       <FieldLabel
                                         htmlFor={`receipt-warranty-${order.id}`}
                                       >
-                                        Warranty / Guarantee Until
+                                        Supplier Guarantee Until
                                       </FieldLabel>
                                       <Input
                                         id={`receipt-warranty-${order.id}`}

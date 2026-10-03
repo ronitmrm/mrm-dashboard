@@ -28,7 +28,7 @@ import {
 } from "@workspace/ui/components/table"
 
 import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
-import { MasterEntryForm } from "@/components/master-entry-form"
+import { StoreUnitDetailsForm } from "@/components/store/store-unit-details-form"
 import {
   StoreAssetWorkspacePane,
   StoreAssetWorkspaceTabs,
@@ -105,7 +105,7 @@ export default async function StoreAssetWorkspacePage({
         }),
       }
     }
-    const [suppliers, performer] = await Promise.all([
+    const [suppliers, performer, equipmentUnits] = await Promise.all([
       repository.listSuppliers(organizationId),
       canMove || canMaintain || canManageLifecycle
         ? signedInPerformer({
@@ -115,9 +115,13 @@ export default async function StoreAssetWorkspacePage({
             userName: session.user.name,
           })
         : Promise.resolve(null),
+      canRecordAcquisition
+        ? repository.listConnectedEquipmentUnits(organizationId)
+        : Promise.resolve([]),
     ])
     return {
       kind: "asset" as const,
+      equipmentUnits,
       performer,
       suppliers,
       workspace,
@@ -213,7 +217,7 @@ export default async function StoreAssetWorkspacePage({
             />
             <Info label="Installed On" value={asset.installedOn || "Not recorded"} />
             <Info label="Connected Stabiliser Unit ID" value={asset.stabilizerUnitId || "Not recorded"} />
-            <Info label="MCB Number" value={asset.mcbNumber || "Not recorded"} />
+            <Info label="Connected MCB Unit ID" value={asset.mcbNumber || "Not recorded"} />
           </div>
           {canRecordAcquisition ? (
             <SectionCard id="unit-details" width="wide">
@@ -225,18 +229,11 @@ export default async function StoreAssetWorkspacePage({
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <MasterEntryForm action={updateStoreAssetEquipmentDetailsAction} className="grid gap-4 sm:grid-cols-2">
-                  <input name="asset_code" type="hidden" value={asset.assetCode} />
-                  <TextField defaultValue={asset.manufacturerSerialNumber ?? ""} label="Manufacturer Serial Number" name="manufacturer_serial_number" />
-                  <TextField defaultValue={asset.warrantyPeriod ?? ""} label="Warranty Period" name="warranty_period" placeholder="e.g. 12 months from installation" />
-                  <TextField defaultValue={asset.warrantyUntil ?? ""} label="Warranty End" name="warranty_until" type="date" />
-                  <TextField defaultValue={asset.installedOn ?? ""} label="Installation Date" name="installed_on" type="date" />
-                  <TextField defaultValue={asset.stabilizerUnitId ?? ""} label="Connected Stabiliser Unit ID" name="stabilizer_unit_id" placeholder="Existing Unit ID" />
-                  <TextField defaultValue={asset.mcbNumber ?? ""} label="MCB Number" name="mcb_number" />
-                  <div className="sm:col-span-2">
-                    <Button type="submit">Save Unit Details</Button>
-                  </div>
-                </MasterEntryForm>
+                <StoreUnitDetailsForm
+                  action={updateStoreAssetEquipmentDetailsAction}
+                  asset={asset}
+                  equipmentUnits={data.equipmentUnits}
+                />
               </CardContent>
             </SectionCard>
           ) : null}
@@ -302,7 +299,11 @@ export default async function StoreAssetWorkspacePage({
               label="Warranty Until"
               value={asset.warrantyUntil || "Not recorded"}
             />
-            <Info label="Warranty Period" value={asset.warrantyPeriod || "Not recorded"} />
+            <Info label="Warranty Period" value={asset.warrantyPeriod
+              ? /^\d+$/.test(asset.warrantyPeriod)
+                ? `${asset.warrantyPeriod} days`
+                : asset.warrantyPeriod
+              : "Not recorded"} />
           </div>
         </StoreAssetWorkspacePane>
 

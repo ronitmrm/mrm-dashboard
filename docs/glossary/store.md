@@ -65,10 +65,16 @@ any open breakdown. Maintenance Masters and calibration appointments are assigne
 to a physical Unit ID. The shared Asset Code describes the item type and never
 receives a maintenance schedule.
 Manufacturer Serial Number, Warranty Period, Warranty Until, actual Installation
-Date, connected Stabiliser Unit ID, and MCB Number belong to the physical Unit
+Date, connected Stabiliser Unit ID, and connected MCB Unit ID belong to the physical Unit
 ID. These optional fields may be supplied when one unit is received or updated
 later in its workspace. Installation details are recorded when known and can be
 revised if the connection changes; they do not change the shared Asset Code.
+Warranty Period is a positive whole number of calendar days. A physical unit's
+Warranty Until date is calculated from its actual Installation Date plus those
+days when both values are known. Existing historical dates remain visible until
+enough information is recorded to calculate them.
+Connected Stabiliser and MCB selections refer to existing, non-scrapped physical
+Unit IDs shown with their Asset Codes in Store stock.
 
 **Unit ID / Serial ID**: The permanent identity of one Physical Asset, separate
 from its shared Asset Code. It may use the manufacturer's serial number and has
