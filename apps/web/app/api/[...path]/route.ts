@@ -991,7 +991,8 @@ async function get(request: NextRequest, context: RouteContext) {
             const value = Number(search.get("knownVersion"))
             return Number.isSafeInteger(value) && value > 0 ? value : undefined
           })(),
-          search.get("scope") === "maintenance" ? "maintenance" : undefined
+          search.get("scope") === "maintenance" ? "maintenance" : undefined,
+          search.get("knownLiveVersion") || undefined
         )
       )
     }

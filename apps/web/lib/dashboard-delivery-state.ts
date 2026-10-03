@@ -23,6 +23,7 @@ type DashboardRequest = {
 }
 
 export type DashboardRequestDescriptor = DashboardRequest & {
+  knownLiveVersion?: string | null
   knownVersion: number | null
 }
 

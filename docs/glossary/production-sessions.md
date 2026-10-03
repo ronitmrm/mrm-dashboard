@@ -54,6 +54,8 @@ after RM reaches the machine, even when its cycle or tooling master is still
 incomplete. Missing masters continue to block unstarted setup planning. For CNC
 startup openings, an `operator_started` setup is Running from the saved opening
 state; its cycle time may be entered when that setup's real session starts.
+The saved setup stage is available to the next Shop Floor, Machinist, or Quality
+task immediately; a pending planning recalculation does not delay that handoff.
 
 CNC-01 has no Pre Setting stage. Its workflow is RM at Machine → Setting →
 Quality Approval → Machine Start. The six CNC checklist points are completed at

@@ -106,7 +106,8 @@ describe("authenticated dashboard state reader", () => {
       "organization-1",
       { month: "2026-07" },
       "conventional",
-      7
+      7,
+      undefined
     )
     expect(mocks.setOutcome).toHaveBeenCalledWith("allowed")
   })
