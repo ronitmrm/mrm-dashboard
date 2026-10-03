@@ -26,9 +26,10 @@ type StoreAction = (
   formData: FormData
 ) => Promise<DepartmentStoreActionState>
 
-function ActionForm({ action, children, storeCode, submitLabel }: {
+function ActionForm({ action, children, disabled = false, storeCode, submitLabel }: {
   action: StoreAction
   children: ReactNode
+  disabled?: boolean
   storeCode: string
   submitLabel: string
 }) {
@@ -38,7 +39,7 @@ function ActionForm({ action, children, storeCode, submitLabel }: {
       <input type="hidden" name="store_code" value={storeCode} />
       {children}
       {state.error ? <p role="alert" className="text-sm text-destructive">{state.error}</p> : null}
-      <Button className="w-fit" disabled={pending} type="submit">
+      <Button className="w-fit" disabled={pending || disabled} type="submit">
         {pending ? "Saving…" : submitLabel}
       </Button>
     </form>
@@ -102,12 +103,16 @@ function DestinationFields({
   </>
 }
 
-export function DepartmentStoreForms({ assets, consumables, departments, gaugeSets, machines, store, stores, vendors }: {
+export type DepartmentStoreAction = "quantity" | "accountability" | "physical" | "consume" | "adjust" | "gauge-create" | "gauge-move" | "gauge-replace" | "gauge-disband"
+
+export function DepartmentStoreForms({ action, assets, consumables, departments, gaugeSets, machines, selectedItemIds = [], store, stores, vendors }: {
+  action: DepartmentStoreAction
   assets: Workspace["assets"]
   consumables: Workspace["consumables"]
   departments: Array<{ code: string; id: string; name: string }>
   gaugeSets: Workspace["gaugeSets"]
   machines: Array<{ id: string; machineNumber: string; name: string | null }>
+  selectedItemIds?: string[]
   store: Workspace["store"]
   stores: Workspace["stores"]
   vendors: Array<{ code: string; id: string; name: string }>
@@ -117,11 +122,15 @@ export function DepartmentStoreForms({ assets, consumables, departments, gaugeSe
   const availableGauges = assets.filter((asset) =>
     asset.isGauge && !asset.inGaugeSet && asset.status === "AVAILABLE" && asset.holderType === "STORE"
   )
-  const otherStores = stores.filter((destination) => destination.id !== store.id)
+  const otherStores = stores.filter((destination) => destination.id !== store.id &&
+    (store.kind === "MAIN" || destination.kind === "MAIN"))
+  const selectedConsumables = consumables.filter((item) =>
+    selectedItemIds.includes(item.itemTypeId) && Number(item.availableQuantity) > 0
+  )
   const [replacementSetId, setReplacementSetId] = useState("")
   const replacementSet = gaugeSets.find((set) => set.id === replacementSetId)
   return <div className="grid gap-5">
-    <FormSection title="Transfer quantity to another Store"
+    {action === "quantity" ? <FormSection title="Transfer quantity to another Store"
       description="Responsibility and available quantity move to the receiving Store. Company on-hand stays the same."
       width="wide">
       <ActionForm action={transferDepartmentQuantityAction} storeCode={store.code} submitLabel="Transfer Quantity">
@@ -132,7 +141,7 @@ export function DepartmentStoreForms({ assets, consumables, departments, gaugeSe
               {item.typeCode} · {item.assetName} · available {item.availableQuantity} {item.unit}
             </NativeSelectOption>)}
           </SelectField>
-          <SelectField label="Receiving Store" name="destination_store_code" required>
+          <SelectField label={store.kind === "MAIN" ? "Receiving Store" : "Receiving Main Store"} name="destination_store_code" required>
             <NativeSelectOption value="">Select Store</NativeSelectOption>
             {otherStores.map((destination) => <NativeSelectOption key={destination.id} value={destination.code}>
               {destination.name}
@@ -142,9 +151,9 @@ export function DepartmentStoreForms({ assets, consumables, departments, gaugeSe
           <TextField label="Remark" name="remark" />
         </FormGrid>
       </ActionForm>
-    </FormSection>
+    </FormSection> : null}
 
-    <FormSection title="Transfer Unit ID accountability"
+    {action === "accountability" ? <FormSection title="Transfer Unit ID accountability"
       description="Use this when another Store takes responsibility. A separate physical move can place equipment at a machine without transferring responsibility."
       width="wide">
       <ActionForm action={transferDepartmentAssetAction} storeCode={store.code} submitLabel="Transfer Accountability">
@@ -155,7 +164,7 @@ export function DepartmentStoreForms({ assets, consumables, departments, gaugeSe
               {asset.assetCode} · {asset.assetName}
             </NativeSelectOption>)}
           </SelectField>
-          <SelectField label="Receiving Store" name="destination_store_code" required>
+          <SelectField label={store.kind === "MAIN" ? "Receiving Store" : "Receiving Main Store"} name="destination_store_code" required>
             <NativeSelectOption value="">Select Store</NativeSelectOption>
             {otherStores.map((destination) => <NativeSelectOption key={destination.id} value={destination.code}>
               {destination.name}
@@ -164,9 +173,9 @@ export function DepartmentStoreForms({ assets, consumables, departments, gaugeSe
           <TextField label="Reason / handover note" name="remark" />
         </FormGrid>
       </ActionForm>
-    </FormSection>
+    </FormSection> : null}
 
-    <FormSection title="Record physical movement"
+    {action === "physical" ? <FormSection title="Record physical movement"
       description="Move a Unit ID to a department, machine, vendor, or back to this Store. Accountability stays here."
       width="wide">
       <ActionForm action={moveDepartmentAssetAction} storeCode={store.code} submitLabel="Record Movement">
@@ -181,20 +190,20 @@ export function DepartmentStoreForms({ assets, consumables, departments, gaugeSe
           <TextField label="Movement note" name="remark" />
         </FormGrid>
       </ActionForm>
-    </FormSection>
+    </FormSection> : null}
 
-    {store.kind !== "MAIN" ? <FormSection title="Record consumable use"
+    {action === "consume" && store.kind !== "MAIN" ? <FormSection title="Record consumable use"
       description="Record only the quantity actually used, with the machine or Job Card and operator. Unused stock stays available here."
       width="wide">
-      <ActionForm action={consumeDepartmentQuantityAction} storeCode={store.code} submitLabel="Record Consumption">
+      <ActionForm action={consumeDepartmentQuantityAction} disabled={!selectedConsumables.length}
+        storeCode={store.code} submitLabel="Record Consumption">
         <FormGrid className="xl:grid-cols-2">
-          <SelectField label="Consumable Asset Code" name="item_type_id" required>
-            <NativeSelectOption value="">Select an available item</NativeSelectOption>
-            {availableConsumables.map((item) => <NativeSelectOption key={item.itemTypeId} value={item.itemTypeId}>
-              {item.typeCode} · {item.assetName} · available {item.availableQuantity} {item.unit}
-            </NativeSelectOption>)}
-          </SelectField>
-          <TextField label="Quantity used" name="quantity" min="0.001" step="0.001" type="number" required />
+          {selectedConsumables.map((item) => <div className="grid gap-2" key={item.itemTypeId}>
+            <input name="item_type_id" type="hidden" value={item.itemTypeId} />
+            <TextField label={`${item.typeCode} · ${item.assetName} · available ${item.availableQuantity} ${item.unit}`}
+              name={`quantity_${item.itemTypeId}`} min="0.001" max={item.availableQuantity}
+              step="0.001" type="number" required />
+          </div>)}
           <SelectField label="Machine" name="machine_reference">
             <NativeSelectOption value="">No machine selected</NativeSelectOption>
             {machines.map((machine) => <NativeSelectOption key={machine.id} value={machine.machineNumber}>
@@ -206,10 +215,11 @@ export function DepartmentStoreForms({ assets, consumables, departments, gaugeSe
           <TextField label="Used on" name="consumed_on" type="date" required />
           <TextField label="Remark" name="remark" />
         </FormGrid>
+        {!selectedConsumables.length ? <p className="text-sm text-muted-foreground">Select available consumables from Stock first.</p> : null}
       </ActionForm>
     </FormSection> : null}
 
-    <FormSection title="Record loss or damage"
+    {action === "adjust" ? <FormSection title="Record loss or damage"
       description="Adjustment reduces company on-hand and retains an auditable reason."
       width="wide">
       <ActionForm action={adjustDepartmentQuantityAction} storeCode={store.code} submitLabel="Record Adjustment">
@@ -229,10 +239,10 @@ export function DepartmentStoreForms({ assets, consumables, departments, gaugeSe
           <TextField label="Details" name="remark" required />
         </FormGrid>
       </ActionForm>
-    </FormSection>
+    </FormSection> : null}
 
     {store.kind === "QUALITY" ? <>
-      <FormSection title="Combine two gauges"
+      {action === "gauge-create" ? <FormSection title="Combine two gauges"
         description="Give two individually identified gauges one Set ID for joint movement. Each Unit ID keeps its own calibration record."
         width="wide">
         <ActionForm action={createQualityGaugeSetAction} storeCode={store.code} submitLabel="Create Gauge Set">
@@ -248,8 +258,8 @@ export function DepartmentStoreForms({ assets, consumables, departments, gaugeSe
             </SelectField>
           </FormGrid>
         </ActionForm>
-      </FormSection>
-      <FormSection title="Move a gauge set"
+      </FormSection> : null}
+      {action === "gauge-move" ? <FormSection title="Move a gauge set"
         description="Both member Unit IDs move together. An incomplete set cannot be moved as a set."
         width="wide">
         <ActionForm action={moveQualityGaugeSetAction} storeCode={store.code} submitLabel="Move Set">
@@ -263,8 +273,8 @@ export function DepartmentStoreForms({ assets, consumables, departments, gaugeSe
             <TextField label="Movement note" name="remark" />
           </FormGrid>
         </ActionForm>
-      </FormSection>
-      <FormSection title="Replace a gauge in a set"
+      </FormSection> : null}
+      {action === "gauge-replace" ? <FormSection title="Replace a gauge in a set"
         description="Keep the Set ID while replacing one member. The old and new Unit IDs retain their separate history."
         width="wide">
         <ActionForm action={replaceQualityGaugeSetMemberAction} storeCode={store.code} submitLabel="Replace Member">
@@ -290,8 +300,8 @@ export function DepartmentStoreForms({ assets, consumables, departments, gaugeSe
             </SelectField>
           </FormGrid>
         </ActionForm>
-      </FormSection>
-      <FormSection title="Disband a gauge set"
+      </FormSection> : null}
+      {action === "gauge-disband" ? <FormSection title="Disband a gauge set"
         description="End joint movement for this set. Each gauge keeps its Unit ID and history, and can then move separately."
         width="wide">
         <ActionForm action={disbandQualityGaugeSetAction} storeCode={store.code} submitLabel="Disband Set">
@@ -306,7 +316,7 @@ export function DepartmentStoreForms({ assets, consumables, departments, gaugeSe
             I understand these gauges will no longer move as one set.
           </label>
         </ActionForm>
-      </FormSection>
+      </FormSection> : null}
     </> : null}
   </div>
 }

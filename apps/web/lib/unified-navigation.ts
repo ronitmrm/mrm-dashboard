@@ -1,4 +1,5 @@
 import {
+  ArrowRightLeft,
   Boxes,
   BookOpenCheck,
   BriefcaseBusiness,
@@ -132,6 +133,8 @@ export const qualityControlNavigation = [
   { href: "/quality-control", icon: ShieldCheck, label: "Rejection Entry" },
   { href: "/quality-control/calibration", icon: Gauge, label: "Calibration" },
   { href: "/quality-control/store", icon: Boxes, label: "Quality Store" },
+  { href: "/quality-control/store/movement", icon: ArrowRightLeft, label: "Store Movement" },
+  { href: "/quality-control/store/repairs", icon: Wrench, label: "Store Repairs" },
 ] as const
 
 export function dashboardTabHref(

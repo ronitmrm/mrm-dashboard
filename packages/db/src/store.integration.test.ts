@@ -2679,4 +2679,42 @@ describe("Store requests", () => {
     )
     expect(transfer.rows[0]).toEqual({ code: "cnc", requisition_id: request.lineIds[0] })
   })
+
+  test("routes a Unit ID between department Stores through Main", async () => {
+    await pool.query(
+      `INSERT INTO manufacturing.production_floors (organization_id, code, name)
+       VALUES ($1, 'cnc', 'CNC Production Floor')
+       ON CONFLICT (organization_id, code) DO NOTHING`,
+      [organizationId]
+    )
+    const location = await store.ensurePrimaryStoreLocation({ organizationId })
+    const item = await store.createItemType({
+      ...(await createClassification("Store Transfer Route")),
+      assetType: "NON_CONSUMABLE",
+      identificationName: `Transfer Route ${suffix}`,
+      organizationId,
+      unit: "Nos",
+    })
+    const receipt = await store.receiveStock({
+      locationId: location.id,
+      organizationId,
+      purchaseOrderLineId: (await createPurchaseOrder(item.id, 1, "100.00")).id,
+      quantity: 1,
+    })
+    const assetCode = receipt.assetCodes[0]!
+    await departmentStore.transferAssetAccountability({
+      assetCode, destinationStoreCode: "QUALITY", organizationId, sourceStoreCode: "MAIN",
+    })
+    await expect(departmentStore.transferAssetAccountability({
+      assetCode, destinationStoreCode: "cnc", organizationId, sourceStoreCode: "QUALITY",
+    })).rejects.toThrow("through Main Store")
+    await departmentStore.transferAssetAccountability({
+      assetCode, destinationStoreCode: "MAIN", organizationId, sourceStoreCode: "QUALITY",
+    })
+    await departmentStore.transferAssetAccountability({
+      assetCode, destinationStoreCode: "cnc", organizationId, sourceStoreCode: "MAIN",
+    })
+    expect((await departmentStore.getAssetAccountability(organizationId, assetCode))?.accountableStoreCode)
+      .toBe("cnc")
+  })
 })
