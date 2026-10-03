@@ -8,6 +8,7 @@ import { OperationalTable, TableBody, TableCell, TableHead, TableHeader, TableRo
 
 import { DepartmentStoreForms, type DepartmentStoreAction } from "@/components/store/department-store-forms"
 import { DepartmentRepairCompletion } from "@/components/store/department-repair-completion"
+import { DepartmentStoreUnitActions } from "@/components/store/department-store-unit-actions"
 import { MetricSummary, PageHeader } from "@/components/ui/golden-patterns"
 import { formatIstDateTime } from "@/lib/date-time"
 
@@ -34,7 +35,6 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
 }) {
   const { store, stores, consumables, assets, gaugeSets, movements } = workspace
   const isQuality = store.kind === "QUALITY"
-  const movementHref = `${basePath}/movement`
   const availableConsumables = consumables.filter((item) => Number(item.availableQuantity) > 0)
   const stockCount = consumables.length + assets.length
   const useFormId = "department-store-use-selection"
@@ -63,24 +63,40 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
         ]}
         scope={`Stock accountable to ${store.name} · before table filters`}
       />
+      {canWrite && action ? <DepartmentStoreForms action={action} assets={assets}
+        consumables={consumables} departments={departments} gaugeSets={gaugeSets}
+        machines={machines} selectedItemIds={selectedItemIds} store={store}
+        stores={stores} vendors={vendors} /> : null}
       <SectionCard>
         <CardHeader className="gap-3">
           <CardTitle>Stock Register</CardTitle>
           {canWrite ? <div className="flex flex-wrap gap-2">
-            <Button asChild size="sm" variant="outline"><Link href={`${movementHref}?action=quantity`}>Transfer quantity</Link></Button>
-            <Button asChild size="sm" variant="outline"><Link href={`${movementHref}?action=accountability`}>Transfer Unit ID</Link></Button>
-            <Button asChild size="sm" variant="outline"><Link href={`${movementHref}?action=physical`}>Record physical move</Link></Button>
+            <Button asChild size="sm" variant="outline"><Link href={`${basePath}?action=quantity`}>Transfer quantity</Link></Button>
+            <Button asChild size="sm" variant="outline"><Link href={`${basePath}?action=accountability`}>Transfer Unit ID</Link></Button>
+            <Button asChild size="sm" variant="outline"><Link href={`${basePath}?action=physical`}>Record physical move</Link></Button>
             {availableConsumables.length ? <Button asChild size="sm" variant={selectUse ? "default" : "outline"}>
               <Link href={`${basePath}?select=use`}>Record use</Link>
-            </Button> : null}
-            <Button asChild size="sm" variant="outline"><Link href={`${movementHref}?action=adjust`}>Record loss or damage</Link></Button>
-            {selectUse ? <><form action={movementHref} id={useFormId} method="get">
+            </Button> : <Button disabled size="sm" title="Receive or transfer consumable stock here before recording use"
+              variant="outline">Record use</Button>}
+            <Button asChild size="sm" variant="outline"><Link href={`${basePath}?action=adjust`}>Record loss or damage</Link></Button>
+            {isQuality ? ([
+              ["gauge-create", "Combine gauges"], ["gauge-move", "Move gauge set"],
+              ["gauge-replace", "Replace gauge"], ["gauge-disband", "Disband set"],
+            ] as const).map(([key, label]) => <Button asChild key={key} size="sm" variant="outline">
+              <Link href={`${basePath}?action=${key}`}>{label}</Link>
+            </Button>) : null}
+            {action ? <Button asChild size="sm" variant="ghost"><Link href={basePath}>Close form</Link></Button> : null}
+            {selectUse ? <><form action={basePath} id={useFormId} method="get">
               <input name="action" type="hidden" value="consume" />
             </form>
               <Button form={useFormId} size="sm" type="submit">Continue with selected items</Button>
               <Button asChild size="sm" variant="ghost"><Link href={basePath}>Cancel selection</Link></Button>
             </> : null}
           </div> : null}
+          {assets.length ? <DepartmentStoreUnitActions assets={assets.map((asset) => ({
+            assetCode: asset.assetCode, assetName: asset.assetName, status: asset.status,
+          }))}
+            canRepair={canRepair} storeCode={store.code} /> : null}
         </CardHeader>
         <CardContent className="min-w-0">
           <OperationalTable
@@ -92,7 +108,7 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
               <TableHead>Asset Code</TableHead><TableHead>Unit ID</TableHead><TableHead>Item</TableHead>
               <TableHead>Type</TableHead><TableHead>Available here</TableHead>
               <TableHead>Company on hand</TableHead><TableHead>Status</TableHead>
-              <TableHead>Physical holder</TableHead><TableHead>Record</TableHead>
+              <TableHead>Physical holder</TableHead>
             </TableRow></TableHeader>
             <TableBody>
               {consumables.map((item) => <TableRow key={item.itemTypeId}>
@@ -104,7 +120,7 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
                 <TableCell>Consumable</TableCell><TableCell>{item.availableQuantity} {item.unit}</TableCell>
                 <TableCell>{item.companyQuantity} {item.unit}</TableCell>
                 <TableCell><StatusBadge value={Number(item.availableQuantity) > 0 ? "AVAILABLE" : "OUT OF STOCK"} /></TableCell>
-                <TableCell>{store.name}</TableCell><TableCell>—</TableCell>
+                <TableCell>{store.name}</TableCell>
               </TableRow>)}
               {assets.map((asset) => <TableRow key={asset.assetCode}>
                 {selectUse ? <TableCell>—</TableCell> : null}
@@ -114,16 +130,8 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
                 <TableCell>{asset.status === "SCRAPPED" ? "0" : "1"}</TableCell>
                 <TableCell><StatusBadge value={asset.status} /></TableCell>
                 <TableCell>{asset.holderName || asset.holderType}</TableCell>
-                <TableCell className="whitespace-nowrap"><div className="flex flex-wrap gap-2">
-                  <Button asChild size="sm" variant="outline"><Link
-                    href={`/department-store/assets/${encodeURIComponent(asset.assetCode)}?store=${encodeURIComponent(store.code)}`}>History</Link></Button>
-                  {canRepair && asset.status !== "SCRAPPED" ? <Button asChild size="sm" variant="outline"><Link
-                    href={`/department-store/repair?store=${encodeURIComponent(store.code)}&asset_code=${encodeURIComponent(asset.assetCode)}`}>Repair PO</Link></Button> : null}
-                  {canRepair && asset.status !== "SCRAPPED" ? <Button asChild size="sm" variant="outline"><Link
-                    href={`/department-store/calibration/${encodeURIComponent(asset.assetCode)}?store=${encodeURIComponent(store.code)}`}>Calibration service</Link></Button> : null}
-                </div></TableCell>
               </TableRow>)}
-              {!stockCount ? <TableRow><TableCell colSpan={selectUse ? 10 : 9}>No stock accountable to this Store.</TableCell></TableRow> : null}
+              {!stockCount ? <TableRow><TableCell colSpan={selectUse ? 9 : 8}>No stock accountable to this Store.</TableCell></TableRow> : null}
             </TableBody>
           </OperationalTable>
         </CardContent>
@@ -143,25 +151,6 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
     </> : null}
 
     {view === "movement" ? <>
-      {canWrite ? <div className="flex flex-wrap gap-2">
-        {([
-          ["quantity", "Transfer quantity"], ["accountability", "Transfer Unit ID"],
-          ["physical", "Record physical move"], ["adjust", "Record loss or damage"],
-          ...(isQuality ? [
-            ["gauge-create", "Combine gauges"], ["gauge-move", "Move gauge set"],
-            ["gauge-replace", "Replace gauge"], ["gauge-disband", "Disband set"],
-          ] : []),
-        ] as const).map(([key, label]) => <Button asChild key={key} size="sm"
-          variant={action === key ? "default" : "outline"}>
-          <Link href={`${movementHref}?action=${key}`}>{label}</Link>
-        </Button>)}
-        {!isQuality ? <Button asChild size="sm" variant="outline"><Link href={`${basePath}?select=use`}>Record use from Stock</Link></Button> : null}
-        {action ? <Button asChild size="sm" variant="ghost"><Link href={movementHref}>Close form</Link></Button> : null}
-      </div> : null}
-      {canWrite && action ? <DepartmentStoreForms action={action} assets={assets}
-        consumables={consumables} departments={departments} gaugeSets={gaugeSets}
-        machines={machines} selectedItemIds={selectedItemIds} store={store}
-        stores={stores} vendors={vendors} /> : null}
       <SectionCard><CardHeader><CardTitle>Movement Register</CardTitle></CardHeader>
         <CardContent className="min-w-0"><OperationalTable filterStorageKey={`department-store-movements-${store.code}`}>
           <TableHeader><TableRow><TableHead>Date & time</TableHead><TableHead>Item / Unit ID</TableHead>

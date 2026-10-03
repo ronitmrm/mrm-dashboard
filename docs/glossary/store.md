@@ -363,6 +363,8 @@ its Stock Register. Its Stock Register combines local Consumable balances with
 accountable Non Consumable Unit IDs; repair orders have a separate register.
 Consumable use starts by selecting one or more available Asset Codes in Stock
 and records their quantities together with the same operator and work context.
+Stock also starts transfers, physical moves, adjustments, Unit ID history,
+repair orders, and calibration service. Movement is the saved-event register.
 
 **Gauge Set**: A Quality Store handling group of exactly two physical gauges,
 of any gauge types, under one Set ID and chosen name. It is not a third stock

@@ -53,7 +53,6 @@ async function withStoreWrite(
   const storeCode = required(formData, "store_code")
   const { capability, path: storePath } = permissionForStore(storeCode)
   const path = storeCode === "MAIN" && mainReturnPath ? mainReturnPath
-    : mainReturnPath === "/store/movement" ? `${storePath}/movement`
     : mainReturnPath === "/store/orders" ? `${storePath}/repairs` : storePath
   const session = storeCode === "MAIN"
     ? await requireStoreAction(mainCapability, path)
