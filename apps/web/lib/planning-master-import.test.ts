@@ -1,3 +1,4 @@
+import { normalizeUserEnteredPayload } from "@workspace/db/user-entry-text"
 import { describe, expect, it } from "vitest"
 
 import {
@@ -8,6 +9,7 @@ import {
   planningImportValidationError,
   workOrderNumberForPayload,
 } from "./planning-master-import"
+import { parseTemplateUpload } from "./template-upload"
 
 describe("planning master CSV imports", () => {
   const rows = [
@@ -87,6 +89,39 @@ describe("planning master CSV imports", () => {
     ).toMatchObject({
       machineNo: "A305",
       productionFloorCode: "conventional-02",
+    })
+  })
+
+  it("maps Machine Master detail headings without altering identifiers or ratings", () => {
+    const csv = "Machine Serial No.,Machine Load\n000123,12 KW\n"
+    const [parsed] = parseTemplateUpload(
+      "machine_master",
+      "machine_master.csv",
+      Buffer.from(csv).toString("base64"),
+      new Set(["machine_master"])
+    ).rows
+    const row = machineMasterImportPayload(
+      normalizeUserEnteredPayload({
+        "Machine Model No.": "20-G",
+        "Machine Make": "HAAS AUTOMATION",
+        ...parsed,
+        "Machine Installation Date": "2024-09-20",
+        "Machine Stabiliser No.": "S05",
+        "Machine MCB No.": "M13",
+        "Machine Warranty": "24 MONTHS",
+      }),
+      "cnc"
+    )
+    expect(row).toMatchObject({
+      machineModelNo: "20-G",
+      machineMake: "HAAS AUTOMATION",
+      machineLoad: "12 KW",
+      machineSerialNo: "000123",
+      machineInstallationDate: "2024-09-20",
+      machineStabiliserNo: "S05",
+      machineMcbNo: "M13",
+      machineWarranty: "24 MONTHS",
+      productionFloorCode: "cnc",
     })
   })
 

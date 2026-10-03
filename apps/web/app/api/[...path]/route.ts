@@ -227,6 +227,14 @@ const dataEntryTemplateFields: Record<string, string[]> = {
     "machineType",
     "Machine Size",
     "location",
+    "Machine Model No.",
+    "Machine Make",
+    "Machine Load",
+    "Machine Serial No.",
+    "Machine Installation Date",
+    "Machine Stabiliser No.",
+    "Machine MCB No.",
+    "Machine Warranty",
     "status",
     "remarks",
   ],
@@ -693,6 +701,7 @@ async function savePlanningMasterEntry(
     }
     return repository.upsertMachine({
       rejectDuplicates,
+      recordId,
       actorUserId,
       machineNumber: text(payload.machineNo),
       name: optionalText(payload.machineName),

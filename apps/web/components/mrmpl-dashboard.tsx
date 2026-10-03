@@ -671,6 +671,22 @@ const dataEntrySpecs: DataEntrySpec[] = [
         label: "Machine Location Within Unit",
         required: true,
       },
+      { name: "machineModelNo", label: "Machine Model No." },
+      { name: "machineMake", label: "Machine Make" },
+      { name: "machineLoad", label: "Machine Load", placeholder: "e.g. 12 kW" },
+      { name: "machineSerialNo", label: "Machine Serial No." },
+      {
+        name: "machineInstallationDate",
+        label: "Machine Installation Date",
+        type: "date",
+      },
+      { name: "machineStabiliserNo", label: "Machine Stabiliser No." },
+      { name: "machineMcbNo", label: "Machine MCB No." },
+      {
+        name: "machineWarranty",
+        label: "Machine Warranty",
+        placeholder: "e.g. 12 months or 2027-09-20",
+      },
       {
         name: "status",
         label: "Status",
@@ -12320,6 +12336,29 @@ function MachineMasterPanel({
               value={selectedMachine.machineName}
             />
             <TileField
+              label="Machine Model No."
+              value={selectedMachine.machineModelNo}
+            />
+            <TileField label="Machine Make" value={selectedMachine.machineMake} />
+            <TileField label="Machine Load" value={selectedMachine.machineLoad} />
+            <TileField
+              label="Machine Serial No."
+              value={selectedMachine.machineSerialNo}
+            />
+            <TileField
+              label="Machine Installation Date"
+              value={selectedMachine.machineInstallationDate}
+            />
+            <TileField
+              label="Machine Stabiliser No."
+              value={selectedMachine.machineStabiliserNo}
+            />
+            <TileField label="Machine MCB No." value={selectedMachine.machineMcbNo} />
+            <TileField
+              label="Machine Warranty"
+              value={selectedMachine.machineWarranty}
+            />
+            <TileField
               label="Production Unit"
               value={machineProductionUnitLabel(selectedMachine)}
             />
@@ -14428,9 +14467,13 @@ function DataEntryForm({
     ...masterRows,
     ...locallyGeneratedCodes.map((code) => ({ code })),
   ])
-  const resolvedDefaults = generatedCode
-    ? { ...defaults, code: generatedCode }
-    : defaults
+  const resolvedDefaults = {
+    ...defaults,
+    ...(spec.entryType === "machine_master" && productionFloorCode
+      ? { productionFloorCode }
+      : {}),
+    ...(generatedCode ? { code: generatedCode } : {}),
+  }
   const toolingAssetCodes = Array.isArray(productionControl.toolingAssetCodes)
     ? productionControl.toolingAssetCodes.filter(
         (value): value is string => typeof value === "string"
@@ -14443,9 +14486,10 @@ function DataEntryForm({
   const routeMachineFamilies = machineFamilyOptions([
     ...asArray(productionControl.machinePlanningRows),
   ])
-  const lockedFields = new Set(
-    defaults.__editingMaster ? immutableMasterFields(spec.entryType) : []
-  )
+  const lockedFields = new Set([
+    ...(defaults.__editingMaster ? immutableMasterFields(spec.entryType) : []),
+    ...(spec.entryType === "machine_master" ? ["productionFloorCode"] : []),
+  ])
   const resolvedFields = spec.fields.map((field) => {
     const routeOptions =
       spec.entryType === "route" && field.name === "setupName"
@@ -16890,6 +16934,7 @@ function LegacyActionForm({
                 <SearchableSelect
                   className="h-9 rounded-md border bg-background px-3 text-sm"
                   name={field.name}
+                  disabled={field.readOnly}
                   defaultValue={
                     str(defaults[field.name]) ||
                     field.defaultValue ||
