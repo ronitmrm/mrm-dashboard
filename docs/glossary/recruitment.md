@@ -15,6 +15,17 @@ Template creates it without a template link. This does not change the Employee
 Master's template. Combined-role templates must belong to the selected combined
 role. Other job-entry paths retain their existing linked-template defaults.
 
+## Editing a Job Template
+
+Editing a template changes the reusable profile for future Job Posts. HR must
+choose whether to apply its requirements to all matching Approved Posts,
+regardless of whether they are occupied or vacant. This updates posts already
+linked to the template and unlinked posts matching its combined role or its
+individual department and designation; posts linked to another template keep
+their own profile. The approved-post link and requirement fields update in the
+same transaction as the template. Employee assignments and existing Job Posts
+are not rewritten.
+
 ## Approved Post Deletion
 
 An unassigned Approved Post outside a combined role may be deleted when all

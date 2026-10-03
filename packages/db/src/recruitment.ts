@@ -2324,6 +2324,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
 
     async upsertTemplate(
       input: MutationContext & {
+        applyToApprovedPosts?: boolean
         rejectDuplicates?: boolean
         combinedRoleId?: string | null
         departmentCode?: string | null
@@ -2336,15 +2337,27 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         name: string
         roleResponsibilities?: string | null
         templateCode: string
+        templateId?: string | null
       }
     ) {
       return transaction(pool, async (client) => {
+        const templateId = optional(input.templateId)
+        if (templateId) {
+          const existing = await client.query(
+            `SELECT 1 FROM recruitment.requirement_templates
+             WHERE id = $1 AND organization_id = $2
+               AND lower(template_code) = lower($3) AND active
+             FOR UPDATE`,
+            [templateId, input.organizationId, input.templateCode]
+          )
+          if (!existing.rows[0]) throw new Error("Job template was not found.")
+        }
         await assertMasterAvailable(
           client,
           input,
           "recruitment.requirement_templates",
-          "lower(template_code) = lower($2) OR lower(btrim(name)) = lower(btrim($3))",
-          [input.templateCode.trim(), input.name]
+          "(lower(template_code) = lower($2) OR lower(btrim(name)) = lower(btrim($3))) AND ($4::uuid IS NULL OR id <> $4::uuid)",
+          [input.templateCode.trim(), input.name, templateId]
         )
         const departmentCode = optional(input.departmentCode)
         const combinedRoleId = optional(input.combinedRoleId)
@@ -2416,9 +2429,38 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             "Department, combined job, or designation was not found."
           )
         }
+        let updatedPostCount = 0
+        if (templateId && input.applyToApprovedPosts) {
+          const updatedPosts = await client.query(
+            `UPDATE recruitment.posts post SET
+               requirement_template_id = template.id,
+               gender = template.gender,
+               education = template.education,
+               experience_requirement = template.experience_requirement,
+               salary_range = nullif(concat_ws(' - ', template.minimum_salary, template.maximum_salary), ''),
+               role_responsibilities = template.role_responsibilities,
+               updated_by_user_id = $3,
+               updated_at = now(),
+               row_version = post.row_version + 1
+             FROM recruitment.requirement_templates template
+             WHERE template.id = $1 AND template.organization_id = $2
+               AND post.organization_id = $2
+               AND (post.requirement_template_id = template.id OR
+                 (post.requirement_template_id IS NULL AND
+                   ((template.combined_role_id IS NOT NULL
+                     AND post.combined_role_id = template.combined_role_id) OR
+                    (template.combined_role_id IS NULL
+                     AND post.combined_role_id IS NULL
+                     AND post.department_id = template.department_id
+                     AND post.designation_id = template.designation_id))))`,
+            [result.rows[0].id, input.organizationId, input.actorUserId ?? null]
+          )
+          updatedPostCount = updatedPosts.rowCount ?? 0
+        }
         await audit(client, {
           ...input,
           eventType: "recruitment.template.saved",
+          metadata: { applyToApprovedPosts: !!input.applyToApprovedPosts, updatedPostCount },
           targetId: result.rows[0].id,
           targetTable: "requirement_templates",
         })
