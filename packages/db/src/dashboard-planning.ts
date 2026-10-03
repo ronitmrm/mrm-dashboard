@@ -894,6 +894,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
 
     async upsertMachine(input: {
       rejectDuplicates?: boolean
+      recordId?: string
       actorUserId?: string | null
       machineNumber: string
       name?: string | null
@@ -919,9 +920,16 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           "catalog.machine",
           `${input.organizationId}:${machineNumber}`
         )
-        const existing = await client.query<{ id: string; production_floor_id: string }>(
+        const existing = await client.query<{
+          id: string
+          source_id: string
+          legacy_id: string | null
+          production_floor_id: string
+        }>(
           `
-            SELECT machine.id, machine.production_floor_id FROM catalog.machines machine
+            SELECT machine.id, machine.source_id,
+              machine.source_payload->>'_id' AS legacy_id,
+              machine.production_floor_id FROM catalog.machines machine
             WHERE machine.organization_id = $1
               AND lower(machine.machine_number) = lower($2)
             FOR UPDATE
@@ -931,8 +939,15 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
         if (existing.rows[0] && existing.rows[0].production_floor_id !== productionFloorId) {
           throw new Error("This machine belongs to another Production Unit. Edit it in its existing unit.")
         }
+        if (input.recordId && (!existing.rows[0] || ![
+          existing.rows[0].id,
+          existing.rows[0].source_id,
+          existing.rows[0].legacy_id,
+        ].includes(input.recordId))) {
+          throw new Error("The Machine Master record to edit was not found. Reload the master.")
+        }
         const sourcePayload = input.sourcePayload ?? input
-        rejectDuplicateMaster(input.rejectDuplicates, !!existing.rows[0])
+        rejectDuplicateMaster(input.rejectDuplicates && !input.recordId, !!existing.rows[0])
         const result = existing.rows[0]
           ? await client.query<{ id: string }>(
               `

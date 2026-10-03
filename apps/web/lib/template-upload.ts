@@ -22,7 +22,7 @@ export function parseTemplateUpload(
   }
   const csvText = decodeDataUrl(fileBase64)
   const rows = parseCsv(csvText)
-    .map(normalizeImportedPayload)
+    .map((row) => normalizeImportedPayload(row, entryType))
     .map((payload) => normalizeUserEnteredPayload(payload))
     .filter((row) => Object.values(row).some((value) => text(value)))
   return dedupeCsvImportRows(entryType, rows)
@@ -91,11 +91,24 @@ function parseCsv(csvText: string): Array<Record<string, unknown>> {
     )
 }
 
-function normalizeImportedPayload(row: Record<string, unknown>) {
+const machineMasterTextFields = new Set([
+  "machinemodelno",
+  "machineserialno",
+  "machinestabiliserno",
+  "machinemcbno",
+])
+
+function normalizeImportedPayload(
+  row: Record<string, unknown>,
+  entryType: string
+) {
   return Object.fromEntries(
     Object.entries(row).map(([key, value]) => [
       key,
-      normalizeImportedValue(value),
+      entryType === "machine_master" &&
+      machineMasterTextFields.has(key.toLowerCase().replace(/[^a-z0-9]/g, ""))
+        ? text(value)
+        : normalizeImportedValue(value),
     ])
   )
 }

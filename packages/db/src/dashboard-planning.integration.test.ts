@@ -600,6 +600,40 @@ describe("dashboard planning writes", () => {
     expect(floor.rows[0]?.code).toBe("cnc")
   })
 
+  test("edits an existing Machine Master record by its visible source ID", async () => {
+    const machineNumber = `DETAIL-${suffix}`
+    const original = await repository.upsertMachine({
+      machineNumber,
+      organizationId,
+      productionFloorCode: "cnc",
+      rejectDuplicates: true,
+      sourcePayload: { machineNo: machineNumber },
+    })
+    const source = await pool.query<{ source_id: string }>(
+      "SELECT source_id FROM catalog.machines WHERE id = $1",
+      [original.id]
+    )
+    const correction = {
+      machineNumber,
+      organizationId,
+      productionFloorCode: "cnc",
+      rejectDuplicates: true,
+      sourcePayload: { machineNo: machineNumber, machineModelNo: "20-G" },
+    }
+    const updated = await repository.upsertMachine({
+      ...correction,
+      recordId: source.rows[0]!.source_id,
+    })
+    expect(updated.id).toBe(original.id)
+    const saved = await pool.query<{ model: string }>(
+      "SELECT source_payload->>'machineModelNo' AS model FROM catalog.machines WHERE id = $1",
+      [original.id]
+    )
+    expect(saved.rows[0]?.model).toBe("20-G")
+    await expect(repository.upsertMachine({ ...correction, recordId: "wrong-id" }))
+      .rejects.toThrow("record to edit was not found")
+  })
+
   test("corrects route details, protects structure and preserves the previous automatic option", async () => {
     const item = `ROUTE-EDIT-${suffix}`
     const routeInput = {
