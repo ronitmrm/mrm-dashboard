@@ -779,6 +779,7 @@ function JobsPanel({
                 <TableHead>Job</TableHead>
                 <TableHead>Vacancy</TableHead>
                 <TableHead>Post</TableHead>
+                <TableHead>Template</TableHead>
                 <TableHead>Posted</TableHead>
                 <TableHead>Target</TableHead>
                 <TableHead>Applicants</TableHead>
@@ -802,6 +803,15 @@ function JobsPanel({
                     <TableCell className="font-mono">
                       {row.postCode ?? "—"}
                     </TableCell>
+                    <TableCell className="font-mono">
+                      {row.requirementTemplateCode ? (
+                        <Button asChild className="h-auto p-0 font-mono" variant="link">
+                          <Link href={`/hr?panel=postMasterPanel&masterView=masterTables&template=${encodeURIComponent(row.requirementTemplateCode)}`}>
+                            {row.requirementTemplateCode}
+                          </Link>
+                        </Button>
+                      ) : "—"}
+                    </TableCell>
                     <TableCell>{row.postDate}</TableCell>
                     <TableCell>{row.targetDate ?? "—"}</TableCell>
                     <TableCell>{row.applicantCount}</TableCell>
@@ -816,7 +826,7 @@ function JobsPanel({
                   </TableRow>
                 ))
               ) : (
-                <EmptyRow columns={8} label="No Job Posts Found." />
+                <EmptyRow columns={9} label="No Job Posts Found." />
               )}
             </TableBody>
  </OperationalTable>

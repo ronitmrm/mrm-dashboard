@@ -146,6 +146,7 @@ export type RecruitmentJobRow = {
   jobNumber: string
   postCode: string | null
   postDate: string
+  requirementTemplateCode: string | null
   status: string
   targetDate: string | null
   title: string
@@ -1663,6 +1664,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         job_number: string
         post_code: string | null
         post_date: string
+        requirement_template_code: string | null
         status: string
         target_date: string | null
         title: string
@@ -1671,13 +1673,16 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         `
           SELECT job.id, job.job_number, job.vacancy_code, job.title,
             job.post_date::text, job.target_date::text, job.status,
-            post.post_code, count(application.id)::int AS applicant_count
+            post.post_code, template.template_code AS requirement_template_code,
+            count(application.id)::int AS applicant_count
           FROM recruitment.job_posts job
           LEFT JOIN recruitment.posts post ON post.id = job.post_id
+          LEFT JOIN recruitment.requirement_templates template
+            ON template.id = job.requirement_template_id
           LEFT JOIN recruitment.applications application
             ON application.job_post_id = job.id
           WHERE job.organization_id = $1
-          GROUP BY job.id, post.post_code
+          GROUP BY job.id, post.post_code, template.template_code
           ORDER BY (job.status = 'Open') DESC, job.post_date DESC, job.title
         `,
         [organizationId]
@@ -1688,6 +1693,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         jobNumber: row.job_number,
         postCode: row.post_code,
         postDate: row.post_date,
+        requirementTemplateCode: row.requirement_template_code,
         status: row.status,
         targetDate: row.target_date,
         title: row.title,
@@ -1707,6 +1713,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             job_number: string
             post_code: string | null
             post_date: string
+            requirement_template_code: string | null
             status: string
             target_date: string | null
             title: string
@@ -1715,13 +1722,16 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             `
               SELECT job.id, job.job_number, job.vacancy_code, job.title,
                 job.post_date::text, job.target_date::text, job.status,
-                post.post_code, count(application.id)::int AS applicant_count
+                post.post_code, template.template_code AS requirement_template_code,
+                count(application.id)::int AS applicant_count
               FROM recruitment.job_posts job
               LEFT JOIN recruitment.posts post ON post.id = job.post_id
+              LEFT JOIN recruitment.requirement_templates template
+                ON template.id = job.requirement_template_id
               LEFT JOIN recruitment.applications application
                 ON application.job_post_id = job.id
               WHERE job.organization_id = $1 AND job.id = $2
-              GROUP BY job.id, post.post_code
+              GROUP BY job.id, post.post_code, template.template_code
             `,
             [organizationId, jobId]
           ),
@@ -1934,6 +1944,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           jobNumber: job.job_number,
           postCode: job.post_code,
           postDate: job.post_date,
+          requirementTemplateCode: job.requirement_template_code,
           status: job.status,
           targetDate: job.target_date,
           title: job.title,

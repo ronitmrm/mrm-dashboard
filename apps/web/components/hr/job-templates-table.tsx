@@ -65,12 +65,14 @@ type FilterKey =
   | "name"
 
 function JobTemplateEditor({
+  canWrite,
   combinedRoles,
   masterView,
   masters,
   panelId = "postMasterPanel",
   template,
 }: {
+  canWrite: boolean
   combinedRoles: RecruitmentCombinedRoleRow[]
   masterView?: "dataEntry" | "masterTables"
   masters: RecruitmentMasterSnapshot
@@ -78,19 +80,21 @@ function JobTemplateEditor({
   template: RecruitmentTemplateRow
 }) {
   return (
-    <form action={saveTemplateAction} className="flex min-h-full flex-col">
+    <form action={canWrite ? saveTemplateAction : undefined} className="flex min-h-full flex-col">
       <input name="panel" type="hidden" value={panelId} />
       {masterView ? (
         <input name="master_view" type="hidden" value={masterView} />
       ) : null}
       <input name="template_code" type="hidden" value={template.templateCode} />
       <SheetHeader>
-        <SheetTitle>Edit {template.templateCode}</SheetTitle>
+        <SheetTitle>{canWrite ? "Edit" : "View"} {template.templateCode}</SheetTitle>
         <SheetDescription>
-          Update The Full Job Requirement Form. The Template Code Remains Fixed.
+          {canWrite
+            ? "Update The Full Job Requirement Form. The Template Code Remains Fixed."
+            : "Full Job Requirement Form."}
         </SheetDescription>
       </SheetHeader>
-      <div className="grid flex-1 content-start gap-4 px-6 sm:grid-cols-2">
+      <fieldset disabled={!canWrite} className="grid flex-1 content-start gap-4 px-6 sm:grid-cols-2">
         <Field>
           <FieldLabel>Template Code</FieldLabel>
           <Input readOnly value={template.templateCode} />
@@ -173,10 +177,12 @@ function JobTemplateEditor({
             rows={8}
           />
         </Field>
-      </div>
-      <SheetFooter>
-        <Button type="submit">Save Template Changes</Button>
-      </SheetFooter>
+      </fieldset>
+      {canWrite ? (
+        <SheetFooter>
+          <Button type="submit">Save Template Changes</Button>
+        </SheetFooter>
+      ) : null}
     </form>
   )
 }
@@ -200,10 +206,7 @@ export function JobTemplatesTable({
 }) {
   const [editingTemplate, setEditingTemplate] =
     useState<RecruitmentTemplateRow | null>(() =>
-      canWrite
-        ? (templates.find((row) => row.templateCode === initialTemplateCode) ??
-          null)
-        : null
+      templates.find((row) => row.templateCode === initialTemplateCode) ?? null
     )
   const [deletingTemplate, setDeletingTemplate] =
     useState<RecruitmentTemplateRow | null>(null)
@@ -286,18 +289,14 @@ export function JobTemplatesTable({
               {visibleTemplates.map((row) => (
                 <TableRow key={row.id}>
                   <TableCell className="font-mono">
-                    {canWrite ? (
-                      <Button
-                        className="h-auto p-0 font-mono"
-                        onClick={() => setEditingTemplate(row)}
-                        type="button"
-                        variant="link"
-                      >
-                        {row.templateCode}
-                      </Button>
-                    ) : (
-                      row.templateCode
-                    )}
+                    <Button
+                      className="h-auto p-0 font-mono"
+                      onClick={() => setEditingTemplate(row)}
+                      type="button"
+                      variant="link"
+                    >
+                      {row.templateCode}
+                    </Button>
                   </TableCell>
                   <TableCell>{row.name}</TableCell>
                   <TableCell>
@@ -339,6 +338,7 @@ export function JobTemplatesTable({
       {editingTemplate ? (
         <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
           <JobTemplateEditor
+            canWrite={canWrite}
             combinedRoles={combinedRoles}
             masterView={masterView}
             masters={masters}
