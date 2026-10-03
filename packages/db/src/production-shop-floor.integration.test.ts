@@ -1018,6 +1018,15 @@ describe("production and shop-floor workflows", () => {
     })
     expect(pending).toMatchObject({ outputPending: true, totalPieces: 0 })
 
+    await repository.recordShopFloorStage({
+      jobCardNumber: firstJobCard,
+      machineNumber: firstMachine,
+      operationSetupCode: "1",
+      organizationId,
+      payload: { doneBy: "Quality", partCode: itemUid },
+      stage: "quality_approval",
+    })
+
     await repository.recordProductionSessionDowntime({
       correctionReason: "Operator recorded the stoppage after the shift.",
       endedAt: "2026-08-15T08:55:00+05:30",

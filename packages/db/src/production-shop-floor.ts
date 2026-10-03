@@ -935,12 +935,12 @@ async function completeProductionSessionSetup(
        jsonb_build_object('jcNo', session.job_card_number_snapshot,
          'partCode', session.part_code_snapshot, 'optionNumber', session.option_number_snapshot,
          'setupNo', session.setup_number_snapshot, 'machine', session.machine_number_snapshot) AS context,
-       (state.updated_at > session.created_at OR EXISTS (
+       EXISTS (
          SELECT 1 FROM manufacturing.production_sessions later
          WHERE later.machine_id = session.machine_id AND later.reversed_at IS NULL
            AND (later.started_at, later.created_at, later.id)
              > (session.started_at, session.created_at, session.id)
-       )) AS superseded
+       ) AS superseded
      FROM manufacturing.production_sessions session
      JOIN manufacturing.shop_floor_setup_state state
        ON state.work_order_id = session.work_order_id
