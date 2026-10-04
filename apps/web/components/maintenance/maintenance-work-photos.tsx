@@ -8,7 +8,9 @@ import {
   useState,
 } from "react"
 import Image from "next/image"
+import { Trash2 } from "lucide-react"
 import type { MaintenanceWorkPhotoTarget } from "@workspace/db"
+import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
 
@@ -31,7 +33,23 @@ export const MaintenanceWorkPhotos = forwardRef<MaintenanceWorkPhotosHandle, {
   const [files, setFiles] = useState<File[]>([])
   const [photos, setPhotos] = useState<Photo[]>([])
   const [error, setError] = useState("")
+  const [removingId, setRemovingId] = useState<string | null>(null)
   const query = maintenanceWorkPhotoQuery(target)
+
+  async function removePhoto(photo: Photo) {
+    setError("")
+    setRemovingId(photo.id)
+    try {
+      const response = await fetch(`/api/maintenance/work-photos/${photo.id}?${query}`, { method: "DELETE" })
+      const result = (await response.json()) as { error?: string }
+      if (!response.ok) throw new Error(result.error || "Photo could not be removed.")
+      setPhotos((current) => current.filter((item) => item.id !== photo.id))
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Photo could not be removed.")
+    } finally {
+      setRemovingId(null)
+    }
+  }
 
   useEffect(() => {
     let active = true
@@ -93,7 +111,7 @@ export const MaintenanceWorkPhotos = forwardRef<MaintenanceWorkPhotosHandle, {
         <Label htmlFor="maintenance-work-photos">Photos of work done</Label>
         <Input
           accept="image/jpeg,image/png"
-          disabled={disabled}
+          disabled={disabled || removingId !== null}
           id="maintenance-work-photos"
           multiple
           onChange={(event) => {
@@ -105,15 +123,47 @@ export const MaintenanceWorkPhotos = forwardRef<MaintenanceWorkPhotosHandle, {
         />
         <p className="text-xs text-muted-foreground">Up to eight JPG or PNG photos, 10 MB each. Selected photos save with this maintenance job.</p>
       </div>
-      {files.length ? <p className="text-sm">Selected: {files.map((file) => file.name).join(", ")}</p> : null}
+      {files.length ? (
+        <ul className="grid gap-1.5">
+          {files.map((file, index) => (
+            <li className="flex min-w-0 items-center gap-2 text-sm" key={`${file.name}-${index}`}>
+              <span className="min-w-0 truncate">{file.name}</span>
+              <Button
+                aria-label={`Remove selected photo ${file.name}`}
+                disabled={disabled || removingId !== null}
+                onClick={() => {
+                  setFiles((current) => current.filter((_, fileIndex) => fileIndex !== index))
+                  if (inputRef.current) inputRef.current.value = ""
+                }}
+                size="xs"
+                type="button"
+                variant="outline"
+              >
+                <Trash2 aria-hidden="true" /> Remove
+              </Button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
       {photos.length ? (
         <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {photos.map((photo) => (
-            <li key={photo.id}>
+            <li className="grid gap-1.5" key={photo.id}>
               <a className="grid gap-1.5 text-sm underline underline-offset-4" href={photo.url} rel="noopener noreferrer" target="_blank">
                 <Image alt={photo.fileName} className="h-32 w-full rounded-md border object-cover" height={128} src={photo.url} unoptimized width={192} />
                 <span className="break-all">{photo.fileName}</span>
               </a>
+              <Button
+                aria-label={`Remove saved photo ${photo.fileName}`}
+                className="w-fit"
+                disabled={disabled || removingId !== null}
+                onClick={() => void removePhoto(photo)}
+                size="xs"
+                type="button"
+                variant="outline"
+              >
+                <Trash2 aria-hidden="true" /> {removingId === photo.id ? "Removing…" : "Remove"}
+              </Button>
             </li>
           ))}
         </ul>
