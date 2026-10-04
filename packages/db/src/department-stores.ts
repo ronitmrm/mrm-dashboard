@@ -1,6 +1,7 @@
 import type { PoolClient } from "pg"
 
 import { queueDashboardRefresh } from "./dashboard-refresh-queue"
+import { productionFloorFromDepartment } from "./production-floors"
 import {
   repositoryPool,
   withTransaction,
@@ -836,6 +837,43 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
         gaugeSets: gaugeSets.rows,
         movements: movements.rows,
       }
+    },
+
+    async listDepartmentAllocations(input: {
+      organizationId: string
+      productionFloorCode: string
+    }) {
+      const result = await pool.query<{
+        accountableStoreCode: string
+        accountableStoreName: string
+        assetCode: string
+        assetName: string
+        departmentName: string
+        holderReference: string | null
+        status: string
+        typeCode: string
+      }>(
+        `SELECT asset.asset_code AS "assetCode", item.type_code AS "typeCode",
+           item.asset_name AS "assetName",
+           asset.current_holder_reference AS "holderReference",
+           COALESCE(asset.current_holder_name, asset.current_holder_reference, 'Unknown')
+             AS "departmentName",
+           accountable.code AS "accountableStoreCode",
+           accountable.name AS "accountableStoreName", asset.status
+         FROM store.assets asset
+         JOIN store.item_types item ON item.id = asset.item_type_id
+         JOIN store.accountable_stores accountable
+           ON accountable.id = asset.accountable_store_id
+         WHERE asset.organization_id = $1
+           AND asset.current_holder_type = 'DEPARTMENT'
+           AND asset.status <> 'SCRAPPED'
+         ORDER BY "departmentName", asset.asset_code`,
+        [input.organizationId]
+      )
+      // Store issues may record a Department name; direct moves record its code.
+      return result.rows.filter((asset) => productionFloorFromDepartment(
+        asset.departmentName, asset.holderReference
+      ) === input.productionFloorCode)
     },
 
     async transferQuantity(input: MutationIdentity & {

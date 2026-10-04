@@ -58,6 +58,13 @@ export async function renderDepartmentStoreWorkspace(input: {
     organizationId: options.organizationId,
     storeCode: input.storeCode,
   })
+  const departmentAllocations = workspace.store.productionFloorCode &&
+    (input.view ?? "stock") === "stock"
+    ? await repository.listDepartmentAllocations({
+        organizationId: options.organizationId,
+        productionFloorCode: workspace.store.productionFloorCode,
+      })
+    : []
   const repairOrders = input.view === "repairs"
     ? await (async () => {
         const orders = createStoreRepository({ connectionString: readAuthEnvironment().connectionString })
@@ -84,6 +91,7 @@ export async function renderDepartmentStoreWorkspace(input: {
       selectedItemIds={input.selectedItemIds}
       selectMode={input.selectMode}
       departments={options.departments}
+      departmentAllocations={departmentAllocations}
       machines={options.machines}
       repairOrders={equipmentRepairOrders}
       vendors={options.vendors}

@@ -2717,4 +2717,33 @@ describe("Store requests", () => {
     expect((await departmentStore.getAssetAccountability(organizationId, assetCode))?.accountableStoreCode)
       .toBe("cnc")
   })
+
+  test("shows Main-accountable units held by CNC in its allocation list", async () => {
+    await pool.query(
+      `INSERT INTO manufacturing.production_floors (organization_id, code, name)
+       VALUES ($1, 'cnc', 'CNC Production Floor')
+       ON CONFLICT (organization_id, code) DO NOTHING`,
+      [organizationId]
+    )
+    const departmentName = "Ppac Cnc-01"
+    const assetCode = `ALLOC-${suffix}`
+    await pool.query(
+      `INSERT INTO store.assets (organization_id, item_type_id, asset_code,
+         identification_name, status, current_holder_type,
+         current_holder_reference, current_holder_name, accountable_store_id)
+       VALUES ($1, $2, $3, 'CNC fixture', 'ASSIGNED', 'DEPARTMENT',
+         $4, $5, $6)`,
+      [organizationId, legacyItemTypeId, assetCode, departmentName,
+        departmentName, mainAccountableStoreId]
+    )
+
+    const allocations = await departmentStore.listDepartmentAllocations({
+      organizationId, productionFloorCode: "cnc",
+    })
+    expect(allocations).toContainEqual(expect.objectContaining({
+      accountableStoreCode: "MAIN", assetCode, departmentName,
+    }))
+    const cncStock = await departmentStore.listStoreWorkspace({ organizationId, storeCode: "cnc" })
+    expect(cncStock.assets.some((asset) => asset.assetCode === assetCode)).toBe(false)
+  })
 })
