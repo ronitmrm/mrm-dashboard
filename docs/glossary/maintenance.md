@@ -47,7 +47,7 @@ The task records a start date and time when work begins and an end date and time
 
 The same checklist workflow applies to physical Unit ID schedules. Its saved due occurrence, draft answers, performer, changed items, and completion belong to that Unit ID. Existing direct Unit ID timetables without checklist points remain completable from Mechanical with work notes.
 
-Up to eight JPG or PNG work photos may be attached to each saved machine or Unit ID planned maintenance job. A photo belongs to that job's due occurrence, including while it is In Progress. An authorized maintenance worker may remove an attached photo; removed photos no longer appear on the job or in the completed maintenance register. Remaining saved photos remain available from the register.
+Up to twelve JPG or PNG work photos may be attached to each saved machine or Unit ID planned maintenance job. A photo belongs to that job's due occurrence, including while it is In Progress. An authorized maintenance worker may remove an attached photo; removed photos no longer appear on the job or completed report. Remaining saved photos remain available from the report linked in the maintenance register.
 
 _Avoid_: browser prompts for checklist points, treating a partial draft as completed work, repeating the same checklist point across production units.
 
@@ -68,7 +68,7 @@ authorized signed-in performer's Employee ID and name when linked, or account na
 optional remarks, and zero or more separately entered Changed Items.
 One breakdown may contain multiple Changed Items; they are not flattened into a
 single free-text part field.
-Up to eight work photos may be attached to the open breakdown before completion. They remain with that completed breakdown in the maintenance register.
+Up to twelve work photos may be attached to the open breakdown before completion. They remain with that completed breakdown in the report linked from the maintenance register.
 
 _Avoid_: completed-only breakdown entry, ending the Production Session when the
 breakdown starts, starting production while a machine breakdown remains open.

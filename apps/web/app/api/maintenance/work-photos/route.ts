@@ -11,6 +11,7 @@ import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { createGoogleCloudArtifactProvider } from "@/lib/google-cloud-artifact-provider"
 import {
+  MAX_MAINTENANCE_WORK_PHOTOS,
   maintenanceWorkPhotoQuery,
   parseMaintenanceWorkPhotoTarget,
 } from "@/lib/maintenance-work-photo-target"
@@ -52,10 +53,10 @@ export async function POST(request: Request) {
     const body = (await request.json()) as Record<string, unknown>
     const target = parseMaintenanceWorkPhotoTarget(body.target)
     const uploadIds = body.uploadIds
-    if (!Array.isArray(uploadIds) || uploadIds.length < 1 || uploadIds.length > 8 ||
+    if (!Array.isArray(uploadIds) || uploadIds.length < 1 || uploadIds.length > MAX_MAINTENANCE_WORK_PHOTOS ||
       uploadIds.some((id) => typeof id !== "string") ||
       new Set(uploadIds).size !== uploadIds.length) {
-      throw new Error("Select one to eight maintenance photos.")
+      throw new Error(`Select one to ${MAX_MAINTENANCE_WORK_PHOTOS} maintenance photos.`)
     }
     const authorization = await pendingUploadAuthorizationForUser(session.user.id)
     const repository = createMaintenanceWorkPhotoRepository({
@@ -71,8 +72,8 @@ export async function POST(request: Request) {
         throw new Error("Enter an edit reason (up to 500 characters) before adding photos to a completed report.")
       }
       const existing = await repository.listPhotos(organizationId, resolved)
-      if (existing.length + uploadIds.filter((id) => !existing.some((photo) => photo.purpose === `work-photo:${id}`)).length > 8) {
-        throw new Error("Attach no more than eight photos to this maintenance job.")
+      if (existing.length + uploadIds.filter((id) => !existing.some((photo) => photo.purpose === `work-photo:${id}`)).length > MAX_MAINTENANCE_WORK_PHOTOS) {
+        throw new Error(`Attach no more than ${MAX_MAINTENANCE_WORK_PHOTOS} photos to this maintenance job.`)
       }
       for (const [index, uploadId] of uploadIds.entries()) {
         await preparePendingArtifactUploadForFinalAction({

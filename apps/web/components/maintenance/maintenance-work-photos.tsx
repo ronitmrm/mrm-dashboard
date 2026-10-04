@@ -15,7 +15,7 @@ import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
 
 import { usePendingRetainedUploads } from "@/components/pending-retained-upload-form"
-import { maintenanceWorkPhotoQuery } from "@/lib/maintenance-work-photo-target"
+import { MAX_MAINTENANCE_WORK_PHOTOS, maintenanceWorkPhotoQuery } from "@/lib/maintenance-work-photo-target"
 
 type Photo = { fileName: string; id: string; url: string }
 
@@ -85,8 +85,8 @@ export const MaintenanceWorkPhotos = forwardRef<MaintenanceWorkPhotosHandle, {
       setError(message)
       throw new Error(message)
     }
-    if (files.length + photos.length > 8) {
-      const message = "Attach no more than eight photos to this maintenance job."
+    if (files.length + photos.length > MAX_MAINTENANCE_WORK_PHOTOS) {
+      const message = `Attach no more than ${MAX_MAINTENANCE_WORK_PHOTOS} photos to this maintenance job.`
       setError(message)
       throw new Error(message)
     }
@@ -140,7 +140,7 @@ export const MaintenanceWorkPhotos = forwardRef<MaintenanceWorkPhotosHandle, {
           ref={inputRef}
           type="file"
         />
-        <p className="text-xs text-muted-foreground">Up to eight JPG or PNG photos, 10 MB each. {correctionReason === undefined
+        <p className="text-xs text-muted-foreground">Up to {MAX_MAINTENANCE_WORK_PHOTOS} JPG or PNG photos, 10 MB each. {correctionReason === undefined
           ? "Selected photos save with this maintenance job."
           : "Select photos, then use Add selected photos to save them."}</p>
       </div>
