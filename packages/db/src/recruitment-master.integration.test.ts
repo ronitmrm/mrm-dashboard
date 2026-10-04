@@ -212,6 +212,18 @@ test("editing a template can update occupied and vacant Approved Posts", async (
     [organizationId, department.rows[0]!.id, designation.rows[0]!.id,
       template.id, `occupied-${suffix}`, `vacant-${suffix}`]
   )
+  await pool.query(
+    `INSERT INTO recruitment.job_posts
+       (organization_id, post_id, job_number, vacancy_code, title,
+        status, closed_on, source_system, source_table, source_id)
+     SELECT post.organization_id, post.id, post.post_code, post.vacancy_code,
+       'Operator / Cnc',
+       CASE WHEN post.post_code = 'CNC-OP-1' THEN 'Closed' ELSE 'Open' END,
+       CASE WHEN post.post_code = 'CNC-OP-1' THEN CURRENT_DATE ELSE NULL END,
+       'test', 'jobs', post.post_code || $2
+     FROM recruitment.posts post WHERE post.organization_id = $1`,
+    [organizationId, suffix]
+  )
 
   await repository.upsertTemplate({
     ...input,
@@ -257,4 +269,23 @@ test("editing a template can update occupied and vacant Approved Posts", async (
     { post_code: "CNC-OP-2", status: "Vacant", employee_name: null,
       experience_requirement: "Three years", requirement_template_id: template.id },
   ])
+  const jobs = await pool.query<{
+    job_number: string
+    requirement_template_id: string
+    shift_type: string
+    start_time: string
+    end_time: string
+  }>(
+    `SELECT job_number, requirement_template_id, shift_type,
+       start_time::text, end_time::text
+     FROM recruitment.job_posts WHERE organization_id = $1 ORDER BY job_number`,
+    [organizationId]
+  )
+  expect(jobs.rows).toEqual(["CNC-OP-1", "CNC-OP-2"].map((jobNumber) => ({
+    job_number: jobNumber,
+    requirement_template_id: template.id,
+    shift_type: "Day",
+    start_time: "09:00:00",
+    end_time: "18:00:00",
+  })))
 })

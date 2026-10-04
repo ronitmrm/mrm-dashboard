@@ -457,6 +457,63 @@ async function audit(client: PoolClient, input: AuditInput) {
   await auditMany(client, [input])
 }
 
+async function linkUnassignedJobsToTemplate(
+  client: PoolClient,
+  input: MutationContext,
+  templateId: string
+) {
+  const before = await client.query<Record<string, unknown> & { id: string }>(
+    `SELECT job.*
+     FROM recruitment.job_posts job
+     JOIN recruitment.posts post ON post.id = job.post_id
+     WHERE job.organization_id = $1 AND post.organization_id = $1
+       AND post.requirement_template_id = $2
+       AND job.requirement_template_id IS NULL
+     FOR UPDATE OF job`,
+    [input.organizationId, templateId]
+  )
+  if (!before.rows.length) return 0
+
+  const updated = await client.query<Record<string, unknown> & { id: string }>(
+    `UPDATE recruitment.job_posts job SET
+       requirement_template_id = template.id,
+       minimum_salary = COALESCE(job.minimum_salary, template.minimum_salary),
+       maximum_salary = COALESCE(job.maximum_salary, template.maximum_salary),
+       gender = COALESCE(NULLIF(BTRIM(job.gender), ''), template.gender),
+       education = COALESCE(NULLIF(BTRIM(job.education), ''), template.education),
+       experience_requirement = COALESCE(NULLIF(BTRIM(job.experience_requirement), ''), template.experience_requirement),
+       description = COALESCE(NULLIF(BTRIM(job.description), ''), template.role_responsibilities),
+       shift_type = COALESCE(job.shift_type, template.shift_type),
+       start_time = COALESCE(job.start_time, template.shift_start_time),
+       end_time = COALESCE(job.end_time, template.shift_end_time),
+       updated_by_user_id = $3,
+       updated_at = now(), row_version = job.row_version + 1
+     FROM recruitment.posts post
+     JOIN recruitment.requirement_templates template
+       ON template.id = post.requirement_template_id
+     WHERE job.post_id = post.id
+       AND job.organization_id = $1 AND post.organization_id = $1
+       AND post.requirement_template_id = $2
+       AND job.requirement_template_id IS NULL
+     RETURNING job.*`,
+    [input.organizationId, templateId, input.actorUserId ?? null]
+  )
+  if (updated.rows.length !== before.rows.length) {
+    throw new Error("Not every linked Job Post received its template.")
+  }
+  const afterById = new Map(updated.rows.map((job) => [job.id, job]))
+  await auditMany(client, before.rows.map((job) => ({
+    ...input,
+    afterState: afterById.get(job.id),
+    beforeState: job,
+    eventType: "recruitment.job.template_assigned",
+    reason: "Assigned from linked Approved Post",
+    targetId: job.id,
+    targetTable: "job_posts",
+  })))
+  return updated.rows.length
+}
+
 function recruitmentAssignmentAudit(
   input: AuditInput,
   commandId: string,
@@ -2489,6 +2546,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           )
         }
         let updatedPostCount = 0
+        let linkedJobCount = 0
         if (templateId && input.applyToApprovedPosts) {
           const updatedPosts = await client.query(
             `UPDATE recruitment.posts post SET
@@ -2515,11 +2573,18 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             [result.rows[0].id, input.organizationId, input.actorUserId ?? null]
           )
           updatedPostCount = updatedPosts.rowCount ?? 0
+          linkedJobCount = await linkUnassignedJobsToTemplate(
+            client, input, result.rows[0].id
+          )
         }
         await audit(client, {
           ...input,
           eventType: "recruitment.template.saved",
-          metadata: { applyToApprovedPosts: !!input.applyToApprovedPosts, updatedPostCount },
+          metadata: {
+            applyToApprovedPosts: !!input.applyToApprovedPosts,
+            linkedJobCount,
+            updatedPostCount,
+          },
           targetId: result.rows[0].id,
           targetTable: "requirement_templates",
         })
@@ -2672,12 +2737,15 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           `,
           [templateId, input.actorUserId ?? null, postId, input.organizationId]
         )
+        const linkedJobCount = templateId
+          ? await linkUnassignedJobsToTemplate(client, input, templateId)
+          : 0
         await audit(client, {
           ...input,
           afterState: updated.rows[0],
           beforeState: existing.rows[0],
           eventType: "recruitment.post.updated",
-          metadata: { requirementTemplateCode: templateCode },
+          metadata: { linkedJobCount, requirementTemplateCode: templateCode },
           targetId: postId,
           targetTable: "posts",
         })
