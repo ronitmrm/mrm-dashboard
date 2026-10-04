@@ -2786,4 +2786,55 @@ describe("Store requests", () => {
     const cncStock = await departmentStore.listStoreWorkspace({ organizationId, storeCode: "cnc" })
     expect(cncStock.assets.some((asset) => asset.assetCode === assetCode)).toBe(false)
   })
+
+  test("shows each Store leg and one consumption without double-debiting company stock", async () => {
+    await pool.query(
+      `INSERT INTO manufacturing.production_floors (organization_id, code, name)
+       VALUES ($1, 'cnc', 'CNC Production Floor')
+       ON CONFLICT (organization_id, code) DO NOTHING`,
+      [organizationId]
+    )
+    const location = await store.ensurePrimaryStoreLocation({ organizationId })
+    const item = await store.createItemType({
+      ...(await createClassification("Company Movement")),
+      assetType: "CONSUMABLE",
+      identificationName: `Company Movement ${suffix}`,
+      organizationId,
+      unit: "Nos",
+    })
+    await store.receiveStock({
+      locationId: location.id,
+      organizationId,
+      purchaseOrderLineId: (await createPurchaseOrder(item.id, 10, "100.00")).id,
+      quantity: 10,
+    })
+    await departmentStore.transferQuantity({
+      destinationStoreCode: "cnc", itemTypeId: item.id,
+      organizationId, quantity: 10, sourceStoreCode: "MAIN",
+    })
+    await departmentStore.consumeQuantities({
+      consumedOn: "2026-08-17", items: [{ itemTypeId: item.id, quantity: 10 }],
+      organizationId, storeCode: "cnc",
+    })
+
+    const [main, cnc, company] = await Promise.all([
+      departmentStore.listStoreWorkspace({ organizationId, storeCode: "MAIN" }),
+      departmentStore.listStoreWorkspace({ organizationId, storeCode: "cnc" }),
+      departmentStore.listCompanyMovements({ organizationId, code: item.typeCode }),
+    ])
+    expect(main.consumables.find((row) => row.itemTypeId === item.id)).toMatchObject({
+      availableQuantity: "0", companyQuantity: "0",
+    })
+    expect(cnc.consumables.find((row) => row.itemTypeId === item.id)).toMatchObject({
+      availableQuantity: "0", companyQuantity: "0",
+    })
+    expect(company.movements).toHaveLength(4)
+    expect(company.movements).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: "RECEIPT", quantity: "+10", storeName: main.store.name }),
+      expect.objectContaining({ kind: "TRANSFER_OUT", quantity: "-10", storeName: main.store.name }),
+      expect.objectContaining({ kind: "TRANSFER_IN", quantity: "+10", storeName: cnc.store.name }),
+      expect.objectContaining({ kind: "CONSUMPTION", quantity: "-10",
+        storeName: cnc.store.name, usedOn: "2026-08-17" }),
+    ]))
+  })
 })

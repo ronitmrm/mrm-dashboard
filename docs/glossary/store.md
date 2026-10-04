@@ -119,6 +119,12 @@ recorder's account ID. The date defaults to the current day in India and may be
 backdated, but never set in the future. It lowers the accountable store balance
 and company on-hand. An unused return is a new stock movement. No balance may
 become negative.
+The company movement history shows the existing signed Store entries: a receipt
+adds stock at the receiving Store, an internal transfer debits the sending Store
+and credits the receiving Store, and consumption debits only the using Store.
+Transfer entries net to zero across the company; recording consumption does not
+debit Main Store again. Unit ID holder movements and responsibility transfers
+are visible as events but are not additional Consumable balance changes.
 
 **Unit ID Loss**: The accountable Store records one lost Non Consumable Unit ID
 at a time, with a reason. Loss keeps its history and last known physical holder,
@@ -362,9 +368,12 @@ movement history. Consumables never participate.
 movements and explicit transfers of Unit ID responsibility or Consumable
 quantity to another accountable Store. A physical move leaves the responsible
 Store unchanged. A Store transfer changes the responsible Store or its local
-available quantity while preserving company ownership. The register shows a
-single history of these events and quantity adjustments. Fulfilling a
-Department request remains an Issue, not a transfer into a department Store.
+available quantity while preserving company ownership. Main Store's company
+history shows receipts, transfers, consumption, loss, physical movements, and
+responsibility changes from every accountable Store, identifying the Store for
+each event. It is a view of recorded events, not another stock posting.
+Fulfilling a Department request remains an Issue, not a transfer into a
+department Store.
 Each production and Quality Store has its own Movement Register, separate from
 its Stock Register. Its Stock Register combines local Consumable balances with
 accountable Non Consumable Unit IDs; repair orders have a separate register.

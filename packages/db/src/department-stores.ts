@@ -833,6 +833,89 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
       }
     },
 
+    async listCompanyMovements(input: {
+      organizationId: string
+      code?: string
+      page?: number
+    }) {
+      const page = Math.max(1, Math.trunc(input.page ?? 1))
+      const pageSize = 100
+      const result = await pool.query<{
+        from: string | null
+        kind: string
+        occurredAt: string
+        performedBy: string | null
+        quantity: string
+        remark: string | null
+        storeName: string
+        subjectCode: string
+        to: string | null
+        typeCode: string
+        unitId: string | null
+        usedOn: string | null
+      }>(
+        `WITH events AS (
+           SELECT movement.id, movement.moved_at AS occurred_at,
+             COALESCE(asset.asset_code, item.type_code) AS subject_code,
+             item.type_code, asset.asset_code AS unit_id,
+             CASE WHEN movement.asset_id IS NULL
+               THEN CASE WHEN movement.quantity > 0 THEN '+' ELSE '' END ||
+                 trim_scale(movement.quantity)::text
+               ELSE '1' END AS quantity,
+             concat_ws(' / ', movement.from_holder_type,
+               movement.from_holder_name) AS from_holder,
+             concat_ws(' / ', movement.to_holder_type,
+               movement.to_holder_name) AS to_holder,
+             CASE WHEN operation.operation_type = 'CONSUMPTION'
+               THEN 'CONSUMPTION' ELSE movement.movement_type END AS kind,
+             movement.moved_by AS performed_by, movement.remark,
+             accountable.name AS store_name,
+             CASE WHEN operation.operation_type = 'CONSUMPTION'
+               THEN operation.operated_on::text ELSE NULL END AS used_on
+           FROM store.stock_movements movement
+           JOIN store.locations location ON location.id = movement.location_id
+           JOIN store.accountable_stores accountable
+             ON accountable.id = location.accountable_store_id
+           JOIN store.item_types item ON item.id = movement.item_type_id
+           LEFT JOIN store.assets asset ON asset.id = movement.asset_id
+           LEFT JOIN store.department_stock_operations operation
+             ON operation.id = movement.department_stock_operation_id
+           WHERE movement.organization_id = $1
+           UNION ALL
+           SELECT transfer.id, transfer.transferred_at,
+             asset.asset_code, item.type_code, asset.asset_code, '1',
+             source.name, destination.name, 'ACCOUNTABILITY_TRANSFER',
+             transfer.transferred_by, transfer.remark, source.name, NULL::text
+           FROM store.asset_accountability_transfers transfer
+           JOIN store.assets asset ON asset.id = transfer.asset_id
+           JOIN store.item_types item ON item.id = asset.item_type_id
+           JOIN store.accountable_stores source
+             ON source.id = transfer.source_store_id
+           JOIN store.accountable_stores destination
+             ON destination.id = transfer.destination_store_id
+           WHERE transfer.organization_id = $1
+         )
+         SELECT occurred_at::text AS "occurredAt",
+           subject_code AS "subjectCode", type_code AS "typeCode",
+           unit_id AS "unitId", quantity,
+           from_holder AS "from", to_holder AS "to", kind,
+           performed_by AS "performedBy", remark,
+           store_name AS "storeName", used_on AS "usedOn"
+         FROM events
+         WHERE $2::text IS NULL
+           OR lower(subject_code) = lower($2)
+           OR lower(type_code) = lower($2)
+         ORDER BY occurred_at DESC, id DESC
+         LIMIT $3 OFFSET $4`,
+        [input.organizationId, input.code?.trim() || null,
+          pageSize + 1, (page - 1) * pageSize]
+      )
+      return {
+        movements: result.rows.slice(0, pageSize),
+        hasMore: result.rows.length > pageSize,
+      }
+    },
+
     async listDepartmentAllocations(input: {
       organizationId: string
       productionFloorCode: string
