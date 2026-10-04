@@ -166,7 +166,7 @@ export function CombinedRolesTable({
     ["name", "Name"],
     ["posts", "Post Codes"],
     ["primary", "Primary Post"],
-    ["templates", "Job templates"],
+    ["templates", "Job description templates"],
     ["status", "Status"],
   ] as const
   const table = useExcelTable({
@@ -216,7 +216,7 @@ export function CombinedRolesTable({
                 <TableHead>Name</TableHead>
                 <TableHead>Post Codes</TableHead>
                 <TableHead>Primary Post</TableHead>
-                <TableHead>Job Template</TableHead>
+                <TableHead>Job Description Template</TableHead>
                 <TableHead>Status</TableHead>
                 {showActions ? (
                   <TableHead className="text-right">Actions</TableHead>
@@ -375,7 +375,7 @@ export function CombinedRolesTable({
             <SheetHeader>
               <SheetTitle>Edit Combined Role</SheetTitle>
               <SheetDescription>
-                Select Its Job Template And Maintain The Combined Post Codes.
+                Select Its Job Description Template And Maintain The Combined Post Codes.
               </SheetDescription>
             </SheetHeader>
             <div className="grid flex-1 content-start gap-4 px-6">
@@ -405,7 +405,7 @@ export function CombinedRolesTable({
               </div>
               <Field>
                 <FieldLabel htmlFor="edit-combined-template">
-                  Job Template
+                  Job Description Template
                 </FieldLabel>
                 <NativeSelect
                   className="w-full"

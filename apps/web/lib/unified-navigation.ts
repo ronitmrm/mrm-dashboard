@@ -694,7 +694,7 @@ export const hrMasterNavigation = [
   {
     href: "/hr?panel=postMasterPanel",
     icon: ClipboardList,
-    label: "Job Templates",
+    label: "Job Description Templates",
     panelId: "postMasterPanel",
     requiredCapability: "hr.job_templates.read",
   },

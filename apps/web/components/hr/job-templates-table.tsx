@@ -63,6 +63,8 @@ type FilterKey =
   | "education"
   | "experience"
   | "name"
+  | "shiftType"
+  | "shiftTiming"
 
 function JobTemplateEditor({
   canWrite,
@@ -91,8 +93,8 @@ function JobTemplateEditor({
         <SheetTitle>{canWrite ? "Edit" : "View"} {template.templateCode}</SheetTitle>
         <SheetDescription>
           {canWrite
-            ? "Update The Full Job Requirement Form. The Template Code Remains Fixed."
-            : "Full Job Requirement Form."}
+            ? "Update The Job Description Template. The Template Code Remains Fixed."
+            : "Job Description Template."}
         </SheetDescription>
       </SheetHeader>
       <fieldset disabled={!canWrite} className="grid flex-1 content-start gap-4 px-6 sm:grid-cols-2">
@@ -165,6 +167,40 @@ function JobTemplateEditor({
             min="0"
             name="maximum_salary"
             type="number"
+          />
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="edit-template-shift-type">Shift Type</FieldLabel>
+          <NativeSelect
+            defaultValue={template.shiftType ?? ""}
+            id="edit-template-shift-type"
+            name="shift_type"
+            required
+          >
+            <NativeSelectOption disabled value="">Select Shift Type</NativeSelectOption>
+            <NativeSelectOption value="Day">Day</NativeSelectOption>
+            <NativeSelectOption value="Night">Night</NativeSelectOption>
+            <NativeSelectOption value="Rotation">Rotation</NativeSelectOption>
+          </NativeSelect>
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="edit-template-shift-start">Shift Start Time</FieldLabel>
+          <Input
+            defaultValue={template.shiftStartTime ?? ""}
+            id="edit-template-shift-start"
+            name="shift_start_time"
+            required
+            type="time"
+          />
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="edit-template-shift-end">Shift End Time</FieldLabel>
+          <Input
+            defaultValue={template.shiftEndTime ?? ""}
+            id="edit-template-shift-end"
+            name="shift_end_time"
+            required
+            type="time"
           />
         </Field>
         <Field className="sm:col-span-2">
@@ -246,6 +282,8 @@ export function JobTemplatesTable({
     { key: "designation", label: "Designation" },
     { key: "education", label: "Education" },
     { key: "experience", label: "Experience" },
+    { key: "shiftType", label: "Shift Type" },
+    { key: "shiftTiming", label: "Shift Timing" },
   ]
   const table = useExcelTable({
     rows: templates,
@@ -259,7 +297,11 @@ export function JobTemplatesTable({
             ? (row.combinedRoleName ?? row.department)
             : key === "experience"
               ? row.experienceRequirement
-              : String(row[key]),
+              : key === "shiftType"
+                ? row.shiftType
+                : key === "shiftTiming"
+                  ? [row.shiftStartTime, row.shiftEndTime].filter(Boolean).join("–")
+                  : String(row[key]),
       ],
     })),
   })
@@ -274,7 +316,7 @@ export function JobTemplatesTable({
     >
  <SectionCard>
         <CardHeader>
-          <CardTitle>Job Templates</CardTitle>
+          <CardTitle>Job Description Templates</CardTitle>
           <CardDescription>
             Showing {visibleTemplates.length} Of {templates.length} Reusable
             Profiles
@@ -336,6 +378,12 @@ export function JobTemplatesTable({
                   <TableCell>{row.designation}</TableCell>
                   <TableCell>{row.education ?? "—"}</TableCell>
                   <TableCell>{row.experienceRequirement ?? "—"}</TableCell>
+                  <TableCell>{row.shiftType ?? "—"}</TableCell>
+                  <TableCell>
+                    {row.shiftStartTime && row.shiftEndTime
+                      ? `${row.shiftStartTime}–${row.shiftEndTime}`
+                      : "—"}
+                  </TableCell>
                   {canWrite || canDelete ? (
                     <TableCell className="space-x-2 text-right">
                       {canWrite ? (
@@ -366,9 +414,9 @@ export function JobTemplatesTable({
                 <TableRow>
                   <TableCell
                     className="py-10 text-center text-muted-foreground"
-                    colSpan={canWrite || canDelete ? 7 : 6}
+                    colSpan={canWrite || canDelete ? 9 : 8}
                   >
-                    No Job Templates Match The Selected Filters.
+                    No Job Description Templates Match The Selected Filters.
                   </TableCell>
                 </TableRow>
               ) : null}
@@ -396,7 +444,7 @@ export function JobTemplatesTable({
         {deletingTemplate ? (
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Delete Job Template</DialogTitle>
+              <DialogTitle>Delete Job Description Template</DialogTitle>
               <DialogDescription>
                 Unused templates delete immediately. If used, choose a
                 replacement first.

@@ -472,7 +472,7 @@ export function ApprovedPostsTable({
               <SheetHeader>
                 <SheetTitle>Edit Approved Post</SheetTitle>
                 <SheetDescription>
-                  Update The Job Template Linked To {editingPost.postCode}.
+                  Update The Job Description Template Linked To {editingPost.postCode}.
                   Department And Designation Remain Locked Because They Form The
                   Software-Generated Post Code.
                 </SheetDescription>
@@ -508,7 +508,7 @@ export function ApprovedPostsTable({
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="edit-post-template">
-                    Job Template
+                    Job Description Template
                   </FieldLabel>
                   <NativeSelect
                     className="w-full"

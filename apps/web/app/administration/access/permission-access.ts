@@ -94,7 +94,7 @@ export function permissionAccessPageLabels(row: PermissionAccessRow): string[] {
     ["hr.candidates.save", ["Candidates"]],
     ["hr.candidates.assign", ["Candidates"]],
     ["hr.employees.", ["Employee Master"]],
-    ["hr.job_templates.", ["Job Templates"]],
+    ["hr.job_templates.", ["Job Description Templates"]],
     ["hr.masters.", ["Masters"]],
     ["store.masters.", ["Store Masters"]],
     ["store.asset_", ["Asset Movement & Maintenance History"]],
