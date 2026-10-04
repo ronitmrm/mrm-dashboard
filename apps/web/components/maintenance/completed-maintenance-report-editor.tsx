@@ -15,6 +15,18 @@ import { Textarea } from "@workspace/ui/components/textarea"
 
 import { MaintenanceWorkPhotos } from "./maintenance-work-photos"
 
+function reportDetails({ changedItems, checklistSteps, remark, workDone }: Pick<CompletedMaintenanceReport,
+  "changedItems" | "checklistSteps" | "remark" | "workDone">) {
+  return JSON.stringify({
+    changedItems: changedItems.map((item) => item.trim()).filter(Boolean),
+    checklistSteps: checklistSteps.map(({ id, sequence, value, remark: stepRemark }) => ({
+      id, sequence, value: value.trim(), remark: stepRemark?.trim() ?? "",
+    })),
+    remark: remark?.trim() ?? "",
+    workDone: workDone?.trim() ?? "",
+  })
+}
+
 export function CompletedMaintenanceReportEditor({ kind, report }: {
   kind: MaintenanceReportKind
   report: CompletedMaintenanceReport
@@ -29,9 +41,11 @@ export function CompletedMaintenanceReportEditor({ kind, report }: {
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
+  const hasReportChanges = reportDetails({ changedItems, checklistSteps: steps, remark, workDone }) !== reportDetails(report)
 
   async function saveChanges(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!hasReportChanges) return
     setError("")
     setMessage("")
     setSaving(true)
@@ -128,14 +142,15 @@ export function CompletedMaintenanceReportEditor({ kind, report }: {
               </TableRow>)}</TableBody>
             </OperationalTable>
           </div> : null}
-          <Button className="w-fit" disabled={saving || !reason.trim()} type="submit">
-            {saving ? "Saving…" : "Save report changes"}
+          <Button className="w-fit" disabled={saving || !reason.trim() || !hasReportChanges} type="submit">
+            {saving ? "Saving…" : "Save report details"}
           </Button>
         </form>
         <div className="grid gap-2 border-t pt-4">
           <p className="text-sm font-medium">Work photos</p>
+          <p className="text-xs text-muted-foreground">Photos save when added or removed. Save report details only for text or checklist changes.</p>
           <MaintenanceWorkPhotos correctionReason={reason} disabled={saving}
-            onChanged={() => { setMessage("Photo change saved in correction history."); router.refresh() }}
+            onChanged={() => { setError(""); setMessage("Photo change saved in correction history."); router.refresh() }}
             target={report.photoTarget} />
         </div>
         {message ? <p className="text-sm text-primary" role="status">{message}</p> : null}
