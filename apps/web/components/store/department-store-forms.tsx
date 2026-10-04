@@ -143,7 +143,7 @@ export function DepartmentStoreForms({ action, assets, consumables, departments,
         <NativeSelectOption value="quantity">Consumable quantity to another Store</NativeSelectOption>
         <NativeSelectOption value="physical">Non Consumable Unit ID to a physical holder</NativeSelectOption>
       </SelectField>
-      {transferMode === "quantity" ? <ActionForm action={transferDepartmentQuantityAction} storeCode={store.code} submitLabel="Transfer Quantity">
+      {transferMode === "quantity" ? <ActionForm key="quantity" action={transferDepartmentQuantityAction} storeCode={store.code} submitLabel="Transfer Quantity">
         <FormGrid className="xl:grid-cols-2">
           <SelectField label="Consumable Asset Code" name="item_type_id" required>
             <NativeSelectOption value="">Select an available item</NativeSelectOption>
@@ -160,7 +160,7 @@ export function DepartmentStoreForms({ action, assets, consumables, departments,
           <TextField label="Quantity" name="quantity" min="0.001" step="0.001" type="number" required />
           <TextField label="Remark" name="remark" />
         </FormGrid>
-      </ActionForm> : <ActionForm action={moveDepartmentAssetAction} storeCode={store.code} submitLabel="Record Movement">
+      </ActionForm> : <ActionForm key="physical" action={moveDepartmentAssetAction} storeCode={store.code} submitLabel="Record Movement">
         <FormGrid className="xl:grid-cols-2">
           <SelectField label="Unit ID" name="asset_code" required>
             <NativeSelectOption value="">Select Unit ID</NativeSelectOption>
