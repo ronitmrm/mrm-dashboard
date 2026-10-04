@@ -197,6 +197,7 @@ export function createDashboardReadModelRepository(options: RepositoryPoolOption
               sum(receipt.quantity_kg) AS received_kg
             FROM manufacturing.raw_material_receipts receipt
             WHERE receipt.organization_id = $1
+              AND receipt.reversed_at IS NULL
             GROUP BY lower(receipt.job_card_number)
           ), rejection_totals AS (
             SELECT rejection.work_order_id,

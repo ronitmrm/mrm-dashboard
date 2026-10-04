@@ -208,6 +208,15 @@ Blank Piece Weight and remain estimates until remaining RM is maintained accurat
 Each RM inward entry is append-only for normal receiving; later inward entries add
 to the Job Card total instead of replacing the previous receipt. An exact import
 retry reuses its receipt identity so the tally is not duplicated.
+RM Inward CSV uploads require a valid `DD-MM-YYYY` date on every row. A file with
+an invalid date is rejected before any receipt is saved, with the failed row
+number and required format shown to the uploader. Saved RM Inward dates display
+in that same format, including earlier entries stored in other formats.
+A mistaken receipt can be deleted with a reason, even after production starts.
+Deletion reverses that receipt for current RM totals, availability and unlocked
+planning while preserving the receipt, audit trail and recorded production
+history. A forecast baseline tied to a reversed receipt is excluded from the
+current dashboard; its historical record remains immutable.
 
 ## Work Order Line Cancellation
 

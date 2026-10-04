@@ -1,6 +1,7 @@
 import { normalizeUserEnteredPayload } from "@workspace/db/user-entry-text"
 
 import { dedupeCsvImportRows } from "./auto-coded-master-import"
+import { parseRmInwardUploadDate } from "./rm-inward-date"
 
 export class TemplateUploadError extends Error {
   readonly status = 400
@@ -25,6 +26,20 @@ export function parseTemplateUpload(
     .map((row) => normalizeImportedPayload(row, entryType))
     .map((payload) => normalizeUserEnteredPayload(payload))
     .filter((row) => Object.values(row).some((value) => text(value)))
+  if (entryType === "rm_inward") {
+    const failures = rows.flatMap((row, index) => {
+      const date = parseRmInwardUploadDate(row.rmInwardDate)
+      return date ? [] : [`Row ${index + 2}: RM Inward Date "${text(row.rmInwardDate) || "blank"}" must be DD-MM-YYYY (e.g. 21-09-2026).`]
+    })
+    if (failures.length) {
+      throw new TemplateUploadError(
+        `Import failed; no rows saved. ${failures.slice(0, 10).join(" ")}${failures.length > 10 ? ` ${failures.length - 10} more row(s) failed.` : ""}`
+      )
+    }
+    for (const row of rows) {
+      row.rmInwardDate = parseRmInwardUploadDate(row.rmInwardDate)!
+    }
+  }
   return dedupeCsvImportRows(entryType, rows)
 }
 

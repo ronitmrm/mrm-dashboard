@@ -522,6 +522,14 @@ async function preauthorizeDashboardMutation(
     await authorizedDashboardSession(request, capability)
     return
   }
+  if (path === "rm-inward-delete") {
+    const floor = requiredProductionFloor(body.productionFloorCode)
+    await authorizedDashboardSession(
+      request,
+      operationalEntryCapability("rm_inward", "delete", floor)
+    )
+    return
+  }
   if (path === "data-entry" || path === "data-import") {
     const entry = String(body.entryType || "")
     const payload = plainRecord(body.payload)
@@ -1534,6 +1542,32 @@ async function post(request: NextRequest, context: RouteContext) {
       }
     }
 
+    if (path === "rm-inward-delete") {
+      const floor = requiredProductionFloor(body.productionFloorCode)
+      const result = await withProductionRepository(
+        request,
+        operationalEntryCapability("rm_inward", "delete", floor),
+        async ({ actorUserId, organizationId, repository }) => {
+          try {
+            return await repository.reverseRawMaterialReceipt({
+              actorUserId,
+              organizationId,
+              productionFloorCode: floor,
+              reason: requiredDashboardText(body.reason, "Deletion reason"),
+              sourceId: requiredDashboardText(body.sourceId, "RM Inward entry"),
+            })
+          } catch (error) {
+            if (error instanceof ProductionUnitAccessError || error instanceof RouteError) throw error
+            throw new RouteError(400, error instanceof Error ? error.message : "RM Inward deletion failed.")
+          }
+        }
+      )
+      return json(await withPlanningRefresh(request, path, body, {
+        ...result,
+        message: "RM Inward entry deleted. Planning recalculation queued.",
+      }))
+    }
+
     if (path === "data-entry") {
       const entryType = String(body.entryType || "")
       const rawPayload = masterPayloadForScope(
@@ -2530,6 +2564,7 @@ const knownDashboardApiPaths = new Set([
   "plan-override",
   "planner-priority",
   "raw-material-rejection",
+  "rm-inward-delete",
   "production-sessions",
   "production-break-schedule",
   "quality-parameter-set",

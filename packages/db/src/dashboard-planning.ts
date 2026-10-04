@@ -2105,6 +2105,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
                 FROM manufacturing.raw_material_receipts receipt
                 WHERE receipt.organization_id = $1
                   AND lower(receipt.job_card_number) = lower($2)
+                  AND receipt.reversed_at IS NULL
               ), 0)::text AS received_kg,
               COALESCE((
                 SELECT sum(rejection.rejected_kg)
