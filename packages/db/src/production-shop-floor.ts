@@ -376,10 +376,11 @@ async function writeRawMaterialReceipt(
     id: string
     job_card_number: string
     receipt_number: string
+    reversed_at: Date | null
     source_payload: unknown
   }>(
     `
-      SELECT id, job_card_number, receipt_number, source_payload
+      SELECT id, job_card_number, receipt_number, reversed_at, source_payload
       FROM manufacturing.raw_material_receipts
       WHERE organization_id = $1 AND source_system = 'mrm-dashboard'
         AND source_table = 'rm_inward' AND source_id = $2
@@ -396,6 +397,9 @@ async function writeRawMaterialReceipt(
   }
   if (existing.rows[0] && input.requiredProductionFloorCode && productionFloorCodeForRecord({ sourcePayload: existing.rows[0].source_payload }) !== input.requiredProductionFloorCode) {
     throw new ProductionUnitAccessError("This raw-material receipt belongs to another Production Unit.")
+  }
+  if (existing.rows[0]?.reversed_at) {
+    throw new Error("This RM Inward row was deleted. Correct the row before uploading it again.")
   }
   return existing.rows[0] ?? (
     await client.query<{ id: string }>(
@@ -1098,6 +1102,68 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
     },
 
     upsertRawMaterialReceipts,
+
+    async reverseRawMaterialReceipt(input: {
+      actorUserId?: string | null
+      organizationId: string
+      productionFloorCode: ProductionFloorCode
+      reason: string
+      sourceId: string
+    }) {
+      return transaction(pool, async (client) => {
+        const reason = requiredText(input.reason, "Deletion reason")
+        const sourceId = requiredText(input.sourceId, "RM Inward entry")
+        const found = await client.query<{
+          id: string
+          job_card_number: string
+          reversed_at: Date | null
+          source_payload: unknown
+          snapshot: Record<string, unknown>
+        }>(
+          `SELECT id, job_card_number, reversed_at, source_payload,
+             to_jsonb(receipt) AS snapshot
+           FROM manufacturing.raw_material_receipts receipt
+           WHERE organization_id = $1 AND source_id = $2
+             AND source_payload IS NOT NULL
+             AND (source_table = 'dataEntries'
+               OR (source_system = 'mrm-dashboard' AND source_table = 'rm_inward'))
+           FOR UPDATE`,
+          [input.organizationId, sourceId]
+        )
+        if (found.rows.length !== 1) {
+          throw new Error(found.rows.length
+            ? "This RM Inward entry is ambiguous; contact an administrator."
+            : "RM Inward entry was not found.")
+        }
+        const receipt = found.rows[0]!
+        if (receipt.reversed_at) throw new Error("This RM Inward entry was already deleted.")
+        if (productionFloorCodeForRecord({ sourcePayload: receipt.source_payload }) !== input.productionFloorCode) {
+          throw new ProductionUnitAccessError("This RM Inward entry belongs to another Production Unit.")
+        }
+        const reversed = await client.query<{ snapshot: Record<string, unknown> }>(
+          `UPDATE manufacturing.raw_material_receipts receipt
+           SET reversed_at = now(), reversed_by_user_id = $1,
+             reversal_reason = $2, updated_at = now(),
+             updated_by_user_id = $1, row_version = row_version + 1
+           WHERE id = $3
+           RETURNING to_jsonb(receipt) AS snapshot`,
+          [input.actorUserId ?? null, reason, receipt.id]
+        )
+        await client.query(
+          `INSERT INTO audit.events (
+             organization_id, event_type, target_schema, target_table,
+             target_id, actor_user_id, reason, before_state, after_state,
+             source_system, source_table, source_id
+           ) VALUES ($1, 'rm_inward.deleted', 'manufacturing',
+             'raw_material_receipts', $2, $3, $4, $5, $6,
+             'mrm-dashboard', 'rm_inward_reversals', $7)`,
+          [input.organizationId, receipt.id, input.actorUserId ?? null,
+            reason, receipt.snapshot, reversed.rows[0]!.snapshot, randomUUID()]
+        )
+        await queueDashboardRefresh(client, input.organizationId)
+        return { id: receipt.id, jobCardNumber: receipt.job_card_number }
+      })
+    },
 
     async startProductionSession(input: {
       actorUserId?: string | null
@@ -3276,6 +3342,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
               source_payload AS "sourcePayload"
            FROM manufacturing.raw_material_receipts
            WHERE organization_id = $1 AND lower(job_card_number) = lower($2)
+             AND reversed_at IS NULL
            ORDER BY received_on, created_at`,
           [input.organizationId, jobCardNumber]
         ),

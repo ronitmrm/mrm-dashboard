@@ -446,6 +446,57 @@ describe("production and shop-floor workflows", () => {
     }])
   })
 
+  test("reverses one mistaken RM receipt without removing its audit history", async () => {
+    const sourceId = `test:rm-delete:${suffix}`
+    const receipt = await repository.upsertRawMaterialReceipt({
+      organizationId,
+      payload: { jcNo: cncJobCard, rmPoNo: rmPoNumber, productionFloorCode: "cnc" },
+      productionFloorCode: "cnc",
+      requiredProductionFloorCode: "cnc",
+      quantityKg: 25,
+      receiptNumber: rmPoNumber,
+      receivedOn: "2026-09-30",
+      sourceId,
+    })
+    await repository.reverseRawMaterialReceipt({
+      organizationId,
+      productionFloorCode: "cnc",
+      sourceId,
+      reason: "Entered by mistake",
+    })
+    const state = await pool.query<{
+      active_receipts: string
+      audit_events: string
+      baseline_rows: string
+      projected_rows: string
+    }>(
+      `SELECT
+         (SELECT count(*) FROM manufacturing.raw_material_receipts
+          WHERE id = $1 AND reversed_at IS NULL) AS active_receipts,
+         (SELECT count(*) FROM audit.events
+          WHERE target_id = $1 AND event_type = 'rm_inward.deleted') AS audit_events,
+         (SELECT count(*) FROM manufacturing.job_card_finish_baselines
+          WHERE raw_material_receipt_id = $1) AS baseline_rows,
+         (SELECT count(*) FROM derived.dashboard_source_records
+          WHERE source_schema = 'manufacturing' AND source_table = 'raw_material_receipts'
+            AND source_id = $2) AS projected_rows`,
+      [receipt.id, sourceId]
+    )
+    expect(state.rows[0]).toEqual({
+      active_receipts: "0", audit_events: "1", baseline_rows: "1", projected_rows: "0",
+    })
+    await expect(repository.upsertRawMaterialReceipt({
+      organizationId,
+      payload: { jcNo: cncJobCard, rmPoNo: rmPoNumber, productionFloorCode: "cnc" },
+      productionFloorCode: "cnc",
+      requiredProductionFloorCode: "cnc",
+      quantityKg: 25,
+      receiptNumber: rmPoNumber,
+      receivedOn: "2026-09-30",
+      sourceId,
+    })).rejects.toThrow(/was deleted/)
+  })
+
   test("records append-only production", async () => {
     const card = await repository.upsertProductionCard({
       cardNumber: `CARD-${suffix}`,

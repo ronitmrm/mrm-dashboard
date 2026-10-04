@@ -5,6 +5,7 @@ export const operationalEntryActions = [
   "save",
   "import",
   "export",
+  "delete",
 ] as const
 export type OperationalEntryAction = (typeof operationalEntryActions)[number]
 
@@ -37,7 +38,7 @@ export const scopedOperationalEntries = productionFloors.flatMap((floor) =>
 
 export const operationalEntryPermissionOptions =
   scopedOperationalEntries.flatMap((entry) =>
-    operationalEntryActions.map((action) => ({
+    operationalEntryActions.filter((action) => action !== "delete" || entry.entry === "rm_inward").map((action) => ({
       key: operationalEntryPermissionKey(entry.unit, entry.entry, action),
       module: "entries",
       name: `${entry.scopeLabel} / ${entry.label} / ${action}`,
@@ -52,7 +53,7 @@ export function operationalEntryCapability(
   if (
     !scopedOperationalEntries.some(
       (item) => item.entry === entry && item.unit === unit
-    )
+    ) || (action === "delete" && entry !== "rm_inward")
   ) {
     throw new Error("Unknown operational entry or unit.")
   }

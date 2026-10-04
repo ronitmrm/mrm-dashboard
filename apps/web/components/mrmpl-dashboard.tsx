@@ -173,6 +173,8 @@ import {
   type ExternalOperationalEntryOption,
 } from "@/lib/operational-entry-navigation"
 import { operationalEntrySelectionFromContext } from "@/lib/operational-entry-module"
+import { formatRmInwardDate } from "@/lib/rm-inward-date"
+import { StandardDialogContent } from "@/components/ui/golden-patterns"
 import {
   refreshLockFromStatus,
   refreshLockHasSettled,
@@ -11025,6 +11027,11 @@ function DataEntryPanel({
           />
         )
       ) : null}
+      {operationalTabs && bulkEntryType === "rm_inward" ? (
+        <p className="text-xs text-muted-foreground">
+          RM Inward CSV dates must be DD-MM-YYYY (e.g. 21-09-2026).
+        </p>
+      ) : null}
       {!selectionLocked || isImporting ? (
         <SectionCard width="wide">
           <CardHeader>
@@ -11199,6 +11206,9 @@ function OperationalTablesPanel({
     useState<DashboardPayload | null>(null)
   const [cancellationReason, setCancellationReason] = useState("")
   const [isCancelling, setIsCancelling] = useState(false)
+  const [receiptToDelete, setReceiptToDelete] = useState<DashboardPayload | null>(null)
+  const [receiptDeleteReason, setReceiptDeleteReason] = useState("")
+  const [isDeletingReceipt, setIsDeletingReceipt] = useState(false)
   const selectedSpec =
     specs.find((spec) => spec.entryType === entryType) ?? specs[0]
   const dataEntry = asRecord(payload.dataEntry)
@@ -11225,6 +11235,26 @@ function OperationalTablesPanel({
   const canCancelWorkOrders =
     selectedSpec?.entryType === "work_order" &&
     canUseOperationalEntry("work_order", "save", productionFloorCode)
+  const canDeleteReceipts =
+    selectedSpec?.entryType === "rm_inward" &&
+    canUseOperationalEntry("rm_inward", "delete", productionFloorCode)
+
+  async function deleteReceipt() {
+    const sourceId = receiptToDelete && masterTableRecordId(receiptToDelete)
+    if (!sourceId || !receiptDeleteReason.trim() || isDeletingReceipt) return
+    setIsDeletingReceipt(true)
+    try {
+      await submitAction(
+        "rm-inward-delete",
+        { productionFloorCode, sourceId, reason: receiptDeleteReason.trim() },
+        { throwOnError: true }
+      )
+      setReceiptToDelete(null)
+      setReceiptDeleteReason("")
+    } finally {
+      setIsDeletingReceipt(false)
+    }
+  }
 
   async function cancelWorkOrderLine() {
     if (!cancellationRow || !cancellationReason.trim() || isCancelling) return
@@ -11429,7 +11459,7 @@ function OperationalTablesPanel({
                         {column.label}
                       </TableHead>
                     ))}
-                    {canCancelWorkOrders ? (
+                    {canCancelWorkOrders || canDeleteReceipts ? (
                       <TableHead className="h-10 w-28 px-2 py-1 text-right text-xs">
                         Actions
                       </TableHead>
@@ -11474,6 +11504,23 @@ function OperationalTablesPanel({
                           >
                             <Ban className="size-3.5" />
                             Cancel Line
+                          </Button>
+                        </TableCell>
+                      ) : null}
+                      {canDeleteReceipts ? (
+                        <TableCell className="px-2 py-1.5 text-right align-top">
+                          <Button
+                            disabled={!masterTableRecordId(row)}
+                            onClick={() => {
+                              setReceiptToDelete(row)
+                              setReceiptDeleteReason("")
+                            }}
+                            size="sm"
+                            type="button"
+                            variant="outline"
+                          >
+                            <Trash2 className="size-3.5" />
+                            Delete
                           </Button>
                         </TableCell>
                       ) : null}
@@ -11548,6 +11595,55 @@ function OperationalTablesPanel({
             </Button>
           </DialogFooter>
         </DialogContent>
+      </Dialog>
+      <Dialog
+        open={canDeleteReceipts && Boolean(receiptToDelete)}
+        onOpenChange={(open) => {
+          if (!open && !isDeletingReceipt) {
+            setReceiptToDelete(null)
+            setReceiptDeleteReason("")
+          }
+        }}
+      >
+        <StandardDialogContent
+          title="Delete RM Inward Entry"
+          description="This receipt will leave active records and RM totals. Production history remains, and the deletion is recorded for audit."
+        >
+          <div className="grid gap-4">
+            <div className="rounded-md border bg-muted/40 p-3 text-sm">
+              {receiptToDelete
+                ? `${displayValue(receiptToDelete.jcNo)} · ${formatRmInwardDate(receiptToDelete.rmInwardDate)} · ${displayValue(receiptToDelete.rmInwardKg)} kg`
+                : ""}
+            </div>
+            <Field label="Deletion Reason">
+              <Input
+                disabled={isDeletingReceipt}
+                onChange={(event) => setReceiptDeleteReason(event.target.value)}
+                placeholder="Entered by mistake"
+                required
+                value={receiptDeleteReason}
+              />
+            </Field>
+          </div>
+          <DialogFooter>
+            <Button
+              disabled={isDeletingReceipt}
+              onClick={() => setReceiptToDelete(null)}
+              type="button"
+              variant="outline"
+            >
+              Keep Entry
+            </Button>
+            <Button
+              disabled={!receiptDeleteReason.trim() || isDeletingReceipt}
+              onClick={() => void deleteReceipt()}
+              type="button"
+              variant="destructive"
+            >
+              {isDeletingReceipt ? "Deleting..." : "Delete Entry"}
+            </Button>
+          </DialogFooter>
+        </StandardDialogContent>
       </Dialog>
     </section>
   )
@@ -11960,6 +12056,7 @@ function masterTableColumns(spec: DataEntrySpec): MasterTableColumn[] {
 }
 
 function masterTableCellText(row: DashboardPayload, key: string) {
+  if (key === "rmInwardDate") return formatRmInwardDate(row[key]) || "-"
   return displayValue(row[key])
 }
 

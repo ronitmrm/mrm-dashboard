@@ -764,6 +764,9 @@ export async function buildCanonicalDashboardReadModel(
         baseline.planned_finish_on::text AS planned_finish_on,
         work_order.source_payload AS work_order_source_payload
       FROM manufacturing.job_card_finish_baselines baseline
+      JOIN manufacturing.raw_material_receipts receipt
+        ON receipt.id = baseline.raw_material_receipt_id
+        AND receipt.reversed_at IS NULL
       JOIN manufacturing.work_orders work_order
         ON work_order.id = baseline.work_order_id
       JOIN catalog.items item ON item.id = work_order.item_id

@@ -158,6 +158,7 @@ export function permissionAccessRows(
             save: `Save ${entry.label}`,
             import: `Import ${entry.label}`,
             export: `Export ${entry.label}`,
+            delete: `Delete ${entry.label}`,
           }[action],
           permissionKeys: [
             operationalEntryPermissionKey(entry.unit, entry.entry, action),
