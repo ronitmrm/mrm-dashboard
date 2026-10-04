@@ -57,7 +57,7 @@ breakdowns from the plan and retains completed planned tasks after next-due
 advancement. These views do not create tasks or copy records. Facility requests
 remain in their existing request work lists.
 
-Completed rows in both ISO tables link to the organization-scoped, read-only
+Completed rows in both ISO tables link to the organization-scoped
 `/iso-document/machine-maintenance-report/[kind]/[id]` detail. Machine reports
 read `maintenance.tasks` and `maintenance.task_results`; physical Unit ID reports
 read `store.asset_maintenance_records` with their planned task or breakdown.
@@ -66,6 +66,15 @@ and existing work photos. New physical Unit ID task writes snapshot checklist
 prompts with answers; older records fall back to the current checklist master
 prompt or show the details actually retained. The register and plan tables show
 completion dates without times.
+Workers with `maintenance.tasks.write` may correct a completed report from its
+detail page. The correction route updates the physical machine task and answer
+rows, or the physical Unit ID task/breakdown and its completed Store record.
+Each save writes before/after details and the required reason to `audit.events`;
+completion and schedule dates stay unchanged. The machine task update queues a
+dashboard refresh for maintenance history. Completed-report photo additions
+require the same reason and append a report audit event; photo removals use the
+artifact deletion audit. The report page shows those reasons in Correction History.
+Legacy Unit ID records without a physical task remain read-only.
 
 Mechanical loads active Store Unit ID maintenance schedules through
 `/api/maintenance/assets` alongside machine schedules. The same checklist view

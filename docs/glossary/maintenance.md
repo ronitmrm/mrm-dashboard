@@ -51,6 +51,10 @@ Up to eight JPG or PNG work photos may be attached to each saved machine or Unit
 
 _Avoid_: browser prompts for checklist points, treating a partial draft as completed work, repeating the same checklist point across production units.
 
+## Completed Maintenance Report Correction
+
+An authorized maintenance worker may correct a completed machine or physical Unit ID report. A correction may change recorded checklist answers and remarks, work done, and Changed Items, or add or remove work photos. Each correction requires a reason that remains visible in the report history with the editor and time. Corrections keep the original completion, performer, due occurrence, and next schedule date; they do not complete the job again or recalculate its schedule. Historical reports without an editable physical task retain only the details actually recorded.
+
 ## Machine Breakdown
 
 One machine-linked maintenance task that starts In Progress and completes only

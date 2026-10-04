@@ -83,8 +83,10 @@ export type CompletedMaintenanceReport = {
   remark: string | null
   changedItems: string[]
   checklistSteps: Array<{
+    id: string | null
     sequence: number
     prompt: string
+    inputType: string
     value: string
     remark: string | null
     result: string | null
@@ -607,10 +609,16 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
       const row = record.rows[0]
       if (!row) return null
       const answers = await pool.query<CompletedMaintenanceReport["checklistSteps"][number]>(
-        `SELECT item.sequence,
+        `SELECT answer.id, item.sequence, lower(item.response_type) AS "inputType",
             COALESCE(NULLIF(answer.source_payload->>'itemPrompt', ''), item.prompt) AS prompt,
-            COALESCE(answer.source_payload->>'value', answer.response_text,
-              answer.response_numeric::text, answer.response_boolean::text, '') AS value,
+            CASE WHEN lower(item.response_type) = 'checkbox' THEN
+              CASE lower(COALESCE(answer.source_payload->>'value', answer.response_text,
+                answer.response_boolean::text, ''))
+                WHEN 'true' THEN 'Yes' WHEN 'yes' THEN 'Yes'
+                WHEN 'false' THEN 'No' WHEN 'no' THEN 'No'
+                ELSE COALESCE(answer.source_payload->>'value', answer.response_text, '') END
+              ELSE COALESCE(answer.source_payload->>'value', answer.response_text,
+                answer.response_numeric::text, '') END AS value,
             COALESCE(answer.notes, answer.source_payload->>'notes') AS remark,
             CASE WHEN answer.passed THEN 'Passed'
               WHEN answer.passed = false THEN 'Failed' ELSE NULL END AS result
@@ -704,8 +712,8 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
         remark?: unknown
       }> : []
       const prompts = row.definitionId && savedSteps.length
-        ? await pool.query<{ sequence: number; prompt: string }>(
-          `SELECT item.sequence, item.prompt
+        ? await pool.query<{ sequence: number; prompt: string; inputType: string }>(
+          `SELECT item.sequence, item.prompt, lower(item.response_type) AS "inputType"
             FROM maintenance.checklist_items item
             JOIN maintenance.definitions checklist ON checklist.id = item.definition_id
             JOIN maintenance.definitions definition ON definition.id = $1::uuid
@@ -715,15 +723,17 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
           [row.definitionId]
         )
         : null
-      const promptBySequence = new Map(prompts?.rows.map((item) => [item.sequence, item.prompt]))
+      const promptBySequence = new Map(prompts?.rows.map((item) => [item.sequence, item]))
       const checklistSteps = savedSteps.flatMap((step) => {
         const sequence = Number(step.sequence)
         if (!Number.isInteger(sequence)) return []
         const value = typeof step.value === "string" ? step.value : ""
         return [{
+          id: null,
           sequence,
           prompt: typeof step.prompt === "string" && step.prompt.trim()
-            ? step.prompt : promptBySequence.get(sequence) ?? `Checklist point ${sequence}`,
+            ? step.prompt : promptBySequence.get(sequence)?.prompt ?? `Checklist point ${sequence}`,
+          inputType: promptBySequence.get(sequence)?.inputType ?? (value === "Yes" || value === "No" ? "checkbox" : "text"),
           value,
           remark: typeof step.remark === "string" ? step.remark : null,
           result: value === "Yes" ? "Passed" : value === "No" ? "Failed" : null,

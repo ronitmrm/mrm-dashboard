@@ -65,6 +65,11 @@ export async function POST(request: Request) {
       const organizationId = await repository.organizationIdForCode("MRMPL")
       const resolved = await repository.resolveTarget(organizationId, target)
       if (!resolved) throw new Error("Save the maintenance work before adding photos.")
+      const completedReport = await repository.completedReport(organizationId, resolved)
+      const reason = typeof body.reason === "string" ? body.reason.trim() : ""
+      if (completedReport && (!reason || reason.length > 500)) {
+        throw new Error("Enter an edit reason (up to 500 characters) before adding photos to a completed report.")
+      }
       const existing = await repository.listPhotos(organizationId, resolved)
       if (existing.length + uploadIds.filter((id) => !existing.some((photo) => photo.purpose === `work-photo:${id}`)).length > 8) {
         throw new Error("Attach no more than eight photos to this maintenance job.")
@@ -107,6 +112,15 @@ export async function POST(request: Request) {
             recover: () => undefined,
             uploadId,
           })
+          if (completedReport) {
+            await repository.recordCompletedPhotoAddition({
+              actorUserId: session.user.id,
+              organizationId,
+              reason,
+              report: completedReport,
+              uploadId,
+            })
+          }
         }
       } finally {
         await artifacts.close()
