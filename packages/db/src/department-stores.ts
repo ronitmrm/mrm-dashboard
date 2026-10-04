@@ -282,7 +282,7 @@ async function insertOperation(
     destinationStoreId?: string | null
     itemTypeId: string
     operatedOn?: string | null
-    operationType: "TRANSFER" | "CONSUMPTION" | "LOSS" | "DAMAGE"
+    operationType: "TRANSFER" | "CONSUMPTION"
     quantity: number
     sourceStoreId: string
   }
@@ -426,8 +426,8 @@ async function moveOwnedAsset(
   if (asset.accountId !== input.store.id) {
     throw new Error("This Unit ID is accountable to another Store.")
   }
-  if (asset.status === "SCRAPPED") {
-    throw new Error("A scrapped Unit ID cannot be moved.")
+  if (asset.status === "SCRAPPED" || asset.status === "LOST") {
+    throw new Error("A scrapped or lost Unit ID cannot be moved.")
   }
   if (!input.gaugeSetMovementId) {
     const grouped = await client.query(
@@ -659,10 +659,10 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
           `SELECT item.id AS "itemTypeId", item.type_code AS "typeCode",
             item.asset_name AS "assetName",
             count(asset.id) FILTER (
-              WHERE asset.status <> 'SCRAPPED')::text AS "companyQuantity",
+              WHERE asset.status NOT IN ('SCRAPPED', 'LOST'))::text AS "companyQuantity",
             count(asset.id) FILTER (
               WHERE asset.accountable_store_id = $2
-                AND asset.status <> 'SCRAPPED')::text AS "accountableQuantity",
+                AND asset.status NOT IN ('SCRAPPED', 'LOST'))::text AS "accountableQuantity",
             count(asset.id) FILTER (
               WHERE asset.accountable_store_id = $2
                 AND asset.status = 'AVAILABLE'
@@ -860,7 +860,7 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
            ON accountable.id = asset.accountable_store_id
          WHERE asset.organization_id = $1
            AND asset.current_holder_type = 'DEPARTMENT'
-           AND asset.status <> 'SCRAPPED'
+           AND asset.status NOT IN ('SCRAPPED', 'LOST')
          ORDER BY "departmentName", asset.asset_code`,
         [input.organizationId]
       )
@@ -963,26 +963,89 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
       })
     },
 
-    async adjustQuantity(input: MutationIdentity & {
-      itemTypeId: string
-      quantity: number
-      reason: "LOSS" | "DAMAGE"
+    async recordAssetLoss(input: MutationIdentity & {
+      assetCode: string
       storeCode: string
     }) {
-      const quantity = positiveQuantity(input.quantity)
+      const assetCode = requiredText(input.assetCode, "Unit ID")
+      const remark = requiredText(input.remark, "Loss details")
       return withTransaction(pool, async (client) => {
+        await lockToolingAllocation(client, input.organizationId)
         const store = await findStore(client, input.organizationId, input.storeCode)
-        await lockConsumable(client, input.organizationId, input.itemTypeId)
-        const operationId = await insertOperation(client, {
-          ...input, operationType: input.reason,
-          quantity, sourceStoreId: store.id,
-        })
-        await writeDebits(client, {
-          ...input, itemTypeId: input.itemTypeId,
-          movementType: "ADJUSTMENT", operationId, quantity,
-          sourceStore: store,
-        })
-        return { operationId }
+        const result = await client.query<{
+          accountableStoreId: string
+          currentHolderName: string | null
+          currentHolderReference: string | null
+          currentHolderType: string
+          currentLocationId: string | null
+          id: string
+          itemTypeId: string
+          status: string
+        }>(
+          `SELECT id, item_type_id AS "itemTypeId", status,
+             accountable_store_id AS "accountableStoreId",
+             current_holder_type AS "currentHolderType",
+             current_holder_reference AS "currentHolderReference",
+             current_holder_name AS "currentHolderName",
+             current_location_id AS "currentLocationId"
+           FROM store.assets
+           WHERE organization_id = $1 AND lower(asset_code) = lower($2)
+           FOR UPDATE`,
+          [input.organizationId, assetCode]
+        )
+        const unit = result.rows[0]
+        if (!unit || unit.accountableStoreId !== store.id) {
+          throw new Error("Unit ID is not accountable to this Store.")
+        }
+        if (unit.status === "SCRAPPED" || unit.status === "LOST") {
+          throw new Error("This Unit ID has already left company stock.")
+        }
+        const hold = await client.query(
+          `SELECT 1 FROM store.gauge_set_memberships member
+           JOIN store.gauge_sets gauge_set ON gauge_set.id = member.gauge_set_id
+           WHERE member.organization_id = $1 AND member.asset_id = $2
+             AND member.removed_at IS NULL AND gauge_set.active
+           UNION ALL
+           SELECT 1 FROM store.repair_purchase_order_items repair
+           JOIN store.purchase_orders purchase_order
+             ON purchase_order.id = repair.purchase_order_id
+           WHERE repair.organization_id = $1 AND repair.asset_id = $2
+             AND repair.status = 'Open' AND purchase_order.status = 'Open'
+           UNION ALL
+           SELECT 1 FROM store.calibration_visits visit
+           WHERE visit.organization_id = $1 AND visit.asset_id = $2
+             AND visit.status IN ('OPEN', 'DISPATCHED', 'RETURNED')
+           UNION ALL
+           SELECT 1 FROM store.asset_breakdowns breakdown
+           WHERE breakdown.organization_id = $1 AND breakdown.asset_id = $2
+             AND breakdown.status = 'In Progress'
+           LIMIT 1`,
+          [input.organizationId, unit.id]
+        )
+        if (hold.rows[0]) {
+          throw new Error("Finish the active set, service, or breakdown before recording loss.")
+        }
+        await client.query(
+          `UPDATE store.assets SET status = 'LOST', current_machine_id = NULL,
+             updated_at = now(), updated_by_user_id = $2 WHERE id = $1`,
+          [unit.id, input.actorUserId ?? null]
+        )
+        await client.query(
+          `INSERT INTO store.stock_movements (
+             organization_id, item_type_id, asset_id, location_id,
+             movement_type, quantity, from_holder_type,
+             from_holder_reference, from_holder_name, moved_by, remark,
+             created_by_user_id
+           ) VALUES ($1, $2, $3, $4, 'LOSS', -1, $5, $6, $7, $8, $9, $10)`,
+          [input.organizationId, unit.itemTypeId, unit.id,
+            unit.currentLocationId ?? store.defaultLocationId,
+            unit.currentHolderType, unit.currentHolderReference,
+            unit.currentHolderName, input.movedBy?.trim() || null,
+            remark, input.actorUserId ?? null]
+        )
+        await assertToolingTransferAvailable(client, input.organizationId, assetCode)
+        await queueDashboardRefresh(client, input.organizationId)
+        return { assetCode }
       })
     },
 
@@ -1026,8 +1089,8 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
           Number(request.requestedQuantity) - Number(request.issuedQuantity) !== 1)) {
           throw new Error("Transfer the exact Unit ID named in the request.")
         }
-        if (unit.status === "SCRAPPED") {
-          throw new Error("A scrapped Unit ID cannot change accountable Store.")
+        if (unit.status === "SCRAPPED" || unit.status === "LOST") {
+          throw new Error("A scrapped or lost Unit ID cannot change accountable Store.")
         }
         const source = await findStore(client, input.organizationId, input.sourceStoreCode)
         const destination = await findStore(

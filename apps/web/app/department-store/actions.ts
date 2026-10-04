@@ -133,21 +133,16 @@ export async function consumeDepartmentQuantityAction(
   }, "store.asset_movement.write", "/store/movement")
 }
 
-export async function adjustDepartmentQuantityAction(
+export async function recordDepartmentAssetLossAction(
   _state: DepartmentStoreActionState,
   formData: FormData
 ) {
-  return withStoreWrite(formData, (repository, context) => {
-    const reason = required(formData, "reason")
-    if (reason !== "LOSS" && reason !== "DAMAGE") throw new Error("Choose Loss or Damage.")
-    return repository.adjustQuantity({
+  return withStoreWrite(formData, (repository, context) =>
+    repository.recordAssetLoss({
       ...context,
-      itemTypeId: required(formData, "item_type_id"),
-      quantity: quantity(formData),
-      reason,
-      remark: optional(formData, "remark"),
-    })
-  }, "store.asset_movement.write", "/store/stock", true)
+      assetCode: required(formData, "asset_code"),
+      remark: required(formData, "remark"),
+    }), "store.asset_movement.write", "/store/stock", true)
 }
 
 export async function transferDepartmentAssetAction(

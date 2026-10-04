@@ -84,7 +84,7 @@ ID while the old unit keeps its history.
 **Consumable**: A quantity-managed Store Item with no individual Unit ID or
 Asset Workspace. All quantities share its Asset Code. A transfer between
 accountable stores moves available quantity without changing company on-hand;
-consumption, loss, or damage reduces company on-hand exactly once. Consumables
+consumption reduces company on-hand exactly once. Consumables
 do not have calibration or maintenance timetables.
 
 **Non Consumable**: A returnable Store Item whose physical units share one Asset
@@ -117,8 +117,14 @@ company on-hand is the sum of unused balances across all accountable stores,
 with each unit counted once. Consumption records the amount, date, and signed-in
 recorder's account ID. The date defaults to the current day in India and may be
 backdated, but never set in the future. It lowers the accountable store balance
-and company on-hand. An unused return is a new stock movement, and loss or damage is a
-separately identified adjustment. No balance may become negative.
+and company on-hand. An unused return is a new stock movement. No balance may
+become negative.
+
+**Unit ID Loss**: The accountable Store records one lost Non Consumable Unit ID
+at a time, with a reason. Loss keeps its history and last known physical holder,
+marks it unavailable, and reduces company on-hand by one. A lost Unit ID cannot
+be issued, moved, transferred, repaired, or selected for calibration. Loss is
+distinct from damage, which keeps the physical Unit ID in company inventory.
 
 **Supplier**: The party from whom goods or repair services are purchased. A
 Supplier owns one immutable system-generated code (`SUP-001`, `SUP-002`, and so
@@ -288,8 +294,8 @@ Consumable and Non Consumable items across accountable Stores. It shows Main
 Store availability alongside company-wide on-hand quantity or Unit ID count;
 company totals include stock accountable to Quality and production Stores.
 Departmental and Quality Store workspaces show their own accountable stock.
-A Consumable has one quantity-managed row. Main Store records a loss or damage
-adjustment against that row, with a reason; this reduces company on-hand.
+A Consumable has one quantity-managed row. Recording use reduces its
+local available balance and company on-hand.
 Each Non Consumable Asset Code has a classification row with Main available and
 company-wide unit counts.
 Every company physical unit has a separate row, including assigned or unavailable units,

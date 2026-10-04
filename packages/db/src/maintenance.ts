@@ -886,7 +886,7 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
           JOIN store.assets active_asset ON active_asset.id = schedule.asset_id
           WHERE schedule.organization_id = $1 AND schedule.active
             AND schedule.schedule_type = 'MAINTENANCE'
-            AND active_asset.status <> 'SCRAPPED'
+            AND active_asset.status NOT IN ('SCRAPPED', 'LOST')
             AND schedule.next_due_on >= $2::date
             AND schedule.next_due_on <= $3::date
             AND NOT EXISTS (

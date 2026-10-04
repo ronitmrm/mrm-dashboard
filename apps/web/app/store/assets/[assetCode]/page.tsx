@@ -313,12 +313,15 @@ export default async function StoreAssetWorkspacePage({
           <CardHeader>
             <CardTitle>Asset Lifecycle</CardTitle>
             <CardDescription>
-                  A broken or scrapped physical asset keeps its history. A
+                  A broken, scrapped, or lost physical asset keeps its history. A
                   purchased replacement receives a new Unit ID. Use Store Return
                   above to make an asset available again.
             </CardDescription>
           </CardHeader>
           <CardContent>
+            {asset.status === "LOST" ? <p className="text-sm text-muted-foreground">
+              This Unit ID is recorded as lost and cannot change lifecycle status.
+            </p> :
             <form
               action={setStoreAssetLifecycleAction}
               className="grid gap-4 sm:grid-cols-2"
@@ -347,7 +350,7 @@ export default async function StoreAssetWorkspacePage({
               <div className="flex items-end">
                 <Button type="submit">Update Status</Button>
               </div>
-            </form>
+            </form>}
           </CardContent>
  </SectionCard>
           </StoreAssetWorkspacePane>

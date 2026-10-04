@@ -1313,7 +1313,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           if (!assets.rows.length)
             throw new Error("Repair asset was not found.")
           for (const asset of assets.rows) {
-            if (asset.status === "SCRAPPED" ||
+            if (asset.status === "SCRAPPED" || asset.status === "LOST" ||
               asset.current_holder_type === "SUPPLIER") {
               throw new Error("Unit ID is no longer available for this Repair PO.")
             }
@@ -1631,7 +1631,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           const requestedUnit = await client.query<{ id: string }>(
             `SELECT id FROM store.assets
               WHERE id = $1 AND item_type_id = $2 AND organization_id = $3
-                AND status <> 'SCRAPPED'
+                AND status NOT IN ('SCRAPPED', 'LOST')
                 AND ($4::boolean = false OR EXISTS (
                   SELECT 1 FROM store.accountable_stores accountable
                   WHERE accountable.id = store.assets.accountable_store_id
@@ -2697,7 +2697,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
               WHERE asset.organization_id = $1
                 AND lower(asset.asset_code) = lower($2)
                 AND item.tracking_mode = 'SERIALIZED'
-                AND asset.status <> 'SCRAPPED'
+                AND asset.status NOT IN ('SCRAPPED', 'LOST')
               FOR UPDATE OF asset
             `,
             [input.organizationId, requiredText(input.assetCode, "Unit ID")]
@@ -2958,7 +2958,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             assets.rows.length !== items.length ||
             assets.rows.some(
               (asset) =>
-                asset.status === "SCRAPPED" ||
+                asset.status === "SCRAPPED" || asset.status === "LOST" ||
                 asset.current_holder_type === "SUPPLIER" ||
                 asset.accountable_store_id !== input.accountableStoreId
             )
@@ -3123,8 +3123,8 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         if (unit.accountableStoreId !== order.rows[0].originStoreId) {
           throw new Error("Unit ID accountability no longer matches this repair PO.")
         }
-        if (unit.status === "SCRAPPED") {
-          throw new Error("A scrapped Unit ID cannot be returned from repair.")
+        if (unit.status === "SCRAPPED" || unit.status === "LOST") {
+          throw new Error("A scrapped or lost Unit ID cannot be returned from repair.")
         }
         const location = await client.query<{
           code: string
@@ -4218,7 +4218,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
               THEN (SELECT count(*)::numeric FROM store.assets asset
                 WHERE asset.item_type_id = item.id
                   AND asset.organization_id = item.organization_id
-                  AND asset.status <> 'SCRAPPED')
+                  AND asset.status NOT IN ('SCRAPPED', 'LOST'))
               ELSE (SELECT COALESCE(sum(movement.quantity), 0)
                 FROM store.stock_movements movement
                 WHERE movement.organization_id = item.organization_id
@@ -4330,7 +4330,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             item.asset_name AS "assetName", asset.status
          FROM store.assets asset
          JOIN store.item_types item ON item.id = asset.item_type_id
-         WHERE asset.organization_id = $1 AND asset.status <> 'SCRAPPED'
+         WHERE asset.organization_id = $1 AND asset.status NOT IN ('SCRAPPED', 'LOST')
          ORDER BY item.type_code, asset.asset_code`,
         [organizationId]
       )
@@ -4760,7 +4760,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
                   AND asset.item_type_id = request.item_type_id
                   AND asset.accountable_store_id = location.accountable_store_id
                   AND (header.fulfillment_kind = 'STORE_TRANSFER'
-                    AND asset.status <> 'SCRAPPED'
+                    AND asset.status NOT IN ('SCRAPPED', 'LOST')
                     OR header.fulfillment_kind <> 'STORE_TRANSFER'
                     AND asset.current_location_id = request.location_id
                     AND asset.current_holder_type = 'STORE'
@@ -4794,7 +4794,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
                 AND asset.item_type_id = request.item_type_id
                 AND asset.accountable_store_id = location.accountable_store_id
                 AND (header.fulfillment_kind = 'STORE_TRANSFER'
-                  AND asset.status <> 'SCRAPPED'
+                  AND asset.status NOT IN ('SCRAPPED', 'LOST')
                   OR header.fulfillment_kind <> 'STORE_TRANSFER'
                   AND asset.current_location_id = request.location_id
                   AND asset.current_holder_type = 'STORE'
@@ -5799,8 +5799,8 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         if (asset.rows[0].accountable_store_code !== "MAIN") {
           throw new Error("Move this Unit ID from its accountable departmental store.")
         }
-        if (asset.rows[0].status === "SCRAPPED") {
-          throw new Error("A scrapped asset cannot be moved or reassigned.")
+        if (asset.rows[0].status === "SCRAPPED" || asset.rows[0].status === "LOST") {
+          throw new Error("A scrapped or lost asset cannot be moved or reassigned.")
         }
         const openRepair = await client.query(
           `SELECT 1 FROM store.repair_purchase_order_items repair_item
@@ -6021,7 +6021,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             JOIN store.item_types item ON item.id = asset.item_type_id
             WHERE asset.organization_id = $1
               AND lower(asset.asset_code) = lower($2)
-              AND asset.status <> 'SCRAPPED'
+              AND asset.status NOT IN ('SCRAPPED', 'LOST')
             FOR UPDATE`,
           [input.organizationId, requiredText(input.assetCode, "Unit ID")]
         )
@@ -6118,7 +6118,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
               asset.status
             FROM store.assets asset
             JOIN store.item_types item ON item.id = asset.item_type_id
-            WHERE asset.organization_id = $1 AND asset.status <> 'SCRAPPED'
+            WHERE asset.organization_id = $1 AND asset.status NOT IN ('SCRAPPED', 'LOST')
             ORDER BY asset.asset_code`,
           [organizationId]
         ),
@@ -6159,8 +6159,8 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           [input.organizationId, requiredText(input.assetCode, "Unit ID")]
         )
         if (!asset.rows[0]) throw new Error("Unit ID was not found.")
-        if (asset.rows[0].status === "SCRAPPED") {
-          throw new Error("A scrapped unit cannot start a breakdown.")
+        if (asset.rows[0].status === "SCRAPPED" || asset.rows[0].status === "LOST") {
+          throw new Error("A scrapped or lost unit cannot start a breakdown.")
         }
         const open = await client.query(
           `SELECT 1 FROM store.asset_breakdowns
@@ -6221,7 +6221,9 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         )
         const row = breakdown.rows[0]
         if (!row) throw new Error("Open asset breakdown was not found.")
-        if (row.status === "SCRAPPED") throw new Error("A scrapped unit cannot be repaired.")
+        if (row.status === "SCRAPPED" || row.status === "LOST") {
+          throw new Error("A scrapped or lost unit cannot be repaired.")
+        }
         const completedAt = new Date(input.completedAt)
         if (!Number.isFinite(completedAt.getTime()) || completedAt < row.startedAt) {
           throw new Error("Completion must follow the breakdown start.")
@@ -6304,8 +6306,9 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           current_location_id: string | null
           id: string
           item_type_id: string
+          status: string
         }>(
-          `SELECT asset.id, asset.item_type_id, asset.current_location_id,
+          `SELECT asset.id, asset.item_type_id, asset.status, asset.current_location_id,
               asset.current_holder_type, asset.current_holder_reference,
               asset.current_holder_name
             FROM store.assets asset
@@ -6320,6 +6323,9 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         )
         if (!asset.rows[0]) {
           throw new Error("Unit ID is not accountable to Main Store.")
+        }
+        if (asset.rows[0].status === "LOST") {
+          throw new Error("A lost Unit ID cannot change lifecycle status.")
         }
         const activeCalibration = await client.query(
           `SELECT 1 FROM store.calibration_visits
@@ -6430,7 +6436,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           LEFT JOIN store.asset_maintenance_tasks task ON task.schedule_id = schedule.id
             AND task.due_on = schedule.next_due_on AND task.status = 'In Progress'
           WHERE schedule.organization_id = $1 AND schedule.active
-            AND schedule.schedule_type = 'MAINTENANCE' AND asset.status <> 'SCRAPPED'
+            AND schedule.schedule_type = 'MAINTENANCE' AND asset.status NOT IN ('SCRAPPED', 'LOST')
           ORDER BY schedule.next_due_on, asset.asset_code, schedule.id`,
         [organizationId]
       )
@@ -6465,7 +6471,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             JOIN store.assets asset ON asset.id = schedule.asset_id
             LEFT JOIN maintenance.definitions definition ON definition.id = schedule.definition_id
             WHERE schedule.id = $1 AND schedule.organization_id = $2 AND schedule.active
-              AND schedule.schedule_type = 'MAINTENANCE' AND asset.status <> 'SCRAPPED'
+              AND schedule.schedule_type = 'MAINTENANCE' AND asset.status NOT IN ('SCRAPPED', 'LOST')
             FOR UPDATE OF schedule`,
           [input.scheduleId, input.organizationId]
         )

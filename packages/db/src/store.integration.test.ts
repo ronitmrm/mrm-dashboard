@@ -2718,6 +2718,46 @@ describe("Store requests", () => {
       .toBe("cnc")
   })
 
+  test("records one Unit ID loss against its accountable Store", async () => {
+    const location = await store.ensurePrimaryStoreLocation({ organizationId })
+    const item = await store.createItemType({
+      ...(await createClassification("Lost Unit ID")),
+      assetType: "NON_CONSUMABLE",
+      identificationName: `Lost Unit ${suffix}`,
+      organizationId,
+      unit: "Nos",
+    })
+    const receipt = await store.receiveStock({
+      locationId: location.id,
+      organizationId,
+      purchaseOrderLineId: (await createPurchaseOrder(item.id, 1, "100.00")).id,
+      quantity: 1,
+    })
+    const assetCode = receipt.assetCodes[0]!
+    await departmentStore.transferAssetAccountability({
+      assetCode, destinationStoreCode: "QUALITY", organizationId, sourceStoreCode: "MAIN",
+    })
+    await departmentStore.recordAssetLoss({
+      assetCode, organizationId, storeCode: "QUALITY", remark: "Unit could not be found",
+    })
+    const workspace = await departmentStore.listStoreWorkspace({ organizationId, storeCode: "QUALITY" })
+    expect(workspace.assets.find((asset) => asset.assetCode === assetCode)?.status).toBe("LOST")
+    expect(workspace.serializedTotals.find((row) => row.itemTypeId === item.id)).toMatchObject({
+      accountableQuantity: "0", companyQuantity: "0",
+    })
+    const movement = await pool.query<{ movement_type: string; quantity: string }>(
+      `SELECT movement_type, quantity::text FROM store.stock_movements
+       WHERE organization_id = $1 AND asset_id =
+         (SELECT id FROM store.assets WHERE organization_id = $1 AND asset_code = $2)
+         AND movement_type = 'LOSS'`,
+      [organizationId, assetCode]
+    )
+    expect(movement.rows).toEqual([{ movement_type: "LOSS", quantity: "-1.000" }])
+    await expect(departmentStore.recordAssetLoss({
+      assetCode, organizationId, storeCode: "QUALITY", remark: "Duplicate report",
+    })).rejects.toThrow("already left company stock")
+  })
+
   test("shows Main-accountable units held by CNC in its allocation list", async () => {
     await pool.query(
       `INSERT INTO manufacturing.production_floors (organization_id, code, name)

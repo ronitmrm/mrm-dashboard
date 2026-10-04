@@ -46,7 +46,7 @@ export default async function DepartmentCalibrationSelectionPage({ searchParams 
     ? params.asset_code : params.asset_code ? [params.asset_code] : [])
     .map((value) => value.trim().toLowerCase()))
   const selected = workspace.assets.filter((asset) =>
-    asset.status !== "SCRAPPED" && codes.has(asset.assetCode.toLowerCase()))
+    asset.status !== "SCRAPPED" && asset.status !== "LOST" && codes.has(asset.assetCode.toLowerCase()))
 
   return <div className="grid min-w-0 gap-5">
     <PageHeader title="Calibration service" icon={ClipboardCheck}

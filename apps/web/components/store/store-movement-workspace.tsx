@@ -140,7 +140,7 @@ export function StoreMovementWorkspace({
             <FieldLabel htmlFor="accountability-unit">Unit ID</FieldLabel>
             <NativeSelect id="accountability-unit" name="asset_code" required>
               <NativeSelectOption value="">Select Unit ID</NativeSelectOption>
-              {assets.filter((asset) => asset.status !== "SCRAPPED").map((asset) => (
+              {assets.filter((asset) => asset.status !== "SCRAPPED" && asset.status !== "LOST").map((asset) => (
                 <NativeSelectOption key={asset.assetCode} value={asset.assetCode}>
                   {asset.assetCode} — {asset.assetName}
                 </NativeSelectOption>

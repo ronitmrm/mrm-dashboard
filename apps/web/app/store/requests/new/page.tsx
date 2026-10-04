@@ -232,7 +232,7 @@ export default async function NewStoreRequestPage({
                                 .filter(
                                   (unit) =>
                                     unit.itemTypeId === item.id &&
-                                    unit.isMainAccountable && unit.status !== "SCRAPPED"
+                                    unit.isMainAccountable && unit.status !== "SCRAPPED" && unit.status !== "LOST"
                                 )
                                 .map((unit) => (
                                   <NativeSelectOption key={unit.id} value={unit.id}>

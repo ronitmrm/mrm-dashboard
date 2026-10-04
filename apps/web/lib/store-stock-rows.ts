@@ -69,7 +69,7 @@ export function storeStockRows<T extends StoreStockItem>(
         actionItem: false,
         assignedQuantity: physicalUnit.status === "ASSIGNED" ? "1" : "0",
         availableQuantity: physicalUnit.isAvailableToIssueHere ? "1" : "0",
-        companyQuantity: physicalUnit.status === "SCRAPPED" ? "0" : "1",
+        companyQuantity: ["SCRAPPED", "LOST"].includes(physicalUnit.status) ? "0" : "1",
         displayedCode: physicalUnit.assetCode,
         physicalUnit,
         rowKey: physicalUnit.id,

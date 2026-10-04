@@ -60,7 +60,7 @@ export default async function DepartmentRepairOrderPage({ searchParams }: {
     .map((value) => value.trim().toLowerCase())
   const selected = workspace.assets.filter((asset) =>
     selectedCodes.includes(asset.assetCode.toLowerCase()) &&
-    asset.status !== "SCRAPPED"
+    asset.status !== "SCRAPPED" && asset.status !== "LOST"
   )
   const issuanceId = first(params.issuance_id)
   const safeIssuanceId = issuanceId && /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(issuanceId)
