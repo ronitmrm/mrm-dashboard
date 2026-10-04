@@ -71,7 +71,8 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
       <MetricSummary
         items={[
           { label: "Consumable codes", value: consumables.length, tone: "information" },
-          { label: "Accountable Unit IDs", value: assets.length, tone: "brand" },
+          { label: "Accountable Unit IDs", value: assets.filter((asset) =>
+            asset.status !== "SCRAPPED" && asset.status !== "LOST").length, tone: "brand" },
           ...(isQuality ? [{ label: "Gauge sets", value: gaugeSets.length, tone: "accent" as const }] : []),
         ]}
         scope={`Stock accountable to ${store.name} · before table filters`}
@@ -87,13 +88,12 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
             Units assigned to this floor by another Store appear here for visibility. That Store controls their movements and return.
           </p> : null}
           {canWrite ? <div className="flex flex-wrap gap-2">
-            <Button asChild size="sm" variant="outline"><Link href={`${basePath}?action=quantity`}>Transfer quantity</Link></Button>
-            <Button asChild size="sm" variant="outline"><Link href={`${basePath}?action=accountability`}>Transfer Unit ID</Link></Button>
-            <Button asChild size="sm" variant="outline"><Link href={`${basePath}?action=physical`}>Record physical move</Link></Button>
+            <Button asChild size="sm" variant="outline"><Link href={`${basePath}?action=quantity`}>Transfer or move stock</Link></Button>
+            <Button asChild size="sm" variant="outline"><Link href={`${basePath}?action=accountability`}>Transfer Unit ID responsibility</Link></Button>
             {consumables.length ? <Button asChild size="sm" variant={selectMode === "use" ? "default" : "outline"}>
               <Link href={`${basePath}?select=use`}>Record use</Link>
             </Button> : null}
-            <Button asChild size="sm" variant="outline"><Link href={`${basePath}?action=adjust`}>Record loss or damage</Link></Button>
+            <Button asChild size="sm" variant="outline"><Link href={`${basePath}?action=adjust`}>Record Unit ID loss</Link></Button>
             {isQuality ? ([
               ["gauge-create", "Combine gauges"], ["gauge-move", "Move gauge set"],
               ["gauge-replace", "Replace gauge"], ["gauge-disband", "Disband set"],
@@ -151,7 +151,7 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
                 {store.kind === "PRODUCTION" ? <TableCell>{store.name}</TableCell> : null}
               </TableRow>)}
               {assets.map((asset) => <TableRow key={asset.assetCode}>
-                {selectMode ? <TableCell>{selectingAssets && asset.status !== "SCRAPPED" ? <input
+                {selectMode ? <TableCell>{selectingAssets && asset.status !== "SCRAPPED" && asset.status !== "LOST" ? <input
                   aria-label={`Select ${asset.assetCode} for ${selectMode}`} form={selectionFormId}
                   name="asset_code" type="checkbox" value={asset.assetCode} /> : "—"}</TableCell> : null}
                 <TableCell className="font-medium">{asset.typeCode}</TableCell>
@@ -159,8 +159,8 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
                   href={`/department-store/assets/${encodeURIComponent(asset.assetCode)}?store=${encodeURIComponent(store.code)}`}>
                   {asset.assetCode}</Link></TableCell><TableCell>{asset.assetName}</TableCell>
                 <TableCell>Non Consumable</TableCell><TableCell>{asset.availableHere ? "1" : "0"}</TableCell>
-                <TableCell>{asset.status === "SCRAPPED" ? "0" : "1"}</TableCell>
-                <TableCell><StatusBadge value={asset.status} /></TableCell>
+                <TableCell>{asset.status === "SCRAPPED" || asset.status === "LOST" ? "0" : "1"}</TableCell>
+                <TableCell><StatusBadge tone={asset.status === "LOST" ? "danger" : undefined} value={asset.status} /></TableCell>
                 <TableCell>{asset.holderName || asset.holderType}</TableCell>
                 {store.kind === "PRODUCTION" ? <TableCell>{store.name}</TableCell> : null}
               </TableRow>)}

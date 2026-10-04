@@ -75,7 +75,7 @@ export default async function StoreMovementPage({
   })().finally(() => repository.close())
   const accountableUnitIds = new Set(data.workspace.assets.map((asset) => asset.assetCode))
   const movableUnits = data.units.filter(
-    (unit) => accountableUnitIds.has(unit.assetCode) && unit.status !== "SCRAPPED"
+    (unit) => accountableUnitIds.has(unit.assetCode) && unit.status !== "SCRAPPED" && unit.status !== "LOST"
   )
   const performer = data.performer
     ? [data.performer.code, data.performer.name].filter(Boolean).join(" - ")

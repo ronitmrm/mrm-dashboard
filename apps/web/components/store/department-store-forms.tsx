@@ -7,12 +7,12 @@ import { Input } from "@workspace/ui/components/input"
 import { NativeSelect, NativeSelectOption } from "@workspace/ui/components/native-select"
 
 import {
-  adjustDepartmentQuantityAction,
   consumeDepartmentQuantityAction,
   createQualityGaugeSetAction,
   disbandQualityGaugeSetAction,
   moveDepartmentAssetAction,
   moveQualityGaugeSetAction,
+  recordDepartmentAssetLossAction,
   replaceQualityGaugeSetMemberAction,
   transferDepartmentAssetAction,
   transferDepartmentQuantityAction,
@@ -120,7 +120,7 @@ export function DepartmentStoreForms({ action, assets, consumables, departments,
   vendors: Array<{ code: string; id: string; name: string }>
 }) {
   const availableConsumables = consumables.filter((item) => Number(item.availableQuantity) > 0)
-  const movableAssets = assets.filter((asset) => asset.status !== "SCRAPPED")
+  const movableAssets = assets.filter((asset) => asset.status !== "SCRAPPED" && asset.status !== "LOST")
   const availableGauges = assets.filter((asset) =>
     asset.isGauge && !asset.inGaugeSet && asset.status === "AVAILABLE" && asset.holderType === "STORE"
   )
@@ -130,12 +130,20 @@ export function DepartmentStoreForms({ action, assets, consumables, departments,
     selectedItemIds.includes(item.itemTypeId) && Number(item.availableQuantity) > 0
   )
   const [replacementSetId, setReplacementSetId] = useState("")
+  const [transferMode, setTransferMode] = useState<"quantity" | "physical">(
+    action === "physical" ? "physical" : "quantity"
+  )
   const replacementSet = gaugeSets.find((set) => set.id === replacementSetId)
   return <div className="grid gap-5">
-    {action === "quantity" ? <FormSection title="Transfer quantity to another Store"
-      description="Responsibility and available quantity move to the receiving Store. Company on-hand stays the same."
+    {action === "quantity" || action === "physical" ? <FormSection title="Transfer or move stock"
+      description="Transfer Consumable quantity to another Store, or move one Unit ID to a physical holder."
       width="wide">
-      <ActionForm action={transferDepartmentQuantityAction} storeCode={store.code} submitLabel="Transfer Quantity">
+      <SelectField label="Stock to move" name="stock_type" value={transferMode}
+        onValueChange={(value) => setTransferMode(value as typeof transferMode)}>
+        <NativeSelectOption value="quantity">Consumable quantity to another Store</NativeSelectOption>
+        <NativeSelectOption value="physical">Non Consumable Unit ID to a physical holder</NativeSelectOption>
+      </SelectField>
+      {transferMode === "quantity" ? <ActionForm action={transferDepartmentQuantityAction} storeCode={store.code} submitLabel="Transfer Quantity">
         <FormGrid className="xl:grid-cols-2">
           <SelectField label="Consumable Asset Code" name="item_type_id" required>
             <NativeSelectOption value="">Select an available item</NativeSelectOption>
@@ -152,11 +160,22 @@ export function DepartmentStoreForms({ action, assets, consumables, departments,
           <TextField label="Quantity" name="quantity" min="0.001" step="0.001" type="number" required />
           <TextField label="Remark" name="remark" />
         </FormGrid>
-      </ActionForm>
+      </ActionForm> : <ActionForm action={moveDepartmentAssetAction} storeCode={store.code} submitLabel="Record Movement">
+        <FormGrid className="xl:grid-cols-2">
+          <SelectField label="Unit ID" name="asset_code" required>
+            <NativeSelectOption value="">Select Unit ID</NativeSelectOption>
+            {movableAssets.map((asset) => <NativeSelectOption key={asset.assetCode} value={asset.assetCode}>
+              {asset.assetCode} · {asset.assetName} · {asset.holderName || asset.holderType}
+            </NativeSelectOption>)}
+          </SelectField>
+          <DestinationFields departments={departments} machines={machines} store={store} vendors={vendors} />
+          <TextField label="Movement note" name="remark" />
+        </FormGrid>
+      </ActionForm>}
     </FormSection> : null}
 
     {action === "accountability" ? <FormSection title="Transfer Unit ID accountability"
-      description="Use this when another Store takes responsibility. A separate physical move can place equipment at a machine without transferring responsibility."
+      description="If the Unit ID is in this Store, it also moves physically to the receiving Store. A machine or department keeps holding it when only responsibility changes."
       width="wide">
       <ActionForm action={transferDepartmentAssetAction} storeCode={store.code} submitLabel="Transfer Accountability">
         <FormGrid className="xl:grid-cols-2">
@@ -173,23 +192,6 @@ export function DepartmentStoreForms({ action, assets, consumables, departments,
             </NativeSelectOption>)}
           </SelectField>
           <TextField label="Reason / handover note" name="remark" />
-        </FormGrid>
-      </ActionForm>
-    </FormSection> : null}
-
-    {action === "physical" ? <FormSection title="Record physical movement"
-      description="Move a Unit ID to a department, machine, vendor, or back to this Store. Accountability stays here."
-      width="wide">
-      <ActionForm action={moveDepartmentAssetAction} storeCode={store.code} submitLabel="Record Movement">
-        <FormGrid className="xl:grid-cols-2">
-          <SelectField label="Unit ID" name="asset_code" required>
-            <NativeSelectOption value="">Select Unit ID</NativeSelectOption>
-            {movableAssets.map((asset) => <NativeSelectOption key={asset.assetCode} value={asset.assetCode}>
-              {asset.assetCode} · {asset.assetName} · {asset.holderName || asset.holderType}
-            </NativeSelectOption>)}
-          </SelectField>
-          <DestinationFields departments={departments} machines={machines} store={store} vendors={vendors} />
-          <TextField label="Movement note" name="remark" />
         </FormGrid>
       </ActionForm>
     </FormSection> : null}
@@ -214,24 +216,19 @@ export function DepartmentStoreForms({ action, assets, consumables, departments,
       </ActionForm>
     </FormSection> : null}
 
-    {action === "adjust" ? <FormSection title="Record loss or damage"
-      description="Adjustment reduces company on-hand and retains an auditable reason."
+    {action === "adjust" ? <FormSection title="Record Unit ID loss"
+      description="Select one lost Non Consumable Unit ID. Company on-hand falls by one and its last known holder stays in history."
       width="wide">
-      <ActionForm action={adjustDepartmentQuantityAction} storeCode={store.code} submitLabel="Record Adjustment">
+      <ActionForm action={recordDepartmentAssetLossAction} disabled={!movableAssets.length}
+        storeCode={store.code} submitLabel="Record Loss">
         <FormGrid className="xl:grid-cols-2">
-          <SelectField label="Consumable Asset Code" name="item_type_id" required>
-            <NativeSelectOption value="">Select an available item</NativeSelectOption>
-            {availableConsumables.map((item) => <NativeSelectOption key={item.itemTypeId} value={item.itemTypeId}>
-              {item.typeCode} · {item.assetName} · available {item.availableQuantity} {item.unit}
+          <SelectField label="Unit ID" name="asset_code" required>
+            <NativeSelectOption value="">Select Unit ID</NativeSelectOption>
+            {movableAssets.map((item) => <NativeSelectOption key={item.assetCode} value={item.assetCode}>
+              {item.assetCode} · {item.assetName} · {item.holderName || item.holderType}
             </NativeSelectOption>)}
           </SelectField>
-          <SelectField label="Reason" name="reason" required>
-            <NativeSelectOption value="">Select reason</NativeSelectOption>
-            <NativeSelectOption value="LOSS">Loss</NativeSelectOption>
-            <NativeSelectOption value="DAMAGE">Damage</NativeSelectOption>
-          </SelectField>
-          <TextField label="Quantity" name="quantity" min="0.001" step="0.001" type="number" required />
-          <TextField label="Details" name="remark" required />
+          <TextField label="Loss details" name="remark" required />
         </FormGrid>
       </ActionForm>
     </FormSection> : null}

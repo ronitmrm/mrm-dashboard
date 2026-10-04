@@ -28,7 +28,7 @@ import {
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { MetricSummary } from "@/components/ui/golden-patterns"
 import { StorePurchaseOrderForm } from "@/components/store/store-purchase-order-form"
-import { StoreStockAdjustmentForm } from "@/components/store/store-stock-adjustment-form"
+import { StoreStockLossForm } from "@/components/store/store-stock-loss-form"
 import {
   listGrantedCapabilities,
   requireCapability,
@@ -131,7 +131,7 @@ export default async function StoreStockPage({
 
       {firstValue(params.saved) === "1" ? (
         <SectionCard role="status">
-          <CardContent className="py-4 text-sm">Stock adjustment saved.</CardContent>
+          <CardContent className="py-4 text-sm">Unit ID loss recorded.</CardContent>
         </SectionCard>
       ) : null}
 
@@ -197,8 +197,8 @@ export default async function StoreStockPage({
       />
 
       {mode === "adjust" ? (
-        <StoreStockAdjustmentForm
-          consumables={data.items.filter((item) => item.trackingMode === "CONSUMABLE")}
+        <StoreStockLossForm
+          units={data.physicalUnits.filter((unit) => unit.isMainAccountable)}
         />
       ) : null}
 
@@ -253,13 +253,13 @@ export default async function StoreStockPage({
                   asChild
                   variant={mode === "adjust" ? "default" : "outline"}
                 >
-                  <Link href="/store/stock?mode=adjust">Record Loss/Damage</Link>
+                  <Link href="/store/stock?mode=adjust">Record Unit ID loss</Link>
                 </Button>
               ) : null}
               {mode !== "view" ? (
                 <Button asChild variant="ghost">
                   <Link href="/store/stock">
-                    {mode === "adjust" ? "Close Adjustment" : "Cancel Selection"}
+                    {mode === "adjust" ? "Close Loss Form" : "Cancel Selection"}
                   </Link>
                 </Button>
               ) : null}
@@ -337,7 +337,7 @@ export default async function StoreStockPage({
                 const canSelectRepairUnit =
                   item.physicalUnit &&
                   item.physicalUnit.isMainAccountable &&
-                  item.physicalUnit.status !== "SCRAPPED" &&
+                  item.physicalUnit.status !== "SCRAPPED" && item.physicalUnit.status !== "LOST" &&
                   (item.physicalUnit.holderType !== "SUPPLIER" ||
                     (resumingRepairSelection && selectedRepairUnit))
                 return (
@@ -431,7 +431,9 @@ export default async function StoreStockPage({
                                 ? "information"
                                 : item.physicalUnit.status === "BROKEN"
                                   ? "danger"
-                                  : item.physicalUnit.status === "SCRAPPED"
+                                  : item.physicalUnit.status === "LOST"
+                                    ? "danger"
+                                    : item.physicalUnit.status === "SCRAPPED"
                                     ? "inactive"
                                     : "warning"
                           }

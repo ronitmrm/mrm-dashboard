@@ -288,7 +288,7 @@ export function createStoreCalibrationRepository(pool: Pool) {
            AND schedule.organization_id = $1
            AND schedule.schedule_type = 'CALIBRATION'
            AND schedule.active
-         WHERE asset.organization_id = $1 AND asset.status <> 'SCRAPPED'
+         WHERE asset.organization_id = $1 AND asset.status NOT IN ('SCRAPPED', 'LOST')
            AND ($2::text IS NULL OR asset.asset_code ILIKE '%' || $2 || '%'
              OR item.asset_name ILIKE '%' || $2 || '%'
              OR item.type_code ILIKE '%' || $2 || '%')
@@ -497,8 +497,8 @@ export function createStoreCalibrationRepository(pool: Pool) {
         )
         const row = schedule.rows[0]
         if (!row) throw new Error("An active calibration timetable was not found for this Unit ID.")
-        if (row.status === "SCRAPPED" || row.status === "BROKEN") {
-          throw new Error("A broken or scrapped unit cannot be calibrated.")
+        if (row.status === "SCRAPPED" || row.status === "LOST" || row.status === "BROKEN") {
+          throw new Error("A broken, scrapped, or lost unit cannot be calibrated.")
         }
         if (input.method === "IN_HOUSE" &&
           !["STORE", "MACHINE", "DEPARTMENT"].includes(row.holderType)) {
@@ -915,7 +915,7 @@ export function createStoreCalibrationRepository(pool: Pool) {
           !row.agreedPrice || !row.purchaseOrderId) {
           throw new Error("A selected offer is required before calibration dispatch.")
         }
-        if (["BROKEN", "SCRAPPED"].includes(row.unitStatus) ||
+        if (["BROKEN", "SCRAPPED", "LOST"].includes(row.unitStatus) ||
           row.currentHolderType === "SUPPLIER") {
           throw new Error("This Unit ID cannot be dispatched for calibration.")
         }
@@ -1250,7 +1250,7 @@ export function createStoreCalibrationRepository(pool: Pool) {
         if (!row || row.status !== "OPEN") {
           throw new Error("Open in-house calibration visit was not found.")
         }
-        if (row.unitStatus === "BROKEN" || row.unitStatus === "SCRAPPED" ||
+        if (row.unitStatus === "BROKEN" || row.unitStatus === "SCRAPPED" || row.unitStatus === "LOST" ||
           !["STORE", "MACHINE", "DEPARTMENT"].includes(row.holderType)) {
           throw new Error("This Unit ID is not available for in-house calibration.")
         }
