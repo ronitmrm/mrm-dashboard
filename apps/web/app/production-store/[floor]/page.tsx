@@ -22,7 +22,8 @@ export default async function ProductionStorePage({
     saved: query.saved === "1",
     selectedItemIds: Array.isArray(query.item_type_id) ? query.item_type_id
       : query.item_type_id ? [query.item_type_id] : [],
-    selectUse: query.select === "use",
+    selectMode: query.select === "use" || query.select === "repair" || query.select === "calibration"
+      ? query.select : undefined,
     storeCode: floor.code,
     writeCapability: departmentStoreCapability(floor.code, "write"),
   })

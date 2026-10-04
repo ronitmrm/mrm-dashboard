@@ -23,7 +23,7 @@ export async function renderDepartmentStoreWorkspace(input: {
   saved?: boolean
   action?: DepartmentStoreAction
   selectedItemIds?: string[]
-  selectUse?: boolean
+  selectMode?: "use" | "repair" | "calibration"
   storeCode: string
   view?: "stock" | "movement" | "repairs"
   writeCapability: string
@@ -82,7 +82,7 @@ export async function renderDepartmentStoreWorkspace(input: {
       canRepair={canRepair}
       saved={input.saved ?? false}
       selectedItemIds={input.selectedItemIds}
-      selectUse={input.selectUse}
+      selectMode={input.selectMode}
       departments={options.departments}
       machines={options.machines}
       repairOrders={equipmentRepairOrders}

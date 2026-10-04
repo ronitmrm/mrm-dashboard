@@ -8,7 +8,6 @@ import { OperationalTable, TableBody, TableCell, TableHead, TableHeader, TableRo
 
 import { DepartmentStoreForms, type DepartmentStoreAction } from "@/components/store/department-store-forms"
 import { DepartmentRepairCompletion } from "@/components/store/department-repair-completion"
-import { DepartmentStoreUnitActions } from "@/components/store/department-store-unit-actions"
 import { MetricSummary, PageHeader } from "@/components/ui/golden-patterns"
 import { formatIstDateTime } from "@/lib/date-time"
 
@@ -16,7 +15,7 @@ type Workspace = Awaited<ReturnType<ReturnType<typeof createDepartmentStoreRepos
 type RepairOrders = Awaited<ReturnType<ReturnType<typeof createStoreRepository>["listPurchaseOrders"]>>
 
 export function DepartmentStoreRegister({ action, basePath, canRepair, canRequest, canWrite,
-  departments, machines, repairOrders, saved, selectedItemIds, selectUse, vendors, view, workspace,
+  departments, machines, repairOrders, saved, selectedItemIds, selectMode: requestedSelectMode, vendors, view, workspace,
 }: {
   action?: DepartmentStoreAction
   basePath: string
@@ -28,16 +27,20 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
   repairOrders: RepairOrders
   saved: boolean
   selectedItemIds?: string[]
-  selectUse?: boolean
+  selectMode?: "use" | "repair" | "calibration"
   vendors: Array<{ code: string; id: string; name: string }>
   view: "stock" | "movement" | "repairs"
   workspace: Workspace
 }) {
   const { store, stores, consumables, assets, gaugeSets, movements } = workspace
+  const selectMode = canWrite ? requestedSelectMode : undefined
   const isQuality = store.kind === "QUALITY"
   const availableConsumables = consumables.filter((item) => Number(item.availableQuantity) > 0)
   const stockCount = consumables.length + assets.length
-  const useFormId = "department-store-use-selection"
+  const selectionFormId = "department-store-stock-selection"
+  const selectingAssets = selectMode === "repair" || selectMode === "calibration"
+  const selectionAction = selectMode === "repair" ? "/department-store/repair"
+    : selectMode === "calibration" ? "/department-store/calibration" : basePath
   return <div className="flex min-w-0 flex-col gap-6">
     <PageHeader
       description={view === "stock"
@@ -74,10 +77,9 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
             <Button asChild size="sm" variant="outline"><Link href={`${basePath}?action=quantity`}>Transfer quantity</Link></Button>
             <Button asChild size="sm" variant="outline"><Link href={`${basePath}?action=accountability`}>Transfer Unit ID</Link></Button>
             <Button asChild size="sm" variant="outline"><Link href={`${basePath}?action=physical`}>Record physical move</Link></Button>
-            {availableConsumables.length ? <Button asChild size="sm" variant={selectUse ? "default" : "outline"}>
+            {consumables.length ? <Button asChild size="sm" variant={selectMode === "use" ? "default" : "outline"}>
               <Link href={`${basePath}?select=use`}>Record use</Link>
-            </Button> : <Button disabled size="sm" title="Receive or transfer consumable stock here before recording use"
-              variant="outline">Record use</Button>}
+            </Button> : null}
             <Button asChild size="sm" variant="outline"><Link href={`${basePath}?action=adjust`}>Record loss or damage</Link></Button>
             {isQuality ? ([
               ["gauge-create", "Combine gauges"], ["gauge-move", "Move gauge set"],
@@ -86,25 +88,36 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
               <Link href={`${basePath}?action=${key}`}>{label}</Link>
             </Button>) : null}
             {action ? <Button asChild size="sm" variant="ghost"><Link href={basePath}>Close form</Link></Button> : null}
-            {selectUse ? <><form action={basePath} id={useFormId} method="get">
-              <input name="action" type="hidden" value="consume" />
+            {canRepair && assets.length ? <>
+              <Button asChild size="sm" variant={selectMode === "repair" ? "default" : "outline"}>
+                <Link href={`${basePath}?select=repair`}>Make Repair PO</Link>
+              </Button>
+              <Button asChild size="sm" variant={selectMode === "calibration" ? "default" : "outline"}>
+                <Link href={`${basePath}?select=calibration`}>Calibration service</Link>
+              </Button>
+            </> : null}
+            {selectMode ? <><form action={selectionAction} id={selectionFormId} method="get">
+              <input name={selectMode === "use" ? "action" : "store"} type="hidden"
+                value={selectMode === "use" ? "consume" : store.code} />
             </form>
-              <Button form={useFormId} size="sm" type="submit">Continue with selected items</Button>
+              {(selectMode !== "use" || availableConsumables.length > 0) ?
+                <Button form={selectionFormId} size="sm" type="submit">Continue with selected items</Button> : null}
               <Button asChild size="sm" variant="ghost"><Link href={basePath}>Cancel selection</Link></Button>
             </> : null}
           </div> : null}
-          {assets.length ? <DepartmentStoreUnitActions assets={assets.map((asset) => ({
-            assetCode: asset.assetCode, assetName: asset.assetName, status: asset.status,
-          }))}
-            canRepair={canRepair} storeCode={store.code} /> : null}
+          {selectMode === "use" && !availableConsumables.length ? <p className="text-sm text-muted-foreground">
+            No consumables are available in {store.name}. Company on-hand is stock across all Stores;
+            {canRequest ? <> <Link className="text-primary underline" href={`/store/requests/new?fulfillmentKind=STORE_TRANSFER&storeCode=${encodeURIComponent(store.code)}`}>
+              request a transfer into this Store</Link> before recording use.</> : " arrange a transfer into this Store before recording use."}
+          </p> : null}
         </CardHeader>
         <CardContent className="min-w-0">
           <OperationalTable
             filterStorageKey={`department-store-stock-${store.code}`}
-            filteredSelection={selectUse ? { checkboxName: "item_type_id" } : undefined}
+            filteredSelection={selectMode ? { checkboxName: selectingAssets ? "asset_code" : "item_type_id" } : undefined}
           >
             <TableHeader><TableRow>
-              {selectUse ? <TableHead>Select</TableHead> : null}
+              {selectMode ? <TableHead>Select</TableHead> : null}
               <TableHead>Asset Code</TableHead><TableHead>Unit ID</TableHead><TableHead>Item</TableHead>
               <TableHead>Type</TableHead><TableHead>Available here</TableHead>
               <TableHead>Company on hand</TableHead><TableHead>Status</TableHead>
@@ -112,8 +125,8 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
             </TableRow></TableHeader>
             <TableBody>
               {consumables.map((item) => <TableRow key={item.itemTypeId}>
-                {selectUse ? <TableCell>{Number(item.availableQuantity) > 0 ? <input
-                  aria-label={`Select ${item.typeCode}`} form={useFormId}
+                {selectMode ? <TableCell>{selectMode === "use" && Number(item.availableQuantity) > 0 ? <input
+                  aria-label={`Select ${item.typeCode} for use`} form={selectionFormId}
                   name="item_type_id" type="checkbox" value={item.itemTypeId} /> : "—"}</TableCell> : null}
                 <TableCell className="font-medium">{item.typeCode}</TableCell>
                 <TableCell>—</TableCell><TableCell>{item.assetName}</TableCell>
@@ -123,15 +136,19 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
                 <TableCell>{store.name}</TableCell>
               </TableRow>)}
               {assets.map((asset) => <TableRow key={asset.assetCode}>
-                {selectUse ? <TableCell>—</TableCell> : null}
+                {selectMode ? <TableCell>{selectingAssets && asset.status !== "SCRAPPED" ? <input
+                  aria-label={`Select ${asset.assetCode} for ${selectMode}`} form={selectionFormId}
+                  name="asset_code" type="checkbox" value={asset.assetCode} /> : "—"}</TableCell> : null}
                 <TableCell className="font-medium">{asset.typeCode}</TableCell>
-                <TableCell>{asset.assetCode}</TableCell><TableCell>{asset.assetName}</TableCell>
+                <TableCell><Link className="text-primary underline-offset-4 hover:underline"
+                  href={`/department-store/assets/${encodeURIComponent(asset.assetCode)}?store=${encodeURIComponent(store.code)}`}>
+                  {asset.assetCode}</Link></TableCell><TableCell>{asset.assetName}</TableCell>
                 <TableCell>Non Consumable</TableCell><TableCell>{asset.availableHere ? "1" : "0"}</TableCell>
                 <TableCell>{asset.status === "SCRAPPED" ? "0" : "1"}</TableCell>
                 <TableCell><StatusBadge value={asset.status} /></TableCell>
                 <TableCell>{asset.holderName || asset.holderType}</TableCell>
               </TableRow>)}
-              {!stockCount ? <TableRow><TableCell colSpan={selectUse ? 9 : 8}>No stock accountable to this Store.</TableCell></TableRow> : null}
+              {!stockCount ? <TableRow><TableCell colSpan={selectMode ? 9 : 8}>No stock accountable to this Store.</TableCell></TableRow> : null}
             </TableBody>
           </OperationalTable>
         </CardContent>
