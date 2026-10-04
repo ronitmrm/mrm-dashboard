@@ -764,18 +764,15 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
         completedBy: string | null
         workDone: string | null
         legacyHistory: boolean
-        taskKey: string
-        photos: Array<{ id: string; fileName: string }>
       }>(
         `
-        SELECT task.id, task.task_key AS "taskKey", machine.machine_number AS "machineNumber",
+        SELECT task.id, machine.machine_number AS "machineNumber",
           floor.name AS "productionUnit", definition.name AS maintenance,
           task.task_type AS "taskType", task.due_on::text AS "dueOn",
           task.completed_at::text AS "completedAt",
           COALESCE(NULLIF(task.legacy_completer, ''), technician.name) AS "completedBy",
           task.source_payload->>'workDone' AS "workDone",
-          task.source_payload->>'legacyHistory' = 'true' AS "legacyHistory",
-          COALESCE(photo_list.photos, '[]'::jsonb) AS photos
+          task.source_payload->>'legacyHistory' = 'true' AS "legacyHistory"
         FROM maintenance.tasks task
         JOIN maintenance.machine_schedules schedule ON schedule.id = task.machine_schedule_id
           AND schedule.organization_id = task.organization_id
@@ -785,18 +782,6 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
           AND machine.organization_id = task.organization_id
         JOIN manufacturing.production_floors floor ON floor.id = machine.production_floor_id
         LEFT JOIN identity.users technician ON technician.id = task.completed_by_user_id
-        LEFT JOIN LATERAL (
-          SELECT jsonb_agg(jsonb_build_object('id', file.id, 'fileName', file.file_name)
-            ORDER BY link.created_at, link.id) AS photos
-          FROM core.file_links link
-          JOIN core.files file ON file.id = link.file_id
-          JOIN core.file_objects object ON object.id = file.physical_object_id
-          WHERE link.organization_id = task.organization_id
-            AND link.target_schema = 'maintenance' AND link.target_table = 'tasks'
-            AND link.target_id = task.id AND link.purpose LIKE 'work-photo:%'
-            AND link.is_current AND file.lifecycle_state = 'current'
-            AND object.lifecycle_state = 'available'
-        ) photo_list ON true
         WHERE task.organization_id = $1 AND task.status = 'Completed'
           AND task.completed_at IS NOT NULL
         ORDER BY task.completed_at DESC, machine.machine_number, task.id
@@ -819,9 +804,6 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
         productionUnit: string
         taskType: string
         workDone: string | null
-        scheduleId: string | null
-        breakdownId: string | null
-        photos: Array<{ id: string; fileName: string }>
       }>(
         `SELECT record.id, asset.asset_code AS "assetCode",
             item.asset_name AS "assetName",
@@ -831,13 +813,11 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
                 THEN 'Breakdown maintenance' ELSE 'Asset maintenance' END) AS maintenance,
             CASE WHEN record.maintenance_type = 'BREAKDOWN'
               THEN 'Breakdown' ELSE 'Planned' END AS "taskType",
-            task.due_on::text AS "dueOn", task.schedule_id AS "scheduleId",
-            breakdown.id AS "breakdownId",
+            task.due_on::text AS "dueOn",
             COALESCE(task.completed_at, breakdown.completed_at,
               record.completed_on::timestamptz)::text AS "completedAt",
             record.completed_by AS "completedBy", record.work_done AS "workDone",
-            (task.id IS NULL AND breakdown.id IS NULL) AS "legacyHistory",
-            COALESCE(photo_list.photos, '[]'::jsonb) AS photos
+            (task.id IS NULL AND breakdown.id IS NULL) AS "legacyHistory"
           FROM store.asset_maintenance_records record
           JOIN store.assets asset ON asset.id = record.asset_id
           JOIN store.item_types item ON item.id = asset.item_type_id
@@ -846,20 +826,6 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
           LEFT JOIN maintenance.definitions definition ON definition.id = schedule.definition_id
           LEFT JOIN store.asset_maintenance_tasks task ON task.maintenance_record_id = record.id
           LEFT JOIN store.asset_breakdowns breakdown ON breakdown.maintenance_record_id = record.id
-          LEFT JOIN LATERAL (
-            SELECT jsonb_agg(jsonb_build_object('id', file.id, 'fileName', file.file_name)
-              ORDER BY link.created_at, link.id) AS photos
-            FROM core.file_links link
-            JOIN core.files file ON file.id = link.file_id
-            JOIN core.file_objects object ON object.id = file.physical_object_id
-            WHERE link.organization_id = record.organization_id
-              AND link.target_schema = 'store'
-              AND link.target_table = CASE WHEN task.id IS NOT NULL
-                THEN 'asset_maintenance_tasks' ELSE 'asset_breakdowns' END
-              AND link.target_id = COALESCE(task.id, breakdown.id)
-              AND link.purpose LIKE 'work-photo:%' AND link.is_current
-              AND file.lifecycle_state = 'current' AND object.lifecycle_state = 'available'
-          ) photo_list ON true
           WHERE record.organization_id = $1
             AND record.maintenance_type IN ('MAINTENANCE', 'BREAKDOWN')
           ORDER BY record.completed_on DESC, record.id`,

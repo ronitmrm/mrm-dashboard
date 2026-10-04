@@ -1,6 +1,6 @@
 import Link from "next/link"
 
-import { createMaintenanceRepository, type MaintenanceWorkPhotoTarget } from "@workspace/db"
+import { createMaintenanceRepository } from "@workspace/db"
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
@@ -23,7 +23,6 @@ import {
   machineMaintenancePlan,
   machineMaintenanceRegister,
 } from "@/lib/iso-documents"
-import { maintenanceWorkPhotoQuery } from "@/lib/maintenance-work-photo-target"
 import { planDateRange } from "@/lib/plan-date-range"
 
 async function readReportRows(isPlan: boolean, from: string, to: string) {
@@ -42,15 +41,11 @@ async function readReportRows(isPlan: boolean, from: string, to: string) {
           assetName: null as string | null, taskType: "Planned",
           reportKind: "machine" as const,
           reportId: row.status === "Completed" ? row.id : null,
-          completedBy: null, workDone: null, legacyHistory: false,
-          photos: [] as Array<{ id: string; fileName: string }>,
-          photoTarget: null as MaintenanceWorkPhotoTarget | null })),
+          completedBy: null, workDone: null, legacyHistory: false })),
         ...assets.map((row) => ({ ...row, machineNumber: null as string | null,
           assetCode: row.assetCode, taskType: "Planned",
           reportKind: "asset" as const, reportId: row.reportId,
-          completedBy: null, workDone: null, legacyHistory: false,
-          photos: [] as Array<{ id: string; fileName: string }>,
-          photoTarget: null as MaintenanceWorkPhotoTarget | null })),
+          completedBy: null, workDone: null, legacyHistory: false })),
       ].sort((left, right) => left.dueOn.localeCompare(right.dueOn) ||
         (left.machineNumber ?? left.assetCode ?? "").localeCompare(right.machineNumber ?? right.assetCode ?? ""))
     }
@@ -61,16 +56,10 @@ async function readReportRows(isPlan: boolean, from: string, to: string) {
     return [
       ...machines.map((row) => ({ ...row, assetCode: null as string | null,
         assetName: null as string | null, status: "Completed",
-        reportKind: "machine" as const, reportId: row.id,
-        photoTarget: { kind: "machine", taskKey: row.taskKey } as MaintenanceWorkPhotoTarget })),
+        reportKind: "machine" as const, reportId: row.id })),
       ...assets.map((row) => ({ ...row, machineNumber: null as string | null,
         status: "Completed",
-        reportKind: "asset" as const, reportId: row.id,
-        photoTarget: (row.breakdownId
-          ? { kind: "asset-breakdown", breakdownId: row.breakdownId }
-          : row.scheduleId && row.dueOn
-            ? { kind: "asset-planned", scheduleId: row.scheduleId, dueOn: row.dueOn }
-            : null) as MaintenanceWorkPhotoTarget | null })),
+        reportKind: "asset" as const, reportId: row.id })),
     ].sort((left, right) => right.completedAt.localeCompare(left.completedAt))
   })().finally(() => repository.close())
 }
@@ -194,7 +183,6 @@ export function MachineMaintenanceReportView({
                 <TableHead>Type</TableHead>
                 <TableHead>Completed By</TableHead>
                 <TableHead>Work Done</TableHead>
-                <TableHead>Photos</TableHead>
               </>
             )}
             <TableHead>Report / Checklist</TableHead>
@@ -223,16 +211,6 @@ export function MachineMaintenanceReportView({
                   <TableCell className="whitespace-normal">
                     {row.workDone || "-"}
                   </TableCell>
-                  <TableCell className="whitespace-normal">
-                    {row.photoTarget && row.photos.length
-                      ? row.photos.map((photo, index) => (
-                        <span key={photo.id}>
-                          {index ? ", " : ""}
-                          <a className="underline underline-offset-4" href={`/api/maintenance/work-photos/${photo.id}?${maintenanceWorkPhotoQuery(row.photoTarget!)}`} rel="noopener noreferrer" target="_blank">{photo.fileName}</a>
-                        </span>
-                      ))
-                      : "-"}
-                  </TableCell>
                 </>
               )}
               <TableCell>
@@ -246,7 +224,7 @@ export function MachineMaintenanceReportView({
           ))}
           {!rows.length ? (
             <TableRow>
-              <TableCell colSpan={isPlan ? 7 : 9}>
+              <TableCell colSpan={isPlan ? 7 : 8}>
                 <StandardState
                   title={
                     isPlan

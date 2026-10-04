@@ -74,3 +74,10 @@ test("maintenance work photos require task write access and verified image bytes
     { grantedCapabilities: new Set(), userId: "user-id" }
   )).rejects.toThrow("Upload operation is not permitted.")
 })
+
+test("maintenance work upload accepts twelve photos and rejects a thirteenth", () => {
+  expect(parsePendingUploadIntent({ kind: "maintenance-work-photo", index: 12 }))
+    .toEqual({ kind: "maintenance-work-photo", index: 12 })
+  expect(() => parsePendingUploadIntent({ kind: "maintenance-work-photo", index: 13 }))
+    .toThrow("Upload intent photo index is invalid.")
+})

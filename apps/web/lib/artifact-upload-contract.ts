@@ -1,3 +1,5 @@
+import { MAX_MAINTENANCE_WORK_PHOTOS } from "./maintenance-work-photo-target"
+
 export const artifactUploadOffsetHeader = "Upload-Offset"
 
 export type PendingUploadSafeState =
@@ -165,7 +167,8 @@ export function parsePendingUploadIntent(value: unknown): PendingUploadIntent {
     case "maintenance-request-photo":
     case "maintenance-work-photo": {
       const index = Number(input.index)
-      if (!Number.isSafeInteger(index) || index < 1 || index > 8) {
+      const maxIndex = kind === "maintenance-work-photo" ? MAX_MAINTENANCE_WORK_PHOTOS : 8
+      if (!Number.isSafeInteger(index) || index < 1 || index > maxIndex) {
         throw new Error("Upload intent photo index is invalid.")
       }
       return { index, kind }

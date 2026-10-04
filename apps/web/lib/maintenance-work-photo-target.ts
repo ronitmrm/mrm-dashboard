@@ -1,5 +1,7 @@
 import type { MaintenanceWorkPhotoTarget } from "@workspace/db"
 
+export const MAX_MAINTENANCE_WORK_PHOTOS = 12
+
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export function parseMaintenanceWorkPhotoTarget(value: unknown): MaintenanceWorkPhotoTarget {
