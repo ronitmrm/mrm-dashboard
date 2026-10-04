@@ -281,11 +281,8 @@ async function insertOperation(
   input: MutationIdentity & {
     destinationStoreId?: string | null
     itemTypeId: string
-    jobCardReference?: string | null
-    machineReference?: string | null
     operatedOn?: string | null
     operationType: "TRANSFER" | "CONSUMPTION" | "LOSS" | "DAMAGE"
-    operatorName?: string | null
     quantity: number
     sourceStoreId: string
   }
@@ -293,18 +290,15 @@ async function insertOperation(
   const result = await client.query<{ id: string }>(
     `INSERT INTO store.department_stock_operations (
        organization_id, operation_type, item_type_id, source_store_id,
-       destination_store_id, quantity, machine_reference,
-       job_card_reference, operator_name, operated_on, remark,
+       destination_store_id, quantity, operated_on, remark,
        created_by_user_id, requisition_id
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9,
-       COALESCE($10::date, current_date), $11, $12, $13)
+     ) VALUES ($1, $2, $3, $4, $5, $6,
+       COALESCE($7::date, current_date), $8, $9, $10)
      RETURNING id`,
     [
       input.organizationId, input.operationType, input.itemTypeId,
       input.sourceStoreId, input.destinationStoreId ?? null,
-      input.quantity, input.machineReference?.trim() || null,
-      input.jobCardReference?.trim() || null,
-      input.operatorName?.trim() || null, input.operatedOn ?? null,
+      input.quantity, input.operatedOn ?? null,
       input.remark?.trim() || null, input.actorUserId ?? null,
       input.requisitionId ?? null,
     ]
@@ -937,19 +931,12 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
     },
 
     async consumeQuantities(input: MutationIdentity & {
-      consumedOn?: string | null
+      consumedOn: string
       items: Array<{ itemTypeId: string; quantity: number }>
-      jobCardReference?: string | null
-      machineReference?: string | null
-      operatorName: string
       storeCode: string
     }) {
-      const operatorName = requiredText(input.operatorName, "Operator")
       if (!input.items.length || new Set(input.items.map((item) => item.itemTypeId)).size !== input.items.length) {
         throw new Error("Select one or more distinct consumable Asset Codes.")
-      }
-      if (!input.machineReference?.trim() && !input.jobCardReference?.trim()) {
-        throw new Error("Machine or Job Card is required for consumption.")
       }
       return withTransaction(pool, async (client) => {
         const store = await findStore(client, input.organizationId, input.storeCode)
@@ -962,7 +949,6 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
             itemTypeId: item.itemTypeId,
             operatedOn: input.consumedOn,
             operationType: "CONSUMPTION",
-            operatorName,
             quantity,
             sourceStoreId: store.id,
           })

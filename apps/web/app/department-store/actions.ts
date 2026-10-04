@@ -10,6 +10,7 @@ import { accountableStoreHref, accountableStorePermission, departmentStoreHref }
 import { requireCapability } from "@/lib/auth/require-capability"
 import { requireStoreAction } from "@/lib/auth/store-action-access"
 import { getWebPostgresPool } from "@/lib/postgres-runtime"
+import { isPastOrTodayIstDate } from "@/lib/date-time"
 import { createGoogleCloudArtifactProvider } from "@/lib/google-cloud-artifact-provider"
 import { storeIssuedPurchaseOrderPdf } from "@/lib/store/issued-purchase-order-pdf"
 
@@ -114,6 +115,10 @@ export async function consumeDepartmentQuantityAction(
 ) {
   return withStoreWrite(formData, (repository, context) => {
     if (context.storeCode === "MAIN") throw new Error("Consumption must be recorded by the receiving Store.")
+    const consumedOn = required(formData, "consumed_on")
+    if (!isPastOrTodayIstDate(consumedOn)) {
+      throw new Error("Used on must be a valid date and cannot be in the future.")
+    }
     const itemTypeIds = formData.getAll("item_type_id")
       .map((value) => value.toString().trim()).filter(Boolean)
     return repository.consumeQuantities({
@@ -122,10 +127,7 @@ export async function consumeDepartmentQuantityAction(
         itemTypeId,
         quantity: Number(required(formData, `quantity_${itemTypeId}`)),
       })),
-      operatorName: required(formData, "operator_name"),
-      consumedOn: optional(formData, "consumed_on"),
-      machineReference: optional(formData, "machine_reference"),
-      jobCardReference: optional(formData, "job_card_reference"),
+      consumedOn,
       remark: optional(formData, "remark"),
     })
   }, "store.asset_movement.write", "/store/movement")

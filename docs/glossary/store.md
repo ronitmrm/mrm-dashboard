@@ -114,9 +114,10 @@ transfer to CNC Store. Company ownership persists through internal transfers.
 An internal transfer decreases the source balance and increases the destination
 balance by the same amount. Available to issue is the local unreserved balance;
 company on-hand is the sum of unused balances across all accountable stores,
-with each unit counted once. Consumption records the amount, date, operator,
-and machine or job card; it lowers the accountable store balance and company
-on-hand. An unused return is a new stock movement, and loss or damage is a
+with each unit counted once. Consumption records the amount, date, and signed-in
+recorder's account ID. The date defaults to the current day in India and may be
+backdated, but never set in the future. It lowers the accountable store balance
+and company on-hand. An unused return is a new stock movement, and loss or damage is a
 separately identified adjustment. No balance may become negative.
 
 **Supplier**: The party from whom goods or repair services are purchased. A

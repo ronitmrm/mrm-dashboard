@@ -105,16 +105,18 @@ function DestinationFields({
 
 export type DepartmentStoreAction = "quantity" | "accountability" | "physical" | "consume" | "adjust" | "gauge-create" | "gauge-move" | "gauge-replace" | "gauge-disband"
 
-export function DepartmentStoreForms({ action, assets, consumables, departments, gaugeSets, machines, selectedItemIds = [], store, stores, vendors }: {
+export function DepartmentStoreForms({ action, assets, consumables, departments, gaugeSets, machines, recorderId, selectedItemIds = [], store, stores, today, vendors }: {
   action: DepartmentStoreAction
   assets: Workspace["assets"]
   consumables: Workspace["consumables"]
   departments: Array<{ code: string; id: string; name: string }>
   gaugeSets: Workspace["gaugeSets"]
   machines: Array<{ id: string; machineNumber: string; name: string | null }>
+  recorderId: string
   selectedItemIds?: string[]
   store: Workspace["store"]
   stores: Workspace["stores"]
+  today: string
   vendors: Array<{ code: string; id: string; name: string }>
 }) {
   const availableConsumables = consumables.filter((item) => Number(item.availableQuantity) > 0)
@@ -193,7 +195,7 @@ export function DepartmentStoreForms({ action, assets, consumables, departments,
     </FormSection> : null}
 
     {action === "consume" && store.kind !== "MAIN" ? <FormSection title="Record consumable use"
-      description="Record only the quantity actually used, with the machine or Job Card and operator. Unused stock stays available here."
+      description="Record only the quantity actually used. Unused stock stays available here."
       width="wide">
       <ActionForm action={consumeDepartmentQuantityAction} disabled={!selectedConsumables.length}
         storeCode={store.code} submitLabel="Record Consumption">
@@ -204,15 +206,8 @@ export function DepartmentStoreForms({ action, assets, consumables, departments,
               name={`quantity_${item.itemTypeId}`} min="0.001" max={item.availableQuantity}
               step="0.001" type="number" required />
           </div>)}
-          <SelectField label="Machine" name="machine_reference">
-            <NativeSelectOption value="">No machine selected</NativeSelectOption>
-            {machines.map((machine) => <NativeSelectOption key={machine.id} value={machine.machineNumber}>
-              {machine.machineNumber} · {machine.name || machine.machineNumber}
-            </NativeSelectOption>)}
-          </SelectField>
-          <TextField label="Job Card" name="job_card_reference" />
-          <TextField label="Operator" name="operator_name" required />
-          <TextField label="Used on" name="consumed_on" type="date" required />
+          <TextField label="Operator ID" name="operator_id" value={recorderId} readOnly />
+          <TextField label="Used on" name="consumed_on" type="date" defaultValue={today} max={today} required />
           <TextField label="Remark" name="remark" />
         </FormGrid>
         {!selectedConsumables.length ? <p className="text-sm text-muted-foreground">Select available consumables from Stock first.</p> : null}

@@ -7,6 +7,7 @@ import { accountableStorePermission } from "@/lib/auth/department-store-capabili
 import { listGrantedCapabilities, requireCapability } from "@/lib/auth/require-capability"
 import { listGrantedStoreActions } from "@/lib/auth/store-action-access"
 import { getWebPostgresPool } from "@/lib/postgres-runtime"
+import { istDateValue } from "@/lib/date-time"
 
 const departmentStoreActions: DepartmentStoreAction[] = [
   "quantity", "accountability", "physical", "consume", "adjust",
@@ -93,7 +94,9 @@ export async function renderDepartmentStoreWorkspace(input: {
       departments={options.departments}
       departmentAllocations={departmentAllocations}
       machines={options.machines}
+      recorderId={session.user.id}
       repairOrders={equipmentRepairOrders}
+      today={istDateValue()}
       vendors={options.vendors}
       view={input.view ?? "stock"}
       workspace={workspace}

@@ -68,6 +68,12 @@ export function istDateValue(value: DateTimeValue = new Date()) {
   return istParts(value)?.date ?? ""
 }
 
+export function isPastOrTodayIstDate(value: string, today = istDateValue()) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || value > today) return false
+  const parsed = new Date(`${value}T00:00:00Z`)
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value
+}
+
 export function istDateTimeInputValue(value: DateTimeValue = new Date()) {
   const parts = istParts(value)
   return parts ? `${parts.date}T${parts.time}` : ""
