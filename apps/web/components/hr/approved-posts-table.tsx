@@ -559,7 +559,7 @@ export function ApprovedPostsTable({
               <input name="post_id" type="hidden" value={creatingJobPost.id} />
               <Field>
                 <FieldLabel htmlFor="create-job-template">Attach a Template (optional)</FieldLabel>
-                <NativeSelect id="create-job-template" name="requirement_template_code" className="w-full" defaultValue="">
+                <NativeSelect id="create-job-template" name="requirement_template_code" className="w-full" defaultValue={creatingJobPost.requirementTemplateCode ?? ""}>
                   <NativeSelectOption value="">No Template</NativeSelectOption>
                   {templates.filter((template) => !template.combinedRoleId || template.combinedRoleId === creatingJobPost.combinedRoleId).map((template) => (
                     <NativeSelectOption key={template.id} value={template.templateCode}>

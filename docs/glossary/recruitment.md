@@ -10,7 +10,8 @@ The import assigns vacant posts only; it does not change existing assignments.
 ## Creating a job from Employee Master
 
 Create Job first asks for a target date and an optional active Job Description
-Template.
+Template. The Approved Post's linked template is preselected when available;
+the operator may select another template or No Template.
 The selected template is copied into the new job's requirements; choosing No
 Template creates it without a template link. This does not change the Employee
 Master's template. Combined-role templates must belong to the selected combined
@@ -29,8 +30,10 @@ regardless of whether they are occupied or vacant. This updates posts already
 linked to the template and unlinked posts matching its combined role or its
 individual department and designation; posts linked to another template keep
 their own profile. The approved-post link and requirement fields update in the
-same transaction as the template. Employee assignments and existing Job Posts
-are not rewritten.
+same transaction as the template. Existing Job Posts linked to those Approved
+Posts receive the template link when they have none; blank job requirements and
+shift fields are filled from the template. Existing job values and jobs linked
+to a different template remain historical. Employee assignments are unchanged.
 
 ## Approved Post Deletion
 

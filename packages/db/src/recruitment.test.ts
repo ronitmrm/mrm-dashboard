@@ -82,6 +82,41 @@ test("job description templates require a permitted shift and both times", async
     .rejects.toThrow("Shift End Time is required")
 })
 
+test("assigning a template to an Approved Post links its unassigned job", async () => {
+  const query = vi.fn(async (statement: string) => {
+    if (statement.includes("SELECT post.*")) return { rows: [{ id: "post-1" }], rowCount: 1 }
+    if (statement.includes("SELECT id") && statement.includes("FROM recruitment.requirement_templates")) {
+      return { rows: [{ id: "template-1" }], rowCount: 1 }
+    }
+    if (statement.includes("UPDATE recruitment.posts")) {
+      return { rows: [{ id: "post-1", requirement_template_id: "template-1" }], rowCount: 1 }
+    }
+    if (statement.includes("SELECT job.*") && statement.includes("FOR UPDATE OF job")) {
+      return { rows: [{ id: "job-1", requirement_template_id: null }], rowCount: 1 }
+    }
+    if (statement.includes("UPDATE recruitment.job_posts job")) {
+      return { rows: [{ id: "job-1", requirement_template_id: "template-1" }], rowCount: 1 }
+    }
+    return { rows: [], rowCount: 0 }
+  })
+  const client = { query, release: vi.fn() } as unknown as PoolClient
+  const repository = createRecruitmentRepository({
+    pool: { connect: vi.fn(async () => client) } as unknown as Pool,
+  })
+
+  await repository.updatePost({
+    organizationId: "org-1",
+    postId: "post-1",
+    requirementTemplateCode: "JRT-0011",
+  })
+
+  const jobUpdate = query.mock.calls.find(([statement]) =>
+    statement.includes("UPDATE recruitment.job_posts job")
+  )
+  expect(jobUpdate?.[0]).toContain("job.requirement_template_id IS NULL")
+  expect(jobUpdate?.[0]).toContain("post.requirement_template_id = $2")
+})
+
 test("pending offer responses are scoped to approved applications without a response", async () => {
   const rows = [{ applicationId: "application-1", candidateName: "Pending Candidate" }]
   const query = vi.fn().mockResolvedValue({ rows })
