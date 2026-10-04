@@ -3,6 +3,7 @@ import { notFound } from "next/navigation"
 
 import {
   createMaintenanceRepository,
+  createMaintenanceReportCorrectionRepository,
   createMaintenanceWorkPhotoRepository,
   type CompletedMaintenanceReport,
 } from "@workspace/db"
@@ -15,8 +16,9 @@ import {
 } from "@workspace/ui/components/table"
 
 import { PageHeader } from "@/components/ui/golden-patterns"
+import { CompletedMaintenanceReportEditor } from "@/components/maintenance/completed-maintenance-report-editor"
 import { readAuthEnvironment } from "@/lib/auth/auth"
-import { requireCapability } from "@/lib/auth/require-capability"
+import { listGrantedCapabilities, requireCapability } from "@/lib/auth/require-capability"
 import { formatIstDate, formatIstDateTime } from "@/lib/date-time"
 import { maintenanceWorkPhotoQuery } from "@/lib/maintenance-work-photo-target"
 
@@ -36,14 +38,16 @@ function actualMinutes(report: CompletedMaintenanceReport) {
 export default async function MachineMaintenanceReportPage({ params }: {
   params: Promise<{ kind: string; id: string }>
 }) {
-  await requireCapability("maintenance.workspace.read", "/iso-document/machine-maintenance-register")
+  const session = await requireCapability("maintenance.workspace.read", "/iso-document/machine-maintenance-register")
   const { kind, id } = await params
   if ((kind !== "machine" && kind !== "asset") ||
     !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) notFound()
 
+  const canEdit = (await listGrantedCapabilities(session.user.id, ["maintenance.tasks.write"])).length > 0
   const connectionString = readAuthEnvironment().connectionString
   const repository = createMaintenanceRepository({ connectionString })
   const photoRepository = createMaintenanceWorkPhotoRepository({ connectionString })
+  const correctionRepository = createMaintenanceReportCorrectionRepository({ connectionString })
   const data = await (async () => {
     try {
       const organizationId = await repository.organizationIdForCode("MRMPL")
@@ -54,13 +58,16 @@ export default async function MachineMaintenanceReportPage({ params }: {
       const target = report.photoTarget
         ? await photoRepository.resolveTarget(organizationId, report.photoTarget) : null
       const photos = target ? await photoRepository.listPhotos(organizationId, target) : []
-      return { report, photos }
+      const corrections = await correctionRepository.listHistory({
+        completedAt: report.completedAt, kind, organizationId, photoTarget: target, reportId: id,
+      })
+      return { report, photos, corrections }
     } finally {
-      await Promise.all([repository.close(), photoRepository.close()])
+      await Promise.all([repository.close(), photoRepository.close(), correctionRepository.close()])
     }
   })()
   if (!data) notFound()
-  const { report, photos } = data
+  const { report, photos, corrections } = data
   const photoQuery = report.photoTarget
     ? maintenanceWorkPhotoQuery(report.photoTarget) : null
 
@@ -72,6 +79,7 @@ export default async function MachineMaintenanceReportPage({ params }: {
         <Link href="/iso-document/machine-maintenance-register">Maintenance Register</Link>
       </Button>}
     />
+    {canEdit && report.photoTarget ? <CompletedMaintenanceReportEditor kind={kind} report={report} /> : null}
     <SectionCard>
       <CardHeader>
         <CardTitle>Completed Work</CardTitle>
@@ -142,6 +150,23 @@ export default async function MachineMaintenanceReportPage({ params }: {
           rel="noopener noreferrer"
           target="_blank"
         >{photo.fileName}</a>) : <span className="text-sm text-muted-foreground">No work photos saved.</span>}
+      </CardContent>
+    </SectionCard>
+    <SectionCard>
+      <CardHeader><CardTitle>Correction History</CardTitle></CardHeader>
+      <CardContent>
+        {corrections.length ? <OperationalTable containerClassName="rounded-md border">
+          <TableHeader><TableRow>
+            <TableHead>When</TableHead><TableHead>Change</TableHead><TableHead>By</TableHead><TableHead>Reason</TableHead>
+          </TableRow></TableHeader>
+          <TableBody>{corrections.map((correction, index) => <TableRow key={`${correction.occurredAt}-${index}`}>
+            <TableCell className="whitespace-nowrap">{formatIstDateTime(correction.occurredAt)}</TableCell>
+            <TableCell>{correction.action}</TableCell>
+            <TableCell>{correction.actor || "Not recorded"}</TableCell>
+            <TableCell className="whitespace-normal">{correction.reason}</TableCell>
+          </TableRow>)}</TableBody>
+        </OperationalTable> : <StandardState title="No corrections recorded"
+          description="Edits to this completed report will appear here with their reason." />}
       </CardContent>
     </SectionCard>
   </div>

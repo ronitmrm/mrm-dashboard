@@ -99,6 +99,12 @@ export {
 export { createDashboardReadModelRepository } from "./dashboard-read-model-repository"
 export { createMaintenanceRepository, type CompletedMaintenanceReport } from "./maintenance"
 export {
+  createMaintenanceReportCorrectionRepository,
+  type MaintenanceReportCorrection,
+  type MaintenanceReportCorrectionInput,
+  type MaintenanceReportKind,
+} from "./maintenance-report-corrections"
+export {
   authorizeMaintenanceWorkPhotoTarget,
   createMaintenanceWorkPhotoRepository,
   type MaintenanceWorkPhotoTarget,

@@ -25,9 +25,11 @@ export type MaintenanceWorkPhotosHandle = {
 }
 
 export const MaintenanceWorkPhotos = forwardRef<MaintenanceWorkPhotosHandle, {
+  correctionReason?: string
   disabled?: boolean
+  onChanged?: () => void
   target: MaintenanceWorkPhotoTarget
-}>(function MaintenanceWorkPhotos({ disabled, target }, ref) {
+}>(function MaintenanceWorkPhotos({ correctionReason, disabled, onChanged, target }, ref) {
   const upload = usePendingRetainedUploads()
   const inputRef = useRef<HTMLInputElement>(null)
   const [files, setFiles] = useState<File[]>([])
@@ -37,13 +39,22 @@ export const MaintenanceWorkPhotos = forwardRef<MaintenanceWorkPhotosHandle, {
   const query = maintenanceWorkPhotoQuery(target)
 
   async function removePhoto(photo: Photo) {
+    if (correctionReason !== undefined && !correctionReason.trim()) {
+      setError("Enter an edit reason before changing completed report photos.")
+      return
+    }
     setError("")
     setRemovingId(photo.id)
     try {
-      const response = await fetch(`/api/maintenance/work-photos/${photo.id}?${query}`, { method: "DELETE" })
+      const response = await fetch(`/api/maintenance/work-photos/${photo.id}?${query}`, {
+        body: correctionReason === undefined ? undefined : JSON.stringify({ reason: correctionReason }),
+        headers: correctionReason === undefined ? undefined : { "Content-Type": "application/json" },
+        method: "DELETE",
+      })
       const result = (await response.json()) as { error?: string }
       if (!response.ok) throw new Error(result.error || "Photo could not be removed.")
       setPhotos((current) => current.filter((item) => item.id !== photo.id))
+      onChanged?.()
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Photo could not be removed.")
     } finally {
@@ -66,44 +77,52 @@ export const MaintenanceWorkPhotos = forwardRef<MaintenanceWorkPhotosHandle, {
     return () => { active = false }
   }, [query])
 
+  async function uploadPending() {
+    if (!files.length) return
+    setError("")
+    if (correctionReason !== undefined && !correctionReason.trim()) {
+      const message = "Enter an edit reason before changing completed report photos."
+      setError(message)
+      throw new Error(message)
+    }
+    if (files.length + photos.length > 8) {
+      const message = "Attach no more than eight photos to this maintenance job."
+      setError(message)
+      throw new Error(message)
+    }
+    const data = new FormData()
+    for (const file of files) data.append("photos", file)
+    const prepared = await upload.prepare(data, [{
+      field: "photos",
+      intent: { index: 1, kind: "maintenance-work-photo" },
+    }])
+    if (!prepared) throw new Error("Photos could not be uploaded. Retry with the selected files.")
+    const uploadIds = prepared.getAll("photos_upload_id").map(String)
+    try {
+      const response = await fetch("/api/maintenance/work-photos", {
+        body: JSON.stringify({ target, uploadIds, reason: correctionReason }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      })
+      const result = (await response.json()) as { error?: string; photos?: Photo[] }
+      if (!response.ok) throw new Error(result.error || "Photos could not be saved.")
+      upload.client.markSubmitted()
+      upload.finish()
+      setPhotos(result.photos ?? [])
+      setFiles([])
+      if (inputRef.current) inputRef.current.value = ""
+      onChanged?.()
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : "Photos could not be saved."
+      setError(message)
+      throw cause
+    }
+  }
+
   useImperativeHandle(ref, () => ({
     hasPending: () => files.length > 0,
-    async uploadPending() {
-      if (!files.length) return
-      setError("")
-      if (files.length + photos.length > 8) {
-        const message = "Attach no more than eight photos to this maintenance job."
-        setError(message)
-        throw new Error(message)
-      }
-      const data = new FormData()
-      for (const file of files) data.append("photos", file)
-      const prepared = await upload.prepare(data, [{
-        field: "photos",
-        intent: { index: 1, kind: "maintenance-work-photo" },
-      }])
-      if (!prepared) throw new Error("Photos could not be uploaded. Retry with the selected files.")
-      const uploadIds = prepared.getAll("photos_upload_id").map(String)
-      try {
-        const response = await fetch("/api/maintenance/work-photos", {
-          body: JSON.stringify({ target, uploadIds }),
-          headers: { "Content-Type": "application/json" },
-          method: "POST",
-        })
-        const result = (await response.json()) as { error?: string; photos?: Photo[] }
-        if (!response.ok) throw new Error(result.error || "Photos could not be saved.")
-        upload.client.markSubmitted()
-        upload.finish()
-        setPhotos(result.photos ?? [])
-        setFiles([])
-        if (inputRef.current) inputRef.current.value = ""
-      } catch (cause) {
-        const message = cause instanceof Error ? cause.message : "Photos could not be saved."
-        setError(message)
-        throw cause
-      }
-    },
-  }), [files, photos, target, upload])
+    uploadPending,
+  }))
 
   return (
     <div className="grid gap-3">
@@ -121,7 +140,9 @@ export const MaintenanceWorkPhotos = forwardRef<MaintenanceWorkPhotosHandle, {
           ref={inputRef}
           type="file"
         />
-        <p className="text-xs text-muted-foreground">Up to eight JPG or PNG photos, 10 MB each. Selected photos save with this maintenance job.</p>
+        <p className="text-xs text-muted-foreground">Up to eight JPG or PNG photos, 10 MB each. {correctionReason === undefined
+          ? "Selected photos save with this maintenance job."
+          : "Select photos, then use Add selected photos to save them."}</p>
       </div>
       {files.length ? (
         <ul className="grid gap-1.5">
@@ -145,6 +166,15 @@ export const MaintenanceWorkPhotos = forwardRef<MaintenanceWorkPhotosHandle, {
           ))}
         </ul>
       ) : null}
+      {correctionReason !== undefined ? (
+        <Button
+          className="w-fit"
+          disabled={disabled || removingId !== null || !files.length || !correctionReason.trim()}
+          onClick={() => void uploadPending().catch(() => undefined)}
+          size="sm"
+          type="button"
+        >Add selected photos</Button>
+      ) : null}
       {photos.length ? (
         <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {photos.map((photo) => (
@@ -156,7 +186,7 @@ export const MaintenanceWorkPhotos = forwardRef<MaintenanceWorkPhotosHandle, {
               <Button
                 aria-label={`Remove saved photo ${photo.fileName}`}
                 className="w-fit"
-                disabled={disabled || removingId !== null}
+                disabled={disabled || removingId !== null || (correctionReason !== undefined && !correctionReason.trim())}
                 onClick={() => void removePhoto(photo)}
                 size="xs"
                 type="button"

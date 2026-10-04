@@ -14,6 +14,12 @@ export type ResolvedMaintenanceWorkPhotoTarget = {
   table: "tasks" | "asset_maintenance_tasks" | "asset_breakdowns"
 }
 
+export type CompletedMaintenancePhotoReport = {
+  id: string
+  schema: "maintenance" | "store"
+  table: "tasks" | "asset_maintenance_records"
+}
+
 export async function authorizeMaintenanceWorkPhotoTarget(
   client: PoolClient,
   organizationId: string,
@@ -68,6 +74,45 @@ export function createMaintenanceWorkPhotoRepository(options: RepositoryPoolOpti
         [organizationId, target.breakdownId]
       )
       return result.rows[0] ? { id: result.rows[0].id, schema: "store", table: "asset_breakdowns" } : null
+    },
+
+    async completedReport(organizationId: string, target: ResolvedMaintenanceWorkPhotoTarget): Promise<CompletedMaintenancePhotoReport | null> {
+      if (target.table === "tasks") {
+        const result = await pool.query<{ id: string }>(
+          "SELECT id FROM maintenance.tasks WHERE organization_id = $1 AND id = $2 AND status = 'Completed'",
+          [organizationId, target.id]
+        )
+        return result.rows[0] ? { id: result.rows[0].id, schema: "maintenance", table: "tasks" } : null
+      }
+      const table = target.table === "asset_maintenance_tasks"
+        ? "store.asset_maintenance_tasks" : "store.asset_breakdowns"
+      const result = await pool.query<{ id: string }>(
+        `SELECT maintenance_record_id AS id FROM ${table}
+         WHERE organization_id = $1 AND id = $2 AND status = 'Completed'
+           AND maintenance_record_id IS NOT NULL`,
+        [organizationId, target.id]
+      )
+      return result.rows[0] ? { id: result.rows[0].id, schema: "store", table: "asset_maintenance_records" } : null
+    },
+
+    async recordCompletedPhotoAddition(input: {
+      actorUserId: string
+      organizationId: string
+      reason: string
+      report: CompletedMaintenancePhotoReport
+      uploadId: string
+    }) {
+      await pool.query(
+        `INSERT INTO audit.events (
+           organization_id, event_type, target_schema, target_table, target_id,
+           actor_user_id, reason, metadata, source_system, source_table, source_id
+         ) VALUES ($1, 'maintenance.report.photo_added', $2, $3, $4, $5, $6,
+           jsonb_build_object('uploadId', $7::text), 'mrm-dashboard',
+           'maintenance_report_photo_additions', $7)
+         ON CONFLICT (source_system, source_table, source_id) DO NOTHING`,
+        [input.organizationId, input.report.schema, input.report.table,
+          input.report.id, input.actorUserId, input.reason, input.uploadId]
+      )
     },
 
     async listPhotos(organizationId: string, target: ResolvedMaintenanceWorkPhotoTarget) {
