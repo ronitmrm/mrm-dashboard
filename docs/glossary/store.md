@@ -361,6 +361,10 @@ Department request remains an Issue, not a transfer into a department Store.
 Each production and Quality Store has its own Movement Register, separate from
 its Stock Register. Its Stock Register combines local Consumable balances with
 accountable Non Consumable Unit IDs; repair orders have a separate register.
+Each production Store also shows a read-only allocation list of Unit IDs held
+by that floor's Departments, including Unit IDs still accountable to Main
+Store. These allocations do not increase the production Store's stock; the
+accountable Store shown on each row controls its movements and return.
 Consumable use starts by selecting one or more available Asset Codes in Stock
 and records their quantities together with the same operator and work context.
 Stock also starts transfers, physical moves, adjustments, Unit ID history,

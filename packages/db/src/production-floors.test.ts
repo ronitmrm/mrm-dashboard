@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 import {
   normalizeProductionFloorCode,
   parseProductionFloorCode,
+  productionFloorFromDepartment,
   productionFloors,
   productionFloorCodeForRecord,
 } from "./production-floors"
@@ -73,6 +74,7 @@ describe("production floors", () => {
       label: "PPAC CNC-01",
       shortLabel: "CNC-01",
     })
+    expect(productionFloorFromDepartment("Ppac Cnc-01", "Ppac Cnc-01")).toBe("cnc")
   })
 
   it("uses the PPAC title for Forging", () => {

@@ -12,16 +12,19 @@ import { MetricSummary, PageHeader } from "@/components/ui/golden-patterns"
 import { formatIstDateTime } from "@/lib/date-time"
 
 type Workspace = Awaited<ReturnType<ReturnType<typeof createDepartmentStoreRepository>["listStoreWorkspace"]>>
+type DepartmentAllocations = Awaited<ReturnType<ReturnType<typeof createDepartmentStoreRepository>["listDepartmentAllocations"]>>
 type RepairOrders = Awaited<ReturnType<ReturnType<typeof createStoreRepository>["listPurchaseOrders"]>>
 
 export function DepartmentStoreRegister({ action, basePath, canRepair, canRequest, canWrite,
-  departments, machines, repairOrders, saved, selectedItemIds, selectMode: requestedSelectMode, vendors, view, workspace,
+  departmentAllocations, departments, machines, repairOrders, saved, selectedItemIds,
+  selectMode: requestedSelectMode, vendors, view, workspace,
 }: {
   action?: DepartmentStoreAction
   basePath: string
   canRepair: boolean
   canRequest: boolean
   canWrite: boolean
+  departmentAllocations: DepartmentAllocations
   departments: Array<{ code: string; id: string; name: string }>
   machines: Array<{ id: string; machineNumber: string; name: string | null }>
   repairOrders: RepairOrders
@@ -153,6 +156,36 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
           </OperationalTable>
         </CardContent>
       </SectionCard>
+      {store.kind === "PRODUCTION" ? <SectionCard>
+        <CardHeader className="gap-1">
+          <CardTitle>Allocated to {store.name.replace(/ Store$/, "")} departments ({departmentAllocations.length})</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Unit IDs physically held by this production area. The responsible Store shown below controls their movements and return.
+          </p>
+        </CardHeader>
+        <CardContent className="min-w-0">
+          <OperationalTable filterStorageKey={`department-allocations-${store.code}`}>
+            <TableHeader><TableRow>
+              <TableHead>Asset Code</TableHead><TableHead>Unit ID</TableHead>
+              <TableHead>Item</TableHead><TableHead>Department</TableHead>
+              <TableHead>Responsible Store</TableHead><TableHead>Status</TableHead>
+            </TableRow></TableHeader>
+            <TableBody>
+              {departmentAllocations.map((asset) => <TableRow key={asset.assetCode}>
+                <TableCell>{asset.typeCode}</TableCell>
+                <TableCell className="font-medium">{asset.assetCode}</TableCell>
+                <TableCell>{asset.assetName}</TableCell>
+                <TableCell>{asset.departmentName}</TableCell>
+                <TableCell>{asset.accountableStoreName}</TableCell>
+                <TableCell><StatusBadge value={asset.status} /></TableCell>
+              </TableRow>)}
+              {!departmentAllocations.length ? <TableRow><TableCell colSpan={6}>
+                No Unit IDs currently allocated to these departments.
+              </TableCell></TableRow> : null}
+            </TableBody>
+          </OperationalTable>
+        </CardContent>
+      </SectionCard> : null}
       {isQuality ? <SectionCard><CardHeader><CardTitle>Gauge sets</CardTitle></CardHeader>
         <CardContent className="min-w-0"><OperationalTable filterStorageKey="quality-store-gauge-sets">
           <TableHeader><TableRow><TableHead>Set ID</TableHead><TableHead>Name</TableHead>
