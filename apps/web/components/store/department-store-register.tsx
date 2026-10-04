@@ -39,7 +39,10 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
   const selectMode = canWrite ? requestedSelectMode : undefined
   const isQuality = store.kind === "QUALITY"
   const availableConsumables = consumables.filter((item) => Number(item.availableQuantity) > 0)
-  const stockCount = consumables.length + assets.length
+  const accountableUnitIds = new Set(assets.map((asset) => asset.assetCode.toLowerCase()))
+  const otherStoreAllocations = departmentAllocations.filter((asset) =>
+    !accountableUnitIds.has(asset.assetCode.toLowerCase()))
+  const stockCount = consumables.length + assets.length + otherStoreAllocations.length
   const selectionFormId = "department-store-stock-selection"
   const selectingAssets = selectMode === "repair" || selectMode === "calibration"
   const selectionAction = selectMode === "repair" ? "/department-store/repair"
@@ -47,7 +50,9 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
   return <div className="flex min-w-0 flex-col gap-6">
     <PageHeader
       description={view === "stock"
-        ? `Stock accountable to ${store.name}. Company on-hand includes all Stores.`
+        ? store.kind === "PRODUCTION"
+          ? `Stock accountable to ${store.name}, plus Unit IDs held by its departments. Company on-hand includes all Stores.`
+          : `Stock accountable to ${store.name}. Company on-hand includes all Stores.`
         : view === "movement"
           ? `Transfers, physical moves, consumption and adjustments for ${store.name}.`
           : `Supplier repair orders originated by ${store.name}.`}
@@ -76,6 +81,9 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
       <SectionCard>
         <CardHeader className="gap-3">
           <CardTitle>Stock Register</CardTitle>
+          {store.kind === "PRODUCTION" ? <p className="text-sm text-muted-foreground">
+            Units assigned to this floor by another Store appear here for visibility. That Store controls their movements and return.
+          </p> : null}
           {canWrite ? <div className="flex flex-wrap gap-2">
             <Button asChild size="sm" variant="outline"><Link href={`${basePath}?action=quantity`}>Transfer quantity</Link></Button>
             <Button asChild size="sm" variant="outline"><Link href={`${basePath}?action=accountability`}>Transfer Unit ID</Link></Button>
@@ -125,6 +133,7 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
               <TableHead>Type</TableHead><TableHead>Available here</TableHead>
               <TableHead>Company on hand</TableHead><TableHead>Status</TableHead>
               <TableHead>Physical holder</TableHead>
+              {store.kind === "PRODUCTION" ? <TableHead>Responsible Store</TableHead> : null}
             </TableRow></TableHeader>
             <TableBody>
               {consumables.map((item) => <TableRow key={item.itemTypeId}>
@@ -137,6 +146,7 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
                 <TableCell>{item.companyQuantity} {item.unit}</TableCell>
                 <TableCell><StatusBadge value={Number(item.availableQuantity) > 0 ? "AVAILABLE" : "OUT OF STOCK"} /></TableCell>
                 <TableCell>{store.name}</TableCell>
+                {store.kind === "PRODUCTION" ? <TableCell>{store.name}</TableCell> : null}
               </TableRow>)}
               {assets.map((asset) => <TableRow key={asset.assetCode}>
                 {selectMode ? <TableCell>{selectingAssets && asset.status !== "SCRAPPED" ? <input
@@ -150,42 +160,24 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
                 <TableCell>{asset.status === "SCRAPPED" ? "0" : "1"}</TableCell>
                 <TableCell><StatusBadge value={asset.status} /></TableCell>
                 <TableCell>{asset.holderName || asset.holderType}</TableCell>
+                {store.kind === "PRODUCTION" ? <TableCell>{store.name}</TableCell> : null}
               </TableRow>)}
-              {!stockCount ? <TableRow><TableCell colSpan={selectMode ? 9 : 8}>No stock accountable to this Store.</TableCell></TableRow> : null}
-            </TableBody>
-          </OperationalTable>
-        </CardContent>
-      </SectionCard>
-      {store.kind === "PRODUCTION" ? <SectionCard>
-        <CardHeader className="gap-1">
-          <CardTitle>Allocated to {store.name.replace(/ Store$/, "")} departments ({departmentAllocations.length})</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Unit IDs physically held by this production area. The responsible Store shown below controls their movements and return.
-          </p>
-        </CardHeader>
-        <CardContent className="min-w-0">
-          <OperationalTable filterStorageKey={`department-allocations-${store.code}`}>
-            <TableHeader><TableRow>
-              <TableHead>Asset Code</TableHead><TableHead>Unit ID</TableHead>
-              <TableHead>Item</TableHead><TableHead>Department</TableHead>
-              <TableHead>Responsible Store</TableHead><TableHead>Status</TableHead>
-            </TableRow></TableHeader>
-            <TableBody>
-              {departmentAllocations.map((asset) => <TableRow key={asset.assetCode}>
-                <TableCell>{asset.typeCode}</TableCell>
-                <TableCell className="font-medium">{asset.assetCode}</TableCell>
-                <TableCell>{asset.assetName}</TableCell>
+              {otherStoreAllocations.map((asset) => <TableRow key={asset.assetCode}>
+                {selectMode ? <TableCell>—</TableCell> : null}
+                <TableCell className="font-medium">{asset.typeCode}</TableCell>
+                <TableCell>{asset.assetCode}</TableCell><TableCell>{asset.assetName}</TableCell>
+                <TableCell>Non Consumable</TableCell><TableCell>0</TableCell>
+                <TableCell>1</TableCell><TableCell><StatusBadge value={asset.status} /></TableCell>
                 <TableCell>{asset.departmentName}</TableCell>
-                <TableCell>{asset.accountableStoreName}</TableCell>
-                <TableCell><StatusBadge value={asset.status} /></TableCell>
+                {store.kind === "PRODUCTION" ? <TableCell>{asset.accountableStoreName}</TableCell> : null}
               </TableRow>)}
-              {!departmentAllocations.length ? <TableRow><TableCell colSpan={6}>
-                No Unit IDs currently allocated to these departments.
+              {!stockCount ? <TableRow><TableCell colSpan={(selectMode ? 9 : 8) + (store.kind === "PRODUCTION" ? 1 : 0)}>
+                {store.kind === "PRODUCTION" ? "No stock or Department allocations recorded." : "No stock accountable to this Store."}
               </TableCell></TableRow> : null}
             </TableBody>
           </OperationalTable>
         </CardContent>
-      </SectionCard> : null}
+      </SectionCard>
       {isQuality ? <SectionCard><CardHeader><CardTitle>Gauge sets</CardTitle></CardHeader>
         <CardContent className="min-w-0"><OperationalTable filterStorageKey="quality-store-gauge-sets">
           <TableHeader><TableRow><TableHead>Set ID</TableHead><TableHead>Name</TableHead>
