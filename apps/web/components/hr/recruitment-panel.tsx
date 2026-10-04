@@ -351,9 +351,12 @@ function TemplatePanel({
               "gender",
               "minimum_salary",
               "maximum_salary",
+              "shift_type",
+              "shift_start_time",
+              "shift_end_time",
               "role_responsibilities",
             ]}
-            fileName="job-template-master-template.csv"
+            fileName="job-description-template-master-template.csv"
           />
         }
         csvImportAction={
@@ -373,10 +376,10 @@ function TemplatePanel({
       {canWrite && showDataEntry ? (
         <PanelForm
           action={saveTemplateAction}
-          description="Create The Reusable Qualification And Salary Profile Used By Recruitment Openings."
+          description="Create The Reusable Job Description, Shift, Qualification, And Salary Profile Used By Recruitment Openings."
           panelId="postMasterPanel"
           masterView={activeView}
-          title="Job Requirement Template"
+          title="Job Description Template"
         >
           <CompanyWideMasterScope />
           <TextField
@@ -408,6 +411,17 @@ function TemplatePanel({
             name="maximum_salary"
             type="number"
           />
+          <Field>
+            <FieldLabel htmlFor="template-shift-type">Shift Type</FieldLabel>
+            <NativeSelect id="template-shift-type" name="shift_type" required>
+              <NativeSelectOption disabled value="">Select Shift Type</NativeSelectOption>
+              <NativeSelectOption value="Day">Day</NativeSelectOption>
+              <NativeSelectOption value="Night">Night</NativeSelectOption>
+              <NativeSelectOption value="Rotation">Rotation</NativeSelectOption>
+            </NativeSelect>
+          </Field>
+          <TextField label="Shift Start Time" name="shift_start_time" required type="time" />
+          <TextField label="Shift End Time" name="shift_end_time" required type="time" />
           <Field className="md:col-span-2 xl:col-span-3">
             <FieldLabel htmlFor="template-responsibilities">
               Role Responsibilities
@@ -779,7 +793,8 @@ function JobsPanel({
                 <TableHead>Job</TableHead>
                 <TableHead>Vacancy</TableHead>
                 <TableHead>Post</TableHead>
-                <TableHead>Template</TableHead>
+                <TableHead>Job Description Template</TableHead>
+                <TableHead>Shift</TableHead>
                 <TableHead>Posted</TableHead>
                 <TableHead>Target</TableHead>
                 <TableHead>Applicants</TableHead>
@@ -812,6 +827,11 @@ function JobsPanel({
                         </Button>
                       ) : "—"}
                     </TableCell>
+                    <TableCell>
+                      {row.shiftType
+                        ? `${row.shiftType}${row.shiftStartTime && row.shiftEndTime ? ` · ${row.shiftStartTime}–${row.shiftEndTime}` : ""}`
+                        : "—"}
+                    </TableCell>
                     <TableCell>{row.postDate}</TableCell>
                     <TableCell>{row.targetDate ?? "—"}</TableCell>
                     <TableCell>{row.applicantCount}</TableCell>
@@ -826,7 +846,7 @@ function JobsPanel({
                   </TableRow>
                 ))
               ) : (
-                <EmptyRow columns={9} label="No Job Posts Found." />
+                <EmptyRow columns={10} label="No Job Posts Found." />
               )}
             </TableBody>
  </OperationalTable>

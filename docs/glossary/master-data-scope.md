@@ -45,7 +45,7 @@ The company-wide masters are:
 - Defect / Downtime Reason Master;
 - Store Masters;
 - HR Departments & Designations;
-- HR Job Templates; and
+- HR Job Description Templates; and
 - Commercial Pricing Masters;
 - Customers; and
 - Website Products.

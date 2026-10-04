@@ -212,6 +212,9 @@ export async function saveTemplateAction(formData: FormData) {
         minimumSalary: value(formData, "minimum_salary"),
         name: value(formData, "name"),
         roleResponsibilities: value(formData, "role_responsibilities"),
+        shiftEndTime: value(formData, "shift_end_time"),
+        shiftStartTime: value(formData, "shift_start_time"),
+        shiftType: value(formData, "shift_type"),
         templateCode: value(formData, "template_code"),
         templateId: value(formData, "template_id"),
       })

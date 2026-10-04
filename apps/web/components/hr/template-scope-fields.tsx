@@ -76,7 +76,7 @@ export function TemplateScopeFields({
             ))}
           </NativeSelect>
           <FieldDescription>
-            This Creates One Job Template For The Complete Combined Role.
+            This Creates One Job Description Template For The Complete Combined Role.
           </FieldDescription>
         </Field>
       ) : (

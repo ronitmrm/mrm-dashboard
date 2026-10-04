@@ -192,6 +192,9 @@ test("editing a template can update occupied and vacant Approved Posts", async (
     departmentCode: "CNC",
     designationCode: "OP",
     rejectDuplicates: true,
+    shiftType: "Day",
+    shiftStartTime: "09:00",
+    shiftEndTime: "18:00",
   }
   const template = await repository.upsertTemplate({
     ...input,
@@ -218,6 +221,11 @@ test("editing a template can update occupied and vacant Approved Posts", async (
   expect((await repository.listTemplates(organizationId))[0]?.experienceRequirement).toBe(
     "Two years"
   )
+  expect((await repository.listTemplates(organizationId))[0]).toMatchObject({
+    shiftType: "Day",
+    shiftStartTime: "09:00",
+    shiftEndTime: "18:00",
+  })
   const beforePosts = await pool.query<{ experience_requirement: string }>(
     `SELECT experience_requirement FROM recruitment.posts WHERE organization_id = $1`,
     [organizationId]

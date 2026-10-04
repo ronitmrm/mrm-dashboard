@@ -23,6 +23,9 @@ test("job register returns the template selected for each job", async () => {
     post_code: "POST-1",
     post_date: "2026-10-03",
     requirement_template_code: "JRT-0001",
+    shift_type: "Night",
+    start_time: "22:00:00",
+    end_time: "06:00:00",
     status: "Open",
     target_date: null,
     title: "Operator",
@@ -31,12 +34,52 @@ test("job register returns the template selected for each job", async () => {
   const repository = createRecruitmentRepository({ pool: { query } as unknown as Pool })
 
   await expect(repository.listJobs("org-1")).resolves.toMatchObject([
-    { id: "job-1", requirementTemplateCode: "JRT-0001" },
+    {
+      id: "job-1",
+      requirementTemplateCode: "JRT-0001",
+      shiftType: "Night",
+      shiftStartTime: "22:00",
+      shiftEndTime: "06:00",
+    },
   ])
   expect(query.mock.calls[0]?.[0]).toContain(
     "template.id = job.requirement_template_id"
   )
   expect(query.mock.calls[0]?.[1]).toEqual(["org-1"])
+})
+
+test("job description templates require a permitted shift and both times", async () => {
+  const query = vi.fn(async (statement: string, parameters?: readonly unknown[]) => {
+    void parameters
+    return {
+      rows: statement.includes("INSERT INTO recruitment.requirement_templates")
+        ? [{ id: "template-1" }]
+        : [],
+    }
+  })
+  const client = { query, release: vi.fn() } as unknown as PoolClient
+  const repository = createRecruitmentRepository({
+    pool: { connect: vi.fn(async () => client) } as unknown as Pool,
+  })
+  const input = {
+    organizationId: "org-1",
+    templateCode: "JRT-1",
+    name: "Night Operator",
+    departmentCode: "CNC",
+    designationCode: "OP",
+    shiftType: "Night",
+    shiftStartTime: "22:00",
+    shiftEndTime: "06:00",
+  }
+
+  await expect(repository.upsertTemplate(input)).resolves.toEqual({ id: "template-1" })
+  const insert = query.mock.calls.find(([statement]) =>
+    statement.includes("INSERT INTO recruitment.requirement_templates")
+  )
+  expect(insert?.[0]).toContain("shift_type, shift_start_time, shift_end_time")
+  expect(insert?.[1]?.slice(-3)).toEqual(["Night", "22:00", "06:00"])
+  await expect(repository.upsertTemplate({ ...input, shiftEndTime: "" }))
+    .rejects.toThrow("Shift End Time is required")
 })
 
 test("pending offer responses are scoped to approved applications without a response", async () => {

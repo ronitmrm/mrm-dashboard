@@ -9,13 +9,19 @@ The import assigns vacant posts only; it does not change existing assignments.
 
 ## Creating a job from Employee Master
 
-Create Job first asks for a target date and an optional active Job Template.
+Create Job first asks for a target date and an optional active Job Description
+Template.
 The selected template is copied into the new job's requirements; choosing No
 Template creates it without a template link. This does not change the Employee
 Master's template. Combined-role templates must belong to the selected combined
 role. Other job-entry paths retain their existing linked-template defaults.
 
-## Editing a Job Template
+## Job Description Templates
+
+Each new or edited template requires a Shift Type of Day, Night, or Rotation,
+plus a Shift Start Time and Shift End Time. Night shifts may span midnight.
+Existing templates without shift details remain blank until edited. A new Job
+Post copies the selected template's shift and description into its own record.
 
 Editing a template changes the reusable profile for future Job Posts. HR must
 choose whether to apply its requirements to all matching Approved Posts,
@@ -38,7 +44,7 @@ Any linked job that is not Closed still blocks deletion.
 
 Deleting a combined role removes the grouping, not its individual Approved Posts
 or employee assignments. Member posts regain their individual vacancy codes;
-job templates remain available with their combined-role link cleared. The audit
+job description templates remain available with their combined-role link cleared. The audit
 log retains the deleted grouping and membership. Any linked Job Post (including
 closed jobs) or pending replacement blocks deletion, preserving recruitment
 history and atomic appointment workflows. Deletion requires the independent

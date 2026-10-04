@@ -200,7 +200,7 @@ export const taskCapabilityLabels = {
   [hrTaskCapabilities.deleteJob]: "Delete Job",
   [hrTaskCapabilities.deletePost]: "Delete Approved Post",
   [hrTaskCapabilities.deleteRecruitmentMaster]:
-    "Delete HR Department / Designation / Job Template",
+    "Delete HR Department / Designation / Job Description Template",
   [hrTaskCapabilities.logCandidateEvent]: "Add To Candidate Timeline",
   [hrTaskCapabilities.recordInterview]: "Save Interview Outcome",
   [hrTaskCapabilities.renameRecruitmentMaster]:

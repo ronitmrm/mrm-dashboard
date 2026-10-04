@@ -85,8 +85,13 @@ export type RecruitmentTemplateRow = {
   minimumSalary: number | null
   name: string
   roleResponsibilities: string | null
+  shiftEndTime: string | null
+  shiftStartTime: string | null
+  shiftType: RecruitmentShiftType | null
   templateCode: string
 }
+
+export type RecruitmentShiftType = "Day" | "Night" | "Rotation"
 
 export type RecruitmentCombinedRoleRow = {
   id: string
@@ -147,6 +152,9 @@ export type RecruitmentJobRow = {
   postCode: string | null
   postDate: string
   requirementTemplateCode: string | null
+  shiftEndTime: string | null
+  shiftStartTime: string | null
+  shiftType: RecruitmentShiftType | null
   status: string
   targetDate: string | null
   title: string
@@ -307,6 +315,21 @@ function required(value: unknown, label: string) {
   const normalized = String(value ?? "").trim()
   if (!normalized) throw new Error(`${label} is required.`)
   return normalized
+}
+
+function requiredShiftType(value: unknown): RecruitmentShiftType {
+  const shiftType = required(value, "Shift Type")
+  if (shiftType === "Day" || shiftType === "Night" || shiftType === "Rotation") {
+    return shiftType
+  }
+  throw new Error("Shift Type must be Day, Night, or Rotation.")
+}
+
+function requiredShiftTime(value: unknown, label: string) {
+  const time = required(value, label)
+  const match = /^([01]\d|2[0-3]):([0-5]\d)(?::00)?$/.exec(time)
+  if (!match) throw new Error(`${label} must be a valid 24-hour time.`)
+  return `${match[1]}:${match[2]}`
 }
 
 function optional(value: unknown) {
@@ -1262,6 +1285,9 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         minimum_salary: string | null
         name: string
         role_responsibilities: string | null
+        shift_end_time: string | null
+        shift_start_time: string | null
+        shift_type: RecruitmentShiftType | null
         template_code: string
       }>(
         `
@@ -1273,7 +1299,9 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             designation.code AS designation_code,
             template.gender, template.experience_requirement,
             template.education, template.minimum_salary,
-            template.maximum_salary, template.role_responsibilities
+            template.maximum_salary, template.role_responsibilities,
+            template.shift_type, template.shift_start_time::text,
+            template.shift_end_time::text
           FROM recruitment.requirement_templates template
           LEFT JOIN recruitment.departments department
             ON department.id = template.department_id
@@ -1303,6 +1331,9 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           row.minimum_salary === null ? null : Number(row.minimum_salary),
         name: row.name,
         roleResponsibilities: row.role_responsibilities,
+        shiftEndTime: row.shift_end_time?.slice(0, 5) ?? null,
+        shiftStartTime: row.shift_start_time?.slice(0, 5) ?? null,
+        shiftType: row.shift_type,
         templateCode: row.template_code,
       }))
     },
@@ -1665,6 +1696,9 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         post_code: string | null
         post_date: string
         requirement_template_code: string | null
+        shift_type: RecruitmentShiftType | null
+        start_time: string | null
+        end_time: string | null
         status: string
         target_date: string | null
         title: string
@@ -1673,6 +1707,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         `
           SELECT job.id, job.job_number, job.vacancy_code, job.title,
             job.post_date::text, job.target_date::text, job.status,
+            job.shift_type, job.start_time::text, job.end_time::text,
             post.post_code, template.template_code AS requirement_template_code,
             count(application.id)::int AS applicant_count
           FROM recruitment.job_posts job
@@ -1694,6 +1729,9 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         postCode: row.post_code,
         postDate: row.post_date,
         requirementTemplateCode: row.requirement_template_code,
+        shiftEndTime: row.end_time?.slice(0, 5) ?? null,
+        shiftStartTime: row.start_time?.slice(0, 5) ?? null,
+        shiftType: row.shift_type,
         status: row.status,
         targetDate: row.target_date,
         title: row.title,
@@ -1714,6 +1752,9 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             post_code: string | null
             post_date: string
             requirement_template_code: string | null
+            shift_type: RecruitmentShiftType | null
+            start_time: string | null
+            end_time: string | null
             status: string
             target_date: string | null
             title: string
@@ -1722,6 +1763,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             `
               SELECT job.id, job.job_number, job.vacancy_code, job.title,
                 job.post_date::text, job.target_date::text, job.status,
+                job.shift_type, job.start_time::text, job.end_time::text,
                 post.post_code, template.template_code AS requirement_template_code,
                 count(application.id)::int AS applicant_count
               FROM recruitment.job_posts job
@@ -1945,6 +1987,9 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           postCode: job.post_code,
           postDate: job.post_date,
           requirementTemplateCode: job.requirement_template_code,
+          shiftEndTime: job.end_time?.slice(0, 5) ?? null,
+          shiftStartTime: job.start_time?.slice(0, 5) ?? null,
+          shiftType: job.shift_type,
           status: job.status,
           targetDate: job.target_date,
           title: job.title,
@@ -2336,6 +2381,9 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         minimumSalary?: string | number | null
         name: string
         roleResponsibilities?: string | null
+        shiftEndTime?: string | null
+        shiftStartTime?: string | null
+        shiftType?: string | null
         templateCode: string
         templateId?: string | null
       }
@@ -2350,7 +2398,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
              FOR UPDATE`,
             [templateId, input.organizationId, input.templateCode]
           )
-          if (!existing.rows[0]) throw new Error("Job template was not found.")
+          if (!existing.rows[0]) throw new Error("Job description template was not found.")
         }
         await assertMasterAvailable(
           client,
@@ -2361,6 +2409,9 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         )
         const departmentCode = optional(input.departmentCode)
         const combinedRoleId = optional(input.combinedRoleId)
+        const shiftType = requiredShiftType(input.shiftType)
+        const shiftStartTime = requiredShiftTime(input.shiftStartTime, "Shift Start Time")
+        const shiftEndTime = requiredShiftTime(input.shiftEndTime, "Shift End Time")
         if ((departmentCode ? 1 : 0) + (combinedRoleId ? 1 : 0) !== 1) {
           throw new Error(
             "Select either one department or one combined job for the template."
@@ -2373,11 +2424,13 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
               combined_role_id, designation_id, gender,
               experience_requirement, education,
               minimum_salary, maximum_salary, role_responsibilities,
+              shift_type, shift_start_time, shift_end_time,
               created_by_user_id, updated_by_user_id, source_system,
               source_table, source_id
             )
             SELECT $1, upper($2), $3, department.id, combined.id,
-              designation.id, $4, $5, $6, $7, $8, $9, $10, $10,
+              designation.id, $4, $5, $6, $7, $8, $9,
+              $15, $16::time, $17::time, $10, $10,
               'mrm-dashboard', 'requirementTemplates', $11
             FROM recruitment.designations designation
             LEFT JOIN recruitment.departments department
@@ -2402,6 +2455,9 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
               minimum_salary = EXCLUDED.minimum_salary,
               maximum_salary = EXCLUDED.maximum_salary,
               role_responsibilities = EXCLUDED.role_responsibilities,
+              shift_type = EXCLUDED.shift_type,
+              shift_start_time = EXCLUDED.shift_start_time,
+              shift_end_time = EXCLUDED.shift_end_time,
               updated_by_user_id = EXCLUDED.updated_by_user_id,
               updated_at = now(),
               row_version = recruitment.requirement_templates.row_version + 1
@@ -2422,6 +2478,9 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             required(input.designationCode, "Designation"),
             departmentCode ?? "",
             combinedRoleId ?? "",
+            shiftType,
+            shiftStartTime,
+            shiftEndTime,
           ]
         )
         if (!result.rows[0]) {
@@ -2597,7 +2656,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             `,
             [input.organizationId, templateCode]
           )
-          if (!template.rows[0]) throw new Error("Job template was not found.")
+          if (!template.rows[0]) throw new Error("Job description template was not found.")
           templateId = template.rows[0].id
         }
 
@@ -2748,7 +2807,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             `,
             [input.organizationId, templateCode]
           )
-          if (!template.rows[0]) throw new Error("Job template was not found.")
+          if (!template.rows[0]) throw new Error("Job description template was not found.")
           templateId = template.rows[0].id
         }
 
@@ -3747,7 +3806,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             [input.organizationId, templateCode, targetPost.combined_role_id]
           )
           if (!template.rows[0]) {
-            throw new Error("Select an active job template for this post.")
+            throw new Error("Select an active job description template for this post.")
           }
         }
         const vacancyCode = required(targetPost.vacancy_code, "Vacancy code")
@@ -3772,7 +3831,8 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
               organization_id, post_id, requirement_template_id, job_number,
               vacancy_code, title, target_date, minimum_salary,
               maximum_salary, gender, education, experience_requirement,
-              description, created_by_user_id, updated_by_user_id,
+              description, shift_type, start_time, end_time,
+              created_by_user_id, updated_by_user_id,
               source_system, source_table, source_id
             )
             SELECT selected.organization_id, post.id, template.id,
@@ -3786,6 +3846,8 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
               COALESCE(template.education, post.education),
               COALESCE(template.experience_requirement, post.experience_requirement),
               COALESCE(template.role_responsibilities, post.role_responsibilities),
+              template.shift_type, template.shift_start_time,
+              template.shift_end_time,
               $2, $2, 'mrm-dashboard', 'jobs', $3
             FROM recruitment.posts selected
             LEFT JOIN recruitment.combined_roles combined

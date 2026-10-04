@@ -79,7 +79,7 @@ export function ApprovedPostFields({
         </NativeSelect>
       </Field>
       <Field>
-        <FieldLabel htmlFor="post-template">Job Template</FieldLabel>
+        <FieldLabel htmlFor="post-template">Job Description Template</FieldLabel>
         <NativeSelect
           className="w-full"
           id="post-template"

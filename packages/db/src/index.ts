@@ -158,6 +158,7 @@ export {
   type RecruitmentJobWorkspace,
   type RecruitmentMasterSnapshot,
   type RecruitmentPostRow,
+  type RecruitmentShiftType,
   type RecruitmentTemplateRow,
 } from "./recruitment"
 export {
