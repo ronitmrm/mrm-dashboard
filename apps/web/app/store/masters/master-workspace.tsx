@@ -259,6 +259,7 @@ export function StoreMasterWorkspace({
                     <TableHead>Subcategory</TableHead>
                     <TableHead>Asset Name</TableHead>
                     <TableHead>Make/Model</TableHead>
+                    <TableHead>Make</TableHead>
                     <TableHead>Asset Type</TableHead>
                     <TableHead>Identification</TableHead>
                     <TableHead>Rated Load / Capacity</TableHead>
@@ -291,6 +292,7 @@ export function StoreMasterWorkspace({
                         <TableCell>{item.assetSubcategory}</TableCell>
                         <TableCell>{item.assetName}</TableCell>
                         <TableCell>{item.makeModel}</TableCell>
+                        <TableCell>{item.manufacturerMake || "—"}</TableCell>
                         <TableCell>
                           {item.assetType === "NON_CONSUMABLE"
                             ? "Non Consumable"
@@ -1035,11 +1037,20 @@ function StoreItemTypeForm({
             Enter any other distinguishing specification for this item.
           </FieldDescription>
         </Field>
+        <Field>
+          <FieldLabel htmlFor="master-manufacturer_make">Make (optional)</FieldLabel>
+          <Input
+            defaultValue={defaults.manufacturer_make}
+            id="master-manufacturer_make"
+            name="manufacturer_make"
+            placeholder="e.g. Kaishan"
+          />
+          <FieldDescription>
+            For information only. Make does not change the Asset Code.
+          </FieldDescription>
+        </Field>
         {editing ? (
-          <>
-            <input name="manufacturer_make" type="hidden" value={defaults.manufacturer_make ?? ""} />
-            <input name="model_number" type="hidden" value={defaults.model_number ?? ""} />
-          </>
+          <input name="model_number" type="hidden" value={defaults.model_number ?? ""} />
         ) : null}
         <TextField
           defaultValue={defaults.rated_load}
