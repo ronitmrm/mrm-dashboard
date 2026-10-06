@@ -53,6 +53,7 @@ import {
 import { useRef, useState } from "react"
 import { useFormStatus } from "react-dom"
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 
 import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
 import {
@@ -66,6 +67,7 @@ import { SingleEmployeeAssignmentFields } from "@/components/hr/single-employee-
 import { EmployeeLetterDialog } from "@/components/hr/employee-letter-dialog"
 import { MetricSummary, StandardDialogContent } from "@/components/ui/golden-patterns"
 import { employeeHandoverRows } from "@/lib/employee-handover-rows"
+import { linkedTemplateHref } from "@/lib/recruitment-master-navigation"
 
 type TemplateOption = Pick<
   RecruitmentTemplateRow,
@@ -119,6 +121,7 @@ export function ApprovedPostsTable({
   posts: RecruitmentPostRow[]
   templates?: TemplateOption[]
 }) {
+  const searchParams = useSearchParams()
   const [editingPost, setEditingPost] = useState<RecruitmentPostRow | null>(
     null
   )
@@ -305,7 +308,13 @@ export function ApprovedPostsTable({
                         <TableCell className="font-mono">
                           {row.requirementTemplateCode ? (
                             <Button asChild className="h-auto p-0 font-mono" variant="link">
-                              <Link href={`/hr?panel=postMasterPanel&masterView=masterTables&template=${encodeURIComponent(row.requirementTemplateCode)}`}>
+                              <Link
+                                href={linkedTemplateHref(
+                                  row.requirementTemplateCode,
+                                  searchParams.toString(),
+                                  employeeView
+                                )}
+                              >
                                 {row.requirementTemplateCode}
                               </Link>
                             </Button>
