@@ -70,3 +70,26 @@ test("shows setup-weighted progress from existing snapshots without new cached p
   expect(markup).toContain('width:50%')
   expect(render(250)).toContain('aria-valuenow="75"')
 })
+
+test("shows dispatched finished good and order shortfall instead of active progress", () => {
+  const markup = renderToStaticMarkup(
+    <JobCardRegister actionNeededCount={0} floor="cnc" onOpenMasterReadiness={() => {}}
+      rows={[{ jcNo: "JC-DISPATCHED", partCode: "PART-1", optionNumber: "1", orderPcs: 1100,
+        finalSetupGoodPieces: 1046, dispatchStatus: "Shifted to dispatch" }]}
+      routeRows={[
+        { partNo: "PART-1", optionNumber: "1", setupNo: "1" },
+        { partNo: "PART-1", optionNumber: "1", setupNo: "2" },
+      ]}
+      productionRows={[
+        { jobCard: "JC-DISPATCHED", partCode: "PART-1", setupNo: "1", actualQty: 1046 },
+        { jobCard: "JC-DISPATCHED", partCode: "PART-1", setupNo: "2", actualQty: 1046 },
+      ]}
+      finishDateRows={[]} />
+  )
+
+  expect(markup).toContain("Dispatched")
+  expect(markup).toContain("1,046 / 1,100 pcs")
+  expect(markup).toContain("54 pcs short of order")
+  expect(markup).not.toContain("95.1%")
+  expect(markup).not.toContain('role="progressbar"')
+})
