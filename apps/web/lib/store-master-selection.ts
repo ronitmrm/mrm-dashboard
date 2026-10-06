@@ -3,6 +3,7 @@ export const storeMasterOptions = [
   ["CATEGORY", "Asset Category"],
   ["SUBCATEGORY", "Asset Subcategory"],
   ["ASSET_NAME", "Asset Name"],
+  ["MAKE_MODEL", "Make/Model"],
   ["LOCATION", "Store Location"],
   ["SUPPLIER", "Supplier"],
   ["SUPPLIER_PRICE", "Supplier Price"],
@@ -18,18 +19,20 @@ export type StoreItemIdentity = {
   assetType: string
   id: string
   identificationName: string
+  makeModelId: string
   typeCode: string
 }
 
 export type StoreItemSelection = Pick<
   StoreItemIdentity,
-  "assetCategoryId" | "assetNameId" | "assetSubcategoryId" | "assetType"
+  "assetCategoryId" | "assetNameId" | "assetSubcategoryId" | "assetType" | "makeModelId"
 >
 
 const codeLessStoreMasters = new Set<StoreMasterKey>([
   "CATEGORY",
   "SUBCATEGORY",
   "ASSET_NAME",
+  "MAKE_MODEL",
 ])
 
 export function parseStoreMasterKey(value: unknown): StoreMasterKey | null {
@@ -59,7 +62,8 @@ export function findExistingStoreItem<T extends StoreItemIdentity>(
         item.assetType === selection.assetType &&
         item.assetCategoryId === selection.assetCategoryId &&
         item.assetSubcategoryId === selection.assetSubcategoryId &&
-        item.assetNameId === selection.assetNameId
+        item.assetNameId === selection.assetNameId &&
+        item.makeModelId === selection.makeModelId
     ) ?? null
   )
 }

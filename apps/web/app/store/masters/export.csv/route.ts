@@ -52,6 +52,15 @@ export async function GET(request: Request) {
         "store-asset-name-master.csv"
       )
     }
+    if (master === "MAKE_MODEL") {
+      const rows = (
+        await repository.listAssetClassificationMasters(organizationId)
+      ).makeModels
+      return masterCsvResponse(
+        rows.map((row) => ({ Name: row.name })),
+        "store-make-model-master.csv"
+      )
+    }
     if (master === "LOCATION") {
       const rows = await repository.listLocations(organizationId)
       return masterCsvResponse(
@@ -108,10 +117,9 @@ export async function GET(request: Request) {
         "Asset Category": row.assetCategory,
         "Asset Subcategory": row.assetSubcategory,
         "Asset Name": row.assetName,
+        "Make/Model": row.makeModel,
         "Asset Type": row.assetType,
         Identification: row.identificationName,
-        Make: row.manufacturerMake,
-        Model: row.modelNumber,
         "Rated Load / Capacity": row.ratedLoad,
         "Applicable Item Code": row.applicableItemCode,
         "Drawing Number": row.drawingNumber,

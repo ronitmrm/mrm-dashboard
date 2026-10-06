@@ -52,6 +52,7 @@ import {
   createStoreAssetCategoryAction,
   createStoreAssetNameAction,
   createStoreAssetSubcategoryAction,
+  createStoreMakeModelAction,
   createStoreItemTypeAction,
   createStoreLocationAction,
   createStoreSupplierPriceAction,
@@ -97,6 +98,8 @@ export type StoreMasterData = {
     drawingNumber?: string | null
     id: string
     identificationName: string
+    makeModel: string
+    makeModelId: string
     manufacturerMake: string | null
     minimumStock?: string
     modelNumber: string | null
@@ -119,6 +122,7 @@ export type StoreMasterData = {
       subcategoryName: string
     }>
     categories: Array<{ id: string; name: string }>
+    makeModels: Array<{ id: string; name: string }>
     subcategories: Array<{
       categoryId: string
       categoryName: string
@@ -254,10 +258,9 @@ export function StoreMasterWorkspace({
                     <TableHead>Category</TableHead>
                     <TableHead>Subcategory</TableHead>
                     <TableHead>Asset Name</TableHead>
+                    <TableHead>Make/Model</TableHead>
                     <TableHead>Asset Type</TableHead>
                     <TableHead>Identification</TableHead>
-                    <TableHead>Make</TableHead>
-                    <TableHead>Model</TableHead>
                     <TableHead>Rated Load / Capacity</TableHead>
                     <TableHead>Drawing</TableHead>
                     <TableHead>Unit</TableHead>
@@ -287,14 +290,13 @@ export function StoreMasterWorkspace({
                         <TableCell>{item.assetCategory}</TableCell>
                         <TableCell>{item.assetSubcategory}</TableCell>
                         <TableCell>{item.assetName}</TableCell>
+                        <TableCell>{item.makeModel}</TableCell>
                         <TableCell>
                           {item.assetType === "NON_CONSUMABLE"
                             ? "Non Consumable"
                             : "Consumable"}
                         </TableCell>
                         <TableCell>{item.identificationName}</TableCell>
-                        <TableCell>{item.manufacturerMake || "—"}</TableCell>
-                        <TableCell>{item.modelNumber || "—"}</TableCell>
                         <TableCell>{item.ratedLoad || "—"}</TableCell>
                         <TableCell>
                           {drawing ? (
@@ -489,7 +491,7 @@ function masterRows(
     case "ITEM_TYPE":
       return data.items.map((item) => ({
         code: item.typeCode,
-        details: `${item.assetType === "NON_CONSUMABLE" ? "Non Consumable" : "Consumable"} · ${item.assetCategory} / ${item.assetSubcategory} / ${item.assetName} · ${item.unit}`,
+        details: `${item.assetType === "NON_CONSUMABLE" ? "Non Consumable" : "Consumable"} · ${item.assetCategory} / ${item.assetSubcategory} / ${item.assetName} / ${item.makeModel} · ${item.unit}`,
         key: item.id,
         kind: "store_item_type",
         name: item.identificationName,
@@ -502,6 +504,7 @@ function masterRows(
           asset_type: item.assetType,
           drawing_number: item.drawingNumber ?? "",
           identification_name: item.identificationName,
+          make_model_id: item.makeModelId,
           manufacturer_make: item.manufacturerMake ?? "",
           master_id: item.id,
           minimum_stock: item.minimumStock ?? "0",
@@ -547,6 +550,18 @@ function masterRows(
           asset_name: assetName.name,
           asset_subcategory_id: assetName.subcategoryId,
           master_id: assetName.id,
+        },
+      }))
+    case "MAKE_MODEL":
+      return data.masters.makeModels.map((makeModel) => ({
+        details: "Make/Model",
+        key: makeModel.id,
+        kind: "store_make_model",
+        name: makeModel.name,
+        editable: true,
+        editDefaults: {
+          make_model: makeModel.name,
+          master_id: makeModel.id,
         },
       }))
     case "LOCATION":
@@ -712,6 +727,19 @@ function masterForm(
           >
             Save Asset Name
           </Button>
+        </MasterEntryForm>
+      )
+    case "MAKE_MODEL":
+      return (
+        <MasterEntryForm action={createStoreMakeModelAction}>
+          <input name="master_id" type="hidden" value={defaults.master_id ?? ""} />
+          <TextField
+            defaultValue={defaults.make_model}
+            label="Make/Model"
+            name="make_model"
+            required
+          />
+          <Button className="mt-5" type="submit">Save Make/Model</Button>
         </MasterEntryForm>
       )
     case "LOCATION":
@@ -904,10 +932,12 @@ function StoreItemTypeForm({
   const initialCategoryId = defaults.asset_category_id ?? ""
   const initialSubcategoryId = defaults.asset_subcategory_id ?? ""
   const initialAssetNameId = defaults.asset_name_id ?? ""
+  const initialMakeModelId = defaults.make_model_id ?? ""
   const [assetType, setAssetType] = useState(initialAssetType)
   const [categoryId, setCategoryId] = useState(initialCategoryId)
   const [subcategoryId, setSubcategoryId] = useState(initialSubcategoryId)
   const [assetNameId, setAssetNameId] = useState(initialAssetNameId)
+  const [makeModelId, setMakeModelId] = useState(initialMakeModelId)
   const [saved, setSaved] = useState(false)
   const selectedUnit = defaults.unit ?? ""
   const unitOptions = !selectedUnit || STORE_UNIT_OPTIONS.some(
@@ -942,6 +972,7 @@ function StoreItemTypeForm({
       assetNameId,
       assetSubcategoryId: subcategoryId,
       assetType,
+      makeModelId,
     },
     defaults.master_id
   )
@@ -966,6 +997,7 @@ function StoreItemTypeForm({
           setCategoryId("")
           setSubcategoryId("")
           setAssetNameId("")
+          setMakeModelId("")
         }
         setSaved(true)
       }}
@@ -1003,16 +1035,12 @@ function StoreItemTypeForm({
             Enter any other distinguishing specification for this item.
           </FieldDescription>
         </Field>
-        <TextField
-          defaultValue={defaults.manufacturer_make}
-          label="Make (optional)"
-          name="manufacturer_make"
-        />
-        <TextField
-          defaultValue={defaults.model_number}
-          label="Model (optional)"
-          name="model_number"
-        />
+        {editing ? (
+          <>
+            <input name="manufacturer_make" type="hidden" value={defaults.manufacturer_make ?? ""} />
+            <input name="model_number" type="hidden" value={defaults.model_number ?? ""} />
+          </>
+        ) : null}
         <TextField
           defaultValue={defaults.rated_load}
           label="Rated Load / Capacity (optional, include unit)"
@@ -1068,6 +1096,17 @@ function StoreItemTypeForm({
           value={assetNameId}
         />
         <SelectField
+          label="Make/Model"
+          name="make_model_id"
+          placeholder="Select Make/Model"
+          onChange={(event) => setMakeModelId(event.target.value)}
+          options={data.masters.makeModels.map((row) => ({
+            label: row.name,
+            value: row.id,
+          }))}
+          value={makeModelId}
+        />
+        <SelectField
           defaultValue={selectedProductUid}
           label="Product Portfolio UID"
           name="applicable_item_code"
@@ -1109,7 +1148,7 @@ function StoreItemTypeForm({
       </FieldGroup>
       {!editing ? (
         <p className="mt-4 text-sm text-muted-foreground">
-          For a different model or capacity, select a distinct Asset Name to generate a separate Asset Code.
+          Select a different Make/Model to generate a separate Asset Code for the same Asset Name.
         </p>
       ) : null}
       {saved ? (
@@ -1127,7 +1166,7 @@ function StoreItemTypeForm({
       ) : null}
       <Button
         className="mt-5"
-        disabled={!assetNameId || Boolean(existingItem)}
+        disabled={!assetNameId || !makeModelId || Boolean(existingItem)}
         type="submit"
       >
         {editing

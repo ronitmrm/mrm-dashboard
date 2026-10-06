@@ -234,7 +234,7 @@ export default async function NewItemRequestsPage() {
                                   key={item.id}
                                   value={item.id}
                                 >
-                                  {item.typeCode} — {item.assetName} ·{" "}
+                                  {item.typeCode} — {item.assetName} · {item.makeModel} ·{" "}
                                   {item.assetCategory} / {item.assetSubcategory}
                                 </NativeSelectOption>
                               ))}

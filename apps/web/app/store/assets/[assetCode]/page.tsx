@@ -207,8 +207,7 @@ export default async function StoreAssetWorkspacePage({
               value={`${asset.assetType} / ${asset.category} / ${asset.subcategory}`}
             />
             <Info label="Asset Name" value={asset.assetName} />
-            <Info label="Make" value={asset.manufacturerMake || "Not recorded"} />
-            <Info label="Model" value={asset.modelNumber || "Not recorded"} />
+            <Info label="Make/Model" value={asset.makeModel} />
             <Info label="Rated Load / Capacity" value={asset.ratedLoad || "Not recorded"} />
             <Info label="Accountable Store" value={asset.accountableStoreName} />
             <Info
@@ -824,8 +823,7 @@ function StoreItemWorkspace({
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Info label="Asset Name" value={item.assetName} />
         <Info label="Identification" value={item.identificationName} />
-        <Info label="Make" value={item.manufacturerMake || "Not recorded"} />
-        <Info label="Model" value={item.modelNumber || "Not recorded"} />
+        <Info label="Make/Model" value={item.makeModel} />
         <Info label="Rated Load / Capacity" value={item.ratedLoad || "Not recorded"} />
         <Info
           label="Classification"
