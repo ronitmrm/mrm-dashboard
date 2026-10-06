@@ -120,8 +120,8 @@ export default async function StoreStockPage({
   const today = istDateValue()
   const actionFormId = "stock-row-action"
   const columnCount = mode === "view" || mode === "adjust"
-    ? 12
-    : mode === "order" ? 14 : 13
+    ? 14
+    : mode === "order" ? 16 : 15
 
   return (
     <div className="flex flex-col gap-6">
@@ -212,7 +212,7 @@ export default async function StoreStockPage({
                   ? "Select physical Unit IDs, then continue to enter repair details and Suppliers for each unit."
                   : mode === "order"
                     ? "Select Asset Codes and quantities. The cheapest active Supplier quote is selected by default."
-                  : "Main available is stock Main Store can issue. Company on hand includes every accountable Store. Each Non Consumable Unit ID shows its responsible Store and physical holder."}
+                  : "Asset Code rows summarize stock across Stores. Main Available is stock Main Store can issue; Company On Hand includes every accountable Store. Unit ID rows show their status, responsible Store, and physical holder."}
               </CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -297,12 +297,14 @@ export default async function StoreStockPage({
                   Asset Code / Unit ID
                 </TableHead>
                 <TableHead>Asset Name</TableHead>
+                <TableHead>Make/Model</TableHead>
+                <TableHead data-filterable="true">Asset Type</TableHead>
                 <TableHead>Asset Category</TableHead>
                 <TableHead>Asset Subcategory</TableHead>
                 <TableHead>Main Available</TableHead>
                 <TableHead>Company On Hand</TableHead>
                 <TableHead>Company Assigned</TableHead>
-                <TableHead data-filterable="true">Status</TableHead>
+                <TableHead data-filterable="true">Unit Status</TableHead>
                 <TableHead data-filterable="true">Responsible Store</TableHead>
                 <TableHead>Location / Holder</TableHead>
                 <TableHead>Supplier</TableHead>
@@ -403,15 +405,12 @@ export default async function StoreStockPage({
                         </Link>
                       ) : null}
                     </TableCell>
+                    <TableCell>{item.assetName}</TableCell>
+                    <TableCell>{item.makeModel}</TableCell>
                     <TableCell>
-                      {item.assetName}
-                      <span className="block text-xs text-muted-foreground">
-                        {item.makeModel}
-                        {item.identificationName ? ` · ${item.identificationName}` : ""} ·{" "}
-                        {item.assetType === "NON_CONSUMABLE"
-                          ? "Non Consumable"
-                          : "Consumable"}
-                      </span>
+                      {item.assetType === "NON_CONSUMABLE"
+                        ? "Non Consumable"
+                        : "Consumable"}
                     </TableCell>
                     <TableCell>{item.assetCategory}</TableCell>
                     <TableCell>{item.assetSubcategory}</TableCell>
@@ -419,9 +418,7 @@ export default async function StoreStockPage({
                     <TableCell>{item.companyQuantity}</TableCell>
                     <TableCell>{item.assignedQuantity}</TableCell>
                     <TableCell
-                      data-filter-value={
-                        item.physicalUnit?.status ?? "Item Type"
-                      }
+                      data-filter-value={item.physicalUnit?.status ?? "—"}
                     >
                       {item.physicalUnit ? (
                         <StatusBadge
@@ -440,14 +437,12 @@ export default async function StoreStockPage({
                           }
                           value={item.physicalUnit.status}
                         />
-                      ) : item.trackingMode === "SERIALIZED" ? (
-                        "Item Type"
                       ) : (
-                        "Consumable"
+                        "—"
                       )}
                     </TableCell>
-                    <TableCell data-filter-value={item.physicalUnit?.accountableStoreName ?? "All Stores"}>
-                      {item.physicalUnit?.accountableStoreName ?? "All Stores"}
+                    <TableCell data-filter-value={item.physicalUnit?.accountableStoreName ?? "—"}>
+                      {item.physicalUnit?.accountableStoreName ?? "—"}
                     </TableCell>
                     <TableCell>
                       {item.physicalUnit
