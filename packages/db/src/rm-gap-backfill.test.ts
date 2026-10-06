@@ -367,6 +367,7 @@ test("does not replan a completed setup after a later machine breakdown", () => 
     expect(control.machinePlanDetailRows.filter((row) => row.jcNo === "P1497" && row.setupNo === "2").map((row) => ({ machine: row.machine, stage: row.shopFloorStage, good: row.rawActualQty }))).toEqual([
       { machine: "CNC-14", stage: "item_complete", good: 693 },
     ])
+    expect(control.productionDashboardRows.find((row) => row.jcNo === "P1497")?.actualFinishDate).toBe("25-Sept-26")
   } finally {
     vi.useRealTimers()
   }

@@ -79,7 +79,7 @@ test("approved dispatch marks the Job Card dispatched", () => {
       expect.objectContaining({ jcNo: "P-REJECTED", dispatchStatus: "In production" }),
     ]),
     productionDashboardRows: expect.arrayContaining([
-      expect.objectContaining({ jcNo: "P-DISPATCHED", status: "Dispatched" }),
+      expect.objectContaining({ jcNo: "P-DISPATCHED", status: "Dispatched", actualFinishDate: "" }),
       expect.objectContaining({ jcNo: "P-REJECTED", status: "Pending" }),
     ]),
   })
@@ -106,6 +106,49 @@ test("current setup state wins over a later-timed historical stage event", () =>
   expect(snapshot.productionControl?.machinePlanDetailRows.find((row) => row.jcNo === "P2263" && row.setupNo === "1")).toMatchObject({
     machine: "CNC-10", shopFloorStage: "item_complete", runningStatus: "Complete", rawActualQty: 60,
   })
+})
+
+test("actual finish waits for every machine on the final setup", () => {
+  const createdAt = "2026-09-24T10:00:00Z"
+  const entry = (entryType: string, payload: Record<string, unknown>) => ({ entryType, payload, createdAt })
+  const states = ["CNC-1", "CNC-2"].map((machine, index) => ({
+    jcNo: "P-FINISH", partCode: "M-FINISH", optionNumber: "1", setupNo: "1", machine,
+    stage: "item_complete", completedAt: index ? "2026-09-24T10:00:00Z" : "2026-09-23T10:00:00Z",
+  }))
+  const input = {
+    workbookName: "PostgreSQL", productionFloorCode: "cnc" as const,
+    productionEntries: states.map((state) => ({
+      jobCard: state.jcNo, partCode: state.partCode, setupNo: state.setupNo,
+      machine: state.machine, machineType: "CNC", operatorId: "OP", prodDate: "2026-09-24",
+      outputQty: 50, actualQty: 50, rejectQty: 0, targetQty: 50,
+    })),
+    dataEntries: [
+      entry("work_order", { jcNo: "P-FINISH", partCode: "M-FINISH", optionNumber: "1", orderPcs: 100, rmInwardDate: "2026-09-23", rmInwardKg: 1 }),
+      entry("route", { partNo: "M-FINISH", optionNumber: "1", setupNo: "1", machineType: "CNC", machineFamily: "JT" }),
+      entry("cycle", { partNo: "M-FINISH", optionNumber: "1", setupNo: "1", cycleTime: 60 }),
+      ...states.map((state) => entry("machine_master", { machineNo: state.machine, machineType: "CNC", machineFamily: "JT", status: "Active" })),
+    ],
+    currentShopFloorStatusRows: states,
+  }
+
+  const completed = buildLegacyDashboardSnapshot(input).productionControl
+  expect(completed.machinePlanDetailRows.filter((row) => row.jcNo === "P-FINISH")).toHaveLength(2)
+  expect(completed.productionDashboardRows[0]?.actualFinishDate).toBe("24-Sept-26")
+
+  const withoutPlan = buildLegacyDashboardSnapshot({
+    ...input,
+    dataEntries: input.dataEntries.map((row) => row.entryType === "work_order"
+      ? { ...row, payload: { jcNo: "P-FINISH", partCode: "M-FINISH", optionNumber: "1", orderPcs: 100 } }
+      : row),
+  }).productionControl
+  expect(withoutPlan.machinePlanDetailRows).toHaveLength(0)
+  expect(withoutPlan.productionDashboardRows[0]?.actualFinishDate).toBe("24-Sept-26")
+
+  const incomplete = buildLegacyDashboardSnapshot({
+    ...input,
+    currentShopFloorStatusRows: states.map((state, index) => index ? { ...state, stage: "operator_started" } : state),
+  }).productionControl
+  expect(incomplete.productionDashboardRows[0]?.actualFinishDate).toBe("")
 })
 
 describe("legacy dashboard route selections", () => {

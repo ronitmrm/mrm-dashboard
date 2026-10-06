@@ -129,7 +129,7 @@ export function JobCardRegister({
         <div className="rounded-md border min-w-0">
  <OperationalTable containerClassName="max-h-[70vh]" excelFilters>
             <TableHeader className="sticky top-0 z-10 bg-background"><TableRow>
-              <TableHead data-filterable="true">Job Card</TableHead><TableHead>Part</TableHead><TableHead>Description</TableHead><TableHead>FG PO</TableHead><TableHead>FG PO Date</TableHead><TableHead className="text-right">Order Qty</TableHead><TableHead>Stage</TableHead><TableHead title="Immutable first valid forecast linked to the first RM receipt; legacy unavailable values are not guessed">Planned Finish Date</TableHead><TableHead title="Latest completion forecast across all route setups; updates after planning recalculates">Current Estimated Finish</TableHead><TableHead>Production Progress / Outcome</TableHead><TableHead>Route</TableHead><TableHead />
+              <TableHead data-filterable="true">Job Card</TableHead><TableHead>Part</TableHead><TableHead>Description</TableHead><TableHead>FG PO</TableHead><TableHead>FG PO Date</TableHead><TableHead className="text-right">Order Qty</TableHead><TableHead>Stage</TableHead><TableHead title="Immutable first valid forecast linked to the first RM receipt; legacy unavailable values are not guessed">Planned Finish Date</TableHead><TableHead title="Latest completion forecast across all route setups; updates after planning recalculates">Current Estimated Finish</TableHead><TableHead title="Recorded Item Complete date of the final route setup">Actual Finish Date</TableHead><TableHead>Production Progress / Outcome</TableHead><TableHead>Route</TableHead><TableHead />
             </TableRow></TableHeader>
             <TableBody>{progressRows.length ? progressRows.map((row) => {
               const jobCard = first(row, ["jcNo", "JobCardNo", "jobCard"])
@@ -144,6 +144,7 @@ export function JobCardRegister({
               const short = Math.max(ordered - finished, 0)
               const finishDates = finishDatesByJobCard.get(jobCardKey(row))
               const plannedFinish = text(finishDates?.plannedDispatchDateAtRmReceipt)
+              const actualFinish = text(finishDates?.actualFinishDate)
               return <TableRow key={jobCard}>
                 <TableCell><Link className="font-semibold text-primary hover:underline" href={href}>{jobCard}</Link></TableCell>
                 <TableCell>{first(row, ["partCode", "itemCode", "PART CODE"])}</TableCell>
@@ -154,6 +155,7 @@ export function JobCardRegister({
                 <TableCell>{stage}</TableCell>
                 <TableCell>{plannedFinish || <span className="text-muted-foreground">Not recorded</span>}</TableCell>
                 <TableCell>{formatPlanningFinish(finishDates?.currentProbableDispatchDate, finishDates?.currentProbableDispatchWorkingHours)}</TableCell>
+                <TableCell>{actualFinish || <span className="text-muted-foreground">{dispatched || stage === "Production complete" ? "Not recorded" : "-"}</span>}</TableCell>
                 <TableCell className="min-w-48">
                   {dispatched ? (
                     <div className="space-y-1.5 py-1">
@@ -180,7 +182,7 @@ export function JobCardRegister({
                 <TableCell>{first(row, ["optionNumber", "selectedOption", "routeStatus"])}</TableCell>
                 <TableCell><Button asChild size="sm" variant="outline"><Link href={href}>Open <ExternalLink /></Link></Button></TableCell>
               </TableRow>
-            }) : <TableRow><TableCell colSpan={12} className="py-10 text-center text-muted-foreground">No Job Cards match this search.</TableCell></TableRow>}</TableBody>
+            }) : <TableRow><TableCell colSpan={13} className="py-10 text-center text-muted-foreground">No Job Cards match this search.</TableCell></TableRow>}</TableBody>
  </OperationalTable>
         </div>
       </CardContent>

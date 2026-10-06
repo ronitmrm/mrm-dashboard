@@ -1387,6 +1387,7 @@ function buildProductionControl({
     dispatchRows,
     machinePlanDetailRows,
     machineRows,
+    shopFloorStatusRows,
     planningCalendar,
     baselineRows: productionFinishBaselineRows,
     routeGroups,
@@ -1562,6 +1563,7 @@ function buildProductionDashboardRows({
   dispatchRows,
   machinePlanDetailRows,
   machineRows,
+  shopFloorStatusRows,
   planningCalendar,
   routeGroups,
   workOrderRows,
@@ -1573,12 +1575,14 @@ function buildProductionDashboardRows({
   dispatchRows: Record<string, unknown>[];
   machinePlanDetailRows: Record<string, unknown>[];
   machineRows: Record<string, unknown>[];
+  shopFloorStatusRows: Record<string, unknown>[];
   planningCalendar: PlanningCalendar;
   routeGroups: Map<string, Record<string, unknown>[]>;
   workOrderRows: Record<string, unknown>[];
 }) {
   const cycleByKey = latestMasterRows(cycleRows);
   const plansByWorkOrder = groupByRecord(machinePlanDetailRows, productionDashboardRowKey);
+  const savedSetupStatuses = [...latestShopFloorStatusBySetup(shopFloorStatusRows).values()];
   const baselineByWorkOrder = new Map(
     baselineRows.map((row) => [productionDashboardRowKey(row), row]),
   );
@@ -1598,6 +1602,26 @@ function buildProductionDashboardRows({
   return workOrderRows.map((workOrder) => {
     const key = productionDashboardRowKey(workOrder);
     const plans = plansByWorkOrder.get(key) ?? [];
+    const finalSetupNumber = rowText(workOrder, "finalSetupNumber");
+    const selectedOption = rowText(workOrder, "optionNumber");
+    const finalSetupPlans = finalSetupNumber ? plans.filter((plan) =>
+      canonicalKey(rowText(plan, "optionNumber")) === canonicalKey(selectedOption)
+      && canonicalKey(rowText(plan, "setupNo")) === canonicalKey(finalSetupNumber)) : [];
+    const finalSetupStatuses = finalSetupNumber ? savedSetupStatuses.filter((status) =>
+      productionDashboardRowKey(status) === key
+      && canonicalKey(rowText(status, "optionNumber")) === canonicalKey(selectedOption)
+      && canonicalKey(setupStepKey(rowText(status, "setupNo"), selectedOption)) === canonicalKey(finalSetupNumber)
+      && rowText(status, "machine")) : [];
+    const completedMachines = new Set(finalSetupStatuses.map((status) => canonicalKey(rowText(status, "machine"))));
+    const finalCompletionDates = finalSetupStatuses.map((status) =>
+      rowText(status, "stage") === "item_complete"
+        ? recordedCompletionDate(rowValue(status, "completedAt"))
+        : "");
+    const actualFinishDate = finalCompletionDates.length
+      && finalCompletionDates.every(Boolean)
+      && finalSetupPlans.every((plan) => completedMachines.has(canonicalKey(rowText(plan, "machine"))))
+      ? dateLabel(maxDateValue(...finalCompletionDates))
+      : "";
     const physicalPlanEndDate = latestProductionFinish(plans.map(productionFinishFromPlan));
     const currentProbableDate = projectedRouteDispatchDate({
       rawBySetup,
@@ -1627,6 +1651,7 @@ function buildProductionDashboardRows({
       rmReceivedDate: dateLabel(rmReceivedDate),
       plannedDispatchDateAtRmReceipt: initialDate,
       currentProbableDispatchDate: dateLabel(currentProbableDate.date),
+      actualFinishDate,
       currentProbableDispatchWorkingHours: currentProbableDate.workingHours,
       status: dispatchedByJobCard.has(canonicalKey(rowText(workOrder, "jcNo"))) ? "Dispatched" : "Pending",
       dispatchedDate: dateLabel(dispatchedDate),
@@ -6344,6 +6369,15 @@ function parseDate(value: unknown) {
   const parsed = new Date(raw);
   if (!Number.isNaN(parsed.getTime())) return plantIsoDate(parsed);
   return "";
+}
+
+function recordedCompletionDate(value: unknown) {
+  const raw = cleanText(value);
+  if (/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(raw)) {
+    const instant = new Date(raw);
+    if (!Number.isNaN(instant.getTime())) return plantIsoDate(instant);
+  }
+  return parseDate(value);
 }
 
 function excelSerialIsoDate(value: number) {

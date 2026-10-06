@@ -12,17 +12,19 @@ test("shows the saved finish and changing current forecast for the matching Job 
       routeRows={[]} productionRows={[]}
       rows={[{ jcNo: "P2132", partCode: "R131", poDate: "2026-09-12" }]}
       finishDateRows={[
-        { jcNo: "P2132", partCode: "R131", plannedDispatchDateAtRmReceipt: "25-Sept-26", currentProbableDispatchDate },
-        { jcNo: "P2132", partCode: "OTHER", plannedDispatchDateAtRmReceipt: "1-Nov-26", currentProbableDispatchDate: "2-Nov-26" },
+        { jcNo: "P2132", partCode: "R131", plannedDispatchDateAtRmReceipt: "25-Sept-26", currentProbableDispatchDate, actualFinishDate: "24-Sept-26" },
+        { jcNo: "P2132", partCode: "OTHER", plannedDispatchDateAtRmReceipt: "1-Nov-26", currentProbableDispatchDate: "2-Nov-26", actualFinishDate: "4-Nov-26" },
       ]} />
   )
   const initial = render("28-Sept-26")
   expect(initial).toContain("Planned Finish Date")
   expect(initial).toContain("Current Estimated Finish")
+  expect(initial).toContain("Actual Finish Date")
   expect(initial).toContain("FG PO Date")
   expect(initial).toContain("2026-09-12")
   expect(initial).toContain("25-Sept-26")
   expect(initial).toContain("28-Sept-26")
+  expect(initial).toContain("24-Sept-26")
   const refreshed = render("30-Sept-26")
   expect(refreshed).toContain("25-Sept-26")
   expect(refreshed).toContain("30-Sept-26")
@@ -43,6 +45,7 @@ test("does not invent an RM-receipt finish for a legacy Job Card", () => {
   expect(markup).toContain("Not recorded")
   expect(markup).toContain("29-Sept-26")
   expect(markup).toContain("Progress unavailable")
+  expect(markup).toContain("<span class=\"text-muted-foreground\">-</span>")
 })
 
 test("shows setup-weighted progress from existing snapshots without new cached progress fields", () => {
@@ -90,6 +93,7 @@ test("shows dispatched finished good and order shortfall instead of active progr
   expect(markup).toContain("Dispatched")
   expect(markup).toContain("1,046 / 1,100 pcs")
   expect(markup).toContain("54 pcs short of order")
+  expect(markup).toContain("Not recorded")
   expect(markup).not.toContain("95.1%")
   expect(markup).not.toContain('role="progressbar"')
 })
