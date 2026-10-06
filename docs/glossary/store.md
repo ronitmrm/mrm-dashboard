@@ -1,43 +1,45 @@
 # Store
 
 **Store Classification Master**: The maintained hierarchy of Asset Category,
-Asset Subcategory, and Asset Name. A Subcategory belongs to one Category, and
+Asset Subcategory, and Asset Name, plus a Make/Model master. A Subcategory belongs to one Category, and
 an Asset Name belongs to one Subcategory. Store item creation selects these
 values from the masters; users do not retype classification names. Store
 masters are maintained in the company Data Entry workspace and reviewed in
 Master Tables; they are not a separate Store workspace. Asset Category, Asset
-Subcategory, and Asset Name do not own user-facing codes. Their hierarchy is
+Subcategory, Asset Name, and Make/Model do not own user-facing codes. Their values are
 combined only when creating a Store Item Type.
 
-**Store Item Type**: The unique combination of Asset Type and one selected
-Store Classification Master path. It owns one permanent Asset Code and one
+**Store Item Type**: The unique combination of Asset Type, one selected
+Store Classification Master path, and Make/Model. It owns one permanent Asset Code and one
 optional Identification. Identification records the distinguishing make, model,
 size, grade, or specification when useful. It may be left blank in Data Entry
 and CSV imports; received Physical Assets may also have blank Identification.
-Optional Make, Model, and Rated Load / Capacity fields describe specifications
-shared by every physical unit of that Asset Code. The load value includes its
-unit (for example, `15 kW` or `1000 kg`). Different specifications do not by
-themselves generate another Asset Code; a distinct classification path is
-required for a distinct Store Item Type.
+Make/Model is selected from its master and distinguishes different models with
+the same Category, Subcategory, and Asset Name. Existing codes retain their
+numbers when their saved model is assigned to the new master. Use `Unspecified`
+when a model is not known. Rated Load / Capacity describes a specification
+shared by every physical unit of that Asset Code and includes its unit (for
+example, `15 kW` or `1000 kg`).
 Data Entry controls its Drawing Number: new and edited Store Item Types use
 their Asset Code as their Drawing Number. During Data Entry, the exact Asset
 Type, Asset Category,
-Asset Subcategory, and Asset Name combination is checked before saving. An
+Asset Subcategory, Asset Name, and Make/Model combination is checked before saving. An
 existing combination displays and reuses its existing Asset Code without
 creating another Store Item Type; only a new combination generates a new Asset
-Code. Its Master Table shows Asset Type, Category, Subcategory, Asset Name, and
+Code. Its Master Table shows Asset Type, Category, Subcategory, Asset Name, Make/Model, and
 Identification in separate columns. When a Store Item Type applies to a
 manufactured product, its Product Portfolio UID is selected from active internal
 Portfolio products instead of entered as free text.
 
-Item Type CSV imports use Category, Subcategory, and Asset Name text from the
+Item Type CSV imports use Category, Subcategory, Asset Name, and Make/Model text from the
 existing classification masters, matched ignoring letter case and outer spaces.
 Subcategory is resolved within its Category and Asset Name within its Subcategory.
 Unknown or ambiguous names are rejected with a row error; imports do not create
 classification masters. Existing CSVs with internal IDs remain accepted.
 
 All Store master CSV templates use readable references: Subcategory uses Category
-name; Asset Name uses Category and Subcategory names; Supplier Price uses Supplier
+name; Asset Name uses Category and Subcategory names; Make/Model uses its name;
+Supplier Price uses Supplier
 name (or Supplier Code) and Store Asset Code. Category can be omitted for Asset
 Name only when the Subcategory uniquely identifies one record. Unknown or
 ambiguous references stop the import with a row error. Legacy ID columns remain

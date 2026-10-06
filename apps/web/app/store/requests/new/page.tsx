@@ -136,7 +136,7 @@ export default async function NewStoreRequestPage({
                 <NativeSelectOption value="">Select Asset Code</NativeSelectOption>
                 {data.allItems.map((item) => (
                   <NativeSelectOption key={item.id} value={item.id}>
-                    {item.typeCode} — {item.assetName}
+                    {item.typeCode} — {item.assetName} · {item.makeModel}
                   </NativeSelectOption>
                 ))}
               </NativeSelect>

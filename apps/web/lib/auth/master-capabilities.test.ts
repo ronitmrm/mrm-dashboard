@@ -129,6 +129,7 @@ describe("independent master permissions", () => {
         categories: [{ id: "category", name: "Tools" }],
         subcategories: [],
         assetNames: [],
+        makeModels: [],
       },
       portfolioProducts: [],
       suppliers: [
@@ -169,7 +170,7 @@ describe("independent master permissions", () => {
     ).toEqual([])
   })
   it("keeps setup checklist grants separate for each unit", () => {
-    expect(scopedMasters).toHaveLength(80)
+    expect(scopedMasters).toHaveLength(81)
     expect(
       scopedMasters
         .filter(({ master }) => master === "setup_checklist_master")

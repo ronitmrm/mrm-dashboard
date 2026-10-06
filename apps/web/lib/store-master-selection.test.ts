@@ -10,6 +10,7 @@ describe("Store master table columns", () => {
     expect(storeMasterShowsCode("CATEGORY")).toBe(false)
     expect(storeMasterShowsCode("SUBCATEGORY")).toBe(false)
     expect(storeMasterShowsCode("ASSET_NAME")).toBe(false)
+    expect(storeMasterShowsCode("MAKE_MODEL")).toBe(false)
     expect(storeMasterShowsCode("ITEM_TYPE")).toBe(true)
     expect(storeMasterShowsCode("LOCATION")).toBe(true)
   })
@@ -24,6 +25,7 @@ describe("Store Item Data Entry", () => {
       assetType: "NON_CONSUMABLE",
       id: "item-a",
       identificationName: "Existing Drill",
+      makeModelId: "model-a",
       typeCode: "NC001",
     },
   ]
@@ -35,6 +37,7 @@ describe("Store Item Data Entry", () => {
         assetNameId: "asset-a",
         assetSubcategoryId: "subcategory-a",
         assetType: "NON_CONSUMABLE",
+        makeModelId: "model-a",
       })
     ).toEqual(items[0])
   })
@@ -46,6 +49,7 @@ describe("Store Item Data Entry", () => {
         assetNameId: "asset-a",
         assetSubcategoryId: "subcategory-a",
         assetType: "CONSUMABLE",
+        makeModelId: "model-a",
       })
     ).toBeNull()
   })
@@ -59,9 +63,20 @@ describe("Store Item Data Entry", () => {
           assetNameId: "asset-a",
           assetSubcategoryId: "subcategory-a",
           assetType: "NON_CONSUMABLE",
+          makeModelId: "model-a",
         },
         "item-a"
       )
     ).toBeNull()
+  })
+
+  it("allows another Make/Model for the same asset name", () => {
+    expect(findExistingStoreItem(items, {
+      assetCategoryId: "category-a",
+      assetNameId: "asset-a",
+      assetSubcategoryId: "subcategory-a",
+      assetType: "NON_CONSUMABLE",
+      makeModelId: "model-b",
+    })).toBeNull()
   })
 })

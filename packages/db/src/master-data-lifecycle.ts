@@ -56,6 +56,7 @@ const masterTargets = {
   store_category: ["store", "asset_categories", "id"],
   store_item_type: ["store", "item_types", "id"],
   store_location: ["store", "locations", "id"],
+  store_make_model: ["store", "make_models", "id"],
   store_subcategory: ["store", "asset_subcategories", "id"],
   store_supplier: ["store", "suppliers", "id"],
   store_supplier_price: ["store", "supplier_prices", "id"],

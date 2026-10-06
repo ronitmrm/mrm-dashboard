@@ -205,7 +205,7 @@ export default async function Page({
             selectedStoreMaster === "ITEM_TYPE" && canSave
           const classificationMasters =
             classifications ||
-            ["CATEGORY", "SUBCATEGORY", "ASSET_NAME"].includes(
+            ["CATEGORY", "SUBCATEGORY", "ASSET_NAME", "MAKE_MODEL"].includes(
               selectedStoreMaster
             )
           const repository = createStoreRepository({ connectionString })
@@ -245,6 +245,7 @@ export default async function Page({
                 : Promise.resolve({
                     assetNames: [],
                     categories: [],
+                    makeModels: [],
                     subcategories: [],
                   }),
               selectedStoreMaster === "ITEM_TYPE"

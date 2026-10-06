@@ -18,6 +18,8 @@ export function selectedStoreMasterData(
               id,
               typeCode,
               identificationName,
+              makeModel: "",
+              makeModelId: "",
               unit,
               assetCategory: "",
               assetCategoryId: "",
@@ -66,6 +68,10 @@ export function selectedStoreMasterData(
       assetNames:
         master === "ASSET_NAME" || classifications
           ? data.masters.assetNames
+          : [],
+      makeModels:
+        master === "MAKE_MODEL" || classifications
+          ? data.masters.makeModels
           : [],
     },
   }

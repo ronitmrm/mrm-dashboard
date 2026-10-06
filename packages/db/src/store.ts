@@ -245,6 +245,31 @@ async function assetClassificationPath(
   return result.rows[0]
 }
 
+async function selectedMakeModelId(
+  client: PoolClient,
+  organizationId: string,
+  makeModelId?: string
+) {
+  if (!makeModelId) {
+    const fallback = await client.query<{ id: string }>(
+      `INSERT INTO store.make_models (organization_id, name)
+       VALUES ($1, 'Unspecified')
+       ON CONFLICT (organization_id, lower(name))
+       DO UPDATE SET active = true
+       RETURNING id`,
+      [organizationId]
+    )
+    return fallback.rows[0]!.id
+  }
+  const selected = await client.query<{ id: string }>(
+    `SELECT id FROM store.make_models
+     WHERE id = $1 AND organization_id = $2 AND active`,
+    [makeModelId, organizationId]
+  )
+  if (!selected.rows[0]) throw new Error("Select a valid Make/Model.")
+  return selected.rows[0].id
+}
+
 async function requestedAssetClassificationPath(
   client: PoolClient,
   input: {
@@ -2252,6 +2277,45 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       })
     },
 
+    async createMakeModel(input: {
+      rejectDuplicates?: boolean
+      actorUserId?: string | null
+      name: string
+      organizationId: string
+    }) {
+      return withTransaction(pool, async (client) => {
+        const result = await client.query<{ id: string; inserted: boolean }>(
+          `INSERT INTO store.make_models (
+             organization_id, name, created_by_user_id, updated_by_user_id
+           ) VALUES ($1, $2, $3, $3)
+           ON CONFLICT (organization_id, lower(name))
+           DO UPDATE SET active = true, updated_at = now(),
+             updated_by_user_id = EXCLUDED.updated_by_user_id
+           RETURNING id, (xmax = 0) AS inserted`,
+          [input.organizationId, requiredText(input.name, "Make/Model"), input.actorUserId ?? null]
+        )
+        rejectDuplicateMaster(input.rejectDuplicates, result.rows[0]?.inserted === false)
+        return result.rows[0]!
+      })
+    },
+
+    async updateMakeModel(input: {
+      actorUserId?: string | null
+      id: string
+      name: string
+      organizationId: string
+    }) {
+      const result = await pool.query<{ id: string }>(
+        `UPDATE store.make_models SET name = $1, updated_by_user_id = $2,
+           updated_at = now()
+         WHERE id = $3 AND organization_id = $4 RETURNING id`,
+        [requiredText(input.name, "Make/Model"), input.actorUserId ?? null,
+          input.id, input.organizationId]
+      )
+      if (!result.rows[0]) throw new Error("Store Make/Model was not found.")
+      return result.rows[0]
+    },
+
     async updateAssetName(input: {
       actorUserId?: string | null
       id: string
@@ -2301,7 +2365,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
     },
 
     async listAssetClassificationMasters(organizationId: string) {
-      const [categories, subcategories, assetNames] = await Promise.all([
+      const [categories, subcategories, assetNames, makeModels] = await Promise.all([
         pool.query<{ id: string; name: string }>(
           `SELECT id, name FROM store.asset_categories
            WHERE organization_id = $1 AND active ORDER BY name`,
@@ -2343,10 +2407,16 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
            ORDER BY category.name, subcategory.name, asset_name.name`,
           [organizationId]
         ),
+        pool.query<{ id: string; name: string }>(
+          `SELECT id, name FROM store.make_models
+           WHERE organization_id = $1 AND active ORDER BY name`,
+          [organizationId]
+        ),
       ])
       return {
         assetNames: assetNames.rows,
         categories: categories.rows,
+        makeModels: makeModels.rows,
         subcategories: subcategories.rows,
       }
     },
@@ -3966,6 +4036,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       assetType: StoreAssetType
       applicableItemCode?: string | null
       identificationName?: string
+      makeModelId?: string
       manufacturerMake?: string | null
       minimumStock?: number
       modelNumber?: string | null
@@ -3975,6 +4046,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
     }) {
       return withTransaction(pool, async (client) => {
         const classification = await assetClassificationPath(client, input)
+        const makeModelId = await selectedMakeModelId(client, input.organizationId, input.makeModelId)
         const assetType = storeAssetType(input.assetType)
         const trackingMode = trackingModeForAssetType(assetType)
         await client.query(
@@ -3987,6 +4059,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
               input.assetCategoryId,
               input.assetSubcategoryId,
               input.assetNameId,
+              makeModelId,
             ].join(":"),
           ]
         )
@@ -3998,7 +4071,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
            FROM store.item_types
            WHERE organization_id = $1 AND tracking_mode = $2
              AND asset_category_id = $3 AND asset_subcategory_id = $4
-             AND asset_name_id = $5
+             AND asset_name_id = $5 AND make_model_id = $6
            LIMIT 1`,
           [
             input.organizationId,
@@ -4006,6 +4079,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             input.assetCategoryId,
             input.assetSubcategoryId,
             input.assetNameId,
+            makeModelId,
           ]
         )
         rejectDuplicateMaster(input.rejectDuplicates, !!existing.rows[0])
@@ -4023,10 +4097,11 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
               asset_subcategory_id, asset_name_id, identification_name,
               applicable_item_code, drawing_number, tracking_mode, unit,
               minimum_stock, manufacturer_make, model_number, rated_load,
+              make_model_id,
               created_by_user_id, updated_by_user_id
             ) VALUES (
               $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
-              $13, $14, $15, $16, $17, $18, $19, $19
+              $13, $14, $15, $16, $17, $18, $19, $20, $20
             )
             RETURNING id
           `,
@@ -4049,6 +4124,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             input.manufacturerMake?.trim() || null,
             input.modelNumber?.trim() || null,
             input.ratedLoad?.trim() || null,
+            makeModelId,
             input.actorUserId ?? null,
           ]
         )
@@ -4065,6 +4141,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       applicableItemCode?: string | null
       id: string
       identificationName?: string
+      makeModelId?: string
       manufacturerMake?: string | null
       minimumStock?: number
       modelNumber?: string | null
@@ -4075,6 +4152,18 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       return withTransaction(pool, async (client) => {
         await lockToolingAllocation(client, input.organizationId)
         const classification = await assetClassificationPath(client, input)
+        const currentMakeModel = input.makeModelId
+          ? null
+          : await client.query<{ make_model_id: string }>(
+              `SELECT make_model_id FROM store.item_types
+               WHERE id = $1 AND organization_id = $2`,
+              [input.id, input.organizationId]
+            )
+        const makeModelId = await selectedMakeModelId(
+          client,
+          input.organizationId,
+          input.makeModelId ?? currentMakeModel?.rows[0]?.make_model_id
+        )
         const assetType = storeAssetType(input.assetType)
         const result = await client.query<{ id: string }>(
           `UPDATE store.item_types
@@ -4085,6 +4174,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
              drawing_number = type_code, tracking_mode = $10, unit = $11,
              minimum_stock = $12, updated_by_user_id = $13,
              manufacturer_make = $16, model_number = $17, rated_load = $18,
+             make_model_id = $19,
              updated_at = now()
            WHERE id = $14 AND organization_id = $15
            RETURNING id`,
@@ -4107,6 +4197,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             input.manufacturerMake?.trim() || null,
             input.modelNumber?.trim() || null,
             input.ratedLoad?.trim() || null,
+            makeModelId,
           ]
         )
         if (!result.rows[0]) throw new Error("Store Item Type was not found.")
@@ -4136,6 +4227,8 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         drawingNumber: string | null
         id: string
         identificationName: string
+        makeModel: string
+        makeModelId: string
         manufacturerMake: string | null
         minimumStock: string
         modelNumber: string | null
@@ -4156,6 +4249,8 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             item.asset_name AS "assetName",
             item.asset_name_id AS "assetNameId",
             item.identification_name AS "identificationName",
+            make_model.name AS "makeModel",
+            item.make_model_id AS "makeModelId",
             item.manufacturer_make AS "manufacturerMake",
             item.model_number AS "modelNumber",
             item.rated_load AS "ratedLoad",
@@ -4241,6 +4336,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
                 ORDER BY asset.asset_code
               ) ELSE ARRAY[]::text[] END AS "availableUnitIds"
           FROM store.item_types item
+          JOIN store.make_models make_model ON make_model.id = item.make_model_id
           LEFT JOIN LATERAL (
             SELECT price.supplier_id, supplier.name AS supplier_name,
               supplier.email AS supplier_email,
@@ -5026,6 +5122,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         availableStock: string
         id: string
         identificationName: string
+        makeModel: string
         manufacturerMake: string | null
         minimumStock: string
         modelNumber: string | null
@@ -5042,6 +5139,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             item.asset_subcategory AS "assetSubcategory",
             item.asset_name AS "assetName",
             item.identification_name AS "identificationName", item.unit,
+            make_model.name AS "makeModel",
             item.manufacturer_make AS "manufacturerMake",
             item.model_number AS "modelNumber",
             item.rated_load AS "ratedLoad",
@@ -5093,6 +5191,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
                 END
             ), 'Not in stock') AS "storageLocations"
           FROM store.item_types item
+          JOIN store.make_models make_model ON make_model.id = item.make_model_id
           WHERE item.organization_id = $1 AND item.active
             AND lower(item.type_code) = lower($2)
         `,
@@ -5414,6 +5513,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         itemTypeId: string
         locationName: string | null
         manufacturerSerialNumber: string | null
+        makeModel: string
         manufacturerMake: string | null
         mcbNumber: string | null
         modelNumber: string | null
@@ -5440,6 +5540,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             item.asset_category AS category,
             item.asset_subcategory AS subcategory,
             item.asset_name AS "assetName",
+            make_model.name AS "makeModel",
             asset.identification_name AS "identificationName",
             asset.manufacturer_serial_number AS "manufacturerSerialNumber",
             item.manufacturer_make AS "manufacturerMake",
@@ -5462,6 +5563,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
               asset.acquisition_unit_price)::text AS "unitPrice"
           FROM store.assets asset
           JOIN store.item_types item ON item.id = asset.item_type_id
+          JOIN store.make_models make_model ON make_model.id = item.make_model_id
           LEFT JOIN store.assets stabilizer ON stabilizer.id = asset.stabilizer_asset_id
           JOIN store.accountable_stores accountable
             ON accountable.id = asset.accountable_store_id

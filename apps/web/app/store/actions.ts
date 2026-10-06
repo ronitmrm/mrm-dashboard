@@ -529,6 +529,26 @@ export async function createStoreAssetNameAction(formData: FormData) {
   })
 }
 
+export async function createStoreMakeModelAction(formData: FormData) {
+  return withMasterSaveFeedback(async () => {
+    await withStore(
+      masterCapability("MAKE_MODEL", "save"),
+      (repository, actorUserId, organizationId) => {
+        const masterId = optionalText(formData, "master_id")
+        const input = {
+          actorUserId,
+          name: requiredText(formData, "make_model"),
+          organizationId,
+        }
+        return masterId
+          ? repository.updateMakeModel({ ...input, id: masterId })
+          : repository.createMakeModel({ ...input, rejectDuplicates: true })
+      }
+    )
+    revalidateStore()
+  })
+}
+
 export async function createStoreItemTypeAction(formData: FormData) {
   return withMasterSaveFeedback(async () => {
     await requireCapability(masterCapability("ITEM_TYPE", "save"), storePath)
@@ -572,6 +592,7 @@ export async function createStoreItemTypeAction(formData: FormData) {
           applicableItemCode: optionalText(formData, "applicable_item_code"),
           identificationName:
             optionalText(formData, "identification_name") ?? "",
+          makeModelId: requiredText(formData, "make_model_id"),
           manufacturerMake: optionalText(formData, "manufacturer_make"),
           minimumStock: Number(optionalText(formData, "minimum_stock") ?? 0),
           modelNumber: optionalText(formData, "model_number"),
