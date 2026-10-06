@@ -3,6 +3,7 @@
 import type { ProductionFloorCode } from "@workspace/db/production-floors"
 import { buildJobCardProgress } from "@workspace/db/job-card-progress"
 import { formatPlanningFinish } from "@workspace/db/planning-rules"
+import { StatusBadge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import { SectionCard, CardContent, CardHeader, CardTitle } from "@workspace/ui/components/card"
 import { OperationalTable, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@workspace/ui/components/table"
@@ -59,7 +60,7 @@ export function JobCardRegister({
 }) {
   // Derive this display metric from established snapshot data, so web and worker
   // releases do not have to introduce new cached fields at the same instant.
-  const progressRows = useMemo(() => {
+  const progressRows = useMemo<Row[]>(() => {
     const goodBySetup = new Map<string, number>()
     for (const row of productionRows) {
       const setupKey = key(row.jobCard, row.partCode, row.setupNo)
@@ -128,7 +129,7 @@ export function JobCardRegister({
         <div className="rounded-md border min-w-0">
  <OperationalTable containerClassName="max-h-[70vh]" excelFilters>
             <TableHeader className="sticky top-0 z-10 bg-background"><TableRow>
-              <TableHead data-filterable="true">Job Card</TableHead><TableHead>Part</TableHead><TableHead>Description</TableHead><TableHead>FG PO</TableHead><TableHead>FG PO Date</TableHead><TableHead className="text-right">Order Qty</TableHead><TableHead>Stage</TableHead><TableHead title="Immutable first valid forecast linked to the first RM receipt; legacy unavailable values are not guessed">Planned Finish Date</TableHead><TableHead title="Latest completion forecast across all route setups; updates after planning recalculates">Current Estimated Finish</TableHead><TableHead>Production Progress</TableHead><TableHead>Route</TableHead><TableHead />
+              <TableHead data-filterable="true">Job Card</TableHead><TableHead>Part</TableHead><TableHead>Description</TableHead><TableHead>FG PO</TableHead><TableHead>FG PO Date</TableHead><TableHead className="text-right">Order Qty</TableHead><TableHead>Stage</TableHead><TableHead title="Immutable first valid forecast linked to the first RM receipt; legacy unavailable values are not guessed">Planned Finish Date</TableHead><TableHead title="Latest completion forecast across all route setups; updates after planning recalculates">Current Estimated Finish</TableHead><TableHead>Production Progress / Outcome</TableHead><TableHead>Route</TableHead><TableHead />
             </TableRow></TableHeader>
             <TableBody>{progressRows.length ? progressRows.map((row) => {
               const jobCard = first(row, ["jcNo", "JobCardNo", "jobCard"])
@@ -136,6 +137,11 @@ export function JobCardRegister({
               const progress = jobCardProgress(row)
               const setupCount = numeric(row.productionSetupCount)
               const completedSetups = numeric(row.completedProductionSetupCount)
+              const stage = jobCardStage(row)
+              const dispatched = stage === "Dispatched"
+              const ordered = numeric(row.orderPcs ?? row.orderedQty ?? row["ORD. PCS."])
+              const finished = numeric(row.finalSetupGoodPieces)
+              const short = Math.max(ordered - finished, 0)
               const finishDates = finishDatesByJobCard.get(jobCardKey(row))
               const plannedFinish = text(finishDates?.plannedDispatchDateAtRmReceipt)
               return <TableRow key={jobCard}>
@@ -145,11 +151,20 @@ export function JobCardRegister({
                 <TableCell>{first(row, ["fgPoNo", "FG PO NO."])}</TableCell>
                 <TableCell>{first(row, ["poDate", "PO DATE"])}</TableCell>
                 <TableCell className="text-right tabular-nums">{first(row, ["orderPcs", "orderedQty", "ORD. PCS."])}</TableCell>
-                <TableCell>{jobCardStage(row)}</TableCell>
+                <TableCell>{stage}</TableCell>
                 <TableCell>{plannedFinish || <span className="text-muted-foreground">Not recorded</span>}</TableCell>
                 <TableCell>{formatPlanningFinish(finishDates?.currentProbableDispatchDate, finishDates?.currentProbableDispatchWorkingHours)}</TableCell>
                 <TableCell className="min-w-48">
-                  {progress === null ? <span className="text-xs text-muted-foreground">Progress unavailable</span> : (
+                  {dispatched ? (
+                    <div className="space-y-1.5 py-1">
+                      <div className="text-sm font-semibold tabular-nums">{finished.toLocaleString("en-IN")}{ordered > 0 ? ` / ${ordered.toLocaleString("en-IN")}` : ""} pcs</div>
+                      <div className="text-xs text-muted-foreground">Finished good{ordered > 0 ? " / ordered" : ""}</div>
+                      {ordered > 0 ? <StatusBadge
+                        value={short > 0 ? `${short.toLocaleString("en-IN")} pcs short of order` : finished > ordered ? `${(finished - ordered).toLocaleString("en-IN")} pcs above order` : "Order quantity met"}
+                        tone={short > 0 ? "warning" : finished > ordered ? "information" : "positive"}
+                      /> : null}
+                    </div>
+                  ) : progress === null ? <span className="text-xs text-muted-foreground">Progress unavailable</span> : (
                     <div className="space-y-1.5 py-1" title="Each route setup contributes an equal share of overall progress">
                       <div className="flex items-baseline justify-between gap-3">
                         <span className="text-sm font-semibold tabular-nums">{progress.toFixed(1)}%</span>

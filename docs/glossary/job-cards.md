@@ -13,6 +13,11 @@ setups with no output as 0%. For two setups, completing the first contributes
 on one setup cannot fill another setup's share. Without a selected route or a
 positive order quantity, progress is unavailable. Finished pieces remain the
 good output of the final setup; intermediate output is still WIP.
+Once a Job Card is dispatched, the register shows its finished good against the
+ordered quantity and any remaining order shortfall instead of an in-progress
+percentage. Dispatch closes the Job Card lifecycle even when finished good is
+below the order quantity; the shortfall remains visible and is not counted as
+unfinished production.
 
 Planned Finish Date shows the immutable first valid completion forecast created
 from a Job Card's first Raw Material receipt event. The receipt creates a durable
