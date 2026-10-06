@@ -37,6 +37,7 @@ type SettledInterruptedSetup = InterruptedSetupInput & {
   finishedQuantity: number
   hasOpenDowntime: boolean
   openSessionReference: string | null
+  operationSetupId: string
   sessionReferences: string[]
   settledAt: string | null
 }
@@ -251,10 +252,11 @@ async function workOrderFor(
   const result = await client.query<{
     id: string
     item_id: string
+    source_payload: Record<string, unknown> | null
     status: string
   }>(
     `
-      SELECT id, item_id, status FROM manufacturing.work_orders
+      SELECT id, item_id, source_payload, status FROM manufacturing.work_orders
       WHERE organization_id = $1 AND lower(job_card_number) = lower($2)
       FOR UPDATE
     `,
@@ -267,34 +269,82 @@ async function workOrderFor(
   return result.rows[0]
 }
 
+async function currentPlanningRouteOptionId(
+  client: PoolClient,
+  input: {
+    itemId: string
+    organizationId: string
+    productionFloorCode?: string
+    sourcePayload: Record<string, unknown> | null
+    workOrderId: string
+  }
+) {
+  const payload = input.sourcePayload ?? {}
+  const importedOption = String(payload["OPTION NUMBER"] ?? "").trim()
+    || String(payload.optionNumber ?? "").trim()
+  const floorCode = input.productionFloorCode
+    ? normalizeProductionFloorCode(input.productionFloorCode)
+    : productionFloorCodeForRecord({ sourcePayload: payload })
+  const result = await client.query<{ route_option_id: string | null }>(
+    `SELECT COALESCE(
+       (SELECT to_route_option_id FROM manufacturing.route_change_events
+        WHERE work_order_id = $1 AND reversed_at IS NULL
+        ORDER BY occurred_at DESC, id DESC LIMIT 1),
+       CASE WHEN $4::text <> '' THEN
+         (SELECT route.id FROM manufacturing.route_options route
+          JOIN manufacturing.production_floors floor
+            ON floor.id = route.production_floor_id
+          WHERE route.organization_id = $2 AND route.item_id = $3
+            AND route.active AND floor.code = $5
+            AND (lower(route.route_code) = lower($4)
+              OR lower(COALESCE(route.legacy_option_number, '')) = lower($4))
+          ORDER BY route.revision DESC LIMIT 1)
+       ELSE COALESCE(
+         (SELECT route_option_id FROM manufacturing.route_selections
+          WHERE work_order_id = $1 AND reversed_at IS NULL
+          ORDER BY selected_at DESC, id DESC LIMIT 1),
+         (SELECT CASE WHEN count(*) = 1 THEN (array_agg(route.id))[1] END
+          FROM manufacturing.route_options route
+          JOIN manufacturing.production_floors floor
+            ON floor.id = route.production_floor_id
+          WHERE route.organization_id = $2 AND route.item_id = $3
+            AND route.active AND floor.code = $5)
+       ) END
+     ) AS route_option_id`,
+    [input.workOrderId, input.organizationId, input.itemId, importedOption, floorCode]
+  )
+  return result.rows[0]?.route_option_id ?? null
+}
+
 async function optionalPlanningReference(
   client: PoolClient,
   organizationId: string,
   jobCardNumber: string,
   setupNumber: number
 ) {
-  const result = await client.query<{
-    operation_setup_id: string | null
-    work_order_id: string
+  const workOrder = await client.query<{
+    id: string
+    item_id: string
+    source_payload: Record<string, unknown> | null
   }>(
-    `
-      SELECT work_order.id AS work_order_id,
-        setup.id AS operation_setup_id
-      FROM manufacturing.work_orders work_order
-      LEFT JOIN manufacturing.route_selections selection
-        ON selection.work_order_id = work_order.id
-        AND selection.reversed_at IS NULL
-      LEFT JOIN manufacturing.operation_setups setup
-        ON setup.route_option_id = selection.route_option_id
-        AND setup.setup_number = $3
-        AND setup.active
-      WHERE work_order.organization_id = $1
-        AND lower(work_order.job_card_number) = lower($2)
-      LIMIT 1
-    `,
-    [organizationId, jobCardNumber.trim(), setupNumber]
+    `SELECT id, item_id, source_payload FROM manufacturing.work_orders
+     WHERE organization_id = $1 AND lower(job_card_number) = lower($2)`,
+    [organizationId, jobCardNumber.trim()]
   )
-  return result.rows[0] ?? null
+  const row = workOrder.rows[0]
+  if (!row) return null
+  const routeOptionId = await currentPlanningRouteOptionId(client, {
+    itemId: row.item_id,
+    organizationId,
+    sourcePayload: row.source_payload,
+    workOrderId: row.id,
+  })
+  const setup = routeOptionId ? await client.query<{ id: string }>(
+    `SELECT id FROM manufacturing.operation_setups
+     WHERE route_option_id = $1 AND setup_number = $2 AND active`,
+    [routeOptionId, setupNumber]
+  ) : null
+  return { work_order_id: row.id, operation_setup_id: setup?.rows[0]?.id ?? null }
 }
 
 async function plannerInterruptionState(
@@ -302,6 +352,12 @@ async function plannerInterruptionState(
   organizationId: string,
   interruption: InterruptedSetupInput
 ) {
+  const planningReference = await optionalPlanningReference(
+    client, organizationId, interruption.jobCardNumber, interruption.setupNumber
+  )
+  if (!planningReference?.operation_setup_id) {
+    throw new Error("Interrupted setup is not on the current route. Refresh the plan before continuing.")
+  }
   const result = await client.query<{
     finished_quantity: string
     has_open_downtime: boolean | null
@@ -312,23 +368,13 @@ async function plannerInterruptionState(
   }>(
     `
       WITH interruption_reference AS (
-        SELECT work_order.id AS work_order_id,
-          setup.id AS operation_setup_id,
+        SELECT $1::uuid AS work_order_id,
+          $2::uuid AS operation_setup_id,
           machine.id AS machine_id
-        FROM manufacturing.work_orders work_order
-        JOIN manufacturing.route_selections selection
-          ON selection.work_order_id = work_order.id
-          AND selection.reversed_at IS NULL
-        JOIN manufacturing.operation_setups setup
-          ON setup.route_option_id = selection.route_option_id
-          AND setup.setup_number = $3
-          AND setup.active
-        JOIN catalog.machines machine
-          ON machine.organization_id = work_order.organization_id
+        FROM catalog.machines machine
+        WHERE machine.organization_id = $3
           AND lower(machine.machine_number) = lower($4)
           AND machine.active
-        WHERE work_order.organization_id = $1
-          AND lower(work_order.job_card_number) = lower($2)
         LIMIT 1
       )
       SELECT open_session.session_reference,
@@ -354,7 +400,7 @@ async function plannerInterruptionState(
             'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'
           ) AS settled_at
           FROM manufacturing.production_sessions closed
-          WHERE closed.organization_id = $1
+          WHERE closed.organization_id = $3
             AND closed.work_order_id = reference.work_order_id
             AND closed.operation_setup_id = reference.operation_setup_id
             AND closed.machine_id = reference.machine_id
@@ -365,7 +411,7 @@ async function plannerInterruptionState(
         SELECT session.id, session.session_reference,
           session.measurement_method
         FROM manufacturing.production_sessions session
-        WHERE session.organization_id = $1
+        WHERE session.organization_id = $3
           AND session.work_order_id = reference.work_order_id
           AND session.operation_setup_id = reference.operation_setup_id
           AND session.machine_id = reference.machine_id
@@ -375,13 +421,16 @@ async function plannerInterruptionState(
       ) open_session ON true
     `,
     [
+      planningReference.work_order_id,
+      planningReference.operation_setup_id,
       organizationId,
-      interruption.jobCardNumber.trim(),
-      interruption.setupNumber,
       interruption.machineNumber.trim(),
     ]
   )
-  return result.rows[0] ?? null
+  if (!result.rows[0]) {
+    throw new Error("Interrupted machine was not found. Refresh the plan before continuing.")
+  }
+  return { ...result.rows[0], operationSetupId: planningReference.operation_setup_id }
 }
 
 async function settledPlannerInterruptions(
@@ -413,6 +462,7 @@ async function settledPlannerInterruptions(
       finishedQuantity: Number(state?.finished_quantity ?? 0),
       hasOpenDowntime: state?.has_open_downtime === true,
       openSessionReference: state?.session_reference ?? null,
+      operationSetupId: state.operationSetupId,
       sessionReferences: state?.session_references ?? [],
       settledAt: state?.settled_at ?? null,
     })
@@ -426,7 +476,7 @@ async function releasePlannerInterruptedSetups(
     actorUserId?: string | null
     decisionId: string
     decisionSource: "planOverrides" | "plannerPriorities" | "machineConstraints" | "rawMaterialRejections"
-    interruptions: InterruptedSetupInput[]
+    interruptions: Array<InterruptedSetupInput & { operationSetupId?: string }>
     organizationId: string
     reason: string
   }
@@ -441,9 +491,11 @@ async function releasePlannerInterruptedSetups(
       setup_number: number
       source_payload: Record<string, unknown> | null
       stage: string
+      operation_setup_id: string
     }>(
       `
         SELECT state.id, state.stage, state.source_payload,
+          state.operation_setup_id,
           work_order.job_card_number, item.uid AS part_code,
           route.route_code AS option_number, setup.setup_number,
           machine.machine_number
@@ -471,6 +523,9 @@ async function releasePlannerInterruptedSetups(
     )
     const state = current.rows[0]
     if (!state) continue
+    if (interruption.operationSetupId && state.operation_setup_id !== interruption.operationSetupId) {
+      throw new Error("Active setup belongs to an earlier route. Settle its production session before changing the machine plan.")
+    }
     const sourcePayload = {
       ...(state.source_payload ?? {}),
       jcNo: state.job_card_number,
@@ -2605,26 +2660,13 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
         ) {
           throw new Error("Target machine is locked by another active setup.")
         }
-        const selectedRoute = await client.query<{ route_option_id: string }>(
-          `
-            SELECT route_option_id FROM manufacturing.route_selections
-            WHERE work_order_id = $1 AND reversed_at IS NULL
-            FOR UPDATE
-          `,
-          [workOrder.id]
-        )
-        let routeOptionId = selectedRoute.rows[0]?.route_option_id
-        if (!routeOptionId && assignmentMode === "early_downstream") {
-          const automaticRoute = await client.query<{ route_option_id: string | null }>(
-            `SELECT CASE WHEN count(*) = 1 THEN (array_agg(route.id))[1] ELSE NULL END AS route_option_id
-             FROM manufacturing.route_options route
-             JOIN manufacturing.production_floors floor ON floor.id = route.production_floor_id
-             WHERE route.organization_id = $1 AND route.item_id = $2
-               AND route.active AND floor.code = $3`,
-            [input.organizationId, workOrder.item_id, normalizeProductionFloorCode(input.productionFloorCode)]
-          )
-          routeOptionId = automaticRoute.rows[0]?.route_option_id ?? undefined
-        }
+        const routeOptionId = await currentPlanningRouteOptionId(client, {
+          itemId: workOrder.item_id,
+          organizationId: input.organizationId,
+          productionFloorCode: input.productionFloorCode,
+          sourcePayload: workOrder.source_payload,
+          workOrderId: workOrder.id,
+        })
         let operationSetupId: string | null = null
         if (input.setupNumber && routeOptionId) {
           const setup = await client.query<{ id: string }>(
@@ -2636,6 +2678,9 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
             [routeOptionId, input.setupNumber]
           )
           operationSetupId = setup.rows[0]?.id ?? null
+        }
+        if (input.setupNumber && !operationSetupId && assignmentMode !== "early_downstream") {
+          throw new Error("Requested setup is not on the current route. Refresh the plan before continuing.")
         }
         if (assignmentMode === "early_downstream") {
           if (!operationSetupId) throw new Error("Select a route with Setup 2 before planning it early.")
