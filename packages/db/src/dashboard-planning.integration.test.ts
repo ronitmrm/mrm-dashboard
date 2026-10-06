@@ -76,13 +76,19 @@ beforeAll(async () => {
      VALUES ($1, $2, $3) RETURNING id`,
     [organizationId, subcategory.rows[0]!.id, `Cutting Tool ${suffix}`]
   )
+  const makeModel = await pool.query<{ id: string }>(
+    `INSERT INTO store.make_models (organization_id, name)
+     VALUES ($1, $2) RETURNING id`,
+    [organizationId, `Planning Model ${suffix}`]
+  )
   await pool.query(
     `INSERT INTO store.item_types (
        organization_id, type_code, asset_type, asset_category,
        asset_subcategory, asset_name, identification_name, tracking_mode,
-       unit, asset_category_id, asset_subcategory_id, asset_name_id
+       unit, asset_category_id, asset_subcategory_id, asset_name_id,
+       make_model_id
      ) VALUES ($1, $2, 'NON_CONSUMABLE', $3, $4, $5, $6, 'SERIALIZED',
-       'Nos', $7, $8, $9)`,
+       'Nos', $7, $8, $9, $10)`,
     [
       organizationId,
       toolingAssetCode,
@@ -93,6 +99,7 @@ beforeAll(async () => {
       category.rows[0]!.id,
       subcategory.rows[0]!.id,
       assetName.rows[0]!.id,
+      makeModel.rows[0]!.id,
     ]
   )
 })
