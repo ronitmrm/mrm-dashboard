@@ -34,6 +34,14 @@ recalculates production progress and machine constraints. Both values are
 matched by Job Card and part within the selected floor. An unavailable current
 forecast displays `-`.
 
+Actual Finish Date is the plant-local calendar date of the recorded Item Complete
+timestamp for the final setup in the selected route. Where that setup runs on
+multiple machines, use the latest completion date only after every planned
+machine stream is Item Complete.
+Unfinished Job Cards show `-`. A completed or dispatched Job Card without a
+recorded final-setup completion shows `Not recorded`; neither the forecast nor
+the dispatch date is treated as its actual production finish.
+
 Use the table's per-column filters, including Job Card. The register does not have a separate search strip. Setup Completion and Job Card Dispatch remain visible together; selecting a machine for Setup Completion fills its current Job Card and setup from planning.
 
 Setup Completion can be recorded by a user with the task permission for the
