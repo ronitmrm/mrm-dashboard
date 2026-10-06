@@ -162,7 +162,7 @@ test("removes or limits plans after full and partial raw-material rejection", ()
       producedSetupOne: 5_000,
     }).productionDashboardRows.find((row) => row.jcNo === "RM-REJECT-JC")
   ).toMatchObject({
-    currentProbableDispatchDate: "7-Oct-26",
+    currentProbableDispatchDate: "6-Oct-26",
   })
   expect(planRows(99.9999, "continue_accepted_quantity")).toEqual([])
 
@@ -187,6 +187,6 @@ test("removes or limits plans after full and partial raw-material rejection", ()
   expect(restored.find((row) => row.setupNo === "2")).toMatchObject({
     totalOrderPcs: 9_900,
     rmReplanRequired: false,
-    setupPlannedDate: "23-Sept-26",
+    setupPlannedDate: "22-Sept-26",
   })
 })

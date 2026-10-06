@@ -3502,7 +3502,7 @@ function machinePlanDetails(
         plannerParallelMachineTargets: appliedParallelOverrides.map((parallelOverride) => rowText(parallelOverride, "toMachine", "TO MACHINE", "PLAN ON MACHINE", "TARGET MACHINE")),
         machineAssignment: splitRole === "produced_on_unavailable_machine" ? "Breakdown produced quantity locked on stopped machine" : splitRole === "remaining_moved_to_alternate_machine" ? "Breakdown remaining quantity replanned by system rules" : splitRole === "remaining_delayed_on_same_machine" ? "Breakdown remaining quantity delayed on same machine" : earlyDownstream ? "Planner-approved early downstream setup" : parallelAssignmentOverride ? "Planner-added parallel machine" : appliedParallelOverrides.length ? "Planner-retained parallel machine" : machine === routeMachine ? "Route family fallback" : assignedMachines.length > 1 ? "Parallel 25-day plan" : "Assigned physical machine",
         parallelMachineCount: assignedMachines.length,
-        planningAssumption: `${planningCalendar.productiveHoursPerDay} hrs/day; Friday is plant shutdown; manual planning holidays are skipped; parallel setup WIP is pooled after each machine stream produces it; forecast WIP does not reserve a downstream physical machine unless the Planner approves early Setup 2; normally an unstarted downstream setup is assigned only after recorded WIP satisfies its pooled buffer; the early exception still requires recorded WIP before machine start and limits output to that supply; recorded WIP can feed the next setup on the same working date when cumulative supply covers its full run; stopped-machine WIP starts downstream only when it can feed ${minimumParallelMachineWorkDays} days or complete the order; downstream setup finish cannot precede previous setup finish; RM-at-machine, started shop-floor, or production-actual machines stay locked during recalculation; the same setup keeps its previously planned physical machine unless a material load/date gain justifies moving it; compatible sequential setups and matching Job Cards prefer the preceding machine when separate capacity does not finish earlier; automatic parallel machines require at least ${minimumParallelMachineWorkDays} production days each; a planner-added idle machine overrides only that minimum-run split rule`,
+        planningAssumption: `${planningCalendar.productiveHoursPerDay} hrs/day; Friday is plant shutdown; manual planning holidays are skipped; parallel setup WIP is pooled after each machine stream produces it; forecast WIP does not reserve a downstream physical machine unless the Planner approves early Setup 2; normally an unstarted downstream setup is assigned only after recorded WIP satisfies its pooled buffer; the early exception still requires recorded WIP before machine start and limits output to that supply; recorded WIP can feed the next setup on the same working date once its pooled buffer is ready; stopped-machine WIP starts downstream only when it can feed ${minimumParallelMachineWorkDays} days or complete the order; downstream setup finish cannot precede previous setup finish; RM-at-machine, started shop-floor, or production-actual machines stay locked during recalculation; the same setup keeps its previously planned physical machine unless a material load/date gain justifies moving it; compatible sequential setups and matching Job Cards prefer the preceding machine when separate capacity does not finish earlier; automatic parallel machines require at least ${minimumParallelMachineWorkDays} production days each; a planner-added idle machine overrides only that minimum-run split rule`,
         };
         Object.defineProperty(detail, "__planningMeta", {
           enumerable: false,
@@ -3534,8 +3534,11 @@ function machinePlanDetails(
         planningCalendar,
       };
       const bufferReadyDate = plannedWipBufferReadyDate(bufferArgs);
-      operationReadyDate = maxDateValue(operationReadyDate, bufferReadyDate || maxDateValue(...routeProductionEndDates));
-      operationReadyCanPullForward = actualWipBufferAvailable(bufferArgs);
+      const recordedWipReady = actualWipBufferAvailable(bufferArgs);
+      operationReadyDate = recordedWipReady
+        ? addDays(plantIsoDate(new Date()), 0, planningCalendar)
+        : maxDateValue(operationReadyDate, bufferReadyDate || maxDateValue(...routeProductionEndDates));
+      operationReadyCanPullForward = recordedWipReady;
     }
   }
   const finalizedDetails = finalizeMachineAndSetupSchedule(
@@ -4154,7 +4157,9 @@ function refreshSetupDependencyReadyDates(details: Array<Record<string, unknown>
         ? earlyDownstreamWipDate(group.rows, safeNumber(nextGroup.rows[0]?.physicalWipQty), planningCalendar)
         : "";
       const groupEndDate = maxDateValue(...productionEndDates);
-      operationReadyDate = maxDateValue(groupReadyDate, earlyReadyDate || bufferReadyDate || groupEndDate);
+      operationReadyDate = nextGroup?.rows.some((row) => planningMeta(row).canPullForward)
+        ? addDays(plantIsoDate(new Date()), 0, planningCalendar)
+        : maxDateValue(groupReadyDate, earlyReadyDate || bufferReadyDate || groupEndDate);
       previousSetupEndDate = maxDateValue(previousSetupEndDate, groupEndDate);
     }
   }

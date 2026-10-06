@@ -183,6 +183,9 @@ Recorded WIP can make the next setup ready on the same working date. There is no
 automatic one-day transfer delay once its pooled WIP quantity is sufficient.
 Forecast output becomes available after its production date; it does not count
 as recorded stock before production happens.
+Once recorded WIP meets the normal pooled buffer, the next setup may start even
+when that stock cannot sustain its entire remaining run without later upstream
+output. Its forecast finish still accounts for that upstream supply.
 If every machine on the preceding setup is marked Item Complete below the ordered
 quantity, its recorded good output is the final available supply for the next
 setup. Plan that stock without waiting for pieces the completed setup cannot
