@@ -2787,11 +2787,18 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           input.organizationId,
           input.jobCardNumber
         )
-        const current = await client.query<{ route_option_id: string }>(
+        const current = await client.query<{ route_option_id: string | null }>(
           `
-            SELECT route_option_id FROM manufacturing.route_selections
-            WHERE work_order_id = $1 AND reversed_at IS NULL
-            FOR UPDATE
+            SELECT COALESCE(
+              (SELECT to_route_option_id
+               FROM manufacturing.route_change_events
+               WHERE work_order_id = $1 AND reversed_at IS NULL
+               ORDER BY occurred_at DESC, id DESC LIMIT 1),
+              (SELECT route_option_id
+               FROM manufacturing.route_selections
+               WHERE work_order_id = $1 AND reversed_at IS NULL
+               ORDER BY selected_at DESC LIMIT 1)
+            ) AS route_option_id
           `,
           [workOrder.id]
         )

@@ -2946,6 +2946,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             item.casting,
             material.name AS "materialGrade", rod.name AS "rodType",
             item.rod_size AS "rodSize", item.source_payload AS "itemSource",
+            route_change.to_route_option_id AS "changedRouteOptionId",
             selection.route_option_id AS "selectedRouteOptionId",
             selection.selected_at AS "routeSelectedAt",
             selection.reason AS "routeSelectionReason"
@@ -2953,6 +2954,12 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           JOIN catalog.items item ON item.id = work_order.item_id
           LEFT JOIN catalog.material_grades material ON material.id = item.material_grade_id
           LEFT JOIN catalog.rod_types rod ON rod.id = item.rod_type_id
+          LEFT JOIN LATERAL (
+            SELECT to_route_option_id
+            FROM manufacturing.route_change_events
+            WHERE work_order_id = work_order.id AND reversed_at IS NULL
+            ORDER BY occurred_at DESC, id DESC LIMIT 1
+          ) route_change ON true
           LEFT JOIN LATERAL (
             SELECT route_option_id, selected_at, reason
             FROM manufacturing.route_selections
@@ -2988,7 +2995,8 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         [input.organizationId, jobCard.itemId, floorCode]
       )
       const activeRoutes = routesResult.rows.filter((route) => route.active === true)
-      const explicitRouteId = String(jobCard.selectedRouteOptionId ?? "")
+      const changedRouteId = String(jobCard.changedRouteOptionId ?? "")
+      const explicitRouteId = changedRouteId || String(jobCard.selectedRouteOptionId ?? "")
       const selectedRoute = routesResult.rows.find((route) => route.id === explicitRouteId)
         ?? (activeRoutes.length === 1 ? activeRoutes[0] : undefined)
 
@@ -3697,8 +3705,10 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           ...jobCard,
           id: String(jobCard.id),
           casting: casting > 0 ? String(casting) : null,
-          effectiveRouteSource: explicitRouteId && selectedRoute?.id === explicitRouteId
-            ? "planner_selected"
+          effectiveRouteSource: changedRouteId && selectedRoute?.id === changedRouteId
+            ? "route_change"
+            : explicitRouteId && selectedRoute?.id === explicitRouteId
+              ? "planner_selected"
             : selectedRoute
               ? "single_active_route"
               : "planner_required",

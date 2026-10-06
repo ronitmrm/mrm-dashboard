@@ -38,6 +38,11 @@ Actual Finish Date is the plant-local calendar date of the recorded Item Complet
 timestamp for the final setup in the selected route. Where that setup runs on
 multiple machines, use the latest completion date only after every planned
 machine stream is Item Complete.
+If an approved route change carries completed work into the new route with zero
+remaining quantity on its final setup, use the recorded completion date of that
+same Job Card, part, and equivalent setup operation from the prior route after
+every recorded machine stream is Item Complete. Work started on the new route
+must use its own completion.
 Unfinished Job Cards show `-`. A completed or dispatched Job Card without a
 recorded final-setup completion shows `Not recorded`; neither the forecast nor
 the dispatch date is treated as its actual production finish.
@@ -63,6 +68,9 @@ Every Job Card has one dedicated workspace URL. The workspace reads, but does no
 - durable Planner Movement Records for machine shifts, machine constraints, priority interruptions, and queue changes, including their Production Session settlement evidence;
 - Production Sessions, downtime and rejection;
 - setup-progress, historical Production Card and dispatch events.
+
+The workspace's selected Route follows the latest unreversed Route Change for
+that Job Card; otherwise it uses the current Route Selection.
 
 The workspace separates Overview, Masters, Setup, Setup Production, Production,
 Inprocess Quality Control, Downtime, Delivery, and Complete Log. Setup Production

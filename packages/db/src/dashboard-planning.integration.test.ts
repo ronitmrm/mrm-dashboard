@@ -4,6 +4,7 @@ import { Pool } from "pg"
 import { afterAll, beforeAll, describe, expect, test } from "vitest"
 
 import { createDashboardPlanningRepository } from "./dashboard-planning"
+import { readCanonicalDashboardSource } from "./dashboard-read-model"
 import { migrateDatabase } from "./migrate"
 import { createProductionShopFloorRepository } from "./production-shop-floor"
 
@@ -906,6 +907,11 @@ describe("dashboard planning writes", () => {
       ],
       reason: "Restore approved route",
     })
+    const workspace = await jobCards.readJobCardWorkspace({
+      jobCardNumber: firstJobCard, organizationId,
+    })
+    expect(workspace.routes.find((route) => route.selected)).toMatchObject({ routeCode: "1" })
+    expect(workspace.setups.map((setup) => setup.setupNumber)).toEqual(["1", "2"])
 
     const result = await pool.query<{
       constraints: string
@@ -979,6 +985,29 @@ describe("dashboard planning writes", () => {
       route_change_setups: "2",
       route_history: "2",
     })
+    await repository.recordRouteChange({
+      jobCardNumber: firstJobCard,
+      newRouteCode: "2",
+      organizationId,
+      remainingSetups: [{ plan: true, quantity: 60, setupNumber: 1 }],
+      reason: "Continue on second route",
+    })
+    const changes = await pool.query<{ from_code: string; to_code: string }>(`
+      SELECT previous.route_code AS from_code, next.route_code AS to_code
+      FROM manufacturing.route_change_events event
+      JOIN manufacturing.work_orders work_order ON work_order.id = event.work_order_id
+      JOIN manufacturing.route_options previous ON previous.id = event.from_route_option_id
+      JOIN manufacturing.route_options next ON next.id = event.to_route_option_id
+      WHERE work_order.job_card_number = $1 AND event.reversed_at IS NULL
+      ORDER BY event.occurred_at, event.id
+    `, [firstJobCard])
+    expect(changes.rows).toEqual([
+      { from_code: "2", to_code: "1" },
+      { from_code: "1", to_code: "2" },
+    ])
+    const source = await readCanonicalDashboardSource(pool, organizationId)
+    expect(source.routeChanges.find((change) => change.jobCardNumber === firstJobCard
+      && change.newRouteCode === "2")?.fromRouteCode).toBe("1")
   })
 
   test("blocks planner output duplication and records canonical closed-session output", async () => {
