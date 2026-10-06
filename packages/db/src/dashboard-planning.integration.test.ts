@@ -1010,6 +1010,83 @@ describe("dashboard planning writes", () => {
       && change.newRouteCode === "2")?.fromRouteCode).toBe("1")
   })
 
+  test("planner actions use the changed route and reject old-route active state", async () => {
+    const changedItem = `ACTION-ROUTE-${suffix}`
+    const changedJobCard = `ACTION-ROUTE-JC-${suffix}`
+    const targetMachine = `ACTION-ROUTE-MC-${suffix}`
+    const staleMachine = `ACTION-ROUTE-OLD-MC-${suffix}`
+    for (const machineNumber of [targetMachine, staleMachine]) {
+      await repository.upsertMachine({ organizationId, machineNumber, productionFloorCode: "cnc" })
+    }
+    for (const routeCode of ["OLD", "NEW"]) {
+      await repository.upsertRouteOption({
+        itemUid: changedItem, organizationId, productionFloorCode: "cnc", routeCode,
+        setups: [1, 2].map((setupNumber) => ({
+          operationCode: `SETUP-${setupNumber}`, sequence: setupNumber, setupNumber,
+        })),
+      })
+    }
+    await repository.upsertWorkOrder({
+      itemUid: changedItem, jobCardNumber: changedJobCard, organizationId,
+      orderedQuantity: 20, workOrderNumber: changedJobCard,
+      sourcePayload: { optionNumber: "OLD", productionFloorCode: "cnc" },
+    })
+    await repository.selectRoute({ jobCardNumber: changedJobCard, organizationId,
+      productionFloorCode: "cnc", routeCode: "OLD" })
+    await repository.recordRouteChange({
+      jobCardNumber: changedJobCard, organizationId, newRouteCode: "NEW",
+      productionFloorCode: "cnc",
+      reason: "Use revised route", remainingSetups: [{ setupNumber: 2, plan: true, quantity: 20 }],
+    })
+    const saved = await repository.recordPlanOverride({
+      assignmentMode: "add_parallel_machine", jobCardNumber: changedJobCard,
+      organizationId, productionFloorCode: "cnc", reason: "Use new route setup", setupNumber: 2,
+      toMachineNumber: targetMachine,
+      queuePlacements: [{ targetJobCardNumber: changedJobCard,
+        targetMachineNumber: targetMachine, targetSetupNumber: 2 }],
+    })
+    const reference = await pool.query<{ actual_setup_id: string; detail_setup_id: string; expected_setup_id: string }>(
+      `SELECT event.operation_setup_id AS actual_setup_id,
+         detail.related_setup_id AS detail_setup_id,
+         setup.id AS expected_setup_id
+       FROM manufacturing.plan_override_events event
+       JOIN manufacturing.plan_override_event_details detail
+         ON detail.plan_override_event_id = event.id AND detail.detail_type = 'queue-placement'
+       JOIN manufacturing.operation_setups setup
+         ON setup.setup_number = 2 AND setup.route_option_id = (
+           SELECT id FROM manufacturing.route_options
+           WHERE item_id = (SELECT item_id FROM manufacturing.work_orders WHERE job_card_number = $2)
+             AND route_code = 'NEW')
+       WHERE event.id = $1`,
+      [saved.id, changedJobCard]
+    )
+    expect(reference.rows[0]?.actual_setup_id).toBe(reference.rows[0]?.expected_setup_id)
+    expect(reference.rows[0]?.detail_setup_id).toBe(reference.rows[0]?.expected_setup_id)
+
+    await pool.query(
+      `INSERT INTO manufacturing.shop_floor_setup_state (
+         organization_id, work_order_id, route_option_id, operation_setup_id,
+         machine_id, stage, active, source_system, source_table, source_id
+       ) SELECT $1, work_order.id, route.id, setup.id, machine.id,
+         'operator_started', true, 'test', 'old-route-state', $2
+       FROM manufacturing.work_orders work_order
+       JOIN manufacturing.route_options route
+         ON route.item_id = work_order.item_id AND route.route_code = 'OLD'
+       JOIN manufacturing.operation_setups setup
+         ON setup.route_option_id = route.id AND setup.setup_number = 2
+       JOIN catalog.machines machine
+         ON machine.organization_id = $1 AND machine.machine_number = $3
+       WHERE work_order.organization_id = $1 AND work_order.job_card_number = $4`,
+      [organizationId, `old-route-state:${suffix}`, staleMachine, changedJobCard]
+    )
+    await expect(repository.recordMachineConstraint({
+      interruptedSetups: [{ jobCardNumber: changedJobCard, machineNumber: staleMachine, setupNumber: 2 }],
+      machineNumber: staleMachine, organizationId, productionFloorCode: "cnc",
+      reason: "Unavailable after route change", rescheduleAction: "shift_required",
+      unavailableFrom: "2026-10-06T10:00:00+05:30",
+    })).rejects.toThrow("Active setup belongs to an earlier route")
+  })
+
   test("blocks planner output duplication and records canonical closed-session output", async () => {
     await repository.selectRoute({
       jobCardNumber: firstJobCard,
