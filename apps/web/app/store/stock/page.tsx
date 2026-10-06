@@ -405,7 +405,14 @@ export default async function StoreStockPage({
                         </Link>
                       ) : null}
                     </TableCell>
-                    <TableCell>{item.assetName}</TableCell>
+                    <TableCell>
+                      {item.assetName}
+                      {item.identificationName ? (
+                        <span className="block text-xs text-muted-foreground">
+                          Identification: {item.identificationName}
+                        </span>
+                      ) : null}
+                    </TableCell>
                     <TableCell>{item.makeModel}</TableCell>
                     <TableCell>
                       {item.assetType === "NON_CONSUMABLE"
