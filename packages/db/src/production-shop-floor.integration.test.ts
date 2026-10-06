@@ -621,6 +621,45 @@ describe("production and shop-floor workflows", () => {
     })
   })
 
+  test("saves a Setting checklist on the latest route change", async () => {
+    const jobCardNumber = `FLOOR-JC-${suffix}-ROUTE`
+    await planning.upsertRouteOption({
+      itemUid, organizationId, productionFloorCode: "cnc", routeCode: "CNC-2",
+      setups: [{ operationCode: "TURN", sequence: 1, setupNumber: 1 }],
+    })
+    await planning.upsertWorkOrder({
+      itemUid, jobCardNumber, orderedQuantity: 100, organizationId,
+      sourcePayload: { optionNumber: "CNC-1" },
+      workOrderNumber: jobCardNumber,
+    })
+    await planning.selectRoute({
+      jobCardNumber, organizationId, productionFloorCode: "cnc", routeCode: "CNC-1",
+    })
+    await planning.recordRouteChange({
+      jobCardNumber, newRouteCode: "CNC-2", organizationId,
+      productionFloorCode: "cnc", reason: "Use the revised route",
+    })
+    const template = await quality.upsertSetupChecklistTemplate({
+      code: `CNC-ROUTE-${suffix}`, name: "Setting route check", organizationId,
+      productionFloorCode: "cnc", payload: {}, revision: 1,
+      items: [{ itemKey: "program", prompt: "Program checked", inputType: "checkbox", sequence: 1, required: true }],
+    })
+    const session = await quality.saveSetupChecklistSession({
+      organizationId, productionFloorCode: "cnc", jobCardNumber,
+      operationSetupCode: "1", machineNumber: cncMachine, templateCode: template.code,
+      sessionKey: `CNC-ROUTE-${suffix}`, phase: "end", status: "Completed",
+      payload: { optionNumber: "CNC-2" }, results: [{ itemKey: "program", value: true }],
+    })
+    const saved = await pool.query<{ route_code: string }>(
+      `SELECT route.route_code FROM quality.setup_checklist_sessions checklist
+       JOIN manufacturing.operation_setups setup ON setup.id = checklist.operation_setup_id
+       JOIN manufacturing.route_options route ON route.id = setup.route_option_id
+       WHERE checklist.id = $1`,
+      [session.id]
+    )
+    expect(saved.rows[0]?.route_code).toBe("CNC-2")
+  })
+
   test("keeps CNC count continuity across shift sessions and stores linked events", async () => {
     const template = await quality.upsertSetupChecklistTemplate({
       code: `CNC-${suffix}`, name: "CNC Setting", organizationId, productionFloorCode: "cnc",

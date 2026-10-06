@@ -143,10 +143,10 @@ Part Readiness lists the gaps and the changed Job Card receives no new machine
 plan until the selected route is ready. A Move Setup decision uses the target
 machine from its decision date onward; an outage that ended before that decision
 does not block the move.
-Subsequent Planner Actions, Production Sessions, production entries, and dispatch
-resolve setup identity from the latest active Change Route before any earlier
-route choice. Interruption checks must inspect the session on that current
-setup before releasing its machine.
+Subsequent Planner Actions, Setup Checklists, Production Sessions, production
+entries, and dispatch resolve setup identity from the latest active Change Route
+before any earlier route choice. Interruption checks must inspect the session on
+that current setup before releasing its machine.
 Change Route may be found by Job Card or by Part Code. Part Code narrows the
 available Job Cards; the Planner must select one Job Card because multiple Job
 Cards can share a part and a route change applies to one Job Card.
