@@ -3801,7 +3801,7 @@ function ProductionDashboardPanel({ payload }: { payload: DashboardPayload }) {
     [floorPayloads]
   )
   const pending = rows.filter(
-    (row) => displayValue(row.status) === "Pending"
+    (row) => displayValue(row.status) !== "Dispatched"
   ).length
   const dispatched = rows.filter(
     (row) => displayValue(row.status) === "Dispatched"
@@ -3897,7 +3897,7 @@ function ProductionDashboardPanel({ payload }: { payload: DashboardPayload }) {
                       Current Probable Dispatch Date
                     </TableHead>
                     <TableHead className="min-w-28">Status</TableHead>
-                    <TableHead className="min-w-36">Dispatched Date</TableHead>
+                    <TableHead className="min-w-36">Latest Dispatch Date</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -3951,7 +3951,7 @@ function ProductionDashboardPanel({ payload }: { payload: DashboardPayload }) {
                           )}
                         </TableCell>
                         <TableCell>
-                          <StatusBadge value={row.status} />
+                          <StatusBadge value={row.status} tone={row.status === "Partially dispatched" ? "information" : undefined} />
                         </TableCell>
                         <TableCell>
                           {displayValue(row.dispatchedDate)}
@@ -7932,11 +7932,14 @@ function JobCardDispatchActionForm({
   productionFloorCode,
 }: {
   approver?: EmployeeOption
-  jobCards: string[]
+  jobCards: ReturnType<typeof dispatchReadyJobCards>
   onSubmit: (body: Record<string, unknown>) => void | Promise<void>
   productionFloorCode: ProductionFloorCode
 }) {
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [selectedJobCard, setSelectedJobCard] = useState("")
+  const [quantity, setQuantity] = useState("")
+  const selected = jobCards.find((card) => card.jobCard === selectedJobCard)
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -7946,11 +7949,14 @@ function JobCardDispatchActionForm({
     setIsSubmitting(true)
     try {
       await onSubmit({
-        jcNo: String(formData.get("jcNo") ?? "").trim(),
+        jcNo: selectedJobCard,
         productionFloorCode,
+        quantity: Number(quantity),
         remark: String(formData.get("remark") ?? "").trim(),
       })
       form.reset()
+      setSelectedJobCard("")
+      setQuantity("")
     } catch {
       // submitAction already displays the error; preserve the selected Job Card.
     } finally {
@@ -7968,8 +7974,8 @@ function JobCardDispatchActionForm({
         <div>
           <div className="text-sm font-medium">Job Card Dispatch</div>
           <div className="text-xs text-muted-foreground">
-            Only Job Cards With Every Planned Setup Completed Are Ready For
-            Dispatch.
+            Dispatch recorded good pieces from the final setup. Production can
+            continue after a partial dispatch.
           </div>
         </div>
         <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
@@ -7978,18 +7984,36 @@ function JobCardDispatchActionForm({
               className="h-9 rounded-md border bg-background px-3 text-sm"
               name="jcNo"
               required
+              value={selectedJobCard}
+              onChange={(event) => {
+                const jobCard = event.target.value
+                setSelectedJobCard(jobCard)
+                setQuantity(String(jobCards.find((card) => card.jobCard === jobCard)?.availablePieces ?? ""))
+              }}
             >
               <option value="">
                 {jobCards.length
                   ? "Select Ready Job Card"
                   : "No Job Cards Ready For Dispatch"}
               </option>
-              {jobCards.map((jobCard) => (
-                <option key={jobCard} value={jobCard}>
-                  {jobCard}
+              {jobCards.map((card) => (
+                <option key={card.jobCard} value={card.jobCard}>
+                  {card.jobCard} · {card.availablePieces.toLocaleString("en-IN")} pcs available
                 </option>
               ))}
             </SearchableSelect>
+          </Field>
+          <Field label="Dispatch Quantity (pcs)">
+            <Input
+              type="number"
+              min="1"
+              max={selected?.availablePieces}
+              step="1"
+              required
+              disabled={!selected}
+              value={quantity}
+              onChange={(event) => setQuantity(event.target.value)}
+            />
           </Field>
           <Field label="Dispatched By">
             <Input
@@ -8003,6 +8027,9 @@ function JobCardDispatchActionForm({
             <Input name="remark" placeholder="Optional" />
           </Field>
         </div>
+        {selected ? <div className="text-xs text-muted-foreground">
+          {selected.finishedGoodPieces.toLocaleString("en-IN")} finished good · {selected.dispatchedPieces.toLocaleString("en-IN")} already dispatched · {selected.availablePieces.toLocaleString("en-IN")} available now
+        </div> : null}
         <Button
           className="w-fit"
           type="submit"
@@ -8034,17 +8061,13 @@ function JobCardsPanel({
 }) {
   const { signedInDispatchApprover } =
     useProductionEmployeeDirectory(productionFloorCode)
-  const plannedRows = useMemo(
-    () => asArray(productionControl.machinePlanDetailRows),
-    [productionControl.machinePlanDetailRows]
-  )
   const jobCardRows = useMemo(
     () => asArray(productionControl.jobCardStatusTiles),
     [productionControl.jobCardStatusTiles]
   )
   const readyJobCards = useMemo(
-    () => dispatchReadyJobCards(jobCardRows, plannedRows),
-    [jobCardRows, plannedRows]
+    () => dispatchReadyJobCards(jobCardRows),
+    [jobCardRows]
   )
 
   return (
@@ -18749,7 +18772,8 @@ function jobCardTrackingState(
   setupRows: DashboardPayload[] = []
 ) {
   const dispatchStatus = str(row.dispatchStatus).toLowerCase()
-  if (dispatchStatus.includes("dispatch")) return "Dispatched"
+  if (dispatchStatus === "partially dispatched") return "Partially dispatched"
+  if (["shifted to dispatch", "dispatched", "dispatch approved"].includes(dispatchStatus)) return "Dispatched"
 
   const statuses = [
     row.planningBlocker,

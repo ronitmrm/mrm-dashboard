@@ -6,43 +6,30 @@ function rowValue(row: PlanningRow, keys: string[]) {
   return keys.map((key) => text(row[key])).find(Boolean) ?? ""
 }
 
-function isCompletedSetup(row: PlanningRow) {
-  return (
-    text(row.shopFloorStage).toLowerCase() === "item_complete"
-    || text(row.runningStatus).toLowerCase() === "complete"
-  )
-}
-
 export function dispatchReadyJobCards(
   jobCards: PlanningRow[],
-  plannedRows: PlanningRow[],
 ) {
-  const plansByJobCard = new Map<string, PlanningRow[]>()
-
-  for (const row of plannedRows) {
-    const jobCard = rowValue(row, ["jcNo", "JobCardNo", "jobCard"])
-    const setupNo = rowValue(row, ["setupNo", "setupNumber", "SETUP NO.", "SETUP NO"])
-    if (!jobCard || !setupNo) continue
-    const key = jobCard.toLocaleLowerCase("en-IN")
-    plansByJobCard.set(key, [...(plansByJobCard.get(key) ?? []), row])
-  }
-
-  const ready = new Map<string, string>()
+  const ready = new Map<string, { jobCard: string; availablePieces: number; dispatchedPieces: number; finishedGoodPieces: number }>()
   for (const row of jobCards) {
     const jobCard = rowValue(row, ["jcNo", "JobCardNo", "jobCard"])
     const dispatchStatus = text(row.dispatchStatus).toLowerCase()
     const key = jobCard.toLocaleLowerCase("en-IN")
-    const plans = plansByJobCard.get(key) ?? []
+    const availablePieces = Number(row.dispatchAvailablePieces)
     if (
       !jobCard
       || ["shifted to dispatch", "dispatched", "dispatch approved"].includes(dispatchStatus)
-      || !plans.length
-      || !plans.every(isCompletedSetup)
+      || !Number.isSafeInteger(availablePieces)
+      || availablePieces <= 0
     ) continue
-    ready.set(key, jobCard)
+    ready.set(key, {
+      jobCard,
+      availablePieces,
+      dispatchedPieces: Number(row.dispatchedPieces) || 0,
+      finishedGoodPieces: Number(row.finalSetupGoodPieces) || 0,
+    })
   }
 
   return [...ready.values()].sort((left, right) =>
-    left.localeCompare(right, "en-IN", { numeric: true })
+    left.jobCard.localeCompare(right.jobCard, "en-IN", { numeric: true })
   )
 }

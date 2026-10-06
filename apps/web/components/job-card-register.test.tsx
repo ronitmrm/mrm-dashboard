@@ -97,3 +97,21 @@ test("shows dispatched finished good and order shortfall instead of active progr
   expect(markup).not.toContain("95.1%")
   expect(markup).not.toContain('role="progressbar"')
 })
+
+test("keeps production progress visible after a partial dispatch", () => {
+  const markup = renderToStaticMarkup(
+    <JobCardRegister actionNeededCount={0} floor="cnc" onOpenMasterReadiness={() => {}}
+      rows={[{ jcNo: "JC-PARTIAL", partCode: "PART-1", optionNumber: "1", orderPcs: 100,
+        finalSetupNumber: "1", finalSetupGoodPieces: 40,
+        dispatchStatus: "Partially dispatched", dispatchedPieces: 25, dispatchAvailablePieces: 15 }]}
+      routeRows={[{ partNo: "PART-1", optionNumber: "1", setupNo: "1" }]}
+      productionRows={[{ jobCard: "JC-PARTIAL", partCode: "PART-1", setupNo: "3", actualQty: 40 }]}
+      finishDateRows={[]} />
+  )
+
+  expect(markup).toContain("Partially dispatched")
+  expect(markup).toContain("25 pcs dispatched")
+  expect(markup).toContain("15 ready to dispatch")
+  expect(markup).toContain('role="progressbar"')
+  expect(markup).toContain('aria-valuenow="40"')
+})

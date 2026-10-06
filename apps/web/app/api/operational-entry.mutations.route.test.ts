@@ -178,10 +178,11 @@ describe("production entry mutation API authorization", () => {
 
     const response = await post("dispatch-approval", {
       jcNo: "P2046", productionFloorCode: "cnc", approvedBy: "Another Employee",
+      quantity: 24,
     })
     expect(response.status).toBe(200)
     expect(dependencies.recordDispatchApproval).toHaveBeenCalledWith(
-      expect.objectContaining({ approvedBy: "Planner One", actorUserId: "entry-writer" })
+      expect.objectContaining({ approvedBy: "Planner One", actorUserId: "entry-writer", quantity: 24 })
     )
   })
 
