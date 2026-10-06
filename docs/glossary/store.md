@@ -304,6 +304,9 @@ unchanged.
 Consumable and Non Consumable items across accountable Stores. It shows Main
 Store availability alongside company-wide on-hand quantity or Unit ID count;
 company totals include stock accountable to Quality and production Stores.
+Asset Name, Make/Model, and Asset Type appear in separate columns. Unit Status
+and Responsible Store apply only to physical Unit ID rows; an Asset Code row
+summarizes stock across Stores and has no single responsible Store.
 Departmental and Quality Store workspaces show their own accountable stock.
 A Consumable has one quantity-managed row. Recording use reduces its
 local available balance and company on-hand.
