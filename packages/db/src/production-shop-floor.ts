@@ -3226,7 +3226,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
                 CASE WHEN event.quantity IS NULL
                   THEN COALESCE(event.reason, 'Dispatch decision')
                   ELSE concat_ws(' · ',
-                    event.quantity::text || ' pcs',
+                    trim(trailing '.' from trim(trailing '0' from event.quantity::text)) || ' pcs',
                     NULLIF(event.reason, ''))
                 END
               FROM manufacturing.dispatch_approval_events event
