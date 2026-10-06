@@ -6,9 +6,11 @@ export type ProductionEntry = {
   machine: string;
   partCode: string;
   jobCard?: string;
+  optionNumber?: string;
   setupNo?: string;
   outputQty: number;
   actualQty?: number;
+  quantityGood?: number;
   targetQty: number;
   rejectQty: number;
   rejectionType?: string;

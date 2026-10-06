@@ -32,8 +32,9 @@ function jobCardProgress(row: Row) {
 
 function jobCardStage(row: Row) {
   const progress = jobCardProgress(row)
-  const dispatch = first(row, ["dispatchStatus", "status"])
-  if (dispatch.toLowerCase().includes("dispatch")) return "Dispatched"
+  const dispatch = first(row, ["dispatchStatus", "status"]).toLowerCase()
+  if (dispatch === "partially dispatched") return "Partially dispatched"
+  if (["shifted to dispatch", "dispatched", "dispatch approved"].includes(dispatch)) return "Dispatched"
   if (progress !== null && progress >= 100) return "Production complete"
   if ((progress ?? 0) > 0 || numeric(row.rawRows) > 0 || numeric(row.rawActualQty) > 0 || numeric(row.rawOutputQty) > 0) return "Production"
   if (first(row, ["rmStatus"]).toLowerCase() !== "received") return "Awaiting RM"
@@ -79,8 +80,10 @@ export function JobCardRegister({
         const prefixed = rawSetup.match(/^(\d+)\.(\d+)$/)
         const setup = text(route.displaySetupNo) || (prefixed?.[1] === option ? prefixed[2] : rawSetup)
         if (!setup) continue
-        const good = goodBySetup.get(key(jobCard, part, setup))
-          ?? goodBySetup.get(key(jobCard, part, rawSetup)) ?? 0
+        const good = key(setup) === key(row.finalSetupNumber) && row.finalSetupGoodPieces != null
+          ? numeric(row.finalSetupGoodPieces)
+          : goodBySetup.get(key(jobCard, part, setup))
+            ?? goodBySetup.get(key(jobCard, part, rawSetup)) ?? 0
         setups.set(setup, good)
       }
       const progress = buildJobCardProgress(ordered,
@@ -139,6 +142,7 @@ export function JobCardRegister({
               const completedSetups = numeric(row.completedProductionSetupCount)
               const stage = jobCardStage(row)
               const dispatched = stage === "Dispatched"
+              const partiallyDispatched = stage === "Partially dispatched"
               const ordered = numeric(row.orderPcs ?? row.orderedQty ?? row["ORD. PCS."])
               const finished = numeric(row.finalSetupGoodPieces)
               const short = Math.max(ordered - finished, 0)
@@ -168,6 +172,9 @@ export function JobCardRegister({
                     </div>
                   ) : progress === null ? <span className="text-xs text-muted-foreground">Progress unavailable</span> : (
                     <div className="space-y-1.5 py-1" title="Each route setup contributes an equal share of overall progress">
+                      {partiallyDispatched ? <div className="text-xs font-medium tabular-nums">
+                        {numeric(row.dispatchedPieces).toLocaleString("en-IN")} pcs dispatched · {numeric(row.dispatchAvailablePieces).toLocaleString("en-IN")} ready to dispatch
+                      </div> : null}
                       <div className="flex items-baseline justify-between gap-3">
                         <span className="text-sm font-semibold tabular-nums">{progress.toFixed(1)}%</span>
                         <span className="text-xs text-muted-foreground">overall</span>

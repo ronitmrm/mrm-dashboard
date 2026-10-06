@@ -487,7 +487,16 @@ export async function readCanonicalDashboardSource(
               'optionNumber', session.option_number_snapshot,
               'setupNo', session.setup_number_snapshot,
               'machine', session.machine_number_snapshot
-            ) END || CASE WHEN prior_route.id IS NULL THEN '{}'::jsonb
+            ) END || CASE WHEN production_entry.id IS NULL THEN '{}'::jsonb
+            ELSE jsonb_strip_nulls(jsonb_build_object(
+              'jobCard', production_work_order.job_card_number,
+              'partCode', production_item.uid,
+              'setupNo', production_setup.setup_number::text,
+              'quantityGood', production_entry.quantity_good
+            ))
+            END || CASE WHEN production_route.id IS NULL THEN '{}'::jsonb
+            ELSE jsonb_build_object('optionNumber', production_route.route_code)
+            END || CASE WHEN prior_route.id IS NULL THEN '{}'::jsonb
             ELSE jsonb_build_object('fromRouteCode', prior_route.route_code)
             END AS source_payload,
           source.changed_at,
@@ -503,7 +512,7 @@ export async function readCanonicalDashboardSource(
             AND production_floor_code = budget.floor_code
         ) counts
         CROSS JOIN LATERAL (
-          SELECT source_id, source_payload, changed_at, source_kind,
+          SELECT source_id, source_table, source_payload, changed_at, source_kind,
             source_group, entry_type
           FROM derived.dashboard_source_records
           WHERE organization_id = $1 AND source_kind = 'physical'
@@ -517,6 +526,21 @@ export async function readCanonicalDashboardSource(
           ON source.source_group = 'productionEntries'
           AND session.organization_id = $1 AND session.id::text = source.source_id
           AND session.production_entry_id IS NOT NULL AND session.reversed_at IS NULL
+        LEFT JOIN manufacturing.production_entries production_entry
+          ON source.source_group = 'productionEntries'
+          AND source.source_table = 'production_entries'
+          AND production_entry.organization_id = $1
+          AND production_entry.source_id = source.source_id
+          AND production_entry.reversed_at IS NULL
+        LEFT JOIN manufacturing.work_orders production_work_order
+          ON production_work_order.id = production_entry.work_order_id
+        LEFT JOIN catalog.items production_item
+          ON production_item.id = production_work_order.item_id
+        LEFT JOIN manufacturing.operation_setups production_setup
+          ON production_setup.id = production_entry.operation_setup_id
+        LEFT JOIN manufacturing.route_options production_route
+          ON production_route.id = COALESCE(
+            production_setup.route_option_id, production_entry.route_option_id)
         LEFT JOIN manufacturing.route_change_events route_change
           ON source.source_group = 'routeChanges'
           AND route_change.organization_id = $1

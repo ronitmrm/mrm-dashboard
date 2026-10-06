@@ -75,6 +75,29 @@ type WorkOrderContext = {
   status: string
 }
 
+type DispatchSetup = {
+  id: string
+  operation_name: string | null
+  route_option_id: string
+  setup_number: number
+  source_payload: Record<string, unknown> | null
+}
+
+function dispatchSetupSignature(setup: DispatchSetup) {
+  const nested = setup.source_payload?.payload
+  const source = nested && typeof nested === "object" && !Array.isArray(nested)
+    ? nested as Record<string, unknown>
+    : setup.source_payload ?? {}
+  const key = (value: unknown) => String(value ?? "").replace(/\s+/g, "").toLowerCase()
+  const name = key(source.setupName ?? source["SETUP NAME"] ?? setup.operation_name)
+  const family = key(source.machineFamily ?? source["MACHINE FAMILY"]
+    ?? source["Machine Family"] ?? source["MACHINE USED"] ?? source.machineUsed)
+  const weight = Number(String(source.stageWeight ?? source["STAGE WEIGHT"]
+    ?? source["STAGE WEIGHT GRAM"] ?? source["STAGE WEIGHT (GRAM)"] ?? "").replace(/,/g, "").trim())
+  return name && family && weight > 0 && Number.isFinite(weight)
+    ? `${name}|${family}|${weight}` : null
+}
+
 type ProductionSessionEndReason =
   | "operator_change"
   | "shift_end"
@@ -439,12 +462,41 @@ async function workOrderContext(
     `
       SELECT work_order.id AS work_order_id, work_order.item_id,
         work_order.source_payload, work_order.status,
-        COALESCE(selection.route_option_id, automatic_route.route_option_id)
-          AS route_option_id
+        COALESCE(route_change.to_route_option_id,
+          CASE WHEN imported.route_code IS NOT NULL THEN imported_route.id
+            ELSE COALESCE(selection.route_option_id, automatic_route.route_option_id)
+          END) AS route_option_id
       FROM manufacturing.work_orders work_order
-      LEFT JOIN manufacturing.route_selections selection
-        ON selection.work_order_id = work_order.id
-        AND selection.reversed_at IS NULL
+      LEFT JOIN LATERAL (
+        SELECT to_route_option_id
+        FROM manufacturing.route_change_events
+        WHERE work_order_id = work_order.id AND reversed_at IS NULL
+        ORDER BY occurred_at DESC, id DESC LIMIT 1
+      ) route_change ON true
+      LEFT JOIN LATERAL (
+        SELECT COALESCE(
+          NULLIF(btrim(work_order.source_payload->>'OPTION NUMBER'), ''),
+          NULLIF(btrim(work_order.source_payload->>'optionNumber'), '')
+        ) AS route_code
+      ) imported ON true
+      LEFT JOIN LATERAL (
+        SELECT route.id
+        FROM manufacturing.route_options route
+        JOIN manufacturing.production_floors floor
+          ON floor.id = route.production_floor_id
+        WHERE route.organization_id = work_order.organization_id
+          AND route.item_id = work_order.item_id AND route.active
+          AND floor.code = $3
+          AND (lower(route.route_code) = lower(imported.route_code)
+            OR lower(COALESCE(route.legacy_option_number, '')) = lower(imported.route_code))
+        ORDER BY route.revision DESC LIMIT 1
+      ) imported_route ON imported.route_code IS NOT NULL
+      LEFT JOIN LATERAL (
+        SELECT route_option_id
+        FROM manufacturing.route_selections
+        WHERE work_order_id = work_order.id AND reversed_at IS NULL
+        ORDER BY selected_at DESC, id DESC LIMIT 1
+      ) selection ON true
       LEFT JOIN LATERAL (
         SELECT CASE WHEN count(*) = 1
           THEN (array_agg(route.id))[1]
@@ -458,6 +510,8 @@ async function workOrderContext(
           AND route.active
           AND floor.code = $3
       ) automatic_route ON selection.route_option_id IS NULL
+        AND imported.route_code IS NULL
+        AND route_change.to_route_option_id IS NULL
       WHERE work_order.organization_id = $1
         AND lower(work_order.job_card_number) = lower($2)
       FOR UPDATE OF work_order
@@ -3169,7 +3223,12 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
               UNION ALL
               SELECT 'dispatch_' || event.decision, event.occurred_at,
                 NULL::text, NULL::text, actor.name,
-                COALESCE(event.reason, 'Dispatch decision')
+                CASE WHEN event.quantity IS NULL
+                  THEN COALESCE(event.reason, 'Dispatch decision')
+                  ELSE concat_ws(' · ',
+                    event.quantity::text || ' pcs',
+                    NULLIF(event.reason, ''))
+                END
               FROM manufacturing.dispatch_approval_events event
               LEFT JOIN identity.users actor ON actor.id = event.actor_user_id
               WHERE event.work_order_id = $1 AND event.reversed_at IS NULL
@@ -4524,38 +4583,132 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
       jobCardNumber: string
       organizationId: string
       productionFloorCode?: string
+      quantity: number
       remark?: string | null
     }) {
       return transaction(pool, async (client) => {
+        if (!Number.isSafeInteger(input.quantity) || input.quantity <= 0) {
+          throw new Error("Dispatch quantity must be a positive whole number of pieces.")
+        }
         const workOrder = await workOrderContext(
           client,
           input.organizationId,
           input.jobCardNumber,
           input.productionFloorCode
         )
-        const existing = await client.query<{ id: string }>(
-          `SELECT id FROM manufacturing.dispatch_approval_events
-           WHERE work_order_id = $1 AND decision = 'approved'
-             AND reversed_at IS NULL
+        const floorCode = normalizeProductionFloorCode(input.productionFloorCode)
+        const finalSetup = await client.query<DispatchSetup>(
+          `SELECT setup.id, setup.route_option_id, setup.setup_number,
+             setup.operation_name, setup.source_payload
+           FROM manufacturing.route_options route
+           JOIN manufacturing.production_floors floor
+             ON floor.id = route.production_floor_id
+           JOIN manufacturing.operation_setups setup
+             ON setup.route_option_id = route.id AND setup.active
+           WHERE route.id = $1 AND route.organization_id = $2
+             AND route.active AND floor.code = $3
+           ORDER BY setup.sequence DESC, setup.setup_number DESC
            LIMIT 1`,
+          [workOrder.route_option_id, input.organizationId, floorCode]
+        )
+        if (!finalSetup.rows[0]) {
+          throw new Error("Select a route with a final setup before dispatching finished good.")
+        }
+        const produced = await client.query<{ good_pieces: string }>(
+          `SELECT COALESCE(sum(entry.quantity_good), 0)::text AS good_pieces
+           FROM manufacturing.production_entries entry
+           WHERE entry.organization_id = $1 AND entry.work_order_id = $2
+             AND entry.operation_setup_id = $3 AND entry.reversed_at IS NULL`,
+          [input.organizationId, workOrder.work_order_id, finalSetup.rows[0].id]
+        )
+        let goodPieces = Number(produced.rows[0]?.good_pieces ?? 0)
+        const routeChanges = await client.query<{
+          from_route_option_id: string | null
+          to_route_option_id: string
+          source_payload: Record<string, unknown> | null
+        }>(
+          `SELECT from_route_option_id, to_route_option_id, source_payload
+           FROM manufacturing.route_change_events
+           WHERE work_order_id = $1 AND reversed_at IS NULL
+           ORDER BY occurred_at DESC, id DESC`,
           [workOrder.work_order_id]
         )
-        if (existing.rows[0]) throw new Error("This Job Card is already dispatched.")
+        const countedSetups = new Set([finalSetup.rows[0].id])
+        let carriedSetup = finalSetup.rows[0]
+        for (const change of routeChanges.rows) {
+          const previousRouteId = change.from_route_option_id
+          const remaining = change.source_payload?.remainingSetups
+          const remainingSetups = Array.isArray(remaining)
+            ? remaining.filter((row): row is Record<string, unknown> =>
+              typeof row === "object" && row !== null && !Array.isArray(row))
+            : []
+          const zeroRemaining = remainingSetups.length > 0 && remainingSetups.every((row) =>
+            Number(row.quantity ?? row.qty ?? row.remainingQty) === 0)
+          const finalCarried = remainingSetups.some((row) =>
+            Number(row.setupNumber ?? row.setupNo) === carriedSetup.setup_number)
+          if (!previousRouteId || previousRouteId === carriedSetup.route_option_id
+            || change.to_route_option_id !== carriedSetup.route_option_id
+            || !zeroRemaining || !finalCarried) break
+          const previousSetups = await client.query<DispatchSetup>(
+            `SELECT id, route_option_id, setup_number, operation_name, source_payload
+             FROM manufacturing.operation_setups
+             WHERE route_option_id = $1 AND active`,
+            [previousRouteId]
+          )
+          const signature = dispatchSetupSignature(carriedSetup)
+          const matching = signature
+            ? previousSetups.rows.filter((setup) => dispatchSetupSignature(setup) === signature)
+            : []
+          if (matching.length !== 1 || countedSetups.has(matching[0]!.id)) break
+          carriedSetup = matching[0]!
+          countedSetups.add(carriedSetup.id)
+          const priorProduction = await client.query<{ good_pieces: string }>(
+            `SELECT COALESCE(sum(quantity_good), 0)::text AS good_pieces
+             FROM manufacturing.production_entries
+             WHERE organization_id = $1 AND work_order_id = $2
+               AND operation_setup_id = $3 AND reversed_at IS NULL`,
+            [input.organizationId, workOrder.work_order_id, carriedSetup.id]
+          )
+          goodPieces += Number(priorProduction.rows[0]?.good_pieces ?? 0)
+        }
+        const dispatched = await client.query<{
+          legacy_dispatch: boolean
+          shipped_pieces: string
+        }>(
+          `SELECT COALESCE(bool_or(quantity IS NULL), false) AS legacy_dispatch,
+             COALESCE(sum(quantity), 0)::text AS shipped_pieces
+           FROM manufacturing.dispatch_approval_events
+           WHERE organization_id = $1 AND work_order_id = $2
+             AND decision = 'approved' AND reversed_at IS NULL`,
+          [input.organizationId, workOrder.work_order_id]
+        )
+        if (dispatched.rows[0]?.legacy_dispatch) {
+          throw new Error("This Job Card is already dispatched.")
+        }
+        const shippedPieces = Number(dispatched.rows[0]?.shipped_pieces ?? 0)
+        const availablePieces = goodPieces - shippedPieces
+        if (availablePieces < 0) {
+          throw new Error("Recorded finished good is below the quantity already dispatched. Correct the production or dispatch history before dispatching more.")
+        }
+        if (input.quantity > availablePieces) {
+          throw new Error(`Only ${availablePieces} recorded finished good pieces remain available for dispatch.`)
+        }
         const sourcePayload = { ...input, decision: "approved" }
         const result = await client.query<{ id: string }>(
           `
             INSERT INTO manufacturing.dispatch_approval_events (
-              organization_id, work_order_id, decision, reason,
+              organization_id, work_order_id, decision, quantity, reason,
               actor_user_id, legacy_actor, source_system, source_table,
               source_id, source_payload
             )
-            VALUES ($1, $2, 'approved', $3, $4, $5,
-              'mrm-dashboard', 'dispatchApprovals', $6, $7)
+            VALUES ($1, $2, 'approved', $3, $4, $5, $6,
+              'mrm-dashboard', 'dispatchApprovals', $7, $8)
             RETURNING id
           `,
           [
             input.organizationId,
             workOrder.work_order_id,
+            input.quantity,
             input.remark?.trim() || null,
             input.actorUserId ?? null,
             requiredText(input.approvedBy, "Approved by"),
@@ -4564,7 +4717,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           ]
         )
         await queueDashboardRefresh(client, input.organizationId)
-        return { id: result.rows[0]!.id, ok: true }
+        return { id: result.rows[0]!.id, ok: true, remainingAvailablePieces: availablePieces - input.quantity }
       })
     },
 

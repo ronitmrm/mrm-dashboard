@@ -15,6 +15,14 @@ type DataEntry = {
 
 type ActionRow = Record<string, unknown> & { createdAt?: string };
 
+type DispatchSummary = {
+  dispatchedPieces: number;
+  dispatchedDate: string;
+  legacyTerminal: boolean;
+};
+
+type FinalSetupRoute = { optionNumber: string; setupNo: string };
+
 export type LegacyDashboardInput = {
   includeToolFixtureNumbers?: boolean;
   productionFloorCode?: ProductionFloorCode;
@@ -352,6 +360,7 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
         : defaultProductiveHoursPerDay,
     setupNameMasterRows,
     productionRows,
+    sourceProductionEntries: input.productionEntries,
     employees,
     departments,
     attendanceRecords: input.attendanceRecords ?? [],
@@ -437,6 +446,7 @@ function buildProductionAnalysis({
   productiveHoursPerDay,
   setupNameMasterRows,
   productionRows,
+  sourceProductionEntries,
   employees,
   departments,
   attendanceRecords,
@@ -486,6 +496,7 @@ function buildProductionAnalysis({
   includeToolFixtureNumbers: boolean;
   productiveHoursPerDay: number;
   productionRows: ProductionRow[];
+  sourceProductionEntries: ProductionEntry[];
   employees: Map<string, string>;
   setupNameMasterRows: Record<string, unknown>[];
   departments: Map<string, string>;
@@ -813,6 +824,7 @@ function buildProductionAnalysis({
     productiveHoursPerDay,
     setupNameMasterRows,
     productionRows,
+    sourceProductionEntries,
     routeRows,
     cycleRows,
     toolingRows,
@@ -1004,6 +1016,7 @@ function buildProductionControl({
   productiveHoursPerDay,
   setupNameMasterRows,
   productionRows,
+  sourceProductionEntries,
   routeRows,
   cycleRows,
   toolingRows,
@@ -1044,6 +1057,7 @@ function buildProductionControl({
 }: {
   productiveHoursPerDay: number;
   productionRows: ProductionRow[];
+  sourceProductionEntries: ProductionEntry[];
   setupNameMasterRows: Record<string, unknown>[];
   routeRows: Record<string, unknown>[];
   cycleRows: Record<string, unknown>[];
@@ -1095,11 +1109,27 @@ function buildProductionControl({
   const rmInwardByJc = accumulatedRmInwardByJobCard(rmInwardRows);
   const rawMaterialRejectionByJc = accumulatedRawMaterialRejectionByJobCard(rawMaterialRejections);
   const selectedRouteByJc = latestRouteSelectionByJobCard(routeSelections);
-  const routeChangeByTarget = latestRouteChangeByTarget(routeChanges);
+  const routeChangesByTarget = routeChangeHistoryByTarget(routeChanges);
   const priorityByTarget = latestPlannerPriorityByTarget(plannerPriorities);
+  const goodByRouteSetup = new Map<string, number>();
+  const canonicalProductionJobCards = new Set<string>();
+  for (const entry of sourceProductionEntries) {
+    const jcNo = entry.jobCard ?? "";
+    if (!jcNo) continue;
+    canonicalProductionJobCards.add(canonicalKey(jcNo));
+    const options = routeOptionsByPart.get(canonicalKey(entry.partCode)) ?? [];
+    const optionNumber = entry.optionNumber || (options.length === 1 ? rowText(options[0]!, "optionNumber") : "");
+    const key = setupKeyWithoutMachine({ jcNo, partCode: entry.partCode, optionNumber, setupNo: entry.setupNo ?? "" });
+    if (!key) continue;
+    const good = entry.quantityGood !== undefined
+      ? entry.quantityGood
+      : entry.actualQty ?? Math.max(entry.outputQty - entry.rejectQty, 0);
+    goodByRouteSetup.set(key, (goodByRouteSetup.get(key) ?? 0) + good);
+  }
   const rawByJc = new Map<string, { outputQty: number; actualQty: number; rejectQty: number; rows: number; machines: Set<string>; operators: Set<string> }>();
   const rawBySetup = new Map<string, PlanningProductionActual>();
   const rawBySetupAnyMachine = new Map<string, PlanningProductionActual & { machines: Set<string> }>();
+  const finalSetupChainsByJobCard = new Map<string, FinalSetupRoute[]>();
   let latestRawDate = "";
   for (const row of productionRows) {
     const jcNo = rowText(row, "JobCardNo", "JOB CARD NO.", "JC NO.");
@@ -1138,13 +1168,26 @@ function buildProductionControl({
       if (machine) setupRec.machines.add(machine);
     }
   }
-  const dispatchJcKeys = new Set(
-    [...dispatchRows, ...dispatchApprovals.filter((row) =>
-      !["rejected", "cancelled"].includes(rowText(row, "decision").toLowerCase())
-    )]
-      .map((row) => canonicalKey(rowText(row, "jobCardNumber", "JC NO.", "JC NO", "jcNo")))
-      .filter(Boolean)
-  );
+  const dispatchByJobCard = new Map<string, DispatchSummary>();
+  const recordDispatch = (row: Record<string, unknown>, quantity: unknown) => {
+    const key = canonicalKey(rowText(row, "jobCardNumber", "JC NO.", "JC NO", "jcNo"));
+    if (!key) return;
+    const summary = dispatchByJobCard.get(key) ?? {
+      dispatchedPieces: 0,
+      dispatchedDate: "",
+      legacyTerminal: false,
+    };
+    if (quantity === undefined || quantity === null) summary.legacyTerminal = true;
+    else summary.dispatchedPieces += safeNumber(quantity);
+    const date = parseDate(rowValue(row, "dispatchedDate", "dispatchDate", "date", "createdAt"));
+    if (date > summary.dispatchedDate) summary.dispatchedDate = date;
+    dispatchByJobCard.set(key, summary);
+  };
+  for (const row of dispatchRows) recordDispatch(row, null);
+  for (const row of dispatchApprovals) {
+    if (rowText(row, "decision").toLowerCase() !== "approved") continue;
+    recordDispatch(row, rowValue(row, "quantity"));
+  }
   const readinessSetupGapsByWorkOrder = new WeakMap<object, ReadinessSetupGap[]>();
   const workOrderOutputRows = workOrderRows.map((row) => {
     const jcNo = rowText(row, "JC NO.", "JC NO", "jcNo");
@@ -1153,7 +1196,8 @@ function buildProductionControl({
     const plannerPriorityValue = plannerPriority ? rowText(plannerPriority, "priority", "PRIORITY") : "";
     const optionNumber = rowText(row, "OPTION NUMBER", "optionNumber");
     const selectedOptionNumber = rowText(selectedRouteByJc.get(canonicalKey(jcNo)) ?? {}, "optionNumber", "routeCode", "SELECTED ROUTE OPTION", "OPTION NUMBER");
-    const routeChange = routeChangeForWorkOrder(routeChangeByTarget, jcNo, partCode);
+    const routeChangeHistory = routeChangesForWorkOrder(routeChangesByTarget, jcNo, partCode);
+    const routeChange = routeChangeHistory[0];
     const routeChangeOption = rowText(routeChange ?? {}, "newRouteCode", "newOption", "NEW ROUTE OPTION", "NEW OPTION");
     const routeChangeFromOption = rowText(routeChange ?? {}, "fromRouteCode");
     const routeChangeRemainingSetups = routeChangeRemainingPlan(routeChange);
@@ -1202,6 +1246,16 @@ function buildProductionControl({
       ? rawBySetupAnyMachine.get(productionSetupBaseKey({ jcNo, partCode, setupNo: finalSetupNumber }))
         ?? rawBySetupAnyMachine.get(productionSetupBaseKey({ jcNo, partCode, setupNo: finalRouteSetupNo }))
       : undefined;
+    const recordedRouteGood = (routeOption: string, setupNo: string) =>
+      goodByRouteSetup.get(setupKeyWithoutMachine({ jcNo, partCode, optionNumber: routeOption, setupNo })) ?? 0;
+    const finalSetupChain = equivalentFinalSetupChain({
+      routeChangeHistory, routeGroups, partKey, effectiveOption, finalRoute, finalSetupNumber,
+    });
+    finalSetupChainsByJobCard.set(canonicalKey(jcNo), finalSetupChain);
+    const dispatchRecordedGoodPieces = round(sum(finalSetupChain.map((setup) =>
+      recordedRouteGood(setup.optionNumber, setup.setupNo))));
+    const finalSetupGoodPieces = canonicalProductionJobCards.has(canonicalKey(jcNo))
+      ? dispatchRecordedGoodPieces : round(finalSetupActual?.actualQty ?? 0);
     const actual = rawByJc.get(canonicalKey(jcNo));
     const orderPcs = safeNumber(rowValue(row, "ORD. PCS.", "orderPcs"));
     const orderKg = safeNumber(rowValue(row, "ORD. KG.", "orderKg"));
@@ -1232,7 +1286,12 @@ function buildProductionControl({
       && rmPlanningAction === "wait_for_replacement"
       && rejectionBalanceRestored
     );
-    const dispatchStatus = dispatchJcKeys.has(canonicalKey(jcNo)) ? "Shifted to dispatch" : "In production";
+    const dispatch = dispatchByJobCard.get(canonicalKey(jcNo));
+    const dispatchedPieces = dispatch?.legacyTerminal ? null : round(dispatch?.dispatchedPieces ?? 0);
+    const dispatchAvailablePieces = dispatchedPieces === null
+      ? 0 : round(Math.max(dispatchRecordedGoodPieces - dispatchedPieces, 0));
+    const dispatchStatus = dispatch?.legacyTerminal ? "Shifted to dispatch"
+      : dispatchedPieces !== null && dispatchedPieces > 0 ? "Partially dispatched" : "In production";
     const planningItemPending = rowValue(row, "planningItemPending") === true
       || rowText(row, "planningItemPending").toLowerCase() === "true";
     const routeReadyForPlanning = ["Ready", "Auto single option", "Route change plan"].includes(routeStatus);
@@ -1306,13 +1365,17 @@ function buildProductionControl({
       cycleStatus: missingCycle.length ? `Missing setup ${compactJoin(missingCycle)}` : "Ready",
       toolingStatus: missingTooling.length ? `Missing setup ${compactJoin(missingTooling)}` : "Ready",
       machineMasterStatus: missingMachine.length ? `Missing setup ${compactJoin(missingMachine)}` : "Ready",
-      finalSetupGoodPieces: round(finalSetupActual?.actualQty ?? 0),
+      finalSetupGoodPieces,
+      dispatchRecordedGoodPieces,
       finalSetupNumber,
       rawOutputQty: round(actual?.outputQty ?? 0),
       rawActualQty: round(actual?.actualQty ?? 0),
       rawRejectQty: round(actual?.rejectQty ?? 0),
       rawRows: actual?.rows ?? 0,
       dispatchStatus,
+      dispatchedPieces,
+      dispatchAvailablePieces,
+      dispatchedDate: dateLabel(dispatch?.dispatchedDate ?? ""),
       planningBlocker: planningItemPending
         ? "Create the Product Route in Part Readiness"
         : routeReadyForPlanning
@@ -1385,16 +1448,23 @@ function buildProductionControl({
   const productionDashboardRows = buildProductionDashboardRows({
     rawBySetup,
     cycleRows,
-    dispatchApprovals,
-    dispatchRows,
     machinePlanDetailRows,
     machineRows,
     shopFloorStatusRows,
     planningCalendar,
     baselineRows: productionFinishBaselineRows,
     routeGroups,
+    finalSetupChainsByJobCard,
     workOrderRows: prioritizedWorkOrderRows,
   });
+  const dashboardStatusByJobCard = new Map(
+    productionDashboardRows.map((row) => [canonicalKey(row.jcNo), row.status]),
+  );
+  for (const row of workOrderOutputRows) {
+    const status = dashboardStatusByJobCard.get(canonicalKey(row.jcNo));
+    row.dispatchStatus = status === "Dispatched" ? "Shifted to dispatch"
+      : status === "Partially dispatched" ? "Partially dispatched" : "In production";
+  }
   const workflowExceptionRows = machinePlanDetailRows.filter((row) => row.rawProductionWithoutWorkflow);
   const plannerActionConflicts = plannerActionConflictRows(machinePlanDetailRows);
   const setupChecklistHistoryRows: Record<string, unknown>[] = [];
@@ -1573,29 +1643,71 @@ function sameRouteSetupOperation(
     && selectedWeight === priorWeight);
 }
 
+function equivalentFinalSetupChain({
+  routeChangeHistory, routeGroups, partKey, effectiveOption, finalRoute, finalSetupNumber,
+}: {
+  routeChangeHistory: Array<Record<string, unknown>>;
+  routeGroups: Map<string, Record<string, unknown>[]>;
+  partKey: string;
+  effectiveOption: string;
+  finalRoute: Record<string, unknown> | undefined;
+  finalSetupNumber: string;
+}): FinalSetupRoute[] {
+  const chain = [{ optionNumber: effectiveOption, setupNo: finalSetupNumber }];
+  const seen = new Set([`${canonicalKey(effectiveOption)}|${canonicalKey(finalSetupNumber)}`]);
+  let carriedOption = effectiveOption;
+  let carriedSetupNo = finalSetupNumber;
+  let carriedRoute = finalRoute;
+  for (const change of routeChangeHistory) {
+    if (canonicalKey(rowText(change, "newRouteCode", "newOption", "NEW ROUTE OPTION", "NEW OPTION")) !== canonicalKey(carriedOption)) break;
+    const fromOption = rowText(change, "fromRouteCode");
+    const remaining = change.remainingSetups ?? change.routeChangeRemainingSetups;
+    if (!fromOption || !Array.isArray(remaining) || !remaining.length
+      || !remaining.every((row) => {
+        const setup = asRecord(row);
+        return Number(setup.quantity ?? setup.qty ?? setup.remainingQty) === 0;
+      })
+      || !remaining.some((row) => {
+        const setup = asRecord(row);
+        return Number(setup.setupNumber ?? setup.setupNo) === Number(carriedSetupNo);
+      })) break;
+    const matching = (routeGroups.get([partKey, fromOption].join("|")) ?? [])
+      .filter((route) => sameRouteSetupOperation(carriedRoute, route));
+    if (matching.length !== 1) break;
+    const priorRoute = matching[0]!;
+    const priorSetupNo = setupStepKey(rowText(priorRoute, "SETUP NO.", "SETUP CODE", "setupNo"), fromOption);
+    const key = `${canonicalKey(fromOption)}|${canonicalKey(priorSetupNo)}`;
+    if (!priorSetupNo || seen.has(key)) break;
+    chain.push({ optionNumber: fromOption, setupNo: priorSetupNo });
+    seen.add(key);
+    carriedOption = fromOption;
+    carriedSetupNo = priorSetupNo;
+    carriedRoute = priorRoute;
+  }
+  return chain;
+}
+
 function buildProductionDashboardRows({
   rawBySetup,
   baselineRows,
   cycleRows,
-  dispatchApprovals,
-  dispatchRows,
   machinePlanDetailRows,
   machineRows,
   shopFloorStatusRows,
   planningCalendar,
   routeGroups,
+  finalSetupChainsByJobCard,
   workOrderRows,
 }: {
   rawBySetup: Map<string, PlanningProductionActual>;
   baselineRows: Record<string, unknown>[];
   cycleRows: Record<string, unknown>[];
-  dispatchApprovals: ActionRow[];
-  dispatchRows: Record<string, unknown>[];
   machinePlanDetailRows: Record<string, unknown>[];
   machineRows: Record<string, unknown>[];
   shopFloorStatusRows: Record<string, unknown>[];
   planningCalendar: PlanningCalendar;
   routeGroups: Map<string, Record<string, unknown>[]>;
+  finalSetupChainsByJobCard: Map<string, FinalSetupRoute[]>;
   workOrderRows: Record<string, unknown>[];
 }) {
   const cycleByKey = latestMasterRows(cycleRows);
@@ -1604,18 +1716,6 @@ function buildProductionDashboardRows({
   const baselineByWorkOrder = new Map(
     baselineRows.map((row) => [productionDashboardRowKey(row), row]),
   );
-  const dispatchedByJobCard = new Map<string, string>();
-  for (const row of [...dispatchRows, ...dispatchApprovals.filter((approval) =>
-    !["rejected", "cancelled"].includes(rowText(approval, "decision").toLowerCase())
-  )]) {
-    const jobCardKey = canonicalKey(rowText(row, "jobCardNumber", "jcNo", "JC NO.", "JC NO"));
-    if (!jobCardKey) continue;
-    const dispatchedDate = parseDate(rowValue(row, "dispatchedDate", "dispatchDate", "date", "createdAt"));
-    const existingDate = dispatchedByJobCard.get(jobCardKey) ?? "";
-    if (!dispatchedByJobCard.has(jobCardKey) || dispatchedDate > existingDate) {
-      dispatchedByJobCard.set(jobCardKey, dispatchedDate);
-    }
-  }
 
   return workOrderRows.map((workOrder) => {
     const key = productionDashboardRowKey(workOrder);
@@ -1630,29 +1730,13 @@ function buildProductionDashboardRows({
     const selectedFinalSetupStatuses = workOrderStatuses.filter((status) =>
       canonicalKey(rowText(status, "optionNumber")) === canonicalKey(selectedOption)
       && canonicalKey(setupStepKey(rowText(status, "setupNo"), selectedOption)) === canonicalKey(finalSetupNumber));
-    const remainingAfterRouteChange = routeChangeRemainingPlan(workOrder);
-    const fromOption = rowText(workOrder, "routeChangeFromOption");
-    const carriedFinalSetup = rowText(workOrder, "optionSource") === "Route change"
-      && Boolean(fromOption) && canonicalKey(fromOption) !== canonicalKey(selectedOption)
-      && remainingAfterRouteChange.some((setup) =>
-        canonicalKey(setup.setupNo) === canonicalKey(finalSetupNumber) && setup.quantity === 0)
-      && remainingAfterRouteChange.every((setup) => setup.quantity === 0);
-    const selectedFinalRoute = carriedFinalSetup
-      ? routeGroups.get([canonicalKey(rowText(workOrder, "partCode")), selectedOption].join("|"))?.find((route) =>
-        canonicalKey(setupStepKey(rowText(route, "SETUP NO.", "SETUP CODE", "setupNo"), selectedOption)) === canonicalKey(finalSetupNumber))
-      : undefined;
-    const priorMatchingRoutes = carriedFinalSetup
-      ? (routeGroups.get([canonicalKey(rowText(workOrder, "partCode")), fromOption].join("|")) ?? [])
-        .filter((route) => sameRouteSetupOperation(selectedFinalRoute, route))
-      : [];
-    const priorSetupNumber = priorMatchingRoutes.length === 1
-      ? setupStepKey(rowText(priorMatchingRoutes[0]!, "SETUP NO.", "SETUP CODE", "setupNo"), fromOption)
-      : "";
-    const finalSetupStatuses = selectedFinalSetupStatuses.length || !priorSetupNumber
+    const finalSetupChain = finalSetupChainsByJobCard.get(canonicalKey(rowText(workOrder, "jcNo"))) ?? [];
+    const finalSetupStatuses = selectedFinalSetupStatuses.length
       ? selectedFinalSetupStatuses
-      : workOrderStatuses.filter((status) =>
-        canonicalKey(rowText(status, "optionNumber")) === canonicalKey(fromOption)
-        && canonicalKey(setupStepKey(rowText(status, "setupNo"), fromOption)) === canonicalKey(priorSetupNumber));
+      : finalSetupChain.slice(1).map((setup) => workOrderStatuses.filter((status) =>
+        canonicalKey(rowText(status, "optionNumber")) === canonicalKey(setup.optionNumber)
+        && canonicalKey(setupStepKey(rowText(status, "setupNo"), setup.optionNumber)) === canonicalKey(setup.setupNo)))
+        .find((statuses) => statuses.length) ?? [];
     const completedMachines = new Set(finalSetupStatuses.map((status) => canonicalKey(rowText(status, "machine"))));
     const finalCompletionDates = finalSetupStatuses.map((status) =>
       rowText(status, "stage") === "item_complete"
@@ -1679,7 +1763,16 @@ function buildProductionDashboardRows({
     const initialDate = baseline
       ? dateLabel(rowValue(baseline, "plannedDispatchDateAtRmReceipt"))
       : "";
-    const dispatchedDate = dispatchedByJobCard.get(canonicalKey(rowText(workOrder, "jcNo"))) ?? "";
+    const legacyDispatched = rowText(workOrder, "dispatchStatus") === "Shifted to dispatch";
+    const dispatchedValue = rowValue(workOrder, "dispatchedPieces");
+    const dispatchedPieces = legacyDispatched ? null
+      : typeof dispatchedValue === "number" ? dispatchedValue : 0;
+    const availablePieces = safeNumber(rowValue(workOrder, "dispatchAvailablePieces"));
+    const hasQuantifiedDispatch = dispatchedPieces !== null && dispatchedPieces > 0;
+    const recordedGoodPieces = safeNumber(rowValue(workOrder, "dispatchRecordedGoodPieces"));
+    const dispatchStatus = legacyDispatched || (hasQuantifiedDispatch && Boolean(actualFinishDate)
+      && recordedGoodPieces > 0 && dispatchedPieces <= recordedGoodPieces && availablePieces === 0)
+      ? "Dispatched" : hasQuantifiedDispatch ? "Partially dispatched" : "Pending";
     const orderPcs = safeNumber(rowValue(workOrder, "orderPcs"));
     const orderKg = safeNumber(rowValue(workOrder, "orderKg"));
 
@@ -1694,8 +1787,10 @@ function buildProductionDashboardRows({
       currentProbableDispatchDate: dateLabel(currentProbableDate.date),
       actualFinishDate,
       currentProbableDispatchWorkingHours: currentProbableDate.workingHours,
-      status: dispatchedByJobCard.has(canonicalKey(rowText(workOrder, "jcNo"))) ? "Dispatched" : "Pending",
-      dispatchedDate: dateLabel(dispatchedDate),
+      status: dispatchStatus,
+      dispatchedPieces,
+      dispatchAvailablePieces: availablePieces,
+      dispatchedDate: rowText(workOrder, "dispatchedDate"),
     };
   }).sort((left, right) =>
     Number(left.status === "Dispatched") - Number(right.status === "Dispatched") ||
@@ -2019,6 +2114,8 @@ function normalizedProductionEntries(entries: ProductionEntry[]) {
     "OPERATOR ID": entry.operatorId,
     "PART CODE": entry.partCode,
     "SETUP CODE": entry.setupNo,
+    "OPTION NUMBER": entry.optionNumber,
+    quantityGood: entry.quantityGood,
     "MACHINE TYPE": entry.machineType,
     "PRODUCTION QTY (PCS)": entry.outputQty,
     "TARGET QTY (PCS)": entry.targetQty,
@@ -2970,18 +3067,20 @@ function latestRouteSelectionByJobCard(rows: Array<Record<string, unknown>>) {
   return byJc;
 }
 
-function latestRouteChangeByTarget(rows: Array<Record<string, unknown>>) {
-  const byTarget = new Map<string, Record<string, unknown>>();
+function routeChangeHistoryByTarget(rows: Array<Record<string, unknown>>) {
+  const byTarget = new Map<string, Array<Record<string, unknown>>>();
   for (const row of rows) {
     if (!isActivePlannerDecision(rowText(row, "status", "STATUS"))) continue;
     const target = rowText(row, "target", "jobCardNumber", "jcNo", "JC NO.", "JC NO", "partCode", "PART CODE", "PART NO");
     const key = canonicalKey(target);
     if (!key) continue;
-    const current = byTarget.get(key);
-    if (!current || rowText(row, "createdAt") >= rowText(current, "createdAt")) {
-      byTarget.set(key, row);
-    }
+    const history = byTarget.get(key) ?? [];
+    history.push(row);
+    byTarget.set(key, history);
   }
+  for (const history of byTarget.values()) history.sort((a, b) =>
+    rowText(b, "createdAt").localeCompare(rowText(a, "createdAt"))
+    || rowText(b, "_id", "id").localeCompare(rowText(a, "_id", "id")));
   return byTarget;
 }
 
@@ -3038,8 +3137,8 @@ function compareDateValues(a: unknown, b: unknown) {
   return aDate.localeCompare(bDate);
 }
 
-function routeChangeForWorkOrder(byTarget: Map<string, Record<string, unknown>>, jcNo: string, partCode: string) {
-  return byTarget.get(canonicalKey(jcNo)) ?? byTarget.get(canonicalKey(partCode));
+function routeChangesForWorkOrder(byTarget: Map<string, Array<Record<string, unknown>>>, jcNo: string, partCode: string) {
+  return byTarget.get(canonicalKey(jcNo)) ?? byTarget.get(canonicalKey(partCode)) ?? [];
 }
 
 function routeChangeRemainingPlan(routeChange: Record<string, unknown> | undefined) {

@@ -1439,6 +1439,7 @@ async function post(request: NextRequest, context: RouteContext) {
             jobCardNumber: text(body.jcNo),
             organizationId,
             productionFloorCode: text(body.productionFloorCode),
+            quantity: typeof body.quantity === "number" ? body.quantity : Number.NaN,
             remark: optionalText(body.remark),
           })
         }
