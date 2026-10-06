@@ -94,6 +94,20 @@ test("keeps a WIP-ready second setup on another machine when overlap finishes ea
   expect(new Date(String(second.plannedProductionStartDate)).getTime()).toBeLessThan(new Date(String(first.plannedProductionEndDate)).getTime())
 })
 
+test("releases a downstream setup when recorded WIP covers its buffer", () => {
+  const input = inputFor(4_218)
+  vi.setSystemTime(new Date("2026-10-06T06:00:00Z"))
+  for (const row of input.dataEntries) {
+    if (row.entryType === "cycle") row.payload.cycleTime = row.payload.setupNo === "1" ? 160 : 63
+  }
+  const rows = buildLegacyDashboardSnapshot(input).productionControl.machinePlanDetailRows
+  const second = rows.find(row => row.setupNo === "2")
+  expect(second).toMatchObject({
+    machine: "CNC-2", physicalWipQty: 4_218,
+    plannedStartDate: "6-Oct-26", shopFloorTaskReady: true, shopFloorTaskBlocker: "",
+  })
+})
+
 test("reserves Setup 2 early and releases machine start on the first recorded WIP", () => {
   const decision = {
     target: "A", setupNo: "2", toMachine: "CNC-2",

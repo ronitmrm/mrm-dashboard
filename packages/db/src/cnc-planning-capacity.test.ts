@@ -366,7 +366,7 @@ test("revised cycle time forecasts only the remaining quantity after recorded pr
     }),
     expect.objectContaining({
       setupNo: "2",
-      plannedProductionStartDate: "8-Sept-26",
+      plannedProductionStartDate: "7-Sept-26",
     }),
   ]))
 })
