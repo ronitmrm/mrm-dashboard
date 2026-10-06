@@ -151,6 +151,43 @@ test("actual finish waits for every machine on the final setup", () => {
   expect(incomplete.productionDashboardRows[0]?.actualFinishDate).toBe("")
 })
 
+test("actual finish carries completed final work across an equivalent route change", () => {
+  const createdAt = "2026-10-01T10:00:00Z"
+  const entry = (entryType: string, payload: Record<string, unknown>) => ({ entryType, payload, createdAt })
+  const setup = { partNo: "M2164B", setupNo: "1", setupName: "Hose Barb Operation With Parting", machineFamily: "T25", stageWeight: 15.2 }
+  const input = {
+    workbookName: "PostgreSQL", productionFloorCode: "cnc" as const,
+    dataEntries: [
+      entry("work_order", { jcNo: "P2266", partCode: "M2164B", optionNumber: "1", orderPcs: 50 }),
+      entry("route", { ...setup, optionNumber: "1" }),
+      entry("route", { partNo: "M2164B", setupNo: "2", setupName: "Face", machineFamily: "T25", optionNumber: "1" }),
+      entry("route", { ...setup, optionNumber: "2" }),
+    ],
+    productionEntries: [{ jobCard: "P2266", partCode: "M2164B", setupNo: "1", machine: "CNC-12", machineType: "CNC", operatorId: "OP1", prodDate: "2026-10-01", outputQty: 100, actualQty: 100, rejectQty: 0, targetQty: 50 }],
+    routeSelections: [{ jobCardNumber: "P2266", routeCode: "1", createdAt }],
+    routeChanges: [{ jobCardNumber: "P2266", fromRouteCode: "1", newRouteCode: "2", remainingSetups: [{ setupNumber: 1, plan: true, quantity: 0 }], createdAt: "2026-10-03T15:50:00Z" }],
+    currentShopFloorStatusRows: [{ jcNo: "P2266", partCode: "M2164B", optionNumber: "1", setupNo: "1", machine: "CNC-12", stage: "item_complete", completedAt: "2026-10-01T16:15:00Z" }],
+  }
+  const control = buildLegacyDashboardSnapshot(input).productionControl
+
+  expect(control.workOrders[0]).toMatchObject({ optionNumber: "2", finalSetupNumber: "1", finalSetupGoodPieces: 100 })
+  expect(control.productionDashboardRows[0]?.actualFinishDate).toBe("1-Oct-26")
+
+  const changedSetupNumber = buildLegacyDashboardSnapshot({
+    ...input,
+    dataEntries: [
+      ...input.dataEntries.map((row) => row.entryType === "route" && row.payload.optionNumber === "1" && row.payload.setupNo === "1"
+        ? { ...row, payload: { ...row.payload, setupNo: "3" } } : row),
+      entry("route", { ...setup, optionNumber: "3" }),
+    ],
+    currentShopFloorStatusRows: [
+      { ...input.currentShopFloorStatusRows[0]!, setupNo: "3" },
+      { ...input.currentShopFloorStatusRows[0]!, optionNumber: "3", completedAt: "2026-10-02T10:00:00Z" },
+    ],
+  }).productionControl
+  expect(changedSetupNumber.productionDashboardRows[0]?.actualFinishDate).toBe("1-Oct-26")
+})
+
 describe("legacy dashboard route selections", () => {
   test("retains all uploaded dimensions when parameter codes are generated", () => {
     const dimensions = [

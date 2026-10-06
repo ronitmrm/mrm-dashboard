@@ -487,7 +487,9 @@ export async function readCanonicalDashboardSource(
               'optionNumber', session.option_number_snapshot,
               'setupNo', session.setup_number_snapshot,
               'machine', session.machine_number_snapshot
-            ) END AS source_payload,
+            ) END || CASE WHEN prior_route.id IS NULL THEN '{}'::jsonb
+            ELSE jsonb_build_object('fromRouteCode', prior_route.route_code)
+            END AS source_payload,
           source.changed_at,
           source.source_kind, source.source_group, source.entry_type,
           budget.floor_code AS production_floor_code, counts.available
@@ -515,6 +517,24 @@ export async function readCanonicalDashboardSource(
           ON source.source_group = 'productionEntries'
           AND session.organization_id = $1 AND session.id::text = source.source_id
           AND session.production_entry_id IS NOT NULL AND session.reversed_at IS NULL
+        LEFT JOIN manufacturing.route_change_events route_change
+          ON source.source_group = 'routeChanges'
+          AND route_change.organization_id = $1
+          AND route_change.source_id = source.source_id
+          AND route_change.reversed_at IS NULL
+        LEFT JOIN LATERAL (
+          SELECT previous.to_route_option_id
+          FROM manufacturing.route_change_events previous
+          WHERE previous.organization_id = $1
+            AND previous.work_order_id = route_change.work_order_id
+            AND previous.reversed_at IS NULL
+            AND (previous.occurred_at, previous.id) < (route_change.occurred_at, route_change.id)
+          ORDER BY previous.occurred_at DESC, previous.id DESC
+          LIMIT 1
+        ) previous_change ON true
+        LEFT JOIN manufacturing.route_options prior_route
+          ON prior_route.id = COALESCE(previous_change.to_route_option_id,
+            route_change.from_route_option_id)
       ), correction_rows AS (
         SELECT source.source_id, source.source_payload, source.changed_at,
           source.source_kind, source.source_group, source.entry_type,

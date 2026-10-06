@@ -1155,6 +1155,7 @@ function buildProductionControl({
     const selectedOptionNumber = rowText(selectedRouteByJc.get(canonicalKey(jcNo)) ?? {}, "optionNumber", "routeCode", "SELECTED ROUTE OPTION", "OPTION NUMBER");
     const routeChange = routeChangeForWorkOrder(routeChangeByTarget, jcNo, partCode);
     const routeChangeOption = rowText(routeChange ?? {}, "newRouteCode", "newOption", "NEW ROUTE OPTION", "NEW OPTION");
+    const routeChangeFromOption = rowText(routeChange ?? {}, "fromRouteCode");
     const routeChangeRemainingSetups = routeChangeRemainingPlan(routeChange);
     const partKey = canonicalKey(partCode);
     const availableOptions = routeOptionsByPart.get(partKey) ?? [];
@@ -1266,6 +1267,7 @@ function buildProductionControl({
       description: rowText(row, "DESCRIPTION", "description"),
       optionNumber: effectiveOption || "Not selected",
       optionSource: routeChange ? "Route change" : (optionNumber ? "Excel" : (selectedOptionNumber ? "Planner selected" : (effectiveOption ? "Auto single route" : "Planner required"))),
+      routeChangeFromOption,
       routeChangeRemainingSetups,
       candidateOption: !optionNumber && effectiveOption ? effectiveOption : "-",
       availableOptions,
@@ -1555,6 +1557,22 @@ function buildProductionControl({
   };
 }
 
+function sameRouteSetupOperation(
+  selected: Record<string, unknown> | undefined,
+  prior: Record<string, unknown> | undefined,
+) {
+  if (!selected || !prior) return false;
+  const selectedName = canonicalKey(rowText(selected, "SETUP NAME", "setupName"));
+  const selectedFamily = canonicalKey(machineMasterFamily(selected) || rowText(selected, "MACHINE USED", "machineUsed"));
+  const selectedWeight = safeNumber(rowValue(selected, "STAGE WEIGHT", "STAGE WEIGHT GRAM", "STAGE WEIGHT (GRAM)", "stageWeight"));
+  const priorWeight = safeNumber(rowValue(prior, "STAGE WEIGHT", "STAGE WEIGHT GRAM", "STAGE WEIGHT (GRAM)", "stageWeight"));
+  return Boolean(selectedName && selectedFamily
+    && selectedWeight > 0 && priorWeight > 0
+    && selectedName === canonicalKey(rowText(prior, "SETUP NAME", "setupName"))
+    && selectedFamily === canonicalKey(machineMasterFamily(prior) || rowText(prior, "MACHINE USED", "machineUsed"))
+    && selectedWeight === priorWeight);
+}
+
 function buildProductionDashboardRows({
   rawBySetup,
   baselineRows,
@@ -1607,11 +1625,34 @@ function buildProductionDashboardRows({
     const finalSetupPlans = finalSetupNumber ? plans.filter((plan) =>
       canonicalKey(rowText(plan, "optionNumber")) === canonicalKey(selectedOption)
       && canonicalKey(rowText(plan, "setupNo")) === canonicalKey(finalSetupNumber)) : [];
-    const finalSetupStatuses = finalSetupNumber ? savedSetupStatuses.filter((status) =>
-      productionDashboardRowKey(status) === key
-      && canonicalKey(rowText(status, "optionNumber")) === canonicalKey(selectedOption)
-      && canonicalKey(setupStepKey(rowText(status, "setupNo"), selectedOption)) === canonicalKey(finalSetupNumber)
-      && rowText(status, "machine")) : [];
+    const workOrderStatuses = savedSetupStatuses.filter((status) =>
+      productionDashboardRowKey(status) === key && rowText(status, "machine"));
+    const selectedFinalSetupStatuses = workOrderStatuses.filter((status) =>
+      canonicalKey(rowText(status, "optionNumber")) === canonicalKey(selectedOption)
+      && canonicalKey(setupStepKey(rowText(status, "setupNo"), selectedOption)) === canonicalKey(finalSetupNumber));
+    const remainingAfterRouteChange = routeChangeRemainingPlan(workOrder);
+    const fromOption = rowText(workOrder, "routeChangeFromOption");
+    const carriedFinalSetup = rowText(workOrder, "optionSource") === "Route change"
+      && Boolean(fromOption) && canonicalKey(fromOption) !== canonicalKey(selectedOption)
+      && remainingAfterRouteChange.some((setup) =>
+        canonicalKey(setup.setupNo) === canonicalKey(finalSetupNumber) && setup.quantity === 0)
+      && remainingAfterRouteChange.every((setup) => setup.quantity === 0);
+    const selectedFinalRoute = carriedFinalSetup
+      ? routeGroups.get([canonicalKey(rowText(workOrder, "partCode")), selectedOption].join("|"))?.find((route) =>
+        canonicalKey(setupStepKey(rowText(route, "SETUP NO.", "SETUP CODE", "setupNo"), selectedOption)) === canonicalKey(finalSetupNumber))
+      : undefined;
+    const priorMatchingRoutes = carriedFinalSetup
+      ? (routeGroups.get([canonicalKey(rowText(workOrder, "partCode")), fromOption].join("|")) ?? [])
+        .filter((route) => sameRouteSetupOperation(selectedFinalRoute, route))
+      : [];
+    const priorSetupNumber = priorMatchingRoutes.length === 1
+      ? setupStepKey(rowText(priorMatchingRoutes[0]!, "SETUP NO.", "SETUP CODE", "setupNo"), fromOption)
+      : "";
+    const finalSetupStatuses = selectedFinalSetupStatuses.length || !priorSetupNumber
+      ? selectedFinalSetupStatuses
+      : workOrderStatuses.filter((status) =>
+        canonicalKey(rowText(status, "optionNumber")) === canonicalKey(fromOption)
+        && canonicalKey(setupStepKey(rowText(status, "setupNo"), fromOption)) === canonicalKey(priorSetupNumber));
     const completedMachines = new Set(finalSetupStatuses.map((status) => canonicalKey(rowText(status, "machine"))));
     const finalCompletionDates = finalSetupStatuses.map((status) =>
       rowText(status, "stage") === "item_complete"
