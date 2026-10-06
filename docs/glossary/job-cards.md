@@ -116,6 +116,9 @@ Part Readiness lists the gaps and the changed Job Card receives no new machine
 plan until the selected route is ready. A Move Setup decision uses the target
 machine from its decision date onward; an outage that ended before that decision
 does not block the move.
+Change Route may be found by Job Card or by Part Code. Part Code narrows the
+available Job Cards; the Planner must select one Job Card because multiple Job
+Cards can share a part and a route change applies to one Job Card.
 The immutable RM-receipt Planned Finish Date remains historical.
 
 A machine-unavailable action affects unfinished work only. A setup already

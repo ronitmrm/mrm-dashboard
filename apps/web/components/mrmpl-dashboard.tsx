@@ -272,6 +272,7 @@ import {
 } from "@/components/maintenance/maintenance-work-photos"
 import { UserAccountFooter } from "@/components/user-account-footer"
 import { JobCardRegister } from "@/components/job-card-register"
+import { RouteChangeTargetPicker, type RouteChangeTargetMode } from "@/components/route-change-target-picker"
 import {
   PlannerDecisionWorkspace,
   type PlannerDecisionAction,
@@ -7670,6 +7671,8 @@ function RouteChangePlannerForm({
   const workOrders = asArray(productionControl.workOrders)
   const routeRows = asArray(productionControl.routeMasterRows)
   const [target, setTarget] = useState("")
+  const [targetMode, setTargetMode] = useState<RouteChangeTargetMode>("jobCard")
+  const [lookupPartCode, setLookupPartCode] = useState("")
   const [newOption, setNewOption] = useState("")
   const [reason, setReason] = useState("")
   const [setupPlan, setSetupPlan] = useState<
@@ -7677,12 +7680,10 @@ function RouteChangePlannerForm({
   >({})
 
   const selectedWorkOrder = useMemo(() => {
-    const targetKey = target.toLowerCase()
-    return workOrders.find(
-      (row) =>
-        str(row.jcNo).toLowerCase() === targetKey ||
-        str(row.partCode).toLowerCase() === targetKey
-    )
+    const targetKey = target.trim().toLowerCase()
+    return targetKey
+      ? workOrders.find((row) => str(row.jcNo).toLowerCase() === targetKey)
+      : undefined
   }, [target, workOrders])
   const partCode = str(selectedWorkOrder?.partCode)
   const defaultOrderQty = str(selectedWorkOrder?.orderPcs)
@@ -7742,6 +7743,12 @@ function RouteChangePlannerForm({
     }))
   }
 
+  function changeTarget(jobCard: string) {
+    setTarget(jobCard)
+    setNewOption("")
+    setSetupPlan({})
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const remainingSetups = selectedSetups.map((setup) => {
@@ -7759,7 +7766,7 @@ function RouteChangePlannerForm({
       }
     })
     await submitAction("route-change", {
-      target,
+      target: str(selectedWorkOrder?.jcNo),
       newOption: selectedOption,
       remainingSetups,
       reason,
@@ -7780,25 +7787,22 @@ function RouteChangePlannerForm({
         </div>
       </div>
       <div className="grid gap-3 md:grid-cols-3">
-        <Field label="Job Card / Part">
-          <Input
-            list="route-change-targets"
-            value={target}
-            placeholder="Jc-003 Or M6"
-            required
-            onChange={(event) => setTarget(event.target.value)}
-          />
-          <datalist id="route-change-targets">
-            {workOrders.map((row) => (
-              <option
-                key={`${str(row.jcNo)}-${str(row.partCode)}`}
-                value={str(row.jcNo)}
-              >
-                {str(row.partCode)}
-              </option>
-            ))}
-          </datalist>
-        </Field>
+        <RouteChangeTargetPicker
+          mode={targetMode}
+          target={target}
+          partCode={lookupPartCode}
+          workOrders={workOrders}
+          onModeChange={(mode) => {
+            setTargetMode(mode)
+            setLookupPartCode("")
+            changeTarget("")
+          }}
+          onPartCodeChange={(code) => {
+            setLookupPartCode(code)
+            changeTarget("")
+          }}
+          onTargetChange={changeTarget}
+        />
         <Field label="New Route Option">
           <SearchableSelect
             className="h-9 rounded-md border bg-background px-3 text-sm"
@@ -7912,7 +7916,7 @@ function RouteChangePlannerForm({
       <Button
         className="w-fit"
         type="submit"
-        disabled={!target || !selectedOption || !selectedSetups.length}
+        disabled={!selectedWorkOrder || !selectedOption || !selectedSetups.length}
       >
         <Route className="size-4" />
         Save Route Change Plan
