@@ -84,6 +84,9 @@ test("resolves readable references across Store master CSVs and form labels", as
   expect(save.mock.lastCall?.[0].get("make_model_id")).toBe("unspecified-id")
   expect(await importCsv("ITEM_TYPE", "asset_category,asset_subcategory,asset_name,make_model,asset_type,unit\nProduction Tooling,Tools,Fixture,APPM 11,Non Consumable,No.")).toBeUndefined()
   expect(save.mock.lastCall?.[0].get("make_model_id")).toBe("appm11-id")
+  expect(await importCsv("ITEM_TYPE", "asset_category,asset_subcategory,asset_name,make,asset_type,unit\nProduction Tooling,Tools,Fixture,Kaishan,Non Consumable,No.")).toBeUndefined()
+  expect(save.mock.lastCall?.[0].get("make_model_id")).toBe("unspecified-id")
+  expect(save.mock.lastCall?.[0].get("manufacturer_make")).toBe("Kaishan")
 })
 
 test("normalizes day-first Supplier Price dates before saving", async () => {

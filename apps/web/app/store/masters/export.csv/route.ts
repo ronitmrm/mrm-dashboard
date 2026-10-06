@@ -118,6 +118,7 @@ export async function GET(request: Request) {
         "Asset Subcategory": row.assetSubcategory,
         "Asset Name": row.assetName,
         "Make/Model": row.makeModel,
+        Make: row.manufacturerMake,
         "Asset Type": row.assetType,
         Identification: row.identificationName,
         "Rated Load / Capacity": row.ratedLoad,

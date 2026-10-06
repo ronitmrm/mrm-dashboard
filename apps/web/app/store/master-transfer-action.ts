@@ -181,7 +181,7 @@ function resolveReferences(
     asset_subcategory_id: subcategoryId,
     asset_name_id: assetNameId,
     make_model_id: referenceId(
-      csvValue(row, "make_model", "make_model_id", "model_number", "model", "manufacturer_make", "make") || "Unspecified",
+      csvValue(row, "make_model", "make_model_id", "model_number", "model") || "Unspecified",
       masters.makeModels,
       "Make/Model"
     ),

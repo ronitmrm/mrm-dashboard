@@ -208,6 +208,7 @@ export default async function StoreAssetWorkspacePage({
             />
             <Info label="Asset Name" value={asset.assetName} />
             <Info label="Make/Model" value={asset.makeModel} />
+            <Info label="Make" value={asset.manufacturerMake || "Not recorded"} />
             <Info label="Rated Load / Capacity" value={asset.ratedLoad || "Not recorded"} />
             <Info label="Accountable Store" value={asset.accountableStoreName} />
             <Info
@@ -824,6 +825,7 @@ function StoreItemWorkspace({
         <Info label="Asset Name" value={item.assetName} />
         <Info label="Identification" value={item.identificationName} />
         <Info label="Make/Model" value={item.makeModel} />
+        <Info label="Make" value={item.manufacturerMake || "Not recorded"} />
         <Info label="Rated Load / Capacity" value={item.ratedLoad || "Not recorded"} />
         <Info
           label="Classification"

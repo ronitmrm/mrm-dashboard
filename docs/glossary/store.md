@@ -17,7 +17,9 @@ and CSV imports; received Physical Assets may also have blank Identification.
 Make/Model is selected from its master and distinguishes different models with
 the same Category, Subcategory, and Asset Name. Existing codes retain their
 numbers when their saved model is assigned to the new master. Use `Unspecified`
-when a model is not known. Rated Load / Capacity describes a specification
+when a model is not known. Make is optional manufacturer information on the
+Store Item Type; changing it does not create another Asset Code. Rated Load /
+Capacity describes a specification
 shared by every physical unit of that Asset Code and includes its unit (for
 example, `15 kW` or `1000 kg`).
 Data Entry controls its Drawing Number: new and edited Store Item Types use
@@ -26,13 +28,14 @@ Type, Asset Category,
 Asset Subcategory, Asset Name, and Make/Model combination is checked before saving. An
 existing combination displays and reuses its existing Asset Code without
 creating another Store Item Type; only a new combination generates a new Asset
-Code. Its Master Table shows Asset Type, Category, Subcategory, Asset Name, Make/Model, and
+Code. Its Master Table shows Asset Type, Category, Subcategory, Asset Name, Make/Model, Make, and
 Identification in separate columns. When a Store Item Type applies to a
 manufactured product, its Product Portfolio UID is selected from active internal
 Portfolio products instead of entered as free text.
 
 Item Type CSV imports use Category, Subcategory, Asset Name, and Make/Model text from the
 existing classification masters, matched ignoring letter case and outer spaces.
+The optional Make column is descriptive and never selects the Make/Model master.
 Subcategory is resolved within its Category and Asset Name within its Subcategory.
 Unknown or ambiguous names are rejected with a row error; imports do not create
 classification masters. Existing CSVs with internal IDs remain accepted.
