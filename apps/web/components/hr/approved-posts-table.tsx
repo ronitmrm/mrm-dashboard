@@ -52,8 +52,6 @@ import {
 } from "lucide-react"
 import { useRef, useState } from "react"
 import { useFormStatus } from "react-dom"
-import Link from "next/link"
-import { useSearchParams } from "next/navigation"
 
 import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
 import {
@@ -67,7 +65,7 @@ import { SingleEmployeeAssignmentFields } from "@/components/hr/single-employee-
 import { EmployeeLetterDialog } from "@/components/hr/employee-letter-dialog"
 import { MetricSummary, StandardDialogContent } from "@/components/ui/golden-patterns"
 import { employeeHandoverRows } from "@/lib/employee-handover-rows"
-import { linkedTemplateHref } from "@/lib/recruitment-master-navigation"
+import { JobTemplatePreviewLink } from "@/components/hr/job-template-preview"
 
 type TemplateOption = Pick<
   RecruitmentTemplateRow,
@@ -121,7 +119,6 @@ export function ApprovedPostsTable({
   posts: RecruitmentPostRow[]
   templates?: TemplateOption[]
 }) {
-  const searchParams = useSearchParams()
   const [editingPost, setEditingPost] = useState<RecruitmentPostRow | null>(
     null
   )
@@ -306,19 +303,7 @@ export function ApprovedPostsTable({
                         <TableCell>{row.department}</TableCell>
                         <TableCell>{row.designation}</TableCell>
                         <TableCell className="font-mono">
-                          {row.requirementTemplateCode ? (
-                            <Button asChild className="h-auto p-0 font-mono" variant="link">
-                              <Link
-                                href={linkedTemplateHref(
-                                  row.requirementTemplateCode,
-                                  searchParams.toString(),
-                                  employeeView
-                                )}
-                              >
-                                {row.requirementTemplateCode}
-                              </Link>
-                            </Button>
-                          ) : "—"}
+                          <JobTemplatePreviewLink code={row.requirementTemplateCode} />
                         </TableCell>
                         <TableCell>
                           {row.employeeName ?? "—"}

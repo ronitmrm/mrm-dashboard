@@ -38,7 +38,6 @@ import {
 } from "@workspace/ui/components/table"
 import { useExcelTable } from "@workspace/ui/hooks/use-excel-table"
 import { Pencil, Trash2 } from "lucide-react"
-import Link from "next/link"
 import { useMemo, useState } from "react"
 
 import {
@@ -47,6 +46,7 @@ import {
 } from "@/app/hr/actions"
 import { CombinedPostPicker } from "@/components/hr/combined-post-picker"
 import { ExcelColumnFilter } from "@workspace/ui/components/excel-column-filter"
+import { JobTemplatePreviewLink } from "@/components/hr/job-template-preview"
 
 function CombinedStatusBadge({ status }: { status: string }) {
   return (
@@ -252,18 +252,7 @@ export function CombinedRolesTable({
                       <div className="flex flex-wrap gap-2">
                         {templateCodes.length
                           ? templateCodes.map((code) => (
-                              <Button
-                                asChild
-                                className="h-auto p-0 font-mono"
-                                key={code}
-                                variant="link"
-                              >
-                                <Link
-                                  href={`/hr?panel=postMasterPanel&template=${encodeURIComponent(code)}`}
-                                >
-                                  {code}
-                                </Link>
-                              </Button>
+                              <JobTemplatePreviewLink code={code} key={code} />
                             ))
                           : "—"}
                       </div>

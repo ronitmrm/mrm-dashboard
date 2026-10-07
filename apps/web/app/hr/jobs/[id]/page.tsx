@@ -29,6 +29,7 @@ import {
 import { ArrowLeft, BriefcaseBusiness, UserPlus } from "lucide-react"
 
 import { InterviewOutcomeForm } from "@/components/hr/interview-outcome-form"
+import { JobTemplatePreviewLink, JobTemplatePreviewProvider } from "@/components/hr/job-template-preview"
 import { InterviewRoundEditDialog } from "@/components/hr/interview-round-edit-dialog"
 import { JobInterviewScheduleForm } from "@/components/hr/interview-schedule-form"
 import { CandidateApplicationActions } from "@/components/hr/candidate-application-actions"
@@ -112,7 +113,7 @@ export default async function JobWorkspacePage({
         connectionString: readAuthEnvironment().connectionString,
       })
     : null
-  const { posts, workspace, offerLetters } = await (async () => {
+  const { posts, workspace, offerLetters, template } = await (async () => {
     try {
       const organizationId = await repository.organizationIdForCode("MRMPL")
       const [workspace, posts, offerLetters] = await Promise.all([
@@ -120,7 +121,12 @@ export default async function JobWorkspacePage({
         repository.listPosts(organizationId),
         letterRepository?.listForJob(organizationId, id) ?? [],
       ])
-      return { posts, workspace, offerLetters }
+      const template = workspace?.job.requirementTemplateCode
+        ? (await repository.listTemplates(organizationId)).find(
+            (row) => row.templateCode === workspace.job.requirementTemplateCode
+          ) ?? null
+        : null
+      return { posts, workspace, offerLetters, template }
     } finally {
       await Promise.all([repository.close(), letterRepository?.close()])
     }
@@ -130,6 +136,7 @@ export default async function JobWorkspacePage({
   const { applications, interviews, job } = workspace
   const interviewerOptions = recruitmentInterviewerOptions(posts)
   return (
+    <JobTemplatePreviewProvider templates={template ? [template] : []}>
     <div className="grid gap-6">
       <section className="grid gap-3">
         <Button asChild className="w-fit" size="sm" variant="ghost">
@@ -150,6 +157,9 @@ export default async function JobWorkspacePage({
             <p className="text-sm text-muted-foreground">
               {job.jobNumber} · Vacancy {job.vacancyCode} · Approved Post{" "}
               {job.postCode ?? "—"}
+            </p>
+            <p className="text-sm">
+              Job Description Template: <JobTemplatePreviewLink code={job.requirementTemplateCode} />
             </p>
           </div>
           <div className="flex flex-wrap justify-end gap-2">
@@ -235,6 +245,9 @@ export default async function JobWorkspacePage({
               </CardDescription>
             </CardHeader>
             <CardContent>
+              <p className="mb-4 text-sm">
+                Job Description Template: <JobTemplatePreviewLink code={job.requirementTemplateCode} />
+              </p>
               <InterviewOutcomeForm
                 applications={applications.map((application) => ({
                   candidateName: application.candidateName,
@@ -494,5 +507,6 @@ export default async function JobWorkspacePage({
         </CardContent>
       </SectionCard>
     </div>
+    </JobTemplatePreviewProvider>
   )
 }

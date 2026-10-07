@@ -215,6 +215,7 @@ export type RecruitmentInterviewRow = {
   interviewAt: string | null
   jobId: string
   jobNumber: string
+  requirementTemplateCode: string | null
   joiningDate: string | null
   jobTitle: string
   latestRound: string | null
@@ -2066,6 +2067,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         interview_at: string | null
         job_id: string
         job_number: string
+        requirement_template_code: string | null
         job_title: string
         joining_date: string | null
         latest_round: string | null
@@ -2079,7 +2081,8 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           SELECT application.id AS application_id,
             candidate.id AS candidate_id, candidate.name AS candidate_name,
             job.title AS job_title,
-            job.id AS job_id, job.job_number, post.post_code,
+            job.id AS job_id, job.job_number,
+            template.template_code AS requirement_template_code, post.post_code,
             application.status, application.interview_at::text,
             application.planned_round, application.joining_date::text,
             latest.round_name AS latest_round, latest.status AS latest_status,
@@ -2087,6 +2090,8 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           FROM recruitment.applications application
           JOIN recruitment.candidates candidate ON candidate.id = application.candidate_id
           JOIN recruitment.job_posts job ON job.id = application.job_post_id
+          LEFT JOIN recruitment.requirement_templates template
+            ON template.id = job.requirement_template_id
           LEFT JOIN recruitment.posts post ON post.id = job.post_id
           LEFT JOIN LATERAL (
             SELECT interview.round_name, interview.status
@@ -2132,6 +2137,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           interviewAt: row.interview_at,
           jobId: row.job_id,
           jobNumber: row.job_number,
+          requirementTemplateCode: row.requirement_template_code,
           joiningDate: row.joining_date,
           jobTitle: row.job_title,
           latestRound: row.latest_round,

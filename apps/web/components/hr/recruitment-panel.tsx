@@ -81,6 +81,7 @@ import {
 import { InterviewScheduleForm } from "@/components/hr/interview-schedule-form"
 import { OfferJoiningRegister } from "@/components/hr/offer-joining-register"
 import { JobTemplatesTable } from "@/components/hr/job-templates-table"
+import { JobTemplatePreviewLink, JobTemplatePreviewProvider } from "@/components/hr/job-template-preview"
 import { MasterDataViewTabs } from "@/components/master-data-view-tabs"
 import {
   MasterDataCsvDownloadButton,
@@ -100,6 +101,7 @@ type RecruitmentPanelProps = {
   masterControls: ReturnType<typeof hrMasterControls>
   canCreateJob: boolean
   canLogCandidateEvent: boolean
+  canEditTemplate: boolean
   canManageEmployees: boolean
   canViewOfferLetters: boolean
   canWrite: boolean
@@ -819,13 +821,7 @@ function JobsPanel({
                       {row.postCode ?? "—"}
                     </TableCell>
                     <TableCell className="font-mono">
-                      {row.requirementTemplateCode ? (
-                        <Button asChild className="h-auto p-0 font-mono" variant="link">
-                          <Link href={`/hr?panel=postMasterPanel&masterView=masterTables&template=${encodeURIComponent(row.requirementTemplateCode)}`}>
-                            {row.requirementTemplateCode}
-                          </Link>
-                        </Button>
-                      ) : "—"}
+                      <JobTemplatePreviewLink code={row.requirementTemplateCode} />
                     </TableCell>
                     <TableCell>
                       {row.shiftType
@@ -1066,7 +1062,7 @@ function InterviewsPanel({
   )
 }
 
-export function RecruitmentPanel(props: RecruitmentPanelProps) {
+function RecruitmentPanelContent(props: RecruitmentPanelProps) {
   switch (props.panelId) {
     case "postMasterPanel":
       return (
@@ -1190,4 +1186,29 @@ export function RecruitmentPanel(props: RecruitmentPanelProps) {
         />
       )
   }
+}
+
+export function RecruitmentPanel(props: RecruitmentPanelProps) {
+  const linkedCodes = new Set(
+    props.panelId === "jobsPanel"
+      ? props.jobs.map((row) => row.requirementTemplateCode)
+      : props.panelId === "interviewsPanel"
+        ? props.interviews.map((row) => row.requirementTemplateCode)
+        : props.posts.map((row) => row.requirementTemplateCode)
+  )
+  return (
+    <JobTemplatePreviewProvider
+      edit={props.canEditTemplate && props.panelId !== "interviewsPanel"
+        ? {
+            combinedRoles: props.combinedRoles,
+            masterView: props.masterView,
+            masters: props.masters,
+            panelId: props.panelId,
+          }
+        : undefined}
+      templates={props.templates.filter((row) => linkedCodes.has(row.templateCode))}
+    >
+      <RecruitmentPanelContent {...props} />
+    </JobTemplatePreviewProvider>
+  )
 }
