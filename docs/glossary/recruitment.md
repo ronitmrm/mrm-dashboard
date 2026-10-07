@@ -189,6 +189,20 @@ records until joining is confirmed. Older current assignments start as a baselin
 prior occupants without a retained letter or replacement snapshot cannot be
 reconstructed reliably.
 
+Employee Data begins with a confirmed Joined assignment and an Employee ID; an
+appointment alone does not create an employee data row. HR may fill the row later.
+Date of birth, contact and emergency details, addresses, gender, blood group,
+bank and statutory identifiers belong to the person identified by the Employee
+ID and remain editable across assignments. Shift, salary, salary rate increment,
+PF status and ESIC status belong to the particular joined assignment. If the
+employee leaves and later rejoins, the new employment period gets its own term
+details and may have a different department or designation, while the same Employee
+ID carries the existing personal details. A new Employee ID needs an explicit
+link to the earlier person; names alone never establish identity.
+Concurrent post assignments for the same Employee ID belong to one employment
+term while any of those posts remains occupied. Releasing one post as Role Changed
+does not start a new term; a later join after all posts have ended does.
+
 When a combined job is split, an employee who stays employed may stop covering
 one standalone Approved Post. HR records a Role Changed date for that post only.
 The post becomes Vacant, its assignment history retains the employee and role end
