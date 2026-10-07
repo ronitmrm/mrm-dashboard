@@ -820,7 +820,7 @@ function JobsPanel({
                     <TableCell className="font-mono">
                       {row.postCode ?? "—"}
                     </TableCell>
-                    <TableCell className="font-mono">
+                    <TableCell className="font-mono" data-filter-value={row.requirementTemplateCode ?? "—"}>
                       <JobTemplatePreviewLink code={row.requirementTemplateCode} />
                     </TableCell>
                     <TableCell>

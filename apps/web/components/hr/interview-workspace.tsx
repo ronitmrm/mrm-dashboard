@@ -201,7 +201,7 @@ export function InterviewScheduleBoard({
                       </Link>
                     </TableCell>
                     <TableCell>{row.jobTitle}</TableCell>
-                    <TableCell className="font-mono">
+                    <TableCell className="font-mono" data-filter-value={row.requirementTemplateCode ?? "—"}>
                       <JobTemplatePreviewLink code={row.requirementTemplateCode} />
                     </TableCell>
                     <TableCell>{formatDate(row.interviewAt)}</TableCell>
