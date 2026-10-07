@@ -146,6 +146,15 @@ export {
 } from "./store"
 export { storeUnitId } from "./store-item-codes"
 export {
+  createEmployeeDataRepository,
+  employeePersonalFields,
+  employeeTermFields,
+  type EmployeeDataRecord,
+  type EmployeePersonalDetails,
+  type EmployeeTermDetails,
+} from "./employee-data"
+export { groupEmployeeTerms } from "./employee-terms"
+export {
   authorizeRecruitmentCandidateArtifactTarget,
   createRecruitmentRepository,
   type RecruitmentEmployeeAssignmentRow,

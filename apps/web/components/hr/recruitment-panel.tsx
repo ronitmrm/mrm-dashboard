@@ -73,6 +73,7 @@ import { CompanyWideMasterScope } from "@/components/company-wide-master-scope"
 import { DataDownloadButton } from "@/components/data-download-button"
 import { ConversationLogsTable } from "@/components/hr/conversation-logs-table"
 import { EmployeeAssignmentUpload } from "@/components/hr/employee-assignment-upload"
+import { EmployeeDataRegister } from "@/components/hr/employee-data-register"
 import { EmployeeAssignmentHistory, ProbationEndReminders } from "@/components/hr/employee-lifecycle-registers"
 import {
   InterviewResultsWorkspace,
@@ -657,6 +658,7 @@ function CombinedRolePanel({
 function EmployeePanel({
   canCreateJob,
   canManageEmployees,
+  employeeAssignments,
   masterControls,
   combinedRoles,
   employmentLetters,
@@ -668,6 +670,7 @@ function EmployeePanel({
   RecruitmentPanelProps,
   | "canCreateJob"
   | "canManageEmployees"
+  | "employeeAssignments"
   | "masterControls"
   | "combinedRoles"
   | "employmentLetters"
@@ -722,6 +725,9 @@ function EmployeePanel({
             <EmployeeAssignmentUpload />
           </CardContent>
  </SectionCard>
+      ) : null}
+      {showMasterTables ? (
+        <EmployeeDataRegister assignments={employeeAssignments} canManage={canManageEmployees} />
       ) : null}
       {showMasterTables ? (
         <ApprovedPostsTable
@@ -1101,6 +1107,7 @@ function RecruitmentPanelContent(props: RecruitmentPanelProps) {
         <EmployeePanel
           canCreateJob={props.canCreateJob}
           canManageEmployees={props.canManageEmployees}
+          employeeAssignments={props.employeeAssignments}
           masterControls={props.masterControls}
           combinedRoles={props.combinedRoles}
           employmentLetters={props.employmentLetters}

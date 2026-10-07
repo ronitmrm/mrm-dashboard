@@ -191,6 +191,8 @@ export type RecruitmentOfferOutcomeRow = {
 
 export type RecruitmentEmployeeAssignmentRow = {
   id: string
+  personalDetailsSaved: boolean
+  termDetailsSaved: boolean
   postCode: string
   department: string | null
   designation: string | null
@@ -3362,6 +3364,8 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
     ): Promise<RecruitmentEmployeeAssignmentRow[]> {
       const result = await pool.query<{
         id: string
+        personal_details_saved: boolean
+        term_details_saved: boolean
         post_code: string
         department: string | null
         designation: string | null
@@ -3379,6 +3383,8 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         appointment_letter_issued_on: string | null
       }>(
         `SELECT assignment.id, assignment.post_code,
+           profile.employee_code IS NOT NULL AS personal_details_saved,
+           term.assignment_id IS NOT NULL AS term_details_saved,
            department.name AS department, designation.name AS designation,
            assignment.employee_name,
            assignment.employee_code, assignment.joined_on::text,
@@ -3389,6 +3395,12 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
            assignment.ended_on::text, assignment.exit_type, assignment.exit_note,
            letter.issued_on::text AS appointment_letter_issued_on
          FROM recruitment.employee_post_assignments assignment
+         LEFT JOIN recruitment.employee_profiles profile
+           ON profile.organization_id = assignment.organization_id
+             AND profile.employee_code = btrim(assignment.employee_code)
+         LEFT JOIN recruitment.employee_term_details term
+           ON term.organization_id = assignment.organization_id
+             AND term.assignment_id = assignment.id
          LEFT JOIN recruitment.posts post ON post.id = assignment.post_id
          LEFT JOIN recruitment.departments department ON department.id = post.department_id
          LEFT JOIN recruitment.designations designation ON designation.id = post.designation_id
@@ -3425,6 +3437,8 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       )
       return result.rows.map((row) => ({
         id: row.id,
+        personalDetailsSaved: row.personal_details_saved,
+        termDetailsSaved: row.term_details_saved,
         postCode: row.post_code,
         department: row.department,
         designation: row.designation,

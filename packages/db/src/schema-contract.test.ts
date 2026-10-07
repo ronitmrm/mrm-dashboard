@@ -10,6 +10,10 @@ import publishedChecksums from "../migrations/published-checksums.json"
 import { createCatalogMasterRepository } from "./catalog-masters"
 import { createCustomerRepository } from "./customers"
 import { createDashboardReadModelRepository } from "./dashboard-read-model-repository"
+import {
+  createEmployeeDataRepository, employeePersonalFields, employeeTermFields,
+  type EmployeePersonalDetails, type EmployeeTermDetails,
+} from "./employee-data"
 import { migrateDatabase } from "./migrate"
 import { createProductRepository } from "./products"
 
@@ -137,6 +141,8 @@ const expectedCanonicalTables = [
   "recruitment.departments",
   "recruitment.designations",
   "recruitment.employee_post_assignments",
+  "recruitment.employee_profiles",
+  "recruitment.employee_term_details",
   "recruitment.employment_letters",
   "recruitment.interviews",
   "recruitment.job_posts",
@@ -1809,6 +1815,50 @@ test("Pricing customers are created and listed through the PostgreSQL repository
     await expect(repository.listForOrganization("mrmpl")).resolves.toEqual([
       created,
     ])
+  } finally {
+    await repository.close()
+  }
+})
+
+test("employee data retains personal details across rejoining and separates each term", async () => {
+  const firstId = randomUUID()
+  const concurrentPostId = randomUUID()
+  const secondId = randomUUID()
+  const employeeCode = `REJOIN-${firstId.slice(0, 8)}`
+  await pool.query(
+    `INSERT INTO recruitment.employee_post_assignments
+       (id, organization_id, post_code, employee_name, employee_code, joined_on, ended_on)
+     VALUES ($1, $3, 'TEST-OLD', 'Test Employee', $4, '2026-07-10', '2026-12-10'),
+            ($2, $3, 'TEST-NEW', 'Test Employee', $4, '2027-02-01', NULL),
+            ($5, $3, 'TEST-PARALLEL', 'Test Employee', $4, '2026-08-01', '2026-11-01')`,
+    [firstId, secondId, representativeOrganizationId, employeeCode, concurrentPostId]
+  )
+  const personal = Object.fromEntries(employeePersonalFields.map((field) => [field, ""])) as EmployeePersonalDetails
+  const firstTerm = Object.fromEntries(employeeTermFields.map((field) => [field, ""])) as EmployeeTermDetails
+  personal.contactNo = "9999999999"
+  firstTerm.shift = "Day"
+  firstTerm.salary = "20000"
+  const repository = createEmployeeDataRepository({ pool })
+  try {
+    await repository.save({
+      actorUserId: null, organizationId: representativeOrganizationId,
+      assignmentId: firstId, personal, term: firstTerm,
+    })
+    const rejoined = await repository.get(representativeOrganizationId, secondId)
+    expect(rejoined?.personal.contactNo).toBe("9999999999")
+    expect(rejoined?.term.shift).toBe("")
+    expect((await repository.get(representativeOrganizationId, concurrentPostId))?.term.shift).toBe("Day")
+    const secondTerm = { ...firstTerm, shift: "Night", salary: "25000" }
+    await repository.save({
+      actorUserId: null, organizationId: representativeOrganizationId,
+      assignmentId: secondId, personal, term: secondTerm,
+    })
+    expect((await repository.get(representativeOrganizationId, firstId))?.term.shift).toBe("Day")
+    expect((await repository.get(representativeOrganizationId, secondId))?.term.salary).toBe("25000")
+    await expect(repository.save({
+      actorUserId: null, organizationId: representativeOrganizationId,
+      assignmentId: randomUUID(), personal, term: secondTerm,
+    })).rejects.toThrow("A confirmed joined assignment with an Employee ID is required.")
   } finally {
     await repository.close()
   }
