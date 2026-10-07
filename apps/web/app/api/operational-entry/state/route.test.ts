@@ -6,7 +6,7 @@ const dependencies = vi.hoisted(() => ({
   getSession: vi.fn(),
   listAllGrantedCapabilities: vi.fn(),
   organizationIdForCode: vi.fn(),
-  state: vi.fn(),
+  scopedFactsState: vi.fn(),
 }))
 
 vi.mock("@workspace/db", () => ({
@@ -16,7 +16,7 @@ vi.mock("@workspace/db", () => ({
   createDashboardReadModelRepository: () => ({
     close: dependencies.close,
     organizationIdForCode: dependencies.organizationIdForCode,
-    state: dependencies.state,
+    scopedFactsState: dependencies.scopedFactsState,
   }),
 }))
 
@@ -89,7 +89,7 @@ describe("operational-entry state API", () => {
       expect(response.status).toBe(403)
       expect(response.headers.get("Cache-Control")).toBe("no-store")
     }
-    expect(dependencies.state).not.toHaveBeenCalled()
+    expect(dependencies.scopedFactsState).not.toHaveBeenCalled()
     expect(dependencies.organizationIdForCode).not.toHaveBeenCalled()
   })
 
@@ -102,8 +102,12 @@ describe("operational-entry state API", () => {
       productionFloorCode: "cnc",
       jcNo: "WO-CNC-1",
     }
-    dependencies.state.mockResolvedValue({
+    dependencies.scopedFactsState.mockResolvedValue({
+      productionFloorCode: "cnc",
       version: 9,
+      sourceRevision: "work-order-revision-9",
+      notModified: false,
+      coverage: null,
       status: { isRefreshing: false },
       dashboard: {
         readModelVersion: 9,
@@ -132,6 +136,7 @@ describe("operational-entry state API", () => {
     expect(await response.json()).toEqual({
       productionFloorCode: "cnc",
       version: 9,
+      sourceRevision: "work-order-revision-9",
       notModified: false,
       coverage: null,
       status: { isRefreshing: false },
@@ -142,7 +147,14 @@ describe("operational-entry state API", () => {
         productionControl: { workOrders: [selected] },
       },
     })
-    expect(dependencies.state).toHaveBeenCalledWith("organization-1", {}, "cnc")
+    expect(dependencies.scopedFactsState).toHaveBeenCalledWith({
+      organizationId: "organization-1",
+      productionFloorCode: "cnc",
+      entryTypes: ["work_order"],
+      identity: ["entries.cnc.work_order.read"],
+      knownSourceRevision: null,
+      knownVersion: undefined,
+    })
     expect(dependencies.close).toHaveBeenCalledOnce()
   })
 })

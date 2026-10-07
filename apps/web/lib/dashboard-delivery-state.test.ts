@@ -37,7 +37,7 @@ describe("dashboard delivery state", () => {
       version: 7,
       visibility: "visible",
     })
-    expect(dashboardDeliveryPollDelay(current, 1_000)).toBe(1_000)
+    expect(dashboardDeliveryPollDelay(current, 1_000)).toBe(2_500)
     expect(
       dashboardDeliveryReducer(current, { type: "refresh.poll-due" })
     ).toMatchObject({ refetchPending: true, request: "canonical-state" })
@@ -97,6 +97,7 @@ describe("dashboard delivery state", () => {
     })
     expect(dashboardRequestDescriptor(due, 2)).toEqual({
       floor: "cnc",
+      scopeKey: "cnc",
       knownVersion: 7,
       requestId: 2,
     })
@@ -185,7 +186,7 @@ describe("dashboard delivery state", () => {
       lastError: "Canonical dashboard unavailable",
       payload: "stale",
       request: "settled",
-      safetyDeadlineMs: 63_000,
+      safetyDeadlineMs: 8_000,
     })
   })
 
@@ -384,7 +385,7 @@ describe("dashboard delivery state", () => {
       atMs: 62_000,
     })
 
-    expect(dashboardDeliveryPollDelay(loaded, 1_000)).toBe(60_000)
+    expect(dashboardDeliveryPollDelay(loaded, 1_000)).toBe(2_500)
     expect(dashboardDeliveryPollDelay(loaded, 61_000)).toBe(0)
     expect(
       dashboardDeliveryReducer(loaded, {
@@ -450,6 +451,7 @@ describe("dashboard delivery state", () => {
     expect(retrying).toMatchObject({ lastError: null, request: "initial" })
     expect(dashboardRequestDescriptor(retrying, 2)).toEqual({
       floor: "forging",
+      scopeKey: "forging",
       knownVersion: null,
       requestId: 2,
     })
@@ -503,6 +505,7 @@ describe("dashboard delivery state", () => {
     })
     expect(dashboardRequestDescriptor(invalid, 3)).toEqual({
       floor: "cnc",
+      scopeKey: "cnc",
       knownVersion: null,
       requestId: 3,
     })
