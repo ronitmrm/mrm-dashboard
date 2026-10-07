@@ -84,8 +84,8 @@ const actionChoices = [
   {
     key: "parallel-machine",
     title: "Add Parallel Machine",
-    description: "Use an idle compatible machine for a setup already in the plan.",
-    detail: "Override the automatic split limit without stopping current machines.",
+    description: "Add a compatible machine to a setup already in the plan.",
+    detail: "Close and stop its active setup if needed; current setup machines keep running.",
     icon: PlusCircle,
   },
   {
