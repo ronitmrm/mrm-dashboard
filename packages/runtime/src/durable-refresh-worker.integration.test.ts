@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto"
 
-import { migrateDatabase } from "@workspace/db"
+import { createDashboardReadModelRepository, migrateDatabase } from "@workspace/db"
+import type { StructuredTelemetryEvent } from "@workspace/observability"
 import { Pool } from "pg"
 import { createClient } from "redis"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
@@ -216,20 +217,70 @@ describe("durable dashboard refresh runtime", () => {
       const evidence = await pool.query<{
         models: string
         pending_outbox: string
+        versions: string[]
       }>(
         `
           SELECT
             (SELECT count(*) FROM derived.dashboard_read_models
               WHERE organization_id = $1) AS models,
+            (SELECT array_agg(version::text ORDER BY version) FROM derived.dashboard_read_models
+              WHERE organization_id = $1) AS versions,
             (SELECT count(*) FROM derived.outbox_events
               WHERE organization_id = $1 AND published_at IS NULL) AS pending_outbox
         `,
         [organizationId]
       )
-      expect(evidence.rows[0]!.models).toBe("3")
+      expect(evidence.rows[0]!.models).toBe("2")
+      expect(evidence.rows[0]!.versions).toEqual(["2", "3"])
       expect(Number(evidence.rows[0]!.pending_outbox)).toBeGreaterThan(0)
     } finally {
       await worker.close()
     }
+  })
+
+  it("retains unchanged floor versions and publishes only a changed floor with rollback history", async () => {
+    const organization = await pool.query<{ id: string }>(
+      "INSERT INTO core.organizations (code, name) VALUES ($1, $1) RETURNING id",
+      [`SEGMENTS-${suffix}`]
+    )
+    const id = organization.rows[0]!.id
+    const repository = createDashboardReadModelRepository({ pool })
+    const events: StructuredTelemetryEvent[] = []
+    const worker = createDurableRefreshWorker({
+      organizationId: id, postgresUrl, redisUrl, workerId: `segments-${suffix}`,
+      telemetrySink: event => events.push(event),
+    })
+    const refresh = async () => {
+      events.length = 0
+      await repository.requestRefresh(id)
+      expect((await worker.runRefreshOnce()).status).toBe("processed")
+      return events.filter(event => event.event === "dashboard.build"
+        && event.stage === "floor" && event.work === "built")
+    }
+    try {
+      expect(await refresh()).toHaveLength(4)
+      const initial = await repository.latest(id, {}, "conventional")
+      expect(await refresh()).toHaveLength(0)
+      await pool.query(`INSERT INTO derived.dashboard_source_records (
+        organization_id, source_schema, source_table, source_id,
+        source_kind, source_group, entry_type, changed_at, production_floor_code, source_payload
+      ) VALUES ($1, 'segment_test', 'machine', $2, 'data_entry', 'dataEntries',
+        'machine_master', now(), 'cnc', $3)`, [id, randomUUID(), {
+        entryType: "machine_master", productionFloorCode: "cnc",
+        payload: { machineNo: "SEGMENT-CNC", machineFamily: "T42", machineType: "CNC" },
+      }])
+      const changed = await refresh()
+      expect(changed).toHaveLength(1)
+      expect(changed[0]).toMatchObject({ productionFloorCode: "cnc" })
+      const retained = await repository.latest(id, {}, "conventional")
+      expect(retained).toMatchObject({ readModelVersion: initial!.readModelVersion })
+      const unchanged = await repository.state(id, {}, "conventional", initial!.readModelVersion)
+      expect(unchanged).toMatchObject({ dashboard: null, notModified: true })
+      expect(Buffer.byteLength(JSON.stringify(unchanged))).toBeLessThan(2048)
+      const history = await pool.query<{ versions: string[] }>(
+        "SELECT array_agg(version::text ORDER BY version) AS versions FROM derived.dashboard_read_model_heads WHERE organization_id = $1", [id])
+      expect(history.rows[0]!.versions).toEqual(["2", "3"])
+      expect(events.some(event => event.event === "dashboard.publication")).toBe(true)
+    } finally { await worker.close(); await repository.close() }
   })
 })
