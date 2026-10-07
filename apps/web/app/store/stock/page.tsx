@@ -444,16 +444,7 @@ export default async function StoreStockPage({
                     <TableCell data-filter-value={item.physicalUnit?.accountableStoreName ?? "—"}>
                       {item.physicalUnit?.accountableStoreName ?? "—"}
                     </TableCell>
-                    <TableCell>
-                      {item.physicalUnit
-                        ? (item.physicalUnit.locationName ??
-                          item.physicalUnit.holderName ??
-                          item.physicalUnit.holderType)
-                        : item.storageLocations === "Not in stock" &&
-                            Number(item.companyOnHand) > 0
-                          ? "Not in Main Store"
-                          : item.storageLocations}
-                    </TableCell>
+                    <TableCell>{item.locationHolder}</TableCell>
                     <TableCell>
                       {mode === "order" &&
                       item.actionItem &&
