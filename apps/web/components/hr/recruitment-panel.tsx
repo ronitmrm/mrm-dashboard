@@ -658,7 +658,6 @@ function CombinedRolePanel({
 function EmployeePanel({
   canCreateJob,
   canManageEmployees,
-  employeeAssignments,
   masterControls,
   combinedRoles,
   employmentLetters,
@@ -670,7 +669,6 @@ function EmployeePanel({
   RecruitmentPanelProps,
   | "canCreateJob"
   | "canManageEmployees"
-  | "employeeAssignments"
   | "masterControls"
   | "combinedRoles"
   | "employmentLetters"
@@ -725,9 +723,6 @@ function EmployeePanel({
             <EmployeeAssignmentUpload />
           </CardContent>
  </SectionCard>
-      ) : null}
-      {showMasterTables ? (
-        <EmployeeDataRegister assignments={employeeAssignments} canManage={canManageEmployees} />
       ) : null}
       {showMasterTables ? (
         <ApprovedPostsTable
@@ -1107,7 +1102,6 @@ function RecruitmentPanelContent(props: RecruitmentPanelProps) {
         <EmployeePanel
           canCreateJob={props.canCreateJob}
           canManageEmployees={props.canManageEmployees}
-          employeeAssignments={props.employeeAssignments}
           masterControls={props.masterControls}
           combinedRoles={props.combinedRoles}
           employmentLetters={props.employmentLetters}
@@ -1117,6 +1111,8 @@ function RecruitmentPanelContent(props: RecruitmentPanelProps) {
           templates={props.templates}
         />
       )
+    case "employeeDataPanel":
+      return <EmployeeDataRegister assignments={props.employeeAssignments} canManage={props.canManageEmployees} />
     case "jobsPanel":
       return (
         <JobsPanel

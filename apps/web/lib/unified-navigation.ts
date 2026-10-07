@@ -13,6 +13,7 @@ import {
   FileClock,
   Gauge,
   Globe2,
+  IdCard,
   KeyRound,
   LayoutDashboard,
   ListChecks,
@@ -229,6 +230,13 @@ export function navigationHrefMatches(
     pathname.startsWith("/hr/candidates/") &&
     destination.pathname === "/hr" &&
     destination.searchParams.get("panel") === "candidatesPanel"
+  ) {
+    return true
+  }
+  if (
+    pathname.startsWith("/hr/employees/") &&
+    destination.pathname === "/hr" &&
+    destination.searchParams.get("panel") === "employeeDataPanel"
   ) {
     return true
   }
@@ -729,6 +737,13 @@ export const hrNavigation = [
     label: "Job Posts",
     panelId: "jobsPanel",
     requiredCapability: "hr.jobs.read",
+  },
+  {
+    href: "/hr?panel=employeeDataPanel",
+    icon: IdCard,
+    label: "Employee Data",
+    panelId: "employeeDataPanel",
+    requiredCapability: "hr.employees.read",
   },
   {
     href: "/hr?panel=probationRemindersPanel",

@@ -48,6 +48,7 @@ it("uses the current master grants for commercial and HR destinations", async ()
   expect(scoped.commercialHrefs).toContain("/commercial/customers")
   expect(scoped.hrHrefs).toEqual([
     "/hr?panel=employeeMasterPanel",
+    "/hr?panel=employeeDataPanel",
     "/hr?panel=probationRemindersPanel",
     "/hr?panel=employeeAssignmentHistoryPanel",
   ])
