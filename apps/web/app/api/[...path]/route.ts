@@ -1048,7 +1048,7 @@ async function post(request: NextRequest, context: RouteContext) {
     await preauthorizeDashboardMutation(request, path, plainRecord(body))
 
     if (path === "dashboard-refresh") {
-      return json(await requestPostgresDashboardRefresh(request))
+      return json(await requestPostgresDashboardRefresh(request, "operations.dashboard.read", { force: true }))
     }
 
     if (path === "quality-parameter-set") {

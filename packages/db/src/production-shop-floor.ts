@@ -5,6 +5,7 @@ import { assertSettingChecklistComplete } from "./setup-checklist-validation"
 import type { PoolClient } from "pg"
 
 import { queueDashboardRefresh } from "./dashboard-refresh-queue"
+import { readDashboardSourceRevision } from "./dashboard-direct-facts"
 import {
   productionBreakMinutes,
   validateProductionBreaks,
@@ -3787,6 +3788,45 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
       }
     },
 
+    async readProductionSessionState(input: {
+      organizationId: string
+      productionFloorCode?: string
+      sessionId?: string
+      startDate?: string
+      endDate?: string
+      status?: "closed" | "open"
+      limit?: number
+      offset?: number
+      includeEvents?: boolean
+      knownSourceRevision?: string | null
+      identity?: readonly string[]
+    }) {
+      return transaction(pool, async client => {
+        await client.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+        const floor = normalizeProductionFloorCode(input.productionFloorCode)
+        const clock = await client.query<{ bucket: string | null }>(
+          `SELECT CASE WHEN EXISTS (SELECT 1 FROM manufacturing.production_sessions session
+            JOIN catalog.machines machine ON machine.id = session.machine_id
+            JOIN manufacturing.production_floors floor ON floor.id = machine.production_floor_id
+            WHERE session.organization_id = $1 AND floor.code = $2
+              AND session.status = 'open' AND session.reversed_at IS NULL)
+            THEN floor(extract(epoch FROM transaction_timestamp()) / 60)::text END AS bucket`,
+          [input.organizationId, floor])
+        const sourceRevision = await readDashboardSourceRevision(client, input.organizationId, floor,
+          ["sessions", "productionEntries", "employee", "machine_master", "route", "work_order", "production_break_schedule"], {
+            sessionId: input.sessionId, startDate: input.startDate, endDate: input.endDate,
+            status: input.status, limit: input.limit, offset: input.offset,
+            includeEvents: input.includeEvents, grants: input.identity, minute: clock.rows[0]!.bucket,
+          })
+        if (input.knownSourceRevision === sourceRevision)
+          return { productionFloorCode: floor, sourceRevision, notModified: true, rows: null, events: null }
+        const sessions = await this.readProductionSessions(input, client)
+        const events = input.includeEvents ? await this.readProductionSessionEvents(input, client) : null
+        const employeeRevision = await readDashboardSourceRevision(client, input.organizationId, floor, ["employee"])
+        return { ...sessions, sourceRevision, employeeRevision, notModified: false, events: events?.rows ?? null }
+      })
+    },
+
     async readProductionSessions(input: {
       endDate?: string
       limit?: number
@@ -3796,11 +3836,11 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
       sessionId?: string
       startDate?: string
       status?: "closed" | "open"
-    }) {
+    }, queryClient?: PoolClient) {
       const floorCode = normalizeProductionFloorCode(input.productionFloorCode)
       const limit = Math.min(Math.max(Math.trunc(input.limit ?? 500), 1), 500)
       const offset = Math.max(Math.trunc(input.offset ?? 0), 0)
-      const result = await pool.query<Record<string, unknown>>(
+      const result = await (queryClient ?? pool).query<Record<string, unknown>>(
         `
           SELECT session.id, session.row_version AS "rowVersion",
             session.session_reference AS "sessionReference",
@@ -3979,13 +4019,13 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
       )
       let currentBreaks: ProductionBreak[] = []
       if (needsCurrentBreaks) {
-        const client = await pool.connect()
+        const client = queryClient ?? await pool.connect()
         try {
           currentBreaks = await readProductionBreaks(
             client, input.organizationId, floorCode
           )
         } finally {
-          client.release()
+          if (!queryClient) client.release()
         }
       }
       const now = new Date()
@@ -4032,11 +4072,11 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
       productionFloorCode?: string
       sessionId?: string
       startDate?: string
-    }) {
+    }, queryClient?: PoolClient) {
       const floorCode = normalizeProductionFloorCode(input.productionFloorCode)
       const limit = Math.min(Math.max(Math.trunc(input.limit ?? 250), 1), 500)
       const offset = Math.max(Math.trunc(input.offset ?? 0), 0)
-      const result = await pool.query<Record<string, unknown>>(
+      const result = await (queryClient ?? pool).query<Record<string, unknown>>(
         `
           WITH events AS (
             SELECT organization_id, production_floor_code,

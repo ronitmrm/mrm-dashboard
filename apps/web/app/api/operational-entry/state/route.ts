@@ -31,15 +31,12 @@ export async function GET(request: NextRequest) {
     const response = await withDashboardReadRepository(
       request,
       async ({ organizationId, repository }) => {
-        const state = await repository.state(organizationId, {}, floor)
-        return {
-          productionFloorCode: floor,
-          version: state.version,
-          notModified: false,
-          coverage: null,
-          status: { isRefreshing: state.status.isRefreshing },
-          dashboard: operationalEntrySnapshot(state.dashboard, entry, floor),
-        }
+        const state = await repository.scopedFactsState({ organizationId, productionFloorCode: floor,
+          entryTypes: entry === "software_raw" ? [entry, "route"] : [entry],
+          identity: [operationalEntryCapability(entry, "read", floor)],
+          knownSourceRevision: params.get("knownSourceRevision"),
+          knownVersion: params.has("knownVersion") ? Number(params.get("knownVersion")) : undefined })
+        return state.notModified ? state : { ...state, dashboard: operationalEntrySnapshot(state.dashboard, entry, floor) }
       },
       operationalEntryCapability(entry, "read", floor),
       floor

@@ -97,6 +97,7 @@ export {
   readCanonicalDashboardSource,
 } from "./dashboard-read-model"
 export { createDashboardReadModelRepository } from "./dashboard-read-model-repository"
+export { readDashboardSourceRevision } from "./dashboard-direct-facts"
 export { createMaintenanceRepository, type CompletedMaintenanceReport } from "./maintenance"
 export {
   createMaintenanceReportCorrectionRepository,
