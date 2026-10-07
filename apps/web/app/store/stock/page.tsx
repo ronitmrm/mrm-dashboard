@@ -296,13 +296,13 @@ export default async function StoreStockPage({
                 <TableHead data-filterable="true">
                   Asset Code / Unit ID
                 </TableHead>
-                <TableHead>Asset Name</TableHead>
-                <TableHead>Make/Model</TableHead>
-                <TableHead data-filterable="true">Asset Type</TableHead>
                 <TableHead>Asset Category</TableHead>
                 <TableHead>Asset Subcategory</TableHead>
+                <TableHead>Asset Name</TableHead>
+                <TableHead>Make/Model</TableHead>
                 <TableHead>Main Available</TableHead>
                 <TableHead>Company On Hand</TableHead>
+                <TableHead data-filterable="true">Asset Type</TableHead>
                 <TableHead>Company Assigned</TableHead>
                 <TableHead data-filterable="true">Unit Status</TableHead>
                 <TableHead data-filterable="true">Responsible Store</TableHead>
@@ -405,24 +405,17 @@ export default async function StoreStockPage({
                         </Link>
                       ) : null}
                     </TableCell>
-                    <TableCell>
-                      {item.assetName}
-                      {item.identificationName ? (
-                        <span className="block text-xs text-muted-foreground">
-                          Identification: {item.identificationName}
-                        </span>
-                      ) : null}
-                    </TableCell>
+                    <TableCell>{item.assetCategory}</TableCell>
+                    <TableCell>{item.assetSubcategory}</TableCell>
+                    <TableCell>{item.assetName}</TableCell>
                     <TableCell>{item.makeModel}</TableCell>
+                    <TableCell>{item.availableQuantity}</TableCell>
+                    <TableCell>{item.companyQuantity}</TableCell>
                     <TableCell>
                       {item.assetType === "NON_CONSUMABLE"
                         ? "Non Consumable"
                         : "Consumable"}
                     </TableCell>
-                    <TableCell>{item.assetCategory}</TableCell>
-                    <TableCell>{item.assetSubcategory}</TableCell>
-                    <TableCell>{item.availableQuantity}</TableCell>
-                    <TableCell>{item.companyQuantity}</TableCell>
                     <TableCell>{item.assignedQuantity}</TableCell>
                     <TableCell
                       data-filter-value={item.physicalUnit?.status ?? "—"}
