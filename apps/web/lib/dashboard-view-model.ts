@@ -27,8 +27,9 @@ function canonicalFloor(value: unknown): ProductionFloorCode | null {
 }
 
 function canonicalVersion(value: unknown) {
+  if (value === null || value === undefined) return null;
   const version = Number(value);
-  return Number.isSafeInteger(version) && version > 0 ? version : null;
+  return Number.isSafeInteger(version) && version >= 0 ? version : null;
 }
 
 export function mergeDashboardStateResponse(
@@ -81,6 +82,20 @@ export function mergeDashboardStateResponse(
     };
   }
 
+  if (isRecord(nextState.patch)) {
+    if (!currentDashboard || currentFloor !== expectedFloor || nextVersion !== currentVersion) {
+      throw new DashboardStateNormalizationError("Live status requires the retained published floor version.");
+    }
+    const patchControl = asPatchRecord(nextState.patch.productionControl);
+    return {
+      ...currentState, ...nextState, patch: undefined,
+      coverage: dashboardCoverageFromState(currentState),
+      dashboard: { ...currentDashboard, productionControl: {
+        ...asPatchRecord(currentDashboard.productionControl), ...patchControl,
+      } },
+    };
+  }
+
   if (!nextDashboard) {
     throw new DashboardStateNormalizationError(
       "A changed dashboard response requires a floor payload.",
@@ -126,6 +141,10 @@ export function mergeDashboardStateResponse(
     productionFloorCode: expectedFloor,
     version: nextVersion,
   };
+}
+
+function asPatchRecord(value: unknown) {
+  return isRecord(value) ? value : {};
 }
 
 export function dashboardPayloadFromState(state: unknown) {

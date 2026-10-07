@@ -42,19 +42,28 @@ export function useDashboardDelivery({
   const masterStateUrl = useMasterStateUrl()
   const operationalEntryStateUrl = useOperationalEntryStateUrl()
   const scopedStateUrl = operationalEntryStateUrl ?? masterStateUrl
+  const deliveryEnabled =
+    !scopedStateUrl ||
+    new URLSearchParams(scopedStateUrl.split("?")[1]).get("entry") !==
+      "store_masters"
+  const scopeKey = `${floor}:${scopedStateUrl ?? "dashboard"}`
   const [state, reactDispatch] = useReducer(
     (
       current: DashboardDeliveryState<DashboardRecord>,
       action: DashboardDeliveryAction<DashboardRecord>
     ) => dashboardDeliveryReducer(current, action),
-    createDashboardDeliveryState<DashboardRecord>(floor, currentVisibility())
+    createDashboardDeliveryState<DashboardRecord>(
+      floor,
+      currentVisibility(),
+      scopeKey
+    )
   )
   const stateRef = useRef(state)
   const onDataRef = useRef(onData)
   const requestIdRef = useRef(0)
   const requestControllerRef = useRef<AbortController | null>(null)
   const requestCanonicalStateRef = useRef<() => void>(() => undefined)
-  const floorRef = useRef(floor)
+  const scopeRef = useRef(scopeKey)
 
   const dispatch = useCallback(
     (action: DashboardDeliveryAction<DashboardRecord>) => {
@@ -68,6 +77,8 @@ export function useDashboardDelivery({
   )
 
   const requestCanonicalState = useCallback(async () => {
+    if (!deliveryEnabled) return
+    if (stateRef.current.scopeKey !== scopeKey) return
     if (requestControllerRef.current) return
     const request = dashboardRequestDescriptor(
       stateRef.current,
@@ -80,6 +91,7 @@ export function useDashboardDelivery({
     const started = dispatch({
       type: "request.started",
       floor: request.floor,
+      scopeKey: request.scopeKey,
       requestId: request.requestId,
     }).next
     if (started.inFlight?.requestId !== request.requestId) {
@@ -89,21 +101,38 @@ export function useDashboardDelivery({
 
     try {
       const liveVersion = stateRef.current.data?.liveVersion
-      const response = await fetch(scopedStateUrl ?? dashboardCanonicalRequestUrl({
-        ...request,
-        knownLiveVersion: typeof liveVersion === "string" ? liveVersion : null,
-      }), {
-        cache: "no-store",
-        credentials: "same-origin",
-        signal: controller.signal,
-      })
+      const sourceRevision = stateRef.current.data?.sourceRevision
+      const response = await fetch(
+        dashboardCanonicalRequestUrl(
+          {
+            ...request,
+            knownLiveVersion:
+              typeof liveVersion === "string" ? liveVersion : null,
+            knownSourceRevision:
+              typeof sourceRevision === "string" ? sourceRevision : null,
+          },
+          scopedStateUrl
+        ),
+        {
+          cache: "no-store",
+          credentials: "same-origin",
+          signal: controller.signal,
+        }
+      )
       const body = (await response.json().catch(() => ({}))) as DashboardRecord
       if (!response.ok) {
         const message =
           typeof body.error === "string" && body.error.trim()
             ? body.error.trim()
             : "Dashboard data could not be loaded."
-        throw new Error(message)
+        dispatch({
+          type: "request.failed",
+          ...request,
+          atMs: Date.now(),
+          message,
+          accessDenied: response.status === 401 || response.status === 403,
+        })
+        return
       }
       const action = dashboardDeliveryResponseAction({
         atMs: Date.now(),
@@ -120,6 +149,7 @@ export function useDashboardDelivery({
         dispatch({
           type: "request.aborted",
           floor: request.floor,
+          scopeKey: request.scopeKey,
           requestId: request.requestId,
         })
         return
@@ -131,6 +161,7 @@ export function useDashboardDelivery({
         dispatch({
           type: "state.invalid",
           floor: request.floor,
+          scopeKey: request.scopeKey,
           message: error.message,
           requestId: request.requestId,
         })
@@ -139,6 +170,7 @@ export function useDashboardDelivery({
           type: "request.failed",
           atMs: Date.now(),
           floor: request.floor,
+          scopeKey: request.scopeKey,
           message:
             error instanceof Error
               ? error.message
@@ -154,7 +186,7 @@ export function useDashboardDelivery({
         queueMicrotask(() => requestCanonicalStateRef.current())
       }
     }
-  }, [dispatch, scopedStateUrl])
+  }, [deliveryEnabled, dispatch, scopeKey, scopedStateUrl])
 
   useEffect(() => {
     requestCanonicalStateRef.current = () => void requestCanonicalState()
@@ -165,29 +197,39 @@ export function useDashboardDelivery({
   }, [onData])
 
   useEffect(() => {
-    if (floorRef.current === floor) return
+    if (scopeRef.current === scopeKey) return
     requestControllerRef.current?.abort()
     requestControllerRef.current = null
-    floorRef.current = floor
-    dispatch({ type: "floor.changed", floor })
-  }, [dispatch, floor])
+    scopeRef.current = scopeKey
+    dispatch({ type: "floor.changed", floor, scopeKey })
+  }, [dispatch, floor, scopeKey])
 
   useEffect(() => {
     const handleVisibilityChange = () => {
       dispatch({
         type: "visibility.changed",
         atMs: Date.now(),
-        visibility: document.visibilityState === "hidden" ? "hidden" : "visible",
+        visibility:
+          document.visibilityState === "hidden" ? "hidden" : "visible",
       })
     }
     document.addEventListener("visibilitychange", handleVisibilityChange)
+    const reconcile = () => {
+      if (!document.hidden) dispatch({ type: "retry.requested" })
+    }
+    window.addEventListener("focus", reconcile)
+    window.addEventListener("online", reconcile)
     handleVisibilityChange()
-    return () =>
+    return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange)
+      window.removeEventListener("focus", reconcile)
+      window.removeEventListener("online", reconcile)
+    }
   }, [dispatch])
 
   useEffect(() => {
     const nowMs = Date.now()
+    if (!deliveryEnabled) return
     const delay = dashboardDeliveryPollDelay(state, nowMs)
     if (delay === null) return
     if (delay === 0) {
@@ -207,7 +249,7 @@ export function useDashboardDelivery({
       )
     }, delay)
     return () => window.clearTimeout(timeout)
-  }, [dispatch, requestCanonicalState, state])
+  }, [deliveryEnabled, dispatch, requestCanonicalState, state])
 
   useEffect(
     () => () => {
@@ -229,5 +271,18 @@ export function useDashboardDelivery({
     [dispatch]
   )
 
-  return { refreshFailed, refreshRequested, retry, state }
+  return {
+    deliveryEnabled,
+    refreshFailed,
+    refreshRequested,
+    retry,
+    state:
+      state.scopeKey === scopeKey
+        ? state
+        : createDashboardDeliveryState<DashboardRecord>(
+            floor,
+            state.visibility,
+            scopeKey
+          ),
+  }
 }

@@ -116,6 +116,7 @@ import {
   dashboardDeliveryNotice,
 } from "@/lib/dashboard-delivery-client"
 import { useDashboardDelivery } from "@/hooks/use-dashboard-delivery"
+import { useConditionalRecords } from "@/hooks/use-conditional-records"
 import {
   dashboardPayloadFromState,
   dashboardPayloadForProductionFloor,
@@ -1219,10 +1220,10 @@ function FirstPieceInspectionShell({
   )
   const tasks = useMemo(
     () =>
-      mergeFirstPieceInspectionTasks(liveTasks, storedTasks).filter(
+      (dashboardDeliveryState.accessDenied ? [] : mergeFirstPieceInspectionTasks(liveTasks, storedTasks)).filter(
         (task) => !completedTaskKeys.has(shopFloorPlanKey(task))
       ),
-    [completedTaskKeys, liveTasks, storedTasks]
+    [completedTaskKeys, liveTasks, storedTasks, dashboardDeliveryState.accessDenied]
   )
 
   useEffect(() => {
@@ -2659,6 +2660,7 @@ function DashboardShell({
     )
   }, [])
   const {
+    deliveryEnabled: dashboardDeliveryEnabled,
     refreshFailed: markDashboardRefreshFailed,
     refreshRequested: markDashboardRefreshRequested,
     retry: retryDashboardDelivery,
@@ -2935,9 +2937,9 @@ function DashboardShell({
 
   const hasDashboardData = dashboardDeliveryState.data !== null
   const isDashboardLoading =
-    !hasDashboardData && dashboardDeliveryState.request !== "error"
+    dashboardDeliveryEnabled && !hasDashboardData && dashboardDeliveryState.request !== "error"
   const isDashboardUnavailable =
-    !hasDashboardData && dashboardDeliveryState.request === "error"
+    dashboardDeliveryEnabled && !hasDashboardData && dashboardDeliveryState.request === "error"
   const basePayload = useMemo(
     () =>
       !hasDashboardData
@@ -8280,9 +8282,8 @@ function ShopFloorStatusPanel({
   const { signedInMachinist, signedInQuality, signedInShopFloor, workerOptions } =
     useProductionEmployeeDirectory()
   const productionFloorCode = productionFloorFromLocation()
-  const productionSessionsPage = usePostgresOperationalPage(
-    `/api/production-sessions?floor=${encodeURIComponent(productionFloorCode)}&status=open&limit=500`,
-    30_000
+  const productionSessionsPage = useConditionalRecords(
+    `/api/production-sessions?floor=${encodeURIComponent(productionFloorCode)}&status=open&limit=500&conditional=1`
   )
   const openProductionSessions = useMemo(
     () => asArray(asRecord(productionSessionsPage.data).rows),
@@ -8648,11 +8649,10 @@ function RoleTaskPanel({
     [productionControl]
   )
   const productionFloorCode = productionFloorFromLocation()
-  const productionSessionsPage = usePostgresOperationalPage(
+  const productionSessionsPage = useConditionalRecords(
     role === "quality"
-      ? `/api/production-sessions?floor=${encodeURIComponent(productionFloorCode)}&status=open&limit=500`
-      : null,
-    30_000
+      ? `/api/production-sessions?floor=${encodeURIComponent(productionFloorCode)}&status=open&limit=500&conditional=1`
+      : null
   )
   const roleRows = useMemo(
     () => queueRows.filter((row) => roleTaskMatches(row, role)),

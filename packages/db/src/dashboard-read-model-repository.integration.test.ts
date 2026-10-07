@@ -310,7 +310,7 @@ describe("PostgreSQL dashboard corrections", () => {
         { month: "2026-07" },
         "cnc"
       )
-      expect(statements).toBe(1)
+      expect(statements).toBe(2)
       expect(changed).toMatchObject({
         coverage: cncCoverage,
         dashboard: {
@@ -339,9 +339,10 @@ describe("PostgreSQL dashboard corrections", () => {
         organizationId,
         { month: "2026-07" },
         "cnc",
-        7
+        7,
+        changed.liveVersion ?? undefined
       )
-      expect(statements).toBe(2)
+      expect(statements).toBe(3)
       expect(unchanged).toMatchObject({
         coverage: null,
         dashboard: null,
@@ -350,7 +351,7 @@ describe("PostgreSQL dashboard corrections", () => {
         status: { isRefreshing: false, status: "idle" },
         version: 7,
       })
-      expect(packetBytes[1]).toBeLessThanOrEqual(1024)
+      expect(packetBytes[2]).toBeLessThanOrEqual(1024)
 
       const futureKnownVersion = await countedRepository.state(
         organizationId,
@@ -363,7 +364,7 @@ describe("PostgreSQL dashboard corrections", () => {
         notModified: false,
         version: 7,
       })
-      expect(statements).toBe(3)
+      expect(statements).toBe(5)
     } finally {
       await countedPool.end()
     }

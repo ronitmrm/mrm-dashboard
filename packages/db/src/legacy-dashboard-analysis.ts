@@ -1474,24 +1474,7 @@ function buildProductionControl({
   const totalOutputQty = sum([...rawByJc.values()].map((row) => row.outputQty));
   const totalActualQty = sum([...rawByJc.values()].map((row) => row.actualQty));
   const totalRejectQty = sum([...rawByJc.values()].map((row) => row.rejectQty));
-  const productionOutputRows = productionRows.map((row) => ({
-    prodDate: rowText(row, "PRODUCTION DATE", "PROD DATE"),
-    operatorId: rowText(row, "OPERATOR ID", "operatorId"),
-    operatorName: rowText(row, "OPERATOR NAME", "operatorName"),
-    machineType: rowText(row, "MACHINE TYPE", "machineType"),
-    machine: rowText(row, "MACHINE NO", "machine"),
-    partCode: rowText(row, "PART CODE", "partCode"),
-    jobCard: rowText(row, "JobCardNo", "JOB CARD NO.", "jobCard"),
-    setupNo: rowText(row, "SETUP CODE", "setupNo"),
-    outputQty: safeNumber(rowValue(row, "PRODUCTION QTY (PCS)", "outputQty")),
-    actualQty: safeNumber(rowValue(row, "ACTUAL QTY IN PCS", "actualQty")),
-    targetQty: safeNumber(rowValue(row, "TARGET QTY (PCS)", "targetQty")),
-    rejectQty: rejectionTotalFromRow(row),
-    rejectionType: rowText(row, "REJECTION 1 TYPE OF REJECTION", "rejectionType"),
-    rejectionRemark: rowText(row, "REJECTION 1 REMARK", "rejectionRemark"),
-    downtimeMinutes: safeNumber(rowValue(row, "TOTAL DOWNTIME MINUTES", "downtimeMinutes")),
-    downtimeReason: rowText(row, "DOWNTIME REASON", "downtimeReason"),
-  }));
+  const productionOutputRows = productionOutputTableRows(productionRows);
   const activeMachineConstraints = machineConstraints.filter((row) => isActivePlannerDecision(rowText(row, "status"))).length;
   const activePlanOverrides = planOverrides.length;
   const activeRouteChanges = routeChanges.length;
@@ -2107,7 +2090,7 @@ function normalizedRawSoftwareRows(rows: Record<string, unknown>[], routeLookup:
     });
 }
 
-function normalizedProductionEntries(entries: ProductionEntry[]) {
+function normalizedProductionEntries(entries: Array<Partial<ProductionEntry> | Record<string, unknown>>) {
   return entries.map((entry) => ({
     "PRODUCTION DATE": entry.prodDate,
     "MACHINE NO": entry.machine,
@@ -2129,7 +2112,7 @@ function normalizedProductionEntries(entries: ProductionEntry[]) {
   }));
 }
 
-function bucketDataEntries(entries: DataEntry[]) {
+export function bucketDataEntries(entries: DataEntry[]) {
   const buckets = new Map<string, Array<Record<string, unknown>>>();
   for (const entry of entries) {
     const payload = asRecord(entry.payload);
@@ -2141,8 +2124,62 @@ function bucketDataEntries(entries: DataEntry[]) {
   return buckets;
 }
 
-function entryRows(buckets: Map<string, Array<Record<string, unknown>>>, entryType: string) {
+export function entryRows(buckets: Map<string, Array<Record<string, unknown>>>, entryType: string) {
   return buckets.get(entryType) ?? [];
+}
+
+// Direct saved facts reuse the planner's row aliases and deduplication without
+// invoking analysis or scheduling. Callers supply only authorized dependencies.
+export function directDashboardControlRows(
+  dataEntries: DataEntry[],
+  productionEntries: Array<Partial<ProductionEntry> | Record<string, unknown>> = [],
+) {
+  const buckets = bucketDataEntries(dataEntries);
+  const rows = (type: string) => entryRows(buckets, type);
+  const latest = (type: string, key: (row: Record<string, unknown>) => string) =>
+    latestEntryRowsByKey(rows(type), key);
+  const softwareRows = rows("software_raw");
+  return {
+    setupNameMasterRows: rows("setup_name_master"),
+    routeMasterRows: [...groupRouteRows(rows("route")).values()].flat().map(routeMasterTableRow),
+    cycleMasterRows: [...latestMasterRows(rows("cycle")).values()].map(row => ({ ...cycleMasterTableRow(row), _id: row._id })),
+    toolingMasterRows: [...latestMasterRows(rows("tooling")).values()].map(row => ({ ...toolingMasterTableRow(row), _id: row._id })),
+    machinePlanningRows: rows("machine_master"),
+    employeeMasterRows: rows("employee").map(employeeMasterTableRow),
+    planningHolidayRows: latest("planning_holiday", planningHolidayEntryKey)
+      .flatMap(row => planningHolidayViewRows([row]).map(value => ({ ...value, _id: row._id })))
+      .sort((a, b) => rowText(a, "dateValue").localeCompare(rowText(b, "dateValue"))),
+    setupChecklistMasterRows: rows("setup_checklist_master"),
+    setupChecklistSessionRows: latest("setup_checklist_session", setupChecklistSessionEntryKey),
+    qualityParameterMasterRows: latestEntryRowsByKey(
+      rows("quality_parameter_master").map(row => ({ ...row, code: qualityParameterCode(row) })), qualityParameterMasterEntryKey),
+    firstPieceInspectionMasterRows: rows("first_piece_inspection_master"),
+    firstPieceInspectionReportRows: latest("first_piece_inspection_report", firstPieceReportEntryKey),
+    hourlyQualityCheckRows: latest("hourly_quality_check", hourlyQualityCheckEntryKey),
+    maintenanceMasterRows: latest("maintenance_master", maintenanceMasterEntryKey),
+    maintenanceChecklistMasterRows: latest("maintenance_checklist_master", maintenanceChecklistMasterEntryKey),
+    rejectionTypeMasterRows: latest("rejection_type_master", rejectionMasterEntryKey),
+    rejectionReasonMasterRows: latest("rejection_reason_master", rejectionMasterEntryKey),
+    rejectionRemarkMasterRows: latest("rejection_remark_master", rejectionMasterEntryKey),
+    parameterMasterRows: rows("parameter_master"),
+    measuringInstrumentMasterRows: rows("measuring_instrument_master"),
+    workOrders: rows("work_order").map(row => ({ ...row,
+      jcNo: rowText(row, "JC NO.", "JC NO", "jcNo"),
+      partCode: rowText(row, "PART CODE", "PART NO", "partCode", "partNo"),
+      fgPoNo: rowText(row, "FG PO NO.", "fgPoNo"),
+      rmPoNo: rowText(row, "RM PO NO.", "rmPoNo"),
+      poDate: rowText(row, "PO DATE", "poDate"),
+      description: rowText(row, "DESCRIPTION", "description"),
+      orderPcs: round(safeNumber(rowValue(row, "ORD. PCS.", "orderPcs"))),
+      orderKg: round(safeNumber(rowValue(row, "ORD. KG.", "orderKg"))),
+      deliveryDate: rowText(row, "DELIVERY DATE", "deliveryDate"),
+      status: rowText(row, "status", "workOrderStatus") || "Open",
+    })),
+    rmInwardRows: rows("rm_inward"),
+    productionOutputRows: productionOutputTableRows(softwareRows.length
+      ? normalizedRawSoftwareRows(softwareRows, loadRouteLookup(rows("route")))
+      : normalizedProductionEntries(productionEntries)),
+  };
 }
 
 function latestEntryRowsByKey(
@@ -6884,4 +6921,25 @@ function themeRows(counts: Map<string, number>) {
   return [...counts.entries()]
     .sort((a, b) => b[1] - a[1])
     .map(([theme, count]) => ({ theme, count }));
+}
+
+function productionOutputTableRows(productionRows: ProductionRow[]) {
+  return productionRows.map((row) => ({
+    prodDate: rowText(row, "PRODUCTION DATE", "PROD DATE"),
+    operatorId: rowText(row, "OPERATOR ID", "operatorId"),
+    operatorName: rowText(row, "OPERATOR NAME", "operatorName"),
+    machineType: rowText(row, "MACHINE TYPE", "machineType"),
+    machine: rowText(row, "MACHINE NO", "machine"),
+    partCode: rowText(row, "PART CODE", "partCode"),
+    jobCard: rowText(row, "JobCardNo", "JOB CARD NO.", "jobCard"),
+    setupNo: rowText(row, "SETUP CODE", "setupNo"),
+    outputQty: safeNumber(rowValue(row, "PRODUCTION QTY (PCS)", "outputQty")),
+    actualQty: safeNumber(rowValue(row, "ACTUAL QTY IN PCS", "actualQty")),
+    targetQty: safeNumber(rowValue(row, "TARGET QTY (PCS)", "targetQty")),
+    rejectQty: rejectionTotalFromRow(row),
+    rejectionType: rowText(row, "REJECTION 1 TYPE OF REJECTION", "rejectionType"),
+    rejectionRemark: rowText(row, "REJECTION 1 REMARK", "rejectionRemark"),
+    downtimeMinutes: safeNumber(rowValue(row, "TOTAL DOWNTIME MINUTES", "downtimeMinutes")),
+    downtimeReason: rowText(row, "DOWNTIME REASON", "downtimeReason"),
+  }));
 }

@@ -25,8 +25,9 @@ function record(value: unknown): DashboardRecord {
 }
 
 function positiveVersion(value: unknown) {
+  if (value === null || value === undefined) return null
   const version = Number(value)
-  return Number.isSafeInteger(version) && version > 0 ? version : null
+  return Number.isSafeInteger(version) && version >= 0 ? version : null
 }
 
 function refreshState(status: DashboardRecord): DashboardDurableRefreshState {
@@ -50,16 +51,20 @@ function coverageState(data: DashboardRecord): DashboardCoverageState {
 }
 
 export function dashboardCanonicalRequestUrl(
-  request: DashboardRequestDescriptor
+  request: DashboardRequestDescriptor,
+  scopedStateUrl?: string | null
 ) {
-  const query = new URLSearchParams({ floor: request.floor })
+  const [path, search] = (scopedStateUrl ?? "/api/dashboard-state").split("?")
+  const query = new URLSearchParams(search)
+  query.set("floor", request.floor)
   if (request.knownVersion !== null) {
     query.set("knownVersion", String(request.knownVersion))
   }
   if (request.knownLiveVersion) {
     query.set("knownLiveVersion", request.knownLiveVersion)
   }
-  return `/api/dashboard-state?${query.toString()}`
+  if (request.knownSourceRevision) query.set("knownSourceRevision", request.knownSourceRevision)
+  return `${path}?${query.toString()}`
 }
 
 export function dashboardDeliveryResponseAction({
@@ -97,6 +102,7 @@ export function dashboardDeliveryResponseAction({
     refresh,
     refreshError,
     requestId: request.requestId,
+    scopeKey: request.scopeKey,
     version,
   }
 
@@ -149,13 +155,13 @@ export function dashboardDeliveryNotice<Data>(
     return `${sentence(state.lastError)} Showing the last successful dashboard.`
   }
   if (state.refresh === "pending") {
-    return "Planning recalculation queued. Showing the current dashboard while it completes."
+    return "Saved records and status are current. Forecast recalculation is queued."
   }
   if (state.refresh === "running") {
-    return "Planning recalculation in progress. Showing the current dashboard while it completes."
+    return "Saved records and status are current. Forecasts are recalculating."
   }
   if (state.inFlight !== null || state.request === "canonical-state") {
-    return "Checking for dashboard updates."
+    return null
   }
   return null
 }

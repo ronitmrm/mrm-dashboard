@@ -74,6 +74,7 @@ export async function withDashboardReadRepository<T>(
   request: NextRequest,
   operation: (context: {
     actorUserId: string
+    granted: ReadonlySet<string>
     organizationId: string
     repository: ReturnType<typeof createDashboardReadModelRepository>
   }) => Promise<T>,
@@ -85,6 +86,7 @@ export async function withDashboardReadRepository<T>(
   })
   const { telemetry } = authorizationTelemetry
   let connectionString = ""
+  let granted: ReadonlySet<string> = new Set()
   let session: Awaited<ReturnType<typeof readRequestAuthenticatedSession>>
   try {
     session = await readRequestAuthenticatedSession(request.headers, telemetry)
@@ -97,7 +99,7 @@ export async function withDashboardReadRepository<T>(
     }
 
     connectionString = readAuthEnvironment().connectionString
-    const granted = await readRequestGrantedCapabilitySet(
+    granted = await readRequestGrantedCapabilitySet(
       session.user.id,
       telemetry
     )
@@ -128,6 +130,7 @@ export async function withDashboardReadRepository<T>(
     const organizationId = await repository.organizationIdForCode("MRMPL")
     return await operation({
       actorUserId: session.user.id,
+      granted,
       organizationId,
       repository,
     })
@@ -205,6 +208,10 @@ export async function readPostgresDashboardState(
           notModified: false,
         }
       }
+      if (state.patch) {
+        return { ...envelope, coverage: null, dashboard: null,
+          ...(scope === "maintenance" ? { notModified: true } : { patch: state.patch, notModified: false }) }
+      }
       await repository.requestRefresh(organizationId)
       return {
         ...envelope,
@@ -230,11 +237,11 @@ export async function readPostgresDashboardStatus(request: NextRequest) {
   )
 }
 
-export async function requestPostgresDashboardRefresh(request: NextRequest, capability = "operations.dashboard.read") {
+export async function requestPostgresDashboardRefresh(request: NextRequest, capability = "operations.dashboard.read", options: { force?: boolean } = {}) {
   return withDashboardReadRepository(
     request,
     ({ organizationId, repository }) =>
-      repository.requestRefresh(organizationId),
+      repository.requestRefresh(organizationId, options),
     capability
   )
 }

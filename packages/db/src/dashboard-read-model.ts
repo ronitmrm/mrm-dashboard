@@ -248,7 +248,7 @@ function timestamp(value: Date | string) {
   return value instanceof Date ? value.toISOString() : value
 }
 
-function sourceRecord(
+export function sourceRecord(
   row: SourceRow
 ): JsonRecord & { _id: unknown; createdAt: string } {
   return {
@@ -264,7 +264,7 @@ function sourceRecord(
   }
 }
 
-function dataEntryRecord(row: DataEntrySourceRow): JsonRecord & {
+export function dataEntryRecord(row: DataEntrySourceRow): JsonRecord & {
   _id: unknown
   createdAt: string
   entryType: string
@@ -403,7 +403,7 @@ function floorRows(rows: JsonRecord[], floorCode: ProductionFloorCode) {
   return rows.filter((row) => productionFloorCodeForRecord(row) === floorCode)
 }
 
-const companyWideMasterEntryTypes = new Set([
+export const companyWideMasterEntryTypes = new Set([
   "parameter_master",
   "measuring_instrument_master",
   "maintenance_checklist_master",
